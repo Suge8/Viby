@@ -26,18 +26,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
           {/* Desktop Nav */}
           <nav className="hidden md:flex items-center gap-6">
-            <a href="#features" className="text-sm font-medium hover:text-primary transition-colors">{t('nav.features')}</a>
-
-            <a href="#how-it-works" className="text-sm font-medium hover:text-primary transition-colors">{t('nav.howItWorks')}</a>
-            <a href="#installation" className="text-sm font-medium hover:text-primary transition-colors">{t('nav.installation')}</a>
-            <div className="flex items-center gap-4 ml-4">
+            <div className="flex items-center gap-4">
               <LanguageToggle />
               <ModeToggle />
               <a href="https://github.com/tiann/hapi" target="_blank" rel="noreferrer" className="text-muted-foreground hover:text-foreground transition-colors">
                 <Github className="h-5 w-5" />
               </a>
-              <Button className="font-bold shadow-hard hover:translate-y-0.5 hover:shadow-none transition-all border-2 border-border">
-                {t('nav.getStarted')}
+              <Button className="font-bold shadow-hard hover:translate-y-0.5 hover:shadow-none transition-all border-2 border-border" asChild>
+                <a href="/docs/">{t('nav.getStarted')}</a>
               </Button>
             </div>
           </nav>
@@ -56,12 +52,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         {isMenuOpen && (
           <div className="md:hidden border-b-2 border-border bg-background p-4">
             <nav className="flex flex-col gap-4">
-              <a href="#features" className="text-sm font-medium" onClick={() => setIsMenuOpen(false)}>{t('nav.features')}</a>
-
-              <a href="#how-it-works" className="text-sm font-medium" onClick={() => setIsMenuOpen(false)}>{t('nav.howItWorks')}</a>
-              <a href="#installation" className="text-sm font-medium" onClick={() => setIsMenuOpen(false)}>{t('nav.installation')}</a>
-              <div className="flex flex-col gap-2 mt-2">
-                <Button className="w-full font-bold shadow-hard border-2 border-border">{t('nav.getStarted')}</Button>
+              <div className="flex flex-col gap-2">
+                <Button className="w-full font-bold shadow-hard border-2 border-border" asChild>
+                  <a href="/docs/">{t('nav.getStarted')}</a>
+                </Button>
                 <a href="https://github.com/tiann/hapi" target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 text-sm font-medium p-2 hover:bg-muted rounded-md">
                   <Github className="h-4 w-4" /> {t('nav.viewOnGithub')}
                 </a>

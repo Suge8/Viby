@@ -44,8 +44,10 @@ export default function Home() {
               </p>
               
               <div className="flex flex-col sm:flex-row gap-4 pt-4">
-                <Button size="lg" className="text-lg px-8 py-6 rounded-xl shadow-hard hover:translate-y-1 hover:shadow-none transition-all border-2 border-border bg-primary text-primary-foreground hover:bg-primary/90">
-                  {t('hero.startBtn')} <ArrowRight className="ml-2 h-5 w-5" />
+                <Button size="lg" className="text-lg px-8 py-6 rounded-xl shadow-hard hover:translate-y-1 hover:shadow-none transition-all border-2 border-border bg-primary text-primary-foreground hover:bg-primary/90" asChild>
+                  <a href="/docs/">
+                    {t('hero.startBtn')} <ArrowRight className="ml-2 h-5 w-5" />
+                  </a>
                 </Button>
                 <Button variant="outline" size="lg" className="text-lg px-8 py-6 rounded-xl shadow-hard hover:translate-y-1 hover:shadow-none transition-all border-2 border-border bg-background" onClick={() => window.open('https://github.com/tiann/hapi', '_blank')}>
                   {t('hero.githubBtn')}
@@ -338,7 +340,7 @@ services:
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
             <Button size="lg" className="text-lg px-10 py-8 rounded-xl font-bold shadow-hard hover:translate-y-1 hover:shadow-none transition-all border-2 border-white/20 bg-primary text-primary-foreground hover:bg-primary/90" asChild>
-              <a href="https://github.com/tiann/hapi" target="_blank" rel="noreferrer">
+              <a href="/docs/">
                 <Globe className="mr-2 h-5 w-5" />
                 {t('cta.btn')}
               </a>
