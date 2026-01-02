@@ -15,43 +15,16 @@ Run Claude Code / Codex / Gemini sessions locally and control them remotely thro
 - Track session progress with todo lists.
 - Supports multiple AI backends: Claude Code, Codex, and Gemini.
 
-## Installation
+## Getting Started
 
 ```bash
 npm install -g @twsxtd/hapi
-```
-
-Or with Homebrew:
-
-```bash
-brew install tiann/tap/hapi
-```
-
-Other options: [Installation guide](docs/guide/installation.md)
-
-## Quickstart
-
-1. Start the server:
-
-```bash
 hapi server
 ```
 
-2. Start a coding session:
+Open `http://localhost:3006` and log in with the token.
 
-```bash
-hapi
-```
-
-3. Open the UI at `http://localhost:3006` and log in with the token in `~/.hapi/settings.json`.
-
-## Docker (server only)
-
-```bash
-docker run -d --name hapi -p 3006:3006 -v hapi-data:/data ghcr.io/tiann/hapi-server:latest
-```
-
-More setup options: [Installation guide](docs/guide/installation.md)
+More options: [Quick Start](docs/guide/quick-start.md) | [Installation](docs/guide/installation.md)
 
 ## Docs
 
