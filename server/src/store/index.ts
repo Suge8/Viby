@@ -743,4 +743,16 @@ export class Store {
         ).run(platform, platformUserId)
         return result.changes > 0
     }
+
+    /**
+     * Delete a session and all associated data.
+     * Messages are automatically cascade-deleted via foreign key constraint.
+     * Todos are stored in the sessions.todos column and deleted with the row.
+     */
+    deleteSession(id: string, namespace: string): boolean {
+        const result = this.db.prepare(
+            'DELETE FROM sessions WHERE id = ? AND namespace = ?'
+        ).run(id, namespace)
+        return result.changes > 0
+    }
 }

@@ -25,6 +25,8 @@ export function useSessionActions(api: ApiClient | null, sessionId: string | nul
     switchSession: () => Promise<void>
     setPermissionMode: (mode: PermissionMode) => Promise<void>
     setModelMode: (mode: ModelMode) => Promise<void>
+    renameSession: (name: string) => Promise<void>
+    deleteSession: () => Promise<void>
     isPending: boolean
 } {
     const queryClient = useQueryClient()
@@ -75,11 +77,38 @@ export function useSessionActions(api: ApiClient | null, sessionId: string | nul
         onSuccess: () => void invalidateSession(),
     })
 
+    const renameMutation = useMutation({
+        mutationFn: async (name: string) => {
+            if (!api || !sessionId) {
+                throw new Error('Session unavailable')
+            }
+            await api.renameSession(sessionId, name)
+        },
+        onSuccess: () => void invalidateSession(),
+    })
+
+    const deleteMutation = useMutation({
+        mutationFn: async () => {
+            if (!api || !sessionId) {
+                throw new Error('Session unavailable')
+            }
+            await api.deleteSession(sessionId)
+        },
+        onSuccess: async () => {
+            if (!sessionId) return
+            queryClient.removeQueries({ queryKey: queryKeys.session(sessionId) })
+            queryClient.removeQueries({ queryKey: queryKeys.messages(sessionId) })
+            await queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
+        },
+    })
+
     return {
         abortSession: abortMutation.mutateAsync,
         switchSession: switchMutation.mutateAsync,
         setPermissionMode: permissionMutation.mutateAsync,
         setModelMode: modelMutation.mutateAsync,
-        isPending: abortMutation.isPending || switchMutation.isPending || permissionMutation.isPending || modelMutation.isPending,
+        renameSession: renameMutation.mutateAsync,
+        deleteSession: deleteMutation.mutateAsync,
+        isPending: abortMutation.isPending || switchMutation.isPending || permissionMutation.isPending || modelMutation.isPending || renameMutation.isPending || deleteMutation.isPending,
     }
 }

@@ -67,6 +67,10 @@ const modelModeSchema = z.object({
     model: z.enum(['default', 'sonnet', 'opus'])
 })
 
+const renameSessionSchema = z.object({
+    name: z.string().min(1).max(255)
+})
+
 export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
@@ -210,6 +214,64 @@ export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Ho
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Failed to apply model mode'
             return c.json({ error: message }, 409)
+        }
+    })
+
+    app.patch('/sessions/:id', async (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) {
+            return engine
+        }
+
+        const sessionResult = requireSessionFromParam(c, engine)
+        if (sessionResult instanceof Response) {
+            return sessionResult
+        }
+
+        const body = await c.req.json().catch(() => null)
+        const parsed = renameSessionSchema.safeParse(body)
+        if (!parsed.success) {
+            return c.json({ error: 'Invalid body: name is required' }, 400)
+        }
+
+        try {
+            await engine.renameSession(sessionResult.sessionId, parsed.data.name)
+            return c.json({ ok: true })
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to rename session'
+            // Map concurrency/version errors to 409 conflict
+            if (message.includes('concurrently') || message.includes('version')) {
+                return c.json({ error: message }, 409)
+            }
+            return c.json({ error: message }, 500)
+        }
+    })
+
+    app.delete('/sessions/:id', async (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) {
+            return engine
+        }
+
+        const sessionResult = requireSessionFromParam(c, engine)
+        if (sessionResult instanceof Response) {
+            return sessionResult
+        }
+
+        if (sessionResult.session.active) {
+            return c.json({ error: 'Cannot delete active session. Archive it first.' }, 409)
+        }
+
+        try {
+            await engine.deleteSession(sessionResult.sessionId)
+            return c.json({ ok: true })
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to delete session'
+            // Map "active session" error to 409 conflict (race condition: session became active)
+            if (message.includes('active')) {
+                return c.json({ error: message }, 409)
+            }
+            return c.json({ error: message }, 500)
         }
     })
 
