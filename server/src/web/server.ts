@@ -61,6 +61,9 @@ function createWebApp(options: {
 
     app.use('*', logger())
 
+    // Health check endpoint (no auth required)
+    app.get('/health', (c) => c.json({ status: 'ok' }))
+
     const corsOrigins = configuration.corsOrigins
     const corsOriginOption = corsOrigins.includes('*') ? '*' : corsOrigins
     const corsMiddleware = cors({

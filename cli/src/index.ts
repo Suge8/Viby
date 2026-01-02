@@ -27,6 +27,7 @@ import { handleConnectCommand } from './commands/connect'
 import { spawnHappyCLI } from './utils/spawnHappyCLI'
 import { execFileSync } from 'node:child_process'
 import { initializeToken } from './ui/tokenInit'
+import { maybeAutoStartServer } from './utils/autoStartServer'
 import { ensureRuntimeAssets } from './runtime/assets'
 import { runHappyMcpStdioBridge } from './codex/happyMcpStdioBridge'
 import { withBunRuntimeEnv } from './utils/bunRuntime'
@@ -140,6 +141,7 @@ import { getCliArgs } from './utils/cliArgs'
       }
 
       await initializeToken();
+      await maybeAutoStartServer();
       await authAndSetupMachineIfNeeded();
       await runCodex(options);
       // Do not force exit here; allow instrumentation to show lingering handles
@@ -169,6 +171,7 @@ import { getCliArgs } from './utils/cliArgs'
       registerGeminiAgent(yolo);
 
       await initializeToken();
+      await maybeAutoStartServer();
       await authAndSetupMachineIfNeeded();
       await runAgentSession({ agentType: 'gemini', startedBy });
     } catch (error) {
@@ -408,6 +411,7 @@ ${chalk.bold.cyan('Claude Code Options (from `claude --help`):')}
 
     // Normal flow - auth and machine setup
     await initializeToken();
+    await maybeAutoStartServer();
     await authAndSetupMachineIfNeeded();
 
     // Always auto-start daemon for simplicity
