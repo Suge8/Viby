@@ -1,6 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
-import { Laptop, Smartphone, RefreshCw, Wifi } from "lucide-react";
+import { Laptop, Smartphone, RefreshCw, Wifi, ArrowLeftRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 export default function AppShowcase() {
@@ -89,6 +89,18 @@ export default function AppShowcase() {
                   </div>
                   <p className="text-muted-foreground">
                     {t('showcase.remoteControl.desc')}
+                  </p>
+                </div>
+
+                <div className="p-6 rounded-2xl bg-card border-2 border-border shadow-hard hover:translate-y-1 transition-transform">
+                  <div className="flex items-center gap-4 mb-3">
+                    <div className="p-3 rounded-xl bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400">
+                      <ArrowLeftRight className="h-6 w-6" />
+                    </div>
+                    <h3 className="font-bold text-xl">{t('showcase.modeSwitch.title')}</h3>
+                  </div>
+                  <p className="text-muted-foreground">
+                    {t('showcase.modeSwitch.desc')}
                   </p>
                 </div>
               </div>

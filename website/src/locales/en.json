@@ -19,8 +19,8 @@
   },
   "showcase": {
     "handoff": "Seamless Handoff",
-    "title": "Start on Desktop. <br class=\"hidden md:block\" /> <span class=\"text-primary\">Continue on Mobile.</span>",
-    "subtitle": "Your session lives on your machine. Your phone is just a window. Walk away from your desk and keep the coding vibe alive, context fully synced.",
+    "title": "Start on Desktop. <br class=\"hidden md:block\" /> <span class=\"text-primary\">Continue Anywhere. Switch Back Anytime.</span>",
+    "subtitle": "Your session lives on your machine. Your phone is just a window. Work locally with native Claude Code or Codex, switch to remote when away, double-space to switch back instantly.",
     "localCore": {
       "title": "Local Core",
       "desc": "Heavy lifting happens on your powerful desktop machine. No cloud limits."
@@ -28,6 +28,10 @@
     "remoteControl": {
       "title": "Remote Control",
       "desc": "Access everything via PWA or messaging apps. Zero latency feel."
+    },
+    "modeSwitch": {
+      "title": "Switch Freely",
+      "desc": "Move between terminal and mobile seamlessly. Double-space to return to local. Session state stays perfectly synced."
     },
     "screenshots": {
       "startAnywhere": {
