@@ -110,6 +110,7 @@ function SessionsPage() {
                     onRefresh={handleRefresh}
                     isLoading={isLoading}
                     renderHeader={false}
+                    api={api}
                 />
             </div>
         </div>

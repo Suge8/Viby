@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { SessionSummary } from '@/types/api'
+import type { ApiClient } from '@/api/client'
+import { useLongPress } from '@/hooks/useLongPress'
+import { usePlatform } from '@/hooks/usePlatform'
+import { useSessionActions } from '@/hooks/mutations/useSessionActions'
+import { SessionActionMenu } from '@/components/SessionActionMenu'
+import { RenameSessionDialog } from '@/components/RenameSessionDialog'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 
 type SessionGroup = {
     directory: string
@@ -161,64 +168,128 @@ function SessionItem(props: {
     session: SessionSummary
     onSelect: (sessionId: string) => void
     showPath?: boolean
+    api: ApiClient | null
 }) {
-    const { session: s, onSelect, showPath = true } = props
+    const { session: s, onSelect, showPath = true, api } = props
+    const { haptic } = usePlatform()
+    const [menuOpen, setMenuOpen] = useState(false)
+    const [renameOpen, setRenameOpen] = useState(false)
+    const [archiveOpen, setArchiveOpen] = useState(false)
+    const [deleteOpen, setDeleteOpen] = useState(false)
+
+    const { abortSession, renameSession, deleteSession, isPending } = useSessionActions(api, s.id)
+
+    const longPressHandlers = useLongPress({
+        onLongPress: () => {
+            haptic.impact('medium')
+            setMenuOpen(true)
+        },
+        onClick: () => onSelect(s.id),
+        threshold: 500
+    })
+
+    const sessionName = getSessionTitle(s)
+
     return (
-        <button
-            type="button"
-            onClick={() => onSelect(s.id)}
-            className="session-list-item flex w-full flex-col gap-1.5 px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)]"
-        >
-            <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 min-w-0">
-                    <span className="flex h-4 w-4 items-center justify-center" aria-hidden="true">
-                        <span
-                            className={`h-2 w-2 rounded-full ${s.active ? 'bg-[var(--app-badge-success-text)]' : 'bg-[var(--app-hint)]'}`}
-                        />
-                    </span>
-                    <div className="truncate text-sm font-medium">
-                        {getSessionTitle(s)}
+        <>
+            <button
+                type="button"
+                {...longPressHandlers}
+                className="session-list-item flex w-full flex-col gap-1.5 px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)] select-none"
+                style={{ WebkitTouchCallout: 'none' }}
+            >
+                <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                        <span className="flex h-4 w-4 items-center justify-center" aria-hidden="true">
+                            <span
+                                className={`h-2 w-2 rounded-full ${s.active ? 'bg-[var(--app-badge-success-text)]' : 'bg-[var(--app-hint)]'}`}
+                            />
+                        </span>
+                        <div className="truncate text-sm font-medium">
+                            {sessionName}
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 text-xs">
+                        {(() => {
+                            const progress = getTodoProgress(s)
+                            if (!progress) return null
+                            return (
+                                <span className="flex items-center gap-1 text-[var(--app-hint)]">
+                                    <BulbIcon className="h-3 w-3" />
+                                    {progress.completed}/{progress.total}
+                                </span>
+                            )
+                        })()}
+                        {s.pendingRequestsCount > 0 ? (
+                            <span className="text-[var(--app-badge-warning-text)]">
+                                pending {s.pendingRequestsCount}
+                            </span>
+                        ) : null}
+                        <span className="text-[var(--app-hint)]">
+                            {formatRelativeTime(s.updatedAt)}
+                        </span>
                     </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0 text-xs">
-                    {(() => {
-                        const progress = getTodoProgress(s)
-                        if (!progress) return null
-                        return (
-                            <span className="flex items-center gap-1 text-[var(--app-hint)]">
-                                <BulbIcon className="h-3 w-3" />
-                                {progress.completed}/{progress.total}
-                            </span>
-                        )
-                    })()}
-                    {s.pendingRequestsCount > 0 ? (
-                        <span className="text-[var(--app-badge-warning-text)]">
-                            pending {s.pendingRequestsCount}
-                        </span>
-                    ) : null}
-                    <span className="text-[var(--app-hint)]">
-                        {formatRelativeTime(s.updatedAt)}
-                    </span>
-                </div>
-            </div>
-            {showPath ? (
-                <div className="truncate text-xs text-[var(--app-hint)]">
-                    {s.metadata?.path ?? s.id}
-                </div>
-            ) : null}
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--app-hint)]">
-                <span className="inline-flex items-center gap-2">
-                    <span className="flex h-4 w-4 items-center justify-center" aria-hidden="true">
-                        ❖
-                    </span>
-                    {getAgentLabel(s)}
-                </span>
-                <span>model: {getModelLabel(s)}</span>
-                {s.metadata?.worktree?.branch ? (
-                    <span>worktree: {s.metadata.worktree.branch}</span>
+                {showPath ? (
+                    <div className="truncate text-xs text-[var(--app-hint)]">
+                        {s.metadata?.path ?? s.id}
+                    </div>
                 ) : null}
-            </div>
-        </button>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--app-hint)]">
+                    <span className="inline-flex items-center gap-2">
+                        <span className="flex h-4 w-4 items-center justify-center" aria-hidden="true">
+                            ❖
+                        </span>
+                        {getAgentLabel(s)}
+                    </span>
+                    <span>model: {getModelLabel(s)}</span>
+                    {s.metadata?.worktree?.branch ? (
+                        <span>worktree: {s.metadata.worktree.branch}</span>
+                    ) : null}
+                </div>
+            </button>
+
+            <SessionActionMenu
+                isOpen={menuOpen}
+                onClose={() => setMenuOpen(false)}
+                sessionActive={s.active}
+                onRename={() => setRenameOpen(true)}
+                onArchive={() => setArchiveOpen(true)}
+                onDelete={() => setDeleteOpen(true)}
+            />
+
+            <RenameSessionDialog
+                isOpen={renameOpen}
+                onClose={() => setRenameOpen(false)}
+                currentName={sessionName}
+                onRename={renameSession}
+                isPending={isPending}
+            />
+
+            <ConfirmDialog
+                isOpen={archiveOpen}
+                onClose={() => setArchiveOpen(false)}
+                title="Archive Session"
+                description={`Are you sure you want to archive "${sessionName}"? This will disconnect the active session.`}
+                confirmLabel="Archive"
+                confirmingLabel="Archiving..."
+                onConfirm={abortSession}
+                isPending={isPending}
+                destructive
+            />
+
+            <ConfirmDialog
+                isOpen={deleteOpen}
+                onClose={() => setDeleteOpen(false)}
+                title="Delete Session"
+                description={`Are you sure you want to delete "${sessionName}"? This action cannot be undone.`}
+                confirmLabel="Delete"
+                confirmingLabel="Deleting..."
+                onConfirm={deleteSession}
+                isPending={isPending}
+                destructive
+            />
+        </>
     )
 }
 
@@ -229,8 +300,9 @@ export function SessionList(props: {
     onRefresh: () => void
     isLoading: boolean
     renderHeader?: boolean
+    api: ApiClient | null
 }) {
-    const { renderHeader = true } = props
+    const { renderHeader = true, api } = props
     const groups = useMemo(
         () => groupSessionsByDirectory(props.sessions),
         [props.sessions]
@@ -317,6 +389,7 @@ export function SessionList(props: {
                                             session={s}
                                             onSelect={props.onSelect}
                                             showPath={false}
+                                            api={api}
                                         />
                                     ))}
                                 </div>

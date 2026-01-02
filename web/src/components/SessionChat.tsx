@@ -143,6 +143,8 @@ export function SessionChat(props: {
                 session={props.session}
                 onBack={props.onBack}
                 onViewFiles={props.session.metadata?.path ? handleViewFiles : undefined}
+                api={props.api}
+                onSessionDeleted={props.onBack}
             />
 
             {controlsDisabled ? (

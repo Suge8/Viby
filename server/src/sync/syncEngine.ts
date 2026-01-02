@@ -751,6 +751,56 @@ export class SyncEngine {
         }
     }
 
+    async renameSession(sessionId: string, name: string): Promise<void> {
+        const session = this.sessions.get(sessionId)
+        if (!session) {
+            throw new Error('Session not found')
+        }
+
+        const currentMetadata = session.metadata ?? { path: '', host: '' }
+        const newMetadata = { ...currentMetadata, name }
+
+        const result = this.store.updateSessionMetadata(
+            sessionId,
+            newMetadata,
+            session.metadataVersion,
+            session.namespace
+        )
+
+        if (result.result === 'error') {
+            throw new Error('Failed to update session metadata')
+        }
+
+        if (result.result === 'version-mismatch') {
+            throw new Error('Session was modified concurrently. Please try again.')
+        }
+
+        this.refreshSession(sessionId)
+    }
+
+    async deleteSession(sessionId: string): Promise<void> {
+        const session = this.sessions.get(sessionId)
+        if (!session) {
+            throw new Error('Session not found')
+        }
+
+        if (session.active) {
+            throw new Error('Cannot delete active session')
+        }
+
+        const deleted = this.store.deleteSession(sessionId, session.namespace)
+        if (!deleted) {
+            throw new Error('Failed to delete session')
+        }
+
+        this.sessions.delete(sessionId)
+        this.sessionMessages.delete(sessionId)
+        this.lastBroadcastAtBySessionId.delete(sessionId)
+        this.todoBackfillAttemptedSessionIds.delete(sessionId)
+
+        this.emit({ type: 'session-removed', sessionId, namespace: session.namespace })
+    }
+
     async applySessionConfig(
         sessionId: string,
         config: {
