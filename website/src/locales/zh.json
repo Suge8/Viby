@@ -19,8 +19,8 @@
   },
   "showcase": {
     "handoff": "无缝切换",
-    "title": "始于桌面，<br class=\"hidden md:block\" /> <span class=\"text-primary\">续于指尖。</span>",
-    "subtitle": "会话驻留在你的电脑上，手机只是一个窗口。离开办公桌，保持编程状态，上下文完全同步。",
+    "title": "始于桌面，<br class=\"hidden md:block\" /> <span class=\"text-primary\">续于任何地方，随时切回。</span>",
+    "subtitle": "会话驻留在你的电脑上，手机只是一个窗口。本地就是原生 Claude Code 或 Codex，外出时切换到手机，双空格键瞬间切回本地。",
     "localCore": {
       "title": "本地核心",
       "desc": "繁重的计算在你的高性能桌面上完成。没有云端限制。"
@@ -28,6 +28,10 @@
     "remoteControl": {
       "title": "远程控制",
       "desc": "通过 PWA 或即时通讯应用访问一切。零延迟体验。"
+    },
+    "modeSwitch": {
+      "title": "自由切换",
+      "desc": "在终端和手机之间无缝切换。双空格键切回本地。会话状态完美同步。"
     },
     "screenshots": {
       "startAnywhere": {

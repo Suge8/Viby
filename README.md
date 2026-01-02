@@ -8,6 +8,7 @@ Run Claude Code / Codex / Gemini sessions locally and control them remotely thro
 
 ## Features
 
+- **Seamless Handoff** - Work locally with native Claude Code or Codex, switch to remote when needed, switch back anytime.
 - Start AI coding sessions from any machine.
 - Monitor and control sessions from your phone or browser.
 - Approve or deny tool permissions remotely.
