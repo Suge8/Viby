@@ -7,7 +7,7 @@
     "viewOnGithub": "View on GitHub"
   },
   "hero": {
-    "version": "v0.3.1 is now available",
+    "version": "{{version}} is now available",
     "title": "Vibe Coding <br/> <span class=\"text-primary\">Anytime, Anywhere.</span>",
     "subtitle": "Go for a hike, grab a coffee, or just relax. Your AI agents work in the background. We'll notify you via your favorite messaging app only when they need a nod.",
     "startBtn": "Start Your Freedom",
