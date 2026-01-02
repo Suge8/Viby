@@ -9,11 +9,13 @@ import { Link } from "wouter";
 import { motion, useScroll, useTransform } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { SEO } from "@/components/SEO";
+import { useLatestVersion } from "@/hooks/useLatestVersion";
 
 export default function Home() {
   const [copied, setCopied] = useState("");
   const { scrollY } = useScroll();
   const { t } = useTranslation();
+  const version = useLatestVersion();
 
   const copyToClipboard = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
@@ -34,9 +36,9 @@ export default function Home() {
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
                 </span>
-                {t('hero.version')}
+                {t('hero.version', { version })}
               </div>
-              
+
               <h1 className="text-5xl md:text-7xl lg:text-8xl font-extrabold tracking-tight leading-[1.1] mb-6" dangerouslySetInnerHTML={{ __html: t('hero.title') }} />
               
               <p className="text-xl text-muted-foreground max-w-lg leading-relaxed">

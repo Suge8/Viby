@@ -7,7 +7,7 @@
     "viewOnGithub": "GitHub"
   },
   "hero": {
-    "version": "v0.3.1 现已发布",
+    "version": "{{version}} 现已发布",
     "title": "Vibe Coding <br/> <span class=\"text-primary\">随时随地，自由编程</span>",
     "subtitle": "去徒步，去喝咖啡，或者只是放松一下。你的 AI 代理在后台为你工作。只有在需要你确认时，我们才会通过你喜欢的即时通讯应用通知你。",
     "startBtn": "开启自由之旅",
