@@ -1,3 +1,4 @@
+import { unwrapRoleWrappedRecordEnvelope } from '@hapi/protocol/messages'
 import { TodoItemSchema, TodosSchema } from '@hapi/protocol/schemas'
 import type { TodoItem } from '@hapi/protocol/types'
 
@@ -6,33 +7,6 @@ export type { TodoItem }
 
 function isObject(value: unknown): value is Record<string, unknown> {
     return Boolean(value) && typeof value === 'object'
-}
-
-type RoleWrappedRecord = {
-    role: string
-    content: unknown
-    meta?: unknown
-}
-
-function isRoleWrappedRecord(value: unknown): value is RoleWrappedRecord {
-    if (!isObject(value)) return false
-    return typeof value.role === 'string' && 'content' in value
-}
-
-function unwrapRoleWrappedRecordEnvelope(value: unknown): RoleWrappedRecord | null {
-    if (isRoleWrappedRecord(value)) return value
-    if (!isObject(value)) return null
-
-    const direct = value.message
-    if (isRoleWrappedRecord(direct)) return direct
-
-    const data = value.data
-    if (isObject(data) && isRoleWrappedRecord(data.message)) return data.message as RoleWrappedRecord
-
-    const payload = value.payload
-    if (isObject(payload) && isRoleWrappedRecord(payload.message)) return payload.message as RoleWrappedRecord
-
-    return null
 }
 
 function extractTodosFromClaudeOutput(content: Record<string, unknown>): TodoItem[] | null {
