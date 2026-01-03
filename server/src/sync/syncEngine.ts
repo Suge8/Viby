@@ -728,6 +728,11 @@ export class SyncEngine {
         await this.sessionRpc(sessionId, 'abort', { reason: 'User aborted via Telegram Bot' })
     }
 
+    async archiveSession(sessionId: string): Promise<void> {
+        await this.sessionRpc(sessionId, 'killSession', {})
+        this.handleSessionEnd({ sid: sessionId, time: Date.now() })
+    }
+
     async switchSession(sessionId: string, to: 'remote' | 'local'): Promise<void> {
         await this.sessionRpc(sessionId, 'switch', { to })
     }
