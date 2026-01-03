@@ -128,32 +128,17 @@ export class SyncEngine {
             }
         }
 
-        const webappEvent: SyncEvent = event.type === 'message-received'
-            ? {
-                type: event.type,
-                namespace,
-                sessionId: event.sessionId,
-                machineId: event.machineId,
-                message: event.message
-            }
-            : {
-                type: event.type,
-                namespace,
-                sessionId: event.sessionId,
-                machineId: event.machineId
-            }
-
-        this.sseManager.broadcast(webappEvent)
+        this.sseManager.broadcast(enrichedEvent)
     }
 
     private resolveNamespace(event: SyncEvent): string | undefined {
         if (event.namespace) {
             return event.namespace
         }
-        if (event.sessionId) {
+        if ('sessionId' in event) {
             return this.sessions.get(event.sessionId)?.namespace
         }
-        if (event.machineId) {
+        if ('machineId' in event) {
             return this.machines.get(event.machineId)?.namespace
         }
         return undefined
