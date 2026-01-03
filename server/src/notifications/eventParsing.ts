@@ -31,7 +31,7 @@ export function extractMessageEventType(event: SyncEvent): string | null {
         return null
     }
 
-    const message = event.message?.content ?? event.data
+    const message = event.message?.content
     const envelope = extractEventEnvelope(message)
     if (!envelope) {
         return null
