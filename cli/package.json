@@ -50,6 +50,7 @@
     "release-all": "bun run scripts/release-all.ts"
   },
   "dependencies": {
+    "@hapi/protocol": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.25.1",
     "@types/cross-spawn": "^6.0.6",
     "@types/ps-list": "^6.2.1",

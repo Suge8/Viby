@@ -7,61 +7,17 @@
  * - No E2E encryption; data is stored as JSON in SQLite
  */
 
+import { AgentStateSchema, MetadataSchema } from '@hapi/protocol/schemas'
+import type { ClaudePermissionMode, DecryptedMessage, ModelMode, PermissionMode, Session, SyncEvent } from '@hapi/protocol/types'
 import { z } from 'zod'
 import type { Server } from 'socket.io'
 import type { Store } from '../store'
 import type { RpcRegistry } from '../socket/rpcRegistry'
 import type { SSEManager } from '../sse/sseManager'
-import { extractTodoWriteTodosFromMessageContent, TodosSchema, type TodoItem } from './todos'
+import { extractTodoWriteTodosFromMessageContent, TodosSchema } from './todos'
 
 export type ConnectionStatus = 'disconnected' | 'connected'
-
-export const MetadataSchema = z.object({
-    path: z.string(),
-    host: z.string(),
-    version: z.string().optional(),
-    name: z.string().optional(),
-    os: z.string().optional(),
-    summary: z.object({
-        text: z.string(),
-        updatedAt: z.number()
-    }).optional(),
-    machineId: z.string().optional(),
-    tools: z.array(z.string()).optional(),
-    flavor: z.string().nullish(),
-    worktree: z.object({
-        basePath: z.string(),
-        branch: z.string(),
-        name: z.string(),
-        worktreePath: z.string().optional(),
-        createdAt: z.number().optional()
-    }).optional()
-}).passthrough()
-
-export type Metadata = z.infer<typeof MetadataSchema>
-
-export const AgentStateSchema = z.object({
-    controlledByUser: z.boolean().nullish(),
-    requests: z.record(z.string(), z.object({
-        tool: z.string(),
-        arguments: z.unknown(),
-        createdAt: z.number().nullish()
-    }).passthrough()).nullish(),
-    completedRequests: z.record(z.string(), z.object({
-        tool: z.string(),
-        arguments: z.unknown(),
-        createdAt: z.number().nullish(),
-        completedAt: z.number().nullish(),
-        status: z.enum(['canceled', 'denied', 'approved']),
-        reason: z.string().optional(),
-        mode: z.string().optional(),
-        decision: z.enum(['approved', 'approved_for_session', 'denied', 'abort']).optional(),
-        allowTools: z.array(z.string()).optional(),
-        answers: z.record(z.string(), z.array(z.string())).optional()
-    }).passthrough()).nullish()
-}).passthrough()
-
-export type AgentState = z.infer<typeof AgentStateSchema>
+export type { Session, SyncEvent } from '@hapi/protocol/types'
 
 const machineMetadataSchema = z.object({
     host: z.string().optional(),
@@ -69,25 +25,6 @@ const machineMetadataSchema = z.object({
     happyCliVersion: z.string().optional(),
     displayName: z.string().optional()
 }).passthrough()
-
-export interface Session {
-    id: string
-    namespace: string
-    seq: number
-    createdAt: number
-    updatedAt: number
-    active: boolean
-    activeAt: number
-    metadata: Metadata | null
-    metadataVersion: number
-    agentState: AgentState | null
-    agentStateVersion: number
-    thinking: boolean
-    thinkingAt: number
-    todos?: TodoItem[]
-    permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'read-only' | 'safe-yolo' | 'yolo'
-    modelMode?: 'default' | 'sonnet' | 'opus'
-}
 
 export interface Machine {
     id: string
@@ -107,14 +44,6 @@ export interface Machine {
     metadataVersion: number
     daemonState: unknown | null
     daemonStateVersion: number
-}
-
-export interface DecryptedMessage {
-    id: string
-    seq: number
-    localId: string | null
-    content: unknown
-    createdAt: number
 }
 
 export type FetchMessagesResult =
@@ -137,23 +66,6 @@ export type RpcReadFileResponse = {
 
 export type RpcPathExistsResponse = {
     exists: Record<string, boolean>
-}
-
-export type SyncEventType =
-    | 'session-added'
-    | 'session-updated'
-    | 'session-removed'
-    | 'message-received'
-    | 'machine-updated'
-    | 'connection-changed'
-
-export interface SyncEvent {
-    type: SyncEventType
-    namespace?: string
-    sessionId?: string
-    machineId?: string
-    data?: unknown
-    message?: DecryptedMessage
 }
 
 export type SyncEventListener = (event: SyncEvent) => void
@@ -383,8 +295,8 @@ export class SyncEngine {
         time: number
         thinking?: boolean
         mode?: 'local' | 'remote'
-        permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'read-only' | 'safe-yolo' | 'yolo'
-        modelMode?: 'default' | 'sonnet' | 'opus'
+        permissionMode?: PermissionMode
+        modelMode?: ModelMode
     }): void {
         const t = clampAliveTime(payload.time)
         if (!t) return
@@ -697,7 +609,7 @@ export class SyncEngine {
     async approvePermission(
         sessionId: string,
         requestId: string,
-        mode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan',
+        mode?: ClaudePermissionMode,
         allowTools?: string[],
         decision?: 'approved' | 'approved_for_session' | 'denied' | 'abort',
         answers?: Record<string, string[]>
@@ -739,7 +651,7 @@ export class SyncEngine {
 
     async setPermissionMode(
         sessionId: string,
-        mode: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'read-only' | 'safe-yolo' | 'yolo'
+        mode: PermissionMode
     ): Promise<void> {
         const session = this.sessions.get(sessionId)
         if (session) {
@@ -748,7 +660,7 @@ export class SyncEngine {
         }
     }
 
-    async setModelMode(sessionId: string, model: 'default' | 'sonnet' | 'opus'): Promise<void> {
+    async setModelMode(sessionId: string, model: ModelMode): Promise<void> {
         const session = this.sessions.get(sessionId)
         if (session) {
             session.modelMode = model
@@ -810,8 +722,8 @@ export class SyncEngine {
     async applySessionConfig(
         sessionId: string,
         config: {
-            permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'read-only' | 'safe-yolo' | 'yolo'
-            modelMode?: 'default' | 'sonnet' | 'opus'
+            permissionMode?: PermissionMode
+            modelMode?: ModelMode
         }
     ): Promise<void> {
         const result = await this.sessionRpc(sessionId, 'set-session-config', config)
