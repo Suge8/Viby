@@ -8,12 +8,14 @@ COPY server/package.json ./server/package.json
 COPY web/package.json ./web/package.json
 COPY website/package.json ./website/package.json
 COPY docs/package.json ./docs/package.json
+COPY shared/package.json ./shared/package.json
 
 RUN bun install --frozen-lockfile
 
 
 FROM deps AS build
 
+COPY shared ./shared
 COPY cli ./cli
 COPY server ./server
 COPY web ./web
