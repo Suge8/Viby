@@ -239,6 +239,13 @@ export class ApiClient {
         })
     }
 
+    async archiveSession(sessionId: string): Promise<void> {
+        await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/archive`, {
+            method: 'POST',
+            body: JSON.stringify({})
+        })
+    }
+
     async switchSession(sessionId: string): Promise<void> {
         await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/switch`, {
             method: 'POST',
