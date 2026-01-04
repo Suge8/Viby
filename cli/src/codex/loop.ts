@@ -6,8 +6,9 @@ import { codexLocalLauncher } from './codexLocalLauncher';
 import { codexRemoteLauncher } from './codexRemoteLauncher';
 import { ApiClient, ApiSessionClient } from '@/lib';
 import type { CodexCliOverrides } from './utils/codexCliOverrides';
+import type { CodexPermissionMode } from '@hapi/protocol/types';
 
-export type PermissionMode = 'default' | 'read-only' | 'safe-yolo' | 'yolo';
+export type PermissionMode = CodexPermissionMode;
 
 export interface EnhancedMode {
     permissionMode: PermissionMode;

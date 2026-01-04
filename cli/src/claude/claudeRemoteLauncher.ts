@@ -16,11 +16,12 @@ import { RawJSONLines } from "@/claude/types";
 import { OutgoingMessageQueue } from "./utils/OutgoingMessageQueue";
 import { getToolName } from "./utils/getToolName";
 import { restoreTerminalState } from "@/ui/terminalState";
+import type { ClaudePermissionMode } from "@hapi/protocol/types";
 
 interface PermissionsField {
     date: number;
     result: 'approved' | 'denied';
-    mode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan';
+    mode?: ClaudePermissionMode;
     allowedTools?: string[];
 }
 

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
+import type { ModelMode, PermissionMode } from '@hapi/protocol/types'
 import type { Store, StoredMachine, StoredSession } from '../../store'
 import { RpcRegistry } from '../rpcRegistry'
 import type { SyncEvent } from '../../sync/syncEngine'
@@ -12,8 +13,8 @@ type SessionAlivePayload = {
     time: number
     thinking?: boolean
     mode?: 'local' | 'remote'
-    permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'read-only' | 'safe-yolo' | 'yolo'
-    modelMode?: 'default' | 'sonnet' | 'opus'
+    permissionMode?: PermissionMode
+    modelMode?: ModelMode
 }
 
 type SessionEndPayload = {
