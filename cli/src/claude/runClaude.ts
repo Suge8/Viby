@@ -1,5 +1,4 @@
 import { logger } from '@/ui/logger';
-import { restoreTerminalState } from '@/ui/terminalState';
 import { loop } from '@/claude/loop';
 import { AgentState, SessionModelMode } from '@/api/types';
 import { EnhancedMode, PermissionMode } from './loop';
@@ -14,6 +13,7 @@ import { generateHookSettingsFile, cleanupHookSettingsFile } from '@/claude/util
 import { registerKillSessionHandler } from './registerKillSessionHandler';
 import type { Session } from './session';
 import { bootstrapSession } from '@/agent/sessionFactory';
+import { createModeChangeHandler, createRunnerLifecycle, setControlledByUser } from '@/agent/runnerLifecycle';
 
 export interface StartOptions {
     model?: string
@@ -72,8 +72,6 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
 
     // Variable to track current session instance (updated via onSessionReady callback)
     const currentSessionRef: { current: Session | null } = { current: null };
-    let exitCode = 0;
-    let archiveReason: string | undefined;
 
     const formatFailureReason = (message: string): string => {
         const maxLength = 200;
@@ -108,12 +106,23 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
     logger.infoDeveloper(`Session: ${sessionInfo.id}`);
     logger.infoDeveloper(`Logs: ${logPath}`);
 
+    const lifecycle = createRunnerLifecycle({
+        session,
+        logTag: 'claude',
+        stopKeepAlive: () => currentSessionRef.current?.stopKeepAlive(),
+        onAfterClose: () => {
+            happyServer.stop();
+            hookServer.stop();
+            cleanupHookSettingsFile(hookSettingsPath);
+        }
+    });
+
+    lifecycle.registerProcessHandlers();
+    registerKillSessionHandler(session.rpcHandlerManager, lifecycle.cleanupAndExit);
+
     // Set initial agent state
     const startingMode = options.startingMode ?? (startedBy === 'daemon' ? 'remote' : 'local');
-    session.updateAgentState((currentState) => ({
-        ...currentState,
-        controlledByUser: startingMode !== 'remote'
-    }));
+    setControlledByUser(session, startingMode);
 
     // Import MessageQueue2 and create message queue
     const messageQueue = new MessageQueue2<EnhancedMode>(mode => hashObject({
@@ -258,65 +267,6 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         logger.debugLargeJson('User message pushed to queue:', message)
     });
 
-    // Setup signal handlers for graceful shutdown
-    const cleanup = async () => {
-        logger.debug('[START] Received termination signal, cleaning up...');
-        restoreTerminalState();
-
-        try {
-            // Update lifecycle state to archived before closing
-            if (session) {
-                const reason = archiveReason ?? 'User terminated';
-                session.updateMetadata((currentMetadata) => ({
-                    ...currentMetadata,
-                    lifecycleState: 'archived',
-                    lifecycleStateSince: Date.now(),
-                    archivedBy: 'cli',
-                    archiveReason: reason
-                }));
-                
-                // Send session death message
-                session.sendSessionDeath();
-                await session.flush();
-                await session.close();
-            }
-
-            // Stop HAPI MCP server
-            happyServer.stop();
-
-            // Stop Hook server and cleanup settings file
-            hookServer.stop();
-            cleanupHookSettingsFile(hookSettingsPath);
-
-            logger.debug('[START] Cleanup complete, exiting');
-            process.exit(exitCode);
-        } catch (error) {
-            logger.debug('[START] Error during cleanup:', error);
-            process.exit(1);
-        }
-    };
-
-    // Handle termination signals
-    process.on('SIGTERM', cleanup);
-    process.on('SIGINT', cleanup);
-
-    // Handle uncaught exceptions and rejections
-    process.on('uncaughtException', (error) => {
-        logger.debug('[START] Uncaught exception:', error);
-        exitCode = 1;
-        archiveReason = 'Session crashed';
-        cleanup();
-    });
-
-    process.on('unhandledRejection', (reason) => {
-        logger.debug('[START] Unhandled rejection:', reason);
-        exitCode = 1;
-        archiveReason = 'Session crashed';
-        cleanup();
-    });
-
-    registerKillSessionHandler(session.rpcHandlerManager, cleanup);
-
     session.rpcHandlerManager.registerHandler('set-session-config', async (payload: unknown) => {
         if (!payload || typeof payload !== 'object') {
             throw new Error('Invalid session config payload');
@@ -344,72 +294,50 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         return { applied: { permissionMode: currentPermissionMode, modelMode: currentModelMode } };
     });
 
-    // Create claude loop
-    await loop({
-        path: workingDirectory,
-        model: options.model,
-        permissionMode: options.permissionMode,
-        startingMode,
-        messageQueue,
-        api,
-        allowedTools: happyServer.toolNames.map(toolName => `mcp__hapi__${toolName}`),
-        onModeChange: (newMode) => {
-            session.sendSessionEvent({ type: 'switch', mode: newMode });
-            session.updateAgentState((currentState) => ({
-                ...currentState,
-                controlledByUser: newMode === 'local'
-            }));
-        },
-        onSessionReady: (sessionInstance) => {
-            currentSessionRef.current = sessionInstance;
-            syncSessionModes();
-        },
-        mcpServers: {
-            'hapi': {
-                type: 'http' as const,
-                url: happyServer.url,
-            }
-        },
-        session,
-        claudeEnvVars: options.claudeEnvVars,
-        claudeArgs: options.claudeArgs,
-        startedBy,
-        hookSettingsPath
-    });
+    let loopError: unknown = null;
+    let loopFailed = false;
+    try {
+        await loop({
+            path: workingDirectory,
+            model: options.model,
+            permissionMode: options.permissionMode,
+            startingMode,
+            messageQueue,
+            api,
+            allowedTools: happyServer.toolNames.map(toolName => `mcp__hapi__${toolName}`),
+            onModeChange: createModeChangeHandler(session),
+            onSessionReady: (sessionInstance) => {
+                currentSessionRef.current = sessionInstance;
+                syncSessionModes();
+            },
+            mcpServers: {
+                'hapi': {
+                    type: 'http' as const,
+                    url: happyServer.url,
+                }
+            },
+            session,
+            claudeEnvVars: options.claudeEnvVars,
+            claudeArgs: options.claudeArgs,
+            startedBy,
+            hookSettingsPath
+        });
+    } catch (error) {
+        loopError = error;
+        loopFailed = true;
+        lifecycle.markCrash(error);
+    }
 
     const localFailure = currentSessionRef.current?.localLaunchFailure;
     if (localFailure?.exitReason === 'exit') {
-        exitCode = 1;
-        archiveReason = `Local launch failed: ${formatFailureReason(localFailure.message)}`;
-        session.updateMetadata((currentMetadata) => ({
-            ...currentMetadata,
-            lifecycleState: 'archived',
-            lifecycleStateSince: Date.now(),
-            archivedBy: 'cli',
-            archiveReason
-        }));
+        lifecycle.setExitCode(1);
+        lifecycle.setArchiveReason(`Local launch failed: ${formatFailureReason(localFailure.message)}`);
     }
 
-    // Send session death message
-    session.sendSessionDeath();
+    if (loopFailed) {
+        await lifecycle.cleanup();
+        throw loopError;
+    }
 
-    // Wait for socket to flush
-    logger.debug('Waiting for socket to flush...');
-    await session.flush();
-
-    // Close session
-    logger.debug('Closing session...');
-    await session.close();
-
-    // Stop HAPI MCP server
-    happyServer.stop();
-    logger.debug('Stopped HAPI MCP server');
-
-    // Stop Hook server and cleanup settings file
-    hookServer.stop();
-    cleanupHookSettingsFile(hookSettingsPath);
-    logger.debug('Stopped Hook server and cleaned up settings file');
-
-    // Exit
-    process.exit(exitCode);
+    await lifecycle.cleanupAndExit();
 }

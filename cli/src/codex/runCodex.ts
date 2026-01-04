@@ -1,5 +1,4 @@
 import { logger } from '@/ui/logger';
-import { restoreTerminalState } from '@/ui/terminalState';
 import { loop, type EnhancedMode, type PermissionMode } from './loop';
 import { MessageQueue2 } from '@/utils/MessageQueue2';
 import { hashObject } from '@/utils/deterministicJson';
@@ -8,6 +7,7 @@ import type { AgentState } from '@/api/types';
 import type { CodexSession } from './session';
 import { parseCodexCliOverrides } from './utils/codexCliOverrides';
 import { bootstrapSession } from '@/agent/sessionFactory';
+import { createModeChangeHandler, createRunnerLifecycle, setControlledByUser } from '@/agent/runnerLifecycle';
 
 export { emitReadyIfIdle } from './utils/emitReadyIfIdle';
 
@@ -33,10 +33,7 @@ export async function runCodex(opts: {
 
     const startingMode: 'local' | 'remote' = startedBy === 'daemon' ? 'remote' : 'local';
 
-    session.updateAgentState((currentState) => ({
-        ...currentState,
-        controlledByUser: startingMode === 'local'
-    }));
+    setControlledByUser(session, startingMode);
 
     const messageQueue = new MessageQueue2<EnhancedMode>((mode) => hashObject({
         permissionMode: mode.permissionMode,
@@ -47,6 +44,15 @@ export async function runCodex(opts: {
     const sessionWrapperRef: { current: CodexSession | null } = { current: null };
 
     let currentPermissionMode: PermissionMode = opts.permissionMode ?? 'default';
+
+    const lifecycle = createRunnerLifecycle({
+        session,
+        logTag: 'codex',
+        stopKeepAlive: () => sessionWrapperRef.current?.stopKeepAlive()
+    });
+
+    lifecycle.registerProcessHandlers();
+    registerKillSessionHandler(session.rpcHandlerManager, lifecycle.cleanupAndExit);
 
     const syncSessionMode = () => {
         const sessionInstance = sessionWrapperRef.current;
@@ -67,10 +73,6 @@ export async function runCodex(opts: {
         messageQueue.push(message.content.text, enhancedMode);
     });
 
-    let cleanupStarted = false;
-    let exitCode = 0;
-    let archiveReason = 'User terminated';
-
     const formatFailureReason = (message: string): string => {
         const maxLength = 200;
         if (message.length <= maxLength) {
@@ -78,58 +80,6 @@ export async function runCodex(opts: {
         }
         return `${message.slice(0, maxLength)}...`;
     };
-
-    const cleanup = async (code: number = exitCode) => {
-        if (cleanupStarted) {
-            return;
-        }
-        cleanupStarted = true;
-        logger.debug('[codex] Cleanup start');
-        restoreTerminalState();
-        try {
-            const sessionWrapper = sessionWrapperRef.current;
-            if (sessionWrapper) {
-                sessionWrapper.stopKeepAlive();
-            }
-
-            session.updateMetadata((currentMetadata) => ({
-                ...currentMetadata,
-                lifecycleState: 'archived',
-                lifecycleStateSince: Date.now(),
-                archivedBy: 'cli',
-                archiveReason
-            }));
-
-            session.sendSessionDeath();
-            await session.flush();
-            await session.close();
-
-            logger.debug('[codex] Cleanup complete, exiting');
-            process.exit(code);
-        } catch (error) {
-            logger.debug('[codex] Error during cleanup:', error);
-            process.exit(1);
-        }
-    };
-
-    process.on('SIGTERM', () => cleanup(0));
-    process.on('SIGINT', () => cleanup(0));
-
-    process.on('uncaughtException', (error) => {
-        logger.debug('[codex] Uncaught exception:', error);
-        exitCode = 1;
-        archiveReason = 'Session crashed';
-        cleanup(1);
-    });
-
-    process.on('unhandledRejection', (reason) => {
-        logger.debug('[codex] Unhandled rejection:', reason);
-        exitCode = 1;
-        archiveReason = 'Session crashed';
-        cleanup(1);
-    });
-
-    registerKillSessionHandler(session.rpcHandlerManager, cleanup);
 
     session.rpcHandlerManager.registerHandler('set-session-config', async (payload: unknown) => {
         if (!payload || typeof payload !== 'object') {
@@ -149,7 +99,6 @@ export async function runCodex(opts: {
         return { applied: { permissionMode: currentPermissionMode } };
     });
 
-    let loopError: unknown = null;
     try {
         await loop({
             path: workingDirectory,
@@ -161,29 +110,21 @@ export async function runCodex(opts: {
             codexCliOverrides,
             startedBy,
             permissionMode: currentPermissionMode,
-            onModeChange: (newMode) => {
-                session.sendSessionEvent({ type: 'switch', mode: newMode });
-                session.updateAgentState((currentState) => ({
-                    ...currentState,
-                    controlledByUser: newMode === 'local'
-                }));
-            },
+            onModeChange: createModeChangeHandler(session),
             onSessionReady: (instance) => {
                 sessionWrapperRef.current = instance;
                 syncSessionMode();
             }
         });
     } catch (error) {
-        loopError = error;
-        exitCode = 1;
-        archiveReason = 'Session crashed';
+        lifecycle.markCrash(error);
         logger.debug('[codex] Loop error:', error);
     } finally {
         const localFailure = sessionWrapperRef.current?.localLaunchFailure;
         if (localFailure?.exitReason === 'exit') {
-            exitCode = 1;
-            archiveReason = `Local launch failed: ${formatFailureReason(localFailure.message)}`;
+            lifecycle.setExitCode(1);
+            lifecycle.setArchiveReason(`Local launch failed: ${formatFailureReason(localFailure.message)}`);
         }
-        await cleanup(loopError ? 1 : exitCode);
+        await lifecycle.cleanupAndExit();
     }
 }
