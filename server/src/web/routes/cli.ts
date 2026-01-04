@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { configuration } from '../../configuration'
-import { safeCompareStrings } from '../../utils/crypto'
+import { constantTimeEquals } from '../../utils/crypto'
 import { parseAccessToken } from '../../utils/accessToken'
 import type { Machine, Session, SyncEngine } from '../../sync/syncEngine'
 
@@ -76,7 +76,7 @@ export function createCliRoutes(getSyncEngine: () => SyncEngine | null): Hono<Cl
 
         const token = parsed.data.replace(/^Bearer\s+/i, '')
         const parsedToken = parseAccessToken(token)
-        if (!parsedToken || !safeCompareStrings(parsedToken.baseToken, configuration.cliApiToken)) {
+        if (!parsedToken || !constantTimeEquals(parsedToken.baseToken, configuration.cliApiToken)) {
             return c.json({ error: 'Invalid token' }, 401)
         }
 

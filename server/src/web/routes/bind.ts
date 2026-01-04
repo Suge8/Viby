@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { SignJWT } from 'jose'
 import { z } from 'zod'
 import { configuration } from '../../configuration'
-import { safeCompareStrings } from '../../utils/crypto'
+import { constantTimeEquals } from '../../utils/crypto'
 import { parseAccessToken } from '../../utils/accessToken'
 import { validateTelegramInitData } from '../telegramInitData'
 import { getOrCreateOwnerId } from '../ownerId'
@@ -25,7 +25,7 @@ export function createBindRoutes(jwtSecret: Uint8Array, store: Store): Hono<WebA
         }
 
         const parsedToken = parseAccessToken(parsed.data.accessToken)
-        if (!parsedToken || !safeCompareStrings(parsedToken.baseToken, configuration.cliApiToken)) {
+        if (!parsedToken || !constantTimeEquals(parsedToken.baseToken, configuration.cliApiToken)) {
             return c.json({ error: 'Invalid access token' }, 401)
         }
         const namespace = parsedToken.namespace
