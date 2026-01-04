@@ -20,11 +20,13 @@ interface PermissionResponse {
     id: string;
     approved: boolean;
     reason?: string;
-    mode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan';
+    mode?: PermissionMode;
     allowTools?: string[];
     answers?: Record<string, string[]>;
     receivedAt?: number;
 }
+
+const PLAN_EXIT_MODES: PermissionMode[] = ['default', 'acceptEdits', 'bypassPermissions'];
 
 function isObject(value: unknown): value is Record<string, unknown> {
     return Boolean(value) && typeof value === 'object';
@@ -173,7 +175,7 @@ export class PermissionHandler {
             if (response.approved) {
                 logger.debug('Plan approved - injecting PLAN_FAKE_RESTART');
                 // Inject the approval message at the beginning of the queue
-                if (response.mode && ['default', 'acceptEdits', 'bypassPermissions'].includes(response.mode)) {
+                if (response.mode && PLAN_EXIT_MODES.includes(response.mode)) {
                     this.session.queue.unshift(PLAN_FAKE_RESTART, { permissionMode: response.mode });
                 } else {
                     this.session.queue.unshift(PLAN_FAKE_RESTART, { permissionMode: 'default' });

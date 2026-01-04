@@ -1,4 +1,4 @@
-import { getPermissionModesForFlavor, isModelModeAllowedForFlavor } from '@hapi/protocol'
+import { getPermissionModesForFlavor, isModelModeAllowedForFlavor, isPermissionModeAllowedForFlavor } from '@hapi/protocol'
 import { ModelModeSchema, PermissionModeSchema } from '@hapi/protocol/schemas'
 import { Hono } from 'hono'
 import { z } from 'zod'
@@ -192,7 +192,7 @@ export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Ho
             return c.json({ error: 'Permission mode not supported for session flavor' }, 400)
         }
 
-        if (!allowedModes.includes(mode)) {
+        if (!isPermissionModeAllowedForFlavor(mode, flavor)) {
             return c.json({ error: 'Invalid permission mode for session flavor' }, 400)
         }
 

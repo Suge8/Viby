@@ -8,6 +8,8 @@ import type { CodexSession } from './session';
 import { parseCodexCliOverrides } from './utils/codexCliOverrides';
 import { bootstrapSession } from '@/agent/sessionFactory';
 import { createModeChangeHandler, createRunnerLifecycle, setControlledByUser } from '@/agent/runnerLifecycle';
+import { isPermissionModeAllowedForFlavor } from '@hapi/protocol';
+import { PermissionModeSchema } from '@hapi/protocol/schemas';
 
 export { emitReadyIfIdle } from './utils/emitReadyIfIdle';
 
@@ -81,18 +83,22 @@ export async function runCodex(opts: {
         return `${message.slice(0, maxLength)}...`;
     };
 
+    const resolvePermissionMode = (value: unknown): PermissionMode => {
+        const parsed = PermissionModeSchema.safeParse(value);
+        if (!parsed.success || !isPermissionModeAllowedForFlavor(parsed.data, 'codex')) {
+            throw new Error('Invalid permission mode');
+        }
+        return parsed.data as PermissionMode;
+    };
+
     session.rpcHandlerManager.registerHandler('set-session-config', async (payload: unknown) => {
         if (!payload || typeof payload !== 'object') {
             throw new Error('Invalid session config payload');
         }
-        const config = payload as { permissionMode?: PermissionMode };
+        const config = payload as { permissionMode?: unknown };
 
         if (config.permissionMode !== undefined) {
-            const validModes: PermissionMode[] = ['default', 'read-only', 'safe-yolo', 'yolo'];
-            if (!validModes.includes(config.permissionMode)) {
-                throw new Error('Invalid permission mode');
-            }
-            currentPermissionMode = config.permissionMode;
+            currentPermissionMode = resolvePermissionMode(config.permissionMode);
         }
 
         syncSessionMode();
