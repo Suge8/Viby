@@ -269,9 +269,8 @@ export default function Home() {
           <h2 className="text-3xl md:text-4xl font-bold text-center mb-12">{t('installation.title')}</h2>
           
           <Tabs defaultValue="npm" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-8 h-14 p-1 bg-muted border-2 border-border rounded-xl">
+            <TabsList className="grid w-full grid-cols-1 mb-8 h-14 p-1 bg-muted border-2 border-border rounded-xl">
               <TabsTrigger value="npm" className="text-lg font-bold rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm">NPM</TabsTrigger>
-              <TabsTrigger value="docker" className="text-lg font-bold rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm">Docker</TabsTrigger>
             </TabsList>
             
             <TabsContent value="npm">
@@ -304,31 +303,6 @@ export default function Home() {
               </Card>
             </TabsContent>
             
-            <TabsContent value="docker">
-              <Card className="border-2 border-border shadow-hard bg-card">
-                <CardContent className="p-6">
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <h3 className="font-bold">{t('installation.docker.title')}</h3>
-                    </div>
-                    <div className="bg-slate-950 text-slate-50 p-4 rounded-xl font-mono text-sm overflow-x-auto border-2 border-slate-800">
-                      <pre>{`version: '3'
-services:
-  hapi:
-    image: ghcr.io/tiann/hapi:latest
-    network_mode: host
-    volumes:
-      - ~/.hapi:/root/.hapi
-    restart: unless-stopped`}</pre>
-                    </div>
-                    <Button className="w-full mt-4 font-bold" onClick={() => copyToClipboard("docker-compose up -d", "docker")}>
-                      {copied === "docker" ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
-                      {t('installation.docker.copyBtn')}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
           </Tabs>
         </div>
       </section>

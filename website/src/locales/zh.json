@@ -113,10 +113,6 @@
     "npm": {
       "step1": "1. 全局安装",
       "step2": "2. 启动服务器"
-    },
-    "docker": {
-      "title": "使用 Docker Compose 运行",
-      "copyBtn": "复制 Docker Compose"
     }
   },
   "cta": {
@@ -128,7 +124,7 @@
     "desc": "Vibe Coding 随时随地。 <br/> 为热爱自由的开发者打造的本地优先 AI 代理平台。",
     "product": "产品",
     "community": "社区",
-    "copyright": "© {{year}} HAPI Team. 基于 LGPL 协议开源。",
+    "copyright": "© {{year}} HAPI Team. 基于 AGPL 协议开源。",
     "designedWith": "为 Vibe Coding <span class=\"text-red-500\">♥</span> 精心设计。"
   }
 }

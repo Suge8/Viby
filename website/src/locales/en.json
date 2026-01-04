@@ -113,10 +113,6 @@
     "npm": {
       "step1": "1. Install Globally",
       "step2": "2. Start Server"
-    },
-    "docker": {
-      "title": "Run with Docker Compose",
-      "copyBtn": "Copy Docker Compose"
     }
   },
   "cta": {
@@ -128,7 +124,7 @@
     "desc": "Vibe Coding Anytime, Anywhere. <br/> The local-first AI agent platform for developers who love freedom.",
     "product": "Product",
     "community": "Community",
-    "copyright": "© {{year}} HAPI Team. Open source under LGPL License.",
+    "copyright": "© {{year}} HAPI Team. Open source under AGPL License.",
     "designedWith": "Designed with <span class=\"text-red-500\">♥</span> for Vibe Coding."
   }
 }

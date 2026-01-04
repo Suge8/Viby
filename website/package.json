@@ -2,7 +2,7 @@
   "name": "hapi-website",
   "version": "1.0.0",
   "type": "module",
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "scripts": {
     "dev": "vite --host",
     "build": "vite build && esbuild src/server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
