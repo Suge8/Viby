@@ -19,8 +19,9 @@
 import { existsSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { loadServerSettings, type ServerSettings, type ServerSettingsResult } from './serverSettings'
-import { getOrCreateCliApiToken } from './web/cliApiToken'
+import { getOrCreateCliApiToken } from './config/cliApiToken'
+import { getSettingsFile } from './config/settings'
+import { loadServerSettings, type ServerSettings, type ServerSettingsResult } from './config/serverSettings'
 
 export type ConfigSource = 'env' | 'file' | 'default'
 
@@ -78,7 +79,7 @@ class Configuration {
     ) {
         this.dataDir = dataDir
         this.dbPath = dbPath
-        this.settingsFile = join(dataDir, 'settings.json')
+        this.settingsFile = getSettingsFile(dataDir)
 
         // Apply server settings
         this.telegramBotToken = serverSettings.telegramBotToken
@@ -124,7 +125,7 @@ class Configuration {
         const settingsResult = await loadServerSettings(dataDir)
 
         if (settingsResult.savedToFile) {
-            console.log(`[Server] Configuration saved to ${join(dataDir, 'settings.json')}`)
+            console.log(`[Server] Configuration saved to ${getSettingsFile(dataDir)}`)
         }
 
         // 4. Create configuration instance

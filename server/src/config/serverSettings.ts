@@ -8,8 +8,7 @@
  * it will be saved to settings.json for future use.
  */
 
-import { join } from 'node:path'
-import { readSettings, writeSettings, type Settings } from './web/cliApiToken'
+import { getSettingsFile, readSettings, writeSettings } from './settings'
 
 export interface ServerSettings {
     telegramBotToken: string | null
@@ -70,7 +69,7 @@ function deriveCorsOrigins(webappUrl: string): string[] {
  * Saves new env values to file when not already present
  */
 export async function loadServerSettings(dataDir: string): Promise<ServerSettingsResult> {
-    const settingsFile = join(dataDir, 'settings.json')
+    const settingsFile = getSettingsFile(dataDir)
     const settings = await readSettings(settingsFile)
 
     // If settings file exists but couldn't be parsed, fail fast

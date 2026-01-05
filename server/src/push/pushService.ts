@@ -1,6 +1,6 @@
 import * as webPush from 'web-push'
 import type { Store } from '../store'
-import type { VapidKeys } from './vapidKeys'
+import type { VapidKeys } from '../config/vapidKeys'
 
 export type PushPayload = {
     title: string
