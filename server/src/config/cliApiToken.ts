@@ -5,27 +5,10 @@
  * Priority: environment variable > settings.json > auto-generate
  */
 
-import { existsSync } from 'node:fs'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { randomBytes } from 'node:crypto'
-import { dirname, join } from 'node:path'
 import { parseAccessToken } from '../utils/accessToken'
-
-export interface Settings {
-    machineId?: string
-    machineIdConfirmedByServer?: boolean
-    daemonAutoStartWhenRunningHappy?: boolean
-    cliApiToken?: string
-    vapidKeys?: {
-        publicKey: string
-        privateKey: string
-    }
-    // Server configuration (persisted from environment variables)
-    telegramBotToken?: string
-    webappPort?: number
-    webappUrl?: string
-    corsOrigins?: string[]
-}
+import { getOrCreateSettingsValue } from './generators'
+import { getSettingsFile, readSettings, writeSettings } from './settings'
 
 export interface CliApiTokenResult {
     token: string
@@ -81,38 +64,6 @@ function normalizeCliApiToken(rawToken: string, source: CliApiTokenSource): { to
 }
 
 /**
- * Read settings from file, preserving all existing fields.
- * Returns null if file exists but cannot be parsed (to avoid data loss).
- */
-export async function readSettings(settingsFile: string): Promise<Settings | null> {
-    if (!existsSync(settingsFile)) {
-        return {}
-    }
-    try {
-        const content = await readFile(settingsFile, 'utf8')
-        return JSON.parse(content)
-    } catch (error) {
-        // Return null to signal parse error - caller should not overwrite
-        console.error(`[WARN] Failed to parse ${settingsFile}: ${error}`)
-        return null
-    }
-}
-
-/**
- * Write settings to file atomically (temp file + rename)
- */
-export async function writeSettings(settingsFile: string, settings: Settings): Promise<void> {
-    const dir = dirname(settingsFile)
-    if (!existsSync(dir)) {
-        await mkdir(dir, { recursive: true, mode: 0o700 })
-    }
-
-    const tmpFile = settingsFile + '.tmp'
-    await writeFile(tmpFile, JSON.stringify(settings, null, 2))
-    await rename(tmpFile, settingsFile)
-}
-
-/**
  * Get or create CLI API token
  *
  * Priority:
@@ -121,7 +72,7 @@ export async function writeSettings(settingsFile: string, settings: Settings): P
  * 3. Auto-generate and save to settings.json
  */
 export async function getOrCreateCliApiToken(dataDir: string): Promise<CliApiTokenResult> {
-    const settingsFile = join(dataDir, 'settings.json')
+    const settingsFile = getSettingsFile(dataDir)
 
     // 1. Environment variable has highest priority (backward compatible)
     const envToken = process.env.CLI_API_TOKEN
@@ -141,29 +92,29 @@ export async function getOrCreateCliApiToken(dataDir: string): Promise<CliApiTok
         return { token: normalized.token, source: 'env', isNew: false, filePath: settingsFile }
     }
 
-    // 2. Read from settings file
-    const settings = await readSettings(settingsFile)
+    const result = await getOrCreateSettingsValue({
+        settingsFile,
+        readValue: (settings) => {
+            if (!settings.cliApiToken) {
+                return null
+            }
+            const normalized = normalizeCliApiToken(settings.cliApiToken, 'file')
+            if (normalized.didStrip) {
+                settings.cliApiToken = normalized.token
+                return { value: normalized.token, writeBack: true }
+            }
+            return { value: normalized.token }
+        },
+        writeValue: (settings, value) => {
+            settings.cliApiToken = value
+        },
+        generate: generateSecureToken
+    })
 
-    // If settings file exists but couldn't be parsed, fail fast to avoid data loss
-    if (settings === null) {
-        throw new Error(
-            `Cannot read ${settingsFile}. Please fix or remove the file and restart.`
-        )
+    return {
+        token: result.value,
+        source: result.created ? 'generated' : 'file',
+        isNew: result.created,
+        filePath: settingsFile
     }
-
-    if (settings.cliApiToken) {
-        const normalized = normalizeCliApiToken(settings.cliApiToken, 'file')
-        if (normalized.didStrip) {
-            settings.cliApiToken = normalized.token
-            await writeSettings(settingsFile, settings)
-        }
-        return { token: normalized.token, source: 'file', isNew: false, filePath: settingsFile }
-    }
-
-    // 3. Generate new token and save
-    const newToken = generateSecureToken()
-    settings.cliApiToken = newToken
-    await writeSettings(settingsFile, settings)
-
-    return { token: newToken, source: 'generated', isNew: true, filePath: settingsFile }
 }
