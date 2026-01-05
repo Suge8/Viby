@@ -93,11 +93,8 @@ export function LoginPrompt(props: LoginPromptProps) {
     const displayError = error || props.error
     const serverSummary = props.serverUrl ?? `${props.baseUrl} (same origin)`
     const title = isBindMode ? 'Bind Telegram' : 'HAPI'
-    const subtitle = isBindMode
-        ? 'Enter your access token to bind this Telegram account'
-        : 'Enter your access token to continue'
+    const subtitle = 'Vibe Coding Anytime, Anywhere'
     const submitLabel = isBindMode ? 'Bind' : 'Sign In'
-    const helpText = 'Use CLI_API_TOKEN:<namespace> from your server configuration (omit :<namespace> for default)'
 
     return (
         <div className="relative h-full flex items-center justify-center p-4">
@@ -177,7 +174,7 @@ export function LoginPrompt(props: LoginPromptProps) {
                             type="password"
                             value={accessToken}
                             onChange={(e) => setAccessToken(e.target.value)}
-                            placeholder={isBindMode ? 'CLI_API_TOKEN:<namespace>' : 'CLI_API_TOKEN[:namespace]'}
+                            placeholder="Access token"
                             autoComplete="current-password"
                             disabled={isLoading}
                             className="w-full px-3 py-2.5 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] placeholder:text-[var(--app-hint)] focus:outline-none focus:ring-2 focus:ring-[var(--app-button)] focus:border-transparent disabled:opacity-50"
@@ -206,11 +203,12 @@ export function LoginPrompt(props: LoginPromptProps) {
                         )}
                     </button>
                 </form>
+            </div>
 
-                {/* Help text */}
-                <div className="text-xs text-[var(--app-hint)] text-center">
-                    {helpText}
-                </div>
+            {/* Footer */}
+            <div className="absolute bottom-4 left-0 right-0 text-center text-xs text-[var(--app-hint)] space-y-1">
+                <div>Designed with <span className="text-red-500">♥</span> for Vibe Coding</div>
+                <div>© {new Date().getFullYear()} HAPI</div>
             </div>
         </div>
     )
