@@ -47,21 +47,6 @@ export function reduceChatBlocks(
     const rootResult = reduceTimeline(root, reducerContext)
     let hasReadyEvent = rootResult.hasReadyEvent
 
-    // If a group couldn't be attached to a Task tool call (e.g. legacy shapes), keep it visible.
-    for (const [taskMessageId, sidechainMessages] of groups) {
-        if (consumedGroupIds.has(taskMessageId)) continue
-        if (sidechainMessages.length === 0) continue
-        const child = reduceTimeline(sidechainMessages, reducerContext)
-        hasReadyEvent = hasReadyEvent || child.hasReadyEvent
-        rootResult.blocks.push({
-            kind: 'agent-event',
-            id: `sidechain:${taskMessageId}`,
-            createdAt: sidechainMessages[0].createdAt,
-            event: { type: 'message', message: 'Task sidechain' }
-        })
-        rootResult.blocks.push(...child.blocks)
-    }
-
     // Only create permission-only tool cards when there is no tool call/result in the transcript.
     for (const [id, entry] of permissionsById) {
         if (toolIdsInMessages.has(id)) continue
