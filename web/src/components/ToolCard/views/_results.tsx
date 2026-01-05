@@ -1,7 +1,7 @@
 import type { ToolViewComponent, ToolViewProps } from '@/components/ToolCard/views/_all'
 import { CodeBlock } from '@/components/CodeBlock'
 import { MarkdownRenderer } from '@/components/MarkdownRenderer'
-import { basename, resolveDisplayPath } from '@/components/ToolCard/path'
+import { basename, resolveDisplayPath } from '@/utils/path'
 
 function isObject(value: unknown): value is Record<string, unknown> {
     return Boolean(value) && typeof value === 'object'
