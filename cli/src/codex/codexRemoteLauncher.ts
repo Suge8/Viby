@@ -294,6 +294,12 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
         client.setHandler((msg) => {
             logger.debug(`[Codex] MCP message: ${JSON.stringify(msg)}`);
 
+            const msgType = typeof msg?.type === 'string' ? msg.type : null;
+            if (msgType === 'event_msg' || msgType === 'response_item' || msgType === 'session_meta') {
+                const payloadType = typeof msg?.payload?.type === 'string' ? msg.payload.type : null;
+                logger.debug(`[Codex] MCP wrapper event type: ${msgType}${payloadType ? ` (payload=${payloadType})` : ''}`);
+            }
+
             if (msg.type === 'agent_message') {
                 messageBuffer.addMessage(msg.message, 'assistant');
             } else if (msg.type === 'agent_reasoning_delta') {
