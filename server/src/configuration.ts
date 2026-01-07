@@ -8,6 +8,7 @@
  * Optional environment variables:
  * - CLI_API_TOKEN: Shared secret for hapi CLI authentication (auto-generated if not set)
  * - TELEGRAM_BOT_TOKEN: Telegram Bot API token from @BotFather
+ * - TELEGRAM_NOTIFICATION: Enable/disable Telegram notifications (default: true)
  * - WEBAPP_PORT: Port for Mini App HTTP server (default: 3006)
  * - WEBAPP_URL: Public URL for Telegram Mini App
  * - CORS_ORIGINS: Comma-separated CORS origins
@@ -27,6 +28,7 @@ export type ConfigSource = 'env' | 'file' | 'default'
 
 export interface ConfigSources {
     telegramBotToken: ConfigSource
+    telegramNotification: ConfigSource
     webappHost: ConfigSource
     webappPort: ConfigSource
     webappUrl: ConfigSource
@@ -40,6 +42,9 @@ class Configuration {
 
     /** Telegram bot enabled status (token present) */
     public readonly telegramEnabled: boolean
+
+    /** Telegram notifications enabled */
+    public readonly telegramNotification: boolean
 
     /** CLI auth token (shared secret) */
     public cliApiToken: string
@@ -88,6 +93,7 @@ class Configuration {
         // Apply server settings
         this.telegramBotToken = serverSettings.telegramBotToken
         this.telegramEnabled = Boolean(this.telegramBotToken)
+        this.telegramNotification = serverSettings.telegramNotification
         this.webappHost = serverSettings.webappHost
         this.webappPort = serverSettings.webappPort
         this.miniAppUrl = serverSettings.webappUrl
