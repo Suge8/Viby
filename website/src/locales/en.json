@@ -111,8 +111,9 @@
   "installation": {
     "title": "Get Started in Seconds",
     "npm": {
-      "step1": "1. Install Globally",
-      "step2": "2. Start Server"
+      "step1": "1. Start the Server",
+      "step2": "2. Start a Coding Session",
+      "step3": "3. Open the UI"
     }
   },
   "cta": {
