@@ -13,6 +13,7 @@ export interface Settings {
     }
     // Server configuration (persisted from environment variables)
     telegramBotToken?: string
+    telegramNotification?: boolean
     webappHost?: string
     webappPort?: number
     webappUrl?: string

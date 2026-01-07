@@ -77,6 +77,8 @@ async function main() {
     } else {
         const tokenSource = formatSource(config.sources.telegramBotToken)
         console.log(`[Server] Telegram: enabled (${tokenSource})`)
+        const notificationSource = formatSource(config.sources.telegramNotification)
+        console.log(`[Server] Telegram notifications: ${config.telegramNotification ? 'enabled' : 'disabled'} (${notificationSource})`)
     }
 
     const store = new Store(config.dbPath)
@@ -111,7 +113,10 @@ async function main() {
             miniAppUrl: config.miniAppUrl,
             store
         })
-        notificationChannels.push(happyBot)
+        // Only add to notification channels if notifications are enabled
+        if (config.telegramNotification) {
+            notificationChannels.push(happyBot)
+        }
     }
 
     notificationHub = new NotificationHub(syncEngine, notificationChannels)
