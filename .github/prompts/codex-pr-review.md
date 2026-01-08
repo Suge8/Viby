@@ -28,7 +28,7 @@ Before any analysis, load PR metadata and diff from the GitHub Actions event pay
 ```bash
 pr_number=$(jq -r '.pull_request.number' "$GITHUB_EVENT_PATH")
 repo=$(jq -r '.repository.full_name' "$GITHUB_EVENT_PATH")
-gh pr view "$pr_number" -R "$repo" --json number,title,body,labels,author,authorAssociation,additions,deletions,changedFiles,files
+gh pr view "$pr_number" -R "$repo" --json number,title,body,labels,author,additions,deletions,changedFiles,files
 gh pr diff "$pr_number" -R "$repo"
 ```
 

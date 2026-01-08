@@ -26,7 +26,7 @@ Before any analysis, load the issue title/body/labels from the GitHub Actions ev
 ```bash
 issue_number=$(jq -r '.issue.number' "$GITHUB_EVENT_PATH")
 repo=$(jq -r '.repository.full_name' "$GITHUB_EVENT_PATH")
-gh issue view "$issue_number" -R "$repo" --json number,title,body,labels,author,authorAssociation
+gh issue view "$issue_number" -R "$repo" --json number,title,body,labels,author
 ```
 
 If the issue body is empty or only whitespace, treat it as empty/spam and skip.
