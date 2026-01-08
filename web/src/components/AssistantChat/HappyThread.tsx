@@ -79,6 +79,10 @@ export function HappyThread(props: {
     const prevLoadingMoreRef = useRef(false)
     const loadStartedRef = useRef(false)
     const isLoadingMoreRef = useRef(props.isLoadingMoreMessages)
+    const hasMoreMessagesRef = useRef(props.hasMoreMessages)
+    const isLoadingMessagesRef = useRef(props.isLoadingMessages)
+    const onLoadMoreRef = useRef(props.onLoadMore)
+    const handleLoadMoreRef = useRef<() => void>(() => {})
     const atBottomRef = useRef(true)
     const onAtBottomChangeRef = useRef(props.onAtBottomChange)
     const onFlushPendingRef = useRef(props.onFlushPending)
@@ -98,6 +102,15 @@ export function HappyThread(props: {
     useEffect(() => {
         onFlushPendingRef.current = props.onFlushPending
     }, [props.onFlushPending])
+    useEffect(() => {
+        hasMoreMessagesRef.current = props.hasMoreMessages
+    }, [props.hasMoreMessages])
+    useEffect(() => {
+        isLoadingMessagesRef.current = props.isLoadingMessages
+    }, [props.isLoadingMessages])
+    useEffect(() => {
+        onLoadMoreRef.current = props.onLoadMore
+    }, [props.onLoadMore])
 
     // Track scroll position to toggle autoScroll (stable listener using refs)
     useEffect(() => {
@@ -160,7 +173,7 @@ export function HappyThread(props: {
     }, [props.forceScrollToken, scrollToBottom])
 
     const handleLoadMore = useCallback(() => {
-        if (props.isLoadingMessages || !props.hasMoreMessages || props.isLoadingMoreMessages || loadLockRef.current) {
+        if (isLoadingMessagesRef.current || !hasMoreMessagesRef.current || isLoadingMoreRef.current || loadLockRef.current) {
             return
         }
         const viewport = viewportRef.current
@@ -175,7 +188,7 @@ export function HappyThread(props: {
         loadStartedRef.current = false
         let loadPromise: Promise<unknown>
         try {
-            loadPromise = props.onLoadMore()
+            loadPromise = onLoadMoreRef.current()
         } catch (error) {
             pendingScrollRef.current = null
             loadLockRef.current = false
@@ -191,7 +204,11 @@ export function HappyThread(props: {
                 loadLockRef.current = false
             }
         })
-    }, [props.hasMoreMessages, props.isLoadingMoreMessages, props.isLoadingMessages, props.onLoadMore])
+    }, [])
+
+    useEffect(() => {
+        handleLoadMoreRef.current = handleLoadMore
+    }, [handleLoadMore])
 
     useEffect(() => {
         const sentinel = topSentinelRef.current
@@ -207,7 +224,7 @@ export function HappyThread(props: {
             (entries) => {
                 for (const entry of entries) {
                     if (entry.isIntersecting) {
-                        handleLoadMore()
+                        handleLoadMoreRef.current()
                     }
                 }
             },
@@ -219,7 +236,7 @@ export function HappyThread(props: {
 
         observer.observe(sentinel)
         return () => observer.disconnect()
-    }, [handleLoadMore, props.hasMoreMessages, props.isLoadingMessages])
+    }, [props.hasMoreMessages, props.isLoadingMessages])
 
     useLayoutEffect(() => {
         const pending = pendingScrollRef.current
