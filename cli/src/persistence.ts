@@ -17,6 +17,8 @@ interface Settings {
   machineIdConfirmedByServer?: boolean
   daemonAutoStartWhenRunningHappy?: boolean
   cliApiToken?: string
+  // Server URL for API connections (priority: env HAPI_SERVER_URL > this > default)
+  serverUrl?: string
 }
 
 const defaultSettings: Settings = {}

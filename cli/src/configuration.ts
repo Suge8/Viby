@@ -12,7 +12,7 @@ import packageJson from '../package.json'
 import { getCliArgs } from '@/utils/cliArgs'
 
 class Configuration {
-    public readonly serverUrl: string
+    private _serverUrl: string
     private _cliApiToken: string
     public readonly isDaemonProcess: boolean
 
@@ -29,7 +29,7 @@ class Configuration {
 
     constructor() {
         // Server configuration
-        this.serverUrl = process.env.HAPI_SERVER_URL || 'http://localhost:3006'
+        this._serverUrl = process.env.HAPI_SERVER_URL || 'http://localhost:3006'
         this._cliApiToken = process.env.CLI_API_TOKEN || ''
 
         // Check if we're running as daemon based on process args
@@ -62,6 +62,14 @@ class Configuration {
         if (!existsSync(this.logsDir)) {
             mkdirSync(this.logsDir, { recursive: true })
         }
+    }
+
+    get serverUrl(): string {
+        return this._serverUrl
+    }
+
+    _setServerUrl(url: string): void {
+        this._serverUrl = url
     }
 
     get cliApiToken(): string {
