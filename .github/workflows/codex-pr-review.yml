@@ -89,6 +89,7 @@ jobs:
           sandbox: danger-full-access
           safety-strategy: drop-sudo
           prompt-file: .github/prompts/codex-pr-review.md
+          allow-bots: true
 
   post-review:
     runs-on: ubuntu-latest
