@@ -28,7 +28,7 @@ More options: [Quick Start](docs/guide/quick-start.md) | [Installation](docs/gui
 
 ## Docs
 
-- [PWA](docs/guide/pwa.md)
+- [App](docs/guide/pwa.md)
 - [How it Works](docs/guide/how-it-works.md)
 - [Why HAPI](docs/guide/why-hapi.md)
 - [FAQ](docs/guide/faq.md)
