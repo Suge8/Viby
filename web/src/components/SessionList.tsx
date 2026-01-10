@@ -189,7 +189,11 @@ function SessionItem(props: {
             haptic.impact('medium')
             setMenuOpen(true)
         },
-        onClick: () => onSelect(s.id),
+        onClick: () => {
+            if (!menuOpen) {
+                onSelect(s.id)
+            }
+        },
         threshold: 500
     })
 
@@ -197,7 +201,6 @@ function SessionItem(props: {
     const statusDotClass = s.active
         ? (s.thinking ? 'bg-[#007AFF]' : 'bg-[var(--app-badge-success-text)]')
         : 'bg-[var(--app-hint)]'
-
     return (
         <>
             <button

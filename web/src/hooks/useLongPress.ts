@@ -63,7 +63,7 @@ export function useLongPress(options: UseLongPressOptions): UseLongPressHandlers
     }, [startTimer])
 
     const onMouseUp = useCallback<React.MouseEventHandler>(() => {
-        handleEnd(true)
+        handleEnd(!isLongPressRef.current)
     }, [handleEnd])
 
     const onMouseLeave = useCallback<React.MouseEventHandler>(() => {
@@ -78,7 +78,7 @@ export function useLongPress(options: UseLongPressOptions): UseLongPressHandlers
         if (isLongPressRef.current) {
             e.preventDefault()
         }
-        handleEnd(true)
+        handleEnd(!isLongPressRef.current)
     }, [handleEnd])
 
     const onTouchMove = useCallback<React.TouchEventHandler>(() => {
