@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { SessionSummary } from '@/types/api'
 import type { ApiClient } from '@/api/client'
 import { useLongPress } from '@/hooks/useLongPress'
@@ -171,7 +171,7 @@ function SessionItem(props: {
     const { session: s, onSelect, showPath = true, api } = props
     const { haptic } = usePlatform()
     const [menuOpen, setMenuOpen] = useState(false)
-    const menuAnchorRef = useRef<HTMLButtonElement | null>(null)
+    const [menuAnchorPoint, setMenuAnchorPoint] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
     const [renameOpen, setRenameOpen] = useState(false)
     const [archiveOpen, setArchiveOpen] = useState(false)
     const [deleteOpen, setDeleteOpen] = useState(false)
@@ -183,8 +183,9 @@ function SessionItem(props: {
     )
 
     const longPressHandlers = useLongPress({
-        onLongPress: () => {
+        onLongPress: (point) => {
             haptic.impact('medium')
+            setMenuAnchorPoint(point)
             setMenuOpen(true)
         },
         onClick: () => {
@@ -204,7 +205,6 @@ function SessionItem(props: {
             <button
                 type="button"
                 {...longPressHandlers}
-                ref={menuAnchorRef}
                 className="session-list-item flex w-full flex-col gap-1.5 px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)] select-none"
                 style={{ WebkitTouchCallout: 'none' }}
             >
@@ -271,8 +271,7 @@ function SessionItem(props: {
                 onRename={() => setRenameOpen(true)}
                 onArchive={() => setArchiveOpen(true)}
                 onDelete={() => setDeleteOpen(true)}
-                anchorRef={menuAnchorRef}
-                align="end"
+                anchorPoint={menuAnchorPoint}
             />
 
             <RenameSessionDialog

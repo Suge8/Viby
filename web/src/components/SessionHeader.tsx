@@ -72,6 +72,7 @@ export function SessionHeader(props: {
     const worktreeBranch = session.metadata?.worktree?.branch
 
     const [menuOpen, setMenuOpen] = useState(false)
+    const [menuAnchorPoint, setMenuAnchorPoint] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
     const menuId = useId()
     const menuAnchorRef = useRef<HTMLButtonElement | null>(null)
     const [renameOpen, setRenameOpen] = useState(false)
@@ -87,6 +88,14 @@ export function SessionHeader(props: {
     const handleDelete = async () => {
         await deleteSession()
         onSessionDeleted?.()
+    }
+
+    const handleMenuToggle = () => {
+        if (!menuOpen && menuAnchorRef.current) {
+            const rect = menuAnchorRef.current.getBoundingClientRect()
+            setMenuAnchorPoint({ x: rect.right, y: rect.bottom })
+        }
+        setMenuOpen((open) => !open)
     }
 
     // In Telegram, don't render header (Telegram provides its own)
@@ -151,7 +160,8 @@ export function SessionHeader(props: {
 
                     <button
                         type="button"
-                        onClick={() => setMenuOpen((open) => !open)}
+                        onClick={handleMenuToggle}
+                        onPointerDown={(e) => e.stopPropagation()}
                         ref={menuAnchorRef}
                         aria-haspopup="menu"
                         aria-expanded={menuOpen}
@@ -171,8 +181,7 @@ export function SessionHeader(props: {
                 onRename={() => setRenameOpen(true)}
                 onArchive={() => setArchiveOpen(true)}
                 onDelete={() => setDeleteOpen(true)}
-                anchorRef={menuAnchorRef}
-                align="end"
+                anchorPoint={menuAnchorPoint}
                 menuId={menuId}
             />
 
