@@ -78,7 +78,7 @@ function SessionsPage() {
         void refetch()
     }, [refetch])
 
-    const projectCount = new Set(sessions.map(s => s.metadata?.path ?? 'Other')).size
+    const projectCount = new Set(sessions.map(s => s.metadata?.worktree?.basePath ?? s.metadata?.path ?? 'Other')).size
 
     return (
         <div className="flex h-full flex-col">
