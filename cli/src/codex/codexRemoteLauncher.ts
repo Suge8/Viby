@@ -314,6 +314,7 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
         const permissionHandler = new CodexPermissionHandler(session.client, {
             onRequest: ({ id, toolName, input }) => {
                 const inputRecord = input && typeof input === 'object' ? input as Record<string, unknown> : {};
+                const message = typeof inputRecord.message === 'string' ? inputRecord.message : undefined;
                 const rawCommand = inputRecord.command;
                 const command = Array.isArray(rawCommand)
                     ? rawCommand.filter((part): part is string => typeof part === 'string').join(' ')
@@ -329,6 +330,7 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
                     callId: id,
                     input: {
                         tool: toolName,
+                        message,
                         command,
                         cwd
                     },

@@ -262,8 +262,9 @@ export class CodexMcpClient {
                         toolCallId,
                         toolName,
                         {
-                            command: command ?? [],
-                            cwd: cwd ?? ''
+                            message: typeof params.message === 'string' ? params.message : undefined,
+                            command: command ?? undefined,
+                            cwd: cwd ?? undefined
                         }
                     );
 
