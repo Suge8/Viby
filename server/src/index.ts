@@ -23,6 +23,7 @@ import { PushService } from './push/pushService'
 import { PushNotificationChannel } from './push/pushNotificationChannel'
 import { VisibilityTracker } from './visibility/visibilityTracker'
 import { TunnelManager } from './tunnel'
+import { waitForTunnelTlsReady } from './tunnel/tlsGate'
 import QRCode from 'qrcode'
 import type { Server as BunServer } from 'bun'
 import type { WebSocketData } from '@socket.io/bun-engine'
@@ -194,36 +195,47 @@ async function main() {
         }
     }
 
-    if (tunnelUrl) {
-        console.log('[Web] Public: ' + tunnelUrl)
+    if (tunnelUrl && tunnelManager) {
+        const manager = tunnelManager
+        const announceTunnelAccess = async () => {
+            const tlsReady = await waitForTunnelTlsReady(tunnelUrl, manager)
+            if (!tlsReady) {
+                console.log('[Tunnel] Tunnel stopped before TLS was ready.')
+                return
+            }
 
-        // Generate direct access link with server and token
-        const officialWebUrl = process.env.HAPI_OFFICIAL_WEB_URL || 'https://app.hapi.run'
-        const params = new URLSearchParams({
-            server: tunnelUrl,
-            token: config.cliApiToken
-        })
-        const directAccessUrl = `${officialWebUrl}/?${params.toString()}`
+            console.log('[Web] Public: ' + tunnelUrl)
 
-        console.log('')
-        console.log('Open in browser:')
-        console.log(`  ${directAccessUrl}`)
-        console.log('')
-        console.log('or scan the QR code to open:')
-
-        // Display QR code for easy mobile access
-        try {
-            const qrString = await QRCode.toString(directAccessUrl, {
-                type: 'terminal',
-                small: true,
-                margin: 1,
-                errorCorrectionLevel: 'L'
+            // Generate direct access link with server and token
+            const officialWebUrl = process.env.HAPI_OFFICIAL_WEB_URL || 'https://app.hapi.run'
+            const params = new URLSearchParams({
+                server: tunnelUrl,
+                token: config.cliApiToken
             })
+            const directAccessUrl = `${officialWebUrl}/?${params.toString()}`
+
             console.log('')
-            console.log(qrString)
-        } catch {
-            // QR code generation failure should not affect main flow
+            console.log('Open in browser:')
+            console.log(`  ${directAccessUrl}`)
+            console.log('')
+            console.log('or scan the QR code to open:')
+
+            // Display QR code for easy mobile access
+            try {
+                const qrString = await QRCode.toString(directAccessUrl, {
+                    type: 'terminal',
+                    small: true,
+                    margin: 1,
+                    errorCorrectionLevel: 'L'
+                })
+                console.log('')
+                console.log(qrString)
+            } catch {
+                // QR code generation failure should not affect main flow
+            }
         }
+
+        void announceTunnelAccess()
     }
     console.log('')
     console.log('HAPI Server is ready!')
