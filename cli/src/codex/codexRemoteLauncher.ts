@@ -154,6 +154,38 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
         const RESUME_CONTEXT_TOOL_MAX_CHARS = 2000;
         const RESUME_CONTEXT_REASONING_MAX_CHARS = 2000;
 
+        const normalizeCommand = (value: unknown): string | undefined => {
+            if (typeof value === 'string') {
+                const trimmed = value.trim();
+                return trimmed.length > 0 ? trimmed : undefined;
+            }
+            if (Array.isArray(value)) {
+                const joined = value.filter((part): part is string => typeof part === 'string').join(' ');
+                return joined.length > 0 ? joined : undefined;
+            }
+            return undefined;
+        };
+
+        const normalizeCwd = (value: unknown): string | undefined => {
+            if (typeof value !== 'string') return undefined;
+            const trimmed = value.trim();
+            return trimmed.length > 0 ? trimmed : undefined;
+        };
+
+        const permissionDetails = new Map<string, { command?: string; cwd?: string }>();
+
+        const recordPermissionDetails = (id: string, command?: string, cwd?: string) => {
+            const existing = permissionDetails.get(id) ?? {};
+            const next = {
+                command: command ?? existing.command,
+                cwd: cwd ?? existing.cwd
+            };
+            permissionDetails.set(id, next);
+            return next;
+        };
+
+        const getPermissionDetails = (id: string) => permissionDetails.get(id) ?? {};
+
         function readResumeFileContent(resumeFile: string): { content: string; truncated: boolean } | null {
             try {
                 const stat = fs.statSync(resumeFile);
@@ -279,7 +311,43 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
             return `${header}\n${rendered.join('\n')}`;
         }
 
-        const permissionHandler = new CodexPermissionHandler(session.client);
+        const permissionHandler = new CodexPermissionHandler(session.client, {
+            onRequest: ({ id, toolName, input }) => {
+                const inputRecord = input && typeof input === 'object' ? input as Record<string, unknown> : {};
+                const rawCommand = inputRecord.command;
+                const command = Array.isArray(rawCommand)
+                    ? rawCommand.filter((part): part is string => typeof part === 'string').join(' ')
+                    : typeof rawCommand === 'string'
+                        ? rawCommand
+                        : undefined;
+                const cwdValue = inputRecord.cwd;
+                const cwd = typeof cwdValue === 'string' && cwdValue.trim().length > 0 ? cwdValue : undefined;
+
+                session.sendCodexMessage({
+                    type: 'tool-call',
+                    name: 'CodexPermission',
+                    callId: id,
+                    input: {
+                        tool: toolName,
+                        command,
+                        cwd
+                    },
+                    id: randomUUID()
+                });
+            },
+            onComplete: ({ id, decision, reason, approved }) => {
+                session.sendCodexMessage({
+                    type: 'tool-call-result',
+                    callId: id,
+                    output: {
+                        decision,
+                        reason
+                    },
+                    is_error: !approved,
+                    id: randomUUID()
+                });
+            }
+        });
         const reasoningProcessor = new ReasoningProcessor((message) => {
             session.sendCodexMessage(message);
         });
@@ -368,7 +436,7 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
                 session.sendCodexMessage({
                     type: 'tool-call-result',
                     callId: call_id,
-                    output: output,
+                    output,
                     id: randomUUID()
                 });
             }

@@ -25,10 +25,25 @@ interface PermissionResult {
     reason?: string;
 }
 
-export class CodexPermissionHandler extends BasePermissionHandler<PermissionResponse, PermissionResult> {
+type CodexPermissionHandlerOptions = {
+    onRequest?: (request: { id: string; toolName: string; input: unknown }) => void;
+    onComplete?: (result: {
+        id: string;
+        toolName: string;
+        input: unknown;
+        approved: boolean;
+        decision: PermissionResult['decision'];
+        reason?: string;
+    }) => void;
+};
 
-    constructor(session: ApiSessionClient) {
+export class CodexPermissionHandler extends BasePermissionHandler<PermissionResponse, PermissionResult> {
+    constructor(session: ApiSessionClient, private readonly options?: CodexPermissionHandlerOptions) {
         super(session);
+    }
+
+    protected override onRequestRegistered(id: string, toolName: string, input: unknown): void {
+        this.options?.onRequest?.({ id, toolName, input });
     }
 
     /**
@@ -83,6 +98,15 @@ export class CodexPermissionHandler extends BasePermissionHandler<PermissionResp
 
         pending.resolve(result);
         logger.debug(`[Codex] Permission ${response.approved ? 'approved' : 'denied'} for ${pending.toolName}`);
+
+        this.options?.onComplete?.({
+            id: response.id,
+            toolName: pending.toolName,
+            input: pending.input,
+            approved: response.approved,
+            decision: result.decision,
+            reason: result.reason
+        });
 
         return {
             status: response.approved ? 'approved' : 'denied',
