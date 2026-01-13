@@ -12,7 +12,6 @@
  * - WEBAPP_PORT: Port for Mini App HTTP server (default: 3006)
  * - WEBAPP_URL: Public URL for Telegram Mini App
  * - CORS_ORIGINS: Comma-separated CORS origins
- * - HAPI_RELAY: Enable/disable tunnel (default: false)
  * - HAPI_RELAY_API: Relay API domain for tunwg (default: relay.hapi.run)
  * - HAPI_RELAY_AUTH: Relay auth key for tunwg (default: hapi)
  * - HAPI_RELAY_FORCE_TCP: Force TCP relay mode when UDP is unavailable (true/1)
@@ -38,7 +37,6 @@ export interface ConfigSources {
     webappUrl: ConfigSource
     corsOrigins: ConfigSource
     cliApiToken: 'env' | 'file' | 'generated'
-    tunnelEnabled: ConfigSource
 }
 
 class Configuration {
@@ -81,9 +79,6 @@ class Configuration {
     /** Allowed CORS origins for Mini App + Socket.IO (comma-separated env override) */
     public readonly corsOrigins: string[]
 
-    /** Whether tunnel is enabled (default: true) */
-    public readonly tunnelEnabled: boolean
-
     /** Sources of each configuration value */
     public readonly sources: ConfigSources
 
@@ -106,7 +101,6 @@ class Configuration {
         this.webappPort = serverSettings.webappPort
         this.miniAppUrl = serverSettings.webappUrl
         this.corsOrigins = serverSettings.corsOrigins
-        this.tunnelEnabled = serverSettings.tunnelEnabled
 
         // CLI API token - will be set by _setCliApiToken() before create() returns
         this.cliApiToken = ''

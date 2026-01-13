@@ -17,7 +17,6 @@ export interface ServerSettings {
     webappPort: number
     webappUrl: string
     corsOrigins: string[]
-    tunnelEnabled: boolean
 }
 
 export interface ServerSettingsResult {
@@ -29,7 +28,6 @@ export interface ServerSettingsResult {
         webappPort: 'env' | 'file' | 'default'
         webappUrl: 'env' | 'file' | 'default'
         corsOrigins: 'env' | 'file' | 'default'
-        tunnelEnabled: 'env' | 'file' | 'default'
     }
     savedToFile: boolean
 }
@@ -93,7 +91,6 @@ export async function loadServerSettings(dataDir: string): Promise<ServerSetting
         webappPort: 'default',
         webappUrl: 'default',
         corsOrigins: 'default',
-        tunnelEnabled: 'default',
     }
     // telegramBotToken: env > file > null
     let telegramBotToken: string | null = null
@@ -185,16 +182,6 @@ export async function loadServerSettings(dataDir: string): Promise<ServerSetting
         corsOrigins = deriveCorsOrigins(webappUrl)
     }
 
-    // tunnelEnabled: env (HAPI_RELAY) > file > false (default disabled)
-    let tunnelEnabled = false
-    if (process.env.HAPI_RELAY !== undefined) {
-        tunnelEnabled = process.env.HAPI_RELAY === 'true' || process.env.HAPI_RELAY === '1'
-        sources.tunnelEnabled = 'env'
-    } else if (settings.tunnelEnabled !== undefined) {
-        tunnelEnabled = settings.tunnelEnabled
-        sources.tunnelEnabled = 'file'
-    }
-
     // Save settings if any new values were added
     if (needsSave) {
         await writeSettings(settingsFile, settings)
@@ -208,7 +195,6 @@ export async function loadServerSettings(dataDir: string): Promise<ServerSetting
             webappPort,
             webappUrl,
             corsOrigins,
-            tunnelEnabled,
         },
         sources,
         savedToFile: needsSave,

@@ -41,6 +41,25 @@ function formatSource(source: ConfigSource | 'generated'): string {
     }
 }
 
+type RelayFlagSource = 'default' | '--relay' | '--no-relay'
+
+function resolveRelayFlag(args: string[]): { enabled: boolean; source: RelayFlagSource } {
+    let enabled = false
+    let source: RelayFlagSource = 'default'
+
+    for (const arg of args) {
+        if (arg === '--relay') {
+            enabled = true
+            source = '--relay'
+        } else if (arg === '--no-relay') {
+            enabled = false
+            source = '--no-relay'
+        }
+    }
+
+    return { enabled, source }
+}
+
 let syncEngine: SyncEngine | null = null
 let happyBot: HappyBot | null = null
 let webServer: BunServer<WebSocketData> | null = null
@@ -54,7 +73,8 @@ async function main() {
 
     // Load configuration (async - loads from env/file with persistence)
     const config = await createConfiguration()
-    const relayApiDomain = process.env.HAPI_RELAY_API || null
+    const relayApiDomain = process.env.HAPI_RELAY_API || 'relay.hapi.run'
+    const relayFlag = resolveRelayFlag(process.argv)
 
     // Display CLI API token information
     if (config.cliApiTokenIsNew) {
@@ -88,11 +108,10 @@ async function main() {
     }
 
     // Display tunnel status
-    if (config.tunnelEnabled) {
-        const apiDomain = relayApiDomain || 'relay.hapi.run'
-        console.log(`[Server] Tunnel: enabled (${formatSource(config.sources.tunnelEnabled)}), API: ${apiDomain}`)
+    if (relayFlag.enabled) {
+        console.log(`[Server] Tunnel: enabled (${relayFlag.source}), API: ${relayApiDomain}`)
     } else {
-        console.log(`[Server] Tunnel: disabled (${formatSource(config.sources.tunnelEnabled)})`)
+        console.log(`[Server] Tunnel: disabled (${relayFlag.source})`)
     }
 
     const store = new Store(config.dbPath)
@@ -158,7 +177,7 @@ async function main() {
 
     // Initialize tunnel AFTER web server is ready
     let tunnelUrl: string | null = null
-    if (config.tunnelEnabled) {
+    if (relayFlag.enabled) {
         tunnelManager = new TunnelManager({
             localPort: config.webappPort,
             enabled: true,
@@ -171,7 +190,7 @@ async function main() {
             tunnelUrl = await tunnelManager.start()
         } catch (error) {
             console.error('[Tunnel] Failed to start:', error instanceof Error ? error.message : error)
-            console.log('[Tunnel] Server continuing without tunnel. Use --no-relay to disable.')
+            console.log('[Tunnel] Server continuing without tunnel. Restart without --relay to disable.')
         }
     }
 
