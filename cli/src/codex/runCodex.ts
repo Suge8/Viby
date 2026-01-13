@@ -17,6 +17,7 @@ export async function runCodex(opts: {
     startedBy?: 'daemon' | 'terminal';
     codexArgs?: string[];
     permissionMode?: PermissionMode;
+    resumeSessionId?: string;
 }): Promise<void> {
     const workingDirectory = process.cwd();
     const startedBy = opts.startedBy ?? 'terminal';
@@ -116,6 +117,7 @@ export async function runCodex(opts: {
             codexCliOverrides,
             startedBy,
             permissionMode: currentPermissionMode,
+            resumeSessionId: opts.resumeSessionId,
             onModeChange: createModeChangeHandler(session),
             onSessionReady: (instance) => {
                 sessionWrapperRef.current = instance;
