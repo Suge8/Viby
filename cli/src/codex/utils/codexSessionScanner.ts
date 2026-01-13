@@ -336,7 +336,11 @@ class CodexSessionScannerImpl extends BaseSessionScanner<CodexSessionEvent> {
             return null;
         }
 
-        const diff = Math.abs(sessionTimestamp - this.referenceTimestampMs);
+        if (sessionTimestamp < this.referenceTimestampMs) {
+            return null;
+        }
+
+        const diff = sessionTimestamp - this.referenceTimestampMs;
         if (diff > this.sessionStartWindowMs) {
             return null;
         }

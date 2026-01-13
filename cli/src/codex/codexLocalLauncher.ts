@@ -11,6 +11,7 @@ export async function codexLocalLauncher(session: CodexSession): Promise<'switch
     let exitReason: 'switch' | 'exit' | null = null;
     const processAbortController = new AbortController();
     const exitFuture = new Future<void>();
+    const resumeSessionId = session.sessionId;
 
     // Start hapi server for MCP bridge (same as remote mode)
     const { server: happyServer, mcpServers } = await buildHapiMcpBridge(session.client);
@@ -28,7 +29,7 @@ export async function codexLocalLauncher(session: CodexSession): Promise<'switch
     };
 
     const scanner = await createCodexSessionScanner({
-        sessionId: session.sessionId,
+        sessionId: resumeSessionId,
         cwd: session.path,
         startupTimestampMs: Date.now(),
         onSessionMatchFailed: handleSessionMatchFailed,
@@ -102,7 +103,7 @@ export async function codexLocalLauncher(session: CodexSession): Promise<'switch
             try {
                 await codexLocal({
                     path: session.path,
-                    sessionId: session.sessionId,
+                    sessionId: resumeSessionId,
                     onSessionFound: handleSessionFound,
                     abort: processAbortController.signal,
                     codexArgs: session.codexArgs,
