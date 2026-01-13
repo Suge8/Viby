@@ -2,10 +2,10 @@ name: Issue Auto Response
 
 on:
   issues:
-    types: [opened]
+    types: [opened, labeled]
 
 concurrency:
-  group: issue-auto-response
+  group: issue-auto-response-${{ github.event.issue.number }}
   cancel-in-progress: false
 
 jobs:
