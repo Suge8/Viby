@@ -18,13 +18,15 @@ Run Claude Code / Codex / Gemini sessions locally and control them remotely thro
 ## Getting Started
 
 ```bash
-npx @twsxtd/hapi server # start the server locally
-npx @twsxtd/hapi # run claude code 
+npx @twsxtd/hapi server --relay  # start server with E2E encrypted relay
+npx @twsxtd/hapi                 # run claude code
 ```
 
-Open `http://<server-ip>:3006` and login with the token, if you need to access it remotely, see [Remote access](docs/guide/installation.md#remote-access)
+The terminal will display a URL and QR code. Scan the QR code with your phone or open the URL to access.
 
-More options: [Quick Start](docs/guide/quick-start.md) | [Installation](docs/guide/installation.md)
+> The relay uses WireGuard + TLS for end-to-end encryption. Your data is encrypted from your device to your machine.
+
+For self-hosted options (Cloudflare Tunnel, Tailscale), see [Installation](docs/guide/installation.md)
 
 ## Docs
 
