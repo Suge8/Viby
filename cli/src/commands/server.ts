@@ -22,7 +22,7 @@ function parseServerArgs(args: string[]): { host?: string; port?: string } {
 
 export const serverCommand: CommandDefinition = {
     name: 'server',
-    requiresRuntimeAssets: false,
+    requiresRuntimeAssets: true,
     run: async (context: CommandContext) => {
         try {
             const { host, port } = parseServerArgs(context.commandArgs)
