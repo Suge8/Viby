@@ -12,6 +12,10 @@ Run official Claude Code / Codex / Gemini sessions locally and control them remo
 - **Your AI, Your Choice** - Claude Code, Codex, Gemini—different models, one unified workflow.
 - **Terminal Anywhere** - Run commands from your phone or browser, directly connected to the working machine.
 
+## Demo
+
+https://github.com/user-attachments/assets/38230353-94c6-4dbe-9c29-b2a2cc457546
+
 ## Getting Started
 
 ```bash
