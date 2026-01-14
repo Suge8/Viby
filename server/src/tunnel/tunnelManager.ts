@@ -17,6 +17,12 @@ function isBunCompiled(): boolean {
     return typeof process.execPath === 'string' && !process.execPath.includes('bun')
 }
 
+function getHapiHome(): string {
+    return process.env.HAPI_HOME
+        ? process.env.HAPI_HOME.replace(/^~/, homedir())
+        : join(homedir(), '.hapi')
+}
+
 function getPlatformDir(): string {
     const platformName = platform()
     const archName = arch()
@@ -39,7 +45,7 @@ function getTunwgPath(): string {
     const tunwgBinary = isWin ? 'tunwg.exe' : 'tunwg'
 
     if (isBunCompiled()) {
-        const hapiHome = process.env.HAPI_HOME || join(homedir(), '.hapi')
+        const hapiHome = getHapiHome()
         const packageJson = require('../../../cli/package.json')
         const runtimePath = join(hapiHome, 'runtime', packageJson.version)
         return join(runtimePath, 'tools', 'tunwg', tunwgBinary)
@@ -105,6 +111,10 @@ export class TunnelManager {
         const forwardUrl = `http://localhost:${this.config.localPort}`
 
         const env: Record<string, string> = { ...process.env as Record<string, string> }
+
+        if (!env.TUNWG_PATH) {
+            env.TUNWG_PATH = join(getHapiHome(), 'tunwg')
+        }
 
         if (this.config.apiDomain) {
             env.TUNWG_API = this.config.apiDomain
