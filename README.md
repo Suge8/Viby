@@ -1,19 +1,16 @@
 # HAPI
 
-HAPI means "哈皮" a Chinese transliteration of [Happy](https://github.com/slopus/happy). Great credit to the original project.
-
-Run Claude Code / Codex / Gemini sessions locally and control them remotely through a Web / PWA / Telegram Mini App.
+Run official Claude Code / Codex / Gemini sessions locally and control them remotely through a Web / PWA / Telegram Mini App.
 
 > **Why HAPI?** HAPI is a local-first alternative to Happy. See [Why Not Happy?](docs/guide/why-hapi.md) for the key differences.
 
 ## Features
 
-- **Seamless Handoff** - Work locally with native Claude Code or Codex, switch to remote when needed, switch back anytime.
-- **AFK Without Stopping** - Step away from your desk? Keep approving AI requests from your phone. HAPI pushes permission requests to Telegram or your browser—approve or deny with one tap.
-- **See What AI Sees** - Browse project files and Git diffs directly in the web app. No SSH needed—just open the session and check what changed.
-- **Stay in the Loop** - Real-time todo progress shows you exactly where AI is in a multi-step task. No more guessing if it's stuck or making progress.
-- **Your AI, Your Choice** - Switch between Claude Code, Codex, and Gemini from the same interface. Different models for different tasks, one unified workflow.
-- **Terminal Anywhere** - Need to run a quick command? Access a real terminal session from your phone or browser, directly connected to the working machine.
+- **Seamless Handoff** - Work locally, switch to remote when needed, switch back anytime. No context loss, no session restart.
+- **Native First** - HAPI wraps your AI agent instead of replacing it. Same terminal, same experience, same muscle memory.
+- **AFK Without Stopping** - Step away from your desk? Approve AI requests from your phone with one tap.
+- **Your AI, Your Choice** - Claude Code, Codex, Gemini—different models, one unified workflow.
+- **Terminal Anywhere** - Run commands from your phone or browser, directly connected to the working machine.
 
 ## Getting Started
 
@@ -41,3 +38,7 @@ For self-hosted options (Cloudflare Tunnel, Tailscale), see [Installation](docs/
 bun install
 bun run build:single-exe
 ```
+
+## Credits
+
+HAPI means "哈皮" a Chinese transliteration of [Happy](https://github.com/slopus/happy). Great credit to the original project.
