@@ -102,6 +102,11 @@ export class ApiSessionClient extends EventEmitter {
             }
             void this.backfillIfNeeded()
             this.hasConnectedOnce = true
+            this.socket.emit('session-alive', {
+                sid: this.sessionId,
+                time: Date.now(),
+                thinking: false
+            })
         })
 
         this.socket.on('rpc-request', async (data: { method: string; params: string }, callback: (response: string) => void) => {
