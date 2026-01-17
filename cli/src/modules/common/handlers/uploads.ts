@@ -1,10 +1,10 @@
 import { logger } from '@/ui/logger'
-import { mkdtemp, rm, writeFile } from 'fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'fs/promises'
 import { join, resolve, sep } from 'path'
-import { tmpdir } from 'os'
 import { rmSync } from 'node:fs'
 import type { RpcHandlerManager } from '@/api/rpc/RpcHandlerManager'
 import { getErrorMessage, rpcError } from '../rpcResponses'
+import { getHapiBlobsDir } from '@/constants/uploadPaths'
 
 interface UploadFileRequest {
     sessionId?: string
@@ -74,7 +74,9 @@ async function getOrCreateUploadDir(sessionId?: string): Promise<string> {
     const safeKey = sanitizeFilename(sessionKey)
     const creation = (async () => {
         try {
-            const dir = await mkdtemp(join(tmpdir(), `hapi-uploads-${safeKey}-`))
+            const blobsDir = getHapiBlobsDir()
+            await mkdir(blobsDir, { recursive: true })
+            const dir = await mkdtemp(join(blobsDir, `${safeKey}-`))
             if (uploadDirCleanupRequested.has(sessionKey)) {
                 try {
                     await rm(dir, { recursive: true, force: true })
@@ -151,7 +153,7 @@ function isPathWithinUploadDir(path: string, sessionId?: string): boolean {
     }
 
     const safeKey = sanitizeFilename(sessionKey)
-    const resolvedPrefix = resolve(tmpdir(), `hapi-uploads-${safeKey}-`)
+    const resolvedPrefix = resolve(getHapiBlobsDir(), `${safeKey}-`)
     return resolvedPath.startsWith(resolvedPrefix)
 }
 

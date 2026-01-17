@@ -260,6 +260,7 @@ export function query(config: {
     const {
         prompt,
         options: {
+            additionalDirectories = [],
             allowedTools = [],
             appendSystemPrompt,
             customSystemPrompt,
@@ -303,6 +304,7 @@ export function query(config: {
     if (settingsPath) args.push('--settings', settingsPath)
     if (allowedTools.length > 0) args.push('--allowedTools', allowedTools.join(','))
     if (disallowedTools.length > 0) args.push('--disallowedTools', disallowedTools.join(','))
+    if (additionalDirectories.length > 0) args.push('--add-dir', ...additionalDirectories)
     if (strictMcpConfig) args.push('--strict-mcp-config')
     if (permissionMode) args.push('--permission-mode', permissionMode)
 
