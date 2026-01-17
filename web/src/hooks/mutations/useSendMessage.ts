@@ -1,6 +1,6 @@
 import { useMutation } from '@tanstack/react-query'
 import type { ApiClient } from '@/api/client'
-import type { DecryptedMessage } from '@/types/api'
+import type { AttachmentMetadata, DecryptedMessage } from '@/types/api'
 import { makeClientSideId } from '@/lib/messages'
 import {
     appendOptimisticMessage,
@@ -14,6 +14,7 @@ type SendMessageInput = {
     text: string
     localId: string
     createdAt: number
+    attachments?: AttachmentMetadata[]
 }
 
 function findMessageByLocalId(
@@ -31,7 +32,7 @@ function findMessageByLocalId(
 }
 
 export function useSendMessage(api: ApiClient | null, sessionId: string | null): {
-    sendMessage: (text: string) => void
+    sendMessage: (text: string, attachments?: AttachmentMetadata[]) => void
     retryMessage: (localId: string) => void
     isSending: boolean
 } {
@@ -42,14 +43,21 @@ export function useSendMessage(api: ApiClient | null, sessionId: string | null):
             if (!api) {
                 throw new Error('API unavailable')
             }
-            await api.sendMessage(input.sessionId, input.text, input.localId)
+            await api.sendMessage(input.sessionId, input.text, input.localId, input.attachments)
         },
         onMutate: async (input) => {
             const optimisticMessage: DecryptedMessage = {
                 id: input.localId,
                 seq: null,
                 localId: input.localId,
-                content: { role: 'user', content: input.text },
+                content: {
+                    role: 'user',
+                    content: {
+                        type: 'text',
+                        text: input.text,
+                        attachments: input.attachments
+                    }
+                },
                 createdAt: input.createdAt,
                 status: 'sending',
                 originalText: input.text,
@@ -67,7 +75,7 @@ export function useSendMessage(api: ApiClient | null, sessionId: string | null):
         },
     })
 
-    const sendMessage = (text: string) => {
+    const sendMessage = (text: string, attachments?: AttachmentMetadata[]) => {
         if (!api || !sessionId) return
         if (mutation.isPending) return
         const localId = makeClientSideId('local')
@@ -76,6 +84,7 @@ export function useSendMessage(api: ApiClient | null, sessionId: string | null):
             text,
             localId,
             createdAt: Date.now(),
+            attachments,
         })
     }
 

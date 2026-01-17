@@ -3,6 +3,15 @@ import type { Server } from 'socket.io'
 import type { Store } from '../store'
 import { EventPublisher } from './eventPublisher'
 
+type AttachmentMetadata = {
+    id: string
+    filename: string
+    mimeType: string
+    size: number
+    path: string
+    previewUrl?: string
+}
+
 export class MessageService {
     constructor(
         private readonly store: Store,
@@ -65,7 +74,12 @@ export class MessageService {
 
     async sendMessage(
         sessionId: string,
-        payload: { text: string; localId?: string | null; sentFrom?: 'telegram-bot' | 'webapp' }
+        payload: {
+            text: string
+            localId?: string | null
+            attachments?: AttachmentMetadata[]
+            sentFrom?: 'telegram-bot' | 'webapp'
+        }
     ): Promise<void> {
         const sentFrom = payload.sentFrom ?? 'webapp'
 
@@ -73,7 +87,8 @@ export class MessageService {
             role: 'user',
             content: {
                 type: 'text',
-                text: payload.text
+                text: payload.text,
+                attachments: payload.attachments
             },
             meta: {
                 sentFrom

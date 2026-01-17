@@ -1,5 +1,7 @@
 import type {
+    AttachmentMetadata,
     AuthResponse,
+    DeleteUploadResponse,
     FileReadResponse,
     FileSearchResponse,
     GitCommandResponse,
@@ -13,6 +15,7 @@ import type {
     PushVapidPublicKeyResponse,
     SlashCommandsResponse,
     SpawnResponse,
+    UploadFileResponse,
     VisibilityPayload,
     SessionResponse,
     SessionsResponse
@@ -235,10 +238,28 @@ export class ApiClient {
         return await this.request<FileReadResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/file?${params.toString()}`)
     }
 
-    async sendMessage(sessionId: string, text: string, localId?: string | null): Promise<void> {
+    async uploadFile(sessionId: string, filename: string, content: string, mimeType: string): Promise<UploadFileResponse> {
+        return await this.request<UploadFileResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/upload`, {
+            method: 'POST',
+            body: JSON.stringify({ filename, content, mimeType })
+        })
+    }
+
+    async deleteUploadFile(sessionId: string, path: string): Promise<DeleteUploadResponse> {
+        return await this.request<DeleteUploadResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/upload/delete`, {
+            method: 'POST',
+            body: JSON.stringify({ path })
+        })
+    }
+
+    async sendMessage(sessionId: string, text: string, localId?: string | null, attachments?: AttachmentMetadata[]): Promise<void> {
         await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/messages`, {
             method: 'POST',
-            body: JSON.stringify({ text, localId: localId ?? undefined })
+            body: JSON.stringify({
+                text,
+                localId: localId ?? undefined,
+                attachments: attachments ?? undefined
+            })
         })
     }
 

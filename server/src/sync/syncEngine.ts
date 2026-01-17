@@ -15,13 +15,13 @@ import type { SSEManager } from '../sse/sseManager'
 import { EventPublisher, type SyncEventListener } from './eventPublisher'
 import { MachineCache, type Machine } from './machineCache'
 import { MessageService } from './messageService'
-import { RpcGateway, type RpcCommandResponse, type RpcPathExistsResponse, type RpcReadFileResponse } from './rpcGateway'
+import { RpcGateway, type RpcCommandResponse, type RpcPathExistsResponse, type RpcReadFileResponse, type RpcUploadFileResponse, type RpcDeleteUploadResponse } from './rpcGateway'
 import { SessionCache } from './sessionCache'
 
 export type { Session, SyncEvent } from '@hapi/protocol/types'
 export type { Machine } from './machineCache'
 export type { SyncEventListener } from './eventPublisher'
-export type { RpcCommandResponse, RpcPathExistsResponse, RpcReadFileResponse } from './rpcGateway'
+export type { RpcCommandResponse, RpcPathExistsResponse, RpcReadFileResponse, RpcUploadFileResponse, RpcDeleteUploadResponse } from './rpcGateway'
 
 export class SyncEngine {
     private readonly eventPublisher: EventPublisher
@@ -189,7 +189,19 @@ export class SyncEngine {
 
     async sendMessage(
         sessionId: string,
-        payload: { text: string; localId?: string | null; sentFrom?: 'telegram-bot' | 'webapp' }
+        payload: {
+            text: string
+            localId?: string | null
+            attachments?: Array<{
+                id: string
+                filename: string
+                mimeType: string
+                size: number
+                path: string
+                previewUrl?: string
+            }>
+            sentFrom?: 'telegram-bot' | 'webapp'
+        }
     ): Promise<void> {
         await this.messageService.sendMessage(sessionId, payload)
     }
@@ -283,6 +295,14 @@ export class SyncEngine {
 
     async readSessionFile(sessionId: string, path: string): Promise<RpcReadFileResponse> {
         return await this.rpcGateway.readSessionFile(sessionId, path)
+    }
+
+    async uploadFile(sessionId: string, filename: string, content: string, mimeType: string): Promise<RpcUploadFileResponse> {
+        return await this.rpcGateway.uploadFile(sessionId, filename, content, mimeType)
+    }
+
+    async deleteUploadFile(sessionId: string, path: string): Promise<RpcDeleteUploadResponse> {
+        return await this.rpcGateway.deleteUploadFile(sessionId, path)
     }
 
     async runRipgrep(sessionId: string, args: string[], cwd?: string): Promise<RpcCommandResponse> {

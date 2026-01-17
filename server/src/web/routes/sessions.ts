@@ -18,6 +18,25 @@ const renameSessionSchema = z.object({
     name: z.string().min(1).max(255)
 })
 
+const uploadSchema = z.object({
+    filename: z.string().min(1).max(255),
+    content: z.string().min(1),
+    mimeType: z.string().min(1).max(255)
+})
+
+const uploadDeleteSchema = z.object({
+    path: z.string().min(1)
+})
+
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+
+function estimateBase64Bytes(base64: string): number {
+    const len = base64.length
+    if (len === 0) return 0
+    const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0
+    return Math.floor((len * 3) / 4) - padding
+}
+
 export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
@@ -62,6 +81,72 @@ export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Ho
         }
 
         return c.json({ session: sessionResult.session })
+    })
+
+    app.post('/sessions/:id/upload', async (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) {
+            return engine
+        }
+
+        const sessionResult = requireSessionFromParam(c, engine, { requireActive: true })
+        if (sessionResult instanceof Response) {
+            return sessionResult
+        }
+
+        const body = await c.req.json().catch(() => null)
+        const parsed = uploadSchema.safeParse(body)
+        if (!parsed.success) {
+            return c.json({ error: 'Invalid body' }, 400)
+        }
+
+        const estimatedBytes = estimateBase64Bytes(parsed.data.content)
+        if (estimatedBytes > MAX_UPLOAD_BYTES) {
+            return c.json({ success: false, error: 'File too large (max 50MB)' }, 413)
+        }
+
+        try {
+            const result = await engine.uploadFile(
+                sessionResult.sessionId,
+                parsed.data.filename,
+                parsed.data.content,
+                parsed.data.mimeType
+            )
+            return c.json(result)
+        } catch (error) {
+            return c.json({
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to upload file'
+            }, 500)
+        }
+    })
+
+    app.post('/sessions/:id/upload/delete', async (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) {
+            return engine
+        }
+
+        const sessionResult = requireSessionFromParam(c, engine, { requireActive: true })
+        if (sessionResult instanceof Response) {
+            return sessionResult
+        }
+
+        const body = await c.req.json().catch(() => null)
+        const parsed = uploadDeleteSchema.safeParse(body)
+        if (!parsed.success) {
+            return c.json({ error: 'Invalid body' }, 400)
+        }
+
+        try {
+            const result = await engine.deleteUploadFile(sessionResult.sessionId, parsed.data.path)
+            return c.json(result)
+        } catch (error) {
+            return c.json({
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to delete upload'
+            }, 500)
+        }
     })
 
     app.post('/sessions/:id/abort', async (c) => {

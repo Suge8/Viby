@@ -2,6 +2,7 @@ import { getPermissionModeOptionsForFlavor, MODEL_MODE_LABELS, MODEL_MODES } fro
 import { ComposerPrimitive, useAssistantApi, useAssistantState } from '@assistant-ui/react'
 import {
     type ChangeEvent as ReactChangeEvent,
+    type FormEvent as ReactFormEvent,
     type KeyboardEvent as ReactKeyboardEvent,
     type SyntheticEvent as ReactSyntheticEvent,
     useCallback,
@@ -21,6 +22,7 @@ import { FloatingOverlay } from '@/components/ChatInput/FloatingOverlay'
 import { Autocomplete } from '@/components/ChatInput/Autocomplete'
 import { StatusBar } from '@/components/AssistantChat/StatusBar'
 import { ComposerButtons } from '@/components/AssistantChat/ComposerButtons'
+import { AttachmentItem } from '@/components/AssistantChat/AttachmentItem'
 import { useTranslation } from '@/lib/use-translation'
 
 export interface TextInputState {
@@ -72,13 +74,25 @@ export function HappyComposer(props: {
 
     const api = useAssistantApi()
     const composerText = useAssistantState(({ composer }) => composer.text)
+    const attachments = useAssistantState(({ composer }) => composer.attachments)
     const threadIsRunning = useAssistantState(({ thread }) => thread.isRunning)
     const threadIsDisabled = useAssistantState(({ thread }) => thread.isDisabled)
 
     const controlsDisabled = disabled || !active || threadIsDisabled
     const trimmed = composerText.trim()
     const hasText = trimmed.length > 0
-    const canSend = hasText && !controlsDisabled && !threadIsRunning
+    const hasAttachments = attachments.length > 0
+    const attachmentsReady = !hasAttachments || attachments.every((attachment) => {
+        if (attachment.status.type === 'complete') {
+            return true
+        }
+        if (attachment.status.type !== 'requires-action') {
+            return false
+        }
+        const path = (attachment as { path?: string }).path
+        return typeof path === 'string' && path.length > 0
+    })
+    const canSend = (hasText || hasAttachments) && attachmentsReady && !controlsDisabled && !threadIsRunning
 
     const [inputState, setInputState] = useState<TextInputState>({
         text: '',
@@ -315,9 +329,13 @@ export function HappyComposer(props: {
         setShowSettings(prev => !prev)
     }, [haptic])
 
-    const handleSubmit = useCallback(() => {
+    const handleSubmit = useCallback((event?: ReactFormEvent<HTMLFormElement>) => {
+        if (event && !attachmentsReady) {
+            event.preventDefault()
+            return
+        }
         setShowContinueHint(false)
-    }, [])
+    }, [attachmentsReady])
 
     const handlePermissionChange = useCallback((mode: PermissionMode) => {
         if (!onPermissionModeChange || controlsDisabled) return
@@ -458,7 +476,7 @@ export function HappyComposer(props: {
     return (
         <div className={`px-3 ${bottomPaddingClass} pt-2 bg-[var(--app-bg)]`}>
             <div className="mx-auto w-full max-w-content">
-                <ComposerPrimitive.Root className="relative">
+                <ComposerPrimitive.Root className="relative" onSubmit={handleSubmit}>
                     {overlays}
 
                     <StatusBar
@@ -472,6 +490,12 @@ export function HappyComposer(props: {
                     />
 
                     <div className="overflow-hidden rounded-[20px] bg-[var(--app-secondary-bg)]">
+                        {attachments.length > 0 ? (
+                            <div className="flex flex-wrap gap-2 px-4 pt-3">
+                                <ComposerPrimitive.Attachments components={{ Attachment: AttachmentItem }} />
+                            </div>
+                        ) : null}
+
                         <div className="flex items-center px-4 py-3">
                             <ComposerPrimitive.Input
                                 ref={textareaRef}
@@ -484,7 +508,6 @@ export function HappyComposer(props: {
                                 onChange={handleChange}
                                 onSelect={handleSelect}
                                 onKeyDown={handleKeyDown}
-                                onSubmit={handleSubmit}
                                 className="flex-1 resize-none bg-transparent text-sm leading-snug text-[var(--app-fg)] placeholder-[var(--app-hint)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                             />
                         </div>

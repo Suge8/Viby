@@ -190,6 +190,7 @@ export default {
   'composer.terminal': '终端',
   'composer.abort': '中止',
   'composer.switchRemote': '切换到远程模式',
+  'composer.attach': '添加文件',
   'composer.send': '发送',
 
   // Banners

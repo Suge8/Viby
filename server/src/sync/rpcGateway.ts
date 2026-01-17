@@ -16,6 +16,17 @@ export type RpcReadFileResponse = {
     error?: string
 }
 
+export type RpcUploadFileResponse = {
+    success: boolean
+    path?: string
+    error?: string
+}
+
+export type RpcDeleteUploadResponse = {
+    success: boolean
+    error?: string
+}
+
 export type RpcPathExistsResponse = {
     exists: Record<string, boolean>
 }
@@ -140,6 +151,14 @@ export class RpcGateway {
 
     async readSessionFile(sessionId: string, path: string): Promise<RpcReadFileResponse> {
         return await this.sessionRpc(sessionId, 'readFile', { path }) as RpcReadFileResponse
+    }
+
+    async uploadFile(sessionId: string, filename: string, content: string, mimeType: string): Promise<RpcUploadFileResponse> {
+        return await this.sessionRpc(sessionId, 'uploadFile', { sessionId, filename, content, mimeType }) as RpcUploadFileResponse
+    }
+
+    async deleteUploadFile(sessionId: string, path: string): Promise<RpcDeleteUploadResponse> {
+        return await this.sessionRpc(sessionId, 'deleteUpload', { sessionId, path }) as RpcDeleteUploadResponse
     }
 
     async runRipgrep(sessionId: string, args: string[], cwd?: string): Promise<RpcCommandResponse> {

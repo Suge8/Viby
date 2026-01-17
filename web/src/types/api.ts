@@ -104,6 +104,17 @@ export type FileReadResponse = {
     error?: string
 }
 
+export type UploadFileResponse = {
+    success: boolean
+    path?: string
+    error?: string
+}
+
+export type DeleteUploadResponse = {
+    success: boolean
+    error?: string
+}
+
 export type GitFileStatus = {
     fileName: string
     filePath: string
@@ -160,3 +171,12 @@ export type VisibilityPayload = {
 }
 
 export type SyncEvent = ProtocolSyncEvent
+
+export type AttachmentMetadata = {
+    id: string
+    filename: string
+    mimeType: string
+    size: number
+    path: string
+    previewUrl?: string
+}

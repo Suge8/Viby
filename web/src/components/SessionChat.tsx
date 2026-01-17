@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { AssistantRuntimeProvider } from '@assistant-ui/react'
 import type { ApiClient } from '@/api/client'
-import type { DecryptedMessage, ModelMode, PermissionMode, Session } from '@/types/api'
+import type { AttachmentMetadata, DecryptedMessage, ModelMode, PermissionMode, Session } from '@/types/api'
 import type { ChatBlock, NormalizedMessage } from '@/chat/types'
 import type { Suggestion } from '@/hooks/useActiveSuggestions'
 import { normalizeDecryptedMessage } from '@/chat/normalize'
@@ -11,6 +11,7 @@ import { reconcileChatBlocks } from '@/chat/reconcile'
 import { HappyComposer } from '@/components/AssistantChat/HappyComposer'
 import { HappyThread } from '@/components/AssistantChat/HappyThread'
 import { useHappyRuntime } from '@/lib/assistant-runtime'
+import { createAttachmentAdapter } from '@/lib/attachmentAdapter'
 import { SessionHeader } from '@/components/SessionHeader'
 import { usePlatform } from '@/hooks/usePlatform'
 import { useSessionActions } from '@/hooks/mutations/useSessionActions'
@@ -29,7 +30,7 @@ export function SessionChat(props: {
     onBack: () => void
     onRefresh: () => void
     onLoadMore: () => Promise<unknown>
-    onSend: (text: string) => void
+    onSend: (text: string, attachments?: AttachmentMetadata[]) => void
     onFlushPending: () => void
     onAtBottomChange: (atBottom: boolean) => void
     onRetryMessage?: (localId: string) => void
@@ -139,17 +140,25 @@ export function SessionChat(props: {
         })
     }, [navigate, props.session.id])
 
-    const handleSend = useCallback((text: string) => {
-        props.onSend(text)
+    const handleSend = useCallback((text: string, attachments?: AttachmentMetadata[]) => {
+        props.onSend(text, attachments)
         setForceScrollToken((token) => token + 1)
     }, [props.onSend])
+
+    const attachmentAdapter = useMemo(() => {
+        if (!props.session.active) {
+            return undefined
+        }
+        return createAttachmentAdapter(props.api, props.session.id)
+    }, [props.api, props.session.id, props.session.active])
 
     const runtime = useHappyRuntime({
         session: props.session,
         blocks: reconciled.blocks,
         isSending: props.isSending,
         onSendMessage: handleSend,
-        onAbort: handleAbort
+        onAbort: handleAbort,
+        attachmentAdapter
     })
 
     return (

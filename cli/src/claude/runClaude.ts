@@ -16,6 +16,7 @@ import { bootstrapSession } from '@/agent/sessionFactory';
 import { createModeChangeHandler, createRunnerLifecycle, setControlledByUser } from '@/agent/runnerLifecycle';
 import { isModelModeAllowedForFlavor, isPermissionModeAllowedForFlavor } from '@hapi/protocol';
 import { ModelModeSchema, PermissionModeSchema } from '@hapi/protocol/schemas';
+import { formatMessageWithAttachments } from '@/utils/attachmentFormatter';
 
 export interface StartOptions {
     model?: string
@@ -218,6 +219,9 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         // Check for special commands before processing
         const specialCommand = parseSpecialCommand(message.content.text);
 
+        // Format message text with attachments for Claude
+        const formattedText = formatMessageWithAttachments(message.content.text, message.content.attachments);
+
         if (specialCommand.type === 'compact') {
             logger.debug('[start] Detected /compact command');
             const enhancedMode: EnhancedMode = {
@@ -229,7 +233,9 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
                 allowedTools: messageAllowedTools,
                 disallowedTools: messageDisallowedTools
             };
-            messageQueue.pushIsolateAndClear(specialCommand.originalMessage || message.content.text, enhancedMode);
+            // Use raw text only, ignore attachments for special commands
+            const commandText = specialCommand.originalMessage || message.content.text;
+            messageQueue.pushIsolateAndClear(commandText, enhancedMode);
             logger.debugLargeJson('[start] /compact command pushed to queue:', message);
             return;
         }
@@ -245,8 +251,10 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
                 allowedTools: messageAllowedTools,
                 disallowedTools: messageDisallowedTools
             };
-            messageQueue.pushIsolateAndClear(specialCommand.originalMessage || message.content.text, enhancedMode);
-            logger.debugLargeJson('[start] /compact command pushed to queue:', message);
+            // Use raw text only, ignore attachments for special commands
+            const commandText = specialCommand.originalMessage || message.content.text;
+            messageQueue.pushIsolateAndClear(commandText, enhancedMode);
+            logger.debugLargeJson('[start] /clear command pushed to queue:', message);
             return;
         }
 
@@ -260,7 +268,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
             allowedTools: messageAllowedTools,
             disallowedTools: messageDisallowedTools
         };
-        messageQueue.push(message.content.text, enhancedMode);
+        messageQueue.push(formattedText, enhancedMode);
         logger.debugLargeJson('User message pushed to queue:', message)
     });
 

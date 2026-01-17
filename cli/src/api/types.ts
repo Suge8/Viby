@@ -172,11 +172,23 @@ export const MessageMetaSchema = z.object({
 
 export type MessageMeta = z.infer<typeof MessageMetaSchema>
 
+export const AttachmentMetadataSchema = z.object({
+    id: z.string(),
+    filename: z.string(),
+    mimeType: z.string(),
+    size: z.number(),
+    path: z.string(),
+    previewUrl: z.string().optional()
+})
+
+export type AttachmentMetadata = z.infer<typeof AttachmentMetadataSchema>
+
 export const UserMessageSchema = z.object({
     role: z.literal('user'),
     content: z.object({
         type: z.literal('text'),
-        text: z.string()
+        text: z.string(),
+        attachments: z.array(AttachmentMetadataSchema).optional()
     }),
     localKey: z.string().optional(),
     meta: MessageMetaSchema.optional()

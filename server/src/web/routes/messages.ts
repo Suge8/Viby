@@ -9,9 +9,19 @@ const querySchema = z.object({
     beforeSeq: z.coerce.number().int().min(1).optional()
 })
 
+const attachmentMetadataSchema = z.object({
+    id: z.string(),
+    filename: z.string(),
+    mimeType: z.string(),
+    size: z.number(),
+    path: z.string(),
+    previewUrl: z.string().optional()
+})
+
 const sendMessageBodySchema = z.object({
-    text: z.string().min(1),
-    localId: z.string().min(1).optional()
+    text: z.string(),
+    localId: z.string().min(1).optional(),
+    attachments: z.array(attachmentMetadataSchema).optional()
 })
 
 export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null): Hono<WebAppEnv> {
@@ -53,7 +63,17 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null): Ho
             return c.json({ error: 'Invalid body' }, 400)
         }
 
-        await engine.sendMessage(sessionId, { text: parsed.data.text, localId: parsed.data.localId, sentFrom: 'webapp' })
+        // Require text or attachments
+        if (!parsed.data.text && (!parsed.data.attachments || parsed.data.attachments.length === 0)) {
+            return c.json({ error: 'Message requires text or attachments' }, 400)
+        }
+
+        await engine.sendMessage(sessionId, {
+            text: parsed.data.text,
+            localId: parsed.data.localId,
+            attachments: parsed.data.attachments,
+            sentFrom: 'webapp'
+        })
         return c.json({ ok: true })
     })
 

@@ -188,6 +188,7 @@ export default {
   'composer.terminal': 'Terminal',
   'composer.abort': 'Abort',
   'composer.switchRemote': 'Switch to remote mode',
+  'composer.attach': 'Attach file',
   'composer.send': 'Send',
 
   // Banners
