@@ -15,6 +15,7 @@ export type AgentEvent =
     | { type: 'limit-reached'; endsAt: number }
     | { type: 'ready' }
     | { type: 'api-error'; retryAttempt: number; maxRetries: number; error: unknown }
+    | { type: 'turn-duration'; durationMs: number }
     | ({ type: string } & Record<string, unknown>)
 
 export type ToolResultPermission = {

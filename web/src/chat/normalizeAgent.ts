@@ -232,6 +232,20 @@ export function normalizeAgentRecord(
                 meta
             }
         }
+        if (data.type === 'system' && data.subtype === 'turn_duration') {
+            return {
+                id: messageId,
+                localId,
+                createdAt,
+                role: 'event',
+                content: {
+                    type: 'turn-duration',
+                    durationMs: asNumber(data.durationMs) ?? 0
+                },
+                isSidechain: false,
+                meta
+            }
+        }
         return null
     }
 
