@@ -18,7 +18,7 @@ export interface EnhancedMode {
 interface LoopOptions {
     path: string;
     startingMode?: 'local' | 'remote';
-    startedBy?: 'daemon' | 'terminal';
+    startedBy?: 'runner' | 'terminal';
     onModeChange: (mode: 'local' | 'remote') => void;
     messageQueue: MessageQueue2<EnhancedMode>;
     session: ApiSessionClient;

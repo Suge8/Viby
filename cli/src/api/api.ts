@@ -1,6 +1,6 @@
 import axios from 'axios'
-import type { AgentState, CreateMachineResponse, CreateSessionResponse, DaemonState, Machine, MachineMetadata, Metadata, Session } from '@/api/types'
-import { AgentStateSchema, CreateMachineResponseSchema, CreateSessionResponseSchema, DaemonStateSchema, MachineMetadataSchema, MetadataSchema } from '@/api/types'
+import type { AgentState, CreateMachineResponse, CreateSessionResponse, RunnerState, Machine, MachineMetadata, Metadata, Session } from '@/api/types'
+import { AgentStateSchema, CreateMachineResponseSchema, CreateSessionResponseSchema, RunnerStateSchema, MachineMetadataSchema, MetadataSchema } from '@/api/types'
 import { configuration } from '@/configuration'
 import { getAuthToken } from '@/api/auth'
 import { ApiMachineClient } from './apiMachine'
@@ -76,14 +76,14 @@ export class ApiClient {
     async getOrCreateMachine(opts: {
         machineId: string
         metadata: MachineMetadata
-        daemonState?: DaemonState
+        runnerState?: RunnerState
     }): Promise<Machine> {
         const response = await axios.post<CreateMachineResponse>(
             `${configuration.serverUrl}/cli/machines`,
             {
                 id: opts.machineId,
                 metadata: opts.metadata,
-                daemonState: opts.daemonState ?? null
+                runnerState: opts.runnerState ?? null
             },
             {
                 headers: {
@@ -107,10 +107,10 @@ export class ApiClient {
             return parsedMetadata.success ? parsedMetadata.data : null
         })()
 
-        const daemonState = (() => {
-            if (raw.daemonState == null) return null
-            const parsedDaemonState = DaemonStateSchema.safeParse(raw.daemonState)
-            return parsedDaemonState.success ? parsedDaemonState.data : null
+        const runnerState = (() => {
+            if (raw.runnerState == null) return null
+            const parsedRunnerState = RunnerStateSchema.safeParse(raw.runnerState)
+            return parsedRunnerState.success ? parsedRunnerState.data : null
         })()
 
         return {
@@ -122,8 +122,8 @@ export class ApiClient {
             activeAt: raw.activeAt,
             metadata,
             metadataVersion: raw.metadataVersion,
-            daemonState,
-            daemonStateVersion: raw.daemonStateVersion
+            runnerState,
+            runnerStateVersion: raw.runnerStateVersion
         }
     }
 

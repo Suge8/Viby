@@ -22,10 +22,10 @@ export interface StartOptions {
     model?: string
     permissionMode?: PermissionMode
     startingMode?: 'local' | 'remote'
-    shouldStartDaemon?: boolean
+    shouldStartRunner?: boolean
     claudeEnvVars?: Record<string, string>
     claudeArgs?: string[]
-    startedBy?: 'daemon' | 'terminal'
+    startedBy?: 'runner' | 'terminal'
 }
 
 export async function runClaude(options: StartOptions = {}): Promise<void> {
@@ -36,12 +36,12 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
     logger.debugLargeJson('[START] HAPI process started', getEnvironmentInfo());
     logger.debug(`[START] Options: startedBy=${startedBy}, startingMode=${options.startingMode}`);
 
-    // Validate daemon spawn requirements
-    if (startedBy === 'daemon' && options.startingMode === 'local') {
-        logger.debug('Daemon spawn requested with local mode - forcing remote mode');
+    // Validate runner spawn requirements
+    if (startedBy === 'runner' && options.startingMode === 'local') {
+        logger.debug('Runner spawn requested with local mode - forcing remote mode');
         options.startingMode = 'remote';
         // TODO: Eventually we should error here instead of silently switching
-        // throw new Error('Daemon-spawned sessions cannot use local/interactive mode');
+        // throw new Error('Runner-spawned sessions cannot use local/interactive mode');
     }
 
     const initialState: AgentState = {};
@@ -124,7 +124,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
     registerKillSessionHandler(session.rpcHandlerManager, lifecycle.cleanupAndExit);
 
     // Set initial agent state
-    const startingMode = options.startingMode ?? (startedBy === 'daemon' ? 'remote' : 'local');
+    const startingMode = options.startingMode ?? (startedBy === 'runner' ? 'remote' : 'local');
     setControlledByUser(session, startingMode);
 
     // Import MessageQueue2 and create message queue

@@ -1,15 +1,15 @@
 /**
- * Daemon-specific types (not related to API/server communication)
+ * Runner-specific types (not related to API/server communication)
  */
 
 import { Metadata } from '@/api/types';
 import { ChildProcess } from 'child_process';
 
 /**
- * Session tracking for daemon
+ * Session tracking for runner
  */
 export interface TrackedSession {
-  startedBy: 'daemon' | string;
+  startedBy: 'runner' | string;
   happySessionId?: string;
   happySessionMetadataFromLocalWebhook?: Metadata;
   pid: number;

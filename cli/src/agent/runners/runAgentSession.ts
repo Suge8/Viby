@@ -26,7 +26,7 @@ function emitReadyIfIdle(props: {
 
 export async function runAgentSession(opts: {
     agentType: string;
-    startedBy?: 'daemon' | 'terminal';
+    startedBy?: 'runner' | 'terminal';
 }): Promise<void> {
     const initialState: AgentState = {
         controlledByUser: false

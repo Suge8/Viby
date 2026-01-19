@@ -14,15 +14,15 @@ import { getCliArgs } from '@/utils/cliArgs'
 class Configuration {
     private _serverUrl: string
     private _cliApiToken: string
-    public readonly isDaemonProcess: boolean
+    public readonly isRunnerProcess: boolean
 
     // Directories and paths (from persistence)
     public readonly happyHomeDir: string
     public readonly logsDir: string
     public readonly settingsFile: string
     public readonly privateKeyFile: string
-    public readonly daemonStateFile: string
-    public readonly daemonLockFile: string
+    public readonly runnerStateFile: string
+    public readonly runnerLockFile: string
     public readonly currentCliVersion: string
 
     public readonly isExperimentalEnabled: boolean
@@ -32,9 +32,9 @@ class Configuration {
         this._serverUrl = process.env.HAPI_SERVER_URL || 'http://localhost:3006'
         this._cliApiToken = process.env.CLI_API_TOKEN || ''
 
-        // Check if we're running as daemon based on process args
+        // Check if we're running as runner based on process args
         const args = getCliArgs()
-        this.isDaemonProcess = args.length >= 2 && args[0] === 'daemon' && (args[1] === 'start-sync')
+        this.isRunnerProcess = args.length >= 2 && args[0] === 'runner' && (args[1] === 'start-sync')
 
         // Directory configuration - Priority: HAPI_HOME env > default home dir
         if (process.env.HAPI_HOME) {
@@ -48,8 +48,8 @@ class Configuration {
         this.logsDir = join(this.happyHomeDir, 'logs')
         this.settingsFile = join(this.happyHomeDir, 'settings.json')
         this.privateKeyFile = join(this.happyHomeDir, 'access.key')
-        this.daemonStateFile = join(this.happyHomeDir, 'daemon.state.json')
-        this.daemonLockFile = join(this.happyHomeDir, 'daemon.state.json.lock')
+        this.runnerStateFile = join(this.happyHomeDir, 'runner.state.json')
+        this.runnerLockFile = join(this.happyHomeDir, 'runner.state.json.lock')
 
         this.isExperimentalEnabled = ['true', '1', 'yes'].includes(process.env.HAPI_EXPERIMENTAL?.toLowerCase() || '')
 

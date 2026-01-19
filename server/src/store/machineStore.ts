@@ -7,7 +7,7 @@ import {
     getMachines,
     getMachinesByNamespace,
     getOrCreateMachine,
-    updateMachineDaemonState,
+    updateMachineRunnerState,
     updateMachineMetadata
 } from './machines'
 
@@ -18,8 +18,8 @@ export class MachineStore {
         this.db = db
     }
 
-    getOrCreateMachine(id: string, metadata: unknown, daemonState: unknown, namespace: string): StoredMachine {
-        return getOrCreateMachine(this.db, id, metadata, daemonState, namespace)
+    getOrCreateMachine(id: string, metadata: unknown, runnerState: unknown, namespace: string): StoredMachine {
+        return getOrCreateMachine(this.db, id, metadata, runnerState, namespace)
     }
 
     updateMachineMetadata(
@@ -31,13 +31,13 @@ export class MachineStore {
         return updateMachineMetadata(this.db, id, metadata, expectedVersion, namespace)
     }
 
-    updateMachineDaemonState(
+    updateMachineRunnerState(
         id: string,
-        daemonState: unknown,
+        runnerState: unknown,
         expectedVersion: number,
         namespace: string
     ): VersionedUpdateResult<unknown | null> {
-        return updateMachineDaemonState(this.db, id, daemonState, expectedVersion, namespace)
+        return updateMachineRunnerState(this.db, id, runnerState, expectedVersion, namespace)
     }
 
     getMachine(id: string): StoredMachine | null {

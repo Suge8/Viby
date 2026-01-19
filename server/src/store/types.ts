@@ -23,8 +23,8 @@ export type StoredMachine = {
     updatedAt: number
     metadata: unknown | null
     metadataVersion: number
-    daemonState: unknown | null
-    daemonStateVersion: number
+    runnerState: unknown | null
+    runnerStateVersion: number
     active: boolean
     activeAt: number | null
     seq: number

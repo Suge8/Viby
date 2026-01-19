@@ -15,7 +15,7 @@ import { formatMessageWithAttachments } from '@/utils/attachmentFormatter';
 export { emitReadyIfIdle } from './utils/emitReadyIfIdle';
 
 export async function runCodex(opts: {
-    startedBy?: 'daemon' | 'terminal';
+    startedBy?: 'runner' | 'terminal';
     codexArgs?: string[];
     permissionMode?: PermissionMode;
     resumeSessionId?: string;
@@ -35,7 +35,7 @@ export async function runCodex(opts: {
         agentState: state
     });
 
-    const startingMode: 'local' | 'remote' = startedBy === 'daemon' ? 'remote' : 'local';
+    const startingMode: 'local' | 'remote' = startedBy === 'runner' ? 'remote' : 'local';
 
     setControlledByUser(session, startingMode);
 

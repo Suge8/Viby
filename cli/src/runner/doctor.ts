@@ -1,7 +1,7 @@
 /**
- * Daemon doctor utilities
+ * Runner doctor utilities
  * 
- * Process discovery and cleanup functions for the daemon
+ * Process discovery and cleanup functions for the runner
  * Helps diagnose and fix issues with hung or orphaned processes
  */
 
@@ -37,11 +37,11 @@ export async function findAllHappyProcesses(): Promise<Array<{ pid: number, comm
       if (proc.pid === process.pid) {
         type = 'current';
       } else if (cmd.includes('--version')) {
-        type = isDevMode ? 'dev-daemon-version-check' : 'daemon-version-check';
-      } else if (cmd.includes('daemon start-sync') || cmd.includes('daemon start')) {
-        type = isDevMode ? 'dev-daemon' : 'daemon';
-      } else if (cmd.includes('--started-by daemon')) {
-        type = isDevMode ? 'dev-daemon-spawned' : 'daemon-spawned-session';
+        type = isDevMode ? 'dev-runner-version-check' : 'runner-version-check';
+      } else if (cmd.includes('runner start-sync') || cmd.includes('runner start')) {
+        type = isDevMode ? 'dev-runner' : 'runner';
+      } else if (cmd.includes('--started-by runner')) {
+        type = isDevMode ? 'dev-runner-spawned' : 'runner-spawned-session';
       } else if (cmd.includes('doctor')) {
         type = isDevMode ? 'dev-doctor' : 'doctor';
       } else if (cmd.includes('--yolo')) {
@@ -69,12 +69,12 @@ export async function findRunawayHappyProcesses(): Promise<Array<{ pid: number, 
   return allProcesses
     .filter(p => 
       p.pid !== process.pid && (
-        p.type === 'daemon' ||
-        p.type === 'dev-daemon' ||
-        p.type === 'daemon-spawned-session' ||
-        p.type === 'dev-daemon-spawned' ||
-        p.type === 'daemon-version-check' ||
-        p.type === 'dev-daemon-version-check'
+        p.type === 'runner' ||
+        p.type === 'dev-runner' ||
+        p.type === 'runner-spawned-session' ||
+        p.type === 'dev-runner-spawned' ||
+        p.type === 'runner-version-check' ||
+        p.type === 'dev-runner-version-check'
       )
     )
     .map(p => ({ pid: p.pid, command: p.command }));

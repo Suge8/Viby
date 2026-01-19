@@ -22,7 +22,7 @@ export { PushStore } from './pushStore'
 export { SessionStore } from './sessionStore'
 export { UserStore } from './userStore'
 
-const SCHEMA_VERSION = 1
+const SCHEMA_VERSION = 2
 const REQUIRED_TABLES = [
     'sessions',
     'machines',
@@ -87,11 +87,18 @@ export class Store {
         const currentVersion = this.getUserVersion()
         if (currentVersion === 0) {
             if (this.hasAnyUserTables()) {
+                this.migrateLegacySchemaIfNeeded()
                 this.setUserVersion(SCHEMA_VERSION)
                 return
             }
 
             this.createSchema()
+            this.setUserVersion(SCHEMA_VERSION)
+            return
+        }
+
+        if (currentVersion === 1 && SCHEMA_VERSION === 2) {
+            this.migrateFromV1ToV2()
             this.setUserVersion(SCHEMA_VERSION)
             return
         }
@@ -132,8 +139,8 @@ export class Store {
                 updated_at INTEGER NOT NULL,
                 metadata TEXT,
                 metadata_version INTEGER DEFAULT 1,
-                daemon_state TEXT,
-                daemon_state_version INTEGER DEFAULT 1,
+                runner_state TEXT,
+                runner_state_version INTEGER DEFAULT 1,
                 active INTEGER DEFAULT 0,
                 active_at INTEGER,
                 seq INTEGER DEFAULT 0
@@ -174,6 +181,97 @@ export class Store {
             );
             CREATE INDEX IF NOT EXISTS idx_push_subscriptions_namespace ON push_subscriptions(namespace);
         `)
+    }
+
+    private migrateLegacySchemaIfNeeded(): void {
+        const columns = this.getMachineColumnNames()
+        if (columns.size === 0) {
+            return
+        }
+
+        const hasDaemon = columns.has('daemon_state') || columns.has('daemon_state_version')
+        const hasRunner = columns.has('runner_state') || columns.has('runner_state_version')
+
+        if (hasDaemon && hasRunner) {
+            throw new Error('SQLite schema has both daemon_state and runner_state columns in machines; manual cleanup required.')
+        }
+
+        if (hasDaemon && !hasRunner) {
+            this.migrateFromV1ToV2()
+        }
+    }
+
+    private migrateFromV1ToV2(): void {
+        const columns = this.getMachineColumnNames()
+        if (columns.size === 0) {
+            throw new Error('SQLite schema missing machines table for v1 to v2 migration.')
+        }
+
+        const hasDaemon = columns.has('daemon_state') && columns.has('daemon_state_version')
+        const hasRunner = columns.has('runner_state') && columns.has('runner_state_version')
+
+        if (hasRunner && !hasDaemon) {
+            return
+        }
+
+        if (!hasDaemon) {
+            throw new Error('SQLite schema missing daemon_state columns for v1 to v2 migration.')
+        }
+
+        try {
+            this.db.exec('BEGIN')
+            this.db.exec('ALTER TABLE machines RENAME COLUMN daemon_state TO runner_state')
+            this.db.exec('ALTER TABLE machines RENAME COLUMN daemon_state_version TO runner_state_version')
+            this.db.exec('COMMIT')
+            return
+        } catch (error) {
+            this.db.exec('ROLLBACK')
+        }
+
+        try {
+            this.db.exec('BEGIN')
+            this.db.exec(`
+                CREATE TABLE machines_new (
+                    id TEXT PRIMARY KEY,
+                    namespace TEXT NOT NULL DEFAULT 'default',
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    metadata TEXT,
+                    metadata_version INTEGER DEFAULT 1,
+                    runner_state TEXT,
+                    runner_state_version INTEGER DEFAULT 1,
+                    active INTEGER DEFAULT 0,
+                    active_at INTEGER,
+                    seq INTEGER DEFAULT 0
+                );
+            `)
+            this.db.exec(`
+                INSERT INTO machines_new (
+                    id, namespace, created_at, updated_at,
+                    metadata, metadata_version,
+                    runner_state, runner_state_version,
+                    active, active_at, seq
+                )
+                SELECT id, namespace, created_at, updated_at,
+                       metadata, metadata_version,
+                       daemon_state, daemon_state_version,
+                       active, active_at, seq
+                FROM machines;
+            `)
+            this.db.exec('DROP TABLE machines')
+            this.db.exec('ALTER TABLE machines_new RENAME TO machines')
+            this.db.exec('CREATE INDEX IF NOT EXISTS idx_machines_namespace ON machines(namespace)')
+            this.db.exec('COMMIT')
+        } catch (error) {
+            this.db.exec('ROLLBACK')
+            const message = error instanceof Error ? error.message : String(error)
+            throw new Error(`SQLite schema migration v1->v2 failed: ${message}`)
+        }
+    }
+
+    private getMachineColumnNames(): Set<string> {
+        const rows = this.db.prepare('PRAGMA table_info(machines)').all() as Array<{ name: string }>
+        return new Set(rows.map((row) => row.name))
     }
 
     private getUserVersion(): number {

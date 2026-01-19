@@ -9,12 +9,12 @@ export const geminiCommand: CommandDefinition = {
     requiresRuntimeAssets: true,
     run: async ({ commandArgs }) => {
         try {
-            let startedBy: 'daemon' | 'terminal' | undefined
+            let startedBy: 'runner' | 'terminal' | undefined
             let yolo = false
 
             for (let i = 0; i < commandArgs.length; i++) {
                 if (commandArgs[i] === '--started-by') {
-                    startedBy = commandArgs[++i] as 'daemon' | 'terminal'
+                    startedBy = commandArgs[++i] as 'runner' | 'terminal'
                 } else if (commandArgs[i] === '--yolo') {
                     yolo = true
                 }

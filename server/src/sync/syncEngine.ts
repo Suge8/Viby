@@ -183,8 +183,8 @@ export class SyncEngine {
         return this.sessionCache.getOrCreateSession(tag, metadata, agentState, namespace)
     }
 
-    getOrCreateMachine(id: string, metadata: unknown, daemonState: unknown, namespace: string): Machine {
-        return this.machineCache.getOrCreateMachine(id, metadata, daemonState, namespace)
+    getOrCreateMachine(id: string, metadata: unknown, runnerState: unknown, namespace: string): Machine {
+        return this.machineCache.getOrCreateMachine(id, metadata, runnerState, namespace)
     }
 
     async sendMessage(

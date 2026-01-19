@@ -1,10 +1,10 @@
 /**
- * HTTP client helpers for daemon communication
- * Used by CLI commands to interact with running daemon
+ * HTTP client helpers for runner communication
+ * Used by CLI commands to interact with running runner
  */
 
 import { logger } from '@/ui/logger';
-import { clearDaemonState, readDaemonState } from '@/persistence';
+import { clearRunnerState, readRunnerState } from '@/persistence';
 import { Metadata } from '@/api/types';
 import packageJson from '../../package.json';
 import { existsSync, statSync } from 'node:fs';
@@ -33,10 +33,10 @@ export function getInstalledCliMtimeMs(): number | undefined {
   }
 }
 
-async function daemonPost(path: string, body?: any): Promise<{ error?: string } | any> {
-  const state = await readDaemonState();
+async function runnerPost(path: string, body?: any): Promise<{ error?: string } | any> {
+  const state = await readRunnerState();
   if (!state?.httpPort) {
-    const errorMessage = 'No daemon running, no state file found';
+    const errorMessage = 'No runner running, no state file found';
     logger.debug(`[CONTROL CLIENT] ${errorMessage}`);
     return {
       error: errorMessage
@@ -44,7 +44,7 @@ async function daemonPost(path: string, body?: any): Promise<{ error?: string } 
   }
 
   if (!isProcessAlive(state.pid)) {
-    const errorMessage = 'Daemon is not running, file is stale';
+    const errorMessage = 'Runner is not running, file is stale';
     logger.debug(`[CONTROL CLIENT] ${errorMessage}`);
     return {
       error: errorMessage
@@ -52,7 +52,7 @@ async function daemonPost(path: string, body?: any): Promise<{ error?: string } 
   }
 
   try {
-    const timeout = process.env.HAPI_DAEMON_HTTP_TIMEOUT ? parseInt(process.env.HAPI_DAEMON_HTTP_TIMEOUT) : 10_000;
+    const timeout = process.env.HAPI_RUNNER_HTTP_TIMEOUT ? parseInt(process.env.HAPI_RUNNER_HTTP_TIMEOUT) : 10_000;
     const response = await fetch(`http://127.0.0.1:${state.httpPort}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -79,39 +79,39 @@ async function daemonPost(path: string, body?: any): Promise<{ error?: string } 
   }
 }
 
-export async function notifyDaemonSessionStarted(
+export async function notifyRunnerSessionStarted(
   sessionId: string,
   metadata: Metadata
 ): Promise<{ error?: string } | any> {
-  return await daemonPost('/session-started', {
+  return await runnerPost('/session-started', {
     sessionId,
     metadata
   });
 }
 
-export async function listDaemonSessions(): Promise<any[]> {
-  const result = await daemonPost('/list');
+export async function listRunnerSessions(): Promise<any[]> {
+  const result = await runnerPost('/list');
   return result.children || [];
 }
 
-export async function stopDaemonSession(sessionId: string): Promise<boolean> {
-  const result = await daemonPost('/stop-session', { sessionId });
+export async function stopRunnerSession(sessionId: string): Promise<boolean> {
+  const result = await runnerPost('/stop-session', { sessionId });
   return result.success || false;
 }
 
-export async function spawnDaemonSession(directory: string, sessionId?: string): Promise<any> {
-  const result = await daemonPost('/spawn-session', { directory, sessionId });
+export async function spawnRunnerSession(directory: string, sessionId?: string): Promise<any> {
+  const result = await runnerPost('/spawn-session', { directory, sessionId });
   return result;
 }
 
-export async function stopDaemonHttp(): Promise<void> {
-  await daemonPost('/stop');
+export async function stopRunnerHttp(): Promise<void> {
+  await runnerPost('/stop');
 }
 
 /**
  * The version check is still quite naive.
  * For instance we are not handling the case where we upgraded hapi,
- * the daemon is still running, and it recieves a new message to spawn a new session.
+ * the runner is still running, and it recieves a new message to spawn a new session.
  * This is a tough case - we need to somehow figure out to restart ourselves,
  * yet still handle the original request.
  * 
@@ -123,8 +123,8 @@ export async function stopDaemonHttp(): Promise<void> {
  *   b. Let the request fail, restart and rely on the client retrying the request
  * 
  * I like option 1 a little better.
- * Maybe we can ... wait for it ... have another daemon to make sure 
- * our daemon is always alive and running the latest version.
+ * Maybe we can ... wait for it ... have another runner to make sure 
+ * our runner is always alive and running the latest version.
  * 
  * That seems like an overkill and yet another process to manage - lets not do this :D
  * 
@@ -133,54 +133,54 @@ export async function stopDaemonHttp(): Promise<void> {
  * Not just a boolean.
  * 
  * We can destructure the response on the caller for richer output.
- * For instance when running `hapi daemon status` we can show more information.
+ * For instance when running `hapi runner status` we can show more information.
  */
-export async function checkIfDaemonRunningAndCleanupStaleState(): Promise<boolean> {
-  const state = await readDaemonState();
+export async function checkIfRunnerRunningAndCleanupStaleState(): Promise<boolean> {
+  const state = await readRunnerState();
   if (!state) {
     return false;
   }
 
-  // Check if the daemon is running
+  // Check if the runner is running
   if (isProcessAlive(state.pid)) {
     return true;
   }
 
-  logger.debug('[DAEMON RUN] Daemon PID not running, cleaning up state');
-  await cleanupDaemonState();
+  logger.debug('[RUNNER RUN] Runner PID not running, cleaning up state');
+  await cleanupRunnerState();
   return false;
 }
 
 /**
- * Check if the running daemon version matches the current CLI version.
- * This should work from both the daemon itself & a new CLI process.
- * Works via the daemon.state.json file.
+ * Check if the running runner version matches the current CLI version.
+ * This should work from both the runner itself & a new CLI process.
+ * Works via the runner.state.json file.
  * 
- * @returns true if versions match, false if versions differ or no daemon running
+ * @returns true if versions match, false if versions differ or no runner running
  */
-export async function isDaemonRunningCurrentlyInstalledHappyVersion(): Promise<boolean> {
-  logger.debug('[DAEMON CONTROL] Checking if daemon is running same version');
-  const runningDaemon = await checkIfDaemonRunningAndCleanupStaleState();
-  if (!runningDaemon) {
-    logger.debug('[DAEMON CONTROL] No daemon running, returning false');
+export async function isRunnerRunningCurrentlyInstalledHappyVersion(): Promise<boolean> {
+  logger.debug('[RUNNER CONTROL] Checking if runner is running same version');
+  const runningRunner = await checkIfRunnerRunningAndCleanupStaleState();
+  if (!runningRunner) {
+    logger.debug('[RUNNER CONTROL] No runner running, returning false');
     return false;
   }
 
-  const state = await readDaemonState();
+  const state = await readRunnerState();
   if (!state) {
-    logger.debug('[DAEMON CONTROL] No daemon state found, returning false');
+    logger.debug('[RUNNER CONTROL] No runner state found, returning false');
     return false;
   }
   
   try {
     const currentCliMtimeMs = getInstalledCliMtimeMs();
     if (typeof currentCliMtimeMs === 'number' && typeof state.startedWithCliMtimeMs === 'number') {
-      logger.debug(`[DAEMON CONTROL] Current CLI mtime: ${currentCliMtimeMs}, Daemon started with mtime: ${state.startedWithCliMtimeMs}`);
+      logger.debug(`[RUNNER CONTROL] Current CLI mtime: ${currentCliMtimeMs}, Runner started with mtime: ${state.startedWithCliMtimeMs}`);
       return currentCliMtimeMs === state.startedWithCliMtimeMs;
     }
 
     const currentCliVersion = packageJson.version;
-    logger.debug(`[DAEMON CONTROL] Current CLI version: ${currentCliVersion}, Daemon started with version: ${state.startedWithCliVersion}`);
+    logger.debug(`[RUNNER CONTROL] Current CLI version: ${currentCliVersion}, Runner started with version: ${state.startedWithCliVersion}`);
     return currentCliVersion === state.startedWithCliVersion;
     
     // PREVIOUS IMPLEMENTATION - Keeping this commented in case we need it
@@ -196,41 +196,41 @@ export async function isDaemonRunningCurrentlyInstalledHappyVersion(): Promise<b
       version = data.toString().trim();
     });
     await new Promise(resolve => happyProcess.stdout?.on('close', resolve));
-    logger.debug(`[DAEMON CONTROL] Current CLI version: ${version}, Daemon started with version: ${state.startedWithCliVersion}`);
+    logger.debug(`[RUNNER CONTROL] Current CLI version: ${version}, Runner started with version: ${state.startedWithCliVersion}`);
     return version === state.startedWithCliVersion;
     */
   } catch (error) {
-    logger.debug('[DAEMON CONTROL] Error checking daemon version', error);
+    logger.debug('[RUNNER CONTROL] Error checking runner version', error);
     return false;
   }
 }
 
-export async function cleanupDaemonState(): Promise<void> {
+export async function cleanupRunnerState(): Promise<void> {
   try {
-    await clearDaemonState();
-    logger.debug('[DAEMON RUN] Daemon state file removed');
+    await clearRunnerState();
+    logger.debug('[RUNNER RUN] Runner state file removed');
   } catch (error) {
-    logger.debug('[DAEMON RUN] Error cleaning up daemon metadata', error);
+    logger.debug('[RUNNER RUN] Error cleaning up runner metadata', error);
   }
 }
 
-export async function stopDaemon() {
+export async function stopRunner() {
   try {
-    const state = await readDaemonState();
+    const state = await readRunnerState();
     if (!state) {
-      logger.debug('No daemon state found');
+      logger.debug('No runner state found');
       return;
     }
 
-    logger.debug(`Stopping daemon with PID ${state.pid}`);
+    logger.debug(`Stopping runner with PID ${state.pid}`);
 
     // Try HTTP graceful stop
     try {
-      await stopDaemonHttp();
+      await stopRunnerHttp();
 
-      // Wait for daemon to die
+      // Wait for runner to die
       await waitForProcessDeath(state.pid, 2000);
-      logger.debug('Daemon stopped gracefully via HTTP');
+      logger.debug('Runner stopped gracefully via HTTP');
       return;
     } catch (error) {
       logger.debug('HTTP stop failed, will force kill', error);
@@ -239,12 +239,12 @@ export async function stopDaemon() {
     // Force kill
     const killed = await killProcess(state.pid, true);
     if (killed) {
-      logger.debug('Force killed daemon');
+      logger.debug('Force killed runner');
     } else {
-      logger.debug('Daemon already dead or could not be killed');
+      logger.debug('Runner already dead or could not be killed');
     }
   } catch (error) {
-    logger.debug('Error stopping daemon', error);
+    logger.debug('Error stopping runner', error);
   }
 }
 

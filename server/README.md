@@ -165,7 +165,7 @@ See `src/store/index.ts` for SQLite persistence:
 
 - Sessions with metadata and agent state.
 - Messages with pagination support.
-- Machines with daemon state.
+- Machines with runner state.
 - Todo extraction from messages.
 - Users table for Telegram bindings (includes namespace).
 

@@ -32,7 +32,7 @@ export const MachineMetadataSchema = z.object({
 
 export type MachineMetadata = z.infer<typeof MachineMetadataSchema>
 
-export const DaemonStateSchema = z.object({
+export const RunnerStateSchema = z.object({
     status: z.union([z.enum(['running', 'shutting-down']), z.string()]),
     pid: z.number().optional(),
     httpPort: z.number().optional(),
@@ -41,7 +41,7 @@ export const DaemonStateSchema = z.object({
     shutdownSource: z.union([z.enum(['mobile-app', 'cli', 'os-signal', 'unknown']), z.string()]).optional()
 }).passthrough()
 
-export type DaemonState = z.infer<typeof DaemonStateSchema>
+export type RunnerState = z.infer<typeof RunnerStateSchema>
 
 export type Machine = {
     id: string
@@ -52,8 +52,8 @@ export type Machine = {
     activeAt: number
     metadata: MachineMetadata | null
     metadataVersion: number
-    daemonState: DaemonState | null
-    daemonStateVersion: number
+    runnerState: RunnerState | null
+    runnerStateVersion: number
 }
 
 export const UpdateNewMessageBodySchema = z.object({
@@ -92,7 +92,7 @@ export const UpdateMachineBodySchema = z.object({
         version: z.number(),
         value: z.unknown()
     }).nullable(),
-    daemonState: z.object({
+    runnerState: z.object({
         version: z.number(),
         value: z.unknown().nullable()
     }).nullable()
@@ -154,8 +154,8 @@ export const CreateMachineResponseSchema = z.object({
         activeAt: z.number(),
         metadata: z.unknown().nullable(),
         metadataVersion: z.number(),
-        daemonState: z.unknown().nullable(),
-        daemonStateVersion: z.number()
+        runnerState: z.unknown().nullable(),
+        runnerStateVersion: z.number()
     })
 })
 
@@ -271,17 +271,17 @@ export interface ClientToServerEvents {
         version: number
         metadata: unknown | null
     }) => void) => void
-    'machine-update-state': (data: { machineId: string; expectedVersion: number; daemonState: unknown | null }, cb: (answer: {
+    'machine-update-state': (data: { machineId: string; expectedVersion: number; runnerState: unknown | null }, cb: (answer: {
         result: 'error'
         reason?: SocketErrorReason
     } | {
         result: 'version-mismatch'
         version: number
-        daemonState: unknown | null
+        runnerState: unknown | null
     } | {
         result: 'success'
         version: number
-        daemonState: unknown | null
+        runnerState: unknown | null
     }) => void) => void
     'rpc-register': (data: { method: string }) => void
     'rpc-unregister': (data: { method: string }) => void

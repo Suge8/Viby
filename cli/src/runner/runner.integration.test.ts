@@ -1,13 +1,13 @@
 /**
- * Integration tests for daemon HTTP control system
+ * Integration tests for runner HTTP control system
  * 
- * Tests the full flow of daemon startup, session tracking, and shutdown
+ * Tests the full flow of runner startup, session tracking, and shutdown
  * 
  * IMPORTANT: These tests MUST be run with the integration test environment:
  * yarn test:integration-test-env
  * 
  * DO NOT run with regular 'npm test' or 'yarn test' - it will use the wrong environment
- * and the daemon will not work properly!
+ * and the runner will not work properly!
  * 
  * The integration test environment uses .env.integration-test which sets:
  * - HAPI_HOME=~/.hapi-dev-test (DIFFERENT from dev's ~/.hapi-dev!)
@@ -21,17 +21,17 @@ import { existsSync, unlinkSync, readFileSync, writeFileSync, readdirSync } from
 import path, { join } from 'path';
 import { configuration } from '@/configuration';
 import { 
-  listDaemonSessions, 
-  stopDaemonSession, 
-  spawnDaemonSession, 
-  stopDaemonHttp, 
-  notifyDaemonSessionStarted, 
-  stopDaemon
-} from '@/daemon/controlClient';
-import { readDaemonState, clearDaemonState } from '@/persistence';
+  listRunnerSessions, 
+  stopRunnerSession, 
+  spawnRunnerSession, 
+  stopRunnerHttp, 
+  notifyRunnerSessionStarted, 
+  stopRunner
+} from '@/runner/controlClient';
+import { readRunnerState, clearRunnerState } from '@/persistence';
 import { Metadata } from '@/api/types';
 import { spawnHappyCLI } from '@/utils/spawnHappyCLI';
-import { getLatestDaemonLog } from '@/ui/logger';
+import { getLatestRunnerLog } from '@/ui/logger';
 import { isProcessAlive, isWindows, killProcess, killProcessByChildProcess } from '@/utils/process';
 
 // Utility to wait for condition
@@ -78,46 +78,46 @@ async function isServerHealthy(): Promise<boolean> {
   }
 }
 
-describe.skipIf(!await isServerHealthy())('Daemon Integration Tests', { timeout: 20_000 }, () => {
-  let daemonPid: number;
+describe.skipIf(!await isServerHealthy())('Runner Integration Tests', { timeout: 20_000 }, () => {
+  let runnerPid: number;
 
   beforeEach(async () => {
-    // First ensure no daemon is running by checking PID in metadata file
-    await stopDaemon()
+    // First ensure no runner is running by checking PID in metadata file
+    await stopRunner()
     
-    // Start fresh daemon for this test
+    // Start fresh runner for this test
     // This will return and start a background process - we don't need to wait for it
-    void spawnHappyCLI(['daemon', 'start'], {
+    void spawnHappyCLI(['runner', 'start'], {
       stdio: 'ignore'
     });
     
-    // Wait for daemon to write its state file (it needs to auth, setup, and start server)
+    // Wait for runner to write its state file (it needs to auth, setup, and start server)
     await waitFor(async () => {
-      const state = await readDaemonState();
+      const state = await readRunnerState();
       return state !== null;
     }, 10_000, 250); // Wait up to 10 seconds, checking every 250ms
     
-    const daemonState = await readDaemonState();
-    if (!daemonState) {
-      throw new Error('Daemon failed to start within timeout');
+    const runnerState = await readRunnerState();
+    if (!runnerState) {
+      throw new Error('Runner failed to start within timeout');
     }
-    daemonPid = daemonState.pid;
+    runnerPid = runnerState.pid;
 
-    console.log(`[TEST] Daemon started for test: PID=${daemonPid}`);
-    console.log(`[TEST] Daemon log file: ${daemonState?.daemonLogPath}`);
+    console.log(`[TEST] Runner started for test: PID=${runnerPid}`);
+    console.log(`[TEST] Runner log file: ${runnerState?.runnerLogPath}`);
   });
 
   afterEach(async () => {
-    await stopDaemon()
+    await stopRunner()
   });
 
   it('should list sessions (initially empty)', async () => {
-    const sessions = await listDaemonSessions();
+    const sessions = await listRunnerSessions();
     expect(sessions).toEqual([]);
   });
 
   it('should track session-started webhook from terminal session', async () => {
-    // Simulate a terminal-started session reporting to daemon
+    // Simulate a terminal-started session reporting to runner
     const mockMetadata: Metadata = {
       path: '/test/path',
       host: 'test-host',
@@ -130,10 +130,10 @@ describe.skipIf(!await isServerHealthy())('Daemon Integration Tests', { timeout:
       machineId: 'test-machine-123'
     };
 
-    await notifyDaemonSessionStarted('test-session-123', mockMetadata);
+    await notifyRunnerSessionStarted('test-session-123', mockMetadata);
 
     // Verify session is tracked
-    const sessions = await listDaemonSessions();
+    const sessions = await listRunnerSessions();
     expect(sessions).toHaveLength(1);
     
     const tracked = sessions[0];
@@ -143,56 +143,56 @@ describe.skipIf(!await isServerHealthy())('Daemon Integration Tests', { timeout:
   });
 
   it('should spawn & stop a session via HTTP (not testing RPC route, but similar enough)', async () => {
-    const response = await spawnDaemonSession('/tmp', 'spawned-test-456');
+    const response = await spawnRunnerSession('/tmp', 'spawned-test-456');
 
     expect(response).toHaveProperty('success', true);
     expect(response).toHaveProperty('sessionId');
 
     // Verify session is tracked
-    const sessions = await listDaemonSessions();
+    const sessions = await listRunnerSessions();
     const spawnedSession = sessions.find(
       (s: any) => s.happySessionId === response.sessionId
     );
     
     expect(spawnedSession).toBeDefined();
-    expect(spawnedSession.startedBy).toBe('daemon');
+    expect(spawnedSession.startedBy).toBe('runner');
     
     // Clean up - stop the spawned session
     expect(spawnedSession.happySessionId).toBeDefined();
-    await stopDaemonSession(spawnedSession.happySessionId);
+    await stopRunnerSession(spawnedSession.happySessionId);
   });
 
   it('stress test: spawn / stop', { timeout: 60_000 }, async () => {
     const promises = [];
     const sessionCount = 20;
     for (let i = 0; i < sessionCount; i++) {
-      promises.push(spawnDaemonSession('/tmp'));
+      promises.push(spawnRunnerSession('/tmp'));
     }
 
     // Wait for all sessions to be spawned
     const results = await Promise.all(promises);
     const sessionIds = results.map(r => r.sessionId);
 
-    const sessions = await listDaemonSessions();
+    const sessions = await listRunnerSessions();
     expect(sessions).toHaveLength(sessionCount);
 
     // Stop all sessions
-    const stopResults = await Promise.all(sessionIds.map(sessionId => stopDaemonSession(sessionId)));
+    const stopResults = await Promise.all(sessionIds.map(sessionId => stopRunnerSession(sessionId)));
     expect(stopResults.every(r => r), 'Not all sessions reported stopped').toBe(true);
 
     // Verify all sessions are stopped
-    const emptySessions = await listDaemonSessions();
+    const emptySessions = await listRunnerSessions();
     expect(emptySessions).toHaveLength(0);
   });
 
-  it('should handle daemon stop request gracefully', async () => {    
-    await stopDaemonHttp();
+  it('should handle runner stop request gracefully', async () => {    
+    await stopRunnerHttp();
 
     // Verify metadata file is cleaned up
-    await waitFor(async () => !existsSync(configuration.daemonStateFile), 1000);
+    await waitFor(async () => !existsSync(configuration.runnerStateFile), 1000);
   });
 
-  it('should track both daemon-spawned and terminal sessions', async () => {
+  it('should track both runner-spawned and terminal sessions', async () => {
     // Spawn a real hapi process that looks like it was started from terminal
     const terminalHappyProcess = spawnHappyCLI([
       '--hapi-starting-mode', 'remote',
@@ -208,30 +208,30 @@ describe.skipIf(!await isServerHealthy())('Daemon Integration Tests', { timeout:
     // Give time to start & report itself
     await new Promise(resolve => setTimeout(resolve, 5_000));
 
-    // Spawn a daemon session
-    const spawnResponse = await spawnDaemonSession('/tmp', 'daemon-session-bbb');
+    // Spawn a runner session
+    const spawnResponse = await spawnRunnerSession('/tmp', 'runner-session-bbb');
 
     // List all sessions
-    const sessions = await listDaemonSessions();
+    const sessions = await listRunnerSessions();
     expect(sessions).toHaveLength(2);
 
     // Verify we have one of each type
     const terminalSession = sessions.find(
       (s: any) => s.pid === terminalHappyProcess.pid
     );
-    const daemonSession = sessions.find(
+    const runnerSession = sessions.find(
       (s: any) => s.happySessionId === spawnResponse.sessionId
     );
 
     expect(terminalSession).toBeDefined();
     expect(terminalSession.startedBy).toBe('hapi directly - likely by user from terminal');
     
-    expect(daemonSession).toBeDefined();
-    expect(daemonSession.startedBy).toBe('daemon');
+    expect(runnerSession).toBeDefined();
+    expect(runnerSession.startedBy).toBe('runner');
 
     // Clean up both sessions
-    await stopDaemonSession('terminal-session-aaa');
-    await stopDaemonSession(daemonSession.happySessionId);
+    await stopRunnerSession('terminal-session-aaa');
+    await stopRunnerSession(runnerSession.happySessionId);
     
     // Also kill the terminal process directly to be sure
     try {
@@ -243,21 +243,21 @@ describe.skipIf(!await isServerHealthy())('Daemon Integration Tests', { timeout:
 
   it('should update session metadata when webhook is called', async () => {
     // Spawn a session
-    const spawnResponse = await spawnDaemonSession('/tmp');
+    const spawnResponse = await spawnRunnerSession('/tmp');
 
     // Verify webhook was processed (session ID updated)
-    const sessions = await listDaemonSessions();
+    const sessions = await listRunnerSessions();
     const session = sessions.find((s: any) => s.happySessionId === spawnResponse.sessionId);
     expect(session).toBeDefined();
 
     // Clean up
-    await stopDaemonSession(spawnResponse.sessionId);
+    await stopRunnerSession(spawnResponse.sessionId);
   });
 
-  it('should not allow starting a second daemon', async () => {
-    // Daemon is already running from beforeEach
-    // Try to start another daemon
-    const secondChild = spawn('bun', ['src/index.ts', 'daemon', 'start-sync'], {
+  it('should not allow starting a second runner', async () => {
+    // Runner is already running from beforeEach
+    // Try to start another runner
+    const secondChild = spawn('bun', ['src/index.ts', 'runner', 'start-sync'], {
       cwd: process.cwd(),
       env: process.env,
       stdio: ['ignore', 'pipe', 'pipe']
@@ -271,12 +271,12 @@ describe.skipIf(!await isServerHealthy())('Daemon Integration Tests', { timeout:
       output += data.toString();
     });
 
-    // Wait for the second daemon to exit
+    // Wait for the second runner to exit
     await new Promise<void>((resolve) => {
       secondChild.on('exit', () => resolve());
     });
 
-    // Should report that daemon is already running
+    // Should report that runner is already running
     expect(output).toContain('already running');
   });
 
@@ -285,7 +285,7 @@ describe.skipIf(!await isServerHealthy())('Daemon Integration Tests', { timeout:
     const promises = [];
     for (let i = 0; i < 3; i++) {
       promises.push(
-        spawnDaemonSession('/tmp')
+        spawnRunnerSession('/tmp')
       );
     }
 
@@ -304,68 +304,68 @@ describe.skipIf(!await isServerHealthy())('Daemon Integration Tests', { timeout:
     await new Promise(resolve => setTimeout(resolve, 1000));
 
     // List should show all sessions
-    const sessions = await listDaemonSessions();
-    const daemonSessions = sessions.filter(
-      (s: any) => s.startedBy === 'daemon' && spawnedSessionIds.includes(s.happySessionId)
+    const sessions = await listRunnerSessions();
+    const runnerSessions = sessions.filter(
+      (s: any) => s.startedBy === 'runner' && spawnedSessionIds.includes(s.happySessionId)
     );
-    expect(daemonSessions.length).toBeGreaterThanOrEqual(3);
+    expect(runnerSessions.length).toBeGreaterThanOrEqual(3);
 
     // Stop all spawned sessions
-    for (const session of daemonSessions) {
+    for (const session of runnerSessions) {
       expect(session.happySessionId).toBeDefined();
-      await stopDaemonSession(session.happySessionId);
+      await stopRunnerSession(session.happySessionId);
     }
   });
 
   it('should die with logs when SIGKILL is sent', async () => {
-    // SIGKILL test - daemon should die immediately
+    // SIGKILL test - runner should die immediately
     const logsDir = configuration.logsDir;
     const { readdirSync } = await import('fs');
     
     // Get initial log files
-    const initialLogs = readdirSync(logsDir).filter(f => f.endsWith('-daemon.log'));
+    const initialLogs = readdirSync(logsDir).filter(f => f.endsWith('-runner.log'));
     
-    // Send SIGKILL to daemon (force kill)
-    await killProcess(daemonPid, true);
+    // Send SIGKILL to runner (force kill)
+    await killProcess(runnerPid, true);
     
     // Wait for process to die
     await new Promise(resolve => setTimeout(resolve, 500));
     
     // Check if process is dead
-    const isDead = !isProcessAlive(daemonPid);
+    const isDead = !isProcessAlive(runnerPid);
     expect(isDead).toBe(true);
     
-    // Check that log file exists (it was created when daemon started)
-    const finalLogs = readdirSync(logsDir).filter(f => f.endsWith('-daemon.log'));
+    // Check that log file exists (it was created when runner started)
+    const finalLogs = readdirSync(logsDir).filter(f => f.endsWith('-runner.log'));
     expect(finalLogs.length).toBeGreaterThanOrEqual(initialLogs.length);
     
-    // The daemon won't have time to write cleanup logs with SIGKILL
-    console.log('[TEST] Daemon killed with SIGKILL - no cleanup logs expected');
+    // The runner won't have time to write cleanup logs with SIGKILL
+    console.log('[TEST] Runner killed with SIGKILL - no cleanup logs expected');
     
-    // Clean up state file manually since daemon couldn't do it
-    await clearDaemonState();
+    // Clean up state file manually since runner couldn't do it
+    await clearRunnerState();
   });
 
   it('should die with cleanup logs when a graceful shutdown is requested', async () => {
-    // Graceful shutdown test - daemon should cleanup gracefully
-    const logFile = await getLatestDaemonLog();
+    // Graceful shutdown test - runner should cleanup gracefully
+    const logFile = await getLatestRunnerLog();
     if (!logFile) {
       throw new Error('No log file found');
     }
     
     if (isWindows()) {
       // Windows taskkill does not deliver SIGTERM/SIGBREAK to Node handlers.
-      await stopDaemonHttp();
+      await stopRunnerHttp();
     } else {
-      // Send SIGTERM to daemon (graceful shutdown)
-      await killProcess(daemonPid);
+      // Send SIGTERM to runner (graceful shutdown)
+      await killProcess(runnerPid);
     }
     
     // Wait for graceful shutdown
     await new Promise(resolve => setTimeout(resolve, 4_000));
     
     // Check if process is dead
-    const isDead = !isProcessAlive(daemonPid);
+    const isDead = !isProcessAlive(runnerPid);
     expect(isDead).toBe(true);
     
     // Read the log file to check for cleanup messages
@@ -377,44 +377,44 @@ describe.skipIf(!await isServerHealthy())('Daemon Integration Tests', { timeout:
     }
     expect(logContent).toContain('cleanup');
     
-    console.log('[TEST] Daemon terminated gracefully - cleanup logs written');
+    console.log('[TEST] Runner terminated gracefully - cleanup logs written');
     
     // Clean up state file if it still exists (should have been cleaned by SIGTERM handler)
-    await clearDaemonState();
+    await clearRunnerState();
   });
 
   /**
    * Version mismatch detection test - control flow:
    * 
-   * 1. Test starts daemon with original version (e.g., 0.9.0-6) compiled into dist/
+   * 1. Test starts runner with original version (e.g., 0.9.0-6) compiled into dist/
    * 2. Test modifies package.json to new version (e.g., 0.0.0-integration-test-*)
    * 3. Test runs `yarn build` to recompile with new version
-   * 4. Daemon's heartbeat (every 30s) reads package.json and compares to its compiled version
-   * 5. Daemon detects mismatch: package.json != configuration.currentCliVersion
-   * 6. Daemon spawns new daemon via spawnHappyCLI(['daemon', 'start'])
-   * 7. New daemon starts, reads daemon.state.json, sees old version != its compiled version
-   * 8. New daemon calls stopDaemon() to kill old daemon, then takes over
+   * 4. Runner's heartbeat (every 30s) reads package.json and compares to its compiled version
+   * 5. Runner detects mismatch: package.json != configuration.currentCliVersion
+   * 6. Runner spawns new runner via spawnHappyCLI(['runner', 'start'])
+   * 7. New runner starts, reads runner.state.json, sees old version != its compiled version
+   * 8. New runner calls stopRunner() to kill old runner, then takes over
    * 
    * This simulates what happens during `npm upgrade hapi`:
-   * - Running daemon has OLD version loaded in memory (configuration.currentCliVersion)
+   * - Running runner has OLD version loaded in memory (configuration.currentCliVersion)
    * - npm replaces node_modules/hapi/ with NEW version files
    * - package.json on disk now has NEW version
-   * - Daemon reads package.json, detects mismatch, triggers self-update
+   * - Runner reads package.json, detects mismatch, triggers self-update
    * - Key difference: npm atomically replaces the entire module directory, while
    *   our test must carefully rebuild to avoid missing entrypoint errors
    * 
    * Critical timing constraints:
-   * - Heartbeat must be long enough (30s) for yarn build to complete before daemon tries to spawn
+   * - Heartbeat must be long enough (30s) for yarn build to complete before runner tries to spawn
    * - If heartbeat fires during rebuild, spawn fails (entrypoint missing) and test fails
    * - pkgroll doesn't reliably update compiled version, must use full yarn build
    * - Test modifies package.json BEFORE rebuild to ensure new version is compiled in
    * 
    * Common failure modes:
-   * - Heartbeat too short: daemon tries to spawn while dist/ is being rebuilt
+   * - Heartbeat too short: runner tries to spawn while dist/ is being rebuilt
    * - Using pkgroll alone: doesn't update compiled configuration.currentCliVersion
-   * - Modifying package.json after daemon starts: triggers immediate version check on startup
+   * - Modifying package.json after runner starts: triggers immediate version check on startup
    */
-  it('[takes 1 minute to run] should detect version mismatch and kill old daemon', { timeout: 100_000 }, async () => {
+  it('[takes 1 minute to run] should detect version mismatch and kill old runner', { timeout: 100_000 }, async () => {
     // Read current package.json to get version
     const packagePath = path.join(process.cwd(), 'package.json');
     const packageJsonOriginalRawText = readFileSync(packagePath, 'utf8');
@@ -429,8 +429,8 @@ describe.skipIf(!await isServerHealthy())('Daemon Integration Tests', { timeout:
     writeFileSync(packagePath, JSON.stringify(modifiedPackage, null, 2));
 
     try {
-      // Get initial daemon state
-      const initialState = await readDaemonState();
+      // Get initial runner state
+      const initialState = await readRunnerState();
       expect(initialState).toBeDefined();
       expect(initialState!.startedWithCliVersion).toBe(originalVersion);
       const initialPid = initialState!.pid;
@@ -439,24 +439,24 @@ describe.skipIf(!await isServerHealthy())('Daemon Integration Tests', { timeout:
       // and think it is a new version
       // We are not using yarn build here because it cleans out dist/
       // and we want to avoid that, 
-      // otherwise daemon will spawn a non existing happy js script.
-      // We need to remove index, but not the other files, otherwise some of our code might fail when called from within the daemon.
+      // otherwise runner will spawn a non existing happy js script.
+      // We need to remove index, but not the other files, otherwise some of our code might fail when called from within the runner.
       execSync('yarn build', { stdio: 'ignore' });
       
-      console.log(`[TEST] Current daemon running with version ${originalVersion}, PID: ${initialPid}`);
+      console.log(`[TEST] Current runner running with version ${originalVersion}, PID: ${initialPid}`);
       
       console.log(`[TEST] Changed package.json version to ${testVersion}`);
 
-      // The daemon should automatically detect the version mismatch and restart itself
+      // The runner should automatically detect the version mismatch and restart itself
       // We check once per minute, wait for a little longer than that
-      await new Promise(resolve => setTimeout(resolve, parseInt(process.env.HAPI_DAEMON_HEARTBEAT_INTERVAL || '30000') + 10_000));
+      await new Promise(resolve => setTimeout(resolve, parseInt(process.env.HAPI_RUNNER_HEARTBEAT_INTERVAL || '30000') + 10_000));
 
-      // Check that the daemon is running with the new version
-      const finalState = await readDaemonState();
+      // Check that the runner is running with the new version
+      const finalState = await readRunnerState();
       expect(finalState).toBeDefined();
       expect(finalState!.startedWithCliVersion).toBe(testVersion);
       expect(finalState!.pid).not.toBe(initialPid);
-      console.log('[TEST] Daemon version mismatch detection successful');
+      console.log('[TEST] Runner version mismatch detection successful');
     } finally {
       // CRITICAL: Restore original package.json version
       writeFileSync(packagePath, packageJsonOriginalRawText);
@@ -469,7 +469,7 @@ describe.skipIf(!await isServerHealthy())('Daemon Integration Tests', { timeout:
 
   // TODO: Add a test to see if a corrupted file will work
   
-  // TODO: Test npm uninstall scenario - daemon should gracefully handle when hapi is uninstalled
-  // Current behavior: daemon tries to spawn new daemon on version mismatch but entrypoint is gone
-  // Expected: daemon should detect missing entrypoint and either exit cleanly or at minimum not respawn infinitely
+  // TODO: Test npm uninstall scenario - runner should gracefully handle when hapi is uninstalled
+  // Current behavior: runner tries to spawn new runner on version mismatch but entrypoint is gone
+  // Expected: runner should detect missing entrypoint and either exit cleanly or at minimum not respawn infinitely
 });

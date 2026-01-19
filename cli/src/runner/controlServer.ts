@@ -1,6 +1,6 @@
 /**
- * HTTP control server for daemon management
- * Provides endpoints for listing sessions, stopping sessions, and daemon shutdown
+ * HTTP control server for runner management
+ * Provides endpoints for listing sessions, stopping sessions, and runner shutdown
  */
 
 import fastify, { FastifyInstance } from 'fastify';
@@ -11,7 +11,7 @@ import { Metadata } from '@/api/types';
 import { TrackedSession } from './types';
 import { SpawnSessionOptions, SpawnSessionResult } from '@/modules/common/rpcTypes';
 
-export function startDaemonControlServer({
+export function startRunnerControlServer({
   getChildren,
   stopSession,
   spawnSession,
@@ -170,7 +170,7 @@ export function startDaemonControlServer({
       }
     });
 
-    // Stop daemon
+    // Stop runner
     typed.post('/stop', {
       schema: {
         response: {
@@ -180,11 +180,11 @@ export function startDaemonControlServer({
         }
       }
     }, async () => {
-      logger.debug('[CONTROL SERVER] Stop daemon request received');
+      logger.debug('[CONTROL SERVER] Stop runner request received');
 
       // Give time for response to arrive
       setTimeout(() => {
-        logger.debug('[CONTROL SERVER] Triggering daemon shutdown');
+        logger.debug('[CONTROL SERVER] Triggering runner shutdown');
         requestShutdown();
       }, 50);
 

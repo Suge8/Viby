@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path'
 export interface Settings {
     machineId?: string
     machineIdConfirmedByServer?: boolean
-    daemonAutoStartWhenRunningHappy?: boolean
+    runnerAutoStartWhenRunningHappy?: boolean
     cliApiToken?: string
     vapidKeys?: {
         publicKey: string

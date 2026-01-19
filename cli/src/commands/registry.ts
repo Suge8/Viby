@@ -2,7 +2,7 @@ import { authCommand } from './auth'
 import { claudeCommand } from './claude'
 import { codexCommand } from './codex'
 import { connectCommand } from './connect'
-import { daemonCommand } from './daemon'
+import { runnerCommand } from './runner'
 import { doctorCommand } from './doctor'
 import { geminiCommand } from './gemini'
 import { hookForwarderCommand } from './hookForwarder'
@@ -20,7 +20,7 @@ const COMMANDS: CommandDefinition[] = [
     serverCommand,
     hookForwarderCommand,
     doctorCommand,
-    daemonCommand,
+    runnerCommand,
     notifyCommand
 ]
 

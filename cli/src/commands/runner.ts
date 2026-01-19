@@ -1,40 +1,40 @@
 import chalk from 'chalk'
-import { startDaemon } from '@/daemon/run'
+import { startRunner } from '@/runner/run'
 import {
-    checkIfDaemonRunningAndCleanupStaleState,
-    listDaemonSessions,
-    stopDaemon,
-    stopDaemonSession
-} from '@/daemon/controlClient'
-import { getLatestDaemonLog } from '@/ui/logger'
+    checkIfRunnerRunningAndCleanupStaleState,
+    listRunnerSessions,
+    stopRunner,
+    stopRunnerSession
+} from '@/runner/controlClient'
+import { getLatestRunnerLog } from '@/ui/logger'
 import { spawnHappyCLI } from '@/utils/spawnHappyCLI'
 import { runDoctorCommand } from '@/ui/doctor'
 import { initializeToken } from '@/ui/tokenInit'
 import type { CommandDefinition } from './types'
 
-export const daemonCommand: CommandDefinition = {
-    name: 'daemon',
+export const runnerCommand: CommandDefinition = {
+    name: 'runner',
     requiresRuntimeAssets: true,
     run: async ({ commandArgs }) => {
-        const daemonSubcommand = commandArgs[0]
+        const runnerSubcommand = commandArgs[0]
 
-        if (daemonSubcommand === 'list') {
+        if (runnerSubcommand === 'list') {
             try {
-                const sessions = await listDaemonSessions()
+                const sessions = await listRunnerSessions()
 
                 if (sessions.length === 0) {
-                    console.log('No active sessions this daemon is aware of (they might have been started by a previous version of the daemon)')
+                    console.log('No active sessions this runner is aware of (they might have been started by a previous version of the runner)')
                 } else {
                     console.log('Active sessions:')
                     console.log(JSON.stringify(sessions, null, 2))
                 }
             } catch {
-                console.log('No daemon running')
+                console.log('No runner running')
             }
             return
         }
 
-        if (daemonSubcommand === 'stop-session') {
+        if (runnerSubcommand === 'stop-session') {
             const sessionId = commandArgs[1]
             if (!sessionId) {
                 console.error('Session ID required')
@@ -42,16 +42,16 @@ export const daemonCommand: CommandDefinition = {
             }
 
             try {
-                const success = await stopDaemonSession(sessionId)
+                const success = await stopRunnerSession(sessionId)
                 console.log(success ? 'Session stopped' : 'Failed to stop session')
             } catch {
-                console.log('No daemon running')
+                console.log('No runner running')
             }
             return
         }
 
-        if (daemonSubcommand === 'start') {
-            const child = spawnHappyCLI(['daemon', 'start-sync'], {
+        if (runnerSubcommand === 'start') {
+            const child = spawnHappyCLI(['runner', 'start-sync'], {
                 detached: true,
                 stdio: 'ignore',
                 env: process.env
@@ -60,7 +60,7 @@ export const daemonCommand: CommandDefinition = {
 
             let started = false
             for (let i = 0; i < 50; i++) {
-                if (await checkIfDaemonRunningAndCleanupStaleState()) {
+                if (await checkIfRunnerRunningAndCleanupStaleState()) {
                     started = true
                     break
                 }
@@ -68,34 +68,34 @@ export const daemonCommand: CommandDefinition = {
             }
 
             if (started) {
-                console.log('Daemon started successfully')
+                console.log('Runner started successfully')
             } else {
-                console.error('Failed to start daemon')
+                console.error('Failed to start runner')
                 process.exit(1)
             }
             process.exit(0)
         }
 
-        if (daemonSubcommand === 'start-sync') {
+        if (runnerSubcommand === 'start-sync') {
             await initializeToken()
-            await startDaemon()
+            await startRunner()
             process.exit(0)
         }
 
-        if (daemonSubcommand === 'stop') {
-            await stopDaemon()
+        if (runnerSubcommand === 'stop') {
+            await stopRunner()
             process.exit(0)
         }
 
-        if (daemonSubcommand === 'status') {
-            await runDoctorCommand('daemon')
+        if (runnerSubcommand === 'status') {
+            await runDoctorCommand('runner')
             process.exit(0)
         }
 
-        if (daemonSubcommand === 'logs') {
-            const latest = await getLatestDaemonLog()
+        if (runnerSubcommand === 'logs') {
+            const latest = await getLatestRunnerLog()
             if (!latest) {
-                console.log('No daemon logs found')
+                console.log('No runner logs found')
             } else {
                 console.log(latest.path)
             }
@@ -103,18 +103,18 @@ export const daemonCommand: CommandDefinition = {
         }
 
         console.log(`
-${chalk.bold('hapi daemon')} - Daemon management
+${chalk.bold('hapi runner')} - Runner management
 
 ${chalk.bold('Usage:')}
-  hapi daemon start              Start the daemon (detached)
-  hapi daemon stop               Stop the daemon (sessions stay alive)
-  hapi daemon status             Show daemon status
-  hapi daemon list               List active sessions
+  hapi runner start              Start the runner (detached)
+  hapi runner stop               Stop the runner (sessions stay alive)
+  hapi runner status             Show runner status
+  hapi runner list               List active sessions
 
   If you want to kill all hapi related processes run 
   ${chalk.cyan('hapi doctor clean')}
 
-${chalk.bold('Note:')} The daemon runs in the background and manages Claude sessions.
+${chalk.bold('Note:')} The runner runs in the background and manages Claude sessions.
 
 ${chalk.bold('To clean up runaway processes:')} Use ${chalk.cyan('hapi doctor clean')}
 `)

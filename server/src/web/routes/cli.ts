@@ -16,7 +16,7 @@ const createOrLoadSessionSchema = z.object({
 const createOrLoadMachineSchema = z.object({
     id: z.string().min(1),
     metadata: z.unknown(),
-    daemonState: z.unknown().nullable().optional()
+    runnerState: z.unknown().nullable().optional()
 })
 
 const getMessagesQuerySchema = z.object({
@@ -152,7 +152,7 @@ export function createCliRoutes(getSyncEngine: () => SyncEngine | null): Hono<Cl
         if (existing && existing.namespace !== namespace) {
             return c.json({ error: 'Machine access denied' }, 403)
         }
-        const machine = engine.getOrCreateMachine(parsed.data.id, parsed.data.metadata, parsed.data.daemonState ?? null, namespace)
+        const machine = engine.getOrCreateMachine(parsed.data.id, parsed.data.metadata, parsed.data.runnerState ?? null, namespace)
         return c.json({ machine })
     })
 
