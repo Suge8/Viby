@@ -3,7 +3,7 @@ import { useConversation } from '@elevenlabs/react'
 import { registerVoiceSession } from './RealtimeSession'
 import { realtimeClientTools, registerSessionStore } from './realtimeClientTools'
 import { fetchVoiceToken } from '@/api/voice'
-import type { VoiceSession, VoiceSessionConfig, ConversationStatus } from './types'
+import type { VoiceSession, VoiceSessionConfig, ConversationStatus, StatusCallback } from './types'
 import type { ApiClient } from '@/api/client'
 import type { Session } from '@/types/api'
 
@@ -14,7 +14,7 @@ const DEBUG = import.meta.env.DEV
 let conversationInstance: ReturnType<typeof useConversation> | null = null
 
 // Store reference for status updates
-let statusCallback: ((status: ConversationStatus) => void) | null = null
+let statusCallback: StatusCallback | null = null
 
 // Global voice session implementation
 class RealtimeVoiceSessionImpl implements VoiceSession {
@@ -28,7 +28,7 @@ class RealtimeVoiceSessionImpl implements VoiceSession {
         if (!conversationInstance) {
             const error = new Error('Realtime voice session not initialized')
             console.warn('[Voice] Realtime voice session not initialized')
-            statusCallback?.('error')
+            statusCallback?.('error', 'Voice session not initialized')
             throw error
         }
 
@@ -39,7 +39,7 @@ class RealtimeVoiceSessionImpl implements VoiceSession {
             await navigator.mediaDevices.getUserMedia({ audio: true })
         } catch (error) {
             console.error('[Voice] Failed to get microphone permission:', error)
-            statusCallback?.('error')
+            statusCallback?.('error', 'Microphone permission denied')
             throw error
         }
 
@@ -49,13 +49,13 @@ class RealtimeVoiceSessionImpl implements VoiceSession {
             tokenResponse = await fetchVoiceToken(this.api)
         } catch (error) {
             console.error('[Voice] Failed to fetch voice token:', error)
-            statusCallback?.('error')
+            statusCallback?.('error', 'Network error')
             throw error
         }
         if (!tokenResponse.allowed || !tokenResponse.token) {
             const error = new Error(tokenResponse.error ?? 'Voice not allowed or no token')
             console.error('[Voice] Voice not allowed or no token:', tokenResponse.error)
-            statusCallback?.('error')
+            statusCallback?.('error', tokenResponse.error ?? 'Voice not allowed')
             throw error
         }
 
@@ -75,7 +75,7 @@ class RealtimeVoiceSessionImpl implements VoiceSession {
             }
         } catch (error) {
             console.error('[Voice] Failed to start realtime session:', error)
-            statusCallback?.('error')
+            statusCallback?.('error', 'Failed to start voice session')
             throw error
         }
     }
@@ -115,7 +115,7 @@ class RealtimeVoiceSessionImpl implements VoiceSession {
 export interface RealtimeVoiceSessionProps {
     api: ApiClient
     micMuted?: boolean
-    onStatusChange?: (status: ConversationStatus) => void
+    onStatusChange?: StatusCallback
     getSession?: (sessionId: string) => Session | null
     sendMessage?: (sessionId: string, message: string) => void
     approvePermission?: (sessionId: string, requestId: string) => Promise<void>
@@ -174,7 +174,8 @@ export function RealtimeVoiceSession({
 
     const handleError = useCallback((error: unknown) => {
         if (DEBUG) console.error('[Voice] Realtime error:', error)
-        onStatusChange?.('error')
+        const errorMessage = error instanceof Error ? error.message : 'Connection error'
+        onStatusChange?.('error', errorMessage)
     }, [onStatusChange])
 
     const handleMessage = useCallback((data: unknown) => {

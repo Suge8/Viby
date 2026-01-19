@@ -12,3 +12,5 @@ export interface VoiceSession {
 
 export type ConversationStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
 export type ConversationMode = 'speaking' | 'listening'
+
+export type StatusCallback = (status: ConversationStatus, errorMessage?: string) => void

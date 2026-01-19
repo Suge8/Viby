@@ -20,6 +20,7 @@ import { LoginPrompt } from '@/components/LoginPrompt'
 import { InstallPrompt } from '@/components/InstallPrompt'
 import { OfflineBanner } from '@/components/OfflineBanner'
 import { SyncingBanner } from '@/components/SyncingBanner'
+import { VoiceErrorBanner } from '@/components/VoiceErrorBanner'
 import { LoadingState } from '@/components/LoadingState'
 import { ToastContainer } from '@/components/ToastContainer'
 import { ToastProvider, useToast } from '@/lib/toast-context'
@@ -317,6 +318,7 @@ function AppInner() {
         <AppContextProvider value={{ api, token, baseUrl }}>
             <VoiceProvider>
                 <SyncingBanner isSyncing={isSyncing} />
+                <VoiceErrorBanner />
                 <OfflineBanner />
                 <div className="h-full flex flex-col">
                     <Outlet />

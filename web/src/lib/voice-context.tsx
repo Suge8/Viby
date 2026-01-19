@@ -1,12 +1,13 @@
 import { createContext, useCallback, useContext, useState, type ReactNode } from 'react'
-import type { ConversationStatus } from '@/realtime/types'
+import type { ConversationStatus, StatusCallback } from '@/realtime/types'
 import { startRealtimeSession, stopRealtimeSession, voiceHooks } from '@/realtime'
 
 interface VoiceContextValue {
     status: ConversationStatus
+    errorMessage: string | null
     micMuted: boolean
     currentSessionId: string | null
-    setStatus: (status: ConversationStatus) => void
+    setStatus: (status: ConversationStatus, errorMessage?: string) => void
     setMicMuted: (muted: boolean) => void
     toggleMic: () => void
     startVoice: (sessionId: string) => Promise<void>
@@ -16,9 +17,19 @@ interface VoiceContextValue {
 const VoiceContext = createContext<VoiceContextValue | null>(null)
 
 export function VoiceProvider({ children }: { children: ReactNode }) {
-    const [status, setStatus] = useState<ConversationStatus>('disconnected')
+    const [status, setStatusInternal] = useState<ConversationStatus>('disconnected')
+    const [errorMessage, setErrorMessage] = useState<string | null>(null)
     const [micMuted, setMicMuted] = useState(false)
     const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
+
+    const setStatus: StatusCallback = useCallback((newStatus, error) => {
+        setStatusInternal(newStatus)
+        if (newStatus === 'error') {
+            setErrorMessage(error ?? null)
+        } else if (newStatus === 'connected') {
+            setErrorMessage(null)
+        }
+    }, [])
 
     const toggleMic = useCallback(() => {
         setMicMuted((prev) => !prev)
@@ -34,13 +45,15 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
         voiceHooks.onVoiceStopped()
         await stopRealtimeSession()
         setCurrentSessionId(null)
-        setStatus('disconnected')
+        setStatusInternal('disconnected')
+        setErrorMessage(null)
     }, [])
 
     return (
         <VoiceContext.Provider
             value={{
                 status,
+                errorMessage,
                 micMuted,
                 currentSessionId,
                 setStatus,

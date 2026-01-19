@@ -201,6 +201,13 @@ export default {
   'voice.mute': 'Mute',
   'voice.unmute': 'Unmute',
   'voice.end': 'End',
+  'voice.error.micPermission': 'Microphone permission denied',
+  'voice.error.network': 'Network error',
+  'voice.error.notInitialized': 'Voice session not initialized',
+  'voice.error.startFailed': 'Failed to start voice session',
+  'voice.error.notAllowed': 'Voice not allowed',
+  'voice.error.connection': 'Connection error',
+  'voice.dismiss': 'Dismiss',
 
   // Banners
   'offline.title': 'Offline',

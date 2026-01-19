@@ -203,6 +203,13 @@ export default {
   'voice.mute': '静音',
   'voice.unmute': '取消静音',
   'voice.end': '结束',
+  'voice.error.micPermission': '麦克风权限被拒绝',
+  'voice.error.network': '网络错误',
+  'voice.error.notInitialized': '语音会话未初始化',
+  'voice.error.startFailed': '启动语音会话失败',
+  'voice.error.notAllowed': '语音功能不可用',
+  'voice.error.connection': '连接错误',
+  'voice.dismiss': '关闭',
 
   // Banners
   'offline.title': '离线',
