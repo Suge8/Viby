@@ -379,4 +379,16 @@ export class ApiClient {
             method: 'DELETE'
         })
     }
+
+    async fetchVoiceToken(options?: { customAgentId?: string; customApiKey?: string }): Promise<{
+        allowed: boolean
+        token?: string
+        agentId?: string
+        error?: string
+    }> {
+        return await this.request('/api/voice/token', {
+            method: 'POST',
+            body: JSON.stringify(options || {})
+        })
+    }
 }

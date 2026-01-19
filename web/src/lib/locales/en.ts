@@ -190,6 +190,17 @@ export default {
   'composer.switchRemote': 'Switch to remote mode',
   'composer.attach': 'Attach file',
   'composer.send': 'Send',
+  'composer.stop': 'Stop',
+  'composer.voice': 'Voice assistant',
+
+  // Voice assistant
+  'voice.connecting': 'Connecting...',
+  'voice.active': 'Active',
+  'voice.muted': 'Muted',
+  'voice.error': 'Error',
+  'voice.mute': 'Mute',
+  'voice.unmute': 'Unmute',
+  'voice.end': 'End',
 
   // Banners
   'offline.title': 'Offline',

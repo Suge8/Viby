@@ -15,6 +15,7 @@ import { AppContextProvider } from '@/lib/app-context'
 import { fetchLatestMessages } from '@/lib/message-window-store'
 import { useAppGoBack } from '@/hooks/useAppGoBack'
 import { useTranslation } from '@/lib/use-translation'
+import { VoiceProvider } from '@/lib/voice-context'
 import { LoginPrompt } from '@/components/LoginPrompt'
 import { InstallPrompt } from '@/components/InstallPrompt'
 import { OfflineBanner } from '@/components/OfflineBanner'
@@ -314,13 +315,15 @@ function AppInner() {
 
     return (
         <AppContextProvider value={{ api, token, baseUrl }}>
-            <SyncingBanner isSyncing={isSyncing} />
-            <OfflineBanner />
-            <div className="h-full flex flex-col">
-                <Outlet />
-            </div>
-            <ToastContainer />
-            <InstallPrompt />
+            <VoiceProvider>
+                <SyncingBanner isSyncing={isSyncing} />
+                <OfflineBanner />
+                <div className="h-full flex flex-col">
+                    <Outlet />
+                </div>
+                <ToastContainer />
+                <InstallPrompt />
+            </VoiceProvider>
         </AppContextProvider>
     )
 }

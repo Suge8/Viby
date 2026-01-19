@@ -192,6 +192,17 @@ export default {
   'composer.switchRemote': '切换到远程模式',
   'composer.attach': '添加文件',
   'composer.send': '发送',
+  'composer.stop': '停止',
+  'composer.voice': '语音助手',
+
+  // Voice assistant
+  'voice.connecting': '连接中...',
+  'voice.active': '活跃',
+  'voice.muted': '已静音',
+  'voice.error': '错误',
+  'voice.mute': '静音',
+  'voice.unmute': '取消静音',
+  'voice.end': '结束',
 
   // Banners
   'offline.title': '离线',
