@@ -20,7 +20,7 @@ export interface BotContext extends Context {
 export interface HappyBotConfig {
     syncEngine: SyncEngine
     botToken: string
-    miniAppUrl: string
+    publicUrl: string
     store: Store
 }
 
@@ -31,12 +31,12 @@ export class HappyBot implements NotificationChannel {
     private bot: Bot<BotContext>
     private syncEngine: SyncEngine | null = null
     private isRunning = false
-    private readonly miniAppUrl: string
+    private readonly publicUrl: string
     private readonly store: Store
 
     constructor(config: HappyBotConfig) {
         this.syncEngine = config.syncEngine
-        this.miniAppUrl = config.miniAppUrl
+        this.publicUrl = config.publicUrl
         this.store = config.store
 
         this.bot = new Bot<BotContext>(config.botToken)
@@ -108,13 +108,13 @@ export class HappyBot implements NotificationChannel {
     private setupCommands(): void {
         // /app - Open Telegram Mini App (primary entry point)
         this.bot.command('app', async (ctx) => {
-            const keyboard = new InlineKeyboard().webApp('Open App', this.miniAppUrl)
+            const keyboard = new InlineKeyboard().webApp('Open App', this.publicUrl)
             await ctx.reply('Open HAPI Mini App:', { reply_markup: keyboard })
         })
 
         // /start - Simple welcome with Mini App link
         this.bot.command('start', async (ctx) => {
-            const keyboard = new InlineKeyboard().webApp('Open App', this.miniAppUrl)
+            const keyboard = new InlineKeyboard().webApp('Open App', this.publicUrl)
             await ctx.reply(
                 'Welcome to HAPI Bot!\n\n' +
                 'Use the Mini App for full session management.',
@@ -190,7 +190,7 @@ export class HappyBot implements NotificationChannel {
         }
 
         const agentName = getAgentName(session)
-        const url = buildMiniAppDeepLink(this.miniAppUrl, `session_${session.id}`)
+        const url = buildMiniAppDeepLink(this.publicUrl, `session_${session.id}`)
         const keyboard = new InlineKeyboard()
             .webApp('Open Session', url)
 
@@ -221,7 +221,7 @@ export class HappyBot implements NotificationChannel {
         }
 
         const text = formatSessionNotification(session)
-        const keyboard = createNotificationKeyboard(session, this.miniAppUrl)
+        const keyboard = createNotificationKeyboard(session, this.publicUrl)
 
         const chatIds = this.getBoundChatIds(session.namespace)
         if (chatIds.length === 0) {

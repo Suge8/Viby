@@ -38,7 +38,7 @@ export function formatSessionNotification(session: Session): string {
 /**
  * Create notification keyboard for quick actions
  */
-export function createNotificationKeyboard(session: Session, miniAppUrl: string): InlineKeyboard {
+export function createNotificationKeyboard(session: Session, publicUrl: string): InlineKeyboard {
     const keyboard = new InlineKeyboard()
     const requests = session.agentState?.requests ?? null
     const hasRequests = Boolean(requests && Object.keys(requests).length > 0)
@@ -55,14 +55,14 @@ export function createNotificationKeyboard(session: Session, miniAppUrl: string)
 
         keyboard.webApp(
             'Details',
-            buildMiniAppDeepLink(miniAppUrl, `session_${session.id}`)
+            buildMiniAppDeepLink(publicUrl, `session_${session.id}`)
         )
         return keyboard
     }
 
     keyboard.webApp(
         'Open Session',
-        buildMiniAppDeepLink(miniAppUrl, `session_${session.id}`)
+        buildMiniAppDeepLink(publicUrl, `session_${session.id}`)
     )
     return keyboard
 }

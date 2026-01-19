@@ -9,8 +9,9 @@
  * - CLI_API_TOKEN: Shared secret for hapi CLI authentication (auto-generated if not set)
  * - TELEGRAM_BOT_TOKEN: Telegram Bot API token from @BotFather
  * - TELEGRAM_NOTIFICATION: Enable/disable Telegram notifications (default: true)
- * - WEBAPP_PORT: Port for Mini App HTTP server (default: 3006)
- * - WEBAPP_URL: Public URL for Telegram Mini App
+ * - HAPI_LISTEN_HOST: Host/IP to bind the HTTP server (default: 127.0.0.1)
+ * - HAPI_LISTEN_PORT: Port for HTTP server (default: 3006)
+ * - HAPI_PUBLIC_URL: Public URL for external access (e.g., Telegram Mini App)
  * - CORS_ORIGINS: Comma-separated CORS origins
  * - HAPI_RELAY_API: Relay API domain for tunwg (default: relay.hapi.run)
  * - HAPI_RELAY_AUTH: Relay auth key for tunwg (default: hapi)
@@ -32,9 +33,9 @@ export type ConfigSource = 'env' | 'file' | 'default'
 export interface ConfigSources {
     telegramBotToken: ConfigSource
     telegramNotification: ConfigSource
-    webappHost: ConfigSource
-    webappPort: ConfigSource
-    webappUrl: ConfigSource
+    listenHost: ConfigSource
+    listenPort: ConfigSource
+    publicUrl: ConfigSource
     corsOrigins: ConfigSource
     cliApiToken: 'env' | 'file' | 'generated'
 }
@@ -67,14 +68,14 @@ class Configuration {
     /** SQLite DB path */
     public readonly dbPath: string
 
-    /** Port for the Mini App HTTP server */
-    public readonly webappPort: number
+    /** Port for the HTTP server */
+    public readonly listenPort: number
 
-    /** Host/IP to bind the Mini App HTTP server to */
-    public readonly webappHost: string
+    /** Host/IP to bind the HTTP server to */
+    public readonly listenHost: string
 
-    /** Public HTTPS URL for the Telegram Mini App (used in WebApp buttons) */
-    public readonly miniAppUrl: string
+    /** Public URL for external access (e.g., Telegram Mini App) */
+    public readonly publicUrl: string
 
     /** Allowed CORS origins for Mini App + Socket.IO (comma-separated env override) */
     public readonly corsOrigins: string[]
@@ -97,9 +98,9 @@ class Configuration {
         this.telegramBotToken = serverSettings.telegramBotToken
         this.telegramEnabled = Boolean(this.telegramBotToken)
         this.telegramNotification = serverSettings.telegramNotification
-        this.webappHost = serverSettings.webappHost
-        this.webappPort = serverSettings.webappPort
-        this.miniAppUrl = serverSettings.webappUrl
+        this.listenHost = serverSettings.listenHost
+        this.listenPort = serverSettings.listenPort
+        this.publicUrl = serverSettings.publicUrl
         this.corsOrigins = serverSettings.corsOrigins
 
         // CLI API token - will be set by _setCliApiToken() before create() returns

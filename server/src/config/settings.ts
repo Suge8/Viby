@@ -14,10 +14,14 @@ export interface Settings {
     // Server configuration (persisted from environment variables)
     telegramBotToken?: string
     telegramNotification?: boolean
+    listenHost?: string
+    listenPort?: number
+    publicUrl?: string
+    corsOrigins?: string[]
+    // Legacy field names (for migration, read-only)
     webappHost?: string
     webappPort?: number
     webappUrl?: string
-    corsOrigins?: string[]
 }
 
 export function getSettingsFile(dataDir: string): string {

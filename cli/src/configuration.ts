@@ -12,7 +12,7 @@ import packageJson from '../package.json'
 import { getCliArgs } from '@/utils/cliArgs'
 
 class Configuration {
-    private _serverUrl: string
+    private _apiUrl: string
     private _cliApiToken: string
     public readonly isRunnerProcess: boolean
 
@@ -29,7 +29,7 @@ class Configuration {
 
     constructor() {
         // Server configuration
-        this._serverUrl = process.env.HAPI_SERVER_URL || 'http://localhost:3006'
+        this._apiUrl = process.env.HAPI_API_URL || 'http://localhost:3006'
         this._cliApiToken = process.env.CLI_API_TOKEN || ''
 
         // Check if we're running as runner based on process args
@@ -64,12 +64,12 @@ class Configuration {
         }
     }
 
-    get serverUrl(): string {
-        return this._serverUrl
+    get apiUrl(): string {
+        return this._apiUrl
     }
 
-    _setServerUrl(url: string): void {
-        this._serverUrl = url
+    _setApiUrl(url: string): void {
+        this._apiUrl = url
     }
 
     get cliApiToken(): string {

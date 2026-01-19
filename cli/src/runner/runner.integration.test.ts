@@ -11,7 +11,7 @@
  * 
  * The integration test environment uses .env.integration-test which sets:
  * - HAPI_HOME=~/.hapi-dev-test (DIFFERENT from dev's ~/.hapi-dev!)
- * - HAPI_SERVER_URL=http://localhost:3006 (local hapi-server)
+ * - HAPI_API_URL=http://localhost:3006 (local hapi-server)
  * - CLI_API_TOKEN=... (must match the server)
  */
 
@@ -56,7 +56,7 @@ async function isServerHealthy(): Promise<boolean> {
       return false;
     }
 
-    const url = `${configuration.serverUrl}/cli/machines/__healthcheck__`;
+    const url = `${configuration.apiUrl}/cli/machines/__healthcheck__`;
     const response = await fetch(url, {
       headers: { Authorization: `Bearer ${configuration.cliApiToken}` },
       signal: AbortSignal.timeout(1000)

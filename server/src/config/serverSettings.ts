@@ -13,9 +13,9 @@ import { getSettingsFile, readSettings, writeSettings } from './settings'
 export interface ServerSettings {
     telegramBotToken: string | null
     telegramNotification: boolean
-    webappHost: string
-    webappPort: number
-    webappUrl: string
+    listenHost: string
+    listenPort: number
+    publicUrl: string
     corsOrigins: string[]
 }
 
@@ -24,9 +24,9 @@ export interface ServerSettingsResult {
     sources: {
         telegramBotToken: 'env' | 'file' | 'default'
         telegramNotification: 'env' | 'file' | 'default'
-        webappHost: 'env' | 'file' | 'default'
-        webappPort: 'env' | 'file' | 'default'
-        webappUrl: 'env' | 'file' | 'default'
+        listenHost: 'env' | 'file' | 'default'
+        listenPort: 'env' | 'file' | 'default'
+        publicUrl: 'env' | 'file' | 'default'
         corsOrigins: 'env' | 'file' | 'default'
     }
     savedToFile: boolean
@@ -58,11 +58,11 @@ function parseCorsOrigins(str: string): string[] {
 }
 
 /**
- * Derive CORS origins from webapp URL
+ * Derive CORS origins from public URL
  */
-function deriveCorsOrigins(webappUrl: string): string[] {
+function deriveCorsOrigins(publicUrl: string): string[] {
     try {
-        return [new URL(webappUrl).origin]
+        return [new URL(publicUrl).origin]
     } catch {
         return []
     }
@@ -87,9 +87,9 @@ export async function loadServerSettings(dataDir: string): Promise<ServerSetting
     const sources: ServerSettingsResult['sources'] = {
         telegramBotToken: 'default',
         telegramNotification: 'default',
-        webappHost: 'default',
-        webappPort: 'default',
-        webappUrl: 'default',
+        listenHost: 'default',
+        listenPort: 'default',
+        publicUrl: 'default',
         corsOrigins: 'default',
     }
     // telegramBotToken: env > file > null
@@ -120,53 +120,74 @@ export async function loadServerSettings(dataDir: string): Promise<ServerSetting
         sources.telegramNotification = 'file'
     }
 
-    // webappHost: env > file > 127.0.0.1
-    let webappHost = '127.0.0.1'
-    if (process.env.WEBAPP_HOST) {
-        webappHost = process.env.WEBAPP_HOST
-        sources.webappHost = 'env'
-        if (settings.webappHost === undefined) {
-            settings.webappHost = webappHost
+    // listenHost: env > file (new or old name) > default
+    let listenHost = '127.0.0.1'
+    if (process.env.HAPI_LISTEN_HOST) {
+        listenHost = process.env.HAPI_LISTEN_HOST
+        sources.listenHost = 'env'
+        if (settings.listenHost === undefined) {
+            settings.listenHost = listenHost
             needsSave = true
         }
+    } else if (settings.listenHost !== undefined) {
+        listenHost = settings.listenHost
+        sources.listenHost = 'file'
     } else if (settings.webappHost !== undefined) {
-        webappHost = settings.webappHost
-        sources.webappHost = 'file'
+        // Migrate from old field name
+        listenHost = settings.webappHost
+        sources.listenHost = 'file'
+        settings.listenHost = listenHost
+        delete settings.webappHost
+        needsSave = true
     }
 
-    // webappPort: env > file > 3006
-    let webappPort = 3006
-    if (process.env.WEBAPP_PORT) {
-        const parsed = parseInt(process.env.WEBAPP_PORT, 10)
+    // listenPort: env > file (new or old name) > default
+    let listenPort = 3006
+    if (process.env.HAPI_LISTEN_PORT) {
+        const parsed = parseInt(process.env.HAPI_LISTEN_PORT, 10)
         if (!Number.isFinite(parsed) || parsed <= 0) {
-            throw new Error('WEBAPP_PORT must be a valid port number')
+            throw new Error('HAPI_LISTEN_PORT must be a valid port number')
         }
-        webappPort = parsed
-        sources.webappPort = 'env'
-        if (settings.webappPort === undefined) {
-            settings.webappPort = webappPort
+        listenPort = parsed
+        sources.listenPort = 'env'
+        if (settings.listenPort === undefined) {
+            settings.listenPort = listenPort
             needsSave = true
         }
+    } else if (settings.listenPort !== undefined) {
+        listenPort = settings.listenPort
+        sources.listenPort = 'file'
     } else if (settings.webappPort !== undefined) {
-        webappPort = settings.webappPort
-        sources.webappPort = 'file'
+        // Migrate from old field name
+        listenPort = settings.webappPort
+        sources.listenPort = 'file'
+        settings.listenPort = listenPort
+        delete settings.webappPort
+        needsSave = true
     }
 
-    // webappUrl: env > file > http://localhost:{port}
-    let webappUrl = `http://localhost:${webappPort}`
-    if (process.env.WEBAPP_URL) {
-        webappUrl = process.env.WEBAPP_URL
-        sources.webappUrl = 'env'
-        if (settings.webappUrl === undefined) {
-            settings.webappUrl = webappUrl
+    // publicUrl: env > file (new or old name) > default
+    let publicUrl = `http://localhost:${listenPort}`
+    if (process.env.HAPI_PUBLIC_URL) {
+        publicUrl = process.env.HAPI_PUBLIC_URL
+        sources.publicUrl = 'env'
+        if (settings.publicUrl === undefined) {
+            settings.publicUrl = publicUrl
             needsSave = true
         }
+    } else if (settings.publicUrl !== undefined) {
+        publicUrl = settings.publicUrl
+        sources.publicUrl = 'file'
     } else if (settings.webappUrl !== undefined) {
-        webappUrl = settings.webappUrl
-        sources.webappUrl = 'file'
+        // Migrate from old field name
+        publicUrl = settings.webappUrl
+        sources.publicUrl = 'file'
+        settings.publicUrl = publicUrl
+        delete settings.webappUrl
+        needsSave = true
     }
 
-    // corsOrigins: env > file > derived from webappUrl
+    // corsOrigins: env > file > derived from publicUrl
     let corsOrigins: string[]
     if (process.env.CORS_ORIGINS) {
         corsOrigins = parseCorsOrigins(process.env.CORS_ORIGINS)
@@ -179,7 +200,7 @@ export async function loadServerSettings(dataDir: string): Promise<ServerSetting
         corsOrigins = settings.corsOrigins
         sources.corsOrigins = 'file'
     } else {
-        corsOrigins = deriveCorsOrigins(webappUrl)
+        corsOrigins = deriveCorsOrigins(publicUrl)
     }
 
     // Save settings if any new values were added
@@ -191,9 +212,9 @@ export async function loadServerSettings(dataDir: string): Promise<ServerSetting
         settings: {
             telegramBotToken,
             telegramNotification,
-            webappHost,
-            webappPort,
-            webappUrl,
+            listenHost,
+            listenPort,
+            publicUrl,
             corsOrigins,
         },
         sources,

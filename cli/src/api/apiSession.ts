@@ -71,7 +71,7 @@ export class ApiSessionClient extends EventEmitter {
             registerCommonHandlers(this.rpcHandlerManager, this.metadata.path)
         }
 
-        this.socket = io(`${configuration.serverUrl}/cli`, {
+        this.socket = io(`${configuration.apiUrl}/cli`, {
             auth: {
                 token: this.token,
                 clientType: 'session-scoped' as const,
@@ -270,7 +270,7 @@ export class ApiSessionClient extends EventEmitter {
             let cursor = startSeq
             while (true) {
                 const response = await axios.get(
-                    `${configuration.serverUrl}/cli/sessions/${encodeURIComponent(this.sessionId)}/messages`,
+                    `${configuration.apiUrl}/cli/sessions/${encodeURIComponent(this.sessionId)}/messages`,
                     {
                         params: { afterSeq: cursor, limit },
                         headers: {

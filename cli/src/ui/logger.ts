@@ -50,10 +50,10 @@ class Logger {
   constructor(
     public readonly logFilePath = getSessionLogPath()
   ) {
-    // Remote logging enabled only when explicitly set with server URL
+    // Remote logging enabled only when explicitly set with API URL
     if (process.env.DANGEROUSLY_LOG_TO_SERVER_FOR_AI_AUTO_DEBUGGING
-      && process.env.HAPI_SERVER_URL) {
-      this.dangerouslyUnencryptedServerLoggingUrl = process.env.HAPI_SERVER_URL
+      && process.env.HAPI_API_URL) {
+      this.dangerouslyUnencryptedServerLoggingUrl = process.env.HAPI_API_URL
       console.log(chalk.yellow('[REMOTE LOGGING] Sending logs to server for AI debugging'))
     }
   }

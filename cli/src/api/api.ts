@@ -19,7 +19,7 @@ export class ApiClient {
         state: AgentState | null
     }): Promise<Session> {
         const response = await axios.post<CreateSessionResponse>(
-            `${configuration.serverUrl}/cli/sessions`,
+            `${configuration.apiUrl}/cli/sessions`,
             {
                 tag: opts.tag,
                 metadata: opts.metadata,
@@ -79,7 +79,7 @@ export class ApiClient {
         runnerState?: RunnerState
     }): Promise<Machine> {
         const response = await axios.post<CreateMachineResponse>(
-            `${configuration.serverUrl}/cli/machines`,
+            `${configuration.apiUrl}/cli/machines`,
             {
                 id: opts.machineId,
                 metadata: opts.metadata,

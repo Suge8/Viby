@@ -17,7 +17,9 @@ interface Settings {
   machineIdConfirmedByServer?: boolean
   runnerAutoStartWhenRunningHappy?: boolean
   cliApiToken?: string
-  // Server URL for API connections (priority: env HAPI_SERVER_URL > this > default)
+  // API URL for server connections (priority: env HAPI_API_URL > this > default)
+  apiUrl?: string
+  // Legacy field name (for migration, read-only)
   serverUrl?: string
 }
 

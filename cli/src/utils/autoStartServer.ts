@@ -3,7 +3,7 @@
  *
  * Automatically starts the HAPI server when CLI is launched
  * if specific conditions are met:
- * 1. HAPI_SERVER_URL is not set (using default localhost:3006)
+ * 1. HAPI_API_URL is not set (using default localhost:3006)
  * 2. cliApiToken exists in settings.json (server was previously started)
  * 3. Port 3006 is not currently listening
  */
@@ -90,18 +90,18 @@ async function waitForServerReady(
  * Determine if server should be auto-started
  */
 async function shouldAutoStartServer(): Promise<boolean> {
-    // Condition 1: HAPI_SERVER_URL not set (using default localhost:3006)
-    if (process.env.HAPI_SERVER_URL) {
-        logger.debug('[AUTO-START] HAPI_SERVER_URL is set, skipping auto-start')
+    // Condition 1: HAPI_API_URL not set (using default localhost:3006)
+    if (process.env.HAPI_API_URL) {
+        logger.debug('[AUTO-START] HAPI_API_URL is set, skipping auto-start')
         return false
     }
 
     // Condition 2: Check settings.json
     const settings = await readSettings()
 
-    // 2a: serverUrl is set in settings.json (user configured a specific server)
-    if (settings.serverUrl) {
-        logger.debug('[AUTO-START] serverUrl is set in settings.json, skipping auto-start')
+    // 2a: apiUrl is set in settings.json (user configured a specific server)
+    if (settings.apiUrl || settings.serverUrl) {
+        logger.debug('[AUTO-START] apiUrl is set in settings.json, skipping auto-start')
         return false
     }
 
@@ -154,7 +154,7 @@ export async function maybeAutoStartServer(): Promise<void> {
 
         startServerAsChild()
 
-        const isReady = await waitForServerReady(configuration.serverUrl)
+        const isReady = await waitForServerReady(configuration.apiUrl)
 
         if (!isReady) {
             console.log(chalk.yellow('Warning: Server did not start within expected time'))
