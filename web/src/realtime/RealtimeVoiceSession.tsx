@@ -70,6 +70,13 @@ class RealtimeVoiceSessionImpl implements VoiceSession {
                 dynamicVariables: {
                     sessionId: config.sessionId,
                     initialConversationContext: config.initialContext || ''
+                },
+                // Language override - requires agent to have platform_settings.overrides enabled
+                // See: https://elevenlabs.io/docs/agents-platform/customization/personalization/overrides
+                overrides: {
+                    agent: {
+                        language: config.language
+                    }
                 }
             })
 

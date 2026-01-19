@@ -229,6 +229,9 @@ export default {
   'settings.title': 'Settings',
   'settings.language.title': 'Language',
   'settings.language.label': 'Language',
+  'settings.voice.title': 'Voice Assistant',
+  'settings.voice.language': 'Voice Language',
+  'settings.voice.autoDetect': 'Auto-detect',
 
   // Misc
   'misc.noMachines': 'No machines available',

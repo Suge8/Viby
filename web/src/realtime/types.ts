@@ -1,6 +1,9 @@
+import type { ElevenLabsLanguage } from '@/lib/languages'
+
 export interface VoiceSessionConfig {
     sessionId: string
     initialContext?: string
+    language?: ElevenLabsLanguage
 }
 
 export interface VoiceSession {

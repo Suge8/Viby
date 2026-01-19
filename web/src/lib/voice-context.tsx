@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useState, type ReactNode } from 'react'
 import type { ConversationStatus, StatusCallback } from '@/realtime/types'
 import { startRealtimeSession, stopRealtimeSession, voiceHooks } from '@/realtime'
+import { getElevenLabsCodeFromPreference } from '@/lib/languages'
 
 interface VoiceContextValue {
     status: ConversationStatus
@@ -38,7 +39,12 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     const startVoice = useCallback(async (sessionId: string) => {
         setCurrentSessionId(sessionId)
         const initialContext = voiceHooks.onVoiceStarted(sessionId)
-        await startRealtimeSession(sessionId, initialContext)
+
+        // Read voice language preference from localStorage
+        const voiceLang = localStorage.getItem('hapi-voice-lang')
+        const elevenLabsLang = getElevenLabsCodeFromPreference(voiceLang)
+
+        await startRealtimeSession(sessionId, initialContext, elevenLabsLang)
     }, [])
 
     const stopVoice = useCallback(async () => {

@@ -201,6 +201,16 @@ export interface VoiceAgentConfig {
             speed: number
         }
     }
+    platform_settings?: {
+        overrides?: {
+            conversation_config_override?: {
+                agent?: {
+                    language?: boolean
+                    first_message?: boolean
+                }
+            }
+        }
+    }
 }
 
 /**
@@ -230,6 +240,17 @@ export function buildVoiceAgentConfig(): VoiceAgentConfig {
                 voice_id: 'cgSgspJ2msm6clMCkdW9', // Jessica
                 model_id: 'eleven_flash_v2',
                 speed: 1.1
+            }
+        },
+        // Enable runtime overrides for language selection
+        // See: https://elevenlabs.io/docs/agents-platform/customization/personalization/overrides
+        platform_settings: {
+            overrides: {
+                conversation_config_override: {
+                    agent: {
+                        language: true
+                    }
+                }
             }
         }
     }

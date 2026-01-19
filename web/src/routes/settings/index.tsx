@@ -1,11 +1,14 @@
 import { useState, useRef, useEffect } from 'react'
 import { useTranslation, type Locale } from '@/lib/use-translation'
 import { useAppGoBack } from '@/hooks/useAppGoBack'
+import { getElevenLabsSupportedLanguages, getLanguageDisplayName, type Language } from '@/lib/languages'
 
 const locales: { value: Locale; nativeLabel: string }[] = [
     { value: 'en', nativeLabel: 'English' },
     { value: 'zh-CN', nativeLabel: '简体中文' },
 ]
+
+const voiceLanguages = getElevenLabsSupportedLanguages()
 
 function BackIcon(props: { className?: string }) {
     return (
@@ -68,42 +71,64 @@ export default function SettingsPage() {
     const { t, locale, setLocale } = useTranslation()
     const goBack = useAppGoBack()
     const [isOpen, setIsOpen] = useState(false)
+    const [isVoiceOpen, setIsVoiceOpen] = useState(false)
     const containerRef = useRef<HTMLDivElement>(null)
+    const voiceContainerRef = useRef<HTMLDivElement>(null)
+
+    // Voice language state - read from localStorage
+    const [voiceLanguage, setVoiceLanguage] = useState<string | null>(() => {
+        return localStorage.getItem('hapi-voice-lang')
+    })
 
     const currentLocale = locales.find((loc) => loc.value === locale)
+    const currentVoiceLanguage = voiceLanguages.find((lang) => lang.code === voiceLanguage)
 
     const handleLocaleChange = (newLocale: Locale) => {
         setLocale(newLocale)
         setIsOpen(false)
     }
 
+    const handleVoiceLanguageChange = (language: Language) => {
+        setVoiceLanguage(language.code)
+        if (language.code === null) {
+            localStorage.removeItem('hapi-voice-lang')
+        } else {
+            localStorage.setItem('hapi-voice-lang', language.code)
+        }
+        setIsVoiceOpen(false)
+    }
+
     // Close dropdown when clicking outside
     useEffect(() => {
-        if (!isOpen) return
+        if (!isOpen && !isVoiceOpen) return
 
         const handleClickOutside = (event: MouseEvent) => {
-            if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+            if (isOpen && containerRef.current && !containerRef.current.contains(event.target as Node)) {
                 setIsOpen(false)
+            }
+            if (isVoiceOpen && voiceContainerRef.current && !voiceContainerRef.current.contains(event.target as Node)) {
+                setIsVoiceOpen(false)
             }
         }
 
         document.addEventListener('mousedown', handleClickOutside)
         return () => document.removeEventListener('mousedown', handleClickOutside)
-    }, [isOpen])
+    }, [isOpen, isVoiceOpen])
 
     // Close on escape key
     useEffect(() => {
-        if (!isOpen) return
+        if (!isOpen && !isVoiceOpen) return
 
         const handleEscape = (event: KeyboardEvent) => {
             if (event.key === 'Escape') {
                 setIsOpen(false)
+                setIsVoiceOpen(false)
             }
         }
 
         document.addEventListener('keydown', handleEscape)
         return () => document.removeEventListener('keydown', handleEscape)
-    }, [isOpen])
+    }, [isOpen, isVoiceOpen])
 
     return (
         <div className="flex h-full flex-col">
@@ -164,6 +189,70 @@ export default function SettingsPage() {
                                                 }`}
                                             >
                                                 <span>{loc.nativeLabel}</span>
+                                                {isSelected && (
+                                                    <span className="ml-2 text-[var(--app-link)]">
+                                                        <CheckIcon />
+                                                    </span>
+                                                )}
+                                            </button>
+                                        )
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Voice Assistant section */}
+                    <div className="border-b border-[var(--app-divider)]">
+                        <div className="px-3 py-2 text-xs font-semibold text-[var(--app-hint)] uppercase tracking-wide">
+                            {t('settings.voice.title')}
+                        </div>
+                        <div ref={voiceContainerRef} className="relative">
+                            <button
+                                type="button"
+                                onClick={() => setIsVoiceOpen(!isVoiceOpen)}
+                                className="flex w-full items-center justify-between px-3 py-3 text-left transition-colors hover:bg-[var(--app-subtle-bg)]"
+                                aria-expanded={isVoiceOpen}
+                                aria-haspopup="listbox"
+                            >
+                                <span className="text-[var(--app-fg)]">{t('settings.voice.language')}</span>
+                                <span className="flex items-center gap-1 text-[var(--app-hint)]">
+                                    <span>
+                                        {currentVoiceLanguage
+                                            ? currentVoiceLanguage.code === null
+                                                ? t('settings.voice.autoDetect')
+                                                : getLanguageDisplayName(currentVoiceLanguage)
+                                            : t('settings.voice.autoDetect')}
+                                    </span>
+                                    <ChevronDownIcon className={`transition-transform ${isVoiceOpen ? 'rotate-180' : ''}`} />
+                                </span>
+                            </button>
+
+                            {isVoiceOpen && (
+                                <div
+                                    className="absolute right-3 top-full mt-1 min-w-[200px] max-h-[300px] overflow-y-auto rounded-lg border border-[var(--app-border)] bg-[var(--app-bg)] shadow-lg z-50"
+                                    role="listbox"
+                                    aria-label={t('settings.voice.title')}
+                                >
+                                    {voiceLanguages.map((lang) => {
+                                        const isSelected = voiceLanguage === lang.code
+                                        const displayName = lang.code === null
+                                            ? t('settings.voice.autoDetect')
+                                            : getLanguageDisplayName(lang)
+                                        return (
+                                            <button
+                                                key={lang.code ?? 'auto'}
+                                                type="button"
+                                                role="option"
+                                                aria-selected={isSelected}
+                                                onClick={() => handleVoiceLanguageChange(lang)}
+                                                className={`flex items-center justify-between w-full px-3 py-2 text-sm text-left transition-colors ${
+                                                    isSelected
+                                                        ? 'text-[var(--app-link)] bg-[var(--app-subtle-bg)]'
+                                                        : 'text-[var(--app-fg)] hover:bg-[var(--app-subtle-bg)]'
+                                                }`}
+                                            >
+                                                <span>{displayName}</span>
                                                 {isSelected && (
                                                     <span className="ml-2 text-[var(--app-link)]">
                                                         <CheckIcon />
