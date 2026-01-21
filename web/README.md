@@ -113,7 +113,7 @@ bun run dev:web
 ```
 
 If testing in Telegram, set:
-- `WEBAPP_URL` to the public HTTPS URL of the dev server.
+- `HAPI_PUBLIC_URL` to the public HTTPS URL of the dev server.
 - `CORS_ORIGINS` to include the dev server origin.
 
 ## Build
@@ -135,7 +135,7 @@ bun run build:web -- --base /<repo>/
 ```
 
 2. Deploy `web/dist` to your static host.
-3. Set server CORS to allow the static origin (`WEBAPP_URL` or `CORS_ORIGINS`).
+3. Set server CORS to allow the static origin (`HAPI_PUBLIC_URL` or `CORS_ORIGINS`).
 4. Open the static site, click the top-right Server button on the login screen, and enter the hapi server origin.
 
 Clear the server override in the same dialog to return to same-origin behavior.
