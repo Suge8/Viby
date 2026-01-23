@@ -1,16 +1,7 @@
-import type { DecryptedMessage } from '@hapi/protocol/types'
+import type { AttachmentMetadata, DecryptedMessage } from '@hapi/protocol/types'
 import type { Server } from 'socket.io'
 import type { Store } from '../store'
 import { EventPublisher } from './eventPublisher'
-
-type AttachmentMetadata = {
-    id: string
-    filename: string
-    mimeType: string
-    size: number
-    path: string
-    previewUrl?: string
-}
 
 export class MessageService {
     constructor(

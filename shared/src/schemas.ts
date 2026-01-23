@@ -91,6 +91,17 @@ export type TodoItem = z.infer<typeof TodoItemSchema>
 
 export const TodosSchema = z.array(TodoItemSchema)
 
+export const AttachmentMetadataSchema = z.object({
+    id: z.string(),
+    filename: z.string(),
+    mimeType: z.string(),
+    size: z.number(),
+    path: z.string(),
+    previewUrl: z.string().optional()
+})
+
+export type AttachmentMetadata = z.infer<typeof AttachmentMetadataSchema>
+
 export const DecryptedMessageSchema = z.object({
     id: z.string(),
     seq: z.number().nullable(),

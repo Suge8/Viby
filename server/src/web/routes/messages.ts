@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { AttachmentMetadataSchema } from '@hapi/protocol/schemas'
 import { z } from 'zod'
 import type { SyncEngine } from '../../sync/syncEngine'
 import type { WebAppEnv } from '../middleware/auth'
@@ -9,19 +10,10 @@ const querySchema = z.object({
     beforeSeq: z.coerce.number().int().min(1).optional()
 })
 
-const attachmentMetadataSchema = z.object({
-    id: z.string(),
-    filename: z.string(),
-    mimeType: z.string(),
-    size: z.number(),
-    path: z.string(),
-    previewUrl: z.string().optional()
-})
-
 const sendMessageBodySchema = z.object({
     text: z.string(),
     localId: z.string().min(1).optional(),
-    attachments: z.array(attachmentMetadataSchema).optional()
+    attachments: z.array(AttachmentMetadataSchema).optional()
 })
 
 export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null): Hono<WebAppEnv> {

@@ -1,15 +1,29 @@
-import { AgentStateSchema, MetadataSchema, ModelModeSchema, PermissionModeSchema, TodosSchema } from '@hapi/protocol/schemas'
+import {
+    AgentStateSchema,
+    AttachmentMetadataSchema,
+    MetadataSchema,
+    ModelModeSchema,
+    PermissionModeSchema,
+    TodosSchema
+} from '@hapi/protocol/schemas'
 import type { ModelMode, PermissionMode } from '@hapi/protocol/types'
 import { z } from 'zod'
 import { UsageSchema } from '@/claude/types'
 
 export type Usage = z.infer<typeof UsageSchema>
 
-export type { AgentState, ClaudePermissionMode, CodexPermissionMode, Metadata, Session } from '@hapi/protocol/types'
+export type {
+    AgentState,
+    AttachmentMetadata,
+    ClaudePermissionMode,
+    CodexPermissionMode,
+    Metadata,
+    Session
+} from '@hapi/protocol/types'
 export type SessionPermissionMode = PermissionMode
 export type SessionModelMode = ModelMode
 
-export { AgentStateSchema, MetadataSchema }
+export { AgentStateSchema, AttachmentMetadataSchema, MetadataSchema }
 
 export const MachineMetadataSchema = z.object({
     host: z.string(),
@@ -108,17 +122,6 @@ export const MessageMetaSchema = z.object({
 }).passthrough()
 
 export type MessageMeta = z.infer<typeof MessageMetaSchema>
-
-export const AttachmentMetadataSchema = z.object({
-    id: z.string(),
-    filename: z.string(),
-    mimeType: z.string(),
-    size: z.number(),
-    path: z.string(),
-    previewUrl: z.string().optional()
-})
-
-export type AttachmentMetadata = z.infer<typeof AttachmentMetadataSchema>
 
 export const UserMessageSchema = z.object({
     role: z.literal('user'),

@@ -8,6 +8,7 @@ import type {
 
 export type {
     AgentState,
+    AttachmentMetadata,
     ModelMode,
     PermissionMode,
     Session,
@@ -182,12 +183,3 @@ export type VisibilityPayload = {
 }
 
 export type SyncEvent = ProtocolSyncEvent
-
-export type AttachmentMetadata = {
-    id: string
-    filename: string
-    mimeType: string
-    size: number
-    path: string
-    previewUrl?: string
-}
