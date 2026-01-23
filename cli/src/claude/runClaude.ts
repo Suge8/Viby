@@ -9,7 +9,7 @@ import { parseSpecialCommand } from '@/parsers/specialCommands';
 import { getEnvironmentInfo } from '@/ui/doctor';
 import { startHappyServer } from '@/claude/utils/startHappyServer';
 import { startHookServer } from '@/claude/utils/startHookServer';
-import { generateHookSettingsFile, cleanupHookSettingsFile } from '@/claude/utils/generateHookSettings';
+import { generateHookSettingsFile, cleanupHookSettingsFile } from '@/modules/common/hooks/generateHookSettings';
 import { registerKillSessionHandler } from './registerKillSessionHandler';
 import type { Session } from './session';
 import { bootstrapSession } from '@/agent/sessionFactory';
@@ -101,7 +101,10 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
     });
     logger.debug(`[START] Hook server started on port ${hookServer.port}`);
 
-    const hookSettingsPath = generateHookSettingsFile(hookServer.port, hookServer.token);
+    const hookSettingsPath = generateHookSettingsFile(hookServer.port, hookServer.token, {
+        filenamePrefix: 'session-hook',
+        logLabel: 'generateHookSettings'
+    });
     logger.debug(`[START] Generated hook settings file: ${hookSettingsPath}`);
 
     // Print log file path
@@ -116,7 +119,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         onAfterClose: () => {
             happyServer.stop();
             hookServer.stop();
-            cleanupHookSettingsFile(hookSettingsPath);
+            cleanupHookSettingsFile(hookSettingsPath, 'generateHookSettings');
         }
     });
 

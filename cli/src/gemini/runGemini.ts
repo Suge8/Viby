@@ -9,7 +9,7 @@ import type { GeminiMode, PermissionMode } from './types';
 import { bootstrapSession } from '@/agent/sessionFactory';
 import { createModeChangeHandler, createRunnerLifecycle, setControlledByUser } from '@/agent/runnerLifecycle';
 import { startHookServer } from '@/claude/utils/startHookServer';
-import { cleanupGeminiHookSettingsFile, generateGeminiHookSettingsFile } from './utils/generateHookSettings';
+import { cleanupHookSettingsFile, generateHookSettingsFile } from '@/modules/common/hooks/generateHookSettings';
 import { resolveGeminiRuntimeConfig } from './utils/config';
 import { isPermissionModeAllowedForFlavor } from '@hapi/protocol';
 import { PermissionModeSchema } from '@hapi/protocol/schemas';
@@ -72,7 +72,11 @@ export async function runGemini(opts: {
         }
     });
 
-    const hookSettingsPath = generateGeminiHookSettingsFile(hookServer.port, hookServer.token);
+    const hookSettingsPath = generateHookSettingsFile(hookServer.port, hookServer.token, {
+        filenamePrefix: 'gemini-session-hook',
+        logLabel: 'gemini-hook-settings',
+        hooksEnabled: true
+    });
 
     const lifecycle = createRunnerLifecycle({
         session,
@@ -80,7 +84,7 @@ export async function runGemini(opts: {
         stopKeepAlive: () => sessionWrapperRef.current?.stopKeepAlive(),
         onAfterClose: () => {
             hookServer.stop();
-            cleanupGeminiHookSettingsFile(hookSettingsPath);
+            cleanupHookSettingsFile(hookSettingsPath, 'gemini-hook-settings');
         }
     });
 
