@@ -1,13 +1,10 @@
+import { isObject } from '@hapi/protocol'
 import { unwrapRoleWrappedRecordEnvelope } from '@hapi/protocol/messages'
 import { TodoItemSchema, TodosSchema } from '@hapi/protocol/schemas'
 import type { TodoItem } from '@hapi/protocol/types'
 
 export { TodoItemSchema, TodosSchema }
 export type { TodoItem }
-
-function isObject(value: unknown): value is Record<string, unknown> {
-    return Boolean(value) && typeof value === 'object'
-}
 
 function extractTodosFromClaudeOutput(content: Record<string, unknown>): TodoItem[] | null {
     if (content.type !== 'output') return null

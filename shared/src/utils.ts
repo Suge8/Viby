@@ -13,7 +13,8 @@ export function asNumber(value: unknown): number | null {
 export function safeStringify(value: unknown): string {
     if (typeof value === 'string') return value
     try {
-        return JSON.stringify(value, null, 2)
+        const stringified = JSON.stringify(value, null, 2)
+        return typeof stringified === 'string' ? stringified : String(value)
     } catch {
         return String(value)
     }

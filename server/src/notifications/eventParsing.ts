@@ -1,12 +1,9 @@
+import { isObject } from '@hapi/protocol'
 import type { SyncEvent } from '../sync/syncEngine'
 
 type EventEnvelope = {
     type?: unknown
     data?: unknown
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-    return Boolean(value) && typeof value === 'object'
 }
 
 function extractEventEnvelope(message: unknown): EventEnvelope | null {

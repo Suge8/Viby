@@ -1,20 +1,11 @@
 import { useCallback, useMemo } from 'react'
 import type { AppendMessage, AttachmentAdapter, ThreadMessageLike } from '@assistant-ui/react'
 import { useExternalMessageConverter, useExternalStoreRuntime } from '@assistant-ui/react'
+import { safeStringify } from '@hapi/protocol'
 import { renderEventLabel } from '@/chat/presentation'
 import type { ChatBlock, CliOutputBlock } from '@/chat/types'
 import type { AgentEvent, ToolCallBlock } from '@/chat/types'
 import type { AttachmentMetadata, MessageStatus as HappyMessageStatus, Session } from '@/types/api'
-
-function safeStringify(value: unknown): string {
-    if (typeof value === 'string') return value
-    try {
-        const stringified = JSON.stringify(value, null, 2)
-        return typeof stringified === 'string' ? stringified : String(value)
-    } catch {
-        return String(value)
-    }
-}
 
 export type HappyChatMessageMetadata = {
     kind: 'user' | 'assistant' | 'tool' | 'event' | 'cli-output'

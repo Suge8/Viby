@@ -2,6 +2,7 @@ import type { ToolCallBlock } from '@/chat/types'
 import type { ApiClient } from '@/api/client'
 import type { SessionMetadataSummary } from '@/types/api'
 import { memo, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { isObject, safeStringify } from '@hapi/protocol'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { CodeBlock } from '@/components/CodeBlock'
 import { MarkdownRenderer } from '@/components/MarkdownRenderer'
@@ -16,18 +17,6 @@ import { getToolResultViewComponent } from '@/components/ToolCard/views/_results
 import { usePointerFocusRing } from '@/hooks/usePointerFocusRing'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/lib/use-translation'
-
-function isObject(value: unknown): value is Record<string, unknown> {
-    return Boolean(value) && typeof value === 'object'
-}
-
-function safeStringify(value: unknown): string {
-    try {
-        return JSON.stringify(value, null, 2)
-    } catch {
-        return String(value)
-    }
-}
 
 function getInputString(input: unknown, key: string): string | null {
     if (!isObject(input)) return null

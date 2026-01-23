@@ -1,5 +1,6 @@
 import type { AgentMessage, PlanItem } from '@/agent/types';
-import { asString, deriveToolName, isObject } from '@/agent/utils';
+import { asString, isObject } from '@hapi/protocol';
+import { deriveToolName } from '@/agent/utils';
 import { ACP_SESSION_UPDATE_TYPES } from './constants';
 
 function normalizeStatus(status: unknown): 'pending' | 'in_progress' | 'completed' | 'failed' {

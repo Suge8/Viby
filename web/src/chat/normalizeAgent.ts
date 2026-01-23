@@ -1,5 +1,5 @@
 import type { AgentEvent, NormalizedAgentContent, NormalizedMessage, ToolResultPermission } from '@/chat/types'
-import { asNumber, asString, isObject } from '@/chat/normalizeUtils'
+import { asNumber, asString, isObject } from '@hapi/protocol'
 
 function normalizeToolResultPermissions(value: unknown): ToolResultPermission | undefined {
     if (!isObject(value)) return undefined

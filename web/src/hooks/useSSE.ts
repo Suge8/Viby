@@ -1,12 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { isObject } from '@hapi/protocol'
 import type { SyncEvent } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
 import { clearMessageWindow, ingestIncomingMessages } from '@/lib/message-window-store'
-
-function isObject(value: unknown): value is Record<string, unknown> {
-    return Boolean(value) && typeof value === 'object'
-}
 
 type SSESubscription = {
     all?: boolean

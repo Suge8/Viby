@@ -4,6 +4,7 @@
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { isObject } from '@hapi/protocol';
 import { logger } from '@/ui/logger';
 import { isProcessAlive, killProcess } from '@/utils/process';
 import type { CodexSessionConfig, CodexToolResponse } from './types';
@@ -19,10 +20,6 @@ type ElicitRequestedSchema = {
     properties?: Record<string, unknown>;
     required?: string[];
 };
-
-function isObject(value: unknown): value is Record<string, unknown> {
-    return Boolean(value) && typeof value === 'object';
-}
 
 function extractRequestedSchema(params: Record<string, unknown>): ElicitRequestedSchema | null {
     const raw = params.requestedSchema;

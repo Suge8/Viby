@@ -1,4 +1,5 @@
 import { unwrapRoleWrappedRecordEnvelope } from '@hapi/protocol/messages'
+import { isObject } from '@hapi/protocol'
 import type { DecryptedMessage, Session } from '@/types/api'
 import { VOICE_CONFIG } from '../voiceConfig'
 
@@ -20,10 +21,6 @@ type NormalizedRole = 'assistant' | 'user'
 
 function isContentArray(content: unknown): content is ContentItem[] {
     return Array.isArray(content)
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-    return Boolean(value) && typeof value === 'object'
 }
 
 function normalizeRole(role: string | null | undefined): NormalizedRole | null {

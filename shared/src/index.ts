@@ -1,4 +1,5 @@
 export * from './messages'
 export * from './modes'
 export * from './sessionSummary'
+export * from './utils'
 export type * from './types'

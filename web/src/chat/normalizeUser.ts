@@ -1,6 +1,6 @@
 import type { NormalizedMessage } from '@/chat/types'
 import type { AttachmentMetadata } from '@/types/api'
-import { isObject } from '@/chat/normalizeUtils'
+import { isObject } from '@hapi/protocol'
 
 function parseAttachments(raw: unknown): AttachmentMetadata[] | undefined {
     if (!Array.isArray(raw)) return undefined
