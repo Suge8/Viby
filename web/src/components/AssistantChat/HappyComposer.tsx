@@ -2,6 +2,7 @@ import { getPermissionModeOptionsForFlavor, MODEL_MODE_LABELS, MODEL_MODES } fro
 import { ComposerPrimitive, useAssistantApi, useAssistantState } from '@assistant-ui/react'
 import {
     type ChangeEvent as ReactChangeEvent,
+    type ClipboardEvent as ReactClipboardEvent,
     type FormEvent as ReactFormEvent,
     type KeyboardEvent as ReactKeyboardEvent,
     type SyntheticEvent as ReactSyntheticEvent,
@@ -338,6 +339,23 @@ export function HappyComposer(props: {
         }))
     }, [])
 
+    const handlePaste = useCallback(async (e: ReactClipboardEvent<HTMLTextAreaElement>) => {
+        const files = Array.from(e.clipboardData?.files || [])
+        const imageFiles = files.filter(file => file.type.startsWith('image/'))
+
+        if (imageFiles.length === 0) return
+
+        e.preventDefault()
+
+        try {
+            for (const file of imageFiles) {
+                await api.composer().addAttachment(file)
+            }
+        } catch (error) {
+            console.error('Error adding pasted image:', error)
+        }
+    }, [api])
+
     const handleSettingsToggle = useCallback(() => {
         haptic('light')
         setShowSettings(prev => !prev)
@@ -528,6 +546,7 @@ export function HappyComposer(props: {
                                 onChange={handleChange}
                                 onSelect={handleSelect}
                                 onKeyDown={handleKeyDown}
+                                onPaste={handlePaste}
                                 className="flex-1 resize-none bg-transparent text-sm leading-snug text-[var(--app-fg)] placeholder-[var(--app-hint)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                             />
                         </div>
