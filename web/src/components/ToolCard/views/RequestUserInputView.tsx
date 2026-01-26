@@ -9,10 +9,23 @@ function getSelectionMark(isSelected: boolean): string {
     return isSelected ? '●' : '○'
 }
 
+function parseResultAsAnswers(result: unknown): unknown {
+    // tool.result from history may be a JSON string
+    if (typeof result === 'string') {
+        try {
+            return JSON.parse(result)
+        } catch {
+            return undefined
+        }
+    }
+    return result
+}
+
 export function RequestUserInputView(props: ToolViewProps) {
     const parsed = parseRequestUserInputInput(props.block.tool.input)
     const questions = parsed.questions
-    const rawAnswers = props.block.tool.permission?.answers ?? undefined
+    // Try permission.answers first (live), fall back to tool.result (history)
+    const rawAnswers = props.block.tool.permission?.answers ?? parseResultAsAnswers(props.block.tool.result) ?? undefined
     const parsedAnswers = rawAnswers ? parseRequestUserInputAnswers(rawAnswers) : null
     const hasAnswers = parsedAnswers && Object.keys(parsedAnswers).length > 0
 

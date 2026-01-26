@@ -134,7 +134,8 @@ export function parseRequestUserInputAnswers(
             if (item.startsWith('user_note: ')) {
                 userNote = item.slice('user_note: '.length).trim()
             } else if (!selected) {
-                selected = item
+                // Trim to match option labels which are also trimmed
+                selected = item.trim()
             }
         }
 
