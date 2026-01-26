@@ -58,6 +58,11 @@ export function getEventPresentation(event: AgentEvent): EventPresentation {
         const ms = typeof event.durationMs === 'number' ? event.durationMs : 0
         return { icon: '⏱️', text: `Turn: ${formatDuration(ms)}` }
     }
+    if (event.type === 'microcompact') {
+        const saved = typeof event.tokensSaved === 'number' ? event.tokensSaved : 0
+        const formatted = saved >= 1000 ? `${Math.round(saved / 1000)}K` : String(saved)
+        return { icon: '📦', text: `Context compacted (saved ${formatted} tokens)` }
+    }
     try {
         return { icon: null, text: JSON.stringify(event) }
     } catch {

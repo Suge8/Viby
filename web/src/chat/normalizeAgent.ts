@@ -246,6 +246,23 @@ export function normalizeAgentRecord(
                 meta
             }
         }
+        if (data.type === 'system' && data.subtype === 'microcompact_boundary') {
+            const metadata = isObject(data.microcompactMetadata) ? data.microcompactMetadata : null
+            return {
+                id: messageId,
+                localId,
+                createdAt,
+                role: 'event',
+                content: {
+                    type: 'microcompact',
+                    trigger: asString(metadata?.trigger) ?? 'auto',
+                    preTokens: asNumber(metadata?.preTokens) ?? 0,
+                    tokensSaved: asNumber(metadata?.tokensSaved) ?? 0
+                },
+                isSidechain: false,
+                meta
+            }
+        }
         return null
     }
 
