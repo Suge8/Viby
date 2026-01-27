@@ -24,6 +24,7 @@ Run Claude Code, Codex, or Gemini sessions from your terminal and control them r
 
 - `hapi` - Start a Claude Code session (passes through Claude CLI flags). See `src/index.ts`.
 - `hapi codex` - Start Codex mode. See `src/codex/runCodex.ts`.
+- `hapi codex resume <sessionId>` - Resume existing Codex session.
 - `hapi gemini` - Start Gemini mode via ACP. See `src/agent/runners/runAgentSession.ts`.
   Note: Gemini runs in remote mode only; it waits for messages from the hub UI/Telegram.
 
@@ -43,8 +44,6 @@ See `src/commands/auth.ts`.
 - `hapi runner list` - List active sessions managed by runner.
 - `hapi runner stop-session <sessionId>` - Terminate specific session.
 - `hapi runner logs` - Print path to latest runner log file.
-- `hapi runner install` - Install runner as system service.
-- `hapi runner uninstall` - Remove runner system service.
 
 See `src/runner/run.ts`.
 
@@ -81,6 +80,14 @@ See `src/configuration.ts` for all options.
 
 - `HAPI_RUNNER_HEARTBEAT_INTERVAL` - Heartbeat interval in ms (default: 60000).
 - `HAPI_RUNNER_HTTP_TIMEOUT` - HTTP timeout for runner control in ms (default: 10000).
+
+### Worktree (set by runner)
+
+- `HAPI_WORKTREE_BASE_PATH` - Base repository path.
+- `HAPI_WORKTREE_BRANCH` - Current branch name.
+- `HAPI_WORKTREE_NAME` - Worktree name.
+- `HAPI_WORKTREE_PATH` - Full worktree path.
+- `HAPI_WORKTREE_CREATED_AT` - Creation timestamp (ms).
 
 ## Storage
 

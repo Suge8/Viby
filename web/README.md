@@ -29,6 +29,8 @@ See `src/router.tsx` for route definitions.
 - `/sessions/new` - Create new session.
 - `/sessions/$sessionId/files` - File browser with git status.
 - `/sessions/$sessionId/file` - File viewer with diff support.
+- `/sessions/$sessionId/terminal` - Terminal interface.
+- `/settings` - Application settings.
 
 ## Features
 
@@ -61,11 +63,25 @@ See `src/router.tsx` for route definitions.
 - File content display with syntax highlighting.
 - Staged/unstaged diff view.
 
-### New session (`src/components/NewSession.tsx`)
+### Terminal (`src/routes/sessions/terminal.tsx`)
 
-- Machine selector.
-- Directory input with recent paths.
-- Agent type selector (claude/codex/gemini).
+- Remote terminal via xterm.js
+- Real-time via Socket.IO
+- Resize handling
+
+### Voice assistant
+
+- ElevenLabs integration (@elevenlabs/react)
+- Real-time voice control
+
+### New session (`src/components/NewSession/`)
+
+Modular session creation:
+- Machine selector
+- Directory input with recent paths
+- Agent type selector
+- Model selector
+- Permission mode toggle (YOLO mode)
 
 ## Authentication
 
@@ -93,7 +109,7 @@ See `src/hooks/useSSE.ts`.
 
 ## Stack
 
-React 19 + Vite + TanStack Router/Query + Tailwind + @assistant-ui/react.
+React 19 + Vite + TanStack Router/Query + Tailwind + @assistant-ui/react + xterm.js + @elevenlabs/react + socket.io-client + workbox + shiki.
 
 ## Source structure
 

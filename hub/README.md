@@ -17,7 +17,7 @@ See `src/configuration.ts` for all options.
 
 ### Required
 
-- `CLI_API_TOKEN` - Base shared secret used by CLI and web login. Clients append `:<namespace>` for isolation.
+- `CLI_API_TOKEN` - Base shared secret used by CLI and web login. Clients append `:<namespace>` for isolation. Auto-generated on first run if not set.
 
 ### Optional (Telegram)
 
@@ -36,6 +36,11 @@ See `src/configuration.ts` for all options.
 - `CORS_ORIGINS` - Comma-separated origins, or `*`.
 - `HAPI_HOME` - Data directory (default: ~/.hapi).
 - `DB_PATH` - SQLite database path (default: HAPI_HOME/hapi.db).
+- `TELEGRAM_NOTIFICATION` - Enable/disable Telegram notifications (default: true).
+- `HAPI_RELAY_API` - Relay API domain (default: relay.hapi.run).
+- `HAPI_RELAY_AUTH` - Relay auth key (default: hapi).
+- `HAPI_RELAY_FORCE_TCP` - Force TCP relay mode (true/1).
+- `VAPID_SUBJECT` - Contact email/URL for Web Push.
 
 ## Running
 
@@ -76,7 +81,15 @@ See `src/web/routes/` for all endpoints.
 - `GET /api/sessions` - List all sessions.
 - `GET /api/sessions/:id` - Get session details.
 - `POST /api/sessions/:id/abort` - Abort session.
-- `POST /api/sessions/:id/switch` - Switch session mode (remote/local).
+- `POST /api/sessions/:id/switch` - Switch session to remote mode.
+- `POST /api/sessions/:id/resume` - Resume inactive session.
+- `POST /api/sessions/:id/upload` - Upload file (base64, max 50MB).
+- `POST /api/sessions/:id/upload/delete` - Delete uploaded file.
+- `POST /api/sessions/:id/archive` - Archive active session.
+- `PATCH /api/sessions/:id` - Rename session.
+- `DELETE /api/sessions/:id` - Delete inactive session.
+- `GET /api/sessions/:id/slash-commands` - List slash commands.
+- `GET /api/sessions/:id/skills` - List skills.
 - `POST /api/sessions/:id/permission-mode` - Set permission mode.
 - `POST /api/sessions/:id/model` - Set model preference.
 
@@ -94,6 +107,7 @@ See `src/web/routes/` for all endpoints.
 
 - `GET /api/machines` - List online machines.
 - `POST /api/machines/:id/spawn` - Spawn new session on machine.
+- `POST /api/machines/:id/paths/exists` - Check if path exists.
 
 ### Git/Files (`src/web/routes/git.ts`)
 
@@ -106,10 +120,17 @@ See `src/web/routes/` for all endpoints.
 ### Events (`src/web/routes/events.ts`)
 
 - `GET /api/events` - SSE stream for live updates.
+- `POST /api/visibility` - Report client visibility state.
 
 ### Voice (`src/web/routes/voice.ts`)
 
 - `POST /api/voice/token` - Get ElevenLabs conversation token.
+
+### Push Notifications (`src/web/routes/push.ts`)
+
+- `GET /api/push/vapid-public-key` - Get VAPID public key.
+- `POST /api/push/subscribe` - Subscribe to push notifications.
+- `DELETE /api/push/subscribe` - Unsubscribe.
 
 ### CLI (`src/web/routes/cli.ts`)
 
@@ -134,6 +155,13 @@ Namespace: `/cli`
 - `machine-alive` - Keep machine online.
 - `rpc-register` - Register RPC handler.
 - `rpc-unregister` - Unregister RPC handler.
+
+### Terminal events (web to hub)
+
+- `terminal:create` - Open terminal for session.
+- `terminal:write` - Send input.
+- `terminal:resize` - Resize dimensions.
+- `terminal:close` - Close terminal.
 
 ### Hub events (hub to clients)
 
@@ -185,10 +213,14 @@ See `src/store/index.ts` for SQLite persistence:
 
 - `src/web/` - HTTP service and routes.
 - `src/socket/` - Socket.IO setup and handlers.
+- `src/socket/handlers/cli/` - Modular CLI handlers.
 - `src/telegram/` - Telegram bot.
 - `src/sync/` - Core session/message logic.
 - `src/store/` - SQLite persistence.
 - `src/sse/` - Server-Sent Events.
+- `src/config/` - Configuration loading and generation.
+- `src/notifications/` - Push and Telegram notifications.
+- `src/visibility/` - Client visibility tracking.
 
 ## Security model
 
