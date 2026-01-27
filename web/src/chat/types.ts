@@ -17,6 +17,7 @@ export type AgentEvent =
     | { type: 'api-error'; retryAttempt: number; maxRetries: number; error: unknown }
     | { type: 'turn-duration'; durationMs: number }
     | { type: 'microcompact'; trigger: string; preTokens: number; tokensSaved: number }
+    | { type: 'compact'; trigger: string; preTokens: number }
     | ({ type: string } & Record<string, unknown>)
 
 export type ToolResultPermission = {

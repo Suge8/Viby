@@ -263,6 +263,22 @@ export function normalizeAgentRecord(
                 meta
             }
         }
+        if (data.type === 'system' && data.subtype === 'compact_boundary') {
+            const metadata = isObject(data.compactMetadata) ? data.compactMetadata : null
+            return {
+                id: messageId,
+                localId,
+                createdAt,
+                role: 'event',
+                content: {
+                    type: 'compact',
+                    trigger: asString(metadata?.trigger) ?? 'auto',
+                    preTokens: asNumber(metadata?.preTokens) ?? 0
+                },
+                isSidechain: false,
+                meta
+            }
+        }
         return null
     }
 
