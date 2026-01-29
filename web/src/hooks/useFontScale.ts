@@ -20,6 +20,8 @@ function isBrowser(): boolean {
     return typeof window !== 'undefined' && typeof document !== 'undefined'
 }
 
+const useIsomorphicLayoutEffect = isBrowser() ? useLayoutEffect : useEffect
+
 function safeGetItem(key: string): string | null {
     if (!isBrowser()) {
         return null
@@ -79,7 +81,7 @@ export function initializeFontScale(): void {
 export function useFontScale(): { fontScale: FontScale; setFontScale: (scale: FontScale) => void } {
     const [fontScale, setFontScaleState] = useState<FontScale>(getInitialFontScale)
 
-    useLayoutEffect(() => {
+    useIsomorphicLayoutEffect(() => {
         applyFontScale(fontScale)
     }, [fontScale])
 
