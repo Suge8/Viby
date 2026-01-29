@@ -9,6 +9,7 @@ import type { OpencodeSession } from './session';
 import type { PermissionMode } from './types';
 import { createOpencodeBackend } from './utils/opencodeBackend';
 import { OpencodePermissionHandler } from './utils/permissionHandler';
+import { TITLE_INSTRUCTION } from './utils/systemPrompt';
 
 class OpencodeRemoteLauncher extends RemoteLauncherBase {
     private readonly session: OpencodeSession;
@@ -17,6 +18,7 @@ class OpencodeRemoteLauncher extends RemoteLauncherBase {
     private happyServer: { stop: () => void } | null = null;
     private abortController = new AbortController();
     private displayPermissionMode: PermissionMode | null = null;
+    private instructionsSent = false;
 
     constructor(session: OpencodeSession) {
         super(process.env.DEBUG ? session.logPath : undefined);
@@ -112,9 +114,16 @@ class OpencodeRemoteLauncher extends RemoteLauncherBase {
             this.applyDisplayMode(batch.mode.permissionMode);
             messageBuffer.addMessage(batch.message, 'user');
 
+            // Inject title instructions on first prompt
+            let messageText = batch.message;
+            if (!this.instructionsSent) {
+                messageText = `${TITLE_INSTRUCTION}\n\n${batch.message}`;
+                this.instructionsSent = true;
+            }
+
             const promptContent: PromptContent[] = [{
                 type: 'text',
-                text: batch.message
+                text: messageText
             }];
 
             session.onThinkingChange(true);
