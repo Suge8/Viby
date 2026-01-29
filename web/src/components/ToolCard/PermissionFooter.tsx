@@ -2,19 +2,10 @@ import { useMemo, useState } from 'react'
 import type { ApiClient } from '@/api/client'
 import type { SessionMetadataSummary } from '@/types/api'
 import type { ChatToolCall, ToolPermission } from '@/chat/types'
-import { isObject } from '@hapi/protocol'
 import { usePlatform } from '@/hooks/usePlatform'
 import { Spinner } from '@/components/Spinner'
+import { getInputStringAny } from '@/lib/toolInputUtils'
 import { useTranslation } from '@/lib/use-translation'
-
-function getInputStringAny(input: unknown, keys: string[]): string | null {
-    if (!isObject(input)) return null
-    for (const key of keys) {
-        const value = input[key]
-        if (typeof value === 'string' && value.length > 0) return value
-    }
-    return null
-}
 
 function isToolAllowedForSession(toolName: string, toolInput: unknown, allowedTools: string[] | undefined): boolean {
     if (!allowedTools || allowedTools.length === 0) return false

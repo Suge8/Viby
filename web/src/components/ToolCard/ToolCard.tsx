@@ -17,27 +17,9 @@ import { getToolPresentation } from '@/components/ToolCard/knownTools'
 import { getToolFullViewComponent, getToolViewComponent } from '@/components/ToolCard/views/_all'
 import { getToolResultViewComponent } from '@/components/ToolCard/views/_results'
 import { usePointerFocusRing } from '@/hooks/usePointerFocusRing'
+import { getInputString, getInputStringAny, truncate } from '@/lib/toolInputUtils'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/lib/use-translation'
-
-function getInputString(input: unknown, key: string): string | null {
-    if (!isObject(input)) return null
-    const value = input[key]
-    return typeof value === 'string' ? value : null
-}
-
-function getInputStringAny(input: unknown, keys: string[]): string | null {
-    for (const key of keys) {
-        const value = getInputString(input, key)
-        if (value) return value
-    }
-    return null
-}
-
-function truncate(text: string, maxLen: number): string {
-    if (text.length <= maxLen) return text
-    return text.slice(0, maxLen - 3) + '...'
-}
 
 const ELAPSED_INTERVAL_MS = 1000
 
