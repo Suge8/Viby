@@ -9,6 +9,10 @@ const fileSearchSchema = z.object({
     limit: z.coerce.number().int().min(1).max(500).optional()
 })
 
+const directorySchema = z.object({
+    path: z.string().optional()
+})
+
 const filePathSchema = z.object({
     path: z.string().min(1)
 })
@@ -178,6 +182,32 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
             })
 
         return c.json({ success: true, files })
+    })
+
+    app.get('/sessions/:id/directory', async (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) {
+            return engine
+        }
+
+        const sessionResult = requireSessionFromParam(c, engine)
+        if (sessionResult instanceof Response) {
+            return sessionResult
+        }
+
+        const sessionPath = sessionResult.session.metadata?.path
+        if (!sessionPath) {
+            return c.json({ success: false, error: 'Session path not available' })
+        }
+
+        const parsed = directorySchema.safeParse(c.req.query())
+        if (!parsed.success) {
+            return c.json({ error: 'Invalid query' }, 400)
+        }
+
+        const path = parsed.data.path ?? ''
+        const result = await runRpc(() => engine.listDirectory(sessionResult.sessionId, path))
+        return c.json(result)
     })
 
     return app

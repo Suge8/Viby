@@ -27,6 +27,19 @@ export type RpcDeleteUploadResponse = {
     error?: string
 }
 
+export type RpcDirectoryEntry = {
+    name: string
+    type: 'file' | 'directory' | 'other'
+    size?: number
+    modified?: number
+}
+
+export type RpcListDirectoryResponse = {
+    success: boolean
+    entries?: RpcDirectoryEntry[]
+    error?: string
+}
+
 export type RpcPathExistsResponse = {
     exists: Record<string, boolean>
 }
@@ -153,6 +166,10 @@ export class RpcGateway {
 
     async readSessionFile(sessionId: string, path: string): Promise<RpcReadFileResponse> {
         return await this.sessionRpc(sessionId, 'readFile', { path }) as RpcReadFileResponse
+    }
+
+    async listDirectory(sessionId: string, path: string): Promise<RpcListDirectoryResponse> {
+        return await this.sessionRpc(sessionId, 'listDirectory', { path }) as RpcListDirectoryResponse
     }
 
     async uploadFile(sessionId: string, filename: string, content: string, mimeType: string): Promise<RpcUploadFileResponse> {

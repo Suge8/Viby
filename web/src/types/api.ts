@@ -99,6 +99,19 @@ export type FileSearchResponse = {
     error?: string
 }
 
+export type DirectoryEntry = {
+    name: string
+    type: 'file' | 'directory' | 'other'
+    size?: number
+    modified?: number
+}
+
+export type ListDirectoryResponse = {
+    success: boolean
+    entries?: DirectoryEntry[]
+    error?: string
+}
+
 export type FileReadResponse = {
     success: boolean
     content?: string
