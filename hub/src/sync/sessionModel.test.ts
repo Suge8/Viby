@@ -104,6 +104,31 @@ describe('session model', () => {
         expect(store.sessions.getSession(session.id)?.model).toBeNull()
     })
 
+    it('tracks collaboration mode updates in memory from config and keepalive', () => {
+        const store = new Store(':memory:')
+        const events: SyncEvent[] = []
+        const cache = new SessionCache(store, createPublisher(events))
+
+        const session = cache.getOrCreateSession(
+            'session-collaboration-mode',
+            { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
+            null,
+            'default',
+            'gpt-5.4'
+        )
+
+        cache.applySessionConfig(session.id, { collaborationMode: 'plan' })
+        expect(cache.getSession(session.id)?.collaborationMode).toBe('plan')
+
+        cache.handleSessionAlive({
+            sid: session.id,
+            time: Date.now(),
+            thinking: false,
+            collaborationMode: 'default'
+        })
+        expect(cache.getSession(session.id)?.collaborationMode).toBe('default')
+    })
+
     it('passes the stored model when respawning a resumed session', async () => {
         const store = new Store(':memory:')
         const engine = new SyncEngine(

@@ -1,7 +1,7 @@
 import type { ClientToServerEvents } from '@hapi/protocol'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
-import type { PermissionMode } from '@hapi/protocol/types'
+import type { CodexCollaborationMode, PermissionMode } from '@hapi/protocol/types'
 import type { Store, StoredSession } from '../../../store'
 import type { SyncEvent } from '../../../sync/syncEngine'
 import { extractTodoWriteTodosFromMessageContent } from '../../../sync/todos'
@@ -16,6 +16,7 @@ type SessionAlivePayload = {
     mode?: 'local' | 'remote'
     permissionMode?: PermissionMode
     model?: string | null
+    collaborationMode?: CodexCollaborationMode
 }
 
 type SessionEndPayload = {

@@ -1,6 +1,7 @@
 import type {
     AttachmentMetadata,
     AuthResponse,
+    CodexCollaborationMode,
     DeleteUploadResponse,
     ListDirectoryResponse,
     FileReadResponse,
@@ -307,6 +308,13 @@ export class ApiClient {
 
     async setPermissionMode(sessionId: string, mode: PermissionMode): Promise<void> {
         await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/permission-mode`, {
+            method: 'POST',
+            body: JSON.stringify({ mode })
+        })
+    }
+
+    async setCollaborationMode(sessionId: string, mode: CodexCollaborationMode): Promise<void> {
+        await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/collaboration-mode`, {
             method: 'POST',
             body: JSON.stringify({ mode })
         })

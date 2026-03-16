@@ -9,7 +9,7 @@ import { parseCodexCliOverrides } from './utils/codexCliOverrides';
 import { bootstrapSession } from '@/agent/sessionFactory';
 import { createModeChangeHandler, createRunnerLifecycle, setControlledByUser } from '@/agent/runnerLifecycle';
 import { isPermissionModeAllowedForFlavor } from '@hapi/protocol';
-import { PermissionModeSchema } from '@hapi/protocol/schemas';
+import { CodexCollaborationModeSchema, PermissionModeSchema } from '@hapi/protocol/schemas';
 import { formatMessageWithAttachments } from '@/utils/attachmentFormatter';
 
 export { emitReadyIfIdle } from './utils/emitReadyIfIdle';
@@ -23,6 +23,7 @@ export async function runCodex(opts: {
 }): Promise<void> {
     const workingDirectory = process.cwd();
     const startedBy = opts.startedBy ?? 'terminal';
+    const codexRemoteBackend = process.env.CODEX_USE_MCP_SERVER === '1' ? 'mcp-server' : 'app-server';
 
     logger.debug(`[codex] Starting with options: startedBy=${startedBy}`);
 
@@ -34,7 +35,10 @@ export async function runCodex(opts: {
         startedBy,
         workingDirectory,
         agentState: state,
-        model: opts.model
+        model: opts.model,
+        metadataOverrides: {
+            codexRemoteBackend
+        }
     });
 
     const startingMode: 'local' | 'remote' = startedBy === 'runner' ? 'remote' : 'local';
@@ -51,8 +55,8 @@ export async function runCodex(opts: {
     const sessionWrapperRef: { current: CodexSession | null } = { current: null };
 
     let currentPermissionMode: PermissionMode = opts.permissionMode ?? 'default';
-    const currentModel = opts.model;
-    let currentCollaborationMode: EnhancedMode['collaborationMode'];
+    let currentModel = opts.model;
+    let currentCollaborationMode: EnhancedMode['collaborationMode'] = 'default';
 
     const lifecycle = createRunnerLifecycle({
         session,
@@ -68,13 +72,38 @@ export async function runCodex(opts: {
         if (!sessionInstance) {
             return;
         }
+        const sessionModel = sessionInstance.getModel();
+        if (sessionModel !== undefined) {
+            currentModel = sessionModel ?? undefined;
+        }
         sessionInstance.setPermissionMode(currentPermissionMode);
-        logger.debug(`[Codex] Synced session permission mode for keepalive: ${currentPermissionMode}`);
+        sessionInstance.setModel(currentModel ?? null);
+        sessionInstance.setCollaborationMode(currentCollaborationMode);
+        logger.debug(
+            `[Codex] Synced session config for keepalive: ` +
+            `permissionMode=${currentPermissionMode}, model=${currentModel ?? 'auto'}, collaborationMode=${currentCollaborationMode}`
+        );
     };
 
     session.onUserMessage((message) => {
+        const sessionPermissionMode = sessionWrapperRef.current?.getPermissionMode();
+        if (sessionPermissionMode && isPermissionModeAllowedForFlavor(sessionPermissionMode, 'codex')) {
+            currentPermissionMode = sessionPermissionMode as PermissionMode;
+        }
+        const sessionModel = sessionWrapperRef.current?.getModel();
+        if (sessionModel !== undefined) {
+            currentModel = sessionModel ?? undefined;
+        }
+        const sessionCollaborationMode = sessionWrapperRef.current?.getCollaborationMode();
+        if (sessionCollaborationMode) {
+            currentCollaborationMode = sessionCollaborationMode;
+        }
+
         const messagePermissionMode = currentPermissionMode;
-        logger.debug(`[Codex] User message received with permission mode: ${currentPermissionMode}`);
+        logger.debug(
+            `[Codex] User message received with permission mode: ${currentPermissionMode}, ` +
+            `model: ${currentModel ?? 'auto'}, collaborationMode: ${currentCollaborationMode}`
+        );
 
         const enhancedMode: EnhancedMode = {
             permissionMode: messagePermissionMode ?? 'default',
@@ -103,16 +132,13 @@ export async function runCodex(opts: {
 
     const resolveCollaborationMode = (value: unknown): EnhancedMode['collaborationMode'] => {
         if (value === null) {
-            return undefined;
+            return 'default';
         }
-        if (typeof value !== 'string') {
+        const parsed = CodexCollaborationModeSchema.safeParse(value);
+        if (!parsed.success) {
             throw new Error('Invalid collaboration mode');
         }
-        const trimmed = value.trim();
-        if (!trimmed) {
-            throw new Error('Invalid collaboration mode');
-        }
-        return trimmed as EnhancedMode['collaborationMode'];
+        return parsed.data;
     };
 
     session.rpcHandlerManager.registerHandler('set-session-config', async (payload: unknown) => {
@@ -126,6 +152,9 @@ export async function runCodex(opts: {
         }
 
         if (config.collaborationMode !== undefined) {
+            if (codexRemoteBackend !== 'app-server') {
+                throw new Error('Collaboration mode is only supported for Codex app-server remote sessions');
+            }
             currentCollaborationMode = resolveCollaborationMode(config.collaborationMode);
         }
 
@@ -144,6 +173,8 @@ export async function runCodex(opts: {
             codexCliOverrides,
             startedBy,
             permissionMode: currentPermissionMode,
+            model: currentModel,
+            collaborationMode: currentCollaborationMode,
             resumeSessionId: opts.resumeSessionId,
             onModeChange: createModeChangeHandler(session),
             onSessionReady: (instance) => {

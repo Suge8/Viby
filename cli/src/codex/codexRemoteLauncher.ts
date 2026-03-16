@@ -156,6 +156,16 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
             return typeof value === 'string' && value.length > 0 ? value : null;
         };
 
+        const applyResolvedModel = (value: unknown): string | undefined => {
+            const resolvedModel = asString(value) ?? undefined;
+            if (!resolvedModel) {
+                return undefined;
+            }
+            session.setModel(resolvedModel);
+            logger.debug(`[Codex] Resolved app-server model: ${resolvedModel}`);
+            return resolvedModel;
+        };
+
         const buildMcpToolName = (server: unknown, tool: unknown): string | null => {
             const serverName = asString(server);
             const toolName = asString(tool);
@@ -584,6 +594,9 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
                 clientInfo: {
                     name: 'hapi-codex-client',
                     version: '1.0.0'
+                },
+                capabilities: {
+                    experimentalApi: true
                 }
             });
         } else if (mcpClient) {
@@ -680,6 +693,7 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
                                 const resumeRecord = asRecord(resumeResponse);
                                 const resumeThread = resumeRecord ? asRecord(resumeRecord.thread) : null;
                                 threadId = asString(resumeThread?.id) ?? resumeCandidate;
+                                applyResolvedModel(resumeRecord?.model);
                                 logger.debug(`[Codex] Resumed app-server thread ${threadId}`);
                             } catch (error) {
                                 logger.warn(`[Codex] Failed to resume app-server thread ${resumeCandidate}, starting new thread`, error);
@@ -693,6 +707,7 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
                             const threadRecord = asRecord(threadResponse);
                             const thread = threadRecord ? asRecord(threadRecord.thread) : null;
                             threadId = asString(thread?.id);
+                            applyResolvedModel(threadRecord?.model);
                             if (!threadId) {
                                 throw new Error('app-server thread/start did not return thread.id');
                             }
@@ -708,7 +723,10 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
                         const turnParams = buildTurnStartParams({
                             threadId,
                             message: message.message,
-                            mode: message.mode,
+                            mode: {
+                                ...message.mode,
+                                model: session.getModel() ?? message.mode.model
+                            },
                             cliOverrides: session.codexCliOverrides
                         });
                         turnInFlight = true;
@@ -750,7 +768,10 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
                     const turnParams = buildTurnStartParams({
                         threadId: this.currentThreadId,
                         message: message.message,
-                        mode: message.mode,
+                        mode: {
+                            ...message.mode,
+                            model: session.getModel() ?? message.mode.model
+                        },
                         cliOverrides: session.codexCliOverrides
                     });
                     turnInFlight = true;

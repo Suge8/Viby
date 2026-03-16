@@ -21,6 +21,7 @@ import type {
     MessageContent,
     MessageMeta,
     Metadata,
+    SessionCollaborationMode,
     Session,
     SessionModel,
     SessionPermissionMode,
@@ -438,7 +439,11 @@ export class ApiSessionClient extends EventEmitter {
     keepAlive(
         thinking: boolean,
         mode: 'local' | 'remote',
-        runtime?: { permissionMode?: SessionPermissionMode; model?: SessionModel }
+        runtime?: {
+            permissionMode?: SessionPermissionMode
+            model?: SessionModel
+            collaborationMode?: SessionCollaborationMode
+        }
     ): void {
         this.socket.volatile.emit('session-alive', {
             sid: this.sessionId,

@@ -4,6 +4,9 @@ export type ClaudePermissionMode = typeof CLAUDE_PERMISSION_MODES[number]
 export const CODEX_PERMISSION_MODES = ['default', 'read-only', 'safe-yolo', 'yolo'] as const
 export type CodexPermissionMode = typeof CODEX_PERMISSION_MODES[number]
 
+export const CODEX_COLLABORATION_MODES = ['default', 'plan'] as const
+export type CodexCollaborationMode = typeof CODEX_COLLABORATION_MODES[number]
+
 export const GEMINI_PERMISSION_MODES = ['default', 'read-only', 'safe-yolo', 'yolo'] as const
 export type GeminiPermissionMode = typeof GEMINI_PERMISSION_MODES[number]
 
@@ -60,11 +63,21 @@ export type PermissionModeOption = {
     tone: PermissionModeTone
 }
 
+export type CodexCollaborationModeOption = {
+    mode: CodexCollaborationMode
+    label: string
+}
+
 export const CLAUDE_MODEL_LABELS: Record<ClaudeModelPreset, string> = {
     sonnet: 'Sonnet',
     'sonnet[1m]': 'Sonnet 1M',
     opus: 'Opus',
     'opus[1m]': 'Opus 1M'
+}
+
+export const CODEX_COLLABORATION_MODE_LABELS: Record<CodexCollaborationMode, string> = {
+    default: 'Default',
+    plan: 'Plan'
 }
 
 export function isClaudeModelPreset(model: string | null | undefined): model is ClaudeModelPreset {
@@ -86,6 +99,10 @@ export function getPermissionModeLabel(mode: PermissionMode): string {
 
 export function getPermissionModeTone(mode: PermissionMode): PermissionModeTone {
     return PERMISSION_MODE_TONES[mode]
+}
+
+export function getCodexCollaborationModeLabel(mode: CodexCollaborationMode): string {
+    return CODEX_COLLABORATION_MODE_LABELS[mode]
 }
 
 export function getPermissionModesForFlavor(flavor?: string | null): readonly PermissionMode[] {
@@ -114,4 +131,11 @@ export function getPermissionModeOptionsForFlavor(flavor?: string | null): Permi
 
 export function isPermissionModeAllowedForFlavor(mode: PermissionMode, flavor?: string | null): boolean {
     return getPermissionModesForFlavor(flavor).includes(mode)
+}
+
+export function getCodexCollaborationModeOptions(): CodexCollaborationModeOption[] {
+    return CODEX_COLLABORATION_MODES.map((mode) => ({
+        mode,
+        label: getCodexCollaborationModeLabel(mode)
+    }))
 }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { AssistantRuntimeProvider } from '@assistant-ui/react'
 import type { ApiClient } from '@/api/client'
-import type { AttachmentMetadata, DecryptedMessage, PermissionMode, Session } from '@/types/api'
+import type { AttachmentMetadata, CodexCollaborationMode, DecryptedMessage, PermissionMode, Session } from '@/types/api'
 import type { ChatBlock, NormalizedMessage } from '@/chat/types'
 import type { Suggestion } from '@/hooks/useActiveSuggestions'
 import { normalizeDecryptedMessage } from '@/chat/normalize'
@@ -46,10 +46,14 @@ export function SessionChat(props: {
     const blocksByIdRef = useRef<Map<string, ChatBlock>>(new Map())
     const [forceScrollToken, setForceScrollToken] = useState(0)
     const agentFlavor = props.session.metadata?.flavor ?? null
-    const { abortSession, switchSession, setPermissionMode, setModel } = useSessionActions(
+    const codexCollaborationModeSupported = agentFlavor === 'codex'
+        && props.session.metadata?.codexRemoteBackend === 'app-server'
+    const controlledByUser = props.session.agentState?.controlledByUser === true
+    const { abortSession, switchSession, setPermissionMode, setCollaborationMode, setModel } = useSessionActions(
         props.api,
         props.session.id,
-        agentFlavor
+        agentFlavor,
+        codexCollaborationModeSupported
     )
 
     // Voice assistant integration
@@ -205,6 +209,17 @@ export function SessionChat(props: {
         }
     }, [setPermissionMode, props.onRefresh, haptic])
 
+    const handleCollaborationModeChange = useCallback(async (mode: CodexCollaborationMode) => {
+        try {
+            await setCollaborationMode(mode)
+            haptic.notification('success')
+            props.onRefresh()
+        } catch (e) {
+            haptic.notification('error')
+            console.error('Failed to set collaboration mode:', e)
+        }
+    }, [setCollaborationMode, props.onRefresh, haptic])
+
     // Model mode change handler
     const handleModelChange = useCallback(async (model: string | null) => {
         try {
@@ -314,6 +329,7 @@ export function SessionChat(props: {
                     <HappyComposer
                         disabled={props.isSending}
                         permissionMode={props.session.permissionMode}
+                        collaborationMode={codexCollaborationModeSupported ? props.session.collaborationMode : undefined}
                         model={props.session.model}
                         agentFlavor={agentFlavor}
                         active={props.session.active}
@@ -321,7 +337,12 @@ export function SessionChat(props: {
                         thinking={props.session.thinking}
                         agentState={props.session.agentState}
                         contextSize={reduced.latestUsage?.contextSize}
-                        controlledByUser={props.session.agentState?.controlledByUser === true}
+                        controlledByUser={controlledByUser}
+                        onCollaborationModeChange={
+                            codexCollaborationModeSupported && props.session.active && !controlledByUser
+                                ? handleCollaborationModeChange
+                                : undefined
+                        }
                         onPermissionModeChange={handlePermissionModeChange}
                         onModelChange={handleModelChange}
                         onSwitchToRemote={handleSwitchToRemote}

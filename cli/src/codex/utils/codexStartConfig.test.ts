@@ -8,7 +8,7 @@ describe('buildCodexStartConfig', () => {
     it('applies CLI overrides when permission mode is default', () => {
         const config = buildCodexStartConfig({
             message: 'hello',
-            mode: { permissionMode: 'default' },
+            mode: { permissionMode: 'default', collaborationMode: 'default' },
             first: true,
             mcpServers,
             cliOverrides: { sandbox: 'danger-full-access', approvalPolicy: 'never' }
@@ -25,7 +25,7 @@ describe('buildCodexStartConfig', () => {
     it('ignores CLI overrides when permission mode is not default', () => {
         const config = buildCodexStartConfig({
             message: 'hello',
-            mode: { permissionMode: 'yolo' },
+            mode: { permissionMode: 'yolo', collaborationMode: 'default' },
             first: false,
             mcpServers,
             cliOverrides: { sandbox: 'read-only', approvalPolicy: 'never' }
@@ -38,7 +38,7 @@ describe('buildCodexStartConfig', () => {
     it('keeps on-failure approvals for safe-yolo', () => {
         const config = buildCodexStartConfig({
             message: 'hello',
-            mode: { permissionMode: 'safe-yolo' },
+            mode: { permissionMode: 'safe-yolo', collaborationMode: 'default' },
             first: false,
             mcpServers
         });
@@ -50,7 +50,7 @@ describe('buildCodexStartConfig', () => {
     it('passes model when provided', () => {
         const config = buildCodexStartConfig({
             message: 'hello',
-            mode: { permissionMode: 'default', model: 'o3' },
+            mode: { permissionMode: 'default', model: 'o3', collaborationMode: 'default' },
             first: false,
             mcpServers
         });

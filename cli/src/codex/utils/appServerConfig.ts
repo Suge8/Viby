@@ -49,6 +49,20 @@ function buildMcpServerConfig(mcpServers: McpServersConfig): Record<string, unkn
     return config;
 }
 
+function resolveInstructions(args: {
+    baseInstructions?: string;
+    developerInstructions?: string;
+}): { baseInstructions: string; developerInstructions: string } {
+    const baseInstructions = args.baseInstructions ?? codexSystemPrompt;
+    const developerInstructions = args.developerInstructions
+        ? `${baseInstructions}\n\n${args.developerInstructions}`
+        : baseInstructions;
+    return {
+        baseInstructions,
+        developerInstructions
+    };
+}
+
 export function buildThreadStartParams(args: {
     mode: EnhancedMode;
     mcpServers: McpServersConfig;
@@ -64,10 +78,10 @@ export function buildThreadStartParams(args: {
     const resolvedSandbox = cliOverrides?.sandbox ?? sandbox;
 
     const config = buildMcpServerConfig(args.mcpServers);
-    const baseInstructions = args.baseInstructions ?? codexSystemPrompt;
-    const resolvedDeveloperInstructions = args.developerInstructions
-        ? `${baseInstructions}\n\n${args.developerInstructions}`
-        : baseInstructions;
+    const {
+        baseInstructions,
+        developerInstructions: resolvedDeveloperInstructions
+    } = resolveInstructions(args);
     const configWithInstructions = {
         ...config,
         developer_instructions: resolvedDeveloperInstructions
@@ -93,6 +107,8 @@ export function buildTurnStartParams(args: {
     message: string;
     mode?: EnhancedMode;
     cliOverrides?: CodexCliOverrides;
+    baseInstructions?: string;
+    developerInstructions?: string;
     overrides?: {
         approvalPolicy?: TurnStartParams['approvalPolicy'];
         sandboxPolicy?: TurnStartParams['sandboxPolicy'];
@@ -123,10 +139,17 @@ export function buildTurnStartParams(args: {
     const collaborationMode = args.mode?.collaborationMode;
     const model = args.overrides?.model ?? args.mode?.model;
     if (collaborationMode) {
-        const settings = model ? { model } : undefined;
-        params.collaborationMode = settings
-            ? { mode: collaborationMode, settings }
-            : { mode: collaborationMode };
+        if (!model) {
+            throw new Error(`Collaboration mode '${collaborationMode}' requires a resolved model`);
+        }
+        const { developerInstructions } = resolveInstructions(args);
+        params.collaborationMode = {
+            mode: collaborationMode,
+            settings: {
+                model,
+                developer_instructions: developerInstructions
+            }
+        };
     } else if (model) {
         params.model = model;
     }

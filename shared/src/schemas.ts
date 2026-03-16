@@ -1,7 +1,8 @@
 import { z } from 'zod'
-import { PERMISSION_MODES } from './modes'
+import { CODEX_COLLABORATION_MODES, PERMISSION_MODES } from './modes'
 
 export const PermissionModeSchema = z.enum(PERMISSION_MODES)
+export const CodexCollaborationModeSchema = z.enum(CODEX_COLLABORATION_MODES)
 
 const MetadataSummarySchema = z.object({
     text: z.string(),
@@ -45,6 +46,7 @@ export const MetadataSchema = z.object({
     archivedBy: z.string().optional(),
     archiveReason: z.string().optional(),
     flavor: z.string().nullish(),
+    codexRemoteBackend: z.enum(['app-server', 'mcp-server']).optional(),
     worktree: WorktreeMetadataSchema.optional()
 })
 
@@ -174,7 +176,8 @@ export const SessionSchema = z.object({
     todos: TodosSchema.optional(),
     teamState: TeamStateSchema.optional(),
     model: z.string().nullable(),
-    permissionMode: PermissionModeSchema.optional()
+    permissionMode: PermissionModeSchema.optional(),
+    collaborationMode: CodexCollaborationModeSchema.optional()
 })
 
 export type Session = z.infer<typeof SessionSchema>

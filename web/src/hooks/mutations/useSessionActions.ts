@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { isPermissionModeAllowedForFlavor } from '@hapi/protocol'
 import type { ApiClient } from '@/api/client'
-import type { PermissionMode } from '@/types/api'
+import type { CodexCollaborationMode, PermissionMode } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
 import { clearMessageWindow } from '@/lib/message-window-store'
 import { isKnownFlavor } from '@/lib/agentFlavorUtils'
@@ -9,12 +9,14 @@ import { isKnownFlavor } from '@/lib/agentFlavorUtils'
 export function useSessionActions(
     api: ApiClient | null,
     sessionId: string | null,
-    agentFlavor?: string | null
+    agentFlavor?: string | null,
+    codexCollaborationModeSupported?: boolean
 ): {
     abortSession: () => Promise<void>
     archiveSession: () => Promise<void>
     switchSession: () => Promise<void>
     setPermissionMode: (mode: PermissionMode) => Promise<void>
+    setCollaborationMode: (mode: CodexCollaborationMode) => Promise<void>
     setModel: (model: string | null) => Promise<void>
     renameSession: (name: string) => Promise<void>
     deleteSession: () => Promise<void>
@@ -71,6 +73,22 @@ export function useSessionActions(
         onSuccess: () => void invalidateSession(),
     })
 
+    const collaborationMutation = useMutation({
+        mutationFn: async (mode: CodexCollaborationMode) => {
+            if (!api || !sessionId) {
+                throw new Error('Session unavailable')
+            }
+            if (agentFlavor !== 'codex') {
+                throw new Error('Collaboration mode is only supported for Codex sessions')
+            }
+            if (!codexCollaborationModeSupported) {
+                throw new Error('Collaboration mode is only supported for Codex app-server remote sessions')
+            }
+            await api.setCollaborationMode(sessionId, mode)
+        },
+        onSuccess: () => void invalidateSession(),
+    })
+
     const modelMutation = useMutation({
         mutationFn: async (model: string | null) => {
             if (!api || !sessionId) {
@@ -111,6 +129,7 @@ export function useSessionActions(
         archiveSession: archiveMutation.mutateAsync,
         switchSession: switchMutation.mutateAsync,
         setPermissionMode: permissionMutation.mutateAsync,
+        setCollaborationMode: collaborationMutation.mutateAsync,
         setModel: modelMutation.mutateAsync,
         renameSession: renameMutation.mutateAsync,
         deleteSession: deleteMutation.mutateAsync,
@@ -118,6 +137,7 @@ export function useSessionActions(
             || archiveMutation.isPending
             || switchMutation.isPending
             || permissionMutation.isPending
+            || collaborationMutation.isPending
             || modelMutation.isPending
             || renameMutation.isPending
             || deleteMutation.isPending,

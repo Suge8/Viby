@@ -20,6 +20,8 @@ export type { SessionSummary, SessionSummaryMetadata } from './sessionSummary'
 export type {
     AgentFlavor,
     ClaudePermissionMode,
+    CodexCollaborationMode,
+    CodexCollaborationModeOption,
     CodexPermissionMode,
     CursorPermissionMode,
     GeminiPermissionMode,

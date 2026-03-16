@@ -1,5 +1,5 @@
 import { AgentStateSchema, MetadataSchema, TeamStateSchema } from '@hapi/protocol/schemas'
-import type { PermissionMode, Session } from '@hapi/protocol/types'
+import type { CodexCollaborationMode, PermissionMode, Session } from '@hapi/protocol/types'
 import type { Store } from '../store'
 import { clampAliveTime } from './aliveTime'
 import { EventPublisher } from './eventPublisher'
@@ -127,7 +127,8 @@ export class SessionCache {
             todos,
             teamState,
             model: stored.model,
-            permissionMode: existing?.permissionMode
+            permissionMode: existing?.permissionMode,
+            collaborationMode: existing?.collaborationMode
         }
 
         this.sessions.set(sessionId, session)
@@ -149,6 +150,7 @@ export class SessionCache {
         mode?: 'local' | 'remote'
         permissionMode?: PermissionMode
         model?: string | null
+        collaborationMode?: CodexCollaborationMode
     }): void {
         const t = clampAliveTime(payload.time)
         if (!t) return
@@ -160,6 +162,7 @@ export class SessionCache {
         const wasThinking = session.thinking
         const previousPermissionMode = session.permissionMode
         const previousModel = session.model
+        const previousCollaborationMode = session.collaborationMode
 
         session.active = true
         session.activeAt = Math.max(session.activeAt, t)
@@ -176,10 +179,15 @@ export class SessionCache {
             }
             session.model = payload.model
         }
+        if (payload.collaborationMode !== undefined) {
+            session.collaborationMode = payload.collaborationMode
+        }
 
         const now = Date.now()
         const lastBroadcastAt = this.lastBroadcastAtBySessionId.get(session.id) ?? 0
-        const modeChanged = previousPermissionMode !== session.permissionMode || previousModel !== session.model
+        const modeChanged = previousPermissionMode !== session.permissionMode
+            || previousModel !== session.model
+            || previousCollaborationMode !== session.collaborationMode
         const shouldBroadcast = (!wasActive && session.active)
             || (wasThinking !== session.thinking)
             || modeChanged
@@ -195,7 +203,8 @@ export class SessionCache {
                     activeAt: session.activeAt,
                     thinking: session.thinking,
                     permissionMode: session.permissionMode,
-                    model: session.model
+                    model: session.model,
+                    collaborationMode: session.collaborationMode
                 }
             })
         }
@@ -230,7 +239,14 @@ export class SessionCache {
         }
     }
 
-    applySessionConfig(sessionId: string, config: { permissionMode?: PermissionMode; model?: string | null }): void {
+    applySessionConfig(
+        sessionId: string,
+        config: {
+            permissionMode?: PermissionMode
+            model?: string | null
+            collaborationMode?: CodexCollaborationMode
+        }
+    ): void {
         const session = this.sessions.get(sessionId) ?? this.refreshSession(sessionId)
         if (!session) {
             return
@@ -249,6 +265,9 @@ export class SessionCache {
                 }
             }
             session.model = config.model
+        }
+        if (config.collaborationMode !== undefined) {
+            session.collaborationMode = config.collaborationMode
         }
 
         this.publisher.emit({ type: 'session-updated', sessionId, data: session })

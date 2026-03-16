@@ -1,4 +1,4 @@
-import type { PermissionMode } from '@hapi/protocol/types'
+import type { CodexCollaborationMode, PermissionMode } from '@hapi/protocol/types'
 import type { Server } from 'socket.io'
 import type { RpcRegistry } from '../socket/rpcRegistry'
 
@@ -94,6 +94,7 @@ export class RpcGateway {
         config: {
             permissionMode?: PermissionMode
             model?: string | null
+            collaborationMode?: CodexCollaborationMode
         }
     ): Promise<unknown> {
         return await this.sessionRpc(sessionId, 'set-session-config', config)
