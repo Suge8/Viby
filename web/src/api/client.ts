@@ -9,7 +9,6 @@ import type {
     MachinePathsExistsResponse,
     MachinesResponse,
     MessagesResponse,
-    ModelMode,
     PermissionMode,
     PushSubscriptionPayload,
     PushUnsubscribePayload,
@@ -313,7 +312,7 @@ export class ApiClient {
         })
     }
 
-    async setModelMode(sessionId: string, model: ModelMode): Promise<void> {
+    async setModel(sessionId: string, model: string | null): Promise<void> {
         await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/model`, {
             method: 'POST',
             body: JSON.stringify({ model })

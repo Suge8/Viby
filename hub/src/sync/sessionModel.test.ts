@@ -58,6 +58,52 @@ describe('session model', () => {
         expect(merged?.model).toBe('gpt-5.4')
     })
 
+    it('persists applied session model updates, including clear-to-auto', () => {
+        const store = new Store(':memory:')
+        const events: SyncEvent[] = []
+        const cache = new SessionCache(store, createPublisher(events))
+
+        const session = cache.getOrCreateSession(
+            'session-model-config',
+            { path: '/tmp/project', host: 'localhost', flavor: 'claude' },
+            null,
+            'default',
+            'sonnet'
+        )
+
+        cache.applySessionConfig(session.id, { model: 'opus[1m]' })
+        expect(cache.getSession(session.id)?.model).toBe('opus[1m]')
+        expect(store.sessions.getSession(session.id)?.model).toBe('opus[1m]')
+
+        cache.applySessionConfig(session.id, { model: null })
+        expect(cache.getSession(session.id)?.model).toBeNull()
+        expect(store.sessions.getSession(session.id)?.model).toBeNull()
+    })
+
+    it('persists keepalive model changes, including clearing the model', () => {
+        const store = new Store(':memory:')
+        const events: SyncEvent[] = []
+        const cache = new SessionCache(store, createPublisher(events))
+
+        const session = cache.getOrCreateSession(
+            'session-model-heartbeat',
+            { path: '/tmp/project', host: 'localhost', flavor: 'claude' },
+            null,
+            'default',
+            'sonnet'
+        )
+
+        cache.handleSessionAlive({
+            sid: session.id,
+            time: Date.now(),
+            thinking: false,
+            model: null
+        })
+
+        expect(cache.getSession(session.id)?.model).toBeNull()
+        expect(store.sessions.getSession(session.id)?.model).toBeNull()
+    })
+
     it('passes the stored model when respawning a resumed session', async () => {
         const store = new Store(':memory:')
         const engine = new SyncEngine(

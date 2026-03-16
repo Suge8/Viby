@@ -9,7 +9,6 @@ import type {
 export type {
     AgentState,
     AttachmentMetadata,
-    ModelMode,
     PermissionMode,
     Session,
     SessionSummary,

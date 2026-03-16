@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { AssistantRuntimeProvider } from '@assistant-ui/react'
 import type { ApiClient } from '@/api/client'
-import type { AttachmentMetadata, DecryptedMessage, ModelMode, PermissionMode, Session } from '@/types/api'
+import type { AttachmentMetadata, DecryptedMessage, PermissionMode, Session } from '@/types/api'
 import type { ChatBlock, NormalizedMessage } from '@/chat/types'
 import type { Suggestion } from '@/hooks/useActiveSuggestions'
 import { normalizeDecryptedMessage } from '@/chat/normalize'
@@ -46,7 +46,7 @@ export function SessionChat(props: {
     const blocksByIdRef = useRef<Map<string, ChatBlock>>(new Map())
     const [forceScrollToken, setForceScrollToken] = useState(0)
     const agentFlavor = props.session.metadata?.flavor ?? null
-    const { abortSession, switchSession, setPermissionMode, setModelMode } = useSessionActions(
+    const { abortSession, switchSession, setPermissionMode, setModel } = useSessionActions(
         props.api,
         props.session.id,
         agentFlavor
@@ -206,16 +206,16 @@ export function SessionChat(props: {
     }, [setPermissionMode, props.onRefresh, haptic])
 
     // Model mode change handler
-    const handleModelModeChange = useCallback(async (mode: ModelMode) => {
+    const handleModelChange = useCallback(async (model: string | null) => {
         try {
-            await setModelMode(mode)
+            await setModel(model)
             haptic.notification('success')
             props.onRefresh()
         } catch (e) {
             haptic.notification('error')
-            console.error('Failed to set model mode:', e)
+            console.error('Failed to set model:', e)
         }
-    }, [setModelMode, props.onRefresh, haptic])
+    }, [setModel, props.onRefresh, haptic])
 
     // Abort handler
     const handleAbort = useCallback(async () => {
@@ -314,7 +314,7 @@ export function SessionChat(props: {
                     <HappyComposer
                         disabled={props.isSending}
                         permissionMode={props.session.permissionMode}
-                        modelMode={props.session.modelMode}
+                        model={props.session.model}
                         agentFlavor={agentFlavor}
                         active={props.session.active}
                         allowSendWhenInactive
@@ -323,7 +323,7 @@ export function SessionChat(props: {
                         contextSize={reduced.latestUsage?.contextSize}
                         controlledByUser={props.session.agentState?.controlledByUser === true}
                         onPermissionModeChange={handlePermissionModeChange}
-                        onModelModeChange={handleModelModeChange}
+                        onModelChange={handleModelChange}
                         onSwitchToRemote={handleSwitchToRemote}
                         onTerminal={props.session.active ? handleViewTerminal : undefined}
                         autocompleteSuggestions={props.autocompleteSuggestions}

@@ -1,5 +1,5 @@
 import { AgentStateSchema, MetadataSchema, TeamStateSchema } from '@hapi/protocol/schemas'
-import type { ModelMode, PermissionMode, Session } from '@hapi/protocol/types'
+import type { PermissionMode, Session } from '@hapi/protocol/types'
 import type { Store } from '../store'
 import { clampAliveTime } from './aliveTime'
 import { EventPublisher } from './eventPublisher'
@@ -126,9 +126,8 @@ export class SessionCache {
             thinkingAt: existing?.thinkingAt ?? 0,
             todos,
             teamState,
-            model: stored.model ?? undefined,
-            permissionMode: existing?.permissionMode,
-            modelMode: existing?.modelMode
+            model: stored.model,
+            permissionMode: existing?.permissionMode
         }
 
         this.sessions.set(sessionId, session)
@@ -149,7 +148,7 @@ export class SessionCache {
         thinking?: boolean
         mode?: 'local' | 'remote'
         permissionMode?: PermissionMode
-        modelMode?: ModelMode
+        model?: string | null
     }): void {
         const t = clampAliveTime(payload.time)
         if (!t) return
@@ -160,7 +159,7 @@ export class SessionCache {
         const wasActive = session.active
         const wasThinking = session.thinking
         const previousPermissionMode = session.permissionMode
-        const previousModelMode = session.modelMode
+        const previousModel = session.model
 
         session.active = true
         session.activeAt = Math.max(session.activeAt, t)
@@ -169,13 +168,18 @@ export class SessionCache {
         if (payload.permissionMode !== undefined) {
             session.permissionMode = payload.permissionMode
         }
-        if (payload.modelMode !== undefined) {
-            session.modelMode = payload.modelMode
+        if (payload.model !== undefined) {
+            if (payload.model !== session.model) {
+                this.store.sessions.setSessionModel(payload.sid, payload.model, session.namespace, {
+                    touchUpdatedAt: false
+                })
+            }
+            session.model = payload.model
         }
 
         const now = Date.now()
         const lastBroadcastAt = this.lastBroadcastAtBySessionId.get(session.id) ?? 0
-        const modeChanged = previousPermissionMode !== session.permissionMode || previousModelMode !== session.modelMode
+        const modeChanged = previousPermissionMode !== session.permissionMode || previousModel !== session.model
         const shouldBroadcast = (!wasActive && session.active)
             || (wasThinking !== session.thinking)
             || modeChanged
@@ -191,7 +195,7 @@ export class SessionCache {
                     activeAt: session.activeAt,
                     thinking: session.thinking,
                     permissionMode: session.permissionMode,
-                    modelMode: session.modelMode
+                    model: session.model
                 }
             })
         }
@@ -226,7 +230,7 @@ export class SessionCache {
         }
     }
 
-    applySessionConfig(sessionId: string, config: { permissionMode?: PermissionMode; modelMode?: ModelMode }): void {
+    applySessionConfig(sessionId: string, config: { permissionMode?: PermissionMode; model?: string | null }): void {
         const session = this.sessions.get(sessionId) ?? this.refreshSession(sessionId)
         if (!session) {
             return
@@ -235,8 +239,16 @@ export class SessionCache {
         if (config.permissionMode !== undefined) {
             session.permissionMode = config.permissionMode
         }
-        if (config.modelMode !== undefined) {
-            session.modelMode = config.modelMode
+        if (config.model !== undefined) {
+            if (config.model !== session.model) {
+                const updated = this.store.sessions.setSessionModel(sessionId, config.model, session.namespace, {
+                    touchUpdatedAt: false
+                })
+                if (!updated) {
+                    throw new Error('Failed to update session model')
+                }
+            }
+            session.model = config.model
         }
 
         this.publisher.emit({ type: 'session-updated', sessionId, data: session })

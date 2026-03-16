@@ -30,7 +30,7 @@ const RECONNECT_MAX_DELAY_MS = 30_000
 const RECONNECT_JITTER_MS = 500
 const INVALIDATION_BATCH_MS = 16
 
-type SessionPatch = Partial<Pick<Session, 'active' | 'thinking' | 'activeAt' | 'updatedAt' | 'model' | 'permissionMode' | 'modelMode'>>
+type SessionPatch = Partial<Pick<Session, 'active' | 'thinking' | 'activeAt' | 'updatedAt' | 'model' | 'permissionMode'>>
 
 function sortSessionSummaries(left: SessionSummary, right: SessionSummary): number {
     if (left.active !== right.active) {
@@ -81,16 +81,12 @@ function getSessionPatch(value: unknown): SessionPatch | null {
         patch.updatedAt = value.updatedAt
         hasKnownPatch = true
     }
-    if (typeof value.model === 'string') {
+    if (value.model === null || typeof value.model === 'string') {
         patch.model = value.model
         hasKnownPatch = true
     }
     if (typeof value.permissionMode === 'string') {
         patch.permissionMode = value.permissionMode as Session['permissionMode']
-        hasKnownPatch = true
-    }
-    if (typeof value.modelMode === 'string') {
-        patch.modelMode = value.modelMode as Session['modelMode']
         hasKnownPatch = true
     }
 
@@ -101,7 +97,7 @@ function hasUnknownSessionPatchKeys(value: unknown): boolean {
     if (!hasRecordShape(value)) {
         return false
     }
-    const knownKeys = new Set(['active', 'thinking', 'activeAt', 'updatedAt', 'model', 'permissionMode', 'modelMode'])
+    const knownKeys = new Set(['active', 'thinking', 'activeAt', 'updatedAt', 'model', 'permissionMode'])
     return Object.keys(value).some((key) => !knownKeys.has(key))
 }
 
@@ -386,8 +382,7 @@ export function useSSE(options: {
                     thinking: patch.thinking ?? current.thinking,
                     activeAt: patch.activeAt ?? current.activeAt,
                     updatedAt: patch.updatedAt ?? current.updatedAt,
-                    model: patch.model ?? current.model,
-                    modelMode: patch.modelMode ?? current.modelMode
+                    model: Object.prototype.hasOwnProperty.call(patch, 'model') ? patch.model ?? null : current.model
                 }
 
                 patched = true

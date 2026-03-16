@@ -1,10 +1,11 @@
-import { getModelModeLabel } from '@hapi/protocol'
-import type { Session, SessionSummary } from '@/types/api'
+import { getClaudeModelLabel } from '@hapi/protocol'
 
-type SessionModelSource = Pick<Session, 'model' | 'modelMode'> | Pick<SessionSummary, 'model' | 'modelMode'>
+type SessionModelSource = {
+    model?: string | null
+}
 
 export type SessionModelLabel = {
-    key: 'session.item.model' | 'session.item.modelMode'
+    key: 'session.item.model'
     value: string
 }
 
@@ -13,14 +14,7 @@ export function getSessionModelLabel(session: SessionModelSource): SessionModelL
     if (explicitModel) {
         return {
             key: 'session.item.model',
-            value: explicitModel
-        }
-    }
-
-    if (session.modelMode) {
-        return {
-            key: 'session.item.modelMode',
-            value: getModelModeLabel(session.modelMode)
+            value: getClaudeModelLabel(explicitModel) ?? explicitModel
         }
     }
 

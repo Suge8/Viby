@@ -1,8 +1,7 @@
 import { z } from 'zod'
-import { MODEL_MODES, PERMISSION_MODES } from './modes'
+import { PERMISSION_MODES } from './modes'
 
 export const PermissionModeSchema = z.enum(PERMISSION_MODES)
-export const ModelModeSchema = z.enum(MODEL_MODES)
 
 const MetadataSummarySchema = z.object({
     text: z.string(),
@@ -174,9 +173,8 @@ export const SessionSchema = z.object({
     thinkingAt: z.number(),
     todos: TodosSchema.optional(),
     teamState: TeamStateSchema.optional(),
-    model: z.string().optional(),
-    permissionMode: PermissionModeSchema.optional(),
-    modelMode: ModelModeSchema.optional()
+    model: z.string().nullable(),
+    permissionMode: PermissionModeSchema.optional()
 })
 
 export type Session = z.infer<typeof SessionSchema>

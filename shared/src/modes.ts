@@ -25,8 +25,8 @@ export const PERMISSION_MODES = [
 ] as const
 export type PermissionMode = typeof PERMISSION_MODES[number]
 
-export const MODEL_MODES = ['default', 'sonnet', 'sonnet[1m]', 'opus', 'opus[1m]'] as const
-export type ModelMode = typeof MODEL_MODES[number]
+export const CLAUDE_MODEL_PRESETS = ['sonnet', 'sonnet[1m]', 'opus', 'opus[1m]'] as const
+export type ClaudeModelPreset = typeof CLAUDE_MODEL_PRESETS[number]
 
 export type AgentFlavor = 'claude' | 'codex' | 'gemini' | 'opencode' | 'cursor'
 
@@ -60,16 +60,24 @@ export type PermissionModeOption = {
     tone: PermissionModeTone
 }
 
-export const MODEL_MODE_LABELS: Record<ModelMode, string> = {
-    default: 'Default',
+export const CLAUDE_MODEL_LABELS: Record<ClaudeModelPreset, string> = {
     sonnet: 'Sonnet',
     'sonnet[1m]': 'Sonnet 1M',
     opus: 'Opus',
     'opus[1m]': 'Opus 1M'
 }
 
-export function getModelModeLabel(mode: ModelMode): string {
-    return MODEL_MODE_LABELS[mode]
+export function isClaudeModelPreset(model: string | null | undefined): model is ClaudeModelPreset {
+    return typeof model === 'string' && CLAUDE_MODEL_PRESETS.includes(model as ClaudeModelPreset)
+}
+
+export function getClaudeModelLabel(model: string): string | null {
+    const trimmedModel = model.trim()
+    if (!trimmedModel) {
+        return null
+    }
+
+    return CLAUDE_MODEL_LABELS[trimmedModel as ClaudeModelPreset] ?? null
 }
 
 export function getPermissionModeLabel(mode: PermissionMode): string {
@@ -106,15 +114,4 @@ export function getPermissionModeOptionsForFlavor(flavor?: string | null): Permi
 
 export function isPermissionModeAllowedForFlavor(mode: PermissionMode, flavor?: string | null): boolean {
     return getPermissionModesForFlavor(flavor).includes(mode)
-}
-
-export function getModelModesForFlavor(flavor?: string | null): readonly ModelMode[] {
-    if (flavor === 'codex' || flavor === 'gemini' || flavor === 'opencode' || flavor === 'cursor') {
-        return []
-    }
-    return MODEL_MODES
-}
-
-export function isModelModeAllowedForFlavor(mode: ModelMode, flavor?: string | null): boolean {
-    return getModelModesForFlavor(flavor).includes(mode)
 }

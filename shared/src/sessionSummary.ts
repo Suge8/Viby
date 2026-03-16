@@ -1,4 +1,3 @@
-import type { ModelMode } from './modes'
 import type { Session, WorktreeMetadata } from './schemas'
 
 export type SessionSummaryMetadata = {
@@ -19,8 +18,7 @@ export type SessionSummary = {
     metadata: SessionSummaryMetadata | null
     todoProgress: { completed: number; total: number } | null
     pendingRequestsCount: number
-    model?: string
-    modelMode?: ModelMode
+    model: string | null
 }
 
 export function toSessionSummary(session: Session): SessionSummary {
@@ -49,7 +47,6 @@ export function toSessionSummary(session: Session): SessionSummary {
         metadata,
         todoProgress,
         pendingRequestsCount,
-        model: session.model,
-        modelMode: session.modelMode
+        model: session.model
     }
 }

@@ -1,4 +1,4 @@
-import { getModelModeLabel, MODEL_MODES } from '@hapi/protocol'
+import { CLAUDE_MODEL_PRESETS, getClaudeModelLabel } from '@hapi/protocol'
 import { describe, expect, it } from 'vitest'
 import { MODEL_OPTIONS } from './types'
 
@@ -13,9 +13,9 @@ describe('Claude model options', () => {
         ])
     })
 
-    it('exposes friendly labels for session model modes', () => {
-        expect(MODEL_MODES).toEqual(['default', 'sonnet', 'sonnet[1m]', 'opus', 'opus[1m]'])
-        expect(getModelModeLabel('sonnet[1m]')).toBe('Sonnet 1M')
-        expect(getModelModeLabel('opus[1m]')).toBe('Opus 1M')
+    it('exposes friendly labels for Claude model presets', () => {
+        expect(CLAUDE_MODEL_PRESETS).toEqual(['sonnet', 'sonnet[1m]', 'opus', 'opus[1m]'])
+        expect(getClaudeModelLabel('sonnet[1m]')).toBe('Sonnet 1M')
+        expect(getClaudeModelLabel('opus[1m]')).toBe('Opus 1M')
     })
 })
