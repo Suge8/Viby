@@ -23,7 +23,6 @@ export async function runCodex(opts: {
 }): Promise<void> {
     const workingDirectory = process.cwd();
     const startedBy = opts.startedBy ?? 'terminal';
-    const codexRemoteBackend = process.env.CODEX_USE_MCP_SERVER === '1' ? 'mcp-server' : 'app-server';
 
     logger.debug(`[codex] Starting with options: startedBy=${startedBy}`);
 
@@ -35,10 +34,7 @@ export async function runCodex(opts: {
         startedBy,
         workingDirectory,
         agentState: state,
-        model: opts.model,
-        metadataOverrides: {
-            codexRemoteBackend
-        }
+        model: opts.model
     });
 
     const startingMode: 'local' | 'remote' = startedBy === 'runner' ? 'remote' : 'local';
@@ -152,9 +148,6 @@ export async function runCodex(opts: {
         }
 
         if (config.collaborationMode !== undefined) {
-            if (codexRemoteBackend !== 'app-server') {
-                throw new Error('Collaboration mode is only supported for Codex app-server remote sessions');
-            }
             currentCollaborationMode = resolveCollaborationMode(config.collaborationMode);
         }
 

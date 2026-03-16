@@ -46,9 +46,8 @@ export function SessionChat(props: {
     const blocksByIdRef = useRef<Map<string, ChatBlock>>(new Map())
     const [forceScrollToken, setForceScrollToken] = useState(0)
     const agentFlavor = props.session.metadata?.flavor ?? null
-    const codexCollaborationModeSupported = agentFlavor === 'codex'
-        && props.session.metadata?.codexRemoteBackend === 'app-server'
     const controlledByUser = props.session.agentState?.controlledByUser === true
+    const codexCollaborationModeSupported = agentFlavor === 'codex' && !controlledByUser
     const { abortSession, switchSession, setPermissionMode, setCollaborationMode, setModel } = useSessionActions(
         props.api,
         props.session.id,

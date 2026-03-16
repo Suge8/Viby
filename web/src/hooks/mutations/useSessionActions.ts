@@ -82,7 +82,7 @@ export function useSessionActions(
                 throw new Error('Collaboration mode is only supported for Codex sessions')
             }
             if (!codexCollaborationModeSupported) {
-                throw new Error('Collaboration mode is only supported for Codex app-server remote sessions')
+                throw new Error('Collaboration mode is only supported for remote Codex sessions')
             }
             await api.setCollaborationMode(sessionId, mode)
         },

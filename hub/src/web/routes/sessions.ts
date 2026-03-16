@@ -278,9 +278,6 @@ export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Ho
         if (sessionResult.session.agentState?.controlledByUser === true) {
             return c.json({ error: 'Collaboration mode can only be changed for remote Codex sessions' }, 409)
         }
-        if (sessionResult.session.metadata?.codexRemoteBackend !== 'app-server') {
-            return c.json({ error: 'Collaboration mode is only supported for Codex app-server remote sessions' }, 409)
-        }
 
         const body = await c.req.json().catch(() => null)
         const parsed = collaborationModeSchema.safeParse(body)

@@ -168,11 +168,9 @@ describe('codexRemoteLauncher', () => {
         harness.notifications = [];
         harness.registerRequestCalls = [];
         harness.initializeCalls = [];
-        delete process.env.CODEX_USE_MCP_SERVER;
     });
 
     it('finishes a turn and emits ready when task lifecycle events omit turn_id', async () => {
-        delete process.env.CODEX_USE_MCP_SERVER;
         const {
             session,
             sessionEvents,

@@ -8,8 +8,7 @@ function createSession(overrides?: Partial<Session>): Session {
     const baseMetadata = {
         path: '/tmp/project',
         host: 'localhost',
-        flavor: 'codex' as const,
-        codexRemoteBackend: 'app-server' as const
+        flavor: 'codex' as const
     }
     const base: Session = {
         id: 'session-1',
@@ -70,13 +69,12 @@ function createApp(session: Session) {
 }
 
 describe('sessions routes', () => {
-    it('rejects collaboration mode changes for MCP-backed Codex sessions', async () => {
+    it('rejects collaboration mode changes for local Codex sessions', async () => {
         const session = createSession({
-            metadata: {
-                path: '/tmp/project',
-                host: 'localhost',
-                flavor: 'codex',
-                codexRemoteBackend: 'mcp-server'
+            agentState: {
+                controlledByUser: true,
+                requests: {},
+                completedRequests: {}
             }
         })
         const { app, applySessionConfigCalls } = createApp(session)
@@ -89,12 +87,35 @@ describe('sessions routes', () => {
 
         expect(response.status).toBe(409)
         expect(await response.json()).toEqual({
-            error: 'Collaboration mode is only supported for Codex app-server remote sessions'
+            error: 'Collaboration mode can only be changed for remote Codex sessions'
         })
         expect(applySessionConfigCalls).toEqual([])
     })
 
-    it('applies collaboration mode changes for app-server Codex sessions', async () => {
+    it('rejects collaboration mode changes for non-Codex sessions', async () => {
+        const session = createSession({
+            metadata: {
+                path: '/tmp/project',
+                host: 'localhost',
+                flavor: 'claude'
+            }
+        })
+        const { app, applySessionConfigCalls } = createApp(session)
+
+        const response = await app.request('/api/sessions/session-1/collaboration-mode', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ mode: 'plan' })
+        })
+
+        expect(response.status).toBe(400)
+        expect(await response.json()).toEqual({
+            error: 'Collaboration mode is only supported for Codex sessions'
+        })
+        expect(applySessionConfigCalls).toEqual([])
+    })
+
+    it('applies collaboration mode changes for remote Codex sessions', async () => {
         const { app, applySessionConfigCalls } = createApp(createSession())
 
         const response = await app.request('/api/sessions/session-1/collaboration-mode', {

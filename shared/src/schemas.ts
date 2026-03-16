@@ -46,7 +46,6 @@ export const MetadataSchema = z.object({
     archivedBy: z.string().optional(),
     archiveReason: z.string().optional(),
     flavor: z.string().nullish(),
-    codexRemoteBackend: z.enum(['app-server', 'mcp-server']).optional(),
     worktree: WorktreeMetadataSchema.optional()
 })
 
