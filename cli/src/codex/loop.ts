@@ -14,6 +14,7 @@ export interface EnhancedMode {
     permissionMode: PermissionMode;
     model?: string;
     collaborationMode: CodexCollaborationMode;
+    modelReasoningEffort?: string;
 }
 
 interface LoopOptions {
