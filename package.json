@@ -1,0 +1,36 @@
+{
+    "name": "viby",
+    "private": true,
+    "workspaces": ["cli", "shared", "hub", "web", "desktop"],
+    "scripts": {
+        "dev": "concurrently \"bun run dev:hub\" \"bun run dev:web\" --kill-others-on-exit",
+        "dev:remote": "bun run scripts/devRemote.ts",
+        "build": "bun run build:web && bun run build:hub",
+        "build:single-exe": "bun run download:tunwg && bun run build:web && (cd hub && bun run generate:embedded-web-assets) && (cd cli && bun run build:exe:allinone)",
+        "build:single-exe:all": "bun run download:tunwg && bun run build:web && (cd hub && bun run generate:embedded-web-assets) && (cd cli && bun run build:exe:allinone:all)",
+        "download:tunwg": "bun run hub/scripts/download-tunwg.ts",
+        "build:hub": "cd hub && bun run generate:embedded-web-assets && bun run build",
+        "build:web": "cd web && bun run build",
+        "build:desktop:web": "cd desktop && bun run build:web",
+        "build:desktop": "bun run build:single-exe && cd desktop && bun run prepare:sidecar && bun run prepare:icons && bun run tauri:build",
+        "dev:hub": "cd hub && bun run dev",
+        "dev:web": "cd web && bun run dev",
+        "dev:desktop": "cd desktop && bun run tauri:dev",
+        "typecheck": "bun run typecheck:cli && bun run typecheck:web && bun run typecheck:hub",
+        "typecheck:cli": "cd cli && bun run typecheck",
+        "typecheck:hub": "cd hub && bun run typecheck",
+        "typecheck:web": "cd web && bun run typecheck",
+        "typecheck:desktop": "cd desktop && bun run typecheck",
+        "test": "bun run test:cli && bun run test:hub && bun run test:web",
+        "test:cli": "cd cli && bun run test",
+        "test:hub": "cd hub && bun run test",
+        "test:web": "cd web && bun run test",
+        "clean-session": "bun run hub/scripts/cleanup-sessions.ts",
+        "release-all": "cd cli && bun run release-all"
+    },
+    "devDependencies": {
+        "concurrently": "^9.2.1",
+        "react-devtools-core": "^7.0.1",
+        "vite-plugin-pwa": "^1.2.0"
+    }
+}

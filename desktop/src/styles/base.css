@@ -1,0 +1,40 @@
+:root {
+    --panel-bg: rgba(249, 252, 255, 0.86);
+    --panel-strong: rgba(255, 255, 255, 0.92);
+    --panel-soft: rgba(244, 248, 253, 0.94);
+    --line: rgba(63, 89, 123, 0.14);
+    --line-strong: rgba(63, 89, 123, 0.22);
+    --ink: #10233b;
+    --muted: #5f7089;
+    --blue: #2354d8;
+    --mint: #0d8b6f;
+    --rose: #c24444;
+    --shadow: 0 24px 52px rgba(22, 46, 84, 0.12);
+    color-scheme: light;
+    font-family: "SF Pro Display", "Avenir Next", "Helvetica Neue", sans-serif;
+    background:
+        radial-gradient(circle at top left, rgba(35, 84, 216, 0.18), transparent 34%),
+        radial-gradient(circle at top right, rgba(13, 139, 111, 0.16), transparent 28%),
+        linear-gradient(180deg, #eef5ff 0%, #f7fbff 52%, #f2f8ff 100%);
+    color: var(--ink);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+    height: 100%;
+}
+
+body {
+    margin: 0;
+    overflow: hidden;
+}
+
+button,
+input {
+    font: inherit;
+}

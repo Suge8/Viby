@@ -1,0 +1,87 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { renderHook, waitFor } from '@testing-library/react'
+import type { PropsWithChildren } from 'react'
+import { describe, expect, it, vi } from 'vitest'
+import type { ApiClient } from '@/api/client'
+import { useMachineDirectoryBrowser } from './useMachineDirectoryBrowser'
+
+function createWrapper(): (props: PropsWithChildren) => React.JSX.Element {
+    const queryClient = new QueryClient({
+        defaultOptions: {
+            queries: {
+                retry: false,
+            }
+        }
+    })
+
+    return function Wrapper(props: PropsWithChildren): React.JSX.Element {
+        return (
+            <QueryClientProvider client={queryClient}>
+                {props.children}
+            </QueryClientProvider>
+        )
+    }
+}
+
+describe('useMachineDirectoryBrowser', () => {
+    it('loads the current directory and common roots for the selected machine', async () => {
+        const api = {
+            browseMachineDirectory: vi.fn().mockResolvedValue({
+                success: true,
+                currentPath: '/Users/demo/Projects',
+                parentPath: '/Users/demo',
+                entries: [{ name: 'viby', path: '/Users/demo/Projects/viby', type: 'directory' }],
+                roots: [{ kind: 'home', path: '/Users/demo' }]
+            })
+        } as unknown as ApiClient
+
+        const { result } = renderHook(() => useMachineDirectoryBrowser({
+            api,
+            machineId: 'machine-1',
+            initialPath: '/Users/demo/Projects',
+            enabled: true
+        }), {
+            wrapper: createWrapper()
+        })
+
+        await waitFor(() => {
+            expect(result.current.isLoading).toBe(false)
+        })
+
+        expect(api.browseMachineDirectory).toHaveBeenCalledWith('machine-1', '/Users/demo/Projects')
+        expect(result.current.currentPath).toBe('/Users/demo/Projects')
+        expect(result.current.parentPath).toBe('/Users/demo')
+        expect(result.current.entries).toEqual([
+            { name: 'viby', path: '/Users/demo/Projects/viby', type: 'directory' }
+        ])
+        expect(result.current.roots).toEqual([{ kind: 'home', path: '/Users/demo' }])
+        expect(result.current.hasCurrentDirectory).toBe(true)
+    })
+
+    it('surfaces machine browse errors without throwing away root shortcuts', async () => {
+        const api = {
+            browseMachineDirectory: vi.fn().mockResolvedValue({
+                success: false,
+                roots: [{ kind: 'home', path: '/Users/demo' }],
+                error: 'Directory not found'
+            })
+        } as unknown as ApiClient
+
+        const { result } = renderHook(() => useMachineDirectoryBrowser({
+            api,
+            machineId: 'machine-1',
+            initialPath: '/Users/demo/missing',
+            enabled: true
+        }), {
+            wrapper: createWrapper()
+        })
+
+        await waitFor(() => {
+            expect(result.current.isLoading).toBe(false)
+        })
+
+        expect(result.current.error).toBe('Directory not found')
+        expect(result.current.roots).toEqual([{ kind: 'home', path: '/Users/demo' }])
+        expect(result.current.hasCurrentDirectory).toBe(false)
+    })
+})

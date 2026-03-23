@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+        />
+
+        <!-- PWA Meta Tags -->
+        <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+        <meta name="theme-color" content="#1c1c1e" media="(prefers-color-scheme: dark)" />
+        <meta name="description" content="AI-powered development assistant" />
+
+        <!-- iOS PWA Meta Tags -->
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="Viby" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png" />
+
+        <!-- Favicon -->
+        <link rel="icon" href="/favicon.ico" sizes="48x48" />
+        <link rel="icon" href="/icon.svg" sizes="any" type="image/svg+xml" />
+
+        <!-- Safari Pinned Tab -->
+        <link rel="mask-icon" href="/mask-icon.svg" color="#111827" />
+
+        <!-- Prevent flash of white background on dark mode -->
+        <style>
+            html {
+                background: #fff;
+                font-family: "Geist", "SF Pro Display", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+            }
+
+            body {
+                margin: 0;
+                font-family: "Geist", "SF Pro Display", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+                -webkit-font-smoothing: antialiased;
+                text-rendering: optimizeLegibility;
+                font-synthesis-weight: none;
+            }
+
+            @media (prefers-color-scheme: dark) {
+                html { background: #1c1c1e; color-scheme: dark }
+            }
+
+            #app-boot-shell {
+                position: fixed;
+                inset: 0;
+                z-index: 60;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 1.25rem;
+                background:
+                    radial-gradient(circle at top, rgba(26, 99, 255, 0.12), transparent 45%),
+                    linear-gradient(180deg, rgba(247, 249, 255, 0.96), rgba(255, 255, 255, 0.98));
+                opacity: 1;
+                transition: opacity 0.28s ease, transform 0.28s ease;
+            }
+
+            @media (prefers-color-scheme: dark) {
+                #app-boot-shell {
+                    background:
+                        radial-gradient(circle at top, rgba(114, 182, 255, 0.16), transparent 42%),
+                        linear-gradient(180deg, rgba(20, 22, 30, 0.96), rgba(14, 17, 25, 0.98));
+                }
+            }
+
+            #app-boot-shell.is-hidden {
+                opacity: 0;
+                transform: scale(1.01);
+                pointer-events: none;
+            }
+
+            .boot-shell-stage {
+                width: min(100%, 20rem);
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 0.95rem;
+                text-align: center;
+            }
+
+            .boot-shell-orb {
+                position: relative;
+                width: 3.5rem;
+                height: 3.5rem;
+                border-radius: 1.25rem;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border: 1px solid rgba(59, 130, 246, 0.14);
+                background: linear-gradient(160deg, rgba(255, 255, 255, 0.92), rgba(255, 145, 77, 0.08));
+                color: #2563eb;
+                box-shadow: 0 20px 44px rgba(15, 23, 42, 0.1);
+            }
+
+            .boot-shell-orb::before {
+                content: '';
+                position: absolute;
+                inset: 0.35rem;
+                border-radius: 1rem;
+                background: radial-gradient(circle at top, rgba(59, 130, 246, 0.18), transparent 72%);
+                animation: boot-shell-orb 2.4s ease-in-out infinite;
+            }
+
+            .boot-shell-orb svg {
+                position: relative;
+                z-index: 1;
+            }
+
+            .boot-shell-title {
+                font-size: 1rem;
+                font-weight: 600;
+                line-height: 1.4;
+                color: #0f172a;
+                letter-spacing: -0.02em;
+            }
+
+            .boot-shell-copy {
+                margin-top: 0.38rem;
+                font-size: 0.84rem;
+                line-height: 1.6;
+                color: rgba(15, 23, 42, 0.72);
+            }
+
+            .boot-shell-rail {
+                position: relative;
+                width: min(100%, 10rem);
+                height: 0.375rem;
+                overflow: hidden;
+                border-radius: 999px;
+                background: rgba(148, 163, 184, 0.18);
+            }
+
+            .boot-shell-rail::after {
+                content: '';
+                position: absolute;
+                inset: 0;
+                width: 5rem;
+                border-radius: inherit;
+                background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.92), transparent);
+                transform: translateX(-140%);
+                animation: boot-shell-shimmer 1.4s ease-in-out infinite;
+            }
+
+            @media (prefers-color-scheme: dark) {
+                .boot-shell-orb {
+                    border-color: rgba(131, 143, 255, 0.2);
+                    background: linear-gradient(160deg, rgba(28, 33, 46, 0.94), rgba(255, 145, 77, 0.08));
+                    color: #93c5fd;
+                }
+
+                .boot-shell-title { color: #f8fafc }
+                .boot-shell-copy { color: rgba(226, 232, 240, 0.74) }
+            }
+
+            @keyframes boot-shell-orb {
+                0%, 100% {
+                    transform: scale(0.97);
+                    opacity: 0.7;
+                }
+                50% {
+                    transform: scale(1.04);
+                    opacity: 1;
+                }
+            }
+
+            @keyframes boot-shell-shimmer {
+                0% { transform: translateX(-140%); opacity: 0.3 }
+                50% { opacity: 0.9 }
+                100% { transform: translateX(220%); opacity: 0.3 }
+            }
+
+            @media (prefers-reduced-motion: reduce) {
+                #app-boot-shell,
+                .boot-shell-orb::before,
+                .boot-shell-rail::after {
+                    animation: none;
+                    transition: none;
+                }
+            }
+        </style>
+        <script>
+            (function () {
+                try {
+                    var raw = localStorage.getItem('viby-font-scale')
+                    var scale = Number(raw)
+                    if (scale === 0.8 || scale === 0.9 || scale === 1 || scale === 1.1 || scale === 1.2) {
+                        document.documentElement.style.setProperty('--app-font-scale', String(scale))
+                    }
+                } catch (error) {
+                    // Ignore storage errors.
+                }
+            })()
+        </script>
+        <script>
+            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                document.documentElement.setAttribute('data-theme', 'dark')
+            }
+        </script>
+        <script>
+            (function () {
+                var RECOVERY_KEY = 'viby-pending-app-recovery'
+
+                try {
+                    if (document.wasDiscarded) {
+                        sessionStorage.setItem(RECOVERY_KEY, JSON.stringify({
+                            reason: 'page-discarded',
+                            at: Date.now()
+                        }))
+                    }
+
+                    if (document.wasDiscarded || sessionStorage.getItem(RECOVERY_KEY)) {
+                        document.documentElement.setAttribute('data-boot-mode', 'recovery')
+                    }
+                } catch (error) {
+                    // Ignore storage errors.
+                }
+            })()
+        </script>
+        <script>
+            (function () {
+                var RECOVERY_KEY = 'viby-runtime-asset-recovery'
+                var APP_RECOVERY_KEY = 'viby-pending-app-recovery'
+                var ERROR_PATTERNS = [
+                    'failed to fetch dynamically imported module',
+                    'importing a module script failed',
+                    'loading module from',
+                    'dynamically imported module'
+                ]
+
+                function normalize(value) {
+                    return typeof value === 'string' ? value.trim().toLowerCase() : ''
+                }
+
+                function containsAssetPath(value) {
+                    return value.indexOf('/assets/') !== -1
+                }
+
+                function hasKnownLoadFailure(values) {
+                    return values.some(function (value) {
+                        return ERROR_PATTERNS.some(function (pattern) {
+                            return value.indexOf(pattern) !== -1
+                        })
+                    })
+                }
+
+                function isLikelyAssetFailure(details) {
+                    var filename = normalize(details && details.filename)
+                    var message = normalize(details && details.message)
+                    var stack = normalize(details && details.stack)
+
+                    return hasKnownLoadFailure([message, stack])
+                        || (containsAssetPath(filename) && hasKnownLoadFailure([message]))
+                }
+
+                async function clearRuntimeAssets() {
+                    if ('serviceWorker' in navigator) {
+                        var registrations = await navigator.serviceWorker.getRegistrations()
+                        await Promise.all(registrations.map(function (registration) {
+                            return registration.unregister()
+                        }))
+                    }
+
+                    if ('caches' in window) {
+                        var cacheKeys = await caches.keys()
+                        await Promise.all(cacheKeys.map(function (cacheKey) {
+                            return caches.delete(cacheKey)
+                        }))
+                    }
+                }
+
+                async function recoverRuntimeAssets(reason) {
+                    try {
+                        if (sessionStorage.getItem(RECOVERY_KEY) === reason) {
+                            return
+                        }
+                        sessionStorage.setItem(RECOVERY_KEY, reason)
+                        sessionStorage.setItem(APP_RECOVERY_KEY, JSON.stringify({
+                            reason: 'runtime-asset-reload',
+                            at: Date.now()
+                        }))
+                        await clearRuntimeAssets()
+                    } catch (error) {
+                        console.error('Failed to clear stale runtime assets', error)
+                    } finally {
+                        window.location.reload()
+                    }
+                }
+
+                window.addEventListener('error', function (event) {
+                    if (!isLikelyAssetFailure(event)) {
+                        return
+                    }
+
+                    event.preventDefault()
+                    void recoverRuntimeAssets('error:' + normalize(event.message))
+                }, true)
+
+                window.addEventListener('unhandledrejection', function (event) {
+                    var reason = event.reason
+                    var details = {
+                        message: normalize(reason && reason.message ? reason.message : String(reason || '')),
+                        stack: normalize(reason && reason.stack ? reason.stack : '')
+                    }
+
+                    if (!isLikelyAssetFailure(details)) {
+                        return
+                    }
+
+                    event.preventDefault()
+                    void recoverRuntimeAssets('rejection:' + details.message)
+                })
+            })()
+        </script>
+
+        <title>Viby</title>
+    </head>
+    <body>
+        <div id="app-boot-shell" aria-hidden="true">
+            <div class="boot-shell-stage">
+                <div class="boot-shell-orb" aria-hidden="true">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 3.5l1.8 4.7L18.5 10l-4.7 1.8L12 16.5l-1.8-4.7L5.5 10l4.7-1.8L12 3.5z" />
+                    </svg>
+                </div>
+                <div class="boot-shell-title" id="app-boot-shell-title">Preparing your workspace…</div>
+                <div class="boot-shell-copy" id="app-boot-shell-copy">Chat, files, and live updates will pick up in a moment.</div>
+                <div class="boot-shell-rail" aria-hidden="true"></div>
+            </div>
+        </div>
+        <div id="root"></div>
+        <script>
+            (function () {
+                var LOCALE_PREFERENCE_STORAGE_KEY = 'viby-lang-preference'
+                var LEGACY_LOCALE_STORAGE_KEY = 'viby-lang'
+                var STRINGS = {
+                    en: {
+                        normal: {
+                            title: 'Preparing your workspace…',
+                            copy: 'Chat, files, and live updates will pick up in a moment.'
+                        },
+                        recovery: {
+                            title: 'Restoring your session…',
+                            copy: 'Reopening your session and syncing the latest replies.'
+                        }
+                    },
+                    'zh-CN': {
+                        normal: {
+                            title: '正在准备你的工作区…',
+                            copy: '聊天、文件和实时状态马上接上。'
+                        },
+                        recovery: {
+                            title: '正在恢复刚才的会话…',
+                            copy: '正在重新打开当前会话，并同步最新回复。'
+                        }
+                    }
+                }
+                var bootMode = document.documentElement.getAttribute('data-boot-mode')
+
+                function readPreferredLocale() {
+                    try {
+                        var storedPreference = localStorage.getItem(LOCALE_PREFERENCE_STORAGE_KEY)
+                        var legacyLocale = localStorage.getItem(LEGACY_LOCALE_STORAGE_KEY)
+                        var rawLocale = storedPreference && storedPreference !== 'system'
+                            ? storedPreference
+                            : legacyLocale
+
+                        if (rawLocale === 'zh-CN') {
+                            return rawLocale
+                        }
+                    } catch (error) {
+                        // Ignore storage errors.
+                    }
+
+                    var browserLanguages = navigator.languages && navigator.languages.length
+                        ? navigator.languages
+                        : [navigator.language]
+
+                    for (var index = 0; index < browserLanguages.length; index += 1) {
+                        var language = String(browserLanguages[index] || '').toLowerCase()
+                        if (language.indexOf('zh') === 0) {
+                            return 'zh-CN'
+                        }
+                    }
+
+                    return 'en'
+                }
+
+                var locale = readPreferredLocale()
+                var mode = bootMode === 'recovery' ? 'recovery' : 'normal'
+                var content = STRINGS[locale][mode]
+                var title = document.getElementById('app-boot-shell-title')
+                var copy = document.getElementById('app-boot-shell-copy')
+
+                document.documentElement.lang = locale
+
+                if (title) {
+                    title.textContent = content.title
+                }
+                if (copy) {
+                    copy.textContent = content.copy
+                }
+            })()
+        </script>
+        <script type="module" src="/src/main.tsx"></script>
+    </body>
+</html>

@@ -1,0 +1,177 @@
+import {
+    AgentStateSchema,
+    AttachmentMetadataSchema,
+    CodexCollaborationModeSchema,
+    ModelReasoningEffortSchema,
+    MetadataSchema,
+    PermissionModeSchema,
+    TodosSchema
+} from '@viby/protocol/schemas'
+import { MACHINE_CAPABILITIES, SessionRecoveryPageSchema } from '@viby/protocol'
+import type { ClaudeReasoningEffort, CodexCollaborationMode, CodexReasoningEffort, ModelReasoningEffort, PermissionMode } from '@viby/protocol/types'
+import { z } from 'zod'
+import { UsageSchema } from '@/claude/types'
+
+export type Usage = z.infer<typeof UsageSchema>
+
+export type {
+    AgentFlavor,
+    AgentState,
+    AttachmentMetadata,
+    ClaudeReasoningEffort,
+    ClaudePermissionMode,
+    CodexCollaborationMode,
+    CodexPermissionMode,
+    Metadata,
+    ModelReasoningEffort,
+    Session
+} from '@viby/protocol/types'
+export type SessionPermissionMode = PermissionMode
+export type SessionCollaborationMode = CodexCollaborationMode
+export type SessionModel = string | null
+export type SessionModelReasoningEffort = ModelReasoningEffort | null
+export type ClaudeSessionModelReasoningEffort = ClaudeReasoningEffort | null
+export type CodexSessionModelReasoningEffort = CodexReasoningEffort | null
+
+export { AgentStateSchema, AttachmentMetadataSchema, MetadataSchema }
+
+const MachineCapabilitySchema = z.enum(MACHINE_CAPABILITIES)
+
+export const MachineMetadataSchema = z.object({
+    host: z.string(),
+    platform: z.string(),
+    vibyCliVersion: z.string(),
+    displayName: z.string().optional(),
+    capabilities: z.array(MachineCapabilitySchema).optional(),
+    homeDir: z.string(),
+    vibyHomeDir: z.string(),
+    vibyLibDir: z.string()
+})
+
+export type MachineMetadata = z.infer<typeof MachineMetadataSchema>
+
+export const RunnerStateSchema = z.object({
+    status: z.union([z.enum(['running', 'shutting-down']), z.string()]),
+    pid: z.number().optional(),
+    httpPort: z.number().optional(),
+    startedAt: z.number().optional(),
+    shutdownRequestedAt: z.number().optional(),
+    shutdownSource: z.union([z.enum(['mobile-app', 'cli', 'os-signal', 'unknown']), z.string()]).optional(),
+    lastSpawnError: z.object({
+        message: z.string(),
+        pid: z.number().optional(),
+        exitCode: z.number().nullable().optional(),
+        signal: z.string().nullable().optional(),
+        at: z.number()
+    }).nullable().optional()
+})
+
+export type RunnerState = z.infer<typeof RunnerStateSchema>
+
+export type Machine = {
+    id: string
+    seq: number
+    createdAt: number
+    updatedAt: number
+    active: boolean
+    activeAt: number
+    metadata: MachineMetadata | null
+    metadataVersion: number
+    runnerState: RunnerState | null
+    runnerStateVersion: number
+}
+
+export const CliMessagesResponseSchema = z.object({
+    messages: z.array(z.object({
+        id: z.string(),
+        seq: z.number(),
+        createdAt: z.number(),
+        localId: z.string().nullable().optional(),
+        content: z.unknown()
+    }))
+})
+
+export type CliMessagesResponse = z.infer<typeof CliMessagesResponseSchema>
+
+export const CliSessionRecoveryResponseSchema = SessionRecoveryPageSchema
+export type CliSessionRecoveryResponse = z.infer<typeof CliSessionRecoveryResponseSchema>
+
+export const CreateSessionResponseSchema = z.object({
+    session: z.object({
+        id: z.string(),
+        seq: z.number(),
+        createdAt: z.number(),
+        updatedAt: z.number(),
+        active: z.boolean(),
+        activeAt: z.number(),
+        metadata: z.unknown().nullable(),
+        metadataVersion: z.number(),
+        agentState: z.unknown().nullable(),
+        agentStateVersion: z.number(),
+        thinking: z.boolean(),
+        thinkingAt: z.number(),
+        todos: TodosSchema.optional(),
+        model: z.string().nullable(),
+        modelReasoningEffort: ModelReasoningEffortSchema.nullable(),
+        permissionMode: PermissionModeSchema.optional(),
+        collaborationMode: CodexCollaborationModeSchema.optional()
+    })
+})
+
+export type CreateSessionResponse = z.infer<typeof CreateSessionResponseSchema>
+
+export const CreateMachineResponseSchema = z.object({
+    machine: z.object({
+        id: z.string(),
+        seq: z.number(),
+        createdAt: z.number(),
+        updatedAt: z.number(),
+        active: z.boolean(),
+        activeAt: z.number(),
+        metadata: z.unknown().nullable(),
+        metadataVersion: z.number(),
+        runnerState: z.unknown().nullable(),
+        runnerStateVersion: z.number()
+    })
+})
+
+export type CreateMachineResponse = z.infer<typeof CreateMachineResponseSchema>
+
+export const MessageMetaSchema = z.object({
+    sentFrom: z.string().optional(),
+    fallbackModel: z.string().nullable().optional(),
+    customSystemPrompt: z.string().nullable().optional(),
+    appendSystemPrompt: z.string().nullable().optional(),
+    allowedTools: z.array(z.string()).nullable().optional(),
+    disallowedTools: z.array(z.string()).nullable().optional()
+})
+
+export type MessageMeta = z.infer<typeof MessageMetaSchema>
+
+export const UserMessageSchema = z.object({
+    role: z.literal('user'),
+    content: z.object({
+        type: z.literal('text'),
+        text: z.string(),
+        attachments: z.array(AttachmentMetadataSchema).optional()
+    }),
+    localKey: z.string().optional(),
+    meta: MessageMetaSchema.optional()
+})
+
+export type UserMessage = z.infer<typeof UserMessageSchema>
+
+export const AgentMessageSchema = z.object({
+    role: z.literal('agent'),
+    content: z.object({
+        type: z.literal('output'),
+        data: z.unknown()
+    }),
+    meta: MessageMetaSchema.optional()
+})
+
+export type AgentMessage = z.infer<typeof AgentMessageSchema>
+
+export const MessageContentSchema = z.union([UserMessageSchema, AgentMessageSchema])
+
+export type MessageContent = z.infer<typeof MessageContentSchema>

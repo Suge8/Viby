@@ -1,0 +1,109 @@
+import { ApiClient, ApiSessionClient } from '@/lib';
+import { MessageQueue2 } from '@/utils/MessageQueue2';
+import { AgentSessionBase } from '@/agent/sessionBase';
+import type { EnhancedMode, PermissionMode } from './loop';
+import type { CodexCliOverrides } from './utils/codexCliOverrides';
+import type { LocalLaunchExitReason } from '@/agent/localLaunchPolicy';
+import type { CodexSessionModelReasoningEffort, SessionModel } from '@/api/types';
+
+type LocalLaunchFailure = {
+    message: string;
+    exitReason: LocalLaunchExitReason;
+};
+
+export class CodexSession extends AgentSessionBase<EnhancedMode> {
+    readonly codexArgs?: string[];
+    readonly codexCliOverrides?: CodexCliOverrides;
+    readonly startedBy: 'runner' | 'terminal';
+    readonly startingMode: 'local' | 'remote';
+    localLaunchFailure: LocalLaunchFailure | null = null;
+
+    constructor(opts: {
+        api: ApiClient;
+        client: ApiSessionClient;
+        path: string;
+        logPath: string;
+        sessionId: string | null;
+        messageQueue: MessageQueue2<EnhancedMode>;
+        onModeChange: (mode: 'local' | 'remote') => void;
+        mode?: 'local' | 'remote';
+        startedBy: 'runner' | 'terminal';
+        startingMode: 'local' | 'remote';
+        codexArgs?: string[];
+        codexCliOverrides?: CodexCliOverrides;
+        permissionMode?: PermissionMode;
+        model?: SessionModel;
+        modelReasoningEffort?: CodexSessionModelReasoningEffort;
+        collaborationMode?: EnhancedMode['collaborationMode'];
+    }) {
+        super({
+            api: opts.api,
+            client: opts.client,
+            path: opts.path,
+            logPath: opts.logPath,
+            sessionId: opts.sessionId,
+            messageQueue: opts.messageQueue,
+            onModeChange: opts.onModeChange,
+            mode: opts.mode,
+            sessionLabel: 'CodexSession',
+            sessionIdLabel: 'Codex',
+            applySessionIdToMetadata: (metadata, sessionId) => ({
+                ...metadata,
+                codexSessionId: sessionId
+            }),
+            permissionMode: opts.permissionMode,
+            model: opts.model,
+            modelReasoningEffort: opts.modelReasoningEffort,
+            collaborationMode: opts.collaborationMode
+        });
+
+        this.codexArgs = opts.codexArgs;
+        this.codexCliOverrides = opts.codexCliOverrides;
+        this.startedBy = opts.startedBy;
+        this.startingMode = opts.startingMode;
+        this.permissionMode = opts.permissionMode;
+        this.model = opts.model;
+        this.modelReasoningEffort = opts.modelReasoningEffort;
+        this.collaborationMode = opts.collaborationMode;
+    }
+
+    setPermissionMode = (mode: PermissionMode): void => {
+        this.permissionMode = mode;
+    };
+
+    setModel = (model: SessionModel): void => {
+        this.model = model;
+    };
+
+    setModelReasoningEffort = (modelReasoningEffort: CodexSessionModelReasoningEffort): void => {
+        this.modelReasoningEffort = modelReasoningEffort;
+    };
+
+    getModelReasoningEffort(): CodexSessionModelReasoningEffort | undefined {
+        return this.modelReasoningEffort as CodexSessionModelReasoningEffort | undefined;
+    }
+
+    setCollaborationMode = (mode: EnhancedMode['collaborationMode']): void => {
+        this.collaborationMode = mode;
+    };
+
+    recordLocalLaunchFailure = (message: string, exitReason: LocalLaunchExitReason): void => {
+        this.localLaunchFailure = { message, exitReason };
+    };
+
+    sendCodexMessage = (message: unknown): void => {
+        this.client.sendCodexMessage(message);
+    };
+
+    sendUserMessage = (text: string): void => {
+        this.client.sendUserMessage(text);
+    };
+
+    sendSessionEvent = (event: Parameters<ApiSessionClient['sendSessionEvent']>[0]): void => {
+        this.client.sendSessionEvent(event);
+    };
+
+    sendStreamUpdate = (update: Parameters<ApiSessionClient['sendStreamUpdate']>[0]): void => {
+        this.client.sendStreamUpdate(update);
+    };
+}

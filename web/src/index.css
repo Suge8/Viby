@@ -1,0 +1,294 @@
+@import "tailwindcss";
+@import "./styles/design-system.css";
+@config "../tailwind.config.ts";
+
+:root {
+    --app-font-scale: 1;
+    --app-safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+html {
+    font-size: calc(100% * var(--app-font-scale, 1));
+    color-scheme: light;
+}
+
+html,
+body {
+    height: 100vh;
+    height: 100dvh;
+    height: var(--tg-viewport-stable-height, 100dvh);
+    overflow: hidden;
+    touch-action: pan-x pan-y;
+    overscroll-behavior: none;
+    -webkit-text-size-adjust: 100%;
+}
+
+body {
+    font-size: 1rem;
+    background: var(--app-bg);
+    color: var(--app-fg);
+    font-family: var(--ds-font-sans);
+}
+
+#root {
+    height: 100%;
+}
+
+@media (max-width: 767px) {
+    html[data-viby-route='session-chat'],
+    body[data-viby-route='session-chat'] {
+        height: 100%;
+        min-height: 100dvh;
+    }
+
+    html[data-viby-route='session-chat'] {
+        background: var(--app-bg);
+    }
+
+    body[data-viby-route='session-chat'] {
+        background: var(--app-bg);
+        overflow: hidden;
+        overscroll-behavior-y: none;
+    }
+
+    body[data-viby-route='session-chat'] #root {
+        height: 100%;
+        min-height: 0;
+    }
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .session-list-item:hover,
+    .session-list-new-button:hover {
+        background-color: var(--app-subtle-bg);
+    }
+}
+
+/* Desktop-only: move the sidebar scrollbar to the left without flipping content. */
+@media (min-width: 1024px) {
+    .desktop-scrollbar-left {
+        direction: rtl;
+    }
+
+    .desktop-scrollbar-left > * {
+        direction: ltr;
+    }
+}
+
+/*
+ * content-visibility: auto lets the browser skip layout/paint for messages
+ * scrolled out of the viewport. Big win on Windows with long conversations (#310).
+ * contain-intrinsic-size gives a rough height hint so scrollbar doesn't jump.
+ */
+.viby-thread-messages > * {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 80px;
+}
+
+/*
+ * During history jump/restore we need exact message heights, not the
+ * speculative intrinsic-size placeholders from content-visibility:auto.
+ */
+.viby-thread-messages[data-viby-measure-all='true'] > * {
+    content-visibility: visible;
+}
+
+.viby-thread-viewport {
+    overflow-anchor: none;
+    scrollbar-gutter: stable both-edges;
+}
+
+/* Markdown styles */
+.markdown-content a { color: var(--app-link); text-decoration: underline; }
+.markdown-content code { background: var(--app-inline-code-bg); padding: 0.1em 0.3em; border-radius: 4px; font-size: 0.9em; }
+.markdown-content blockquote { border-left: 3px solid var(--app-hint); padding-left: 0.75rem; margin: 0.5rem 0; opacity: 0.85; }
+.markdown-content ul, .markdown-content ol { padding-left: 1.5rem; margin: 0.5rem 0; }
+.markdown-content table { border-collapse: collapse; width: 100%; }
+.markdown-content th, .markdown-content td { border: 1px solid var(--app-border); padding: 0.25rem 0.5rem; }
+
+.aui-md-codeblock pre.shiki {
+    margin: 0;
+    padding: 0.5rem;
+    background-color: transparent !important;
+    font-size: 0.875rem;
+}
+
+.aui-md-codeblock pre.shiki code {
+    display: block;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.aui-md-codeblock .shiki,
+.aui-md-codeblock .shiki span {
+    background-color: transparent !important;
+}
+
+/* Shiki dual theme colors */
+.shiki,
+.shiki span {
+    color: var(--shiki-light) !important;
+    font-style: var(--shiki-light-font-style) !important;
+    font-weight: var(--shiki-light-font-weight) !important;
+    text-decoration: var(--shiki-light-text-decoration) !important;
+}
+
+html[data-theme="dark"] .shiki,
+html[data-theme="dark"] .shiki span {
+    color: var(--shiki-dark) !important;
+    font-style: var(--shiki-dark-font-style) !important;
+    font-weight: var(--shiki-dark-font-weight) !important;
+    text-decoration: var(--shiki-dark-text-decoration) !important;
+}
+
+/* Ultrathink rainbow sparkle effect - per-letter wave animation */
+@keyframes rainbow-wave {
+  0% { color: #ff5555; }      /* red */
+  14% { color: #ffaa00; }     /* orange */
+  28% { color: #ffff55; }     /* yellow */
+  42% { color: #55ff55; }     /* green */
+  57% { color: #55ffff; }     /* cyan */
+  71% { color: #5555ff; }     /* blue */
+  85% { color: #ff55ff; }     /* magenta/pink */
+  100% { color: #ff5555; }    /* red */
+}
+
+@keyframes sparkle-wave {
+  0%, 100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(0.7);
+  }
+}
+
+.rainbow-letter {
+  display: inline-block;
+  animation: rainbow-wave 2s linear infinite, sparkle-wave 2s ease-in-out infinite;
+  font-weight: 600;
+}
+
+/* PWA install prompt animation */
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out;
+}
+
+@keyframes menu-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-menu-pop {
+  animation: menu-pop 0.18s ease-out;
+}
+
+/* Syncing spinner animation */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes loading-shimmer {
+  0% {
+    transform: translateX(-140%);
+    opacity: 0.22;
+  }
+  50% {
+    opacity: 0.55;
+  }
+  100% {
+    transform: translateX(220%);
+    opacity: 0.22;
+  }
+}
+
+@keyframes loading-orb {
+  0%, 100% {
+    transform: scale(0.97);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+}
+
+.ds-loading-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.ds-loading-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--ds-brand) 20%, transparent) 48%,
+    transparent 100%
+  );
+  transform: translateX(-140%);
+  animation: loading-shimmer 1.4s ease-in-out infinite;
+}
+
+.ds-loading-orb {
+  animation: loading-orb 2.4s ease-in-out infinite;
+}
+
+/* New messages indicator bounce animation */
+@keyframes bounce-in {
+  0% {
+    transform: translateX(-50%) scale(0.8);
+    opacity: 0;
+  }
+  50% {
+    transform: translateX(-50%) scale(1.05);
+  }
+  100% {
+    transform: translateX(-50%) scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-bounce-in {
+  animation: bounce-in 0.3s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ds-loading-shimmer::after,
+  .ds-loading-orb {
+    animation: none;
+    transform: none;
+  }
+}
+
+/* ReactQueryDevtools button - move to middle-right to avoid blocking UI */
+.tsqd-open-btn-container {
+  bottom: 50% !important;
+  transform: translateY(50%);
+}

@@ -1,0 +1,76 @@
+import { reloadWindowForRecovery } from '@/lib/appRecovery'
+import { readPendingNavigationRecoveryHref } from '@/lib/navigationTransition'
+import {
+    isLikelyRuntimeAssetFailure,
+    recoverRuntimeAssets,
+    type RuntimeAssetFailure
+} from '@/lib/runtimeAssetRecovery'
+
+type VitePreloadErrorEvent = Event & {
+    payload?: unknown
+}
+
+const VITE_PRELOAD_ERROR_EVENT = 'vite:preloadError'
+const VITE_PRELOAD_RECOVERY_REASON = 'vite:preloadError'
+
+let hasInstalledVitePreloadErrorHandler = false
+
+function extractRuntimeAssetFailure(payload: unknown): RuntimeAssetFailure {
+    if (payload instanceof Error) {
+        return {
+            name: payload.name,
+            message: payload.message,
+            stack: payload.stack
+        }
+    }
+
+    if (!payload || typeof payload !== 'object') {
+        return {
+            message: typeof payload === 'string' ? payload : null
+        }
+    }
+
+    const candidate = payload as Record<string, unknown>
+    return {
+        name: typeof candidate.name === 'string' ? candidate.name : null,
+        filename: typeof candidate.filename === 'string' ? candidate.filename : null,
+        message: typeof candidate.message === 'string' ? candidate.message : null,
+        stack: typeof candidate.stack === 'string' ? candidate.stack : null
+    }
+}
+
+export async function recoverFromVitePreloadError(
+    payload?: unknown,
+    reload?: () => void
+): Promise<boolean> {
+    const failure = extractRuntimeAssetFailure(payload)
+    if (!isLikelyRuntimeAssetFailure(failure)) {
+        console.error('Skipped runtime asset recovery for non-asset preload failure:', payload)
+        return false
+    }
+
+    const recovered = await recoverRuntimeAssets(VITE_PRELOAD_RECOVERY_REASON)
+    if (!recovered) {
+        console.error(`Skipped repeated runtime asset recovery for ${VITE_PRELOAD_RECOVERY_REASON}`)
+        return false
+    }
+
+    reloadWindowForRecovery('vite-preload-error', reload, {
+        resumeHref: readPendingNavigationRecoveryHref()
+    })
+    return true
+}
+
+export function installVitePreloadErrorHandler(): void {
+    if (typeof window === 'undefined' || hasInstalledVitePreloadErrorHandler) {
+        return
+    }
+
+    window.addEventListener(VITE_PRELOAD_ERROR_EVENT, (event: Event) => {
+        const preloadEvent = event as VitePreloadErrorEvent
+        console.error('Failed to preload route chunk:', preloadEvent.payload)
+        event.preventDefault()
+        void recoverFromVitePreloadError(preloadEvent.payload)
+    })
+    hasInstalledVitePreloadErrorHandler = true
+}
