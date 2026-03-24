@@ -7,6 +7,7 @@ const platform = process.platform;
 const arch = process.arch;
 const RELEASE_URL = 'https://github.com/tiann/viby/releases';
 const OFFICIAL_NPM_REGISTRY = 'https://registry.npmjs.org';
+const MAIN_PACKAGE_NAME = '@singyy/viby';
 const SUPPORTED_PLATFORMS = [
     {
         key: 'darwin-arm64',
@@ -111,7 +112,7 @@ function reportMissingPlatformPackage(platformName = platform, archName = arch, 
     log('This may happen when using a registry mirror that has not synced all optionalDependencies.');
     log('');
     log('Try reinstalling with the official npm registry:');
-    log(`  npm install -g viby --registry=${OFFICIAL_NPM_REGISTRY}`);
+    log(`  npm install -g ${MAIN_PACKAGE_NAME} --registry=${OFFICIAL_NPM_REGISTRY}`);
     log('');
     log('Or download the binary manually from:');
     log(`  ${RELEASE_URL}`);

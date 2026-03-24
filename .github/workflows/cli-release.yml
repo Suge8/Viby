@@ -121,4 +121,4 @@ jobs:
           publish_if_needed "viby-cli-linux-arm64" "cli/npm/linux-arm64"
           publish_if_needed "viby-cli-linux-x64" "cli/npm/linux-x64"
           publish_if_needed "viby-cli-windows-x64" "cli/npm/windows-x64"
-          publish_if_needed "viby" "cli/npm/main"
+          publish_if_needed "@singyy/viby" "cli/npm/main"
