@@ -1,0 +1,112 @@
+name: CLI Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Semver version to publish, without leading v
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish-cli:
+    name: Publish CLI Packages
+    runs-on: macos-14
+    timeout-minutes: 60
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Verify npm token
+        shell: bash
+        run: |
+          if [[ -z "${NODE_AUTH_TOKEN}" ]]; then
+            echo "Missing NPM_TOKEN secret"
+            exit 1
+          fi
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: ${VERSION}"
+
+      - name: Verify workspace version
+        shell: bash
+        run: |
+          ACTUAL_VERSION=$(node -p "require('./cli/package.json').version")
+          if [[ "${ACTUAL_VERSION}" != "${{ steps.version.outputs.version }}" ]]; then
+            echo "cli/package.json version ${ACTUAL_VERSION} does not match release version ${{ steps.version.outputs.version }}"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Focused CLI verification
+        run: |
+          bun run typecheck:cli
+          bun run --cwd cli test -- src/bin/vibyBin.test.ts
+
+      - name: Build release binaries
+        run: bun run build:single-exe:all
+
+      - name: Prepare npm packages
+        run: bun run --cwd cli prepare-npm-packages
+
+      - name: Dry-run published main package
+        run: npm publish --dry-run --access public
+        working-directory: cli/npm/main
+
+      - name: Publish CLI packages
+        shell: bash
+        run: |
+          publish_if_needed() {
+            local package_name="$1"
+            local package_dir="$2"
+
+            if npm view "${package_name}@${{ steps.version.outputs.version }}" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
+              echo "Skipping ${package_name}@${{ steps.version.outputs.version }}; already published"
+              return 0
+            fi
+
+            echo "Publishing ${package_name}@${{ steps.version.outputs.version }}"
+            (
+              cd "${package_dir}"
+              npm publish --access public
+            )
+          }
+
+          publish_if_needed "@viby/cli-darwin-arm64" "cli/npm/darwin-arm64"
+          publish_if_needed "@viby/cli-darwin-x64" "cli/npm/darwin-x64"
+          publish_if_needed "@viby/cli-linux-arm64" "cli/npm/linux-arm64"
+          publish_if_needed "@viby/cli-linux-x64" "cli/npm/linux-x64"
+          publish_if_needed "@viby/cli-win32-x64" "cli/npm/win32-x64"
+          publish_if_needed "viby" "cli/npm/main"

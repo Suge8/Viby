@@ -9,6 +9,8 @@ const DEFAULT_TARGETS = [
     'bun-linux-arm64',
     'bun-windows-x64'
 ];
+const BUILD_RETRY_ATTEMPTS = 3;
+const BUILD_RETRY_DELAY_MS = 5_000;
 const SUPPORTED_PLATFORMS = new Set(['darwin', 'linux', 'windows']);
 const SUPPORTED_ARCHES = new Set(['x64', 'arm64']);
 const SUPPORTED_LINUX_X64_VARIANTS = new Set(['baseline', 'modern']);
@@ -239,6 +241,30 @@ async function buildTarget(projectRoot: string, target: string, outdir: string, 
     }
 }
 
+async function buildTargetWithRetry(projectRoot: string, target: string, outdir: string, name: string): Promise<void> {
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= BUILD_RETRY_ATTEMPTS; attempt += 1) {
+        try {
+            await buildTarget(projectRoot, target, outdir, name);
+            return;
+        } catch (error) {
+            lastError = error;
+            if (attempt === BUILD_RETRY_ATTEMPTS) {
+                break;
+            }
+
+            console.warn(
+                `[build:exe] Attempt ${attempt}/${BUILD_RETRY_ATTEMPTS} failed for ${target}; retrying in ${BUILD_RETRY_DELAY_MS / 1000}s`
+            );
+            console.warn(`[build:exe] ${error instanceof Error ? error.message : String(error)}`);
+            await Bun.sleep(BUILD_RETRY_DELAY_MS);
+        }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
 async function main(): Promise<void> {
     const args = process.argv.slice(2);
     const target = getArg(args, '--target');
@@ -267,7 +293,7 @@ async function main(): Promise<void> {
     ensureEmbeddedAssetsManifest(workspaceRoot, includeWebAssets);
 
     for (const targetName of targets) {
-        await buildTarget(projectRoot, targetName, outdir, name);
+        await buildTargetWithRetry(projectRoot, targetName, outdir, name);
     }
 }
 
