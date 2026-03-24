@@ -1,5 +1,5 @@
 {
-    "name": "viby",
+    "name": "@viby/workspace",
     "private": true,
     "workspaces": ["cli", "shared", "hub", "web", "desktop"],
     "scripts": {

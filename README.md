@@ -46,7 +46,7 @@
 
 ```bash
 # 1. 启动 hub
-npx @viby/cli hub
+npx viby hub
 
 # 2. 打开 Web / PWA
 #    然后从新建会话流程里创建会话

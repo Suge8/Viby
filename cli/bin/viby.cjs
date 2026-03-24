@@ -103,7 +103,7 @@ function reportMissingPlatformPackage(platformName = platform, archName = arch, 
     log('This may happen when using a registry mirror that has not synced all optionalDependencies.');
     log('');
     log('Try reinstalling with the official npm registry:');
-    log(`  npm install -g @viby/cli --registry=${OFFICIAL_NPM_REGISTRY}`);
+    log(`  npm install -g viby --registry=${OFFICIAL_NPM_REGISTRY}`);
     log('');
     log('Or download the binary manually from:');
     log(`  ${RELEASE_URL}`);
