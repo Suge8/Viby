@@ -103,6 +103,9 @@ jobs:
           publish_if_needed() {
             local package_name="$1"
             local package_dir="$2"
+            local publish_log
+
+            publish_log=$(mktemp)
 
             if npm view "${package_name}@${{ steps.version.outputs.version }}" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
               echo "Skipping ${package_name}@${{ steps.version.outputs.version }}; already published"
@@ -110,10 +113,25 @@ jobs:
             fi
 
             echo "Publishing ${package_name}@${{ steps.version.outputs.version }}"
-            (
+            if (
               cd "${package_dir}"
               npm publish --access public --tag "${{ steps.dist_tag.outputs.dist_tag }}"
-            )
+            ) >"${publish_log}" 2>&1; then
+              cat "${publish_log}"
+              rm -f "${publish_log}"
+              return 0
+            fi
+
+            cat "${publish_log}"
+
+            if grep -q "previously published versions" "${publish_log}"; then
+              echo "Skipping ${package_name}@${{ steps.version.outputs.version }}; npm reports this version already exists"
+              rm -f "${publish_log}"
+              return 0
+            fi
+
+            rm -f "${publish_log}"
+            return 1
           }
 
           publish_if_needed "viby-cli-darwin-arm64" "cli/npm/darwin-arm64"
