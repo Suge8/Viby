@@ -58,6 +58,18 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Resolved version: ${VERSION}"
 
+      - name: Resolve npm dist-tag
+        id: dist_tag
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          DIST_TAG="latest"
+          if [[ "${VERSION}" == *-* ]]; then
+            DIST_TAG="next"
+          fi
+          echo "dist_tag=${DIST_TAG}" >> "$GITHUB_OUTPUT"
+          echo "Resolved npm dist-tag: ${DIST_TAG}"
+
       - name: Verify workspace version
         shell: bash
         run: |
@@ -82,7 +94,7 @@ jobs:
         run: bun run --cwd cli prepare-npm-packages
 
       - name: Dry-run published main package
-        run: npm publish --dry-run --access public
+        run: npm publish --dry-run --access public --tag "${{ steps.dist_tag.outputs.dist_tag }}"
         working-directory: cli/npm/main
 
       - name: Publish CLI packages
@@ -100,7 +112,7 @@ jobs:
             echo "Publishing ${package_name}@${{ steps.version.outputs.version }}"
             (
               cd "${package_dir}"
-              npm publish --access public
+              npm publish --access public --tag "${{ steps.dist_tag.outputs.dist_tag }}"
             )
           }
 
