@@ -91,7 +91,7 @@ describe('viby binary launcher error reporting', () => {
             lines.push(line);
         });
 
-        expect(lines).toContain('Missing platform package: @viby/cli-linux-x64');
+        expect(lines).toContain('Missing platform package: viby-cli-linux-x64');
         expect(lines).toContain('Try reinstalling with the official npm registry:');
         expect(lines).toContain('  npm install -g viby --registry=https://registry.npmjs.org');
         expect(lines).toContain('Or download the binary manually from:');

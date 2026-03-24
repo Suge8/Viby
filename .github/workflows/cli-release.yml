@@ -116,9 +116,9 @@ jobs:
             )
           }
 
-          publish_if_needed "@viby/cli-darwin-arm64" "cli/npm/darwin-arm64"
-          publish_if_needed "@viby/cli-darwin-x64" "cli/npm/darwin-x64"
-          publish_if_needed "@viby/cli-linux-arm64" "cli/npm/linux-arm64"
-          publish_if_needed "@viby/cli-linux-x64" "cli/npm/linux-x64"
-          publish_if_needed "@viby/cli-win32-x64" "cli/npm/win32-x64"
+          publish_if_needed "viby-cli-darwin-arm64" "cli/npm/darwin-arm64"
+          publish_if_needed "viby-cli-darwin-x64" "cli/npm/darwin-x64"
+          publish_if_needed "viby-cli-linux-arm64" "cli/npm/linux-arm64"
+          publish_if_needed "viby-cli-linux-x64" "cli/npm/linux-x64"
+          publish_if_needed "viby-cli-win32-x64" "cli/npm/win32-x64"
           publish_if_needed "viby" "cli/npm/main"

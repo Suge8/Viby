@@ -18,7 +18,7 @@ function buildCliOptionalDependencies(version: string): Record<string, string> {
     const optionalDependencies: Record<string, string> = {};
 
     for (const platformName of OPTIONAL_PLATFORM_PACKAGES) {
-        optionalDependencies[`@viby/cli-${platformName}`] = version;
+        optionalDependencies[`viby-cli-${platformName}`] = version;
     }
 
     return optionalDependencies;

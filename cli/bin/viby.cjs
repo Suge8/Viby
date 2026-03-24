@@ -39,7 +39,7 @@ function isSupportedPlatform(platformName = platform, archName = arch) {
 }
 
 function getBinaryPath(platformName = platform, archName = arch) {
-    const pkgName = `@viby/cli-${platformName}-${archName}`;
+    const pkgName = `viby-cli-${platformName}-${archName}`;
 
     try {
         // Try to find the platform-specific package
@@ -96,7 +96,7 @@ function reportUnsupportedPlatform(platformName = platform, archName = arch, log
 }
 
 function reportMissingPlatformPackage(platformName = platform, archName = arch, log = console.error) {
-    const platformPackage = `@viby/cli-${platformName}-${archName}`;
+    const platformPackage = `viby-cli-${platformName}-${archName}`;
     log(`Missing platform package: ${platformPackage}`);
     log('');
     log(`Detected platform ${platformName}-${archName} is supported, but the platform binary package was not installed.`);

@@ -86,7 +86,7 @@ function generatePlatformPackageJson(
     mainPkg: MainPackageJson
 ): object {
     return {
-        name: `@viby/cli-${platform.name}`,
+        name: `viby-cli-${platform.name}`,
         version: mainPkg.version,
         description: `viby binary for ${platform.os} ${platform.cpu}`,
         os: [platform.os],
@@ -104,7 +104,7 @@ function buildOptionalDependencies(version: string): Record<string, string> {
     const optionalDependencies: Record<string, string> = {};
 
     for (const platform of PLATFORMS) {
-        optionalDependencies[`@viby/cli-${platform.name}`] = version;
+        optionalDependencies[`viby-cli-${platform.name}`] = version;
     }
 
     return optionalDependencies;
