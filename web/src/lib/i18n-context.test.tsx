@@ -9,6 +9,11 @@ function LocaleProbe(): JSX.Element {
     return <div>{locale}</div>
 }
 
+function TranslationProbe(): JSX.Element {
+    const { t } = useTranslation()
+    return <div>{t('login.submit')}</div>
+}
+
 describe('i18n locale detection', () => {
     const originalLanguage = navigator.language
     const originalLanguages = navigator.languages
@@ -124,6 +129,20 @@ describe('i18n locale detection', () => {
 
         await waitFor(() => {
             expect(screen.getByText('zh-CN')).toBeInTheDocument()
+        })
+    })
+
+    it('loads zh-CN translations on demand when the saved locale prefers Chinese', async () => {
+        window.localStorage.setItem('viby-lang-preference', 'zh-CN')
+
+        render(
+            <I18nProvider>
+                <TranslationProbe />
+            </I18nProvider>
+        )
+
+        await waitFor(() => {
+            expect(screen.getByText('登录')).toBeInTheDocument()
         })
     })
 })

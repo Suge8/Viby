@@ -5,7 +5,7 @@ import { SessionList } from '@/components/SessionList'
 import { SessionsEmptyState } from '@/components/SessionsEmptyState'
 import { PlusIcon, SettingsIcon, BrandIcon } from '@/components/icons'
 import { Button } from '@/components/ui/button'
-import { disposeSessionViewRuntime } from '@/hooks/queries/sessionScopedQueryOptions'
+import { disposeSessionViewRuntime } from '@/hooks/queries/sessionViewRuntime'
 import { useSessions } from '@/hooks/queries/useSessions'
 import { useAppContext } from '@/lib/app-context'
 import {

@@ -1,5 +1,4 @@
 import { lazy, Suspense, type JSX } from 'react'
-import { NoticeProvider } from '@/lib/notice-center'
 
 const LazyAppController = lazy(async () => {
     const module = await import('@/components/AppController')
@@ -12,10 +11,8 @@ function AppBootFallback(): JSX.Element {
 
 export function App(): JSX.Element {
     return (
-        <NoticeProvider>
-            <Suspense fallback={<AppBootFallback />}>
-                <LazyAppController />
-            </Suspense>
-        </NoticeProvider>
+        <Suspense fallback={<AppBootFallback />}>
+            <LazyAppController />
+        </Suspense>
     )
 }

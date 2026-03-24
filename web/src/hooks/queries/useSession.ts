@@ -3,7 +3,7 @@ import type { ApiClient } from '@/api/client'
 import type { Session } from '@/types/api'
 import type { SessionResponse } from '@/types/api'
 import { getSessionPlaceholderResponse } from '@/lib/sessionQueryCache'
-import { createSessionDetailQueryOptions } from './sessionScopedQueryOptions'
+import { createSessionDetailQueryOptions } from './sessionDetailQueryOptions'
 
 function getSessionErrorMessage(error: unknown): string | null {
     if (error instanceof Error) {

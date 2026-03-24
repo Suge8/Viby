@@ -69,7 +69,7 @@ vi.mock('@/routes/sessions/sessionRoutePreload', () => ({
     loadSettingsRouteModule: () => loadSettingsRouteModuleMock()
 }))
 
-vi.mock('@/hooks/queries/sessionScopedQueryOptions', () => ({
+vi.mock('@/hooks/queries/sessionViewRuntime', () => ({
     disposeSessionViewRuntime: (...args: unknown[]) => disposeSessionViewRuntimeMock(...args)
 }))
 

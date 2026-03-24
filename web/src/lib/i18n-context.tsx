@@ -1,5 +1,6 @@
 import { createContext, useCallback, useEffect, useState, type ReactNode } from 'react'
-import { en, zhCN } from './locales'
+import { en } from './locales'
+import { getCachedTranslations, preloadTranslations } from './i18nCatalog'
 
 export type Locale = 'en' | 'zh-CN'
 export type LocalePreference = Locale | 'system'
@@ -15,9 +16,9 @@ export type I18nContextValue = {
 
 export const I18nContext = createContext<I18nContextValue | null>(null)
 
-const locales: Record<Locale, Translations> = { en, 'zh-CN': zhCN }
 const LEGACY_LOCALE_STORAGE_KEY = 'viby-lang'
 const LOCALE_PREFERENCE_STORAGE_KEY = 'viby-lang-preference'
+const DEFAULT_TRANSLATIONS: Translations = en
 
 function isLocale(value: string | null): value is Locale {
     return value === 'en' || value === 'zh-CN'
@@ -37,11 +38,11 @@ export function detectPreferredLocale(): Locale {
     return matchedChinese ? 'zh-CN' : 'en'
 }
 
-function resolveLocale(localePreference: LocalePreference): Locale {
+export function resolveLocale(localePreference: LocalePreference): Locale {
     return localePreference === 'system' ? detectPreferredLocale() : localePreference
 }
 
-function readStoredLocalePreference(): LocalePreference {
+export function readStoredLocalePreference(): LocalePreference {
     if (typeof localStorage === 'undefined') {
         return 'system'
     }
@@ -53,6 +54,10 @@ function readStoredLocalePreference(): LocalePreference {
 
     const legacyLocale = localStorage.getItem(LEGACY_LOCALE_STORAGE_KEY)
     return isLocale(legacyLocale) ? legacyLocale : 'system'
+}
+
+export function resolveInitialLocale(): Locale {
+    return resolveLocale(readStoredLocalePreference())
 }
 
 function persistLocalePreference(localePreference: LocalePreference): void {
@@ -82,6 +87,9 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     const [localePreference, setLocalePreference] = useState<LocalePreference>(() => readStoredLocalePreference())
     const [systemLocale, setSystemLocale] = useState<Locale>(() => detectPreferredLocale())
     const locale = localePreference === 'system' ? systemLocale : localePreference
+    const [translations, setTranslations] = useState<Translations>(() => {
+        return getCachedTranslations(locale) ?? DEFAULT_TRANSLATIONS
+    })
 
     const setLocale = useCallback((nextLocalePreference: LocalePreference) => {
         persistLocalePreference(nextLocalePreference)
@@ -89,14 +97,31 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     }, [])
 
     const t = useCallback((key: string, params?: Record<string, string | number>): string => {
-        const dict = locales[locale] ?? locales.en
-        const value = dict[key]
-        const fallback = locales.en[key] ?? key
+        const value = translations[key]
+        const fallback = DEFAULT_TRANSLATIONS[key] ?? key
         return interpolate(value ?? fallback, params)
-    }, [locale])
+    }, [translations])
 
     useEffect(() => {
         document.documentElement.lang = locale
+    }, [locale])
+
+    useEffect(() => {
+        const cached = getCachedTranslations(locale)
+        if (cached) {
+            setTranslations(cached)
+            return
+        }
+
+        let cancelled = false
+        void preloadTranslations(locale).then((nextTranslations) => {
+            if (!cancelled) {
+                setTranslations(nextTranslations)
+            }
+        })
+        return () => {
+            cancelled = true
+        }
     }, [locale])
 
     useEffect(() => {

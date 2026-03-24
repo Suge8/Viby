@@ -12,6 +12,7 @@ import {
     renderAuthorizingState
 } from '@/lib/appShellPresentation'
 import { AppContextProvider } from '@/lib/app-context'
+import { NoticeProvider } from '@/lib/notice-center'
 import { useTranslation } from '@/lib/use-translation'
 import { requireHubUrlForLogin } from '@/lib/runtime-config'
 import type { LoginPromptServerConfig } from '@/components/LoginPrompt'
@@ -123,15 +124,17 @@ export function AppController(): JSX.Element {
     }
 
     return (
-        <AppContextProvider value={{ api, token, baseUrl }}>
-            <Suspense fallback={renderAuthorizingState(t)}>
-                <LazyAppRealtimeRuntime
-                    api={api}
-                    token={token}
-                    baseUrl={baseUrl}
-                    appViewportRoute={appViewportRoute}
-                />
-            </Suspense>
-        </AppContextProvider>
+        <NoticeProvider>
+            <AppContextProvider value={{ api, token, baseUrl }}>
+                <Suspense fallback={renderAuthorizingState(t)}>
+                    <LazyAppRealtimeRuntime
+                        api={api}
+                        token={token}
+                        baseUrl={baseUrl}
+                        appViewportRoute={appViewportRoute}
+                    />
+                </Suspense>
+            </AppContextProvider>
+        </NoticeProvider>
     )
 }

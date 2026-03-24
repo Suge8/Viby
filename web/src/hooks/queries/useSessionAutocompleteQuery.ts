@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient, type QueryKey, type UseQueryResult } from '@tanstack/react-query'
 import { useCallback, useMemo } from 'react'
-import { sessionAutocompleteQueryOptions } from './sessionScopedQueryOptions'
+import { sessionAutocompleteQueryOptions } from './sessionDetailQueryOptions'
 
 type SessionAutocompleteQueryOptions<TData> = {
     enabled: boolean

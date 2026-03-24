@@ -1,11 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query'
 import type { ApiClient } from '@/api/client'
-import { ensureLatestMessagesLoaded } from '@/lib/message-window-store'
-import {
-    recordRuntimeAssetFailureRecovery,
-    type RuntimeAssetFailure
-} from '@/lib/runtimeAssetRecovery'
-import { createSessionDetailQueryOptions } from '@/hooks/queries/sessionScopedQueryOptions'
+import { recordRuntimeAssetFailureRecovery } from '@/lib/runtimeAssetRecovery'
 
 export function loadSessionChatRouteModule(): Promise<typeof import('@/routes/sessions/chat')> {
     return import('@/routes/sessions/chat')
@@ -65,7 +60,7 @@ export const SESSIONS_IDLE_PRELOADERS = [
     loadSettingsRouteModule,
 ] as const
 
-type PreloadSessionDetailRouteOptions = {
+export type PreloadSessionDetailRouteOptions = {
     api: ApiClient | null
     queryClient: QueryClient
     sessionId: string
@@ -75,25 +70,11 @@ type PreloadSessionDetailRouteOptions = {
 }
 
 export async function preloadSessionDetailRoute(options: PreloadSessionDetailRouteOptions): Promise<void> {
-    const api = options.api
-    const tasks: Promise<unknown>[] = [preloadSessionChatExperience({
-        includeWorkspace: options.includeWorkspace !== false
-    })]
-    const includeLatestMessages = options.includeLatestMessages !== false
-
-    if (api) {
-        tasks.push(options.queryClient.prefetchQuery(
-            createSessionDetailQueryOptions(api, options.sessionId)
-        ))
-        if (includeLatestMessages) {
-            tasks.push(ensureLatestMessagesLoaded(api, options.sessionId))
-        }
-    }
-
     try {
-        await Promise.all(tasks)
+        const module = await import('./sessionDetailPreload')
+        await module.preloadSessionDetailRoute(options)
     } catch (error) {
-        const failure: RuntimeAssetFailure = error instanceof Error
+        const failure = error instanceof Error
             ? {
                 message: error.message,
                 stack: error.stack

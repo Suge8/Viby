@@ -115,7 +115,7 @@ describe('sessionRoutePreload', () => {
             recoveryHref: '/sessions/session-1'
         })
 
-        await Promise.resolve()
+        await vi.dynamicImportSettled()
 
         expect(queryClient.prefetchQuery).toHaveBeenCalledTimes(1)
         expect(harness.ensureLatestMessagesLoaded).not.toHaveBeenCalled()
