@@ -4,8 +4,7 @@ import { isPermissionModeAllowedForFlavor, type LiveSessionConfigSupport } from 
 import type { ApiClient } from '@/api/client'
 import type { CodexCollaborationMode, ModelReasoningEffort, PermissionMode, Session } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
-import { clearMessageWindow } from '@/lib/message-window-store'
-import { writeSessionToQueryCache } from '@/lib/sessionQueryCache'
+import { removeSessionClientState, writeSessionToQueryCache } from '@/lib/sessionQueryCache'
 import { isKnownFlavor } from '@/lib/agentFlavorUtils'
 
 export function useSessionActions(
@@ -17,7 +16,7 @@ export function useSessionActions(
     }
 ): {
     abortSession: () => Promise<void>
-    resumeSession: () => Promise<string>
+    resumeSession: () => Promise<Session>
     closeSession: () => Promise<void>
     archiveSession: () => Promise<void>
     unarchiveSession: () => Promise<void>
@@ -38,10 +37,9 @@ export function useSessionActions(
         await queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
     }, [queryClient, sessionId])
 
-    const handleSessionSnapshotSuccess = useCallback((session: Session): void => {
+    const writeSessionSnapshot = useCallback((session: Session): void => {
         writeSessionToQueryCache(queryClient, session)
-        void invalidateSession()
-    }, [invalidateSession, queryClient])
+    }, [queryClient])
 
     const abortMutation = useMutation({
         mutationFn: async () => {
@@ -60,7 +58,7 @@ export function useSessionActions(
             }
             return await api.archiveSession(sessionId)
         },
-        onSuccess: handleSessionSnapshotSuccess,
+        onSuccess: writeSessionSnapshot,
     })
 
     const closeMutation = useMutation({
@@ -70,7 +68,7 @@ export function useSessionActions(
             }
             return await api.closeSession(sessionId)
         },
-        onSuccess: handleSessionSnapshotSuccess,
+        onSuccess: writeSessionSnapshot,
     })
 
     const unarchiveMutation = useMutation({
@@ -80,7 +78,7 @@ export function useSessionActions(
             }
             return await api.unarchiveSession(sessionId)
         },
-        onSuccess: handleSessionSnapshotSuccess,
+        onSuccess: writeSessionSnapshot,
     })
 
     const resumeMutation = useMutation({
@@ -90,10 +88,7 @@ export function useSessionActions(
             }
             return await api.resumeSession(sessionId)
         },
-        onSuccess: async (resolvedSessionId) => {
-            await invalidateSession()
-            await queryClient.invalidateQueries({ queryKey: queryKeys.session(resolvedSessionId) })
-        },
+        onSuccess: writeSessionSnapshot,
     })
 
     const switchMutation = useMutation({
@@ -117,9 +112,9 @@ export function useSessionActions(
             if (isKnownFlavor(agentFlavor) && !isPermissionModeAllowedForFlavor(mode, agentFlavor)) {
                 throw new Error('Invalid permission mode for session flavor')
             }
-            await api.setPermissionMode(sessionId, mode)
+            return await api.setPermissionMode(sessionId, mode)
         },
-        onSuccess: () => void invalidateSession(),
+        onSuccess: writeSessionSnapshot,
     })
 
     const collaborationMutation = useMutation({
@@ -133,9 +128,9 @@ export function useSessionActions(
             if (!options?.liveConfigSupport?.canChangeCollaborationMode) {
                 throw new Error('Collaboration mode is only supported for remote Codex sessions')
             }
-            await api.setCollaborationMode(sessionId, mode)
+            return await api.setCollaborationMode(sessionId, mode)
         },
-        onSuccess: () => void invalidateSession(),
+        onSuccess: writeSessionSnapshot,
     })
 
     const modelMutation = useMutation({
@@ -144,11 +139,11 @@ export function useSessionActions(
                 throw new Error('Session unavailable')
             }
             if (!options?.liveConfigSupport?.canChangeModel) {
-                throw new Error('Model selection is only supported for remote Codex sessions')
+                throw new Error('Model selection is only supported for remote Claude and Codex sessions')
             }
-            await api.setModel(sessionId, model)
+            return await api.setModel(sessionId, model)
         },
-        onSuccess: () => void invalidateSession(),
+        onSuccess: writeSessionSnapshot,
     })
 
     const modelReasoningEffortMutation = useMutation({
@@ -160,11 +155,11 @@ export function useSessionActions(
                 throw new Error('Model reasoning effort is only supported for Claude and Codex sessions')
             }
             if (!options?.liveConfigSupport?.canChangeModelReasoningEffort) {
-                throw new Error('Model reasoning effort is only supported for remote Codex sessions')
+                throw new Error('Model reasoning effort is only supported for remote Claude and Codex sessions')
             }
-            await api.setModelReasoningEffort(sessionId, modelReasoningEffort)
+            return await api.setModelReasoningEffort(sessionId, modelReasoningEffort)
         },
-        onSuccess: () => void invalidateSession(),
+        onSuccess: writeSessionSnapshot,
     })
 
     const renameMutation = useMutation({
@@ -174,9 +169,7 @@ export function useSessionActions(
             }
             return await api.renameSession(sessionId, name)
         },
-        onSuccess: (session) => {
-            writeSessionToQueryCache(queryClient, session)
-        },
+        onSuccess: writeSessionSnapshot,
     })
 
     const deleteMutation = useMutation({
@@ -188,9 +181,7 @@ export function useSessionActions(
         },
         onSuccess: async () => {
             if (!sessionId) return
-            queryClient.removeQueries({ queryKey: queryKeys.session(sessionId) })
-            clearMessageWindow(sessionId)
-            await queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
+            removeSessionClientState(queryClient, sessionId)
         },
     })
 
@@ -213,10 +204,18 @@ export function useSessionActions(
         archiveSession,
         unarchiveSession,
         switchSession: switchMutation.mutateAsync,
-        setPermissionMode: permissionMutation.mutateAsync,
-        setCollaborationMode: collaborationMutation.mutateAsync,
-        setModel: modelMutation.mutateAsync,
-        setModelReasoningEffort: modelReasoningEffortMutation.mutateAsync,
+        setPermissionMode: async (mode: PermissionMode) => {
+            await permissionMutation.mutateAsync(mode)
+        },
+        setCollaborationMode: async (mode: CodexCollaborationMode) => {
+            await collaborationMutation.mutateAsync(mode)
+        },
+        setModel: async (model: string | null) => {
+            await modelMutation.mutateAsync(model)
+        },
+        setModelReasoningEffort: async (modelReasoningEffort: ModelReasoningEffort | null) => {
+            await modelReasoningEffortMutation.mutateAsync(modelReasoningEffort)
+        },
         renameSession: async (name: string) => {
             await renameMutation.mutateAsync(name)
         },

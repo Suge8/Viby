@@ -1,5 +1,5 @@
 import { useMutation } from '@tanstack/react-query'
-import { useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import type { ApiClient } from '@/api/client'
 import type { AttachmentMetadata, DecryptedMessage } from '@/types/api'
 import { makeClientSideId } from '@/lib/messages'
@@ -21,8 +21,7 @@ type SendMessageInput = {
 type BlockedReason = 'no-api' | 'no-session' | 'pending'
 
 type UseSendMessageOptions = {
-    resolveSessionId?: (sessionId: string) => Promise<string>
-    onSessionResolved?: (sessionId: string) => void
+    ensureSessionReady?: () => Promise<void>
     onBlocked?: (reason: BlockedReason) => void
     onSendStart?: (info: {
         sessionId: string
@@ -63,6 +62,33 @@ export function useSendMessage(
     const { haptic } = usePlatform()
     const [isResolving, setIsResolving] = useState(false)
     const resolveGuardRef = useRef(false)
+
+    const handleBlocked = useCallback((reason: BlockedReason): void => {
+        options?.onBlocked?.(reason)
+        if (reason !== 'pending') {
+            haptic.notification('error')
+        }
+    }, [haptic, options])
+
+    const ensureSendTargetReady = useCallback(async (): Promise<boolean> => {
+        if (!options?.ensureSessionReady) {
+            return true
+        }
+
+        resolveGuardRef.current = true
+        setIsResolving(true)
+        try {
+            await options.ensureSessionReady()
+            return true
+        } catch (error) {
+            haptic.notification('error')
+            console.error('Failed to resolve session before send:', error)
+            return false
+        } finally {
+            resolveGuardRef.current = false
+            setIsResolving(false)
+        }
+    }, [haptic, options])
 
     const mutation = useMutation({
         mutationFn: async (input: SendMessageInput) => {
@@ -106,72 +132,63 @@ export function useSendMessage(
         },
     })
 
-    const sendMessage = (text: string, attachments?: AttachmentMetadata[]) => {
+    const getBlockedReason = useCallback((): BlockedReason | null => {
         if (!api) {
-            options?.onBlocked?.('no-api')
-            haptic.notification('error')
-            return
+            return 'no-api'
         }
         if (!sessionId) {
-            options?.onBlocked?.('no-session')
-            haptic.notification('error')
-            return
+            return 'no-session'
         }
         if (mutation.isPending || resolveGuardRef.current) {
-            options?.onBlocked?.('pending')
+            return 'pending'
+        }
+        return null
+    }, [api, mutation.isPending, sessionId])
+
+    const sendMessage = useCallback((text: string, attachments?: AttachmentMetadata[]) => {
+        const blockedReason = getBlockedReason()
+        if (blockedReason) {
+            handleBlocked(blockedReason)
             return
         }
+
+        const currentSessionId = sessionId
+        if (!currentSessionId) {
+            return
+        }
+
         const localId = makeClientSideId('local')
         const createdAt = Date.now()
+
         void (async () => {
-            let targetSessionId = sessionId
-            if (options?.resolveSessionId) {
-                resolveGuardRef.current = true
-                setIsResolving(true)
-                try {
-                    const resolved = await options.resolveSessionId(sessionId)
-                    if (resolved && resolved !== sessionId) {
-                        options.onSessionResolved?.(resolved)
-                        targetSessionId = resolved
-                    }
-                } catch (error) {
-                    haptic.notification('error')
-                    console.error('Failed to resolve session before send:', error)
-                    return
-                } finally {
-                    resolveGuardRef.current = false
-                    setIsResolving(false)
-                }
+            const ready = await ensureSendTargetReady()
+            if (!ready) {
+                return
             }
+
             options?.onSendStart?.({
-                sessionId: targetSessionId,
+                sessionId: currentSessionId,
                 localId,
                 createdAt,
                 attachmentsCount: attachments?.length ?? 0
             })
             mutation.mutate({
-                sessionId: targetSessionId,
+                sessionId: currentSessionId,
                 text,
                 localId,
                 createdAt,
                 attachments,
             })
         })()
-    }
+    }, [ensureSendTargetReady, getBlockedReason, handleBlocked, mutation, options, sessionId])
 
-    const retryMessage = (localId: string) => {
-        if (!api) {
-            options?.onBlocked?.('no-api')
-            haptic.notification('error')
+    const retryMessage = useCallback((localId: string) => {
+        const blockedReason = getBlockedReason()
+        if (blockedReason) {
+            handleBlocked(blockedReason)
             return
         }
         if (!sessionId) {
-            options?.onBlocked?.('no-session')
-            haptic.notification('error')
-            return
-        }
-        if (mutation.isPending || resolveGuardRef.current) {
-            options?.onBlocked?.('pending')
             return
         }
 
@@ -186,7 +203,7 @@ export function useSendMessage(
             localId,
             createdAt: message.createdAt,
         })
-    }
+    }, [getBlockedReason, handleBlocked, mutation, sessionId])
 
     return {
         sendMessage,

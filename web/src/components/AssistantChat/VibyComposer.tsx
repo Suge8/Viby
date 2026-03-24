@@ -68,6 +68,7 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
     const {
         permissionMode: rawPermissionMode,
         model: rawModel,
+        isResuming = false,
         active = true,
         allowSendWhenInactive = false,
         controlledByUser = false,
@@ -92,7 +93,7 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
     const threadIsRunning = useAssistantState(({ thread }) => thread.isRunning)
     const threadIsDisabled = useAssistantState(({ thread }) => thread.isDisabled)
 
-    const controlsDisabled = disabled || (!active && !allowSendWhenInactive) || threadIsDisabled
+    const controlsDisabled = disabled || isResuming || (!active && !allowSendWhenInactive) || threadIsDisabled
     const trimmed = composerText.trim()
     const hasText = trimmed.length > 0
     const hasAttachments = attachments.length > 0
@@ -117,7 +118,7 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
         prevControlledByUser.current = controlledByUser
     }, [controlledByUser])
 
-    const showResumePlaceholder = showResumeHint || (!active && allowSendWhenInactive)
+    const showResumePlaceholder = !isResuming && (showResumeHint || (!active && allowSendWhenInactive))
 
     const { haptic, isTouch } = useComposerPlatform()
 
@@ -219,7 +220,11 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
     return (
         <div ref={composerModel.containerRef} className="session-chat-composer-shell ds-composer-shell shrink-0 px-3">
             <div className="mx-auto w-full ds-stage-shell">
-                <ComposerPrimitive.Root className="relative" onSubmit={handleFormSubmit}>
+                <ComposerPrimitive.Root
+                    className="relative"
+                    onSubmit={handleFormSubmit}
+                    aria-busy={isResuming ? 'true' : undefined}
+                >
                     <ComposerSuggestionsOverlay
                         hidden={openPanel !== null}
                         suggestions={composerInput.suggestions}
@@ -251,7 +256,11 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
                             <ComposerPrimitive.Input
                                 ref={composerInput.textareaRef}
                                 autoFocus={!controlsDisabled && !isTouch}
-                                placeholder={showResumePlaceholder ? t('misc.resumeMessage') : t('misc.typeAMessage')}
+                                placeholder={isResuming
+                                    ? t('misc.resumingSession')
+                                    : showResumePlaceholder
+                                        ? t('misc.resumeMessage')
+                                        : t('misc.typeAMessage')}
                                 disabled={controlsDisabled}
                                 maxRows={5}
                                 submitOnEnter={false}

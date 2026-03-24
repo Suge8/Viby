@@ -3,63 +3,129 @@ import { describe, expect, it, vi } from 'vitest'
 import { useSessionTargetResolver } from '@/hooks/useSessionTargetResolver'
 
 describe('useSessionTargetResolver', () => {
-    it('resumes an inactive session once and reuses the resolved target', async () => {
-        const api = {
-            resumeSession: vi.fn().mockResolvedValue('session-2')
+    it('resumes an inactive session once and reuses the in-flight ready promise', async () => {
+        const resumedSession = {
+            id: 'session-1',
+            active: true,
+            metadata: {
+                flavor: 'codex',
+                codexSessionId: 'thread-1'
+            }
         }
-        const onResolved = vi.fn()
+        const api = {
+            resumeSession: vi.fn().mockResolvedValue(resumedSession)
+        }
+        const onReady = vi.fn()
         const onError = vi.fn()
 
-        const { result, rerender } = renderHook((session: { id: string; active: boolean }) => useSessionTargetResolver({
+        const { result, rerender } = renderHook((session: { id: string; active: boolean; metadata: { flavor: 'codex'; codexSessionId?: string } }) => useSessionTargetResolver({
             api: api as never,
             session: session as never,
-            onResolved,
+            onReady,
             onError,
         }), {
-            initialProps: { id: 'session-1', active: false }
+            initialProps: {
+                id: 'session-1',
+                active: false,
+                metadata: {
+                    flavor: 'codex',
+                    codexSessionId: 'thread-1'
+                }
+            }
         })
 
-        await expect(result.current('session-1')).resolves.toBe('session-2')
-        await expect(result.current('session-1')).resolves.toBe('session-2')
+        await expect(result.current()).resolves.toBeUndefined()
 
         expect(api.resumeSession).toHaveBeenCalledTimes(1)
-        expect(onResolved).toHaveBeenCalledWith('session-1', 'session-2')
+        expect(onReady).toHaveBeenCalledWith(resumedSession)
         expect(onError).not.toHaveBeenCalled()
 
-        rerender({ id: 'session-2', active: true })
+        rerender({
+            id: 'session-1',
+            active: true,
+            metadata: {
+                flavor: 'codex',
+                codexSessionId: 'thread-1'
+            }
+        })
 
-        await expect(result.current('session-2')).resolves.toBe('session-2')
+        await expect(result.current()).resolves.toBeUndefined()
         expect(api.resumeSession).toHaveBeenCalledTimes(1)
     })
 
     it('dedupes concurrent resume requests while a resume is in flight', async () => {
-        let resolveResume: ((sessionId: string) => void) | null = null
+        let resolveResume: ((session: { id: string; active: boolean; metadata: { flavor: 'codex'; codexSessionId: string } }) => void) | null = null
         const api = {
-            resumeSession: vi.fn().mockImplementation(() => new Promise<string>((resolve) => {
+            resumeSession: vi.fn().mockImplementation(() => new Promise((resolve) => {
                 resolveResume = resolve
             }))
         }
-        const onResolved = vi.fn()
+        const onReady = vi.fn()
 
         const { result } = renderHook(() => useSessionTargetResolver({
             api: api as never,
-            session: { id: 'session-1', active: false } as never,
-            onResolved,
+            session: {
+                id: 'session-1',
+                active: false,
+                metadata: {
+                    flavor: 'codex',
+                    codexSessionId: 'thread-1'
+                }
+            } as never,
+            onReady,
             onError: vi.fn(),
         }))
 
-        let pendingResults: string[] | null = null
+        let readyCount = 0
         await act(async () => {
-            const first = result.current('session-1')
-            const second = result.current('session-1')
+            const first = result.current()
+            const second = result.current()
 
             expect(api.resumeSession).toHaveBeenCalledTimes(1)
 
-            resolveResume?.('session-2')
-            pendingResults = await Promise.all([first, second])
+            resolveResume?.({
+                id: 'session-1',
+                active: true,
+                metadata: {
+                    flavor: 'codex',
+                    codexSessionId: 'thread-1'
+                }
+            })
+            await Promise.all([first, second])
+            readyCount = onReady.mock.calls.length
         })
 
-        expect(pendingResults).toEqual(['session-2', 'session-2'])
-        expect(onResolved).toHaveBeenCalledTimes(1)
+        expect(readyCount).toBe(1)
+        expect(onReady).toHaveBeenCalledTimes(1)
+    })
+
+    it('fails fast for closed sessions without a resume marker', async () => {
+        const api = {
+            resumeSession: vi.fn()
+        }
+        const onReady = vi.fn()
+        const onError = vi.fn()
+
+        const { result } = renderHook(() => useSessionTargetResolver({
+            api: api as never,
+            session: {
+                id: 'session-legacy',
+                active: false,
+                metadata: {
+                    flavor: 'codex'
+                }
+            } as never,
+            onReady,
+            onError,
+        }))
+
+        await expect(result.current()).rejects.toMatchObject({
+            code: 'resume_unavailable'
+        })
+        expect(api.resumeSession).not.toHaveBeenCalled()
+        expect(onReady).not.toHaveBeenCalled()
+        expect(onError).toHaveBeenCalledWith(expect.objectContaining({
+            code: 'resume_unavailable'
+        }), 'session-legacy')
     })
 })

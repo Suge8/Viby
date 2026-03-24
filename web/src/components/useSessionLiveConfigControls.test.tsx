@@ -68,23 +68,58 @@ function createSession(overrides?: Partial<Session>): Session {
     } as Session
 }
 
+function primeSessionCaches(queryClient: QueryClient, session: Session): void {
+    queryClient.setQueryData(queryKeys.session(session.id), {
+        session
+    })
+    queryClient.setQueryData(queryKeys.sessions, {
+        sessions: [{
+            id: session.id,
+            active: session.active,
+            thinking: session.thinking,
+            activeAt: session.active ? 1 : null,
+            updatedAt: 1,
+            latestActivityAt: 1,
+            latestActivityKind: 'ready',
+            latestCompletedReplyAt: 1,
+            lifecycleState: session.metadata?.lifecycleState ?? 'running',
+            lifecycleStateSince: session.metadata?.lifecycleStateSince ?? null,
+            metadata: {
+                path: session.metadata?.path ?? '',
+                flavor: session.metadata?.flavor ?? null
+            },
+            todoProgress: null,
+            pendingRequestsCount: 0,
+            resumeAvailable: false,
+            permissionMode: session.permissionMode,
+            collaborationMode: session.collaborationMode,
+            model: session.model,
+            modelReasoningEffort: session.modelReasoningEffort
+        }]
+    })
+}
+
 describe('useSessionLiveConfigControls', () => {
     beforeEach(() => {
         platformHarness.success.mockReset()
         platformHarness.error.mockReset()
     })
 
-    it('invalidates both detail and list caches after a successful live config update', async () => {
+    it('writes the updated live config snapshot directly into both caches', async () => {
         const queryClient = createQueryClient()
         const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
-        const onRefresh = vi.fn()
+        const session = createSession()
+        primeSessionCaches(queryClient, session)
         const api = {
-            setPermissionMode: vi.fn(async () => undefined)
+            setPermissionMode: vi.fn(async () => ({
+                ...session,
+                permissionMode: 'read-only' as const
+            }))
         } as Partial<ApiClient> as ApiClient
 
         const { result } = renderHook(() => useSessionLiveConfigControls({
             api,
-            session: createSession(),
+            session,
             liveConfigSupport: {
                 isRemoteManaged: true,
                 canChangePermissionMode: true,
@@ -92,10 +127,10 @@ describe('useSessionLiveConfigControls', () => {
                 canChangeModel: true,
                 canChangeModelReasoningEffort: true
             },
-            onRefresh,
             onSwitchToRemote: vi.fn(async () => undefined),
             attachmentsSupported: true,
-            allowSendWhenInactive: false
+            allowSendWhenInactive: false,
+            isResumingSession: false
         }), {
             wrapper: createWrapper(queryClient)
         })
@@ -105,22 +140,23 @@ describe('useSessionLiveConfigControls', () => {
         })
 
         expect(api.setPermissionMode).toHaveBeenCalledWith('session-1', 'read-only')
-        expect(invalidateQueries).toHaveBeenNthCalledWith(1, { queryKey: queryKeys.session('session-1') })
-        expect(invalidateQueries).toHaveBeenNthCalledWith(2, { queryKey: queryKeys.sessions })
-        expect(onRefresh).toHaveBeenCalledOnce()
+        expect(queryClient.getQueryData<{ session: Session }>(queryKeys.session('session-1'))?.session.permissionMode).toBe('read-only')
+        expect(queryClient.getQueryData<{ sessions: Array<{ permissionMode: string }> }>(queryKeys.sessions)?.sessions[0]?.permissionMode).toBe('read-only')
+        expect(invalidateQueries).not.toHaveBeenCalled()
         expect(platformHarness.success).toHaveBeenCalledOnce()
         expect(platformHarness.error).not.toHaveBeenCalled()
     })
 
     it('hides permission controls when the session cannot change permission mode', () => {
         const queryClient = createQueryClient()
+        const session = createSession()
         const api = {
-            setPermissionMode: vi.fn(async () => undefined)
+            setPermissionMode: vi.fn(async () => session)
         } as Partial<ApiClient> as ApiClient
 
         const { result } = renderHook(() => useSessionLiveConfigControls({
             api,
-            session: createSession(),
+            session,
             liveConfigSupport: {
                 isRemoteManaged: false,
                 canChangePermissionMode: false,
@@ -128,10 +164,10 @@ describe('useSessionLiveConfigControls', () => {
                 canChangeModel: false,
                 canChangeModelReasoningEffort: false
             },
-            onRefresh: vi.fn(),
             onSwitchToRemote: vi.fn(async () => undefined),
             attachmentsSupported: true,
-            allowSendWhenInactive: false
+            allowSendWhenInactive: false,
+            isResumingSession: false
         }), {
             wrapper: createWrapper(queryClient)
         })
@@ -142,12 +178,12 @@ describe('useSessionLiveConfigControls', () => {
         expect(platformHarness.error).not.toHaveBeenCalled()
     })
 
-    it('rejects invalid permission modes for the current flavor without mutating or invalidating cache', async () => {
+    it('rejects invalid permission modes for the current flavor without mutating cache', async () => {
         const queryClient = createQueryClient()
         const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
-        const onRefresh = vi.fn()
+        const session = createSession()
         const api = {
-            setPermissionMode: vi.fn(async () => undefined)
+            setPermissionMode: vi.fn(async () => session)
         } as Partial<ApiClient> as ApiClient
 
         const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -162,10 +198,10 @@ describe('useSessionLiveConfigControls', () => {
                 canChangeModel: true,
                 canChangeModelReasoningEffort: true
             },
-            onRefresh,
             onSwitchToRemote: vi.fn(async () => undefined),
             attachmentsSupported: true,
-            allowSendWhenInactive: false
+            allowSendWhenInactive: false,
+            isResumingSession: false
         }), {
             wrapper: createWrapper(queryClient)
         })
@@ -176,10 +212,66 @@ describe('useSessionLiveConfigControls', () => {
 
         expect(api.setPermissionMode).not.toHaveBeenCalled()
         expect(invalidateQueries).not.toHaveBeenCalled()
-        expect(onRefresh).not.toHaveBeenCalled()
         expect(platformHarness.success).not.toHaveBeenCalled()
         expect(platformHarness.error).toHaveBeenCalledOnce()
 
         errorSpy.mockRestore()
+    })
+
+    it('exposes live Claude model and reasoning handlers when the session supports them', async () => {
+        const queryClient = createQueryClient()
+        const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
+        const session = createSession({
+            metadata: {
+                path: '/tmp/project',
+                host: 'localhost',
+                flavor: 'claude'
+            },
+            model: 'sonnet',
+            modelReasoningEffort: 'high'
+        })
+        primeSessionCaches(queryClient, session)
+        const api = {
+            setModel: vi.fn(async () => ({
+                ...session,
+                model: 'opus'
+            })),
+            setModelReasoningEffort: vi.fn(async () => ({
+                ...session,
+                model: 'opus',
+                modelReasoningEffort: 'max'
+            }))
+        } as Partial<ApiClient> as ApiClient
+
+        const { result } = renderHook(() => useSessionLiveConfigControls({
+            api,
+            session,
+            liveConfigSupport: {
+                isRemoteManaged: true,
+                canChangePermissionMode: true,
+                canChangeCollaborationMode: false,
+                canChangeModel: true,
+                canChangeModelReasoningEffort: true
+            },
+            onSwitchToRemote: vi.fn(async () => undefined),
+            attachmentsSupported: true,
+            allowSendWhenInactive: false,
+            isResumingSession: false
+        }), {
+            wrapper: createWrapper(queryClient)
+        })
+
+        await act(async () => {
+            await result.current.composerHandlers.onModelChange?.('opus')
+            await result.current.composerHandlers.onModelReasoningEffortChange?.('max')
+        })
+
+        expect(api.setModel).toHaveBeenCalledWith('session-1', 'opus')
+        expect(api.setModelReasoningEffort).toHaveBeenCalledWith('session-1', 'max')
+        expect(queryClient.getQueryData<{ session: Session }>(queryKeys.session('session-1'))?.session.model).toBe('opus')
+        expect(queryClient.getQueryData<{ session: Session }>(queryKeys.session('session-1'))?.session.modelReasoningEffort).toBe('max')
+        expect(invalidateQueries).not.toHaveBeenCalled()
+        expect(platformHarness.success).toHaveBeenCalledTimes(2)
+        expect(platformHarness.error).not.toHaveBeenCalled()
     })
 })

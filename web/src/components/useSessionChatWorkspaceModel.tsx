@@ -50,7 +50,8 @@ export type SessionChatWorkspaceActionHandlers = {
 
 export type SessionChatWorkspaceRuntimeOptions = {
     liveConfigSupport: LiveSessionConfigSupport
-    resolveSessionId?: (currentSessionId: string) => Promise<string>
+    ensureSessionReady?: () => Promise<void>
+    isResumingSession?: boolean
     autocompleteSuggestions?: (query: string) => Promise<Suggestion[]>
 }
 
@@ -91,7 +92,8 @@ export function useSessionChatWorkspaceModel(props: SessionChatWorkspaceProps) {
     } = actions
     const {
         liveConfigSupport,
-        resolveSessionId,
+        ensureSessionReady,
+        isResumingSession = false,
         autocompleteSuggestions
     } = runtimeOptions
 
@@ -116,12 +118,12 @@ export function useSessionChatWorkspaceModel(props: SessionChatWorkspaceProps) {
     }, [onSend])
 
     const attachmentAdapter = useMemo(() => {
-        if (!session.active && (!allowSendWhenInactive || !resolveSessionId)) {
+        if (!session.active && (!allowSendWhenInactive || !ensureSessionReady)) {
             return undefined
         }
 
-        return createAttachmentAdapter(api, sessionId, { resolveSessionId })
-    }, [allowSendWhenInactive, api, resolveSessionId, session.active, sessionId])
+        return createAttachmentAdapter(api, sessionId, { ensureSessionReady })
+    }, [allowSendWhenInactive, api, ensureSessionReady, session.active, sessionId])
 
     const assistantRuntime = useVibyRuntime({
         session,
@@ -140,11 +142,11 @@ export function useSessionChatWorkspaceModel(props: SessionChatWorkspaceProps) {
         api,
         session,
         liveConfigSupport,
-        onRefresh,
         onSwitchToRemote,
         autocompleteSuggestions,
         attachmentsSupported: attachmentAdapter !== undefined,
-        allowSendWhenInactive
+        allowSendWhenInactive,
+        isResumingSession
     })
 
     const { localNotices } = useSessionChatLocalNotices({

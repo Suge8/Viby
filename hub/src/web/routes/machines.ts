@@ -79,7 +79,22 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null): Ho
             worktreeName: parsed.data.worktreeName,
             collaborationMode: parsed.data.collaborationMode
         })
-        return c.json(result)
+        if (result.type !== 'success') {
+            return c.json(result)
+        }
+
+        const session = engine.getSession(result.sessionId)
+        if (!session) {
+            return c.json({
+                error: 'Session snapshot unavailable after spawn',
+                code: 'session_not_found'
+            }, 500)
+        }
+
+        return c.json({
+            type: 'success',
+            session
+        })
     })
 
     app.post('/machines/:id/paths/exists', async (c) => {

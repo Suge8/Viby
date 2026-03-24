@@ -84,8 +84,8 @@ function createReasoningEffortOption<T extends ModelReasoningEffort | ModelReaso
 export const MODEL_OPTIONS: Record<SessionConfigAgentType, SessionConfigOption<string>[]> = {
     claude: [
         createTerminalDefaultModelOption('auto'),
-        { value: 'sonnet[1m]', label: 'Sonnet' },
-        { value: 'opus[1m]', label: 'Opus' },
+        { value: 'sonnet', label: 'Sonnet' },
+        { value: 'opus', label: 'Opus' },
     ],
     codex: [
         createTerminalDefaultModelOption('auto'),

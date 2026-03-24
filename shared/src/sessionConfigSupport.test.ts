@@ -30,7 +30,7 @@ describe('getLiveSessionConfigSupport', () => {
         })
     })
 
-    it('keeps permission mode for remote Claude but disables model hot switching', () => {
+    it('enables Claude live model and reasoning config for remote sessions', () => {
         expect(getLiveSessionConfigSupport({
             active: true,
             metadata: { flavor: 'claude' } as never,
@@ -39,8 +39,8 @@ describe('getLiveSessionConfigSupport', () => {
             isRemoteManaged: true,
             canChangePermissionMode: true,
             canChangeCollaborationMode: false,
-            canChangeModel: false,
-            canChangeModelReasoningEffort: false,
+            canChangeModel: true,
+            canChangeModelReasoningEffort: true,
         })
     })
 

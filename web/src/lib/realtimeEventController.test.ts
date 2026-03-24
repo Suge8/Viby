@@ -2,7 +2,7 @@ import { QueryClient } from '@tanstack/react-query'
 import { describe, expect, it, vi } from 'vitest'
 import type { Session, SessionSummary, SessionsResponse, SyncEvent } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
-import { getMessageWindowState } from './message-window-store'
+import { getMessageWindowState, ingestIncomingMessages } from './message-window-store'
 import { createRealtimeEventController } from './realtimeEventController'
 
 function createSessionSummary(
@@ -34,6 +34,7 @@ function createSessionSummary(
         },
         todoProgress: null,
         pendingRequestsCount: 0,
+        resumeAvailable: false,
         model: null,
         modelReasoningEffort: null,
         ...restOverrides
@@ -578,5 +579,62 @@ describe('createRealtimeEventController', () => {
         } as SyncEvent)
 
         expect(getMessageWindowState('session-stream').stream).toBeNull()
+    })
+
+    it('removes session detail, summary, and message window state when a session is removed', () => {
+        const queryClient = new QueryClient()
+        const session = createSessionSummary({
+            id: 'session-removed',
+            active: false,
+            updatedAt: 2_000,
+            lifecycleState: 'closed',
+            lifecycleStateSince: 2_000
+        })
+
+        queryClient.setQueryData<SessionsResponse>(queryKeys.sessions, {
+            sessions: [session]
+        })
+        queryClient.setQueryData(queryKeys.session(session.id), {
+            session: createSessionRecord({
+                id: session.id,
+                active: false,
+                updatedAt: 2_000,
+                metadata: {
+                    path: '/tmp/project',
+                    host: 'localhost',
+                    flavor: 'codex',
+                    lifecycleState: 'closed',
+                    lifecycleStateSince: 2_000
+                }
+            })
+        })
+        ingestIncomingMessages(session.id, [{
+            id: 'message-1',
+            seq: 1,
+            localId: null,
+            createdAt: 1_000,
+            content: {
+                role: 'user',
+                content: {
+                    type: 'text',
+                    text: 'hello'
+                }
+            }
+        }])
+
+        const controller = createRealtimeEventController({
+            queryClient,
+            onEvent: vi.fn()
+        })
+
+        controller.handleEvent({
+            type: 'session-removed',
+            sessionId: session.id,
+            data: {}
+        } as SyncEvent)
+
+        expect(queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)?.sessions).toEqual([])
+        expect(queryClient.getQueryData(queryKeys.session(session.id))).toBeUndefined()
+        expect(getMessageWindowState(session.id).messages).toEqual([])
     })
 })

@@ -42,6 +42,44 @@ type SessionActionResponse = {
     session: Session
 }
 
+type ResumeSessionResponse = {
+    type: 'success'
+    session: Session
+}
+
+type SessionActionLegacyResponse = {
+    ok: true
+}
+
+type ResumeSessionLegacyResponse = {
+    type: 'success'
+    sessionId: string
+}
+
+type SpawnSuccessResponse = {
+    type: 'success'
+    session: Session
+}
+
+type SpawnLegacySuccessResponse = {
+    type: 'success'
+    sessionId: string
+}
+
+type SpawnErrorResponse = {
+    type: 'error'
+    message: string
+}
+
+type SessionSnapshotAction =
+    | 'archive'
+    | 'close'
+    | 'unarchive'
+    | 'permission-mode'
+    | 'collaboration-mode'
+    | 'model'
+    | 'model-reasoning-effort'
+
 function parseErrorPayload(bodyText: string): { message?: string; code?: string } {
     try {
         const parsed = JSON.parse(bodyText) as ErrorPayload
@@ -66,6 +104,42 @@ export class ApiError extends Error {
         this.code = code
         this.body = body
     }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null
+}
+
+function isSession(value: unknown): value is Session {
+    return isRecord(value) && typeof value.id === 'string'
+}
+
+function isSpawnErrorResponse(value: unknown): value is SpawnErrorResponse {
+    return isRecord(value) && value.type === 'error' && typeof value.message === 'string'
+}
+
+function isSpawnSuccessResponse(value: unknown): value is SpawnSuccessResponse {
+    return isRecord(value) && value.type === 'success' && isSession(value.session)
+}
+
+function isSpawnLegacySuccessResponse(value: unknown): value is SpawnLegacySuccessResponse {
+    return isRecord(value) && value.type === 'success' && typeof value.sessionId === 'string'
+}
+
+function isResumeSessionResponse(value: unknown): value is ResumeSessionResponse {
+    return isRecord(value) && value.type === 'success' && isSession(value.session)
+}
+
+function isResumeSessionLegacyResponse(value: unknown): value is ResumeSessionLegacyResponse {
+    return isRecord(value) && value.type === 'success' && typeof value.sessionId === 'string'
+}
+
+function isSessionActionResponse(value: unknown): value is SessionActionResponse {
+    return isRecord(value) && value.ok === true && isSession(value.session)
+}
+
+function isSessionActionLegacyResponse(value: unknown): value is SessionActionLegacyResponse {
+    return isRecord(value) && value.ok === true
 }
 
 export class ApiClient {
@@ -134,6 +208,25 @@ export class ApiClient {
         }
 
         return await res.json() as T
+    }
+
+    private async fetchSessionSnapshot(sessionId: string): Promise<Session> {
+        return (await this.getSession(sessionId)).session
+    }
+
+    private async resolveSessionActionSnapshotResponse(
+        response: unknown,
+        sessionId: string,
+        action: string
+    ): Promise<Session> {
+        if (isSessionActionResponse(response)) {
+            return response.session
+        }
+        if (isSessionActionLegacyResponse(response)) {
+            return await this.fetchSessionSnapshot(sessionId)
+        }
+
+        throw new Error(`Invalid session action response for ${action}`)
     }
 
     async authenticate(auth: { accessToken: string }): Promise<AuthResponse> {
@@ -271,12 +364,19 @@ export class ApiClient {
         })
     }
 
-    async resumeSession(sessionId: string): Promise<string> {
-        const response = await this.request<{ sessionId: string }>(
+    async resumeSession(sessionId: string): Promise<Session> {
+        const response = await this.request<unknown>(
             `/api/sessions/${encodeURIComponent(sessionId)}/resume`,
             { method: 'POST' }
         )
-        return response.sessionId
+        if (isResumeSessionResponse(response)) {
+            return response.session
+        }
+        if (isResumeSessionLegacyResponse(response)) {
+            return await this.fetchSessionSnapshot(response.sessionId)
+        }
+
+        throw new Error('Invalid resume session response')
     }
 
     async sendMessage(sessionId: string, text: string, localId?: string | null, attachments?: AttachmentMetadata[]): Promise<void> {
@@ -298,15 +398,15 @@ export class ApiClient {
     }
 
     async archiveSession(sessionId: string): Promise<Session> {
-        return await this.postSessionAction(sessionId, 'archive')
+        return await this.postSessionSnapshotAction(sessionId, 'archive', {})
     }
 
     async closeSession(sessionId: string): Promise<Session> {
-        return await this.postSessionAction(sessionId, 'close')
+        return await this.postSessionSnapshotAction(sessionId, 'close', {})
     }
 
     async unarchiveSession(sessionId: string): Promise<Session> {
-        return await this.postSessionAction(sessionId, 'unarchive')
+        return await this.postSessionSnapshotAction(sessionId, 'unarchive', {})
     }
 
     async switchSession(sessionId: string): Promise<void> {
@@ -316,32 +416,20 @@ export class ApiClient {
         })
     }
 
-    async setPermissionMode(sessionId: string, mode: PermissionMode): Promise<void> {
-        await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/permission-mode`, {
-            method: 'POST',
-            body: JSON.stringify({ mode })
-        })
+    async setPermissionMode(sessionId: string, mode: PermissionMode): Promise<Session> {
+        return await this.postSessionSnapshotAction(sessionId, 'permission-mode', { mode })
     }
 
-    async setCollaborationMode(sessionId: string, mode: CodexCollaborationMode): Promise<void> {
-        await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/collaboration-mode`, {
-            method: 'POST',
-            body: JSON.stringify({ mode })
-        })
+    async setCollaborationMode(sessionId: string, mode: CodexCollaborationMode): Promise<Session> {
+        return await this.postSessionSnapshotAction(sessionId, 'collaboration-mode', { mode })
     }
 
-    async setModel(sessionId: string, model: string | null): Promise<void> {
-        await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/model`, {
-            method: 'POST',
-            body: JSON.stringify({ model })
-        })
+    async setModel(sessionId: string, model: string | null): Promise<Session> {
+        return await this.postSessionSnapshotAction(sessionId, 'model', { model })
     }
 
-    async setModelReasoningEffort(sessionId: string, modelReasoningEffort: ModelReasoningEffort | null): Promise<void> {
-        await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/model-reasoning-effort`, {
-            method: 'POST',
-            body: JSON.stringify({ modelReasoningEffort })
-        })
+    async setModelReasoningEffort(sessionId: string, modelReasoningEffort: ModelReasoningEffort | null): Promise<Session> {
+        return await this.postSessionSnapshotAction(sessionId, 'model-reasoning-effort', { modelReasoningEffort })
     }
 
     async approvePermission(
@@ -419,7 +507,7 @@ export class ApiClient {
         worktreeName?: string
         collaborationMode?: CodexCollaborationMode
     }): Promise<SpawnResponse> {
-        return await this.request<SpawnResponse>(`/api/machines/${encodeURIComponent(input.machineId)}/spawn`, {
+        const response = await this.request<unknown>(`/api/machines/${encodeURIComponent(input.machineId)}/spawn`, {
             method: 'POST',
             body: JSON.stringify({
                 directory: input.directory,
@@ -432,6 +520,21 @@ export class ApiClient {
                 collaborationMode: input.collaborationMode
             })
         })
+
+        if (isSpawnErrorResponse(response)) {
+            return response
+        }
+        if (isSpawnSuccessResponse(response)) {
+            return response
+        }
+        if (isSpawnLegacySuccessResponse(response)) {
+            return {
+                type: 'success',
+                session: await this.fetchSessionSnapshot(response.sessionId)
+            }
+        }
+
+        throw new Error('Invalid spawn session response')
     }
 
     async getSlashCommands(sessionId: string): Promise<SlashCommandsResponse> {
@@ -460,11 +563,15 @@ export class ApiClient {
         })
     }
 
-    private async postSessionAction(sessionId: string, action: 'archive' | 'close' | 'unarchive'): Promise<Session> {
-        const response = await this.request<SessionActionResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/${action}`, {
+    private async postSessionSnapshotAction(
+        sessionId: string,
+        action: SessionSnapshotAction,
+        body: Record<string, unknown>
+    ): Promise<Session> {
+        const response = await this.request<unknown>(`/api/sessions/${encodeURIComponent(sessionId)}/${action}`, {
             method: 'POST',
-            body: JSON.stringify({})
+            body: JSON.stringify(body)
         })
-        return response.session
+        return await this.resolveSessionActionSnapshotResponse(response, sessionId, action)
     }
 }

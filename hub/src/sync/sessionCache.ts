@@ -391,6 +391,35 @@ export class SessionCache {
         }, { touchUpdatedAt: options?.touchUpdatedAt })
     }
 
+    async transitionSessionLifecycle(
+        sessionId: string,
+        lifecycleState: SessionLifecycleState,
+        options?: {
+            markInactive?: boolean
+            archivedBy?: string
+            archiveReason?: string
+            touchUpdatedAt?: boolean
+            transitionAt?: number
+        }
+    ): Promise<Session> {
+        const cachedSession = this.sessions.get(sessionId) ?? this.refreshSession(sessionId)
+        if (!cachedSession) {
+            throw new Error('Session not found')
+        }
+
+        if (options?.markInactive) {
+            const transitionAt = options.transitionAt ?? Date.now()
+            cachedSession.active = false
+            cachedSession.thinking = false
+            cachedSession.thinkingAt = transitionAt
+            this.persistSessionInactiveState(sessionId)
+        }
+
+        return this.commitMetadataMutation(sessionId, (currentMetadata) => {
+            return buildLifecycleMetadata(currentMetadata, lifecycleState, options)
+        }, { touchUpdatedAt: options?.touchUpdatedAt })
+    }
+
     async deleteSession(sessionId: string): Promise<void> {
         const session = this.sessions.get(sessionId)
         if (!session) {

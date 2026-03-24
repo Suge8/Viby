@@ -53,6 +53,7 @@ function createApp(
     session: Session,
     options?: {
         resumeResult?: Awaited<ReturnType<SyncEngine['resumeSession']>>
+        dropSessionSnapshotAfterConfig?: boolean
     }
 ) {
     const applySessionConfigCalls: Array<[string, Record<string, unknown>]> = []
@@ -61,13 +62,31 @@ function createApp(
     const recoveryCalls: Array<[string, { afterSeq: number; limit: number }]> = []
     const resumeSessionCalls: string[] = []
     let currentSession = session
+    let sessionSnapshotAvailable = true
     const renameSessionCalls: Array<[string, string]> = []
     const unarchiveSessionCalls: string[] = []
     const applySessionConfig = async (sessionId: string, config: Record<string, unknown>) => {
         applySessionConfigCalls.push([sessionId, config])
+        currentSession = {
+            ...currentSession,
+            model: 'model' in config ? (config.model as Session['model']) ?? null : currentSession.model,
+            modelReasoningEffort: 'modelReasoningEffort' in config
+                ? (config.modelReasoningEffort as Session['modelReasoningEffort']) ?? null
+                : currentSession.modelReasoningEffort,
+            permissionMode: 'permissionMode' in config
+                ? config.permissionMode as Session['permissionMode']
+                : currentSession.permissionMode,
+            collaborationMode: 'collaborationMode' in config
+                ? config.collaborationMode as Session['collaborationMode']
+                : currentSession.collaborationMode,
+            updatedAt: currentSession.updatedAt + 1
+        }
+        if (options?.dropSessionSnapshotAfterConfig) {
+            sessionSnapshotAvailable = false
+        }
     }
     const engine = {
-        getSession: () => currentSession,
+        getSession: () => sessionSnapshotAvailable ? currentSession : undefined,
         applySessionConfig,
         archiveSession: async (sessionId: string) => {
             archiveSessionCalls.push(sessionId)
@@ -125,10 +144,26 @@ function createApp(
         },
         resumeSession: async (sessionId: string) => {
             resumeSessionCalls.push(sessionId)
-            return options?.resumeResult ?? {
+            const result = options?.resumeResult ?? {
                 type: 'success',
                 sessionId
             }
+            if (result.type === 'success') {
+                currentSession = {
+                    ...currentSession,
+                    active: true,
+                    activeAt: currentSession.updatedAt + 1,
+                    updatedAt: currentSession.updatedAt + 1,
+                    metadata: currentSession.metadata
+                        ? {
+                            ...currentSession.metadata,
+                            lifecycleState: 'running',
+                            lifecycleStateSince: currentSession.updatedAt + 1
+                        }
+                        : null
+                }
+            }
+            return result
         },
         unarchiveSession: async (sessionId: string) => {
             unarchiveSessionCalls.push(sessionId)
@@ -244,9 +279,58 @@ describe('sessions routes', () => {
         })
 
         expect(response.status).toBe(200)
-        expect(await response.json()).toEqual({ ok: true })
+        expect(await response.json()).toMatchObject({
+            ok: true,
+            session: {
+                id: 'session-1',
+                collaborationMode: 'plan'
+            }
+        })
         expect(applySessionConfigCalls).toEqual([
             ['session-1', { collaborationMode: 'plan' }]
+        ])
+    })
+
+    it('returns the updated session snapshot after permission mode changes', async () => {
+        const { app, applySessionConfigCalls } = createApp(createSession())
+
+        const response = await app.request('/api/sessions/session-1/permission-mode', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ mode: 'read-only' })
+        })
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toMatchObject({
+            ok: true,
+            session: {
+                id: 'session-1',
+                permissionMode: 'read-only'
+            }
+        })
+        expect(applySessionConfigCalls).toEqual([
+            ['session-1', { permissionMode: 'read-only' }]
+        ])
+    })
+
+    it('fails when the updated live config snapshot is unavailable', async () => {
+        const { app, applySessionConfigCalls } = createApp(createSession(), {
+            dropSessionSnapshotAfterConfig: true
+        })
+
+        const response = await app.request('/api/sessions/session-1/permission-mode', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ mode: 'read-only' })
+        })
+
+        expect(response.status).toBe(500)
+        expect(await response.json()).toEqual({
+            error: 'Session snapshot unavailable after config update',
+            code: 'session_not_found'
+        })
+        expect(applySessionConfigCalls).toEqual([
+            ['session-1', { permissionMode: 'read-only' }]
         ])
     })
 
@@ -292,11 +376,11 @@ describe('sessions routes', () => {
         expect(closeSessionCalls).toEqual(['session-1'])
     })
 
-    it('returns the resumed session id when the synchronous resume contract succeeds', async () => {
+    it('returns the resumed session snapshot when the synchronous resume contract succeeds', async () => {
         const { app, resumeSessionCalls } = createApp(createSession({ active: false }), {
             resumeResult: {
                 type: 'success',
-                sessionId: 'session-2'
+                sessionId: 'session-1'
             }
         })
 
@@ -307,7 +391,18 @@ describe('sessions routes', () => {
         expect(response.status).toBe(200)
         expect(await response.json()).toEqual({
             type: 'success',
-            sessionId: 'session-2'
+            session: createSession({
+                active: true,
+                activeAt: 2,
+                updatedAt: 2,
+                metadata: {
+                    path: '/tmp/project',
+                    host: 'localhost',
+                    flavor: 'codex',
+                    lifecycleState: 'running',
+                    lifecycleStateSince: 2
+                }
+            })
         })
         expect(resumeSessionCalls).toEqual(['session-1'])
     })
@@ -556,7 +651,13 @@ describe('sessions routes', () => {
         })
 
         expect(response.status).toBe(200)
-        expect(await response.json()).toEqual({ ok: true })
+        expect(await response.json()).toMatchObject({
+            ok: true,
+            session: {
+                id: 'session-1',
+                model: 'gpt-5.2'
+            }
+        })
         expect(applySessionConfigCalls).toEqual([
             ['session-1', { model: 'gpt-5.2' }]
         ])
@@ -580,12 +681,12 @@ describe('sessions routes', () => {
 
         expect(response.status).toBe(409)
         expect(await response.json()).toEqual({
-            error: 'Model selection can only be changed for remote Codex sessions'
+            error: 'Model selection can only be changed for remote Claude and Codex sessions'
         })
         expect(applySessionConfigCalls).toEqual([])
     })
 
-    it('rejects model changes for remote Claude sessions', async () => {
+    it('applies model changes for remote Claude sessions', async () => {
         const session = createSession({
             metadata: {
                 path: '/tmp/project',
@@ -598,14 +699,20 @@ describe('sessions routes', () => {
         const response = await app.request('/api/sessions/session-1/model', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ model: 'opus[1m]' })
+            body: JSON.stringify({ model: 'opus' })
         })
 
-        expect(response.status).toBe(400)
-        expect(await response.json()).toEqual({
-            error: 'Live model selection is only supported for Codex sessions'
+        expect(response.status).toBe(200)
+        expect(await response.json()).toMatchObject({
+            ok: true,
+            session: {
+                id: 'session-1',
+                model: 'opus'
+            }
         })
-        expect(applySessionConfigCalls).toEqual([])
+        expect(applySessionConfigCalls).toEqual([
+            ['session-1', { model: 'opus' }]
+        ])
     })
 
     it('applies model reasoning effort changes for remote Codex sessions', async () => {
@@ -618,7 +725,13 @@ describe('sessions routes', () => {
         })
 
         expect(response.status).toBe(200)
-        expect(await response.json()).toEqual({ ok: true })
+        expect(await response.json()).toMatchObject({
+            ok: true,
+            session: {
+                id: 'session-1',
+                modelReasoningEffort: 'xhigh'
+            }
+        })
         expect(applySessionConfigCalls).toEqual([
             ['session-1', { modelReasoningEffort: 'xhigh' }]
         ])
@@ -642,12 +755,12 @@ describe('sessions routes', () => {
 
         expect(response.status).toBe(400)
         expect(await response.json()).toEqual({
-            error: 'Live model reasoning effort is only supported for Codex sessions'
+            error: 'Live model reasoning effort is only supported for Claude and Codex sessions'
         })
         expect(applySessionConfigCalls).toEqual([])
     })
 
-    it('rejects model reasoning effort changes for remote Claude sessions', async () => {
+    it('applies model reasoning effort changes for remote Claude sessions', async () => {
         const session = createSession({
             metadata: {
                 path: '/tmp/project',
@@ -663,9 +776,38 @@ describe('sessions routes', () => {
             body: JSON.stringify({ modelReasoningEffort: 'max' })
         })
 
+        expect(response.status).toBe(200)
+        expect(await response.json()).toMatchObject({
+            ok: true,
+            session: {
+                id: 'session-1',
+                modelReasoningEffort: 'max'
+            }
+        })
+        expect(applySessionConfigCalls).toEqual([
+            ['session-1', { modelReasoningEffort: 'max' }]
+        ])
+    })
+
+    it('rejects invalid Claude model reasoning effort values', async () => {
+        const session = createSession({
+            metadata: {
+                path: '/tmp/project',
+                host: 'localhost',
+                flavor: 'claude'
+            }
+        })
+        const { app, applySessionConfigCalls } = createApp(session)
+
+        const response = await app.request('/api/sessions/session-1/model-reasoning-effort', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ modelReasoningEffort: 'xhigh' })
+        })
+
         expect(response.status).toBe(400)
         expect(await response.json()).toEqual({
-            error: 'Live model reasoning effort is only supported for Codex sessions'
+            error: 'Invalid model reasoning effort for session flavor'
         })
         expect(applySessionConfigCalls).toEqual([])
     })

@@ -50,6 +50,7 @@ function createSessionSummary() {
         },
         todoProgress: null,
         pendingRequestsCount: 0,
+        resumeAvailable: true,
         model: 'gpt-5.4',
         modelReasoningEffort: 'high',
         permissionMode: 'yolo',

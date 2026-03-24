@@ -54,6 +54,7 @@ function renderItem(selectionOverrides?: Partial<{
                     },
                     todoProgress: null,
                     pendingRequestsCount: 0,
+                    resumeAvailable: true,
                     model: 'gpt-5.4',
                     modelReasoningEffort: 'xhigh'
                 }}

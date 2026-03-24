@@ -215,6 +215,18 @@ describe('VibyComposer', () => {
         expect(harness.inputProps?.placeholder).toBe('Send a message to resume...')
     })
 
+    it('shows a lightweight resuming placeholder and disables input while the session is being reattached', () => {
+        renderComposerWithConfig({
+            active: false,
+            allowSendWhenInactive: true,
+            isResuming: true
+        })
+
+        expect(harness.inputProps?.placeholder).toBe('Resuming session...')
+        expect(harness.inputProps?.disabled).toBe(true)
+        expect(harness.rootProps?.['aria-busy']).toBe('true')
+    })
+
     it('loads the controls overlay only after the controls button is explicitly opened', async () => {
         renderComposer()
 

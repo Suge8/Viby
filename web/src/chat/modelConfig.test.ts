@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { getContextBudgetTokens } from './modelConfig'
 
 describe('getContextBudgetTokens', () => {
+    it('uses the default budget for standard Claude aliases', () => {
+        expect(getContextBudgetTokens('sonnet', 'claude')).toBe(190_000)
+        expect(getContextBudgetTokens('opus', 'claude')).toBe(190_000)
+    })
+
     it('uses the large budget only for explicit 1m Claude presets', () => {
         expect(getContextBudgetTokens('sonnet[1m]', 'claude')).toBe(990_000)
     })

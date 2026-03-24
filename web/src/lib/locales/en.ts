@@ -488,6 +488,7 @@ export default {
   'misc.newMessage': '{n} new message{s}',
   'misc.loadingMessages': 'Loading messages…',
   'misc.resumeMessage': 'Send a message to resume...',
+  'misc.resumingSession': 'Resuming session...',
   'misc.typeAMessage': 'Type a message...',
   'misc.offline': 'offline',
   'misc.permissionRequired': 'permission required',

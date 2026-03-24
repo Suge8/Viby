@@ -9,14 +9,15 @@ const sessionChatPropsMock = vi.fn()
 const addToastMock = vi.fn()
 const resolverOptionsRef: {
     current: null | {
-        onResolved: (currentSessionId: string, resolvedSessionId: string) => void
+        onReady: (session: { id: string; active: boolean }) => void
         onError: (error: unknown, currentSessionId: string) => void
     }
 } = { current: null }
+const setQueryDataMock = vi.fn()
 
 vi.mock('@tanstack/react-query', () => ({
     useQueryClient: () => ({
-        setQueryData: vi.fn(),
+        setQueryData: setQueryDataMock,
         prefetchQuery: vi.fn(() => Promise.resolve()),
         fetchQuery: vi.fn(() => Promise.resolve()),
     })
@@ -89,11 +90,11 @@ vi.mock('@/hooks/queries/useSlashCommands', () => ({
 
 vi.mock('@/hooks/useSessionTargetResolver', () => ({
     useSessionTargetResolver: (options: {
-        onResolved: (currentSessionId: string, resolvedSessionId: string) => void
+        onReady: (session: { id: string; active: boolean }) => void
         onError: (error: unknown, currentSessionId: string) => void
     }) => {
         resolverOptionsRef.current = options
-        return vi.fn(async (currentSessionId: string) => currentSessionId)
+        return vi.fn(async () => undefined)
     }
 }))
 
@@ -161,6 +162,7 @@ describe('SessionChatRoute', () => {
         navigateMock.mockReset()
         sessionChatPropsMock.mockReset()
         addToastMock.mockReset()
+        setQueryDataMock.mockReset()
         resolverOptionsRef.current = null
         useSessionMock.mockImplementation((_api: unknown, sessionId: string) => ({
             session: createSession(sessionId),
@@ -183,21 +185,22 @@ describe('SessionChatRoute', () => {
         expect(sessionChatPropsMock.mock.lastCall?.[0]?.session.id).toBe('session-2')
     })
 
-    it('ignores a stale resume resolution after the user has already switched routes', async () => {
-        const { rerender } = render(<SessionChatRoute />)
-        const firstOnResolved = resolverOptionsRef.current?.onResolved
+    it('writes the resumed snapshot in place instead of redirecting to another session route', async () => {
+        render(<SessionChatRoute />)
+        const onReady = resolverOptionsRef.current?.onReady
 
-        expect(firstOnResolved).toBeTypeOf('function')
-
-        useParamsMock.mockReturnValue({ sessionId: 'session-2' })
-        rerender(<SessionChatRoute />)
+        expect(onReady).toBeTypeOf('function')
 
         await act(async () => {
-            firstOnResolved?.('session-1', 'session-3')
+            onReady?.({
+                id: 'session-1',
+                active: true
+            })
             await Promise.resolve()
         })
 
         expect(navigateMock).not.toHaveBeenCalled()
+        expect(setQueryDataMock).toHaveBeenCalled()
     })
 
     it('keeps rendering the chat shell when the current session comes from placeholder detail data', () => {

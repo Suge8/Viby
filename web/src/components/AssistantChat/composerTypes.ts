@@ -9,6 +9,7 @@ export type ComposerConfigState = {
     collaborationMode?: CodexCollaborationMode
     model?: string | null
     modelReasoningEffort?: ModelReasoningEffort | null
+    isResuming?: boolean
     active?: boolean
     allowSendWhenInactive?: boolean
     controlledByUser?: boolean

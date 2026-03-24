@@ -90,8 +90,8 @@ export function SessionListActionController(
 
     const handleResume = useCallback(async () => {
         onCloseMenu()
-        const resolvedSessionId = await resumeSession()
-        onSelectSession(resolvedSessionId)
+        const resumedSession = await resumeSession()
+        onSelectSession(resumedSession.id)
     }, [onCloseMenu, onSelectSession, resumeSession])
 
     const handleConfirm = useCallback(async () => {
@@ -119,7 +119,10 @@ export function SessionListActionController(
                 isOpen={isMenuOpen}
                 onClose={onCloseMenu}
                 anchorPoint={anchorPoint}
-                session={{ lifecycleState: session.lifecycleState }}
+                session={{
+                    lifecycleState: session.lifecycleState,
+                    resumeAvailable: session.resumeAvailable
+                }}
                 actions={{
                     onRename: openRenameDialog,
                     onResume: () => void handleResume(),

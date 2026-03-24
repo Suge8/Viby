@@ -38,6 +38,33 @@ describe('session model', () => {
         expect(toSessionSummary(session).collaborationMode).toBe('plan')
     })
 
+    it('projects durable resume availability into session summaries', () => {
+        const store = new Store(':memory:')
+        const events: SyncEvent[] = []
+        const cache = new SessionCache(store, createPublisher(events))
+
+        const resumableSession = cache.getOrCreateSession(
+            'session-resume-available',
+            {
+                path: '/tmp/project',
+                host: 'localhost',
+                flavor: 'codex',
+                codexSessionId: 'codex-thread-1'
+            },
+            null,
+            'gpt-5.4'
+        )
+        const legacySession = cache.getOrCreateSession(
+            'session-resume-unavailable',
+            { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
+            null,
+            'gpt-5.4'
+        )
+
+        expect(toSessionSummary(resumableSession).resumeAvailable).toBe(true)
+        expect(toSessionSummary(legacySession).resumeAvailable).toBe(false)
+    })
+
     it('keeps updatedAt stable while reply chunks are still streaming', () => {
         const store = new Store(':memory:')
         const events: SyncEvent[] = []
@@ -143,6 +170,60 @@ describe('session model', () => {
         await cache.setSessionLifecycleState(archivedSession.id, 'archived')
         expect(toSessionSummary(cache.getSession(archivedSession.id)!)).toMatchObject({
             lifecycleState: 'archived'
+        })
+    })
+
+    it('publishes only the final archived snapshot when archiving an active session', async () => {
+        const store = new Store(':memory:')
+        const events: SyncEvent[] = []
+        const cache = new SessionCache(store, createPublisher(events))
+
+        const session = cache.getOrCreateSession(
+            'session-active-archive',
+            {
+                path: '/tmp/project',
+                host: 'localhost',
+                flavor: 'codex',
+                codexSessionId: 'codex-thread-archive'
+            },
+            null,
+            'gpt-5.4'
+        )
+
+        cache.handleSessionAlive({
+            sid: session.id,
+            time: 2_000,
+            thinking: true
+        })
+        events.length = 0
+
+        const archivedSession = await cache.transitionSessionLifecycle(session.id, 'archived', {
+            markInactive: true,
+            archivedBy: 'web',
+            archiveReason: 'Archived by user',
+            transitionAt: 3_000
+        })
+
+        expect(archivedSession).toMatchObject({
+            active: false,
+            thinking: false,
+            metadata: {
+                lifecycleState: 'archived',
+                archivedBy: 'web',
+                archiveReason: 'Archived by user'
+            }
+        })
+        expect(events).toHaveLength(1)
+        expect(events[0]).toMatchObject({
+            type: 'session-updated',
+            sessionId: session.id,
+            data: {
+                active: false,
+                thinking: false,
+                metadata: {
+                    lifecycleState: 'archived'
+                }
+            }
         })
     })
 

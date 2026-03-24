@@ -4,10 +4,11 @@ import type {
     CodexCollaborationMode,
     ModelReasoningEffort,
     PermissionMode,
+    Session,
     SpawnResponse
 } from '@/types/api'
-import { queryKeys } from '@/lib/query-keys'
 import { appendRealtimeTrace } from '@/lib/realtimeTrace'
+import { writeSessionToQueryCache } from '@/lib/sessionQueryCache'
 
 type SpawnInput = {
     machineId: string
@@ -21,12 +22,26 @@ type SpawnInput = {
     collaborationMode?: CodexCollaborationMode
 }
 
+function getSpawnMutationErrorMessage(error: unknown): string | null {
+    if (error instanceof Error) {
+        return error.message
+    }
+    if (error) {
+        return 'Failed to spawn session'
+    }
+    return null
+}
+
 export function useSpawnSession(api: ApiClient | null): {
     spawnSession: (input: SpawnInput) => Promise<SpawnResponse>
     isPending: boolean
     error: string | null
 } {
     const queryClient = useQueryClient()
+
+    function writeSessionSnapshot(session: Session): void {
+        writeSessionToQueryCache(queryClient, session)
+    }
 
     const mutation = useMutation({
         mutationFn: async (input: SpawnInput) => {
@@ -36,13 +51,13 @@ export function useSpawnSession(api: ApiClient | null): {
             return await api.spawnSession(input)
         },
         onSuccess: (result, input) => {
-            void queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
             if (result.type === 'success') {
+                writeSessionSnapshot(result.session)
                 appendRealtimeTrace({
                     at: Date.now(),
                     type: 'spawn_success',
                     details: {
-                        sessionId: result.sessionId,
+                        sessionId: result.session.id,
                         machineId: input.machineId,
                         agent: input.agent ?? 'claude',
                         sessionType: input.sessionType ?? 'simple'
@@ -55,6 +70,6 @@ export function useSpawnSession(api: ApiClient | null): {
     return {
         spawnSession: mutation.mutateAsync,
         isPending: mutation.isPending,
-        error: mutation.error instanceof Error ? mutation.error.message : mutation.error ? 'Failed to spawn session' : null,
+        error: getSpawnMutationErrorMessage(mutation.error),
     }
 }

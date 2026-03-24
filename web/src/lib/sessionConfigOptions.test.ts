@@ -11,11 +11,11 @@ import {
 } from './sessionConfigOptions'
 
 describe('sessionConfigOptions', () => {
-    it('keeps new-session Claude options narrowed to terminal default plus 1m presets', () => {
+    it('keeps new-session Claude options narrowed to terminal default plus sonnet and opus aliases', () => {
         expect(MODEL_OPTIONS.claude).toEqual([
             { value: 'auto', label: 'Terminal default model', labelKey: 'model.terminalDefault' },
-            { value: 'sonnet[1m]', label: 'Sonnet' },
-            { value: 'opus[1m]', label: 'Opus' },
+            { value: 'sonnet', label: 'Sonnet' },
+            { value: 'opus', label: 'Opus' },
         ])
     })
 
@@ -53,8 +53,8 @@ describe('sessionConfigOptions', () => {
         expect(getClaudeComposerModelOptions('claude-opus-4-1-20250805')).toEqual([
             { value: null, label: 'Terminal default model', labelKey: 'model.terminalDefault' },
             { value: 'claude-opus-4-1-20250805', label: 'claude-opus-4-1-20250805' },
-            { value: 'sonnet[1m]', label: 'Sonnet' },
-            { value: 'opus[1m]', label: 'Opus' },
+            { value: 'sonnet', label: 'Sonnet' },
+            { value: 'opus', label: 'Opus' },
         ])
     })
 
@@ -91,6 +91,6 @@ describe('sessionConfigOptions', () => {
     })
 
     it('cycles from a non-preset Claude model to the next selectable model instead of auto', () => {
-        expect(getNextClaudeComposerModel('claude-opus-4-1-20250805')).toBe('sonnet[1m]')
+        expect(getNextClaudeComposerModel('claude-opus-4-1-20250805')).toBe('sonnet')
     })
 })

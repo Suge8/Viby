@@ -3,16 +3,16 @@ import { describe, expect, it } from 'vitest'
 import { CLAUDE_REASONING_EFFORT_OPTIONS, MODEL_OPTIONS } from '@/lib/sessionConfigOptions'
 
 describe('Claude model options', () => {
-    it('only exposes terminal default plus the 1m presets in the expected order', () => {
+    it('only exposes terminal default plus the sonnet and opus aliases in the expected order', () => {
         expect(MODEL_OPTIONS.claude).toEqual([
             { value: 'auto', label: 'Terminal default model', labelKey: 'model.terminalDefault' },
-            { value: 'sonnet[1m]', label: 'Sonnet' },
-            { value: 'opus[1m]', label: 'Opus' },
+            { value: 'sonnet', label: 'Sonnet' },
+            { value: 'opus', label: 'Opus' },
         ])
     })
 
-    it('keeps the selectable Claude presets narrowed to 1m variants', () => {
-        expect(CLAUDE_SELECTABLE_MODEL_PRESETS).toEqual(['sonnet[1m]', 'opus[1m]'])
+    it('keeps the selectable Claude presets narrowed to sonnet and opus aliases', () => {
+        expect(CLAUDE_SELECTABLE_MODEL_PRESETS).toEqual(['sonnet', 'opus'])
     })
 
     it('exposes friendly labels for Claude model presets, including legacy values', () => {

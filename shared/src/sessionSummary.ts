@@ -5,7 +5,11 @@ import {
     type SessionActivityKind,
     type SessionMessageActivity
 } from './sessionActivity'
-import { getSessionLifecycleState, type SessionLifecycleState } from './sessionLifecycle'
+import {
+    getSessionLifecycleState,
+    getSessionResumeToken,
+    type SessionLifecycleState
+} from './sessionLifecycle'
 
 export type SessionSummaryMetadata = {
     name?: string
@@ -33,6 +37,7 @@ export type SessionSummary = {
     metadata: SessionSummaryMetadata | null
     todoProgress: { completed: number; total: number } | null
     pendingRequestsCount: number
+    resumeAvailable: boolean
     model: string | null
     modelReasoningEffort: ModelReasoningEffort | null
     permissionMode?: PermissionMode
@@ -127,6 +132,7 @@ export function toSessionSummary(session: Session, messageActivity?: SessionMess
         metadata,
         todoProgress,
         pendingRequestsCount,
+        resumeAvailable: getSessionResumeToken(session.metadata) !== undefined,
         model: session.model,
         modelReasoningEffort: session.modelReasoningEffort,
         permissionMode: session.permissionMode,

@@ -1,53 +1,60 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useRef } from 'react'
+import { getSessionLifecycleState, getSessionResumeToken } from '@viby/protocol'
 import type { ApiClient } from '@/api/client'
 import type { Session } from '@/types/api'
 
 type UseSessionTargetResolverOptions = {
     api: ApiClient | null
     session: Session | null | undefined
-    onResolved: (currentSessionId: string, resolvedSessionId: string) => void
+    onReady: (session: Session) => void
     onError: (error: unknown, currentSessionId: string) => void
 }
 
-type ResolvedTarget = {
-    sourceId: string
-    targetId: string
+type SessionTargetResolverError = Error & {
+    code: 'resume_unavailable' | 'session_archived'
+}
+
+function getSessionTargetResolverErrorMessage(
+    code: SessionTargetResolverError['code']
+): string {
+    switch (code) {
+        case 'session_archived':
+            return 'Archived sessions must be restored before resuming'
+        case 'resume_unavailable':
+            return 'Resume session ID unavailable'
+    }
+}
+
+function createSessionTargetResolverError(
+    code: SessionTargetResolverError['code']
+): SessionTargetResolverError {
+    const error = new Error(getSessionTargetResolverErrorMessage(code)) as SessionTargetResolverError
+    error.code = code
+    return error
 }
 
 export function useSessionTargetResolver(
     options: UseSessionTargetResolverOptions
-): (currentSessionId: string) => Promise<string> {
-    const { api, session, onResolved, onError } = options
-    const resolvedTargetRef = useRef<ResolvedTarget | null>(null)
-    const inFlightResumeRef = useRef<Promise<string> | null>(null)
+): () => Promise<void> {
+    const { api, session, onReady, onError } = options
+    const inFlightResumeRef = useRef<Promise<void> | null>(null)
 
-    useEffect(() => {
-        const sessionId = session?.id
-        if (!sessionId) {
-            resolvedTargetRef.current = null
-            inFlightResumeRef.current = null
+    return useCallback(async () => {
+        const currentSessionId = session?.id
+        if (!api || !session || !currentSessionId || session.active) {
             return
         }
 
-        const resolvedTarget = resolvedTargetRef.current
-        if (!resolvedTarget) {
-            return
+        if (getSessionLifecycleState(session) === 'archived') {
+            const error = createSessionTargetResolverError('session_archived')
+            onError(error, currentSessionId)
+            throw error
         }
 
-        if (sessionId === resolvedTarget.targetId || sessionId !== resolvedTarget.sourceId) {
-            resolvedTargetRef.current = null
-            inFlightResumeRef.current = null
-        }
-    }, [session?.active, session?.id])
-
-    return useCallback(async (currentSessionId: string) => {
-        if (!api || !session || session.active) {
-            return currentSessionId
-        }
-
-        const resolvedTarget = resolvedTargetRef.current
-        if (resolvedTarget && resolvedTarget.sourceId === currentSessionId) {
-            return resolvedTarget.targetId
+        if (!getSessionResumeToken(session.metadata)) {
+            const error = createSessionTargetResolverError('resume_unavailable')
+            onError(error, currentSessionId)
+            throw error
         }
 
         if (inFlightResumeRef.current) {
@@ -55,13 +62,8 @@ export function useSessionTargetResolver(
         }
 
         const resumePromise = api.resumeSession(currentSessionId)
-            .then((resolvedSessionId) => {
-                resolvedTargetRef.current = {
-                    sourceId: currentSessionId,
-                    targetId: resolvedSessionId
-                }
-                onResolved(currentSessionId, resolvedSessionId)
-                return resolvedSessionId
+            .then((resumedSession) => {
+                onReady(resumedSession)
             })
             .catch((error) => {
                 onError(error, currentSessionId)
@@ -73,5 +75,5 @@ export function useSessionTargetResolver(
 
         inFlightResumeRef.current = resumePromise
         return await resumePromise
-    }, [api, onError, onResolved, session])
+    }, [api, onError, onReady, session])
 }

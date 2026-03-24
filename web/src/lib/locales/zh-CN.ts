@@ -490,6 +490,7 @@ export default {
   'misc.newMessage': '{n} 条新消息',
   'misc.loadingMessages': '加载消息中…',
   'misc.resumeMessage': '发送消息以恢复...',
+  'misc.resumingSession': '正在恢复会话...',
   'misc.typeAMessage': '输入消息...',
   'misc.offline': '离线',
   'misc.permissionRequired': '需要权限',

@@ -31,29 +31,28 @@ describe('createAttachmentAdapter', () => {
         expect(adapter.accept).not.toBe('*/*')
     })
 
-    it('uploads and cleans up attachments against the resolved session id', async () => {
+    it('ensures the current session is ready before uploading and cleans up against the same session id', async () => {
         const api = {
             uploadFile: vi.fn().mockResolvedValue({ success: true, path: '/tmp/uploaded.png' }),
             deleteUploadFile: vi.fn().mockResolvedValue({ success: true }),
         }
-        const resolveSessionId = vi.fn(async () => 'session-2')
-        const adapter = createAttachmentAdapter(api as never, 'session-1', { resolveSessionId })
+        const ensureSessionReady = vi.fn(async () => undefined)
+        const adapter = createAttachmentAdapter(api as never, 'session-1', { ensureSessionReady })
         const file = new File(['image-bytes'], 'screenshot.png', { type: 'image/png' })
 
         const states = await collectAttachmentStates(adapter, file)
         const pendingAttachment = states.at(-1)
 
-        expect(resolveSessionId).toHaveBeenCalledWith('session-1')
-        expect(api.uploadFile).toHaveBeenCalledWith('session-2', 'screenshot.png', expect.any(String), 'image/png')
+        expect(ensureSessionReady).toHaveBeenCalledTimes(1)
+        expect(api.uploadFile).toHaveBeenCalledWith('session-1', 'screenshot.png', expect.any(String), 'image/png')
         expect(pendingAttachment).toMatchObject({
             status: { type: 'requires-action', reason: 'composer-send' },
-            path: '/tmp/uploaded.png',
-            uploadSessionId: 'session-2'
+            path: '/tmp/uploaded.png'
         })
 
         await adapter.remove(pendingAttachment as never)
 
-        expect(api.deleteUploadFile).toHaveBeenCalledWith('session-2', '/tmp/uploaded.png')
+        expect(api.deleteUploadFile).toHaveBeenCalledWith('session-1', '/tmp/uploaded.png')
     })
 
     it('serializes attachment metadata into assistant-ui attachment content', async () => {

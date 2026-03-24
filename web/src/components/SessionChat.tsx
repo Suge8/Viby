@@ -34,6 +34,7 @@ type SessionChatProps = {
     isLoadingMessages: boolean
     isLoadingMoreMessages: boolean
     isSending: boolean
+    isResumingSession: boolean
     pendingCount: number
     hasLoadedLatestMessages: boolean
     messagesVersion: number
@@ -47,7 +48,7 @@ type SessionChatProps = {
     onFlushPending: () => void
     onAtBottomChange: (atBottom: boolean) => void
     onRetryMessage?: (localId: string) => void
-    resolveSessionId?: (currentSessionId: string) => Promise<string>
+    ensureSessionReady?: () => Promise<void>
     autocompleteSuggestions?: (query: string) => Promise<Suggestion[]>
 }
 
@@ -61,6 +62,7 @@ export function SessionChat(props: SessionChatProps): React.JSX.Element {
         isLoadingMessages,
         isLoadingMoreMessages,
         isSending,
+        isResumingSession,
         messages,
         messagesVersion,
         messagesWarning,
@@ -74,7 +76,7 @@ export function SessionChat(props: SessionChatProps): React.JSX.Element {
         onSend,
         pendingCount,
         hasLoadedLatestMessages,
-        resolveSessionId,
+        ensureSessionReady,
         session,
         stream,
         streamVersion
@@ -201,9 +203,10 @@ export function SessionChat(props: SessionChatProps): React.JSX.Element {
     ])
     const workspaceRuntimeOptions = useMemo(() => ({
         liveConfigSupport,
-        resolveSessionId,
+        ensureSessionReady,
+        isResumingSession,
         autocompleteSuggestions
-    }), [autocompleteSuggestions, liveConfigSupport, resolveSessionId])
+    }), [autocompleteSuggestions, ensureSessionReady, isResumingSession, liveConfigSupport])
 
     return (
         <div className="session-chat-page flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden">

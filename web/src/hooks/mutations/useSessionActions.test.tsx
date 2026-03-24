@@ -5,6 +5,7 @@ import { act, renderHook } from '@testing-library/react'
 import type { PropsWithChildren } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import type { ApiClient } from '@/api/client'
+import { getMessageWindowState, ingestIncomingMessages } from '@/lib/message-window-store'
 import { queryKeys } from '@/lib/query-keys'
 import type { Session, SessionsResponse } from '@/types/api'
 import { useSessionActions } from './useSessionActions'
@@ -61,6 +62,7 @@ function createSession(lifecycleState: 'closed' | 'archived'): Session {
 }
 
 function primeSessionsCache(queryClient: QueryClient, session: Session): void {
+    queryClient.setQueryData(queryKeys.session(session.id), { session })
     queryClient.setQueryData<SessionsResponse>(queryKeys.sessions, {
         sessions: [
             {
@@ -80,6 +82,7 @@ function primeSessionsCache(queryClient: QueryClient, session: Session): void {
                 },
                 todoProgress: null,
                 pendingRequestsCount: 0,
+                resumeAvailable: false,
                 model: session.model,
                 modelReasoningEffort: session.modelReasoningEffort
             }
@@ -90,6 +93,7 @@ function primeSessionsCache(queryClient: QueryClient, session: Session): void {
 describe('useSessionActions', () => {
     it('writes the final archived snapshot into both detail and list caches immediately after archive succeeds', async () => {
         const queryClient = createQueryClient()
+        const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
         primeSessionsCache(queryClient, createSession('closed'))
 
         const archivedSession = createSession('archived')
@@ -109,5 +113,133 @@ describe('useSessionActions', () => {
         expect(api.archiveSession).toHaveBeenCalledWith('session-1')
         expect(queryClient.getQueryData<{ session: Session }>(queryKeys.session('session-1'))?.session.metadata?.lifecycleState).toBe('archived')
         expect(queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)?.sessions[0]?.lifecycleState).toBe('archived')
+        expect(invalidateQueries).not.toHaveBeenCalled()
+    })
+
+    it('writes the resumed session snapshot directly into cache without invalidating', async () => {
+        const queryClient = createQueryClient()
+        const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
+        primeSessionsCache(queryClient, createSession('closed'))
+
+        const resumedSession = {
+            ...createSession('closed'),
+            active: true,
+            activeAt: 3_000,
+            updatedAt: 3_000,
+            metadata: {
+                ...createSession('closed').metadata!,
+                lifecycleState: 'running',
+                lifecycleStateSince: 3_000
+            }
+        }
+        const api = {
+            resumeSession: vi.fn(async () => resumedSession)
+        } as Partial<ApiClient> as ApiClient
+
+        const { result } = renderHook(
+            () => useSessionActions(api, 'session-1', 'codex'),
+            { wrapper: createWrapper(queryClient) }
+        )
+
+        await act(async () => {
+            const session = await result.current.resumeSession()
+            expect(session).toEqual(resumedSession)
+        })
+
+        expect(api.resumeSession).toHaveBeenCalledWith('session-1')
+        expect(queryClient.getQueryData<{ session: Session }>(queryKeys.session('session-1'))?.session.active).toBe(true)
+        expect(queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)?.sessions[0]?.active).toBe(true)
+        expect(invalidateQueries).not.toHaveBeenCalled()
+    })
+
+    it('applies live model and reasoning updates for remote Claude sessions', async () => {
+        const queryClient = createQueryClient()
+        const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
+        const baseSession = {
+            ...createSession('closed'),
+            metadata: {
+                ...createSession('closed').metadata!,
+                flavor: 'claude' as const,
+                lifecycleState: 'running' as const
+            },
+            active: true,
+            model: 'sonnet',
+            modelReasoningEffort: 'high' as const
+        }
+        primeSessionsCache(queryClient, baseSession)
+        const api = {
+            setModel: vi.fn(async () => ({
+                ...baseSession,
+                model: 'opus'
+            })),
+            setModelReasoningEffort: vi.fn(async () => ({
+                ...baseSession,
+                model: 'opus',
+                modelReasoningEffort: 'max'
+            }))
+        } as Partial<ApiClient> as ApiClient
+
+        const { result } = renderHook(
+            () => useSessionActions(api, 'session-1', 'claude', {
+                liveConfigSupport: {
+                    isRemoteManaged: true,
+                    canChangePermissionMode: true,
+                    canChangeCollaborationMode: false,
+                    canChangeModel: true,
+                    canChangeModelReasoningEffort: true
+                }
+            }),
+            { wrapper: createWrapper(queryClient) }
+        )
+
+        await act(async () => {
+            await result.current.setModel('opus')
+            await result.current.setModelReasoningEffort('max')
+        })
+
+        expect(api.setModel).toHaveBeenCalledWith('session-1', 'opus')
+        expect(api.setModelReasoningEffort).toHaveBeenCalledWith('session-1', 'max')
+        expect(queryClient.getQueryData<{ session: Session }>(queryKeys.session('session-1'))?.session.model).toBe('opus')
+        expect(queryClient.getQueryData<{ session: Session }>(queryKeys.session('session-1'))?.session.modelReasoningEffort).toBe('max')
+        expect(invalidateQueries).not.toHaveBeenCalled()
+    })
+
+    it('clears session client state through a single helper after delete succeeds', async () => {
+        const queryClient = createQueryClient()
+        const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
+        const session = createSession('closed')
+        primeSessionsCache(queryClient, session)
+        ingestIncomingMessages(session.id, [{
+            id: 'message-1',
+            seq: 1,
+            localId: null,
+            createdAt: 1_000,
+            content: {
+                role: 'user',
+                content: {
+                    type: 'text',
+                    text: 'hello'
+                }
+            }
+        }])
+
+        const api = {
+            deleteSession: vi.fn(async () => undefined)
+        } as Partial<ApiClient> as ApiClient
+
+        const { result } = renderHook(
+            () => useSessionActions(api, 'session-1', 'codex'),
+            { wrapper: createWrapper(queryClient) }
+        )
+
+        await act(async () => {
+            await result.current.deleteSession()
+        })
+
+        expect(api.deleteSession).toHaveBeenCalledWith('session-1')
+        expect(queryClient.getQueryData(queryKeys.session('session-1'))).toBeUndefined()
+        expect(queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)?.sessions).toEqual([])
+        expect(getMessageWindowState('session-1').messages).toEqual([])
+        expect(invalidateQueries).not.toHaveBeenCalled()
     })
 })

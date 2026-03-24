@@ -31,6 +31,7 @@ function createSessionSummary(
         },
         todoProgress: null,
         pendingRequestsCount: 0,
+        resumeAvailable: false,
         model: null,
         modelReasoningEffort: null,
         ...restOverrides

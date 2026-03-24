@@ -9,6 +9,7 @@ import { useTranslation } from '@/lib/use-translation'
 
 type SessionActionMenuState = {
     lifecycleState: SessionLifecycleState
+    resumeAvailable: boolean
 }
 
 type SessionActionMenuCallbacks = {
@@ -40,7 +41,7 @@ export function SessionActionMenu(props: SessionActionMenuProps): React.JSX.Elem
         menuId
     } = props
     const items = getSessionActionMenuItems(
-        session.lifecycleState,
+        session,
         t,
         {
             onArchive: actions.onArchive,
@@ -65,7 +66,7 @@ export function SessionActionMenu(props: SessionActionMenuProps): React.JSX.Elem
 }
 
 function getSessionActionMenuItems(
-    lifecycleState: SessionLifecycleState,
+    session: SessionActionMenuState,
     t: (key: string, params?: Record<string, string | number>) => string,
     handlers: {
         onArchive: () => void
@@ -85,7 +86,7 @@ function getSessionActionMenuItems(
         }
     ]
 
-    if (lifecycleState === 'running') {
+    if (session.lifecycleState === 'running') {
         items.push(
             {
                 id: 'close',
@@ -104,14 +105,17 @@ function getSessionActionMenuItems(
         return items
     }
 
-    if (lifecycleState === 'closed') {
-        items.push(
-            {
+    if (session.lifecycleState === 'closed') {
+        if (session.resumeAvailable) {
+            items.push({
                 id: 'resume',
                 label: t('session.action.resume'),
                 icon: <RefreshIcon className="text-[var(--app-hint)]" />,
                 onSelect: handlers.onResume
-            },
+            })
+        }
+
+        items.push(
             {
                 id: 'archive',
                 label: t('session.action.archive'),

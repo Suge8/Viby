@@ -25,6 +25,7 @@ import {
     saveNewSessionPreferences,
 } from './preferences'
 import { SessionTypeSelector } from './SessionTypeSelector'
+import { resolveLaunchPermissionMode } from './launchConfig'
 import { useNewSessionDirectoryState } from './useNewSessionDirectoryState'
 import { formatRunnerSpawnError } from '../../utils/formatRunnerSpawnError'
 
@@ -144,7 +145,7 @@ export function NewSession(props: {
             const resolvedModelReasoningEffort = modelReasoningEffort !== 'default'
                 ? modelReasoningEffort
                 : undefined
-            const resolvedPermissionMode = yoloMode ? 'yolo' : 'default'
+            const resolvedPermissionMode = resolveLaunchPermissionMode(agent, yoloMode)
             const result = await spawnSession({
                 machineId: selectedMachineId,
                 directory: trimmedDirectory,
@@ -172,7 +173,7 @@ export function NewSession(props: {
                         }
                     }
                 })
-                props.onSuccess(result.sessionId)
+                props.onSuccess(result.session.id)
                 return
             }
 

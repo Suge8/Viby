@@ -1,4 +1,4 @@
-import { getSessionLifecycleState } from '@viby/protocol'
+import { getSessionLifecycleState, getSessionResumeToken } from '@viby/protocol'
 import type { Session } from '@viby/protocol/types'
 import { MachineCache } from './machineCache'
 import { RpcGateway } from './rpcGateway'
@@ -30,30 +30,6 @@ const ARCHIVED_BY_WEB = 'web'
 const ARCHIVED_BY_USER_REASON = 'Archived by user'
 const RESUME_CONTRACT_TIMEOUT_MS = 15_000
 const RESUME_CONTRACT_POLL_INTERVAL_MS = 250
-
-function getSessionResumeToken(session: Session): string | undefined {
-    const metadata = session.metadata
-    if (!metadata) {
-        return undefined
-    }
-
-    switch (metadata.flavor) {
-        case 'codex':
-            return metadata.codexSessionId
-        case 'gemini':
-            return metadata.geminiSessionId
-        case 'opencode':
-            return metadata.opencodeSessionId
-        case 'cursor':
-            return metadata.cursorSessionId
-        case 'claude':
-        case null:
-        case undefined:
-            return metadata.claudeSessionId
-        default:
-            return metadata.claudeSessionId
-    }
-}
 
 function withSessionResumeToken(
     metadata: Session['metadata'],
@@ -120,8 +96,9 @@ export class SessionLifecycleService {
         }
 
         await this.stopSessionIfActive(sessionId, session.active)
-        await this.sessionCache.setSessionLifecycleState(sessionId, 'closed')
-        return this.getUpdatedSession(sessionId)
+        return await this.sessionCache.transitionSessionLifecycle(sessionId, 'closed', {
+            markInactive: session.active
+        })
     }
 
     async archiveSession(sessionId: string): Promise<Session> {
@@ -132,11 +109,11 @@ export class SessionLifecycleService {
         }
 
         await this.stopSessionIfActive(sessionId, session.active)
-        await this.sessionCache.setSessionLifecycleState(sessionId, 'archived', {
+        return await this.sessionCache.transitionSessionLifecycle(sessionId, 'archived', {
+            markInactive: session.active,
             archivedBy: ARCHIVED_BY_WEB,
             archiveReason: ARCHIVED_BY_USER_REASON
         })
-        return this.getUpdatedSession(sessionId)
     }
 
     async unarchiveSession(sessionId: string): Promise<Session> {
@@ -150,8 +127,7 @@ export class SessionLifecycleService {
             throw new Error('Cannot unarchive active session')
         }
 
-        await this.sessionCache.setSessionLifecycleState(sessionId, 'closed')
-        return this.getUpdatedSession(sessionId)
+        return await this.sessionCache.transitionSessionLifecycle(sessionId, 'closed')
     }
 
     async resumeSession(
@@ -183,7 +159,7 @@ export class SessionLifecycleService {
         const flavor = metadata.flavor === 'codex' || metadata.flavor === 'gemini' || metadata.flavor === 'opencode' || metadata.flavor === 'cursor'
             ? metadata.flavor
             : 'claude'
-        const resumeToken = getSessionResumeToken(session)
+        const resumeToken = getSessionResumeToken(session.metadata)
 
         if (!resumeToken) {
             return { type: 'error', message: 'Resume session ID unavailable', code: 'resume_unavailable' }
@@ -312,7 +288,7 @@ export class SessionLifecycleService {
 
         while (Date.now() - startTime < timeoutMs) {
             const session = this.getSession(sessionId)
-            const resumedToken = session ? getSessionResumeToken(session) : undefined
+            const resumedToken = session ? getSessionResumeToken(session.metadata) : undefined
 
             if (session?.active) {
                 hasBecomeActive = true
@@ -344,17 +320,12 @@ export class SessionLifecycleService {
         return this.sessionCache.getSession(sessionId) ?? this.sessionCache.refreshSession(sessionId) ?? undefined
     }
 
-    private getUpdatedSession(sessionId: string): Session {
-        return assertSessionExists(this.getSession(sessionId))
-    }
-
     private async stopSessionIfActive(sessionId: string, active: boolean): Promise<void> {
         if (!active) {
             return
         }
 
         await this.rpcGateway.killSession(sessionId)
-        this.sessionCache.handleSessionEnd({ sid: sessionId, time: Date.now() })
     }
 
     private resolveResumeTargetMachine(session: Session) {

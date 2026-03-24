@@ -40,11 +40,13 @@ export type PermissionMode = typeof PERMISSION_MODES[number]
 export const CLAUDE_MODEL_PRESETS = ['sonnet', 'sonnet[1m]', 'opus', 'opus[1m]'] as const
 export type ClaudeModelPreset = typeof CLAUDE_MODEL_PRESETS[number]
 
-export const CLAUDE_SELECTABLE_MODEL_PRESETS = ['sonnet[1m]', 'opus[1m]'] as const
+export const CLAUDE_SELECTABLE_MODEL_PRESETS = ['sonnet', 'opus'] as const
 export type ClaudeSelectableModelPreset = typeof CLAUDE_SELECTABLE_MODEL_PRESETS[number]
 
 export const AGENT_FLAVORS = ['claude', 'codex', 'gemini', 'opencode', 'cursor'] as const
 export type AgentFlavor = typeof AGENT_FLAVORS[number]
+
+const LIVE_MODEL_CONFIG_FLAVORS = ['claude', 'codex'] as const
 
 export const PERMISSION_MODE_LABELS: Record<PermissionMode, string> = {
     default: 'Default',
@@ -168,6 +170,21 @@ export function getPermissionModesForFlavor(flavor?: string | null): readonly Pe
     return CLAUDE_PERMISSION_MODES
 }
 
+export function getModelReasoningEffortsForFlavor(flavor?: string | null): readonly ModelReasoningEffort[] {
+    if (flavor === 'codex') {
+        return CODEX_REASONING_EFFORTS
+    }
+    if (flavor === 'claude') {
+        return CLAUDE_REASONING_EFFORTS
+    }
+
+    return []
+}
+
+export function supportsLiveModelConfigForFlavor(flavor?: string | null): boolean {
+    return LIVE_MODEL_CONFIG_FLAVORS.includes(flavor as typeof LIVE_MODEL_CONFIG_FLAVORS[number])
+}
+
 export function getPermissionModeOptionsForFlavor(flavor?: string | null): PermissionModeOption[] {
     return getPermissionModesForFlavor(flavor).map((mode) => ({
         mode,
@@ -178,6 +195,13 @@ export function getPermissionModeOptionsForFlavor(flavor?: string | null): Permi
 
 export function isPermissionModeAllowedForFlavor(mode: PermissionMode, flavor?: string | null): boolean {
     return getPermissionModesForFlavor(flavor).includes(mode)
+}
+
+export function isModelReasoningEffortAllowedForFlavor(
+    effort: ModelReasoningEffort,
+    flavor?: string | null
+): boolean {
+    return getModelReasoningEffortsForFlavor(flavor).includes(effort)
 }
 
 export function getCodexCollaborationModeOptions(): CodexCollaborationModeOption[] {

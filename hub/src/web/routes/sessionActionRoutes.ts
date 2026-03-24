@@ -87,7 +87,15 @@ export function registerSessionActionRoutes(
             return c.json({ error: result.message, code: result.code }, status)
         }
 
-        return c.json({ type: 'success', sessionId: result.sessionId })
+        const resumedSession = sessionContext.engine.getSession(result.sessionId)
+        if (!resumedSession) {
+            return c.json({
+                error: 'Session snapshot unavailable after resume',
+                code: 'session_not_found'
+            }, 500)
+        }
+
+        return c.json({ type: 'success', session: resumedSession })
     })
 
     app.post('/sessions/:id/upload', async (c) => {

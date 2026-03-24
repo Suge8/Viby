@@ -146,6 +146,7 @@ function createSessionSummary(overrides: Partial<SessionSummary> & Pick<SessionS
         },
         todoProgress: null,
         pendingRequestsCount: 0,
+        resumeAvailable: false,
         model: null,
         modelReasoningEffort: null,
         ...restOverrides,

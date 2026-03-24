@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { ApiError } from '@/api/client'
@@ -12,68 +12,46 @@ import { useSkills } from '@/hooks/queries/useSkills'
 import { useSlashCommands } from '@/hooks/queries/useSlashCommands'
 import { useSessionTargetResolver } from '@/hooks/useSessionTargetResolver'
 import { useAppContext } from '@/lib/app-context'
-import { fetchLatestMessages, getMessageWindowState, seedMessageWindowFromSession } from '@/lib/message-window-store'
-import {
-    runNavigationTransition,
-    VIEW_TRANSITION_NAVIGATION_OPTIONS,
-} from '@/lib/navigationTransition'
+import { fetchLatestMessages, getMessageWindowState } from '@/lib/message-window-store'
 import { useNoticeCenter } from '@/lib/notice-center'
 import { getNoticePreset } from '@/lib/noticePresets'
 import { queryKeys } from '@/lib/query-keys'
 import { appendRealtimeTrace } from '@/lib/realtimeTrace'
 import { runSendCatchup } from '@/lib/sendCatchup'
+import { writeSessionToQueryCache } from '@/lib/sessionQueryCache'
 import { useTranslation } from '@/lib/use-translation'
 
-function formatResumeErrorMessage(error: unknown, t: (key: string) => string): string {
+function getResumeErrorCode(error: unknown): string | null {
     if (error instanceof ApiError) {
-        switch (error.code) {
-            case 'session_archived':
-                return t('chat.resumeFailed.sessionArchived')
-            case 'resume_unavailable':
-                return t('chat.resumeFailed.resumeUnavailable')
-            case 'no_machine_online':
-                return t('chat.resumeFailed.noMachineOnline')
-            case 'session_not_found':
-                return t('chat.resumeFailed.sessionNotFound')
-            case 'resume_failed':
-                return t('chat.resumeFailed.resumeFailed')
-            default:
-                return t('chat.resumeFailed.generic')
-        }
+        return typeof error.code === 'string' ? error.code : null
+    }
+
+    if (!error || typeof error !== 'object') {
+        return null
+    }
+
+    return typeof (error as { code?: unknown }).code === 'string'
+        ? (error as { code: string }).code
+        : null
+}
+
+function formatResumeErrorMessage(error: unknown, t: (key: string) => string): string {
+    switch (getResumeErrorCode(error)) {
+        case 'session_archived':
+            return t('chat.resumeFailed.sessionArchived')
+        case 'resume_unavailable':
+            return t('chat.resumeFailed.resumeUnavailable')
+        case 'no_machine_online':
+            return t('chat.resumeFailed.noMachineOnline')
+        case 'session_not_found':
+            return t('chat.resumeFailed.sessionNotFound')
+        case 'resume_failed':
+            return t('chat.resumeFailed.resumeFailed')
+        default:
+            break
     }
 
     return error instanceof Error ? error.message : t('chat.resumeFailed.generic')
-}
-
-async function prefetchResolvedSessionData(options: {
-    api: ReturnType<typeof useAppContext>['api']
-    currentSessionId: string
-    queryClient: QueryClient
-    resolvedSessionId: string
-    session: NonNullable<ReturnType<typeof useSession>['session']>
-}): Promise<void> {
-    const { api, currentSessionId, queryClient, resolvedSessionId, session } = options
-    if (!api) {
-        return
-    }
-
-    if (resolvedSessionId !== session.id) {
-        seedMessageWindowFromSession(currentSessionId, resolvedSessionId)
-        queryClient.setQueryData(queryKeys.session(resolvedSessionId), {
-            session: { ...session, id: resolvedSessionId, active: true }
-        })
-    }
-
-    try {
-        await Promise.all([
-            queryClient.prefetchQuery({
-                queryKey: queryKeys.session(resolvedSessionId),
-                queryFn: () => api.getSession(resolvedSessionId),
-            }),
-            fetchLatestMessages(api, resolvedSessionId),
-        ])
-    } catch {
-    }
 }
 
 export default function SessionChatRoute(): React.JSX.Element {
@@ -147,11 +125,15 @@ function ResolvedSessionChatRoute(props: ResolvedSessionChatRouteProps): React.J
     const queryClient = useQueryClient()
     const { addToast } = useNoticeCenter()
     const { api, isDetailPending, refetchSession, session, sessionId } = props
-    const activeRouteSessionIdRef = useRef(sessionId)
+    const [isResumingSession, setIsResumingSession] = useState(false)
+    const mountedRef = useRef(true)
+    const resumingCountRef = useRef(0)
 
     useEffect(() => {
-        activeRouteSessionIdRef.current = sessionId
-    }, [sessionId])
+        return () => {
+            mountedRef.current = false
+        }
+    }, [])
 
     const {
         messages,
@@ -170,31 +152,11 @@ function ResolvedSessionChatRoute(props: ResolvedSessionChatRouteProps): React.J
         flushPending,
         setAtBottom,
     } = useMessages(api, sessionId)
-    const resolveSessionId = useSessionTargetResolver({
+    const ensureSessionReadyBase = useSessionTargetResolver({
         api,
         session,
-        onResolved: (currentSessionId, resolvedSessionId) => {
-            void (async () => {
-                await prefetchResolvedSessionData({
-                    api,
-                    currentSessionId,
-                    queryClient,
-                    resolvedSessionId,
-                    session
-                })
-
-                if (activeRouteSessionIdRef.current !== currentSessionId) {
-                    return
-                }
-
-                runNavigationTransition(() => {
-                    navigate({
-                        to: '/sessions/$sessionId',
-                        params: { sessionId: resolvedSessionId },
-                        replace: true
-                    })
-                }, VIEW_TRANSITION_NAVIGATION_OPTIONS)
-            })()
+        onReady: (resumedSession) => {
+            writeSessionToQueryCache(queryClient, resumedSession)
         },
         onError: (error, currentSessionId) => {
             addToast({
@@ -205,6 +167,25 @@ function ResolvedSessionChatRoute(props: ResolvedSessionChatRouteProps): React.J
             })
         }
     })
+    const ensureSessionReady = useCallback(async () => {
+        if (session.active) {
+            return
+        }
+
+        resumingCountRef.current += 1
+        if (mountedRef.current) {
+            setIsResumingSession(true)
+        }
+
+        try {
+            await ensureSessionReadyBase()
+        } finally {
+            resumingCountRef.current = Math.max(0, resumingCountRef.current - 1)
+            if (mountedRef.current && resumingCountRef.current === 0) {
+                setIsResumingSession(false)
+            }
+        }
+    }, [ensureSessionReadyBase, session.active])
     const handleSendBlocked = useCallback((reason: 'no-api' | 'no-session' | 'pending') => {
         if (reason !== 'no-api') {
             return
@@ -261,7 +242,7 @@ function ResolvedSessionChatRoute(props: ResolvedSessionChatRouteProps): React.J
     }, [api, queryClient])
 
     const { sendMessage, retryMessage, isSending } = useSendMessage(api, sessionId, {
-        resolveSessionId,
+        ensureSessionReady,
         onBlocked: handleSendBlocked,
         onSendStart: ({ sessionId: sendingSessionId, localId, createdAt, attachmentsCount }) => {
             appendRealtimeTrace({
@@ -305,6 +286,7 @@ function ResolvedSessionChatRoute(props: ResolvedSessionChatRouteProps): React.J
             isLoadingMessages={messagesLoading}
             isLoadingMoreMessages={messagesLoadingMore}
             isSending={isSending}
+            isResumingSession={isResumingSession}
             pendingCount={pendingCount}
             hasLoadedLatestMessages={hasLoadedLatest}
             messagesVersion={messagesVersion}
@@ -318,7 +300,7 @@ function ResolvedSessionChatRoute(props: ResolvedSessionChatRouteProps): React.J
             onFlushPending={flushPending}
             onAtBottomChange={setAtBottom}
             onRetryMessage={retryMessage}
-            resolveSessionId={resolveSessionId}
+            ensureSessionReady={ensureSessionReady}
             autocompleteSuggestions={getAutocompleteSuggestions}
         />
     )

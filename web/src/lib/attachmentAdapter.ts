@@ -11,7 +11,6 @@ const MAX_PREVIEW_BYTES = 5 * 1024 * 1024
 type PendingUploadAttachment = PendingAttachment & {
     path?: string
     previewUrl?: string
-    uploadSessionId?: string
 }
 
 const IMAGE_EXTENSION_MIME_TYPES: Record<string, string> = {
@@ -93,7 +92,7 @@ function resolveAttachmentContentType(
 }
 
 type CreateAttachmentAdapterOptions = {
-    resolveSessionId?: (currentSessionId: string) => Promise<string>
+    ensureSessionReady?: () => Promise<void>
 }
 
 export function createAttachmentAdapter(
@@ -110,14 +109,6 @@ export function createAttachmentAdapter(
         } catch {
             // Best effort cleanup
         }
-    }
-
-    const resolveTargetSessionId = async (): Promise<string> => {
-        if (!options?.resolveSessionId) {
-            return sessionId
-        }
-
-        return await options.resolveSessionId(sessionId)
     }
 
     return {
@@ -168,11 +159,11 @@ export function createAttachmentAdapter(
                     status: { type: 'running', reason: 'uploading', progress: 50 }
                 }
 
-                const targetSessionId = await resolveTargetSessionId()
-                const result = await api.uploadFile(targetSessionId, file.name, content, contentType)
+                await options?.ensureSessionReady?.()
+                const result = await api.uploadFile(sessionId, file.name, content, contentType)
                 if (cancelledAttachmentIds.has(id)) {
                     if (result.success && result.path) {
-                        await deleteUpload(targetSessionId, result.path)
+                        await deleteUpload(sessionId, result.path)
                     }
                     return
                 }
@@ -203,8 +194,7 @@ export function createAttachmentAdapter(
                     file,
                     status: { type: 'requires-action', reason: 'composer-send' },
                     path: result.path,
-                    previewUrl,
-                    uploadSessionId: targetSessionId
+                    previewUrl
                 } as PendingUploadAttachment
             } catch {
                 yield {
@@ -221,7 +211,7 @@ export function createAttachmentAdapter(
         async remove(attachment: Attachment): Promise<void> {
             cancelledAttachmentIds.add(attachment.id)
             const pendingAttachment = attachment as PendingUploadAttachment
-            await deleteUpload(pendingAttachment.uploadSessionId ?? sessionId, pendingAttachment.path)
+            await deleteUpload(sessionId, pendingAttachment.path)
         },
 
         async send(attachment: PendingAttachment): Promise<CompleteAttachment> {

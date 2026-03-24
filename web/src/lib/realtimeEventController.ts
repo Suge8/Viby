@@ -9,7 +9,6 @@ import type {
 } from '@/types/api'
 import {
     applySessionStream,
-    clearMessageWindow,
     clearSessionStream,
     ingestIncomingMessages
 } from '@/lib/message-window-store'
@@ -26,9 +25,8 @@ import { queryKeys } from '@/lib/query-keys'
 import {
     patchSessionSummaryCache,
     patchSessionSummaryFromMessageCache,
-    removeSessionSummaryCache,
 } from '@/lib/realtimeSessionSummaryCache'
-import { writeSessionToQueryCache } from '@/lib/sessionQueryCache'
+import { removeSessionClientState, writeSessionToQueryCache } from '@/lib/sessionQueryCache'
 export type ToastEvent = Extract<SyncEvent, { type: 'toast' }>
 const INVALIDATION_BATCH_MS = 16
 type PendingInvalidations = { sessions: boolean; machines: boolean; sessionIds: Set<string> }
@@ -168,12 +166,6 @@ export function createRealtimeEventController(options: RealtimeEventControllerOp
         return patched
     }
 
-    function removeSessionSummary(sessionId: string): void {
-        options.queryClient.setQueryData<SessionsResponse | undefined>(queryKeys.sessions, (previous) => {
-            return removeSessionSummaryCache(previous, sessionId)
-        })
-    }
-
     function upsertMachine(machine: Machine): void {
         options.queryClient.setQueryData<MachinesResponse | undefined>(queryKeys.machines, (previous) => {
             if (!previous) {
@@ -238,9 +230,7 @@ export function createRealtimeEventController(options: RealtimeEventControllerOp
 
         if (event.type === 'session-added' || event.type === 'session-updated' || event.type === 'session-removed') {
             if (event.type === 'session-removed') {
-                removeSessionSummary(event.sessionId)
-                void options.queryClient.removeQueries({ queryKey: queryKeys.session(event.sessionId) })
-                clearMessageWindow(event.sessionId)
+                removeSessionClientState(options.queryClient, event.sessionId)
             } else if (isSessionRecord(event.data) && event.data.id === event.sessionId) {
                 writeSessionToQueryCache(options.queryClient, event.data)
             } else {

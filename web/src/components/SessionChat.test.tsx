@@ -129,6 +129,7 @@ function renderSessionChat(options?: {
                 isLoadingMessages={false}
                 isLoadingMoreMessages={false}
                 isSending={false}
+                isResumingSession={false}
                 pendingCount={0}
                 hasLoadedLatestMessages={options?.hasLoadedLatestMessages ?? true}
                 messagesVersion={0}

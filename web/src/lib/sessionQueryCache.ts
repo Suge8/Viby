@@ -1,7 +1,8 @@
 import type { QueryClient } from '@tanstack/react-query'
 import type { Session, SessionResponse, SessionsResponse, SessionSummary } from '@/types/api'
+import { clearMessageWindow } from '@/lib/message-window-store'
 import { queryKeys } from '@/lib/query-keys'
-import { upsertSessionSummaryCache } from '@/lib/realtimeSessionSummaryCache'
+import { removeSessionSummaryCache, upsertSessionSummaryCache } from '@/lib/realtimeSessionSummaryCache'
 
 type SessionFlavor = NonNullable<NonNullable<Session['metadata']>['flavor']> | null
 
@@ -10,6 +11,17 @@ export function writeSessionToQueryCache(queryClient: QueryClient, session: Sess
     queryClient.setQueryData<SessionsResponse | undefined>(queryKeys.sessions, (previous) => {
         return upsertSessionSummaryCache(previous, session)
     })
+}
+
+export function removeSessionClientState(
+    queryClient: Pick<QueryClient, 'setQueryData' | 'removeQueries'>,
+    sessionId: string
+): void {
+    queryClient.setQueryData<SessionsResponse | undefined>(queryKeys.sessions, (previous) => {
+        return removeSessionSummaryCache(previous, sessionId)
+    })
+    void queryClient.removeQueries({ queryKey: queryKeys.session(sessionId) })
+    clearMessageWindow(sessionId)
 }
 
 export function getSessionResponseFromCache(

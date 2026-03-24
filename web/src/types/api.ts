@@ -117,7 +117,7 @@ export type MachinePathsExistsResponse = { exists: Record<string, boolean> }
 export type MachineBrowseDirectoryResponse = ProtocolMachineDirectoryResponse
 
 export type SpawnResponse =
-    | { type: 'success'; sessionId: string }
+    | { type: 'success'; session: Session }
     | { type: 'error'; message: string }
 
 export type GitCommandResponse = {
