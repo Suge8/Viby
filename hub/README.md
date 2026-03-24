@@ -100,15 +100,16 @@ bun run dev:hub
 - `POST /api/sessions/:id/archive` / `close` / `unarchive`：返回最终 `session` 快照；用于 Web 立刻把 lifecycle 写回缓存，避免先掉进 `已关闭` 再等待下一拍 metadata 修正
 - `PATCH /api/sessions/:id`：重命名会话；远程 dev 跨源调用依赖 Hub CORS 允许 `PATCH`
 - `POST /api/sessions/:id/resume`：同步 resume 契约；只有旧 agent session 真正重新接回后才返回成功，失败则直接返回错误并完成 cleanup，Web 不承担补偿重试
+- `POST /api/sessions/:id/permission-mode` / `collaboration-mode` / `model` / `model-reasoning-effort`：统一返回最终 `session` 快照；如果 apply 成功后拿不到 snapshot，Hub 会直接报错，不把空快照漏给 Web
 - CLI `update-metadata` 的普通 title / summary / path 更新不会覆盖已存在的 lifecycle 元数据；归档态必须只由显式 lifecycle 更新修改，避免 archived 被后续 metadata 同步误擦成 closed
 - `GET /api/sessions/:id/messages`：消息分页
 - `GET /api/sessions/:id/messages?afterSeq=<seq>`：按 SQLite seq 做 reconnect catch-up；用于 Web/CLI 在 unrecovered reconnect 后补齐缺失消息
 - `POST /api/sessions/:id/messages`：发送消息
 - `POST /api/sessions/:id/permission-mode`：切换权限模式
-- `POST /api/sessions/:id/model`：切换 remote Codex 会话模型；从下一轮 turn 生效
-- `POST /api/sessions/:id/model-reasoning-effort`：切换 remote Codex 会话思考强度；从下一轮 turn 生效
+- `POST /api/sessions/:id/model`：切换 remote Claude / Codex 会话模型；从下一轮 turn 生效
+- `POST /api/sessions/:id/model-reasoning-effort`：切换 remote Claude / Codex 会话思考强度；从下一轮 turn 生效；Hub 会按 flavor 校验可用档位
 - `GET /api/machines`：在线机器列表
-- `POST /api/machines/:id/spawn`：远程创建会话
+- `POST /api/machines/:id/spawn`：远程创建会话；成功时直接返回最终 `session` 快照，避免 Web 再走 `sessionId -> refetch` 双阶段提交
 - `GET /api/push/vapid-public-key`：Push 公钥
 
 更详细的路由请看 `src/web/routes/`。

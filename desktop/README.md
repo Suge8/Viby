@@ -16,19 +16,26 @@
 ```text
 Tauri shell
   ├─ React status panel
-  ├─ Rust process manager + tray
+  ├─ Rust supervisor + tray
   └─ viby hub sidecar
 ```
 
 桌面壳不重写 hub 业务逻辑。  
 真正的服务事实源仍然在 `cli + hub`，桌面层只负责进程托管和状态展示。
 
+当前桌面状态链已经收口为：
+
+- Rust supervisor 负责统一读取 `managed_pid`、`hub.runtime-status.json` 和启动配置
+- supervisor 产出单一 canonical snapshot，并通过 Tauri event 推给前端
+- React 面板只做首次 `get_hub_snapshot` 和后续 event subscription，不再固定轮询
+- 面板与托盘打开入口统一复用 `open_preferred_url`，不再保留前端任意 URL 打开分支
+
 补充说明：
 
 - 桌面壳默认和 CLI 共用同一套 `~/.viby`
 - 桌面壳永远只托管自己启动的 `viby hub`
 - 如果默认端口被占用，hub 会自动切到空闲端口，并把新端口写回 `~/.viby/settings.toml`
-- 入口模式分三档：`仅本机` 用 `127.0.0.1` 启动，`局域网` 用 `0.0.0.0` 启动，`中转入口` 当前只保留占位，不参与启动
+- 入口模式只保留两档：`仅本机` 用 `127.0.0.1` 启动，`局域网` 用 `0.0.0.0` 启动
 - 显式退出应用或点击“停止中枢”时，会把桌面壳启动的 hub 一起停掉，避免 lingering hub / runner
 - 如果 `hub.runtime-status.json` 还在但对应进程已经退出，桌面壳会把它归一成已停止状态，不再误判成“桌面托管中”
 - 本机连接生命周期继续归 hub 管，不再让子进程自己热重启自己
@@ -69,6 +76,7 @@ bun run tauri:dev
 - 启动时沿用现有 `settings.toml` 里的 token；若默认端口冲突会自动改写成新的空闲端口
 - hub 运行态会写到 `~/.viby/hub.runtime-status.json`
 - 桌面壳拉起 hub 的 stdout / stderr 会写到 `~/.viby/logs/desktop-hub.log`
+- Tauri command 权限已显式收口到桌面控制面实际需要的最小集合；未使用 command 会在 build 时剔除
 
 ## 构建
 

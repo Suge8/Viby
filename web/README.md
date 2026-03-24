@@ -27,7 +27,11 @@
 - 会话 lifecycle 语义统一为 `running / closed / archived`：`停止运行` 保留在主列表可继续，`归档` 会移出主列表，恢复归档后不会自动重启
 - 会话列表状态读模型统一为：生命周期看 `running / closed / archived`，运行中细分看 `thinking + latestActivityKind`，`新回复未看` 只看 `latestCompletedReplyAt`；`updatedAt` 表示稳定列表时间，只用于排序和相对时间，不再拿来猜未读或 `待输入`
 - realtime session patch 除了 `active/thinking`，也必须消费 lifecycle metadata；`archive` 的最终归属只信 `lifecycleState='archived'`，不能靠 Web 本地把 inactive 猜成 `closed`
-- `archive / close / unarchive` 这类 lifecycle action 统一要求 Hub 直接返回最终 `session` 快照；`useSessionActions.ts` 会先把快照写回 `session detail + sessions list` cache，再做后台 invalidation，避免 UI 先短暂落进错误分区
+- `archive / close / unarchive` 这类 lifecycle action 统一要求 Hub 直接返回最终 `session` 快照；`useSessionActions.ts` 会直接把快照写回 `session detail + sessions list` cache，不再依赖 `invalidate + refetch` 补偿，避免 UI 先短暂落进错误分区
+- `spawn` 也走同一条单次提交链：`POST /api/machines/:id/spawn` 成功后直接返回最终 `session` snapshot，`useSpawnSession.ts` 立刻写回 detail + list cache，不再先回 `sessionId` 再等页面二次拉取
+- live config 同样只认 authoritative snapshot：permission / collaboration / model / reasoning effort 成功后统一直写缓存，不再保留 `onRefresh` 或 mutation 成功后的额外 invalidation
+- `web/src/api/client.ts` 是 session snapshot 响应归一化的单一边界：如果运行中的 Hub 仍返回旧形状 `sessionId` / `ok:true`，只能在这里补 authoritative `getSession()`；hooks 和 UI 一律只消费最终 `Session`，不要把 mixed response shape 继续往上游扩散
+- `delete` 的 client-state 清理统一走 `removeSessionClientState()`：只保留一条 owner 链负责移除 detail query、summary cache 和 message window
 - 会话列表与终端快捷键的长按语义统一收口到 `web/src/hooks/useLongPress.ts`：桌面右键、鼠标/触屏长按、移动端 touch hold 都只走同一套 pointer 事件链，不再并行维护 `mouse + touch` 两套状态
 - 会话列表 action owner 与菜单开关必须分离：`SessionListActionController` 负责对话框状态，`SessionActionMenu` 只负责菜单显隐；关闭菜单不能顺手卸载 rename/archive/close/unarchive 对话框 owner
 - 会话列表 action controller 继续保持同一个 owner，但不再常驻塞进首页 bundle；只有用户真正打开菜单时才按需加载 `SessionListActionController` 与相关对话框逻辑
@@ -62,9 +66,10 @@
 - 消息发送、重试与滚动窗口管理
 - 聊天消息复制统一收口到 `MessageSurface -> useCopyToClipboard -> safeCopyToClipboard`：消息本体只保留点击复制与 copied 成功态色彩反馈，不再伪装成 `button`、不再叠加按压缩放或 hover chrome；clipboard fallback 的临时 textarea 会通过 `data-viby-transient-editable` 与 `focus({ preventScroll: true })` 路径隔离，避免长消息点击复制时把 chat viewport 带偏
 - Codex 会话默认直接复用现有 metadata/path 标题回退，不再为首轮 AI 命名额外起桥
-- inactive session 的恢复发送与附件上传共用 `useSessionTargetResolver`；只有用户显式发送时才会触发 resume，页面重连不会偷偷续跑
+- inactive session 的恢复发送与附件上传共用 `useSessionTargetResolver`；只有用户显式发送或上传时才会触发 resume，页面重连不会偷偷续跑
+- 聊天页对显式恢复只保留 route-local 的轻量 `isResumingSession` 状态；composer 在恢复期间只做 placeholder / disabled / `aria-busy` 表达，不扩散成第二套全局状态机
 - `resume` 仍保持单次显式操作，但后端完成条件已收口为“旧 agent session 真正重新接回”；Web 不承担补偿重试，也不再需要靠“等一会再点一次”撞过启动竞态
-- `/sessions/$sessionId` 以路由参数作为唯一选中会话事实源；resume 结果只有在当前路由仍然拥有这次恢复结果时才允许替换到新 session，避免 stale 回调把页面跳到别的会话
+- `/sessions/$sessionId` 继续只信路由参数作为唯一选中会话事实源；resume 现在是原 session 原地恢复，不再走 `resolvedSessionId`/redirect 兼容链
 - session detail 只允许沿 `sessions query cache -> useSession() placeholder seed -> SessionChat stable shell` 这一条路径衔接；普通站内导航时，detail query 未完成也要保持 header/body 壳体稳定，只在壳体内部显示局部 pending；`chat.tsx` 路由控制器在 session 尚未解析出来时继续复用共享 blocking fallback，而一旦进入 `SessionChat`，detail/workspace pending 都必须留在壳体内部的局部 skeleton，不再回退到第二层 centered blocking hero、额外 route wrapper 或整页 `LoadingState`
 - 聊天页首次挂载也必须先对齐 `message-window-store` 的 latest snapshot ready：已有会话的普通站内导航要在 `sessionRoutePreload.ts` 里并行预热 `chat route module + chat workspace module + session detail + latest messages`，`SessionChat` 里保留唯一一层本地 `Suspense` 作为 page-internal runtime lazy owner，并且只在首屏消息快照 ready 后才挂载 `SessionChatWorkspace/VibyThread`；不要再让 thread viewport 先空挂载、再异步补消息、最后靠贴底事务补救
 - sessions 列表上的 hover / focus / touchstart intent preload 继续只做轻量 route chunk + session detail 预热；chat workspace 和 latest messages 只允许在真正进入目标会话前预热，避免列表扫过时把多条 message window 或 chat runtime 提前灌进内存
@@ -96,7 +101,7 @@
 - 停止按钮区分 `Stop` 与 `Stopping`；前端不再把“abort 请求已发出”误表现成页面刷新
 - 核心交互 surface 现在统一收口到 `Button` / `PressableSurface` primitive：按钮、tab、菜单项、快捷键、机器卡片、新建会话 agent/type 胶囊都复用同一套 press / release / pointer glow 动效与 reduced-motion 降级；按钮类默认走 `pressStyle="button"`，会话卡片、机器卡片和其他 card surface 统一走 `pressStyle="card"` 并关闭 pointer glow，不再让 composer、header、session list、settings、install prompt、new-session 卡片各自散写一套点击反馈
 - 会话内 live config 能力统一由 `shared/src/sessionConfigSupport.ts` 判断；Web 不再自己猜哪些 flavor / 状态能热切换
-- remote Codex 的模型 / 思考强度切换从下一轮 turn 生效；当前正在执行的那一轮不会被中途改写
+- remote Claude / Codex 的模型 / 思考强度切换都从下一轮 turn 生效；当前正在执行的那一轮不会被中途改写
 - 远程终端与文件查看
 - PWA 安装、离线提示、Web Push
 - 安装提示统一复用 `lucide-react + @lucide/lab` icon 体系；Chromium 原生安装与 iOS 手动引导共用一套 banner / guide 组件语义
@@ -112,15 +117,17 @@
 - 新建会话页的目录输入保持唯一事实源；项目选择器只负责把“最近路径 / 当前机器已知项目 / 目标机器目录浏览”回填到输入框，避免再造第二套目录状态
 - 目标机器若还没重连到支持目录浏览的新版本 Viby，项目选择器会优雅降级为快捷项目入口，不再把“能力缺失”直接放大成 `500`
 - 会话聊天控制器、新建会话页、终端、文件与高亮链路按页懒加载，避免把会话级 hooks 提前塞进主入口
-- app boot boundary 现在显式拆成 `App.tsx -> AppController.tsx -> AppRealtimeRuntime.tsx`：`App` 只保留最小启动壳，`AppController` 负责 auth / serverUrl / route viewport 边界，只有真正进入已登录态后才会加载 realtime / recovery / push runtime；`/sessions` 列表壳也已经是 route-level lazy chunk，不再把会话工作台常驻进 boot 入口
+- app boot boundary 现在显式拆成 `App.tsx -> AppController.tsx -> AppRealtimeRuntime.tsx`：`App` 只保留最小启动壳，`AppController` 负责 auth / serverUrl / route viewport 边界，并且只在进入已登录态后才挂 `NoticeProvider`；只有真正进入已登录态后才会加载 realtime / recovery / push runtime；`/sessions` 列表壳也已经是 route-level lazy chunk，不再把会话工作台常驻进 boot 入口
+- locale 词典现在按当前需要加载：`i18n-context.tsx` 继续是 locale 判定与切换的单一 owner，但只把英文词典作为同步 fallback 留在 boot path；`zh-CN` 由 `i18nCatalog.ts` 按需缓存和加载，主入口不再默认吞下双语字典
 - 聊天页保持“chat route chunk 懒加载 + route 内 page-internal lazy runtime”单一路径：`SessionChatWorkspace` 在 `SessionChat` 内按需挂载，终端页的 `TerminalView` 仍是进入页面后再动态导入
 - `SessionChat` 现在只负责 header、detail pending shell 和 workspace lazy owner；其中 detail/workspace pending 已统一成稳定壳内的局部消息 skeleton，而不是第二层 blocking hero；workspace 内部的消息块归一化/重排、composer live config 控制和 thread view-model 已收口到 `useSessionChatWorkspaceModel -> useSessionChatBlocks / useSessionLiveConfigControls`，避免 route shell 和 workspace 再互相吞职责
 - `VibyComposer` 继续只保留基础输入、附件和主操作 eager 路径；controls 是否显示统一走 `useComposerControlsVisibility.ts`，而实际 settings overlay 改成 `ComposerControlsOverlay` 按需加载，避免会话首开就为了模型/权限/协作面板初始化整条控制链
 - assistant 消息渲染现在也按内容复杂度分层：普通纯文本回复直接走 `PlainAssistantMessageContent`，只有真的出现 markdown / reasoning / tool-call 时才 lazy 加载 `RichAssistantMessageContent`，避免所有 assistant 回复默认把 markdown/tool 渲染链一起塞进 chat workspace 首包
 - 用户消息与 CLI 输出也继续沿同一原则减载：`LazyRainbowText` 对普通文本默认直接渲染，只有看起来像 markdown 时才 lazy 挂 `MarkdownRenderer`；CLI 输出详情卡则通过 `CliOutputMessageContent` 延后到真实命中该类消息时再加载 `CliOutputBlock` / dialog，避免低频链路常驻聊天首包
 - sessions 壳层只在 idle 且网络条件合适时预热 new / settings；chat detail 只在 hover / focus / touchstart / click 的 intent 或显式进入前预热，不再无差别提前下载 terminal / files 大块
+- `sessionRoutePreload.ts` 继续只做轻量 route loader 外壳：route chunk loader、idle preloader 和 detail preload wrapper 可以留在这里，但真正会带入 `message-window-store` 或 session detail query 的实现必须后移到交互时才 `import()` 的明细模块，避免 `router.tsx` 通过顶层导入把 detail runtime 重新卷回主 `index`
 - sessions 列表到聊天页的普通客户端导航不再按完整 `pathname` 把右侧 detail surface 整面 remount；同时会在 hover / focus / touchstart / click 时并行预热 chat detail route chunk 和 session detail query，减少“先整页空一下再回来”的闪屏
-- 离开会话路由时，`SessionsShell` 会继续统一释放 message window、session stream 与 session-scoped queries；这条释放链只认 `sessionScopedQueryOptions.ts`，不再靠长 `gcTime` 等被动回收
+- 离开会话路由时，`SessionsShell` 会继续统一释放 message window、session stream 与 session-scoped queries；query policy 只认 `sessionDetailQueryOptions.ts`，运行时清理只认 `sessionViewRuntime.ts`，不再保留额外 re-export 壳，也不靠长 `gcTime` 等被动回收
 - 普通 sessions 站内导航统一走“`preload settle -> transition commit`”这条 helper；chat / new / settings、chat header 里的 files/terminal 跳转，以及 files 内部 tab/file 切换都复用同一条 navigation transition 语义，recovery href 与 transition options 也统一从 `web/src/lib/navigationTransition.ts` 生成；支持浏览器 `View Transition` 时只叠加视觉增强，不支持或用户偏好 reduced motion 时仍回到同一 retained navigation 主路径，不会分叉出第二套 pending 状态机
 - app shell 根层不再平行叠一套 `AnimatePresence/motion` 路由淡入淡出；全站导航过渡只保留 `web/src/lib/navigationTransition.ts` 这一条正式路径，避免重复 owner 和首屏常驻 runtime
 - 如果用户在列表点击会话 / 新建 / 设置前的 preload 恰好命中旧 chunk，recovery 现在会记住这次用户意图并在 reload 后继续回到目标 href；列表项的 hover / focus / touchstart 意图预热也复用同一条 recovery target 语义，不再偷掉第一次点击
@@ -129,6 +136,7 @@
 - 生产态若命中已删除的旧 chunk，会通过 `vite:preloadError` 走统一 runtime recovery 链恢复；只有这类已确认的 runtime asset 故障才会触发整页 reload
 - build id 变化时会先清理 runtime caches 并继续保留当前页面，而不是默认再来一次二次硬刷新；真正需要 reload 的场景会保留 recovery reason 并用启动过渡壳平滑接管
 - `runtimeAssetRecovery` 与 `index.html` 启动前 inline recovery 只允许对“模块加载失败 / 缺 chunk / 旧 asset 路径”这类已确认的 runtime asset 故障做 reload；不要再把通用 `before initialization` 之类 production runtime exception 误判成 stale asset，否则会把真实错误刷成无限恢复循环
+- service worker / runtime update 注册已从 `main.tsx` 的主 boot path 后移到 `boot/registerRuntimeServiceWorker.ts`；首屏仍先完成 recovery / render，再在 idle 时挂 SW/update 注册，避免把非首屏必需的 update runtime 常驻进主入口
 - PWA 新版本就绪时不再弹阻塞式 `confirm()`；统一走应用内 floating notice，用户点击后才切到新壳，失败也会保留入口以便重试
 - 普通 runtime update notice 不会自行强刷当前页面；只有已经确认的旧 chunk / runtime asset 故障恢复，才允许接管成整页 reload
 - runtime/update/recovery notice 已收口成单一 owner：页面资源切换相关的 `build-assets-reset / local-service-worker-reset / vite-preload-error / runtime-asset-reload` 对用户统一表现为一类“页面资源刚更新”提示；本地/局域网静态入口只补一条克制的 build 提醒，不再并排冒出多种底层术语

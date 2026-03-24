@@ -14,7 +14,7 @@
 - dev 源码态下，runner 安装戳复用判断不能只看 `package.json`；当前实现会优先跟踪 `cli/src/**` 的最新变更时间，缺失源码时间戳时再回退到 CLI 版本号，避免 hub 热更新后继续复用旧 runner
 - Codex remote 会在空闲阶段预热 app-server thread，列表标题默认回退 metadata/path，不再为首轮自动命名额外起桥
 - 这类 Codex remote thread 预热只属于内部 runtime 准备，不应推进会话 `thinking`、也不应把内部 warmup 事件写进用户可见 transcript
-- Codex remote 的 live model / reasoning effort 切换只影响下一轮 turn；当前 in-flight turn 不会被追溯改写
+- Claude / Codex remote 的 live model / reasoning effort 切换都只影响下一轮 turn；当前 in-flight turn 不会被追溯改写
 - runner-managed Codex resume 启动期必须同步重新接回旧 thread；不会再先报“恢复成功”再把真正 resume 偷偷延后到首轮 turn
 - Codex resume 失败会直接报错，不会再 silent fallback 成一个新的 thread 假装恢复成功
 - `ApiSessionClient` 首次连上 hub 时会先用已恢复的 session snapshot 作为 keepalive 种子；后续 reconnect 继续重放最近一次 live keepalive snapshot，不会再先把会话硬回写成 `thinking=false`

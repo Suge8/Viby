@@ -23,6 +23,9 @@
 - **跨重启恢复更可靠**：Web 和 CLI 的 reconnect 主路径统一为 `snapshot + afterSeq catch-up`；`Socket.IO connectionStateRecovery` 只负责短暂断线补 realtime，不再被当成跨重启业务恢复协议。
 - **会话配置可持久恢复**：session 的 `permission mode` / `collaboration mode` 已落到 Hub SQLite，不再只挂在内存 keepalive 上；重启 hub、重开终端或 runner 接管后，恢复链会继续带回这组配置。
 - **恢复语义同步闭环**：`POST /api/sessions/:id/resume` 现在只会在“旧 agent thread 已重新接回”后返回成功；Hub 不再先看 keepalive 活跃就抢跑判定，Codex remote 也不再保留“启动先假成功、首轮再偷偷补 resume”的分叉。
+- **会话提交链单一**：`spawn / resume / archive / close / unarchive / live config` 这些会改变会话事实的操作，都会由 Hub 返回 authoritative `session` snapshot；Web 直接写回 detail + list cache，不再依赖 `invalidate + refetch` 补偿。
+- **显式恢复更稳**：`closed` 会话只有在用户显式发送消息或上传附件时才会触发恢复；聊天页只保留 route-local 的轻量 `resuming` 状态，页面重连不会偷偷续跑。
+- **删除清理单点收口**：删除会话后的 detail cache、list summary 和 message window 统一走同一条 client-state cleanup helper，不再在 mutation、realtime 和视图层散写第二套清理逻辑。
 - **聊天历史更稳**：线程历史按钮统一走 `上一条你发的消息 / 更多消息` 双模式；prepend 历史页时保持当前 viewport anchor，不再因为补历史把视角抖乱。
 - **会话收纳更清楚**：运行中、已关闭、已归档是三种明确状态；已关闭可继续，已归档会移出主列表但仍可恢复。
 - **运行中列表更稳**：会话卡片在处理中只更新内容，不会因为中途权限/工具/控制面事件反复换位；只有进入或离开运行态时才会重排。
@@ -35,7 +38,7 @@
 - **手机端更像原生**：PWA 安装提示统一复用产品 icon 体系；iOS 手动安装引导和 Chromium 安装入口共用同一条 UI / i18n 语义；通知开关统一收口到设置页，只有用户显式开启后才会订阅 Web Push。
 - **桌面键盘更稳**：聊天输入框默认 `Enter` 换行、`Cmd/Ctrl+Enter` 发送；IME 选词期间不会误发消息。
 - **输入状态更稳定**：composer 草稿按 session 做本地持久化，只在初始化时恢复一次；发送后或手动清空后不会再被旧草稿反向回填，默认 24 小时 TTL 到期会自动清理。
-- **会话内热切换边界清晰**：live model / effort 只对 remote Codex 暴露，并从下一轮 turn 生效，不会追溯改正在执行的当前轮次。
+- **会话内热切换边界清晰**：live model / effort 现在对 remote Claude 和 remote Codex 暴露，并统一从下一轮 turn 生效，不会追溯改正在执行的当前轮次。
 - **首轮更快**：Codex remote 会预热 app-server thread，首轮不再为了自动命名额外起标题桥。
 - **桌面常驻**：Tauri 桌面壳始终托管自己启动的 hub，显示入口和 key，并在关窗时缩到托盘。
 
@@ -43,7 +46,7 @@
 
 ```bash
 # 1. 启动 hub
-npx @viby/cli hub --relay
+npx @viby/cli hub
 
 # 2. 打开 Web / PWA
 #    然后从新建会话流程里创建会话
@@ -186,7 +189,7 @@ bun run dev:desktop
 再进入 `desktop` 自己的 `build:web` / `desktop/dist` 打包链。
 
 桌面壳会只绑定自己拉起的 hub。
-未运行时可以直接在桌面里切 `仅本机 / 局域网 / 中转入口` 三档模式，并即时预览下一次启动地址；
+未运行时可以直接在桌面里切 `仅本机 / 局域网` 两档模式，并即时预览下一次启动地址；
 运行中则固定显示真实运行地址与真实端口。
 如果默认端口被占用，会自动换到空闲端口并同步到 `~/.viby/settings.toml`。
 
