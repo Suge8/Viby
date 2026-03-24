@@ -3,6 +3,14 @@ import { generateVAPIDKeys } from 'web-push'
 import { PushService, isStalePushSubscriptionError } from './pushService'
 import type { Store } from '../store'
 
+type MockPushSubscription = {
+    endpoint: string
+    keys: {
+        p256dh: string
+        auth: string
+    }
+}
+
 function createStore(subscriptions: Array<{ endpoint: string; p256dh: string; auth: string }>): {
     store: Store
     removedEndpoints: string[]
@@ -38,7 +46,7 @@ describe('PushService', () => {
                 auth: 'auth-key'
             }
         ])
-        const sendNotification = mock(() => {
+        const sendNotification = mock((_subscription: MockPushSubscription, _body: string) => {
             return Promise.reject({
                 statusCode: 400,
                 body: '{"reason":"VapidPkHashMismatch"}'
@@ -77,7 +85,7 @@ describe('PushService', () => {
                 auth: 'auth-b'
             }
         ])
-        const sendNotification = mock(() => Promise.resolve(undefined))
+        const sendNotification = mock((_subscription: MockPushSubscription, _body: string) => Promise.resolve(undefined))
         const vapidKeys = generateVAPIDKeys()
         const service = new PushService(
             {
