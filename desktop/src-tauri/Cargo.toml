@@ -1,6 +1,6 @@
 [package]
 name = "viby-desktop"
-version = "0.1.4"
+version = "0.1.2-rc.1"
 description = "Native desktop shell for Viby hub"
 authors = ["OpenAI Codex"]
 license = "AGPL-3.0-only"

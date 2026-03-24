@@ -1,7 +1,7 @@
 {
     "name": "viby-hub",
     "private": true,
-    "version": "0.1.4",
+    "version": "0.1.2-rc.1",
     "description": "Hub server for viby remote session control",
     "author": "weishu",
     "license": "AGPL-3.0-only",
