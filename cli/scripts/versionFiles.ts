@@ -6,7 +6,7 @@ const OPTIONAL_PLATFORM_PACKAGES = [
     'darwin-x64',
     'linux-arm64',
     'linux-x64',
-    'win32-x64'
+    'windows-x64'
 ] as const;
 
 const SCRIPT_DIR = import.meta.dir;

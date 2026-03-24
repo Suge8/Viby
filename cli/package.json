@@ -30,7 +30,7 @@
     "viby-cli-darwin-x64": "0.1.2-rc.1",
     "viby-cli-linux-arm64": "0.1.2-rc.1",
     "viby-cli-linux-x64": "0.1.2-rc.1",
-    "viby-cli-win32-x64": "0.1.2-rc.1"
+    "viby-cli-windows-x64": "0.1.2-rc.1"
   },
   "scripts": {
     "postinstall": "node -e \"try{require('fs').chmodSync(require('path').join(__dirname,'bin','viby.cjs'),0o755)}catch(e){}\"",

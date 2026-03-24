@@ -26,7 +26,7 @@ const SUPPORTED_PLATFORMS = [
     },
     {
         key: 'win32-x64',
-        label: 'win32-x64',
+        label: 'windows-x64',
     },
 ];
 
@@ -34,12 +34,20 @@ function getPlatformKey(platformName = platform, archName = arch) {
     return `${platformName}-${archName}`;
 }
 
+function getPackagePlatformName(platformName = platform) {
+    return platformName === 'win32' ? 'windows' : platformName;
+}
+
+function getPlatformPackageName(platformName = platform, archName = arch) {
+    return `viby-cli-${getPackagePlatformName(platformName)}-${archName}`;
+}
+
 function isSupportedPlatform(platformName = platform, archName = arch) {
     return SUPPORTED_PLATFORMS.some((item) => item.key === getPlatformKey(platformName, archName));
 }
 
 function getBinaryPath(platformName = platform, archName = arch) {
-    const pkgName = `viby-cli-${platformName}-${archName}`;
+    const pkgName = getPlatformPackageName(platformName, archName);
 
     try {
         // Try to find the platform-specific package
@@ -96,7 +104,7 @@ function reportUnsupportedPlatform(platformName = platform, archName = arch, log
 }
 
 function reportMissingPlatformPackage(platformName = platform, archName = arch, log = console.error) {
-    const platformPackage = `viby-cli-${platformName}-${archName}`;
+    const platformPackage = getPlatformPackageName(platformName, archName);
     log(`Missing platform package: ${platformPackage}`);
     log('');
     log(`Detected platform ${platformName}-${archName} is supported, but the platform binary package was not installed.`);
@@ -151,6 +159,8 @@ if (require.main === module) {
 module.exports = {
     formatCommand,
     getPlatformKey,
+    getPackagePlatformName,
+    getPlatformPackageName,
     getBinaryPath,
     isSupportedPlatform,
     normalizeExecError,

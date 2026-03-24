@@ -7,6 +7,7 @@ const require = createRequire(import.meta.url);
 const binModulePath = path.resolve(process.cwd(), 'bin/viby.cjs');
 const {
     formatCommand,
+    getPlatformPackageName,
     isSupportedPlatform,
     normalizeExecError,
     reportExecutionFailure,
@@ -72,6 +73,11 @@ describe('viby binary launcher error reporting', () => {
     it('distinguishes supported and unsupported platforms', () => {
         expect(isSupportedPlatform('linux', 'x64')).toBe(true);
         expect(isSupportedPlatform('linux', 'ppc64')).toBe(false);
+    });
+
+    it('maps runtime platform names to published package names', () => {
+        expect(getPlatformPackageName('linux', 'x64')).toBe('viby-cli-linux-x64');
+        expect(getPlatformPackageName('win32', 'x64')).toBe('viby-cli-windows-x64');
     });
 
     it('reports unsupported platform with supported list', () => {

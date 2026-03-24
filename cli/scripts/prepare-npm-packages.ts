@@ -50,7 +50,7 @@ const PLATFORMS = [
         binName: 'viby'
     },
     {
-        name: 'win32-x64',
+        name: 'windows-x64',
         os: 'win32',
         cpu: 'x64',
         buildTarget: 'bun-windows-x64',
