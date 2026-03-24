@@ -2,7 +2,8 @@ use std::sync::atomic::Ordering;
 
 use tauri::{AppHandle, Manager, RunEvent};
 
-use crate::state::{build_snapshot, show_main_window, stop_managed_hub, DesktopState};
+use crate::state::{show_main_window, DesktopState};
+use crate::supervisor;
 
 fn attempt_quit(app: &AppHandle) -> Result<(), String> {
     let state = app.state::<DesktopState>();
@@ -10,16 +11,7 @@ fn attempt_quit(app: &AppHandle) -> Result<(), String> {
         return Ok(());
     }
 
-    let stop_result = {
-        let mut process = state
-            .hub
-            .lock()
-            .map_err(|_| "Hub state is poisoned.".to_string())?;
-        let snapshot = build_snapshot(&mut process)?;
-        stop_managed_hub(&mut process, snapshot.status.as_ref())
-    };
-
-    if let Err(error) = stop_result {
+    if let Err(error) = supervisor::stop_hub(app) {
         state.quitting.store(false, Ordering::SeqCst);
         if let Ok(mut process) = state.hub.lock() {
             process.last_error = Some(error.clone());

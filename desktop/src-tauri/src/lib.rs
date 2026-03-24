@@ -1,7 +1,9 @@
 mod commands;
 mod launch;
 mod lifecycle;
+mod snapshot;
 mod state;
+mod supervisor;
 mod tray;
 
 use state::DesktopState;
@@ -15,6 +17,8 @@ pub fn run() {
         .manage(DesktopState::default())
         .setup(|app| {
             tray::create_tray(app.handle())?;
+            supervisor::start_snapshot_supervisor(app.handle().clone())
+                .map_err(|error| -> Box<dyn std::error::Error> { error.into() })?;
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -24,7 +28,7 @@ pub fn run() {
             commands::get_hub_snapshot,
             commands::start_hub,
             commands::stop_hub,
-            commands::open_url,
+            commands::open_preferred_url,
             commands::copy_text
         ])
         .build(tauri::generate_context!())

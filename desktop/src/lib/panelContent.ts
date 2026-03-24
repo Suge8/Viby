@@ -92,7 +92,7 @@ function buildCopyField(
     }
 }
 
-export function buildStatusCopy(viewState: HubViewState, canStart: boolean): StatusCopy {
+export function buildStatusCopy(viewState: HubViewState): StatusCopy {
     if (viewState.managed && viewState.ready) {
         return {
             title: '运行中',
@@ -108,15 +108,6 @@ export function buildStatusCopy(viewState: HubViewState, canStart: boolean): Sta
             subtitle: '正在把这台机器接入中枢，入口很快就会出现。',
             chip: '本窗口托管',
             chipTone: 'managed'
-        }
-    }
-
-    if (!canStart) {
-        return {
-            title: '暂不可用',
-            subtitle: '中转入口当前只保留占位；等服务就绪后再开放启动。',
-            chip: '等待服务',
-            chipTone: 'idle'
         }
     }
 
@@ -144,10 +135,6 @@ export function buildFooterMessage(
 
     if (snapshot?.status?.message) {
         return snapshot.status.message
-    }
-
-    if (!viewState.running && entryPreview.mode === 'relay') {
-        return '中转入口暂不提供服务；当前不能用这个模式启动中枢。'
     }
 
     if (!viewState.running && entryPreview.mode === 'lan') {
@@ -193,17 +180,13 @@ export function buildOwnershipHint(_viewState: HubViewState): OwnershipHint {
     }
 }
 
-export function buildPrimaryActionLabel(viewState: HubViewState, busy: boolean, canStart: boolean): string {
+export function buildPrimaryActionLabel(viewState: HubViewState, busy: boolean): string {
     if (busy && !viewState.running) {
         return STARTING_PRIMARY_ACTION_LABEL
     }
 
     if (viewState.managed) {
         return MANAGED_PRIMARY_ACTION_LABEL
-    }
-
-    if (!canStart) {
-        return '暂不可用'
     }
 
     return IDLE_PRIMARY_ACTION_LABEL

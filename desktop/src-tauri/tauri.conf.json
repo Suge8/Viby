@@ -7,7 +7,8 @@
         "beforeDevCommand": "bun run dev:web",
         "beforeBuildCommand": "bun run build:web",
         "devUrl": "http://127.0.0.1:1420",
-        "frontendDist": "../dist"
+        "frontendDist": "../dist",
+        "removeUnusedCommands": true
     },
     "app": {
         "windows": [
@@ -21,7 +22,8 @@
             }
         ],
         "security": {
-            "csp": null
+            "devCsp": "default-src 'self' http://127.0.0.1:1420 asset: http://asset.localhost; connect-src 'self' ipc: http://ipc.localhost ws://127.0.0.1:1420 http://127.0.0.1:1420; img-src 'self' asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline' http://127.0.0.1:1420; font-src 'self' data:; script-src 'self' 'unsafe-eval' http://127.0.0.1:1420",
+            "csp": "default-src 'self' asset: http://asset.localhost; connect-src 'self' ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:"
         }
     },
     "bundle": {

@@ -5,7 +5,8 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{AppHandle, Manager, WindowEvent};
 
 use crate::lifecycle::request_app_exit;
-use crate::state::{open_preferred_url, show_main_window, DesktopState};
+use crate::state::{show_main_window, DesktopState};
+use crate::supervisor;
 
 pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     let show_item = MenuItem::with_id(app, "show", "显示 Viby", true, None::<&str>)?;
@@ -23,8 +24,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
                     let _ = show_main_window(&app_handle);
                 }
                 "open" => {
-                    let state = app_handle.state::<DesktopState>();
-                    let _ = open_preferred_url(&state);
+                    let _ = supervisor::open_preferred_url(&app_handle);
                 }
                 "quit" => {
                     let _ = request_app_exit(&app_handle);

@@ -36,7 +36,6 @@ describe('entryMode', () => {
             status: {
                 phase: 'stopped',
                 pid: 1,
-                relayEnabled: false,
                 listenHost: '0.0.0.0',
                 listenPort: 4567,
                 localHubUrl: 'http://127.0.0.1:4567',
@@ -57,14 +56,6 @@ describe('entryMode', () => {
 
         expect(model.isPreview).toBe(true)
         expect(model.displayValue).toBe('http://0.0.0.0:37173')
-        expect(model.canStart).toBe(true)
-    })
-
-    it('marks relay as unavailable before runtime support exists', () => {
-        const model = buildEntryPreviewModel(makeSnapshot(), 'relay')
-
-        expect(model.displayValue).toBe('暂不提供服务')
-        expect(model.canStart).toBe(false)
     })
 
     it('prefers the running hub address over any pending tab selection', () => {
@@ -73,7 +64,6 @@ describe('entryMode', () => {
             status: {
                 phase: 'ready',
                 pid: 1,
-                relayEnabled: false,
                 listenHost: '0.0.0.0',
                 listenPort: 4567,
                 localHubUrl: 'http://127.0.0.1:4567',
@@ -86,7 +76,7 @@ describe('entryMode', () => {
             }
         })
 
-        const model = buildEntryPreviewModel(snapshot, 'relay')
+        const model = buildEntryPreviewModel(snapshot, 'local')
 
         expect(model.isPreview).toBe(false)
         expect(model.displayValue).toBe('http://0.0.0.0:4567')

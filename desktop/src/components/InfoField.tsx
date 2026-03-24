@@ -1,5 +1,3 @@
-import { memo } from 'react'
-
 interface InfoFieldProps {
     label: string
     value?: string
@@ -8,7 +6,7 @@ interface InfoFieldProps {
     mono?: boolean
 }
 
-export const InfoField = memo(function InfoField({
+export function InfoField({
     label,
     value,
     actionLabel,
@@ -16,18 +14,18 @@ export const InfoField = memo(function InfoField({
     mono = false
 }: InfoFieldProps) {
     return (
-        <div className="info-field">
-            <div className="info-field-header">
-                <span className="info-field-label">{label}</span>
+        <div className="bg-slate-800/50 border border-slate-700/80 rounded-lg p-4 transition-colors hover:border-slate-600 hover:bg-slate-800">
+            <div className="flex justify-between items-center">
+                <span className="text-sm text-slate-400 font-medium">{label}</span>
                 {actionLabel && onAction ? (
-                    <button className="link-button" onClick={onAction} type="button">
+                    <button className="text-sm font-medium text-sky-500 hover:text-sky-400 transition-colors" onClick={onAction} type="button">
                         {actionLabel}
                     </button>
                 ) : null}
             </div>
-            <div className={mono ? 'info-field-value mono-text' : 'info-field-value'}>
-                {value || '暂无'}
+            <div className={`mt-2 text-lg text-white font-semibold ${mono ? 'font-mono' : ''}`}>
+                {value || <span className="text-slate-500">暂无</span>}
             </div>
         </div>
     )
-})
+}

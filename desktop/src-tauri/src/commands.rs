@@ -1,67 +1,41 @@
 use arboard::Clipboard;
-use tauri::{AppHandle, State};
+use tauri::AppHandle;
 
-use crate::launch::spawn_hub_process;
-use crate::state::{
-    build_snapshot, refresh_managed_child, stop_managed_hub, DesktopState, HubSnapshot,
-    StartHubOptions,
-};
+use crate::state::{HubSnapshot, StartHubOptions};
+use crate::supervisor;
 
-#[tauri::command]
-pub fn get_hub_snapshot(state: State<DesktopState>) -> Result<HubSnapshot, String> {
-    let mut process = state
-        .hub
-        .lock()
-        .map_err(|_| "Hub state is poisoned.".to_string())?;
-    build_snapshot(&mut process)
+async fn run_blocking<T>(
+    job: impl FnOnce() -> Result<T, String> + Send + 'static,
+) -> Result<T, String>
+where
+    T: Send + 'static,
+{
+    tokio::task::spawn_blocking(job)
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
-pub fn start_hub(
+pub async fn get_hub_snapshot(app: AppHandle) -> Result<HubSnapshot, String> {
+    run_blocking(move || supervisor::get_hub_snapshot(&app)).await
+}
+
+#[tauri::command]
+pub async fn start_hub(
     app: AppHandle,
-    state: State<DesktopState>,
     options: StartHubOptions,
 ) -> Result<HubSnapshot, String> {
-    let mut process = state
-        .hub
-        .lock()
-        .map_err(|_| "Hub state is poisoned.".to_string())?;
-    refresh_managed_child(&mut process);
-    let existing_snapshot = build_snapshot(&mut process)?;
-    if existing_snapshot.running {
-        process.last_error = None;
-        return Ok(existing_snapshot);
-    }
-
-    if process.child.is_none() {
-        let child = match spawn_hub_process(&app, &options) {
-            Ok(child) => child,
-            Err(error) => {
-                process.last_error = Some(error.clone());
-                return Err(error);
-            }
-        };
-        process.child = Some(child);
-        process.last_error = None;
-    }
-
-    build_snapshot(&mut process)
+    run_blocking(move || supervisor::start_hub(&app, options)).await
 }
 
 #[tauri::command]
-pub fn stop_hub(state: State<DesktopState>) -> Result<HubSnapshot, String> {
-    let mut process = state
-        .hub
-        .lock()
-        .map_err(|_| "Hub state is poisoned.".to_string())?;
-    let snapshot = build_snapshot(&mut process)?;
-    stop_managed_hub(&mut process, snapshot.status.as_ref())?;
-    build_snapshot(&mut process)
+pub async fn stop_hub(app: AppHandle) -> Result<HubSnapshot, String> {
+    run_blocking(move || supervisor::stop_hub(&app)).await
 }
 
 #[tauri::command]
-pub fn open_url(url: String) -> Result<(), String> {
-    open::that(url).map_err(|error| error.to_string())
+pub async fn open_preferred_url(app: AppHandle) -> Result<(), String> {
+    run_blocking(move || supervisor::open_preferred_url(&app)).await
 }
 
 #[tauri::command]

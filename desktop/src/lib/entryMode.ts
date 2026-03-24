@@ -3,7 +3,6 @@ import type { DesktopEntryMode, HubSnapshot, HubStartupConfig } from '@/types'
 const LOCAL_LISTEN_HOST = '127.0.0.1'
 const LAN_LISTEN_HOST = '0.0.0.0'
 const DEFAULT_PREVIEW_LISTEN_PORT = 37173
-const RELAY_UNAVAILABLE_MESSAGE = '暂不提供服务'
 const CURRENT_ADDRESS_LABEL = '当前地址'
 const PREVIEW_ADDRESS_LABEL = '启动后地址'
 
@@ -13,7 +12,6 @@ export interface EntryPreviewModel {
     displayValue: string
     copyValue?: string
     openUrl?: string
-    canStart: boolean
     isPreview: boolean
 }
 
@@ -55,22 +53,11 @@ export function buildEntryPreviewModel(snapshot: HubSnapshot | null, selectedMod
             displayValue,
             copyValue: displayValue,
             openUrl: status.preferredBrowserUrl,
-            canStart: true,
             isPreview: false
         }
     }
 
     const startupConfig = getStartupConfig(snapshot)
-    if (selectedMode === 'relay') {
-        return {
-            mode: selectedMode,
-            displayLabel: PREVIEW_ADDRESS_LABEL,
-            displayValue: RELAY_UNAVAILABLE_MESSAGE,
-            canStart: false,
-            isPreview: true
-        }
-    }
-
     const host = selectedMode === 'lan' ? LAN_LISTEN_HOST : LOCAL_LISTEN_HOST
     const displayValue = formatHttpOrigin(host, startupConfig.listenPort)
 
@@ -79,7 +66,6 @@ export function buildEntryPreviewModel(snapshot: HubSnapshot | null, selectedMod
         displayLabel: PREVIEW_ADDRESS_LABEL,
         displayValue,
         copyValue: displayValue,
-        canStart: true,
         isPreview: true
     }
 }

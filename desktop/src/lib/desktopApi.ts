@@ -1,11 +1,13 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { HubSnapshot, StartableEntryMode } from '@/types'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import type { DesktopEntryMode, HubSnapshot } from '@/types'
 
 interface StartHubOptions {
-    entryMode: StartableEntryMode
+    entryMode: DesktopEntryMode
 }
 
 const DESKTOP_RUNTIME_UNAVAILABLE_MESSAGE = '当前运行在浏览器预览环境，Tauri runtime 不可用。请使用 bun run dev:desktop 启动桌面壳。'
+const HUB_SNAPSHOT_EVENT = 'desktop://hub-snapshot'
 
 type TauriInternals = {
     invoke?: unknown
@@ -47,10 +49,19 @@ export async function stopHub(): Promise<HubSnapshot> {
     return await invokeDesktopCommand<HubSnapshot>('stop_hub')
 }
 
-export async function openUrl(url: string): Promise<void> {
-    await invokeDesktopCommand('open_url', { url })
+export async function openPreferredUrl(): Promise<void> {
+    await invokeDesktopCommand('open_preferred_url')
 }
 
 export async function copyText(text: string): Promise<void> {
     await invokeDesktopCommand('copy_text', { text })
+}
+
+export async function listenHubSnapshot(
+    onSnapshot: (snapshot: HubSnapshot) => void,
+): Promise<UnlistenFn> {
+    ensureTauriRuntime()
+    return await listen<HubSnapshot>(HUB_SNAPSHOT_EVENT, (event) => {
+        onSnapshot(event.payload)
+    })
 }

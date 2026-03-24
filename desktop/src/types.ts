@@ -1,7 +1,6 @@
 export type HubRuntimePhase = 'starting' | 'ready' | 'stopped' | 'error'
 export type HubLaunchSource = 'desktop' | 'cli'
-export type DesktopEntryMode = 'local' | 'lan' | 'relay'
-export type StartableEntryMode = Exclude<DesktopEntryMode, 'relay'>
+export type DesktopEntryMode = 'local' | 'lan'
 
 export interface HubStartupConfig {
     listenHost: string
@@ -12,7 +11,6 @@ export interface HubRuntimeStatus {
     phase: HubRuntimePhase
     pid: number
     launchSource?: HubLaunchSource
-    relayEnabled: boolean
     listenHost: string
     listenPort: number
     localHubUrl: string

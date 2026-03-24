@@ -1,9 +1,16 @@
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useMemo, useState } from 'react'
-import { copyText, getHubSnapshot, isTauriRuntimeAvailable, openUrl, startHub, stopHub } from '@/lib/desktopApi'
+import {
+    copyText,
+    getHubSnapshot,
+    isTauriRuntimeAvailable,
+    listenHubSnapshot,
+    openPreferredUrl,
+    startHub,
+    stopHub
+} from '@/lib/desktopApi'
 import { deriveEntryModeFromListenHost, deriveInitialEntryMode } from '@/lib/entryMode'
 import type { DesktopEntryMode, HubSnapshot } from '@/types'
 
-const POLL_INTERVAL_MS = 1500
 const DESKTOP_PREVIEW_MESSAGE = '当前运行在浏览器预览环境，Tauri runtime 不可用。请使用 bun run dev:desktop 启动桌面壳。'
 
 interface HubControllerState {
@@ -64,9 +71,17 @@ export function useHubController(): HubControllerState {
         }
 
         let stopped = false
+        let teardownListener: (() => void) | null = null
 
-        async function runInitialLoad(): Promise<void> {
+        async function connectSnapshotStream(): Promise<void> {
             try {
+                teardownListener = await listenHubSnapshot((nextSnapshot) => {
+                    if (stopped) {
+                        return
+                    }
+                    applySnapshot(nextSnapshot, { setSnapshot, setActionError, setEntryMode })
+                })
+
                 const nextSnapshot = await readSnapshot()
                 if (stopped) {
                     return
@@ -84,21 +99,13 @@ export function useHubController(): HubControllerState {
             }
         }
 
-        const intervalId = window.setInterval(() => {
-            void refresh().catch((error: unknown) => {
-                if (!stopped) {
-                    setActionError(error instanceof Error ? error.message : '轮询中枢状态失败。')
-                }
-            })
-        }, POLL_INTERVAL_MS)
-
-        void runInitialLoad()
+        void connectSnapshotStream()
 
         return () => {
             stopped = true
-            window.clearInterval(intervalId)
+            teardownListener?.()
         }
-    }, [refresh, tauriRuntimeAvailable])
+    }, [tauriRuntimeAvailable])
 
     const runAction = useCallback(async (action: () => Promise<HubSnapshot | void>): Promise<void> => {
         if (!tauriRuntimeAvailable) {
@@ -123,10 +130,6 @@ export function useHubController(): HubControllerState {
     }, [refresh, tauriRuntimeAvailable])
 
     const start = useCallback(async (): Promise<void> => {
-        if (entryMode === 'relay') {
-            setActionError('中转入口暂不提供服务。')
-            return
-        }
         await runAction(() => startHub({ entryMode }))
     }, [entryMode, runAction])
 
@@ -135,12 +138,11 @@ export function useHubController(): HubControllerState {
     }, [runAction])
 
     const openPreferred = useCallback(async (): Promise<void> => {
-        const preferredUrl = snapshot?.status?.preferredBrowserUrl
         await runAction(async () => {
-            if (!preferredUrl) {
+            if (!snapshot?.status?.preferredBrowserUrl) {
                 throw new Error('当前还没有可打开的网址。')
             }
-            await openUrl(preferredUrl)
+            await openPreferredUrl()
         })
     }, [runAction, snapshot?.status?.preferredBrowserUrl])
 

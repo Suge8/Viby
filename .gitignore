@@ -56,3 +56,4 @@ desktop/src-tauri/binaries/viby-sidecar-*
 # Desktop generated assets
 desktop/src-tauri/icons/
 desktop/src-tauri/gen/schemas/
+desktop/src-tauri/permissions/

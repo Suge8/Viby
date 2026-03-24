@@ -63,7 +63,7 @@ fn resolve_home_dir() -> Result<PathBuf, String> {
         .ok_or_else(|| "Failed to resolve HOME.".to_string())
 }
 
-fn resolve_shared_viby_home_dir() -> Result<PathBuf, String> {
+pub fn resolve_shared_viby_home_dir() -> Result<PathBuf, String> {
     let home_dir = resolve_home_dir()?;
     Ok(home_dir.join(SHARED_VIBY_HOME_DIR))
 }

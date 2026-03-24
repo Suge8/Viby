@@ -1,5 +1,3 @@
-import { memo } from 'react'
-
 interface SegmentedOption {
     value: string
     label: string
@@ -12,24 +10,27 @@ interface SegmentedControlProps {
     disabled?: boolean
 }
 
-export const SegmentedControl = memo(function SegmentedControl({
+export function SegmentedControl({
     options,
     value,
     onChange,
     disabled = false
 }: SegmentedControlProps) {
     return (
-        <div className="segmented-control" role="tablist">
+        <div className={`flex items-center gap-1 rounded-lg bg-slate-800/80 p-1 border border-slate-700/80 ${disabled ? 'opacity-50' : ''}`}>
             {options.map((option) => {
                 const active = option.value === value
                 return (
                     <button
                         aria-selected={active}
-                        className={active ? 'segmented-option segmented-option-active' : 'segmented-option'}
+                        className={`rounded px-3 py-1 text-sm font-medium transition-colors ${
+                            active
+                                ? 'bg-sky-600/50 text-white'
+                                : 'text-slate-300 hover:text-white'
+                        }`}
                         disabled={disabled}
                         key={option.value}
                         onClick={() => onChange(option.value)}
-                        role="tab"
                         type="button"
                     >
                         {option.label}
@@ -38,4 +39,4 @@ export const SegmentedControl = memo(function SegmentedControl({
             })}
         </div>
     )
-})
+}
