@@ -18,7 +18,10 @@ import type {
     MessageMeta,
     PermissionMode,
     Session,
+    TeamMemberRecord,
+    TeamProjectSnapshot,
     TeamSessionSpawnRole,
+    TeamTaskRecord,
     SessionRecoveryPage,
     SessionMessageActivity,
     SyncEvent
@@ -75,8 +78,25 @@ export type SessionSendMessageErrorCode =
     | Extract<ResumeSessionResult, { type: 'error' }>['code']
     | 'session_not_found'
 
+export type TeamMemberControlErrorCode =
+    | 'team_member_not_found'
+    | 'team_member_inactive'
+    | 'team_member_not_manager_controlled'
+    | 'team_session_not_found'
+
 type GetOrCreateSessionOptions = Parameters<SessionCache['getOrCreateSession']>[0] & {
     sessionRole?: TeamSessionSpawnRole
+}
+
+type TeamInterjectPayload = {
+    text: string
+    localId?: string | null
+}
+
+type TeamMemberTarget = {
+    member: TeamMemberRecord
+    snapshot: TeamProjectSnapshot
+    currentTask: TeamTaskRecord | null
 }
 
 export class SessionSendMessageError extends Error {
@@ -86,6 +106,18 @@ export class SessionSendMessageError extends Error {
     constructor(message: string, code: SessionSendMessageErrorCode, status: 404 | 409) {
         super(message)
         this.name = 'SessionSendMessageError'
+        this.code = code
+        this.status = status
+    }
+}
+
+export class TeamMemberControlError extends Error {
+    readonly code: TeamMemberControlErrorCode
+    readonly status: 404 | 409
+
+    constructor(message: string, code: TeamMemberControlErrorCode, status: 404 | 409) {
+        super(message)
+        this.name = 'TeamMemberControlError'
         this.code = code
         this.status = status
     }
@@ -177,6 +209,10 @@ export class SyncEngine {
 
     getMessagesAfter(sessionId: string, options: { afterSeq: number; limit: number }): DecryptedMessage[] {
         return this.messageService.getMessagesAfter(sessionId, options)
+    }
+
+    getTeamProjectSnapshot(projectId: string): TeamProjectSnapshot | null {
+        return this.teamCoordinatorService.getProjectSnapshot(projectId)
     }
 
     getSessionRecoveryPage(sessionId: string, options: { afterSeq: number; limit: number }): SessionRecoveryPage {
@@ -368,6 +404,148 @@ export class SyncEngine {
         return this.getSession(sessionId) ?? readySession
     }
 
+    async interjectTeamMember(memberId: string, payload: TeamInterjectPayload): Promise<Session> {
+        const target = this.requireTeamMemberTarget(memberId, { requireManagerControl: true })
+        const noticeMeta = this.buildTeamMessageMeta(target.member, 'manager', {
+            sentFrom: 'team-system',
+            teamMessageKind: 'system-event',
+            controlOwner: target.member.controlOwner
+        })
+        const interjectionText = payload.text.trim()
+
+        this.teamCoordinatorService.applyCommand({
+            type: 'record-event',
+            event: {
+                id: crypto.randomUUID(),
+                projectId: target.member.projectId,
+                kind: 'user-interjected',
+                actorType: 'user',
+                actorId: null,
+                targetType: 'member',
+                targetId: target.member.id,
+                payload: {
+                    text: interjectionText
+                },
+                createdAt: Date.now()
+            },
+            affectedSessionIds: [target.member.managerSessionId, target.member.sessionId]
+        })
+
+        await this.appendInternalUserMessage(target.member.sessionId, {
+            text: interjectionText,
+            localId: payload.localId,
+            meta: this.buildTeamMessageMeta(target.member, 'member', {
+                sentFrom: 'user',
+                teamMessageKind: 'coordination',
+                controlOwner: target.member.controlOwner
+            })
+        })
+
+        await this.appendPassiveInternalUserMessage(
+            target.member.managerSessionId,
+            {
+                text: this.buildManagerNoticeText('interject', target, interjectionText),
+                meta: noticeMeta
+            }
+        )
+
+        return this.requireSessionSnapshot(target.member.sessionId)
+    }
+
+    async takeOverTeamMember(memberId: string): Promise<Session> {
+        const target = this.requireTeamMemberTarget(memberId)
+        if (target.member.controlOwner === 'user') {
+            return this.requireSessionSnapshot(target.member.sessionId)
+        }
+
+        const nextMember: TeamMemberRecord = {
+            ...target.member,
+            controlOwner: 'user',
+            updatedAt: Date.now()
+        }
+
+        this.teamCoordinatorService.applyCommand({
+            type: 'upsert-member',
+            member: nextMember,
+            event: {
+                id: crypto.randomUUID(),
+                projectId: nextMember.projectId,
+                kind: 'user-takeover-started',
+                actorType: 'user',
+                actorId: null,
+                targetType: 'member',
+                targetId: nextMember.id,
+                payload: null,
+                createdAt: nextMember.updatedAt
+            },
+            affectedSessionIds: [nextMember.managerSessionId, nextMember.sessionId]
+        })
+
+        await this.appendPassiveInternalUserMessage(
+            nextMember.managerSessionId,
+            {
+                text: this.buildManagerNoticeText('takeover', {
+                    ...target,
+                    member: nextMember
+                }),
+                meta: this.buildTeamMessageMeta(nextMember, 'manager', {
+                    sentFrom: 'team-system',
+                    teamMessageKind: 'system-event',
+                    controlOwner: 'user'
+                })
+            }
+        )
+
+        return this.requireSessionSnapshot(nextMember.sessionId)
+    }
+
+    async returnTeamMember(memberId: string): Promise<Session> {
+        const target = this.requireTeamMemberTarget(memberId)
+        if (target.member.controlOwner === 'manager') {
+            return this.requireSessionSnapshot(target.member.sessionId)
+        }
+
+        const nextMember: TeamMemberRecord = {
+            ...target.member,
+            controlOwner: 'manager',
+            updatedAt: Date.now()
+        }
+
+        this.teamCoordinatorService.applyCommand({
+            type: 'upsert-member',
+            member: nextMember,
+            event: {
+                id: crypto.randomUUID(),
+                projectId: nextMember.projectId,
+                kind: 'user-takeover-ended',
+                actorType: 'user',
+                actorId: null,
+                targetType: 'member',
+                targetId: nextMember.id,
+                payload: null,
+                createdAt: nextMember.updatedAt
+            },
+            affectedSessionIds: [nextMember.managerSessionId, nextMember.sessionId]
+        })
+
+        await this.appendPassiveInternalUserMessage(
+            nextMember.managerSessionId,
+            {
+                text: this.buildManagerNoticeText('return', {
+                    ...target,
+                    member: nextMember
+                }),
+                meta: this.buildTeamMessageMeta(nextMember, 'manager', {
+                    sentFrom: 'team-system',
+                    teamMessageKind: 'system-event',
+                    controlOwner: 'manager'
+                })
+            }
+        )
+
+        return this.requireSessionSnapshot(nextMember.sessionId)
+    }
+
     async approvePermission(
         sessionId: string,
         requestId: string,
@@ -502,6 +680,112 @@ export class SyncEngine {
         collaborationMode?: CodexCollaborationMode
     }): Promise<{ type: 'success'; sessionId: string } | { type: 'error'; message: string }> {
         return await this.rpcGateway.spawnSession(options)
+    }
+
+    private async appendPassiveInternalUserMessage(
+        sessionId: string,
+        payload: {
+            text: string
+            localId?: string | null
+            attachments?: Array<{
+                id: string
+                filename: string
+                mimeType: string
+                size: number
+                path: string
+                previewUrl?: string
+            }>
+            meta?: MessageMeta
+        }
+    ): Promise<Session> {
+        const existingSession = this.getSession(sessionId)
+        if (!existingSession) {
+            throw new TeamMemberControlError('Session not found', 'team_session_not_found', 404)
+        }
+
+        await this.messageService.appendUserMessage(sessionId, payload)
+        this.sessionCache.refreshSession(sessionId)
+        return this.getSession(sessionId) ?? existingSession
+    }
+
+    private buildTeamMessageMeta(
+        member: TeamMemberRecord,
+        sessionRole: 'manager' | 'member',
+        overrides: Pick<MessageMeta, 'sentFrom' | 'teamMessageKind' | 'controlOwner'>
+    ): MessageMeta {
+        return {
+            sentFrom: overrides.sentFrom,
+            teamProjectId: member.projectId,
+            managerSessionId: member.managerSessionId,
+            memberId: member.id,
+            sessionRole,
+            teamMessageKind: overrides.teamMessageKind,
+            controlOwner: overrides.controlOwner
+        }
+    }
+
+    private buildManagerNoticeText(
+        action: 'interject' | 'takeover' | 'return',
+        target: TeamMemberTarget,
+        interjectionText?: string
+    ): string {
+        const memberLabel = `${target.member.role} 成员`
+        const taskTitle = target.currentTask?.title ?? null
+        const taskSuffix = taskTitle ? ` 当前任务：${taskTitle}。` : ''
+
+        if (action === 'interject') {
+            return `用户向 ${memberLabel} 插话：${interjectionText ?? ''}${taskSuffix}`.trim()
+        }
+        if (action === 'takeover') {
+            return `用户已接管 ${memberLabel}。经理需暂停继续向该成员下发指令。${taskSuffix}`.trim()
+        }
+
+        return `用户已将 ${memberLabel} 归还给经理。请先阅读接管期间的最新 transcript，再从当前状态继续。${taskSuffix}`.trim()
+    }
+
+    private requireSessionSnapshot(sessionId: string): Session {
+        const session = this.getSession(sessionId)
+        if (!session) {
+            throw new TeamMemberControlError('Session not found', 'team_session_not_found', 404)
+        }
+
+        return session
+    }
+
+    private requireTeamMemberTarget(
+        memberId: string,
+        options?: { requireManagerControl?: boolean }
+    ): TeamMemberTarget {
+        const member = this.teamCoordinatorService.getMember(memberId)
+        if (!member) {
+            throw new TeamMemberControlError('Team member not found', 'team_member_not_found', 404)
+        }
+        if (member.membershipState !== 'active') {
+            throw new TeamMemberControlError('Team member is not active', 'team_member_inactive', 409)
+        }
+        if (options?.requireManagerControl && member.controlOwner !== 'manager') {
+            throw new TeamMemberControlError(
+                'Team member is not manager-controlled',
+                'team_member_not_manager_controlled',
+                409
+            )
+        }
+
+        const snapshot = this.teamCoordinatorService.getProjectSnapshot(member.projectId)
+        if (!snapshot) {
+            throw new TeamMemberControlError('Team member not found', 'team_member_not_found', 404)
+        }
+
+        this.requireSessionSnapshot(member.sessionId)
+        this.requireSessionSnapshot(member.managerSessionId)
+
+        return {
+            member,
+            snapshot,
+            currentTask: member.spawnedForTaskId
+                ? snapshot.tasks.find((task) => task.id === member.spawnedForTaskId) ?? null
+                : null
+        }
     }
 
     private async cleanupFailedResumeSpawn(

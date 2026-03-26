@@ -166,6 +166,15 @@ export const TeamEventRecordSchema = z.object({
 
 export type TeamEventRecord = z.infer<typeof TeamEventRecordSchema>
 
+export const TeamProjectSnapshotSchema = z.object({
+    project: TeamProjectSchema,
+    members: z.array(TeamMemberRecordSchema),
+    tasks: z.array(TeamTaskRecordSchema),
+    events: z.array(TeamEventRecordSchema)
+})
+
+export type TeamProjectSnapshot = z.infer<typeof TeamProjectSnapshotSchema>
+
 export const SessionTeamContextSchema = z.object({
     projectId: z.string(),
     sessionRole: TeamSessionRoleSchema,

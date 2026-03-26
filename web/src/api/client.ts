@@ -18,6 +18,7 @@ import type {
     SlashCommandsResponse,
     SkillsResponse,
     SpawnResponse,
+    TeamProjectSnapshot,
     TeamSessionSpawnRole,
     UploadFileResponse,
     ModelReasoningEffort,
@@ -104,6 +105,7 @@ const loadPushModule = createCachedModuleLoader(() => import('./clientPush'))
 const loadWorkspaceModule = createCachedModuleLoader(() => import('./clientWorkspace'))
 const loadMachinesModule = createCachedModuleLoader(() => import('./clientMachines'))
 const loadAutocompleteModule = createCachedModuleLoader(() => import('./clientAutocomplete'))
+const loadTeamsModule = createCachedModuleLoader(() => import('./clientTeams'))
 
 export class ApiClient {
     private token: string
@@ -397,6 +399,32 @@ export class ApiClient {
     async getMachines(): Promise<MachinesResponse> {
         const module = await loadMachinesModule()
         return await module.getMachines(this.boundRequest)
+    }
+
+    async getTeamProject(projectId: string): Promise<TeamProjectSnapshot> {
+        const module = await loadTeamsModule()
+        return await module.getTeamProject(this.boundRequest, projectId)
+    }
+
+    async interjectTeamMember(
+        memberId: string,
+        input: {
+            text: string
+            localId?: string | null
+        }
+    ): Promise<Session> {
+        const module = await loadTeamsModule()
+        return await module.interjectTeamMember(this.boundRequest, memberId, input)
+    }
+
+    async takeOverTeamMember(memberId: string): Promise<Session> {
+        const module = await loadTeamsModule()
+        return await module.takeOverTeamMember(this.boundRequest, memberId)
+    }
+
+    async returnTeamMember(memberId: string): Promise<Session> {
+        const module = await loadTeamsModule()
+        return await module.returnTeamMember(this.boundRequest, memberId)
     }
 
     async checkMachinePathsExists(

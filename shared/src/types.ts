@@ -27,6 +27,7 @@ export type {
     TeamEventRecord,
     TeamMemberRecord,
     TeamProject,
+    TeamProjectSnapshot,
     TeamTaskRecord
 } from './teamSchemas'
 export type { MachineCapability } from './machineCapabilities'

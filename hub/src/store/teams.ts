@@ -266,6 +266,11 @@ export function getTeamMemberBySessionId(db: Database, sessionId: string): TeamM
     return row ? toTeamMember(row) : null
 }
 
+export function getTeamMember(db: Database, memberId: string): TeamMemberRecord | null {
+    const row = db.query('SELECT * FROM team_members WHERE id = ? LIMIT 1').get(memberId) as DbTeamMemberRow | undefined
+    return row ? toTeamMember(row) : null
+}
+
 export function upsertTeamMember(db: Database, member: TeamMemberRecord): TeamMemberRecord {
     db.query(`
         INSERT INTO team_members (

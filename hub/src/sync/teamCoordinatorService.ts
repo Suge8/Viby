@@ -6,17 +6,11 @@ import type {
     TeamEventRecord,
     TeamMemberRecord,
     TeamProject,
+    TeamProjectSnapshot,
     TeamTaskRecord
 } from '@viby/protocol/types'
 import type { Store } from '../store'
 import { applyTeamStateDelta, extractTeamStateFromMessageContent } from './teams'
-
-export type TeamProjectSnapshot = {
-    project: TeamProject
-    members: TeamMemberRecord[]
-    tasks: TeamTaskRecord[]
-    events: TeamEventRecord[]
-}
 
 export type TeamCoordinatorCommand =
     | {
@@ -121,6 +115,10 @@ export class TeamCoordinatorService {
             tasks: this.store.teams.listProjectTasks(projectId),
             events: this.store.teams.listProjectEvents(projectId)
         }
+    }
+
+    getMember(memberId: string): TeamMemberRecord | null {
+        return this.store.teams.getMember(memberId)
     }
 
     applyCommand(command: TeamCoordinatorCommand): TeamCoordinatorCommandResult {

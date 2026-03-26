@@ -29,9 +29,13 @@ import {
 } from '@/routes/sessions/sessionRoutePreload'
 
 const SessionChatWorkspace = lazy(loadSessionChatWorkspaceModule)
-const LazyTeamPanel = lazy(async () => {
-    const module = await import('@/components/TeamPanel')
-    return { default: module.TeamPanel }
+const LazyProjectPanel = lazy(async () => {
+    const module = await import('@/components/ProjectPanel')
+    return { default: module.ProjectPanel }
+})
+const LazyMemberControlBanner = lazy(async () => {
+    const module = await import('@/components/MemberControlBanner')
+    return { default: module.MemberControlBanner }
 })
 const SESSION_CHAT_ENTER_SURFACE_CLASS_NAME = 'session-chat-enter-surface'
 const SESSION_CHAT_ENTER_BODY_CLASS_NAME = 'session-chat-enter-body'
@@ -257,9 +261,15 @@ export function SessionChat(props: SessionChatProps): React.JSX.Element {
                 navigation={headerNavigation}
             />
 
-            {session.teamState ? (
+            {session.teamContext?.sessionRole === 'manager' ? (
                 <Suspense fallback={null}>
-                    <LazyTeamPanel teamState={session.teamState} />
+                    <LazyProjectPanel api={api} session={session} />
+                </Suspense>
+            ) : null}
+
+            {session.teamContext?.sessionRole === 'member' ? (
+                <Suspense fallback={null}>
+                    <LazyMemberControlBanner api={api} session={session} />
                 </Suspense>
             ) : null}
 

@@ -7,6 +7,7 @@ import type {
     TeamTaskRecord
 } from '@viby/protocol/types'
 import {
+    getTeamMember,
     getSessionTeamContext,
     getTeamMemberBySessionId,
     getTeamProject,
@@ -50,6 +51,10 @@ export class TeamStore {
 
     getMemberBySessionId(sessionId: string): TeamMemberRecord | null {
         return getTeamMemberBySessionId(this.db, sessionId)
+    }
+
+    getMember(memberId: string): TeamMemberRecord | null {
+        return getTeamMember(this.db, memberId)
     }
 
     upsertMember(member: TeamMemberRecord): TeamMemberRecord {

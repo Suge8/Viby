@@ -15,6 +15,7 @@ export const queryKeys = {
     messages: (sessionId: string) => ['messages', sessionId] as const,
     machines: ['machines'] as const,
     machineDirectory: (machineId: string, path: string) => ['machine-directory', machineId, path] as const,
+    teamProject: (projectId: string) => ['team-project', projectId] as const,
     gitStatus: (sessionId: string) => ['git-status', sessionId] as const,
     sessionFiles: (sessionId: string, query: string) => ['session-files', sessionId, query] as const,
     sessionDirectory: (sessionId: string, path: string) => ['session-directory', sessionId, path] as const,

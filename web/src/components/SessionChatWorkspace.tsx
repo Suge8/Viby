@@ -1,5 +1,6 @@
 import { AssistantRuntimeProvider } from '@assistant-ui/react'
 import { Suspense, lazy } from 'react'
+import { MemberReadOnlyComposer } from '@/components/MemberReadOnlyComposer'
 import { SessionChatLocalNoticeStack } from '@/components/SessionChatLocalNoticeStack'
 import { SkeletonRows } from '@/components/loading/LoadingSkeleton'
 import { CHAT_MESSAGE_SKELETON_ROWS } from '@/components/loading/chatSkeletonRows'
@@ -60,12 +61,16 @@ export default function SessionChatWorkspace(props: SessionChatWorkspaceProps): 
                     />
                 </Suspense>
                 <SessionChatLocalNoticeStack notices={model.localNotices} />
-                <Suspense fallback={<SessionChatWorkspaceComposerFallback />}>
-                    <LazyVibyComposer
-                        model={model.composerModel}
-                        key={`composer:${props.session.id}`}
-                    />
-                </Suspense>
+                {model.composerSurface.kind === 'read-only-member' ? (
+                    <MemberReadOnlyComposer session={props.session} />
+                ) : (
+                    <Suspense fallback={<SessionChatWorkspaceComposerFallback />}>
+                        <LazyVibyComposer
+                            model={model.composerModel}
+                            key={`composer:${props.session.id}`}
+                        />
+                    </Suspense>
+                )}
             </div>
         </AssistantRuntimeProvider>
     )

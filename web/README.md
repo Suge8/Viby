@@ -43,6 +43,7 @@
 - 会话列表 action surface 现在进一步收口成 `menu | rename | confirm` 单一 union state；`SessionList` 只持有 `sessionId + anchorPoint`，不再并行维护 `menuOpen` 或靠 effect 猜测 controller 何时卸载
 - `FloatingActionMenu` 只负责 menu surface 本身：点击 item 只执行 `item.onSelect`，不再隐式先 `onClose`；需要关闭当前 surface 的 owner 必须在上层 action 明确表达
 - 会话列表 action controller 继续保持同一个 owner，但不再常驻塞进首页 bundle；只有用户真正打开菜单时才按需加载 `SessionListActionController` 与相关对话框逻辑
+- 会话列表热路径现在继续共享同一份 render context：selection / unseen reply / action menu intent 只从 `SessionList` 下发一次，`sessions` 主视图、`archived` 视图和 manager group 不再各自扩一套 props 或 owner
 - agent 流式 `reply` 期间只更新 `latestActivityAt/latestActivityKind`，不会持续推进 `updatedAt`；列表只会在最终 `ready` 或其他真实会话级更新后重排一次，并通过 layout animation 做平滑位移，不再出现边流式边不断换位的抖动感
 - 列表黄变绿与 ready toast 必须继续共享同一条 turn-final owner：runner 只有在 pending `agentState` 写入排空后才允许发 `ready`，Web 不为此再维护第二套本地 ready/green 状态机
 - 自动 title/summary/sessionId/capabilities 这类 metadata 写入也不会推进 `updatedAt`；它们属于元数据补全，不应被当成列表稳定排序时间

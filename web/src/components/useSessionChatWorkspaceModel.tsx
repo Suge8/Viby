@@ -105,9 +105,11 @@ export function useSessionChatWorkspaceModel(props: SessionChatWorkspaceProps) {
     } = runtimeOptions
 
     const sessionId = session.id
+    const teamContext = session.teamContext
     const lifecycleState = getSessionLifecycleState(session)
     const sessionInactive = lifecycleState !== 'running'
     const allowSendWhenInactive = sessionInactive
+    const memberComposerLocked = teamContext?.sessionRole === 'member' && teamContext.controlOwner !== 'user'
     const [forceScrollToken, setForceScrollToken] = useState(0)
     const {
         isStandalone,
@@ -177,7 +179,7 @@ export function useSessionChatWorkspaceModel(props: SessionChatWorkspaceProps) {
 
     const composerModel = useMemo<VibyComposerModel>(() => ({
         sessionId,
-        disabled: isSending,
+        disabled: isSending || memberComposerLocked,
         onWarmSession: warmSession,
         replyingPhase,
         config: composerConfig,
@@ -188,6 +190,7 @@ export function useSessionChatWorkspaceModel(props: SessionChatWorkspaceProps) {
         composerHandlers,
         composerRef,
         isSending,
+        memberComposerLocked,
         replyingPhase,
         sessionId,
         warmSession
@@ -262,6 +265,9 @@ export function useSessionChatWorkspaceModel(props: SessionChatWorkspaceProps) {
         assistantRuntime,
         chatLayoutStyle,
         composerModel,
+        composerSurface: memberComposerLocked
+            ? { kind: 'read-only-member' as const }
+            : { kind: 'full' as const },
         localNotices,
         viewportState: {
             isStandalone,
