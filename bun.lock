@@ -12,7 +12,7 @@
     },
     "cli": {
       "name": "@singyy/viby",
-      "version": "0.1.2-rc.1",
+      "version": "0.1.2",
       "bin": {
         "viby": "bin/viby.cjs",
       },
@@ -43,16 +43,16 @@
         "vitest": "^4.0.16",
       },
       "optionalDependencies": {
-        "viby-cli-darwin-arm64": "0.1.2-rc.1",
-        "viby-cli-darwin-x64": "0.1.2-rc.1",
-        "viby-cli-linux-arm64": "0.1.2-rc.1",
-        "viby-cli-linux-x64": "0.1.2-rc.1",
-        "viby-cli-windows-x64": "0.1.2-rc.1",
+        "viby-cli-darwin-arm64": "0.1.2",
+        "viby-cli-darwin-x64": "0.1.2",
+        "viby-cli-linux-arm64": "0.1.2",
+        "viby-cli-linux-x64": "0.1.2",
+        "viby-cli-windows-x64": "0.1.2",
       },
     },
     "desktop": {
       "name": "viby-desktop",
-      "version": "0.1.2-rc.1",
+      "version": "0.1.2",
       "dependencies": {
         "@tauri-apps/api": "2.10.1",
         "react": "^19.2.3",
@@ -71,7 +71,7 @@
     },
     "hub": {
       "name": "viby-hub",
-      "version": "0.1.2-rc.1",
+      "version": "0.1.2",
       "dependencies": {
         "@socket.io/bun-engine": "^0.1.0",
         "@viby/protocol": "workspace:*",
@@ -92,14 +92,14 @@
     },
     "shared": {
       "name": "@viby/protocol",
-      "version": "0.1.2-rc.1",
+      "version": "0.1.2",
       "dependencies": {
         "zod": "^4.2.1",
       },
     },
     "web": {
       "name": "viby-web",
-      "version": "0.1.2-rc.1",
+      "version": "0.1.2",
       "dependencies": {
         "@assistant-ui/react": "^0.11.53",
         "@assistant-ui/react-markdown": "^0.11.9",
@@ -1870,16 +1870,6 @@
     "vfile": ["vfile@6.0.3", "", { "dependencies": { "@types/unist": "^3.0.0", "vfile-message": "^4.0.0" } }, "sha512-KzIbH/9tXat2u30jf+smMwFCsno4wHVdNmzFyL+T/L3UGqqk6JKfVqOFOZEpZSHADH1k40ab6NUIXZq422ov3Q=="],
 
     "vfile-message": ["vfile-message@4.0.3", "", { "dependencies": { "@types/unist": "^3.0.0", "unist-util-stringify-position": "^4.0.0" } }, "sha512-QTHzsGd1EhbZs4AsQ20JX1rC3cOlt/IWJruk893DfLRr57lcnOeMaWG4K0JrRta4mIJZKth2Au3mM3u03/JWKw=="],
-
-    "viby-cli-darwin-arm64": ["viby-cli-darwin-arm64@0.1.2-rc.1", "", { "os": "darwin", "cpu": "arm64", "bin": { "viby": "bin/viby" } }, "sha512-TaaK+dZaty8RZO9LnS1AovsaGjZUxrE8Xff4fbS2MLrzQQosfvKAItA7uFiC8/fZ1h+cDbfl2V0jjPhYPiI9Rw=="],
-
-    "viby-cli-darwin-x64": ["viby-cli-darwin-x64@0.1.2-rc.1", "", { "os": "darwin", "cpu": "x64", "bin": { "viby": "bin/viby" } }, "sha512-rDQ0ugW5P6ZESkFfEqt3fUDojnbVaYaNWpPCqtj8U/biLROrUYObOR9C4L7enNJ7dVolusNWzrLD7rPTK1wJfg=="],
-
-    "viby-cli-linux-arm64": ["viby-cli-linux-arm64@0.1.2-rc.1", "", { "os": "linux", "cpu": "arm64", "bin": { "viby": "bin/viby" } }, "sha512-sFPCMDqZMEAwdXnlhmv2tzgwtrcstVVOTo6JuM8zy92/mqw4vwGYVKSHe928JX1dtenWmcEWK1Me7vPk2iDh+Q=="],
-
-    "viby-cli-linux-x64": ["viby-cli-linux-x64@0.1.2-rc.1", "", { "os": "linux", "cpu": "x64", "bin": { "viby": "bin/viby" } }, "sha512-BX0a300SEMKaxJOpiKN/oWEgM9QCHZU5h936p5IooRZGS+pKx+dZ62bODl7rOy8XXRlt41lxKIPs015aHn7CAQ=="],
-
-    "viby-cli-windows-x64": ["viby-cli-windows-x64@0.1.2-rc.1", "", { "os": "win32", "cpu": "x64", "bin": { "viby": "bin/viby.exe" } }, "sha512-pMvvwH6j+ZdcNXW9QXAsR0+oD8jQ1LA8/QZptY98RNYk2CQyFoTxHYC06U9likXuRO9FOsCvXY1nAokAHsJ+Vw=="],
 
     "viby-desktop": ["viby-desktop@workspace:desktop"],
 
