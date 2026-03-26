@@ -24,6 +24,8 @@
 - `src/runtime/runtimeHost.ts` 是 runtime 生命周期 owner：`start / reload / shutdown` 统一从这里过；`src/runtime/managedRunner.ts` 负责 runner lifecycle 单一 owner，当前统一以单一 active binding 管理 `child runner / reused runner`，不要再在别处并行长第二套 runner/reload 状态机
 - `src/web/server.ts` 把 HTTP `fetch` handler 提炼成可重建函数，这样 `bun --hot` 下可以只换 handler，不用重建整个 socket 宿主
 - `src/sync/syncEngine.ts` 继续作为 sync façade；session lifecycle / resume contract 已收口到 `src/sync/sessionLifecycleService.ts`，消息、机器、RPC 仍各自走单职责 owner
+- `src/sync/teamCoordinatorService.ts` 是 team durable mutation 与 manager project bootstrap owner；manager session 的 durable project 必须在 `/cli/sessions` 返回前完成创建/复用
+- `src/sync/teamMemberSessionService.ts` 是 inactive member `resume vs revision` 与 compact carryover brief contract owner；不要再让 Web / CLI / prompt 各写一套判定。当前一期只比较**同角色 inactive candidate**；在没有 `member seat / task lineage` 身份前，不跨角色硬猜 revision lineage
 - session resume / switch 的 waiter 现在统一收口到 `src/sync/sessionCache.ts` 共享实现；不要再在 lifecycle/service 层各自手写 `subscribe + timeout + cleanup`
 - `src/web/routes/sessions.ts` 现在只保留 sessions 路由装配；session action / config 细分到 `src/web/routes/sessionActionRoutes.ts`、`src/web/routes/sessionConfigRoutes.ts`，共享 guard / body 解析收口到 `src/web/routes/sessionRouteSupport.ts`
 - `src/store/messages.ts` 的消息序号现在由 `sessions.next_message_seq` 单点分配；不再在消息热路径里做 `MAX(seq)+1`
@@ -111,7 +113,7 @@ bun run dev:hub
 - `POST /api/sessions/:id/model`：切换 remote Claude / Codex 会话模型；从下一轮 turn 生效
 - `POST /api/sessions/:id/model-reasoning-effort`：切换 remote Claude / Codex 会话思考强度；从下一轮 turn 生效；Hub 会按 flavor 校验可用档位
 - `GET /api/machines`：在线机器列表
-- `POST /api/machines/:id/spawn`：远程创建会话；成功时直接返回最终 `session` 快照，避免 Web 再走 `sessionId -> refetch` 双阶段提交
+- `POST /api/machines/:id/spawn`：远程创建会话；支持 `sessionRole: normal | manager`，成功时直接返回最终 `session` 快照；manager role 会在 `/cli/sessions` 返回前先完成 durable project bootstrap，再把已带 `teamContext` 的 authoritative snapshot 回给 Web
 - `GET /api/push/vapid-public-key`：Push 公钥
 
 更详细的路由请看 `src/web/routes/`。
@@ -165,14 +167,16 @@ Hub 使用 SQLite 作为单一事实源，保存：
 - 会话与元数据
 - 消息与分页游标
 - 机器与 runner 状态
+- `team_projects / team_members / team_tasks / team_events`
 - push 订阅
 - 待办与协作信息
 
-当前 schema version 为 `9`。
-启动时会自动执行 **`v7 -> v9`** 和 **`v8 -> v9`** 升级：
+当前 schema version 为 `10`。
+启动时会自动执行 **`v7 -> v10`**、**`v8 -> v10`** 和 **`v9 -> v10`** 升级：
 
-- `v7 -> v8`：补齐 `permission_mode / collaboration_mode`
-- `v8 -> v9`：补齐 `next_message_seq`，把消息 `seq` 分配收口到 session owner
+- 补齐 `permission_mode / collaboration_mode / next_message_seq`
+- 新增 `team_projects / team_members / team_tasks / team_events`
+- `Session.teamContext / SessionSummary.team` 读模型由 v10 durable data 驱动
 
 更老的 schema 版本不在自动迁移范围内；升级前依旧建议先备份 `~/.viby/viby.db`。
 
@@ -185,6 +189,8 @@ Hub 使用 SQLite 作为单一事实源，保存：
 - `src/socket/`：Socket.IO 入口与 handler
 - `src/sync/`：会话同步 façade、消息服务、RPC 网关
 - `src/sync/sessionLifecycleService.ts`：session close/archive/unarchive 与 resume contract 的单一 owner
-- `src/store/`：SQLite 持久化；schema / `user_version` 是 durable truth source，持久化字段变更必须和显式 migration 同轮提交。当前自动升级边界是 `v7 -> v9` / `v8 -> v9`
+- `src/sync/teamCoordinatorService.ts`：team durable mutation、legacy projection 接管与 manager project bootstrap owner
+- `src/sync/teamMemberSessionService.ts`：inactive member `resume / revision` 策略与 carryover brief owner
+- `src/store/`：SQLite 持久化；schema / `user_version` 是 durable truth source，持久化字段变更必须和显式 migration 同轮提交。当前自动升级边界是 `v7 -> v10` / `v8 -> v10` / `v9 -> v10`
 - `src/runner/`：hub 自动拉起的 runner
 - `src/notifications/`：推送通知

@@ -4,7 +4,8 @@ import { PROTOCOL_VERSION, SESSION_RECOVERY_PAGE_SIZE } from '@viby/protocol'
 import {
     CodexCollaborationModeSchema,
     ModelReasoningEffortSchema,
-    PermissionModeSchema
+    PermissionModeSchema,
+    TeamSessionSpawnRoleSchema
 } from '@viby/protocol/schemas'
 import { configuration } from '../../configuration'
 import { constantTimeEquals } from '../../utils/crypto'
@@ -21,6 +22,7 @@ const createOrLoadSessionSchema = z.object({
     model: z.string().optional(),
     modelReasoningEffort: ModelReasoningEffortSchema.optional(),
     permissionMode: PermissionModeSchema.optional(),
+    sessionRole: TeamSessionSpawnRoleSchema.optional(),
     collaborationMode: CodexCollaborationModeSchema.optional()
 })
 
@@ -94,16 +96,17 @@ export function createCliRoutes(getSyncEngine: () => SyncEngine | null): Hono<Cl
             return c.json({ error: 'Invalid body' }, 400)
         }
 
-        const session = engine.getOrCreateSession(
-            parsed.data.tag,
-            parsed.data.metadata,
-            parsed.data.agentState ?? null,
-            parsed.data.model,
-            parsed.data.modelReasoningEffort,
-            parsed.data.permissionMode,
-            parsed.data.collaborationMode,
-            parsed.data.sessionId
-        )
+        const session = engine.getOrCreateSession({
+            tag: parsed.data.tag,
+            metadata: parsed.data.metadata,
+            agentState: parsed.data.agentState ?? null,
+            model: parsed.data.model,
+            modelReasoningEffort: parsed.data.modelReasoningEffort,
+            permissionMode: parsed.data.permissionMode,
+            collaborationMode: parsed.data.collaborationMode,
+            sessionId: parsed.data.sessionId,
+            sessionRole: parsed.data.sessionRole
+        })
         return c.json({ session })
     })
 

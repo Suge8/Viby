@@ -4,7 +4,8 @@ import { isPermissionModeAllowedForFlavor } from '@viby/protocol'
 import {
     CodexCollaborationModeSchema,
     ModelReasoningEffortSchema,
-    PermissionModeSchema
+    PermissionModeSchema,
+    TeamSessionSpawnRoleSchema
 } from '@viby/protocol/schemas'
 import type { SyncEngine } from '../../sync/syncEngine'
 import type { WebAppEnv } from '../middleware/auth'
@@ -16,6 +17,7 @@ const spawnBodySchema = z.object({
     model: z.string().optional(),
     modelReasoningEffort: ModelReasoningEffortSchema.optional(),
     permissionMode: PermissionModeSchema.optional(),
+    sessionRole: TeamSessionSpawnRoleSchema.optional(),
     collaborationMode: CodexCollaborationModeSchema.optional(),
     sessionType: z.enum(['simple', 'worktree']).optional(),
     worktreeName: z.string().optional()
@@ -75,6 +77,7 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null): Ho
             model: parsed.data.model,
             modelReasoningEffort: parsed.data.modelReasoningEffort,
             permissionMode: parsed.data.permissionMode,
+            sessionRole: parsed.data.sessionRole,
             sessionType: parsed.data.sessionType,
             worktreeName: parsed.data.worktreeName,
             collaborationMode: parsed.data.collaborationMode

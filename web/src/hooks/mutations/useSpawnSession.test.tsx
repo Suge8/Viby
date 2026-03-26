@@ -85,7 +85,8 @@ describe('useSpawnSession', () => {
             const response = await result.current.spawnSession({
                 machineId: 'machine-1',
                 directory: '/Users/demo/Project/Viby',
-                agent: 'codex'
+                agent: 'codex',
+                sessionRole: 'manager'
             })
             expect(response).toEqual({
                 type: 'success',
@@ -96,7 +97,8 @@ describe('useSpawnSession', () => {
         expect(api.spawnSession).toHaveBeenCalledWith({
             machineId: 'machine-1',
             directory: '/Users/demo/Project/Viby',
-            agent: 'codex'
+            agent: 'codex',
+            sessionRole: 'manager'
         })
         expect(queryClient.getQueryData<{ session: Session }>(queryKeys.session('session-1'))?.session).toEqual(spawnedSession)
         expect(queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)?.sessions[0]?.id).toBe('session-1')

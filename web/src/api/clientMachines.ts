@@ -7,6 +7,7 @@ import type {
     PermissionMode,
     Session,
     SpawnResponse,
+    TeamSessionSpawnRole,
 } from '@/types/api'
 import type { ApiClientFetchSessionSnapshot, ApiClientRequest } from './client'
 
@@ -91,6 +92,7 @@ export async function spawnSession(
         model?: string
         modelReasoningEffort?: ModelReasoningEffort
         permissionMode?: PermissionMode
+        sessionRole?: TeamSessionSpawnRole
         sessionType?: 'simple' | 'worktree'
         worktreeName?: string
         collaborationMode?: CodexCollaborationMode
@@ -104,6 +106,7 @@ export async function spawnSession(
             model: input.model,
             modelReasoningEffort: input.modelReasoningEffort,
             permissionMode: input.permissionMode,
+            sessionRole: input.sessionRole,
             sessionType: input.sessionType,
             worktreeName: input.worktreeName,
             collaborationMode: input.collaborationMode

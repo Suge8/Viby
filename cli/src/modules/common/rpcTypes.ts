@@ -1,7 +1,8 @@
 import type {
     SessionCollaborationMode,
     SessionModelReasoningEffort,
-    SessionPermissionMode
+    SessionPermissionMode,
+    TeamSessionSpawnRole
 } from '@/api/types'
 
 export interface SpawnSessionOptions {
@@ -14,6 +15,7 @@ export interface SpawnSessionOptions {
     model?: string
     modelReasoningEffort?: SessionModelReasoningEffort
     permissionMode?: SessionPermissionMode
+    sessionRole?: TeamSessionSpawnRole
     collaborationMode?: SessionCollaborationMode
     token?: string
     sessionType?: 'simple' | 'worktree'

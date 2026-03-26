@@ -20,6 +20,13 @@ const harness = vi.hoisted(() => {
             modelReasoningEffort: null as EnhancedMode['modelReasoningEffort'],
             collaborationMode: 'default' as EnhancedMode['collaborationMode'],
         },
+        teamContext: undefined as undefined | {
+            projectId: string
+            sessionRole: 'manager' | 'member'
+            managerSessionId: string
+            memberRole?: 'planner' | 'architect' | 'implementer' | 'debugger' | 'reviewer' | 'verifier' | 'designer'
+            projectStatus: 'active' | 'delivered' | 'archived'
+        }
     }
 })
 
@@ -35,6 +42,10 @@ vi.mock('@/agent/sessionFactory', () => ({
                     harness.rpcHandlers.set(method, handler)
                 }
             }
+        },
+        sessionInfo: {
+            id: 'session-1',
+            teamContext: harness.teamContext
         }
     })
 }))
@@ -160,6 +171,7 @@ describe('runCodex live session config', () => {
         harness.sessionState.model = null
         harness.sessionState.modelReasoningEffort = null
         harness.sessionState.collaborationMode = 'default'
+        harness.teamContext = undefined
     })
 
     it('applies live model and reasoning effort updates to the next queued user message', async () => {
@@ -180,5 +192,29 @@ describe('runCodex live session config', () => {
             }
         ])
         expect(harness.disposeAppServerClientCalls).toBe(1)
+    })
+
+    it('passes the authoritative team role contract into Codex developer instructions', async () => {
+        harness.teamContext = {
+            projectId: 'project-1',
+            sessionRole: 'manager',
+            managerSessionId: 'manager-session-1',
+            projectStatus: 'active'
+        }
+
+        await runCodex({
+            startedBy: 'runner',
+            model: 'gpt-5.4-mini'
+        })
+
+        expect(harness.queueModes).toHaveLength(1)
+        expect(harness.queueModes[0]).toMatchObject({
+            permissionMode: 'default',
+            model: 'gpt-5.4',
+            modelReasoningEffort: 'high',
+            collaborationMode: 'default'
+        })
+        expect(harness.queueModes[0]?.developerInstructions).toContain('manager session')
+        expect(harness.queueModes[0]?.developerInstructions).toContain('final acceptance')
     })
 })

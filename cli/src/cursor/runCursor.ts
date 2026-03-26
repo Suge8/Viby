@@ -3,7 +3,7 @@ import { loop, type EnhancedMode, type PermissionMode } from './loop';
 import { MessageQueue2 } from '@/utils/MessageQueue2';
 import { hashObject } from '@/utils/deterministicJson';
 import { registerKillSessionHandler } from '@/claude/registerKillSessionHandler';
-import type { AgentState } from '@/api/types';
+import type { AgentState, TeamSessionSpawnRole } from '@/api/types';
 import type { CursorSession } from './session';
 import { bootstrapSession } from '@/agent/sessionFactory';
 import { createModeChangeHandler, createRunnerLifecycle, setControlledByUser } from '@/agent/runnerLifecycle';
@@ -22,6 +22,7 @@ const formatFailureReason = (message: string): string => {
 export async function runCursor(opts: {
     startedBy?: 'runner' | 'terminal';
     vibySessionId?: string;
+    sessionRole?: TeamSessionSpawnRole;
     cursorArgs?: string[];
     permissionMode?: PermissionMode;
     resumeSessionId?: string;
@@ -41,6 +42,7 @@ export async function runCursor(opts: {
         startedBy,
         workingDirectory,
         agentState: state,
+        sessionRole: opts.sessionRole,
         permissionMode: opts.permissionMode ?? 'default',
         model: opts.model
     });

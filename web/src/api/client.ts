@@ -18,6 +18,7 @@ import type {
     SlashCommandsResponse,
     SkillsResponse,
     SpawnResponse,
+    TeamSessionSpawnRole,
     UploadFileResponse,
     ModelReasoningEffort,
     Session,
@@ -421,6 +422,7 @@ export class ApiClient {
         model?: string
         modelReasoningEffort?: ModelReasoningEffort
         permissionMode?: PermissionMode
+        sessionRole?: TeamSessionSpawnRole
         sessionType?: 'simple' | 'worktree'
         worktreeName?: string
         collaborationMode?: CodexCollaborationMode

@@ -7,6 +7,7 @@ import type {
 
 import type { StoredSession, VersionedUpdateResult } from './types'
 import {
+    type CreateStoredSessionInput,
     deleteSession,
     getOrCreateSession,
     getSession,
@@ -31,27 +32,8 @@ export class SessionStore {
         this.db = db
     }
 
-    getOrCreateSession(
-        tag: string,
-        metadata: unknown,
-        agentState: unknown,
-        model?: string,
-        modelReasoningEffort?: ModelReasoningEffort,
-        permissionMode?: PermissionMode,
-        collaborationMode?: CodexCollaborationMode,
-        sessionId?: string
-    ): StoredSession {
-        return getOrCreateSession(
-            this.db,
-            tag,
-            metadata,
-            agentState,
-            model,
-            modelReasoningEffort,
-            permissionMode,
-            collaborationMode,
-            sessionId
-        )
+    getOrCreateSession(input: CreateStoredSessionInput): StoredSession {
+        return getOrCreateSession(this.db, input)
     }
 
     updateSessionMetadata(

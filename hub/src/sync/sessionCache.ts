@@ -3,6 +3,7 @@ import {
     CodexCollaborationModeSchema,
     MetadataSchema,
     PermissionModeSchema,
+    SessionTeamContextSchema,
     TeamStateSchema
 } from '@viby/protocol/schemas'
 import type { CodexCollaborationMode, Metadata, PermissionMode, Session, SessionLifecycleState } from '@viby/protocol/types'
@@ -22,6 +23,8 @@ type WaitForSessionConditionOptions<T> = {
     onTimeout: () => T
     isRelevantEvent?: (event: Parameters<SyncEventListener>[0]) => boolean
 }
+
+type CreateSessionInput = Parameters<Store['sessions']['getOrCreateSession']>[0]
 
 export class SessionCache {
     private readonly sessions: Map<string, Session> = new Map()
@@ -144,26 +147,11 @@ export class SessionCache {
         })
     }
 
-    getOrCreateSession(
-        tag: string,
-        metadata: unknown,
-        agentState: unknown,
-        model?: string,
-        modelReasoningEffort?: Session['modelReasoningEffort'],
-        permissionMode?: PermissionMode,
-        collaborationMode?: CodexCollaborationMode,
-        sessionId?: string
-    ): Session {
-        const stored = this.store.sessions.getOrCreateSession(
-            tag,
-            metadata,
-            agentState,
-            model,
-            modelReasoningEffort ?? undefined,
-            permissionMode,
-            collaborationMode,
-            sessionId
-        )
+    getOrCreateSession(input: CreateSessionInput): Session {
+        const stored = this.store.sessions.getOrCreateSession({
+            ...input,
+            modelReasoningEffort: input.modelReasoningEffort ?? undefined
+        })
         return this.refreshSession(stored.id) ?? (() => { throw new Error('Failed to load session') })()
     }
 
@@ -219,6 +207,12 @@ export class SessionCache {
             const parsed = TeamStateSchema.safeParse(stored.teamState)
             return parsed.success ? parsed.data : undefined
         })()
+        const teamContext = (() => {
+            const resolved = this.store.teams.getSessionTeamContext(stored.id)
+            if (!resolved) return undefined
+            const parsed = SessionTeamContextSchema.safeParse(resolved)
+            return parsed.success ? parsed.data : undefined
+        })()
 
         const permissionMode = (() => {
             if (stored.permissionMode === null) return undefined
@@ -247,6 +241,7 @@ export class SessionCache {
             thinkingAt: existing?.thinkingAt ?? 0,
             todos,
             teamState,
+            teamContext,
             model: stored.model,
             modelReasoningEffort: stored.modelReasoningEffort,
             permissionMode,

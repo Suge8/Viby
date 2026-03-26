@@ -19,11 +19,11 @@ describe('alive incremental events', () => {
         const events: SyncEvent[] = []
         const cache = new SessionCache(store, createPublisher(events))
 
-        const session = cache.getOrCreateSession(
-            'session-alive-test',
-            { path: '/tmp/project', host: 'localhost' },
-            { requests: {}, completedRequests: {} }
-        )
+        const session = cache.getOrCreateSession({
+            tag: 'session-alive-test',
+            metadata: { path: '/tmp/project', host: 'localhost' },
+            agentState: { requests: {}, completedRequests: {} }
+        })
 
         events.length = 0
         cache.handleSessionAlive({ sid: session.id, time: Date.now(), thinking: false })

@@ -1,7 +1,12 @@
 import type {
     CodexCollaborationMode,
     ModelReasoningEffort,
-    PermissionMode
+    PermissionMode,
+    SessionTeamContext,
+    TeamEventRecord,
+    TeamMemberRecord,
+    TeamProject,
+    TeamTaskRecord
 } from '@viby/protocol/types'
 
 export type StoredSession = {
@@ -56,6 +61,12 @@ export type StoredPushSubscription = {
     auth: string
     createdAt: number
 }
+
+export type StoredTeamProject = TeamProject
+export type StoredTeamMember = TeamMemberRecord
+export type StoredTeamTask = TeamTaskRecord
+export type StoredTeamEvent = TeamEventRecord
+export type StoredSessionTeamContext = SessionTeamContext
 
 export type VersionedUpdateResult<T> =
     | { result: 'success'; version: number; value: T }

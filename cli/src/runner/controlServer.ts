@@ -7,7 +7,7 @@ import fastify, { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { serializerCompiler, validatorCompiler, ZodTypeProvider } from 'fastify-type-provider-zod';
 import { logger } from '@/ui/logger';
-import { Metadata } from '@/api/types';
+import { Metadata, TeamSessionSpawnRole } from '@/api/types';
 import { TrackedSession } from './types';
 import { SpawnSessionOptions, SpawnSessionResult } from '@/modules/common/rpcTypes';
 
@@ -109,6 +109,7 @@ export function startRunnerControlServer({
         body: z.object({
           directory: z.string(),
           sessionId: z.string().optional(),
+          sessionRole: z.enum(['normal', 'manager']).optional(),
           sessionType: z.enum(['simple', 'worktree']).optional(),
           worktreeName: z.string().optional()
         }),
@@ -131,10 +132,16 @@ export function startRunnerControlServer({
         }
       }
     }, async (request, reply) => {
-      const { directory, sessionId, sessionType, worktreeName } = request.body;
+      const { directory, sessionId, sessionRole, sessionType, worktreeName } = request.body;
 
       logger.debug(`[CONTROL SERVER] Spawn session request: dir=${directory}, sessionId=${sessionId || 'new'}`);
-      const result = await spawnSession({ directory, sessionId, sessionType, worktreeName });
+      const result = await spawnSession({
+        directory,
+        sessionId,
+        sessionRole: sessionRole as TeamSessionSpawnRole | undefined,
+        sessionType,
+        worktreeName
+      });
 
       switch (result.type) {
         case 'success':

@@ -3,7 +3,7 @@ import { loop, type EnhancedMode, type PermissionMode } from './loop';
 import { MessageQueue2 } from '@/utils/MessageQueue2';
 import { hashObject } from '@/utils/deterministicJson';
 import { registerKillSessionHandler } from '@/claude/registerKillSessionHandler';
-import type { AgentState } from '@/api/types';
+import type { AgentState, TeamSessionSpawnRole } from '@/api/types';
 import type { CodexSession } from './session';
 import { parseCodexCliOverrides } from './utils/codexCliOverrides';
 import { bootstrapSession } from '@/agent/sessionFactory';
@@ -14,12 +14,14 @@ import type { CodexReasoningEffort } from '@viby/protocol/types';
 import { CodexCollaborationModeSchema, CodexReasoningEffortSchema } from '@viby/protocol/schemas';
 import { formatMessageWithAttachments } from '@/utils/attachmentFormatter';
 import { getInvokedCwd } from '@/utils/invokedCwd';
+import { resolveTeamRolePromptContract } from '@/agent/teamPromptContract';
 
 export { emitReadyIfIdle } from '@/agent/emitReadyIfIdle';
 
 export async function runCodex(opts: {
     startedBy?: 'runner' | 'terminal';
     vibySessionId?: string;
+    sessionRole?: TeamSessionSpawnRole;
     codexArgs?: string[];
     permissionMode?: PermissionMode;
     resumeSessionId?: string;
@@ -35,17 +37,19 @@ export async function runCodex(opts: {
     let state: AgentState = {
         controlledByUser: false
     };
-    const { api, session } = await bootstrapSession({
+    const { api, session, sessionInfo } = await bootstrapSession({
         flavor: 'codex',
         sessionId: opts.vibySessionId,
         startedBy,
         workingDirectory,
         agentState: state,
+        sessionRole: opts.sessionRole,
         permissionMode: opts.permissionMode ?? 'default',
         model: opts.model,
         modelReasoningEffort: opts.modelReasoningEffort,
         collaborationMode: opts.collaborationMode ?? 'default'
     });
+    const teamRoleDeveloperInstructions = resolveTeamRolePromptContract(sessionInfo.teamContext);
 
     const startingMode: 'local' | 'remote' = startedBy === 'runner' ? 'remote' : 'local';
 
@@ -55,7 +59,8 @@ export async function runCodex(opts: {
         permissionMode: mode.permissionMode,
         model: mode.model,
         modelReasoningEffort: mode.modelReasoningEffort,
-        collaborationMode: mode.collaborationMode
+        collaborationMode: mode.collaborationMode,
+        developerInstructions: mode.developerInstructions
     }));
 
     const codexCliOverrides = parseCodexCliOverrides(opts.codexArgs);
@@ -123,7 +128,8 @@ export async function runCodex(opts: {
             permissionMode: messagePermissionMode ?? 'default',
             model: currentModel,
             modelReasoningEffort: currentModelReasoningEffort,
-            collaborationMode: currentCollaborationMode
+            collaborationMode: currentCollaborationMode,
+            developerInstructions: teamRoleDeveloperInstructions
         };
         const formattedText = formatMessageWithAttachments(message.content.text, message.content.attachments);
         messageQueue.push(formattedText, enhancedMode);

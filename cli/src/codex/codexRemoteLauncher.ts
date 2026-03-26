@@ -854,7 +854,8 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
                         model: session.getModel() ?? message.mode.model,
                         modelReasoningEffort: session.getModelReasoningEffort() ?? message.mode.modelReasoningEffort
                     },
-                    cliOverrides: session.codexCliOverrides
+                    cliOverrides: session.codexCliOverrides,
+                    developerInstructions: message.mode.developerInstructions
                 });
                 turnInFlight = true;
                 allowAnonymousTerminalEvent = false;

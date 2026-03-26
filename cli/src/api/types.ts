@@ -2,9 +2,11 @@ import {
     AgentStateSchema,
     AttachmentMetadataSchema,
     CodexCollaborationModeSchema,
+    MessageMetaSchema,
     ModelReasoningEffortSchema,
     MetadataSchema,
     PermissionModeSchema,
+    SessionTeamContextSchema,
     TodosSchema
 } from '@viby/protocol/schemas'
 import { MACHINE_CAPABILITIES, SessionRecoveryPageSchema } from '@viby/protocol'
@@ -22,9 +24,12 @@ export type {
     ClaudePermissionMode,
     CodexCollaborationMode,
     CodexPermissionMode,
+    MessageMeta,
+    MessageSentFrom,
     Metadata,
     ModelReasoningEffort,
-    Session
+    Session,
+    TeamSessionSpawnRole
 } from '@viby/protocol/types'
 export type WritableSessionMetadata = Omit<
     import('@viby/protocol/types').Metadata,
@@ -115,6 +120,7 @@ export const CreateSessionResponseSchema = z.object({
         thinking: z.boolean(),
         thinkingAt: z.number(),
         todos: TodosSchema.optional(),
+        teamContext: SessionTeamContextSchema.optional(),
         model: z.string().nullable(),
         modelReasoningEffort: ModelReasoningEffortSchema.nullable(),
         permissionMode: PermissionModeSchema.optional(),
@@ -140,17 +146,6 @@ export const CreateMachineResponseSchema = z.object({
 })
 
 export type CreateMachineResponse = z.infer<typeof CreateMachineResponseSchema>
-
-export const MessageMetaSchema = z.object({
-    sentFrom: z.string().optional(),
-    fallbackModel: z.string().nullable().optional(),
-    customSystemPrompt: z.string().nullable().optional(),
-    appendSystemPrompt: z.string().nullable().optional(),
-    allowedTools: z.array(z.string()).nullable().optional(),
-    disallowedTools: z.array(z.string()).nullable().optional()
-})
-
-export type MessageMeta = z.infer<typeof MessageMetaSchema>
 
 export const UserMessageSchema = z.object({
     role: z.literal('user'),

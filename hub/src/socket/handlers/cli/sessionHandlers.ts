@@ -11,8 +11,8 @@ import type { CodexCollaborationMode, PermissionMode, Session } from '@viby/prot
 import type { Store, StoredSession } from '../../../store'
 import type { SyncEvent } from '../../../sync/syncEngine'
 import type { SessionStreamManager } from '../../../sync/sessionStreamManager'
+import type { TeamCoordinatorService } from '../../../sync/teamCoordinatorService'
 import { extractTodoWriteTodosFromMessageContent } from '../../../sync/todos'
-import { extractTeamStateFromMessageContent, applyTeamStateDelta } from '../../../sync/teams'
 import type { CliSocketWithData } from '../../socketTypes'
 import type { AccessErrorReason, AccessResult } from './types'
 
@@ -105,6 +105,7 @@ export type SessionHandlersDeps = {
     onSessionAlive?: (payload: SessionAlivePayload) => void
     onSessionEnd?: (payload: SessionEndPayload) => void
     onWebappEvent?: (event: SyncEvent) => void
+    teamCoordinator: Pick<TeamCoordinatorService, 'applyLegacyTranscriptProjection'>
 }
 
 export function registerSessionHandlers(socket: CliSocketWithData, deps: SessionHandlersDeps): void {
@@ -159,16 +160,7 @@ export function registerSessionHandlers(socket: CliSocketWithData, deps: Session
             }
         }
 
-        const teamDelta = extractTeamStateFromMessageContent(content)
-        if (teamDelta) {
-            const existingSession = store.sessions.getSession(sid)
-            const existingTeamState = existingSession?.teamState as import('@viby/protocol/types').TeamState | null | undefined
-            const newTeamState = applyTeamStateDelta(existingTeamState ?? null, teamDelta)
-            const updated = store.sessions.setSessionTeamState(sid, newTeamState, msg.createdAt)
-            if (updated) {
-                onWebappEvent?.({ type: 'session-updated', sessionId: sid, data: { sid } })
-            }
-        }
+        deps.teamCoordinator.applyLegacyTranscriptProjection({ sessionId: sid, content, createdAt: msg.createdAt })
 
         const update = {
             id: randomUUID(),

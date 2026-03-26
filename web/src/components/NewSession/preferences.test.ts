@@ -13,6 +13,7 @@ describe('NewSession preferences', () => {
     it('loads defaults when storage is empty', () => {
         expect(loadNewSessionPreferences()).toEqual({
             agent: 'claude',
+            sessionRole: 'normal',
             sessionType: 'simple',
             yoloMode: false,
             agentSettings: {},
@@ -22,6 +23,7 @@ describe('NewSession preferences', () => {
     it('loads saved values from storage', () => {
         localStorage.setItem('viby:newSession:preferences', JSON.stringify({
             agent: 'codex',
+            sessionRole: 'manager',
             sessionType: 'worktree',
             yoloMode: true,
             agentSettings: {
@@ -34,6 +36,7 @@ describe('NewSession preferences', () => {
 
         expect(loadNewSessionPreferences()).toEqual({
             agent: 'codex',
+            sessionRole: 'manager',
             sessionType: 'worktree',
             yoloMode: true,
             agentSettings: {
@@ -48,6 +51,7 @@ describe('NewSession preferences', () => {
     it('falls back to defaults when storage contains invalid values', () => {
         localStorage.setItem('viby:newSession:preferences', JSON.stringify({
             agent: 'unknown-agent',
+            sessionRole: 'unknown-role',
             sessionType: 'unknown-type',
             yoloMode: 'yes',
             agentSettings: {
@@ -60,6 +64,7 @@ describe('NewSession preferences', () => {
 
         expect(loadNewSessionPreferences()).toEqual({
             agent: 'claude',
+            sessionRole: 'normal',
             sessionType: 'simple',
             yoloMode: false,
             agentSettings: {
@@ -71,6 +76,7 @@ describe('NewSession preferences', () => {
     it('persists the full new session preference snapshot', () => {
         saveNewSessionPreferences({
             agent: 'gemini',
+            sessionRole: 'manager',
             sessionType: 'simple',
             yoloMode: true,
             agentSettings: {
@@ -87,6 +93,7 @@ describe('NewSession preferences', () => {
 
         expect(localStorage.getItem('viby:newSession:preferences')).toBe(JSON.stringify({
             agent: 'gemini',
+            sessionRole: 'manager',
             sessionType: 'simple',
             yoloMode: true,
             agentSettings: {

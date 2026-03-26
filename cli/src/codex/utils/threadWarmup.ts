@@ -33,7 +33,8 @@ export function getCodexThreadMode(session: CodexSession, fallback?: EnhancedMod
         permissionMode: normalizePermissionMode(session.getPermissionMode(), fallback?.permissionMode),
         model: session.getModel() ?? fallback?.model,
         modelReasoningEffort: session.getModelReasoningEffort() ?? fallback?.modelReasoningEffort,
-        collaborationMode: session.getCollaborationMode() ?? fallback?.collaborationMode ?? 'default'
+        collaborationMode: session.getCollaborationMode() ?? fallback?.collaborationMode ?? 'default',
+        developerInstructions: fallback?.developerInstructions
     };
 }
 
@@ -48,7 +49,8 @@ export async function ensureCodexThreadStarted(args: {
         cwd: args.session.path,
         mode: args.mode,
         mcpServers: EMPTY_MCP_SERVERS,
-        cliOverrides: args.session.codexCliOverrides
+        cliOverrides: args.session.codexCliOverrides,
+        developerInstructions: args.mode.developerInstructions
     });
 
     const resumeCandidate = args.session.sessionId;

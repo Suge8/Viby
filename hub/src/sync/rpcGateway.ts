@@ -4,7 +4,8 @@ import type {
     MachineDirectoryResponse,
     MachineDirectoryRoot,
     ModelReasoningEffort,
-    PermissionMode
+    PermissionMode,
+    TeamSessionSpawnRole
 } from '@viby/protocol/types'
 import type { Server } from 'socket.io'
 import type { RpcRegistry } from '../socket/rpcRegistry'
@@ -132,6 +133,7 @@ export class RpcGateway {
         model?: string
         modelReasoningEffort?: ModelReasoningEffort | null
         permissionMode?: PermissionMode
+        sessionRole?: TeamSessionSpawnRole
         sessionType?: 'simple' | 'worktree'
         worktreeName?: string
         resumeSessionId?: string
@@ -149,6 +151,7 @@ export class RpcGateway {
                     model: options.model,
                     modelReasoningEffort: options.modelReasoningEffort,
                     permissionMode: options.permissionMode,
+                    sessionRole: options.sessionRole,
                     sessionType: options.sessionType,
                     worktreeName: options.worktreeName,
                     resumeSessionId: options.resumeSessionId,

@@ -20,6 +20,15 @@ export type { SessionSummary, SessionSummaryMetadata } from './sessionSummary'
 export type { SessionActivityKind, SessionMessageActivity } from './sessionActivity'
 export type { SessionLifecycleState } from './sessionLifecycle'
 export type { SessionRecoveryPage } from './sessionRecovery'
+export type { MessageMeta, MessageSentFrom, TeamMessageKind } from './messageMeta'
+export type {
+    SessionSummaryTeam,
+    SessionTeamContext,
+    TeamEventRecord,
+    TeamMemberRecord,
+    TeamProject,
+    TeamTaskRecord
+} from './teamSchemas'
 export type { MachineCapability } from './machineCapabilities'
 export type {
     MachineDirectoryEntry,
@@ -47,3 +56,19 @@ export type {
     PermissionModeOption,
     PermissionModeTone
 } from './modes'
+export type {
+    TeamControlOwner,
+    TeamEventActorType,
+    TeamEventKind,
+    TeamEventTargetType,
+    TeamMemberIsolationMode,
+    TeamMembershipState,
+    TeamProviderFlavor,
+    TeamProjectIsolationMode,
+    TeamProjectStatus,
+    TeamReasoningEffort,
+    TeamRolePrototype,
+    TeamSessionSpawnRole,
+    TeamSessionRole,
+    TeamTaskStatus
+} from './teamSchemas'

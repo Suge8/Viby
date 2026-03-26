@@ -3,7 +3,7 @@ import { opencodeLoop } from './loop';
 import { MessageQueue2 } from '@/utils/MessageQueue2';
 import { hashObject } from '@/utils/deterministicJson';
 import { registerKillSessionHandler } from '@/claude/registerKillSessionHandler';
-import type { AgentState } from '@/api/types';
+import type { AgentState, TeamSessionSpawnRole } from '@/api/types';
 import type { OpencodeSession } from './session';
 import type { OpencodeMode, PermissionMode } from './types';
 import { bootstrapSession } from '@/agent/sessionFactory';
@@ -16,6 +16,7 @@ import { getInvokedCwd } from '@/utils/invokedCwd';
 export async function runOpencode(opts: {
     startedBy?: 'runner' | 'terminal';
     vibySessionId?: string;
+    sessionRole?: TeamSessionSpawnRole;
     startingMode?: 'local' | 'remote';
     permissionMode?: PermissionMode;
     resumeSessionId?: string;
@@ -40,6 +41,7 @@ export async function runOpencode(opts: {
         startedBy,
         workingDirectory,
         agentState: initialState,
+        sessionRole: opts.sessionRole,
         permissionMode: opts.permissionMode ?? 'default'
     });
 

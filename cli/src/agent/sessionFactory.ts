@@ -12,7 +12,8 @@ import type {
     Session,
     SessionCollaborationMode,
     SessionModelReasoningEffort,
-    SessionPermissionMode
+    SessionPermissionMode,
+    TeamSessionSpawnRole
 } from '@/api/types'
 import { MACHINE_BROWSE_DIRECTORY_CAPABILITY } from '@viby/protocol'
 import { notifyRunnerSessionStarted } from '@/runner/controlClient'
@@ -36,6 +37,7 @@ export type SessionBootstrapOptions = {
     model?: string
     modelReasoningEffort?: SessionModelReasoningEffort
     permissionMode?: SessionPermissionMode
+    sessionRole?: TeamSessionSpawnRole
     collaborationMode?: SessionCollaborationMode
     metadataOverrides?: Partial<Metadata>
 }
@@ -150,6 +152,7 @@ export async function bootstrapSession(options: SessionBootstrapOptions): Promis
         model: options.model,
         modelReasoningEffort: options.modelReasoningEffort,
         permissionMode: options.permissionMode,
+        sessionRole: options.sessionRole,
         collaborationMode: options.collaborationMode
     })
 

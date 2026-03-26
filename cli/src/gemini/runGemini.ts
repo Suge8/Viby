@@ -3,7 +3,7 @@ import { geminiLoop } from './loop';
 import { MessageQueue2 } from '@/utils/MessageQueue2';
 import { hashObject } from '@/utils/deterministicJson';
 import { registerKillSessionHandler } from '@/claude/registerKillSessionHandler';
-import type { AgentState } from '@/api/types';
+import type { AgentState, TeamSessionSpawnRole } from '@/api/types';
 import type { GeminiSession } from './session';
 import type { GeminiMode, PermissionMode } from './types';
 import { bootstrapSession } from '@/agent/sessionFactory';
@@ -35,6 +35,7 @@ function resolveSessionModel(value: unknown): string | null {
 export async function runGemini(opts: {
     startedBy?: 'runner' | 'terminal';
     vibySessionId?: string;
+    sessionRole?: TeamSessionSpawnRole;
     startingMode?: 'local' | 'remote';
     permissionMode?: PermissionMode;
     resumeSessionId?: string;
@@ -63,6 +64,7 @@ export async function runGemini(opts: {
         startedBy,
         workingDirectory,
         agentState: initialState,
+        sessionRole: opts.sessionRole,
         permissionMode: opts.permissionMode ?? 'default',
         model: currentModel ?? undefined
     });

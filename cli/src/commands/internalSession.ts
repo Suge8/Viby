@@ -11,12 +11,14 @@ import {
     CodexCollaborationModeSchema,
     CodexReasoningEffortSchema,
     ModelReasoningEffortSchema,
-    PermissionModeSchema
+    PermissionModeSchema,
+    TeamSessionSpawnRoleSchema
 } from '@viby/protocol/schemas'
 import type {
     SessionCollaborationMode,
     SessionModelReasoningEffort,
-    SessionPermissionMode
+    SessionPermissionMode,
+    TeamSessionSpawnRole
 } from '@/api/types'
 import type {
     ClaudePermissionMode,
@@ -40,6 +42,7 @@ type InternalSessionOptions = {
     model?: string
     modelReasoningEffort?: SessionModelReasoningEffort
     permissionMode?: SessionPermissionMode
+    sessionRole?: TeamSessionSpawnRole
     collaborationMode?: SessionCollaborationMode
 }
 
@@ -52,6 +55,7 @@ function parseInternalSessionArgs(args: string[]): InternalSessionOptions {
     let model: string | undefined
     let modelReasoningEffort: SessionModelReasoningEffort | undefined
     let permissionMode: SessionPermissionMode | undefined
+    let sessionRole: TeamSessionSpawnRole | undefined
     let collaborationMode: SessionCollaborationMode | undefined
 
     for (let index = 0; index < args.length; index += 1) {
@@ -151,6 +155,20 @@ function parseInternalSessionArgs(args: string[]): InternalSessionOptions {
             continue
         }
 
+        if (arg === '--session-role') {
+            const value = args[index + 1]
+            if (!value) {
+                throw new Error('Missing --session-role value')
+            }
+            const parsed = TeamSessionSpawnRoleSchema.safeParse(value)
+            if (!parsed.success) {
+                throw new Error('Invalid --session-role value')
+            }
+            sessionRole = parsed.data
+            index += 1
+            continue
+        }
+
         if (arg === '--collaboration-mode') {
             const value = args[index + 1]
             if (!value) {
@@ -181,6 +199,7 @@ function parseInternalSessionArgs(args: string[]): InternalSessionOptions {
         model,
         modelReasoningEffort,
         permissionMode,
+        sessionRole,
         collaborationMode
     }
 }
@@ -270,6 +289,7 @@ async function runInternalClaude(options: InternalSessionOptions): Promise<void>
         startedBy: options.startedBy,
         vibySessionId: options.vibySessionId,
         startingMode: options.startingMode,
+        sessionRole: options.sessionRole,
         permissionMode,
         model: options.model,
         modelReasoningEffort,
@@ -293,6 +313,7 @@ async function runInternalCodex(options: InternalSessionOptions): Promise<void> 
     await runCodex({
         startedBy: options.startedBy,
         vibySessionId: options.vibySessionId,
+        sessionRole: options.sessionRole,
         permissionMode,
         resumeSessionId: options.resumeSessionId,
         model: options.model,
@@ -305,6 +326,7 @@ async function runInternalCursor(options: InternalSessionOptions): Promise<void>
     await runCursor({
         startedBy: options.startedBy,
         vibySessionId: options.vibySessionId,
+        sessionRole: options.sessionRole,
         permissionMode: resolveCursorPermissionMode(options.permissionMode),
         resumeSessionId: options.resumeSessionId,
         model: options.model
@@ -316,6 +338,7 @@ async function runInternalGemini(options: InternalSessionOptions): Promise<void>
         startedBy: options.startedBy,
         vibySessionId: options.vibySessionId,
         startingMode: options.startingMode,
+        sessionRole: options.sessionRole,
         permissionMode: resolveGeminiPermissionMode(options.permissionMode),
         resumeSessionId: options.resumeSessionId,
         model: options.model
@@ -327,6 +350,7 @@ async function runInternalOpencode(options: InternalSessionOptions): Promise<voi
         startedBy: options.startedBy,
         vibySessionId: options.vibySessionId,
         startingMode: options.startingMode,
+        sessionRole: options.sessionRole,
         permissionMode: resolveOpencodePermissionMode(options.permissionMode),
         resumeSessionId: options.resumeSessionId
     })

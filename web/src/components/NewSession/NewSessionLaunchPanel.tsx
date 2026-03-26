@@ -16,11 +16,13 @@ import {
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/lib/use-translation'
 import { NewSessionSectionCard } from './NewSessionSectionCard'
-import type { AgentType, ModelReasoningEffortSelection } from './types'
+import type { AgentType, ModelReasoningEffortSelection, SessionRole } from './types'
+import { SessionRolePicker } from './SessionRolePicker'
 
 type LaunchPanelProps = {
     form: {
         agent: AgentType
+        sessionRole: SessionRole
         model: string
         modelReasoningEffort: ModelReasoningEffortSelection
         yoloMode: boolean
@@ -32,6 +34,7 @@ type LaunchPanelProps = {
     }
     handlers: {
         onAgentChange: (agent: AgentType) => void
+        onSessionRoleChange: (sessionRole: SessionRole) => void
         onModelChange: (model: string) => void
         onReasoningEffortChange: (value: ModelReasoningEffortSelection) => void
         onYoloModeChange: (checked: boolean) => void
@@ -180,6 +183,12 @@ export function NewSessionLaunchPanel(props: LaunchPanelProps): React.JSX.Elemen
             accent="lime"
         >
             <div className="space-y-4">
+                <SessionRolePicker
+                    sessionRole={props.form.sessionRole}
+                    isDisabled={props.options.isDisabled}
+                    onSessionRoleChange={props.handlers.onSessionRoleChange}
+                />
+
                 <AgentPicker
                     agent={props.form.agent}
                     isDisabled={props.options.isDisabled}

@@ -227,12 +227,77 @@ function createLegacySchemaV8(dbPath: string): void {
     db.close()
 }
 
+function createLegacySchemaV9(dbPath: string): void {
+    const db = new Database(dbPath, { create: true, readwrite: true, strict: true })
+    db.exec(`
+        CREATE TABLE sessions (
+            id TEXT PRIMARY KEY,
+            tag TEXT,
+            machine_id TEXT,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            metadata TEXT,
+            metadata_version INTEGER DEFAULT 1,
+            agent_state TEXT,
+            agent_state_version INTEGER DEFAULT 1,
+            model TEXT,
+            model_reasoning_effort TEXT,
+            permission_mode TEXT,
+            collaboration_mode TEXT,
+            next_message_seq INTEGER NOT NULL DEFAULT 1,
+            todos TEXT,
+            todos_updated_at INTEGER,
+            team_state TEXT,
+            team_state_updated_at INTEGER,
+            active INTEGER DEFAULT 0,
+            active_at INTEGER,
+            seq INTEGER DEFAULT 0
+        );
+        CREATE TABLE machines (
+            id TEXT PRIMARY KEY,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            metadata TEXT,
+            metadata_version INTEGER DEFAULT 1,
+            runner_state TEXT,
+            runner_state_version INTEGER DEFAULT 1,
+            active INTEGER DEFAULT 0,
+            active_at INTEGER,
+            seq INTEGER DEFAULT 0
+        );
+        CREATE TABLE messages (
+            id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            seq INTEGER NOT NULL,
+            local_id TEXT
+        );
+        CREATE TABLE push_subscriptions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            endpoint TEXT NOT NULL,
+            p256dh TEXT NOT NULL,
+            auth TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            UNIQUE(endpoint)
+        );
+    `)
+    db.exec('PRAGMA user_version = 9')
+    db.close()
+}
+
 function getStoreDatabase(store: Store): Database {
     return (store as unknown as { db: Database }).db
 }
 
+function getTableNames(db: Database): string[] {
+    return (db.prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+    ).all() as Array<{ name: string }>).map((row) => row.name)
+}
+
 describe('store schema migration', () => {
-    it('migrates a v7 sessions table to v9 without losing session config state', async () => {
+    it('migrates a v7 sessions table to v10 without losing session config state', async () => {
         const dbPath = await createTempDbPath()
         createLegacySchemaV7(dbPath)
 
@@ -242,10 +307,16 @@ describe('store schema migration', () => {
             const userVersion = db.prepare('PRAGMA user_version').get() as { user_version: number }
             const sessionColumns = db.prepare('PRAGMA table_info(sessions)').all() as Array<{ name: string }>
 
-            expect(userVersion.user_version).toBe(9)
+            expect(userVersion.user_version).toBe(10)
             expect(sessionColumns.map((column) => column.name)).toEqual(
                 expect.arrayContaining(['permission_mode', 'collaboration_mode', 'next_message_seq'])
             )
+            expect(getTableNames(db)).toEqual(expect.arrayContaining([
+                'team_projects',
+                'team_members',
+                'team_tasks',
+                'team_events'
+            ]))
 
             const legacySession = store.sessions.getSession('legacy-session')
             expect(legacySession).toMatchObject({
@@ -270,7 +341,7 @@ describe('store schema migration', () => {
         }
     })
 
-    it('migrates a v8 sessions table to v9 and backfills next_message_seq', async () => {
+    it('migrates a v8 sessions table to v10 and backfills next_message_seq', async () => {
         const dbPath = await createTempDbPath()
         createLegacySchemaV8(dbPath)
 
@@ -280,11 +351,38 @@ describe('store schema migration', () => {
             const userVersion = db.prepare('PRAGMA user_version').get() as { user_version: number }
             const sessionColumns = db.prepare('PRAGMA table_info(sessions)').all() as Array<{ name: string }>
 
-            expect(userVersion.user_version).toBe(9)
+            expect(userVersion.user_version).toBe(10)
             expect(sessionColumns.map((column) => column.name)).toContain('next_message_seq')
+            expect(getTableNames(db)).toEqual(expect.arrayContaining([
+                'team_projects',
+                'team_members',
+                'team_tasks',
+                'team_events'
+            ]))
 
             const message = store.messages.addMessage('legacy-session-v8', { role: 'user', content: [] })
             expect(message.seq).toBe(8)
+        } finally {
+            db.close()
+        }
+    })
+
+    it('migrates a v9 store by adding manager teams tables without rebuilding session rows', async () => {
+        const dbPath = await createTempDbPath()
+        createLegacySchemaV9(dbPath)
+
+        const store = new Store(dbPath)
+        const db = getStoreDatabase(store)
+        try {
+            const userVersion = db.prepare('PRAGMA user_version').get() as { user_version: number }
+
+            expect(userVersion.user_version).toBe(10)
+            expect(getTableNames(db)).toEqual(expect.arrayContaining([
+                'team_projects',
+                'team_members',
+                'team_tasks',
+                'team_events'
+            ]))
         } finally {
             db.close()
         }
@@ -297,7 +395,7 @@ describe('store schema migration', () => {
         db.close()
 
         expect(() => new Store(dbPath)).toThrow(
-            'This build only runs the 7 -> 9 and 8 -> 9 migrations automatically.'
+            'This build only runs the 7 -> 10, 8 -> 10, and 9 -> 10 migrations automatically.'
         )
     })
 })

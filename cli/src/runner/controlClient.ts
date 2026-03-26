@@ -5,7 +5,7 @@
 
 import { logger } from '@/ui/logger';
 import { clearRunnerState, readRunnerState, readSettings, type RunnerLocallyPersistedState } from '@/persistence';
-import { Metadata } from '@/api/types';
+import { Metadata, TeamSessionSpawnRole } from '@/api/types';
 import packageJson from '../../package.json';
 import { isProcessAlive, killProcess } from '@/utils/process';
 import { configuration } from '@/configuration';
@@ -125,8 +125,16 @@ export async function stopRunnerSession(sessionId: string): Promise<boolean> {
   return result.success || false;
 }
 
-export async function spawnRunnerSession(directory: string, sessionId?: string): Promise<any> {
-  const result = await runnerPost('/spawn-session', { directory, sessionId });
+export async function spawnRunnerSession(
+  directory: string,
+  sessionId?: string,
+  options?: { sessionRole?: TeamSessionSpawnRole }
+): Promise<any> {
+  const result = await runnerPost('/spawn-session', {
+    directory,
+    sessionId,
+    sessionRole: options?.sessionRole
+  });
   return result;
 }
 

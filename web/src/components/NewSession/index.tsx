@@ -14,7 +14,7 @@ import {
 import { getNoticePreset } from '@/lib/noticePresets'
 import { formatUserFacingErrorMessage } from '@/lib/userFacingError'
 import { useTranslation } from '@/lib/use-translation'
-import type { AgentType, ModelReasoningEffortSelection, SessionType } from './types'
+import type { AgentType, ModelReasoningEffortSelection, SessionRole, SessionType } from './types'
 import { ActionButtons } from './ActionButtons'
 import { DirectorySection } from './DirectorySection'
 import { MachineSelector } from './MachineSelector'
@@ -51,6 +51,7 @@ export function NewSession(props: {
 
     const [agentSettings, setAgentSettings] = useState(initialPreferences.agentSettings)
     const [agent, setAgent] = useState<AgentType>(initialPreferences.agent)
+    const [sessionRole, setSessionRole] = useState<SessionRole>(initialPreferences.sessionRole)
     const [model, setModel] = useState(initialAgentPreferences.model)
     const [modelReasoningEffort, setModelReasoningEffort] = useState<ModelReasoningEffortSelection>(initialAgentPreferences.modelReasoningEffort)
     const [yoloMode, setYoloMode] = useState(initialPreferences.yoloMode)
@@ -149,6 +150,7 @@ export function NewSession(props: {
                 machineId: selectedMachineId,
                 directory: trimmedDirectory,
                 agent,
+                sessionRole,
                 model: resolvedModel,
                 modelReasoningEffort: resolvedModelReasoningEffort,
                 permissionMode: resolvedPermissionMode,
@@ -162,6 +164,7 @@ export function NewSession(props: {
                 addRecentPath(selectedMachineId, trimmedDirectory)
                 saveNewSessionPreferences({
                     agent,
+                    sessionRole,
                     sessionType,
                     yoloMode,
                     agentSettings: {
@@ -236,6 +239,7 @@ export function NewSession(props: {
                     <NewSessionLaunchPanel
                         form={{
                             agent,
+                            sessionRole,
                             model,
                             modelReasoningEffort,
                             yoloMode
@@ -247,6 +251,7 @@ export function NewSession(props: {
                         }}
                         handlers={{
                             onAgentChange: handleAgentChange,
+                            onSessionRoleChange: setSessionRole,
                             onModelChange: handleModelChange,
                             onReasoningEffortChange: handleReasoningEffortChange,
                             onYoloModeChange: setYoloMode

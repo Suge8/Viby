@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { AGENT_FLAVORS, CLAUDE_REASONING_EFFORTS, CODEX_COLLABORATION_MODES, CODEX_REASONING_EFFORTS, MODEL_REASONING_EFFORTS, PERMISSION_MODES } from './modes'
 import { SESSION_LIFECYCLE_STATES } from './sessionLifecycle'
+import { SessionTeamContextSchema } from './teamSchemas'
 
 export const PermissionModeSchema = z.enum(PERMISSION_MODES)
 export const CodexCollaborationModeSchema = z.enum(CODEX_COLLABORATION_MODES)
@@ -187,6 +188,7 @@ export const SessionSchema = z.object({
     thinkingAt: z.number(),
     todos: TodosSchema.optional(),
     teamState: TeamStateSchema.optional(),
+    teamContext: SessionTeamContextSchema.optional(),
     model: z.string().nullable(),
     modelReasoningEffort: ModelReasoningEffortSchema.nullable(),
     permissionMode: PermissionModeSchema.optional(),
@@ -194,6 +196,9 @@ export const SessionSchema = z.object({
 })
 
 export type Session = z.infer<typeof SessionSchema>
+
+export * from './teamSchemas'
+export * from './messageMeta'
 
 const SessionChangedSchema = z.object({
     sessionId: z.string()

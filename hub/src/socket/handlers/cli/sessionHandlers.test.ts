@@ -4,12 +4,13 @@ import type { SyncEvent } from '@viby/protocol/types'
 import { Store } from '../../../store'
 import type { CliSocketWithData } from '../../socketTypes'
 import { SessionStreamManager } from '../../../sync/sessionStreamManager'
+import { TeamCoordinatorService } from '../../../sync/teamCoordinatorService'
 import {
     mergeSessionMetadataPreservingLifecycle,
     registerSessionHandlers
 } from './sessionHandlers'
 
-type RegisteredSessionHandlers = Partial<Pick<ClientToServerEvents, 'update-metadata'>>
+type RegisteredSessionHandlers = Partial<Pick<ClientToServerEvents, 'message' | 'update-metadata'>>
 
 type MockSocket = {
     socket: CliSocketWithData
@@ -36,7 +37,7 @@ function createMockSocket(): MockSocket {
     const emittedUpdates: Array<{ room: string; event: 'update'; payload: Update }> = []
 
     const socket = {
-        on(event: keyof RegisteredSessionHandlers, handler: RegisteredSessionHandlers[keyof RegisteredSessionHandlers]) {
+        on<K extends keyof RegisteredSessionHandlers>(event: K, handler: NonNullable<RegisteredSessionHandlers[K]>) {
             handlers[event] = handler
             return this
         },
@@ -58,9 +59,9 @@ function createMockSocket(): MockSocket {
 
 function createSessionHandlersHarness(): SessionHandlersHarness {
     const store = new Store(':memory:')
-    const session = store.sessions.getOrCreateSession(
-        'session-archive-metadata',
-        {
+    const session = store.sessions.getOrCreateSession({
+        tag: 'session-archive-metadata',
+        metadata: {
             path: '/tmp/project',
             host: 'localhost',
             lifecycleState: 'archived',
@@ -68,10 +69,13 @@ function createSessionHandlersHarness(): SessionHandlersHarness {
             archivedBy: 'web',
             archiveReason: 'Archived by user'
         },
-        null
-    )
+        agentState: null
+    })
     const onWebappEvents: SyncEvent[] = []
     const { socket, handlers, emittedUpdates } = createMockSocket()
+    const teamCoordinator = new TeamCoordinatorService(store, (event) => {
+        onWebappEvents.push(event)
+    })
 
     registerSessionHandlers(socket, {
         store,
@@ -88,7 +92,8 @@ function createSessionHandlersHarness(): SessionHandlersHarness {
         },
         onWebappEvent(event) {
             onWebappEvents.push(event)
-        }
+        },
+        teamCoordinator
     })
 
     return {
@@ -313,5 +318,50 @@ describe('registerSessionHandlers update-metadata', () => {
                 value: expectedMetadata
             }
         })
+    })
+})
+
+describe('registerSessionHandlers message', () => {
+    it('routes legacy team projection through TeamCoordinatorService instead of writing teamState inline', () => {
+        const harness = createSessionHandlersHarness()
+        const handler = harness.handlers.message
+        expect(handler).toBeDefined()
+
+        handler?.({
+            sid: harness.session.id,
+            message: {
+                role: 'agent',
+                content: {
+                    type: 'codex',
+                    data: {
+                        type: 'tool-call',
+                        name: 'TeamCreate',
+                        input: {
+                            team_name: 'Alpha Team'
+                        }
+                    }
+                }
+            }
+        })
+
+        expect(harness.store.sessions.getSession(harness.session.id)?.teamState).toMatchObject({
+            teamName: 'Alpha Team'
+        })
+        expect(harness.onWebappEvents).toEqual([
+            {
+                type: 'session-updated',
+                sessionId: harness.session.id,
+                data: { sid: harness.session.id }
+            },
+            {
+                type: 'message-received',
+                sessionId: harness.session.id,
+                message: expect.objectContaining({
+                    content: expect.objectContaining({
+                        role: 'agent'
+                    })
+                })
+            }
+        ])
     })
 })

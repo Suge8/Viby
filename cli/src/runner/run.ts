@@ -364,6 +364,9 @@ export async function startRunner(): Promise<void> {
         if (options.permissionMode) {
           args.push('--permission-mode', options.permissionMode);
         }
+        if (options.sessionRole) {
+          args.push('--session-role', options.sessionRole);
+        }
         if (options.model && agent !== 'opencode') {
           args.push('--model', options.model);
         }

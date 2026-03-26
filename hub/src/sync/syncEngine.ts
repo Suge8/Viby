@@ -15,8 +15,10 @@ import {
 import type {
     CodexCollaborationMode,
     DecryptedMessage,
+    MessageMeta,
     PermissionMode,
     Session,
+    TeamSessionSpawnRole,
     SessionRecoveryPage,
     SessionMessageActivity,
     SyncEvent
@@ -43,6 +45,13 @@ import {
     type ResumeContractState,
     type ResumeSessionResult
 } from './sessionLifecycleService'
+import {
+    TeamMemberSessionService,
+    type InactiveTeamMemberLaunchPlan,
+    type InactiveTeamMemberLaunchRequest,
+    type RevisionCarryoverMessageInput
+} from './teamMemberSessionService'
+import { TeamCoordinatorService } from './teamCoordinatorService'
 
 export type { Session, SyncEvent } from '@viby/protocol/types'
 export type { Machine } from './machineCache'
@@ -56,10 +65,19 @@ export type {
     RpcReadFileResponse,
     RpcUploadFileResponse
 } from './rpcGateway'
+export type {
+    InactiveTeamMemberLaunchPlan,
+    InactiveTeamMemberLaunchRequest,
+    RevisionCarryoverMessageInput
+} from './teamMemberSessionService'
 
 export type SessionSendMessageErrorCode =
     | Extract<ResumeSessionResult, { type: 'error' }>['code']
     | 'session_not_found'
+
+type GetOrCreateSessionOptions = Parameters<SessionCache['getOrCreateSession']>[0] & {
+    sessionRole?: TeamSessionSpawnRole
+}
 
 export class SessionSendMessageError extends Error {
     readonly code: SessionSendMessageErrorCode
@@ -82,6 +100,8 @@ export class SyncEngine {
     private readonly messageService: MessageService
     private readonly rpcGateway: RpcGateway
     private readonly sessionLifecycleService: SessionLifecycleService
+    private readonly teamMemberSessionService: TeamMemberSessionService
+    private readonly teamCoordinatorService: TeamCoordinatorService
     private inactivityTimer: NodeJS.Timeout | null = null
 
     constructor(
@@ -95,6 +115,10 @@ export class SyncEngine {
         this.machineCache = new MachineCache(store, this.eventPublisher)
         this.messageService = new MessageService(store, io, this.eventPublisher)
         this.rpcGateway = new RpcGateway(io, rpcRegistry)
+        this.teamMemberSessionService = new TeamMemberSessionService(store)
+        this.teamCoordinatorService = new TeamCoordinatorService(store, (event) => {
+            this.handleRealtimeEvent(event)
+        })
         this.sessionLifecycleService = new SessionLifecycleService(
             this.sessionCache,
             this.machineCache,
@@ -238,26 +262,16 @@ export class SyncEngine {
         this.machineCache.reloadAll()
     }
 
-    getOrCreateSession(
-        tag: string,
-        metadata: unknown,
-        agentState: unknown,
-        model?: string,
-        modelReasoningEffort?: Session['modelReasoningEffort'],
-        permissionMode?: PermissionMode,
-        collaborationMode?: CodexCollaborationMode,
-        sessionId?: string
-    ): Session {
-        return this.sessionCache.getOrCreateSession(
-            tag,
-            metadata,
-            agentState,
-            model,
-            modelReasoningEffort,
-            permissionMode,
-            collaborationMode,
-            sessionId
-        )
+    getOrCreateSession(options: GetOrCreateSessionOptions): Session {
+        const { sessionRole, ...sessionOptions } = options
+        const session = this.sessionCache.getOrCreateSession(sessionOptions)
+
+        if (sessionRole === 'manager') {
+            this.teamCoordinatorService.ensureManagerProject(session)
+            return this.getSession(session.id) ?? session
+        }
+
+        return session
     }
 
     getOrCreateMachine(id: string, metadata: unknown, runnerState: unknown): Machine {
@@ -322,8 +336,34 @@ export class SyncEngine {
             sentFrom?: 'webapp'
         }
     ): Promise<Session> {
+        return await this.appendInternalUserMessage(sessionId, {
+            text: payload.text,
+            localId: payload.localId,
+            attachments: payload.attachments,
+            meta: {
+                sentFrom: payload.sentFrom ?? 'webapp'
+            }
+        })
+    }
+
+    async appendInternalUserMessage(
+        sessionId: string,
+        payload: {
+            text: string
+            localId?: string | null
+            attachments?: Array<{
+                id: string
+                filename: string
+                mimeType: string
+                size: number
+                path: string
+                previewUrl?: string
+            }>
+            meta?: MessageMeta
+        }
+    ): Promise<Session> {
         const readySession = await this.ensureSessionReadyForSend(sessionId)
-        await this.messageService.sendMessage(sessionId, payload)
+        await this.messageService.appendUserMessage(sessionId, payload)
         this.sessionCache.refreshSession(sessionId)
         return this.getSession(sessionId) ?? readySession
     }
@@ -433,6 +473,20 @@ export class SyncEngine {
         this.sessionCache.applySessionConfig(sessionId, applied)
     }
 
+    planInactiveTeamMemberLaunch(request: InactiveTeamMemberLaunchRequest): InactiveTeamMemberLaunchPlan {
+        return this.teamMemberSessionService.planInactiveLaunch(request)
+    }
+
+    async appendTeamRevisionCarryoverMessage(
+        sessionId: string,
+        input: RevisionCarryoverMessageInput
+    ): Promise<Session> {
+        return await this.appendInternalUserMessage(
+            sessionId,
+            this.teamMemberSessionService.buildRevisionCarryoverMessage(input)
+        )
+    }
+
     async spawnSession(options: {
         sessionId?: string
         machineId: string
@@ -441,6 +495,7 @@ export class SyncEngine {
         model?: string
         modelReasoningEffort?: Session['modelReasoningEffort']
         permissionMode?: PermissionMode
+        sessionRole?: TeamSessionSpawnRole
         sessionType?: 'simple' | 'worktree'
         worktreeName?: string
         resumeSessionId?: string

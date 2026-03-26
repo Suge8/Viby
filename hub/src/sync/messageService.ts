@@ -2,7 +2,7 @@ import {
     getSessionActivityKind,
     shouldMessageAdvanceSessionUpdatedAt
 } from '@viby/protocol'
-import type { AttachmentMetadata, DecryptedMessage, SessionMessageActivity } from '@viby/protocol/types'
+import type { AttachmentMetadata, DecryptedMessage, MessageMeta, SessionMessageActivity } from '@viby/protocol/types'
 import type { Server } from 'socket.io'
 import type { Store } from '../store'
 import { EventPublisher } from './eventPublisher'
@@ -75,6 +75,27 @@ export class MessageService {
         return this.store.messages.getMessages(sessionId, 1).length > 0
     }
 
+    async appendUserMessage(
+        sessionId: string,
+        payload: {
+            text: string
+            localId?: string | null
+            attachments?: AttachmentMetadata[]
+            meta?: MessageMeta
+        }
+    ): Promise<void> {
+        const content = {
+            role: 'user',
+            content: {
+                type: 'text',
+                text: payload.text,
+                attachments: payload.attachments
+            },
+            ...(payload.meta ? { meta: payload.meta } : {})
+        }
+        await this.appendMessage(sessionId, content, payload.localId ?? undefined)
+    }
+
     async sendMessage(
         sessionId: string,
         payload: {
@@ -84,21 +105,18 @@ export class MessageService {
             sentFrom?: 'webapp'
         }
     ): Promise<void> {
-        const sentFrom = payload.sentFrom ?? 'webapp'
-
-        const content = {
-            role: 'user',
-            content: {
-                type: 'text',
-                text: payload.text,
-                attachments: payload.attachments
-            },
+        await this.appendUserMessage(sessionId, {
+            text: payload.text,
+            localId: payload.localId,
+            attachments: payload.attachments,
             meta: {
-                sentFrom
+                sentFrom: payload.sentFrom ?? 'webapp'
             }
-        }
+        })
+    }
 
-        const msg = this.store.messages.addMessage(sessionId, content, payload.localId ?? undefined)
+    private async appendMessage(sessionId: string, content: unknown, localId?: string): Promise<void> {
+        const msg = this.store.messages.addMessage(sessionId, content, localId)
         const activityKind = getSessionActivityKind(msg.content)
         if (shouldMessageAdvanceSessionUpdatedAt(activityKind)) {
             this.store.sessions.touchSessionUpdatedAt(sessionId, msg.createdAt)

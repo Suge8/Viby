@@ -10,6 +10,7 @@ import type {
     SessionLifecycleState,
     SessionSummary,
     SyncEvent as ProtocolSyncEvent,
+    TeamSessionSpawnRole,
     WorktreeMetadata
 } from '@viby/protocol/types'
 
@@ -33,6 +34,7 @@ export type {
     SessionStreamState,
     SessionRecoveryPage,
     SessionSummaryMetadata,
+    TeamSessionSpawnRole,
     TeamMember,
     TeamMessage,
     TeamState,

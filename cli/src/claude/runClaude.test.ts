@@ -19,6 +19,14 @@ const harness = vi.hoisted(() => {
             model: null as string | null,
             modelReasoningEffort: null as EnhancedMode['modelReasoningEffort'],
         },
+        nextUserMessageMeta: undefined as Record<string, unknown> | undefined,
+        teamContext: undefined as undefined | {
+            projectId: string
+            sessionRole: 'manager' | 'member'
+            managerSessionId: string
+            memberRole?: 'planner' | 'architect' | 'implementer' | 'debugger' | 'reviewer' | 'verifier' | 'designer'
+            projectStatus: 'active' | 'delivered' | 'archived'
+        }
     }
 })
 
@@ -37,7 +45,8 @@ vi.mock('@/agent/sessionFactory', () => ({
             }
         },
         sessionInfo: {
-            id: 'session-1'
+            id: 'session-1',
+            teamContext: harness.teamContext
         }
     })
 }))
@@ -162,7 +171,8 @@ vi.mock('./loop', () => ({
             content: {
                 text: 'ping',
                 attachments: []
-            }
+            },
+            ...(harness.nextUserMessageMeta ? { meta: harness.nextUserMessageMeta } : {})
         })
 
         harness.queueModes = options.messageQueue.queue.map((entry) => entry.mode)
@@ -179,6 +189,8 @@ describe('runClaude live session config', () => {
         harness.sessionState.permissionMode = 'default'
         harness.sessionState.model = null
         harness.sessionState.modelReasoningEffort = null
+        harness.nextUserMessageMeta = undefined
+        harness.teamContext = undefined
     })
 
     it('applies live model and reasoning effort updates to the next queued user message', async () => {
@@ -197,5 +209,33 @@ describe('runClaude live session config', () => {
                 modelReasoningEffort: 'max'
             }
         ])
+    })
+
+    it('merges the authoritative team role contract into Claude appendSystemPrompt', async () => {
+        harness.teamContext = {
+            projectId: 'project-1',
+            sessionRole: 'member',
+            managerSessionId: 'manager-session-1',
+            memberRole: 'reviewer',
+            projectStatus: 'active'
+        }
+        harness.nextUserMessageMeta = {
+            appendSystemPrompt: 'Prioritize regressions and missing tests.'
+        }
+
+        await runClaude({
+            startedBy: 'runner',
+            model: 'sonnet'
+        })
+
+        expect(harness.queueModes).toEqual([
+            expect.objectContaining({
+                permissionMode: 'default',
+                model: 'opus',
+                modelReasoningEffort: 'max',
+                appendSystemPrompt: expect.stringContaining('role prototype is "reviewer"')
+            })
+        ])
+        expect(harness.queueModes[0]?.appendSystemPrompt).toContain('Prioritize regressions and missing tests.')
     })
 })

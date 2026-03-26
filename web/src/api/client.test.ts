@@ -46,6 +46,35 @@ afterEach(() => {
 })
 
 describe('ApiClient session snapshot normalization', () => {
+    it('forwards manager sessionRole through the spawn request body', async () => {
+        const session = createSession('manager-session-1')
+        const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+            const url = String(input)
+            if (url.includes('/api/machines/machine-1/spawn')) {
+                expect(init?.method).toBe('POST')
+                expect(JSON.parse(String(init?.body))).toMatchObject({
+                    directory: '/tmp/project',
+                    agent: 'claude',
+                    sessionRole: 'manager'
+                })
+                return jsonResponse({ type: 'success', session })
+            }
+            throw new Error(`Unexpected fetch: ${url}`)
+        })
+        vi.stubGlobal('fetch', fetchMock)
+
+        const api = new ApiClient('token')
+        const response = await api.spawnSession({
+            machineId: 'machine-1',
+            directory: '/tmp/project',
+            agent: 'claude',
+            sessionRole: 'manager'
+        })
+
+        expect(response).toEqual({ type: 'success', session })
+        expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
     it('normalizes legacy spawn success responses by fetching the authoritative session snapshot', async () => {
         const session = createSession()
         const fetchMock = vi.fn(async (input: RequestInfo | URL) => {

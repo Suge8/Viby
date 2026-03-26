@@ -3,7 +3,7 @@
 `Viby` 是一个本地优先的 AI 编码代理远程控制平台。
 它把 `Claude Code` 和 `Codex` 收到同一套工作流里：会话始终跑在你的机器上，Web / PWA 负责远程查看、发消息、审批权限、浏览文件和打开终端；`desktop/` 则提供一个原生常驻壳来托管 hub。
 
-最后检查：`2026-03-25`
+最后检查：`2026-03-27`
 
 ## 先看哪里
 
@@ -24,6 +24,7 @@
 - **会话配置可持久恢复**：session 的 `permission mode` / `collaboration mode` 已落到 Hub SQLite，不再只挂在内存 keepalive 上；重启 hub、重开终端或 runner 接管后，恢复链会继续带回这组配置。
 - **恢复语义同步闭环**：`POST /api/sessions/:id/resume` 现在只会在“旧 agent thread 已重新接回”后返回成功；Hub 不再先看 keepalive 活跃就抢跑判定，Codex remote 也不再保留“启动先假成功、首轮再偷偷补 resume”的分叉。
 - **会话提交链单一**：`spawn / resume / send / abort / switch / archive / close / unarchive / live config` 这些会改变会话事实的操作，都会由 Hub 返回 authoritative `session` snapshot；Web 直接写回 detail + list cache，不再依赖 `invalidate + refetch` 补偿。
+- **manager teams 基线已冻住**：新建会话支持 `普通会话 / 经理会话`；`sessionRole` 只沿一条 typed create chain 传递，manager session 的 durable project 会在 `/cli/sessions` 返回前完成 bootstrap，并把 `teamContext` 一起带回 Web / CLI。
 - **显式恢复更稳**：inactive 会话只会在用户显式发送消息或上传附件时进入恢复链；文本发送命中的 `inactive + empty transcript` 会 fresh-start 同一个 hub session，已有 transcript 的 inactive session 继续 strict resume；`archived` 会先自动恢复回可继续状态，再沿同一条发送链继续，页面重连不会偷偷续跑。
 - **删除清理单点收口**：删除会话后的 detail cache、list summary 和 message window 统一走同一条 client-state cleanup helper，不再在 mutation、realtime 和视图层散写第二套清理逻辑。
 - **错误提示更克制**：Web 用户态错误 surface 已统一收口，不再把 `grpc / rpc / transport / HTTP` 这类底层术语直接暴露给普通用户。
@@ -32,7 +33,7 @@
 - **归档边界更硬**：`archived` 只会被显式 `unarchive` 或 authoritative/full session snapshot 拉回；迟到的 keepalive 或 `active-only` realtime patch 不会再把归档会话打回“待输入”。
 - **运行中列表更稳**：会话卡片在处理中只更新内容，不会因为中途权限/工具/控制面事件反复换位；只有进入或离开运行态时才会重排。
 - **远程创建会话**：Hub 启动后会自动把当前机器接入，Web 端可直接发起新会话。
-- **新建会话更顺手**：启动设置会记住上次选择的代理、模型、思考强度、会话类型和 YOLO；目录输入保持单一事实源，项目选择器只负责回填最近路径、已知项目和远端目录浏览结果。
+- **新建会话更顺手**：启动设置会记住上次选择的代理、会话角色、模型、思考强度、会话类型和 YOLO；目录输入保持单一事实源，项目选择器只负责回填最近路径、已知项目和远端目录浏览结果。
 - **按页加载**：Web 把聊天、新建会话、设置、文件、终端拆成独立切块，默认首屏只拉 sessions 壳层。
 - **进入态单一**：PWA 进入阶段只保留 `index.html` boot shell 这一层可见占位；登录页懒加载、auth refresh 和 route preload 不再各自再冒第二层阻塞页。
 - **入口继续变轻**：`ApiClient` 的非首屏能力、`message-window-store` 和当前 locale 词典都已从主入口收口到按需或 boot-preload 路径，`web` 当前主 `index` 已稳定在约 `428.25 kB`，`new/settings` 低频链路也已移除 `motion` runtime。
@@ -65,9 +66,13 @@ viby hub
 首次启动后，`Viby` 会把访问令牌写入 `~/.viby/settings.toml`。
 终端会打印访问地址和二维码，手机打开后即可登录。
 
-当前 SQLite schema 版本为 `8`。
-当前构建会在启动时自动执行 **`v7 -> v8`** 升级，把 `sessions` 表补齐
-`permission_mode / collaboration_mode` 两个 durable config 列。
+当前 SQLite schema 版本为 `10`。
+当前构建会在启动时自动执行 **`v7 -> v10`**、**`v8 -> v10`**、**`v9 -> v10`** 升级：
+
+- 补齐 `sessions.permission_mode / collaboration_mode / next_message_seq`
+- 新增 `team_projects / team_members / team_tasks / team_events`
+- shared read model 现在包含 `Session.teamContext / SessionSummary.team`
+
 更老的 schema 仍然不在自动迁移范围内；升级前依旧建议先备份 `~/.viby/viby.db`。
 
 如果要让手机通过局域网或 Tailscale 直连这台电脑上的 hub，可把

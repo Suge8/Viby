@@ -1,6 +1,6 @@
 import { logger } from '@/ui/logger';
 import { loop } from '@/claude/loop';
-import { AgentState, ClaudeSessionModelReasoningEffort, SessionModel } from '@/api/types';
+import { AgentState, ClaudeSessionModelReasoningEffort, SessionModel, TeamSessionSpawnRole } from '@/api/types';
 import { EnhancedMode, PermissionMode } from './loop';
 import { MessageQueue2 } from '@/utils/MessageQueue2';
 import { hashObject } from '@/utils/deterministicJson';
@@ -20,9 +20,11 @@ import { ClaudeReasoningEffortSchema } from '@viby/protocol/schemas';
 import { formatMessageWithAttachments } from '@/utils/attachmentFormatter';
 import { normalizeClaudeSessionModel } from './model';
 import { getInvokedCwd } from '@/utils/invokedCwd';
+import { mergePromptSegments, resolveTeamRolePromptContract } from '@/agent/teamPromptContract';
 
 export interface StartOptions {
     vibySessionId?: string
+    sessionRole?: TeamSessionSpawnRole
     model?: string
     modelReasoningEffort?: ClaudeSessionModelReasoningEffort
     permissionMode?: PermissionMode
@@ -31,6 +33,59 @@ export interface StartOptions {
     claudeEnvVars?: Record<string, string>
     claudeArgs?: string[]
     startedBy?: 'runner' | 'terminal'
+}
+
+type StickyStringMessageMetaKey =
+    | 'customSystemPrompt'
+    | 'fallbackModel'
+    | 'appendSystemPrompt'
+
+type StickyListMessageMetaKey =
+    | 'allowedTools'
+    | 'disallowedTools'
+
+function hasMessageMetaOverride(meta: Record<string, unknown> | null | undefined, key: string): boolean {
+    return Boolean(meta) && Object.prototype.hasOwnProperty.call(meta, key)
+}
+
+function readOptionalString(value: unknown): string | undefined {
+    return (value as string | null | undefined) || undefined
+}
+
+function readOptionalStringList(value: unknown): string[] | undefined {
+    return (value as string[] | null | undefined) || undefined
+}
+
+function formatOverridePresence(value: unknown, emptyLabel: string): string {
+    return value ? 'set' : emptyLabel
+}
+
+function formatOptionalStringValue(value: string | undefined, emptyLabel: string): string {
+    return value || emptyLabel
+}
+
+function formatOptionalStringListValue(value: string[] | undefined, emptyLabel: string): string {
+    return value ? value.join(', ') : emptyLabel
+}
+
+function resolveStickyOverride<TValue>(options: {
+    meta: Record<string, unknown> | null | undefined
+    key: StickyStringMessageMetaKey | StickyListMessageMetaKey
+    currentValue: TValue | undefined
+    updatedLabel: string
+    missingLabel: string
+    read: (value: unknown) => TValue | undefined
+    formatUpdatedValue: (value: TValue | undefined) => string
+    formatCurrentValue: (value: TValue | undefined) => string
+}): TValue | undefined {
+    if (hasMessageMetaOverride(options.meta, options.key)) {
+        const nextValue = options.read(options.meta?.[options.key])
+        logger.debug(`[loop] ${options.updatedLabel} updated from user message: ${options.formatUpdatedValue(nextValue)}`)
+        return nextValue
+    }
+
+    logger.debug(`[loop] User message received with no ${options.missingLabel} override, using current: ${options.formatCurrentValue(options.currentValue)}`)
+    return options.currentValue
 }
 
 export async function runClaude(options: StartOptions = {}): Promise<void> {
@@ -57,11 +112,13 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         startedBy,
         workingDirectory,
         agentState: initialState,
+        sessionRole: options.sessionRole,
         permissionMode: options.permissionMode ?? 'default',
         model: initialModel ?? undefined,
         modelReasoningEffort: options.modelReasoningEffort
     });
     logger.debug(`Session created: ${sessionInfo.id}`);
+    const teamRolePromptContract = resolveTeamRolePromptContract(sessionInfo.teamContext);
 
     // Extract SDK metadata in background and update session when ready
     extractSDKMetadataAsync(async (sdkMetadata) => {
@@ -160,7 +217,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
     let currentModelReasoningEffort: ClaudeSessionModelReasoningEffort = options.modelReasoningEffort ?? null;
     let currentFallbackModel: string | undefined = undefined; // Track current fallback model
     let currentCustomSystemPrompt: string | undefined = undefined; // Track current custom system prompt
-    let currentAppendSystemPrompt: string | undefined = undefined; // Track current append system prompt
+    let currentAppendSystemPromptOverride: string | undefined = undefined; // Track current append system prompt override
     let currentAllowedTools: string[] | undefined = undefined; // Track current allowed tools
     let currentDisallowedTools: string[] | undefined = undefined; // Track current disallowed tools
 
@@ -178,6 +235,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         );
     };
     session.onUserMessage((message) => {
+        const messageMeta = (message.meta ?? null) as Record<string, unknown> | null;
         const sessionPermissionMode = currentSessionRef.current?.getPermissionMode();
         if (sessionPermissionMode && isPermissionModeAllowedForFlavor(sessionPermissionMode, 'claude')) {
             currentPermissionMode = sessionPermissionMode as PermissionMode;
@@ -198,54 +256,70 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         );
 
         // Resolve custom system prompt - use message.meta.customSystemPrompt if provided, otherwise use current
-        let messageCustomSystemPrompt = currentCustomSystemPrompt;
-        if (message.meta?.hasOwnProperty('customSystemPrompt')) {
-            messageCustomSystemPrompt = message.meta.customSystemPrompt || undefined; // null becomes undefined
-            currentCustomSystemPrompt = messageCustomSystemPrompt;
-            logger.debug(`[loop] Custom system prompt updated from user message: ${messageCustomSystemPrompt ? 'set' : 'reset to none'}`);
-        } else {
-            logger.debug(`[loop] User message received with no custom system prompt override, using current: ${currentCustomSystemPrompt ? 'set' : 'none'}`);
-        }
+        const messageCustomSystemPrompt = resolveStickyOverride({
+            meta: messageMeta,
+            key: 'customSystemPrompt',
+            currentValue: currentCustomSystemPrompt,
+            updatedLabel: 'Custom system prompt',
+            missingLabel: 'custom system prompt',
+            read: readOptionalString,
+            formatUpdatedValue: (value) => formatOverridePresence(value, 'reset to none'),
+            formatCurrentValue: (value) => formatOverridePresence(value, 'none')
+        });
+        currentCustomSystemPrompt = messageCustomSystemPrompt;
 
         // Resolve fallback model - use message.meta.fallbackModel if provided, otherwise use current fallback model
-        let messageFallbackModel = currentFallbackModel;
-        if (message.meta?.hasOwnProperty('fallbackModel')) {
-            messageFallbackModel = message.meta.fallbackModel || undefined; // null becomes undefined
-            currentFallbackModel = messageFallbackModel;
-            logger.debug(`[loop] Fallback model updated from user message: ${messageFallbackModel || 'reset to none'}`);
-        } else {
-            logger.debug(`[loop] User message received with no fallback model override, using current: ${currentFallbackModel || 'none'}`);
-        }
+        const messageFallbackModel = resolveStickyOverride({
+            meta: messageMeta,
+            key: 'fallbackModel',
+            currentValue: currentFallbackModel,
+            updatedLabel: 'Fallback model',
+            missingLabel: 'fallback model',
+            read: readOptionalString,
+            formatUpdatedValue: (value) => formatOptionalStringValue(value, 'reset to none'),
+            formatCurrentValue: (value) => formatOptionalStringValue(value, 'none')
+        });
+        currentFallbackModel = messageFallbackModel;
 
         // Resolve append system prompt - use message.meta.appendSystemPrompt if provided, otherwise use current
-        let messageAppendSystemPrompt = currentAppendSystemPrompt;
-        if (message.meta?.hasOwnProperty('appendSystemPrompt')) {
-            messageAppendSystemPrompt = message.meta.appendSystemPrompt || undefined; // null becomes undefined
-            currentAppendSystemPrompt = messageAppendSystemPrompt;
-            logger.debug(`[loop] Append system prompt updated from user message: ${messageAppendSystemPrompt ? 'set' : 'reset to none'}`);
-        } else {
-            logger.debug(`[loop] User message received with no append system prompt override, using current: ${currentAppendSystemPrompt ? 'set' : 'none'}`);
-        }
+        const messageAppendSystemPromptOverride = resolveStickyOverride({
+            meta: messageMeta,
+            key: 'appendSystemPrompt',
+            currentValue: currentAppendSystemPromptOverride,
+            updatedLabel: 'Append system prompt override',
+            missingLabel: 'append system prompt',
+            read: readOptionalString,
+            formatUpdatedValue: (value) => formatOverridePresence(value, 'reset to none'),
+            formatCurrentValue: (value) => formatOverridePresence(value, 'none')
+        });
+        currentAppendSystemPromptOverride = messageAppendSystemPromptOverride;
+        const messageAppendSystemPrompt = mergePromptSegments(teamRolePromptContract, messageAppendSystemPromptOverride);
 
         // Resolve allowed tools - use message.meta.allowedTools if provided, otherwise use current
-        let messageAllowedTools = currentAllowedTools;
-        if (message.meta?.hasOwnProperty('allowedTools')) {
-            messageAllowedTools = message.meta.allowedTools || undefined; // null becomes undefined
-            currentAllowedTools = messageAllowedTools;
-            logger.debug(`[loop] Allowed tools updated from user message: ${messageAllowedTools ? messageAllowedTools.join(', ') : 'reset to none'}`);
-        } else {
-            logger.debug(`[loop] User message received with no allowed tools override, using current: ${currentAllowedTools ? currentAllowedTools.join(', ') : 'none'}`);
-        }
+        const messageAllowedTools = resolveStickyOverride({
+            meta: messageMeta,
+            key: 'allowedTools',
+            currentValue: currentAllowedTools,
+            updatedLabel: 'Allowed tools',
+            missingLabel: 'allowed tools',
+            read: readOptionalStringList,
+            formatUpdatedValue: (value) => formatOptionalStringListValue(value, 'reset to none'),
+            formatCurrentValue: (value) => formatOptionalStringListValue(value, 'none')
+        });
+        currentAllowedTools = messageAllowedTools;
 
         // Resolve disallowed tools - use message.meta.disallowedTools if provided, otherwise use current
-        let messageDisallowedTools = currentDisallowedTools;
-        if (message.meta?.hasOwnProperty('disallowedTools')) {
-            messageDisallowedTools = message.meta.disallowedTools || undefined; // null becomes undefined
-            currentDisallowedTools = messageDisallowedTools;
-            logger.debug(`[loop] Disallowed tools updated from user message: ${messageDisallowedTools ? messageDisallowedTools.join(', ') : 'reset to none'}`);
-        } else {
-            logger.debug(`[loop] User message received with no disallowed tools override, using current: ${currentDisallowedTools ? currentDisallowedTools.join(', ') : 'none'}`);
-        }
+        const messageDisallowedTools = resolveStickyOverride({
+            meta: messageMeta,
+            key: 'disallowedTools',
+            currentValue: currentDisallowedTools,
+            updatedLabel: 'Disallowed tools',
+            missingLabel: 'disallowed tools',
+            read: readOptionalStringList,
+            formatUpdatedValue: (value) => formatOptionalStringListValue(value, 'reset to none'),
+            formatCurrentValue: (value) => formatOptionalStringListValue(value, 'none')
+        });
+        currentDisallowedTools = messageDisallowedTools;
 
         // Check for special commands before processing
         const specialCommand = parseSpecialCommand(message.content.text);

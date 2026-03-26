@@ -5,7 +5,8 @@ import type {
     ModelReasoningEffort,
     PermissionMode,
     Session,
-    SpawnResponse
+    SpawnResponse,
+    TeamSessionSpawnRole
 } from '@/types/api'
 import { appendRealtimeTrace } from '@/lib/realtimeTrace'
 import { writeSessionToQueryCache } from '@/lib/sessionQueryCache'
@@ -19,6 +20,7 @@ type SpawnInput = {
     model?: string
     modelReasoningEffort?: ModelReasoningEffort
     permissionMode?: PermissionMode
+    sessionRole?: TeamSessionSpawnRole
     sessionType?: 'simple' | 'worktree'
     worktreeName?: string
     collaborationMode?: CodexCollaborationMode
@@ -53,6 +55,7 @@ export function useSpawnSession(api: ApiClient | null): {
                         sessionId: result.session.id,
                         machineId: input.machineId,
                         agent: input.agent ?? 'claude',
+                        sessionRole: input.sessionRole ?? 'normal',
                         sessionType: input.sessionType ?? 'simple'
                     }
                 })

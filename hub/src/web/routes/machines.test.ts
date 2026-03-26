@@ -63,6 +63,7 @@ describe('machines routes', () => {
                 model: 'gpt-5.4',
                 modelReasoningEffort: 'high',
                 permissionMode: 'safe-yolo',
+                sessionRole: 'manager',
                 collaborationMode: 'plan',
                 sessionType: 'simple'
             })
@@ -77,6 +78,7 @@ describe('machines routes', () => {
             model: 'gpt-5.4',
             modelReasoningEffort: 'high',
             permissionMode: 'safe-yolo',
+            sessionRole: 'manager',
             collaborationMode: 'plan',
             sessionType: 'simple',
             worktreeName: undefined

@@ -1,4 +1,6 @@
 import axios from 'axios'
+import type { AxiosResponse } from 'axios'
+import type { ZodType } from 'zod'
 import type { AgentState, CreateMachineResponse, CreateSessionResponse, RunnerState, Machine, MachineMetadata, Metadata, Session } from '@/api/types'
 import { AgentStateSchema, CreateMachineResponseSchema, CreateSessionResponseSchema, RunnerStateSchema, MachineMetadataSchema, MetadataSchema } from '@/api/types'
 import { configuration } from '@/configuration'
@@ -9,7 +11,8 @@ import { ApiSessionClient } from './apiSession'
 import type {
     SessionCollaborationMode,
     SessionModelReasoningEffort,
-    SessionPermissionMode
+    SessionPermissionMode,
+    TeamSessionSpawnRole
 } from './types'
 
 export class ApiClient {
@@ -19,6 +22,61 @@ export class ApiClient {
 
     private constructor(private readonly token: string) { }
 
+    private parseApiPayload<T>(response: AxiosResponse, schema: ZodType<T>, errorMessage: string): T {
+        const parsed = schema.safeParse(response.data)
+        if (!parsed.success) {
+            throw apiValidationError(errorMessage, response)
+        }
+        return parsed.data
+    }
+
+    private parseNullable<T>(value: unknown, schema: ZodType<T>): T | null {
+        if (value == null) {
+            return null
+        }
+
+        const parsed = schema.safeParse(value)
+        return parsed.success ? parsed.data : null
+    }
+
+    private toSessionSnapshot(raw: CreateSessionResponse['session']): Session {
+        return {
+            id: raw.id,
+            seq: raw.seq,
+            createdAt: raw.createdAt,
+            updatedAt: raw.updatedAt,
+            active: raw.active,
+            activeAt: raw.activeAt,
+            metadata: this.parseNullable(raw.metadata, MetadataSchema),
+            metadataVersion: raw.metadataVersion,
+            agentState: this.parseNullable(raw.agentState, AgentStateSchema),
+            agentStateVersion: raw.agentStateVersion,
+            thinking: raw.thinking,
+            thinkingAt: raw.thinkingAt,
+            todos: raw.todos,
+            teamContext: raw.teamContext,
+            model: raw.model,
+            modelReasoningEffort: raw.modelReasoningEffort,
+            permissionMode: raw.permissionMode,
+            collaborationMode: raw.collaborationMode
+        }
+    }
+
+    private toMachineSnapshot(raw: CreateMachineResponse['machine']): Machine {
+        return {
+            id: raw.id,
+            seq: raw.seq,
+            createdAt: raw.createdAt,
+            updatedAt: raw.updatedAt,
+            active: raw.active,
+            activeAt: raw.activeAt,
+            metadata: this.parseNullable(raw.metadata, MachineMetadataSchema),
+            metadataVersion: raw.metadataVersion,
+            runnerState: this.parseNullable(raw.runnerState, RunnerStateSchema),
+            runnerStateVersion: raw.runnerStateVersion
+        }
+    }
+
     async getOrCreateSession(opts: {
         tag: string
         sessionId?: string
@@ -27,6 +85,7 @@ export class ApiClient {
         model?: string
         modelReasoningEffort?: SessionModelReasoningEffort
         permissionMode?: SessionPermissionMode
+        sessionRole?: TeamSessionSpawnRole
         collaborationMode?: SessionCollaborationMode
     }): Promise<Session> {
         const response = await axios.post<CreateSessionResponse>(
@@ -39,6 +98,7 @@ export class ApiClient {
                 model: opts.model,
                 modelReasoningEffort: opts.modelReasoningEffort,
                 permissionMode: opts.permissionMode,
+                sessionRole: opts.sessionRole,
                 collaborationMode: opts.collaborationMode
             },
             {
@@ -50,44 +110,12 @@ export class ApiClient {
             }
         )
 
-        const parsed = CreateSessionResponseSchema.safeParse(response.data)
-        if (!parsed.success) {
-            throw apiValidationError('Invalid /cli/sessions response', response)
-        }
-
-        const raw = parsed.data.session
-
-        const metadata = (() => {
-            if (raw.metadata == null) return null
-            const parsedMetadata = MetadataSchema.safeParse(raw.metadata)
-            return parsedMetadata.success ? parsedMetadata.data : null
-        })()
-
-        const agentState = (() => {
-            if (raw.agentState == null) return null
-            const parsedAgentState = AgentStateSchema.safeParse(raw.agentState)
-            return parsedAgentState.success ? parsedAgentState.data : null
-        })()
-
-        return {
-            id: raw.id,
-            seq: raw.seq,
-            createdAt: raw.createdAt,
-            updatedAt: raw.updatedAt,
-            active: raw.active,
-            activeAt: raw.activeAt,
-            metadata,
-            metadataVersion: raw.metadataVersion,
-            agentState,
-            agentStateVersion: raw.agentStateVersion,
-            thinking: raw.thinking,
-            thinkingAt: raw.thinkingAt,
-            todos: raw.todos,
-            model: raw.model,
-            modelReasoningEffort: raw.modelReasoningEffort,
-            permissionMode: raw.permissionMode,
-            collaborationMode: raw.collaborationMode
-        }
+        const parsed = this.parseApiPayload(
+            response,
+            CreateSessionResponseSchema,
+            'Invalid /cli/sessions response'
+        )
+        return this.toSessionSnapshot(parsed.session)
     }
 
     async getOrCreateMachine(opts: {
@@ -111,37 +139,12 @@ export class ApiClient {
             }
         )
 
-        const parsed = CreateMachineResponseSchema.safeParse(response.data)
-        if (!parsed.success) {
-            throw apiValidationError('Invalid /cli/machines response', response)
-        }
-
-        const raw = parsed.data.machine
-
-        const metadata = (() => {
-            if (raw.metadata == null) return null
-            const parsedMetadata = MachineMetadataSchema.safeParse(raw.metadata)
-            return parsedMetadata.success ? parsedMetadata.data : null
-        })()
-
-        const runnerState = (() => {
-            if (raw.runnerState == null) return null
-            const parsedRunnerState = RunnerStateSchema.safeParse(raw.runnerState)
-            return parsedRunnerState.success ? parsedRunnerState.data : null
-        })()
-
-        return {
-            id: raw.id,
-            seq: raw.seq,
-            createdAt: raw.createdAt,
-            updatedAt: raw.updatedAt,
-            active: raw.active,
-            activeAt: raw.activeAt,
-            metadata,
-            metadataVersion: raw.metadataVersion,
-            runnerState,
-            runnerStateVersion: raw.runnerStateVersion
-        }
+        const parsed = this.parseApiPayload(
+            response,
+            CreateMachineResponseSchema,
+            'Invalid /cli/machines response'
+        )
+        return this.toMachineSnapshot(parsed.machine)
     }
 
     sessionSyncClient(session: Session): ApiSessionClient {

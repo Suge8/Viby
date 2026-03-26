@@ -6,27 +6,41 @@ import { MachineStore } from './machineStore'
 import { MessageStore } from './messageStore'
 import { PushStore } from './pushStore'
 import { SessionStore } from './sessionStore'
+import { TeamStore } from './teamStore'
 
 export type {
     StoredMachine,
     StoredMessage,
     StoredPushSubscription,
+    StoredSessionTeamContext,
     StoredSession,
+    StoredTeamEvent,
+    StoredTeamMember,
+    StoredTeamProject,
+    StoredTeamTask,
     VersionedUpdateResult
 } from './types'
 export { MachineStore } from './machineStore'
 export { MessageStore } from './messageStore'
 export { PushStore } from './pushStore'
 export { SessionStore } from './sessionStore'
+export { TeamStore } from './teamStore'
 
 const IN_MEMORY_DATABASE_PREFIX = 'file::memory:'
-const SCHEMA_VERSION = 9
-const AUTO_MIGRATABLE_SCHEMA_VERSIONS = [7, 8] as const
-const REQUIRED_TABLES = [
+const SCHEMA_VERSION = 10
+const AUTO_MIGRATABLE_SCHEMA_VERSIONS = [7, 8, 9] as const
+const LEGACY_REQUIRED_TABLES = [
     'sessions',
     'machines',
     'messages',
     'push_subscriptions'
+] as const
+const REQUIRED_TABLES = [
+    ...LEGACY_REQUIRED_TABLES,
+    'team_projects',
+    'team_members',
+    'team_tasks',
+    'team_events'
 ] as const
 const REQUIRED_SESSION_COLUMNS = [
     'permission_mode',
@@ -53,6 +67,7 @@ export class Store {
     readonly machines: MachineStore
     readonly messages: MessageStore
     readonly push: PushStore
+    readonly teams: TeamStore
 
     constructor(dbPath: string) {
         this.dbPath = dbPath
@@ -95,6 +110,7 @@ export class Store {
         this.machines = new MachineStore(this.db)
         this.messages = new MessageStore(this.db)
         this.push = new PushStore(this.db)
+        this.teams = new TeamStore(this.db)
     }
 
     private initSchema(): void {
@@ -177,6 +193,92 @@ export class Store {
                 created_at INTEGER NOT NULL,
                 UNIQUE(endpoint)
             );
+
+            CREATE TABLE IF NOT EXISTS team_projects (
+                id TEXT PRIMARY KEY,
+                manager_session_id TEXT NOT NULL,
+                machine_id TEXT,
+                root_directory TEXT,
+                title TEXT NOT NULL,
+                goal TEXT,
+                status TEXT NOT NULL,
+                max_active_members INTEGER NOT NULL DEFAULT 6,
+                default_isolation_mode TEXT NOT NULL DEFAULT 'hybrid',
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                delivered_at INTEGER,
+                archived_at INTEGER,
+                FOREIGN KEY (manager_session_id) REFERENCES sessions(id)
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_team_projects_manager_session ON team_projects(manager_session_id);
+
+            CREATE TABLE IF NOT EXISTS team_members (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                manager_session_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                provider_flavor TEXT,
+                model TEXT,
+                reasoning_effort TEXT,
+                isolation_mode TEXT NOT NULL,
+                workspace_root TEXT,
+                control_owner TEXT NOT NULL DEFAULT 'manager',
+                membership_state TEXT NOT NULL DEFAULT 'active',
+                revision INTEGER NOT NULL DEFAULT 1,
+                supersedes_member_id TEXT,
+                superseded_by_member_id TEXT,
+                spawned_for_task_id TEXT,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                archived_at INTEGER,
+                removed_at INTEGER,
+                FOREIGN KEY (project_id) REFERENCES team_projects(id) ON DELETE CASCADE,
+                FOREIGN KEY (session_id) REFERENCES sessions(id)
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_team_members_session ON team_members(session_id);
+            CREATE INDEX IF NOT EXISTS idx_team_members_project ON team_members(project_id);
+            CREATE INDEX IF NOT EXISTS idx_team_members_manager ON team_members(manager_session_id);
+
+            CREATE TABLE IF NOT EXISTS team_tasks (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                parent_task_id TEXT,
+                title TEXT NOT NULL,
+                description TEXT,
+                acceptance_criteria TEXT,
+                status TEXT NOT NULL,
+                assignee_member_id TEXT,
+                reviewer_member_id TEXT,
+                verifier_member_id TEXT,
+                priority TEXT,
+                depends_on TEXT,
+                retry_count INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                completed_at INTEGER,
+                FOREIGN KEY (project_id) REFERENCES team_projects(id) ON DELETE CASCADE,
+                FOREIGN KEY (parent_task_id) REFERENCES team_tasks(id),
+                FOREIGN KEY (assignee_member_id) REFERENCES team_members(id),
+                FOREIGN KEY (reviewer_member_id) REFERENCES team_members(id),
+                FOREIGN KEY (verifier_member_id) REFERENCES team_members(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_team_tasks_project ON team_tasks(project_id);
+            CREATE INDEX IF NOT EXISTS idx_team_tasks_status ON team_tasks(project_id, status);
+
+            CREATE TABLE IF NOT EXISTS team_events (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                actor_type TEXT NOT NULL,
+                actor_id TEXT,
+                target_type TEXT NOT NULL,
+                target_id TEXT,
+                payload TEXT,
+                created_at INTEGER NOT NULL,
+                FOREIGN KEY (project_id) REFERENCES team_projects(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_team_events_project_created ON team_events(project_id, created_at);
         `)
     }
 
@@ -186,11 +288,11 @@ export class Store {
     }
 
     private migrateSchema(currentVersion: number): void {
-        if (!AUTO_MIGRATABLE_SCHEMA_VERSIONS.includes(currentVersion as 7 | 8)) {
+        if (!AUTO_MIGRATABLE_SCHEMA_VERSIONS.includes(currentVersion as 7 | 8 | 9)) {
             throw this.buildSchemaMismatchError(currentVersion)
         }
 
-        this.assertRequiredTablesPresent()
+        this.assertRequiredTablesPresent(LEGACY_REQUIRED_TABLES)
         this.db.exec('BEGIN IMMEDIATE')
 
         try {
@@ -198,6 +300,7 @@ export class Store {
             if (missingColumns.includes('next_message_seq') || currentVersion < SCHEMA_VERSION) {
                 this.backfillSessionMessageSeqCounters()
             }
+            this.createSchema()
             this.setUserVersion(SCHEMA_VERSION)
             this.db.exec('COMMIT')
         } catch (error) {
@@ -217,13 +320,13 @@ export class Store {
         return Boolean(row?.name)
     }
 
-    private assertRequiredTablesPresent(): void {
-        const placeholders = REQUIRED_TABLES.map(() => '?').join(', ')
+    private assertRequiredTablesPresent(requiredTables: readonly string[] = REQUIRED_TABLES): void {
+        const placeholders = requiredTables.map(() => '?').join(', ')
         const rows = this.db.prepare(
             `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (${placeholders})`
-        ).all(...REQUIRED_TABLES) as Array<{ name: string }>
+        ).all(...requiredTables) as Array<{ name: string }>
         const existing = new Set(rows.map((row) => row.name))
-        const missing = REQUIRED_TABLES.filter((table) => !existing.has(table))
+        const missing = requiredTables.filter((table) => !existing.has(table))
 
         if (missing.length > 0) {
             throw new Error(
@@ -283,7 +386,7 @@ export class Store {
         return new Error(
             `SQLite schema version mismatch for ${location}. ` +
             `Expected ${SCHEMA_VERSION}, found ${currentVersion}. ` +
-            `This build only runs the 7 -> ${SCHEMA_VERSION} and 8 -> ${SCHEMA_VERSION} migrations automatically. ` +
+            `This build only runs the 7 -> ${SCHEMA_VERSION}, 8 -> ${SCHEMA_VERSION}, and 9 -> ${SCHEMA_VERSION} migrations automatically. ` +
             SCHEMA_REBUILD_GUIDANCE
         )
     }

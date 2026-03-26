@@ -59,17 +59,32 @@ function toStoredSession(row: DbSessionRow): StoredSession {
     }
 }
 
+export type CreateStoredSessionInput = {
+    tag: string
+    metadata: unknown
+    agentState?: unknown
+    model?: string
+    modelReasoningEffort?: ModelReasoningEffort
+    permissionMode?: PermissionMode
+    collaborationMode?: CodexCollaborationMode
+    sessionId?: string
+}
+
 export function getOrCreateSession(
     db: Database,
-    tag: string,
-    metadata: unknown,
-    agentState: unknown,
-    model?: string,
-    modelReasoningEffort?: ModelReasoningEffort,
-    permissionMode?: PermissionMode,
-    collaborationMode?: CodexCollaborationMode,
-    sessionId?: string
+    input: CreateStoredSessionInput
 ): StoredSession {
+    const {
+        tag,
+        metadata,
+        agentState,
+        model,
+        modelReasoningEffort,
+        permissionMode,
+        collaborationMode,
+        sessionId
+    } = input
+
     if (sessionId) {
         const existingById = getSession(db, sessionId)
         if (existingById) {

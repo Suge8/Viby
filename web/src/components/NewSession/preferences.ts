@@ -1,5 +1,5 @@
 import { MODEL_OPTIONS, REASONING_EFFORT_OPTIONS } from '@/lib/sessionConfigOptions'
-import type { AgentType, ModelReasoningEffortSelection, SessionType } from './types'
+import type { AgentType, ModelReasoningEffortSelection, SessionRole, SessionType } from './types'
 
 export type AgentLaunchPreferences = {
     model: string
@@ -8,6 +8,7 @@ export type AgentLaunchPreferences = {
 
 export type NewSessionPreferences = {
     agent: AgentType
+    sessionRole: SessionRole
     sessionType: SessionType
     yoloMode: boolean
     agentSettings: Partial<Record<AgentType, AgentLaunchPreferences>>
@@ -16,11 +17,13 @@ export type NewSessionPreferences = {
 const PREFERENCES_STORAGE_KEY = 'viby:newSession:preferences'
 const DEFAULT_NEW_SESSION_PREFERENCES: NewSessionPreferences = {
     agent: 'claude',
+    sessionRole: 'normal',
     sessionType: 'simple',
     yoloMode: false,
     agentSettings: {},
 }
 const VALID_AGENTS: AgentType[] = ['claude', 'codex', 'cursor', 'gemini', 'opencode']
+const VALID_SESSION_ROLES: SessionRole[] = ['normal', 'manager']
 const VALID_SESSION_TYPES: SessionType[] = ['simple', 'worktree']
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -48,6 +51,14 @@ function normalizeSessionType(sessionType: unknown): SessionType {
     }
 
     return 'simple'
+}
+
+function normalizeSessionRole(sessionRole: unknown): SessionRole {
+    if (typeof sessionRole === 'string' && VALID_SESSION_ROLES.includes(sessionRole as SessionRole)) {
+        return sessionRole as SessionRole
+    }
+
+    return 'normal'
 }
 
 function normalizeModel(agent: AgentType, value: unknown): string {
@@ -118,6 +129,7 @@ export function loadNewSessionPreferences(): NewSessionPreferences {
 
         return {
             agent: normalizeAgent(parsed.agent),
+            sessionRole: normalizeSessionRole(parsed.sessionRole),
             sessionType: normalizeSessionType(parsed.sessionType),
             yoloMode: parsed.yoloMode === true,
             agentSettings: normalizeAgentSettings(parsed.agentSettings),

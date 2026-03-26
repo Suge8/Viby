@@ -3,7 +3,7 @@
 `web/` 是 `Viby` 的 React PWA。
 它负责远程查看会话、发消息、审批权限、浏览文件、打开终端，以及在连接的机器上创建新会话。
 
-最后检查：`2026-03-26`
+最后检查：`2026-03-27`
 
 下面这份 README 分两层：
 
@@ -32,7 +32,8 @@
 - 会话列表状态读模型统一为：生命周期看 `running / closed / archived`，运行中细分看 `thinking + latestActivityKind`，`新回复未看` 只看 `latestCompletedReplyAt`；`updatedAt` 表示稳定列表时间，只用于排序和相对时间，不再拿来猜未读或 `待输入`
 - realtime session patch 除了 `active/thinking`，也必须消费 lifecycle metadata；`archive` 的最终归属只信 `lifecycleState='archived'`，不能靠 Web 本地把 inactive 猜成 `closed`
 - `abort / switch / archive / close / unarchive` 这类会改变 session runtime 或 lifecycle 的 action 统一要求 Hub 直接返回最终 `session` 快照；`useSessionActions.ts` 会直接把快照写回 `session detail + sessions list` cache，`abort` 还会先 optimistic 拉低 `thinking`，不再依赖 `invalidate + refetch` 补偿，避免 UI 先短暂落进错误分区或卡在 `Stopping`
-- `spawn` 也走同一条单次提交链：`POST /api/machines/:id/spawn` 成功后直接返回最终 `session` snapshot，`useSpawnSession.ts` 立刻写回 detail + list cache，不再先回 `sessionId` 再等页面二次拉取
+- `spawn` 也走同一条单次提交链：`POST /api/machines/:id/spawn` 支持 `sessionRole: normal | manager`；成功后直接返回最终 `session` snapshot，`useSpawnSession.ts` 立刻写回 detail + list cache，不再先回 `sessionId` 再等页面二次拉取。manager role 的返回快照已经包含 `/cli/sessions` bootstrap 后的 authoritative `teamContext`
+- `/sessions/new` 现在显式提供 `普通会话 / 经理会话`；`sessionRole` 和 agent / model / reasoning / permission / collaboration 一样只走单一 typed create chain，不在页面本地另造第二套 owner
 - live config 同样只认 authoritative snapshot：permission / collaboration / model / reasoning effort 成功后统一直写缓存，不再保留 `onRefresh` 或 mutation 成功后的额外 invalidation
 - `web/src/api/client.ts` 是 session snapshot 响应归一化的单一边界：如果运行中的 Hub 仍返回旧形状 `sessionId` / `ok:true`，只能在这里补 authoritative `getSession()`；hooks 和 UI 一律只消费最终 `Session`，不要把 mixed response shape 继续往上游扩散
 - `delete` 的 client-state 清理统一走 `removeSessionClientState()`：只保留一条 owner 链负责移除 detail query、summary cache 和 message window
