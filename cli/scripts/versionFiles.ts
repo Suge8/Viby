@@ -1,28 +1,12 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const OPTIONAL_PLATFORM_PACKAGES = [
-    'darwin-arm64',
-    'darwin-x64',
-    'linux-arm64',
-    'linux-x64',
-    'windows-x64'
-] as const;
+import { buildOptionalDependencies } from './npmReleaseConfig';
 
 const SCRIPT_DIR = import.meta.dir;
 const CLI_ROOT = join(SCRIPT_DIR, '..');
 const REPO_ROOT = join(CLI_ROOT, '..');
 const SEMVER_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
-
-function buildCliOptionalDependencies(version: string): Record<string, string> {
-    const optionalDependencies: Record<string, string> = {};
-
-    for (const platformName of OPTIONAL_PLATFORM_PACKAGES) {
-        optionalDependencies[`viby-cli-${platformName}`] = version;
-    }
-
-    return optionalDependencies;
-}
 
 function assertVersionFormat(version: string): void {
     if (!SEMVER_PATTERN.test(version)) {
@@ -58,7 +42,7 @@ function syncCliPackageVersion(version: string): void {
 
     content = replaceFirstVersionField(content, version);
 
-    for (const [packageName] of Object.entries(buildCliOptionalDependencies(version))) {
+    for (const [packageName] of Object.entries(buildOptionalDependencies(version))) {
         content = replaceOptionalDependencyVersion(content, packageName, version);
     }
 

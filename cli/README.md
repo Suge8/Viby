@@ -5,7 +5,7 @@
 
 ## 能做什么
 
-- 由 hub 在内部拉起 `Claude Code`、`Codex`
+- 由 hub 在内部拉起 `Claude Code`、`Codex`，实验 provider `Gemini / Cursor Agent / OpenCode` 也复用同一套内部 runner / bootstrap 边界
 - 把会话注册到 hub，供 Web / PWA 远程查看与控制
 - 提供 MCP bridge，供外部工具接入
 - 提供诊断、认证和 runner 相关能力
@@ -13,13 +13,20 @@
 - 会话 `permission mode` / `collaboration mode` 现在会作为 durable session config 写进 hub store；spawn / resume 都走同一条显式参数链，不再依赖内存 keepalive 当唯一事实源
 - dev 源码态下，runner 安装戳复用判断不能只看 `package.json`；当前实现会优先跟踪 `cli/src/**` 的最新变更时间，缺失源码时间戳时再回退到 CLI 版本号，避免 hub 热更新后继续复用旧 runner
 - Codex remote 会在空闲阶段预热 app-server thread，列表标题默认回退 metadata/path，不再为首轮自动命名额外起桥
+- Codex app-server 生命周期现在归 `CodexSession` 持有；remote launcher 退出时只解绑 UI/notification，不会顺手把 warm app-server 进程杀掉，真正退出 runner 时才统一回收
+- Gemini / OpenCode remote 的 ACP bridge 与 backend 生命周期现在也都收口到各自 `Session` owner；launcher 只负责 turn/UI/abort，不再自持有长生命周期 runtime
+- remote runner 的 `ready` 发射时序现在也收口成单一 contract：只有在本轮 `agentState` 更新排空后才允许发 `ready`，避免 Web/PWA 先收到 ready toast、会话列表仍停在旧的 `processing / awaiting input` 状态
 - 这类 Codex remote thread 预热只属于内部 runtime 准备，不应推进会话 `thinking`、也不应把内部 warmup 事件写进用户可见 transcript
-- Claude / Codex remote 的 live model / reasoning effort 切换都只影响下一轮 turn；当前 in-flight turn 不会被追溯改写
+- Claude / Codex / Gemini remote 的 live model 切换都只影响下一轮 turn；reasoning effort 继续只对 Claude / Codex 暴露；当前 in-flight turn 不会被追溯改写
+- Gemini remote 在切回 terminal default 时，会把已恢复的 ACP session 显式切回 CLI `auto` 模式，而不是沿用上一个显式模型；上游容量错误如 `MODEL_CAPACITY_EXHAUSTED` 仍属于 gemini-cli / provider 侧问题，不应和 Viby 的会话内 live config 提交链混为同一个 bug
 - runner-managed Codex resume 启动期必须同步重新接回旧 thread；不会再先报“恢复成功”再把真正 resume 偷偷延后到首轮 turn
 - Codex resume 失败会直接报错，不会再 silent fallback 成一个新的 thread 假装恢复成功
 - `ApiSessionClient` 首次连上 hub 时会先用已恢复的 session snapshot 作为 keepalive 种子；后续 reconnect 继续重放最近一次 live keepalive snapshot，不会再先把会话硬回写成 `thinking=false`
+- agent session keepalive 现在走“状态变化立刻发 + idle 降频心跳”单一路径；不再对所有 session 固定 2 秒打点
 - Codex thread binding 只走 `AgentSessionBase.onSessionFound()`；`thread started / resumed / compacted` 统一复用同一条 durable `codexSessionId` 更新链；相同 thread id 的重复上报只去重 metadata 同步，不会吞掉下游 session-found 回调
+- CLI `updateMetadata()` 现在只允许写非 lifecycle 字段；`lifecycleState / lifecycleStateSince / archivedBy / archiveReason` 在类型层、CLI runtime 和 Hub 三层都会被拦掉，避免新代码重新引入非法 write
 - Codex remote assistant 正文 delta 现在会走专用 transient stream 通道推到 hub/web；reasoning 继续 final-only，不会把 chunk 级输出写进 durable transcript
+- Claude / Codex / Gemini transcript scanner 现在都是 watcher-first；周期扫描只保留低频 fallback 来发现新文件或兜 watcher 漏事件
 
 ## Provider Support Matrix
 
@@ -45,6 +52,18 @@
   - `src/agent/acpAgentInterop.ts`
 
 ## 常用命令
+
+如果你是从 npm 直接使用当前 CLI：
+
+```bash
+npx @singyy/viby hub
+
+# 或者全局安装后使用固定命令名
+npm install -g @singyy/viby
+viby hub
+```
+
+对外 npm 主包名是 `@singyy/viby`，安装后的二进制命令名仍然保持 `viby`。
 
 ```bash
 viby hub               # 启动 hub
@@ -82,12 +101,12 @@ VIBY_HOME="$(mktemp -d /tmp/viby-dev.XXXXXX)" bun test
 `Viby` 默认把状态写入 `~/.viby/`：
 
 - `settings.toml`：令牌、机器 ID、基础设置
-- `viby.db`：hub 的 SQLite 持久化；当前 schema version 为 `8`
+- `viby.db`：hub 的 SQLite 持久化；当前 schema version 为 `9`
 - `runner.state.json`：后台 runner 状态
 - `logs/`：日志文件
 
-当前构建会在 hub 启动时自动执行 **`v7 -> v8`** 升级，补齐
-`sessions.permission_mode / collaboration_mode`。
+当前构建会在 hub 启动时自动执行 **`v7 -> v9`** 和 **`v8 -> v9`** 升级，补齐
+`sessions.permission_mode / collaboration_mode / next_message_seq`。
 更老的 schema 仍需先备份，再重建或离线迁移旧库。
 
 ## 开发与构建
@@ -106,8 +125,12 @@ bun run build:single-exe
 ## 版号事实源
 
 - 对外运行时版号以 `cli/package.json` 为单一事实源
+- 对外 npm 主包名固定为 `@singyy/viby`
+- 平台包固定为 `viby-cli-<platform>`；当前 Windows 包名是 `viby-cli-windows-x64`
 - `bun run sync-version <version>` 会同步 `cli / hub / web / shared / desktop` 以及 Tauri / Cargo 版号
-- `bun run release-all <version>` 会复用同一套同步逻辑
+- `bun run release-all <version>` 会复用同一套同步逻辑，并只提交 release 管理的版号文件
+- prerelease 版本会发布到 npm `next`，正式版发布到 `latest`
+- `.github/workflows/cli-release.yml` 支持 tag push `v*.*.*` 和 `workflow_dispatch`
 
 ## 目录说明
 

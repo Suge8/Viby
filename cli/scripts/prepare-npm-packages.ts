@@ -15,48 +15,16 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFile
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import {
+    buildOptionalDependencies,
+    getPlatformPackageName,
+    MAIN_PACKAGE_NAME,
+    type PlatformReleaseTarget,
+    PLATFORM_RELEASE_TARGETS,
+} from './npmReleaseConfig';
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, '..');
-
-// Platform configurations
-// Maps npm platform name to build target info
-const PLATFORMS = [
-    {
-        name: 'darwin-arm64',
-        os: 'darwin',
-        cpu: 'arm64',
-        buildTarget: 'bun-darwin-arm64',
-        binName: 'viby'
-    },
-    {
-        name: 'darwin-x64',
-        os: 'darwin',
-        cpu: 'x64',
-        buildTarget: 'bun-darwin-x64',
-        binName: 'viby'
-    },
-    {
-        name: 'linux-arm64',
-        os: 'linux',
-        cpu: 'arm64',
-        buildTarget: 'bun-linux-arm64',
-        binName: 'viby'
-    },
-    {
-        name: 'linux-x64',
-        os: 'linux',
-        cpu: 'x64',
-        buildTarget: 'bun-linux-x64-baseline',
-        binName: 'viby'
-    },
-    {
-        name: 'windows-x64',
-        os: 'win32',
-        cpu: 'x64',
-        buildTarget: 'bun-windows-x64',
-        binName: 'viby.exe'
-    }
-] as const;
 
 interface MainPackageJson {
     name: string;
@@ -82,11 +50,11 @@ async function readMainPackageJson(): Promise<MainPackageJson> {
 }
 
 function generatePlatformPackageJson(
-    platform: typeof PLATFORMS[number],
+    platform: PlatformReleaseTarget,
     mainPkg: MainPackageJson
 ): object {
     return {
-        name: `viby-cli-${platform.name}`,
+        name: getPlatformPackageName(platform.packagePlatform),
         version: mainPkg.version,
         description: `viby binary for ${platform.os} ${platform.cpu}`,
         os: [platform.os],
@@ -100,22 +68,12 @@ function generatePlatformPackageJson(
     };
 }
 
-function buildOptionalDependencies(version: string): Record<string, string> {
-    const optionalDependencies: Record<string, string> = {};
-
-    for (const platform of PLATFORMS) {
-        optionalDependencies[`viby-cli-${platform.name}`] = version;
-    }
-
-    return optionalDependencies;
-}
-
 function generateMainPackageJson(
     mainPkg: MainPackageJson,
     optionalDependencies: Record<string, string>
 ): object {
     return {
-        name: mainPkg.name,
+        name: MAIN_PACKAGE_NAME,
         version: mainPkg.version,
         description: mainPkg.description,
         author: mainPkg.author,
@@ -157,12 +115,12 @@ function prepareMainPackage(
 }
 
 async function preparePlatform(
-    platform: typeof PLATFORMS[number],
+    platform: PlatformReleaseTarget,
     mainPkg: MainPackageJson,
     distExeDir: string,
     npmDir: string
 ): Promise<void> {
-    const platformDir = join(npmDir, platform.name);
+    const platformDir = join(npmDir, platform.packagePlatform);
     const binDir = join(platformDir, 'bin');
 
     // Ensure bin directory exists
@@ -225,11 +183,11 @@ async function main(): Promise<void> {
         hasErrors = true;
     }
 
-    for (const platform of PLATFORMS) {
+    for (const platform of PLATFORM_RELEASE_TARGETS) {
         try {
             await preparePlatform(platform, mainPkg, distExeDir, npmDir);
         } catch (error) {
-            console.error(`Error preparing ${platform.name}:`, error);
+            console.error(`Error preparing ${platform.packagePlatform}:`, error);
             hasErrors = true;
         }
     }
