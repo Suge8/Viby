@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { ApiClient } from '@/api/client'
 import type { SessionSummary } from '@/types/api'
 import { SessionActionMenu } from '@/components/SessionActionMenu'
 import { RenameSessionDialog } from '@/components/RenameSessionDialog'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
-import type { FloatingActionMenuAnchorPoint } from '@/components/ui/FloatingActionMenu'
+import type { FloatingActionMenuAnchorPoint } from '@/components/ui/FloatingActionMenu.contract'
 import { useSessionActions } from '@/hooks/mutations/useSessionActions'
 import { getSessionTitle } from '@/lib/sessionPresentation'
 import { useTranslation } from '@/lib/use-translation'
@@ -13,17 +13,19 @@ import {
     type SessionActionDialogKind
 } from './sessionActionDialogPresentation'
 
+type SessionActionSurface =
+    | { kind: 'menu' }
+    | { kind: 'rename' }
+    | { kind: 'confirm'; dialogKind: Exclude<SessionActionDialogKind, null> }
+
 type SessionListActionControllerProps = {
     api: ApiClient | null
     session: SessionSummary
-    overlay: {
-        anchorPoint: FloatingActionMenuAnchorPoint
-        isMenuOpen: boolean
-    }
+    anchorPoint: FloatingActionMenuAnchorPoint
     callbacks: {
-        onCloseMenu: () => void
         onDismiss: () => void
         onSelectSession: (sessionId: string) => void
+        onArchiveSelectedSession?: (sessionId: string) => void
     }
 }
 
@@ -31,21 +33,13 @@ export function SessionListActionController(
     props: SessionListActionControllerProps
 ): React.JSX.Element {
     const { t } = useTranslation()
-    const {
-        api,
-        session,
-        overlay,
-        callbacks
-    } = props
-    const { anchorPoint, isMenuOpen } = overlay
-    const { onCloseMenu, onDismiss, onSelectSession } = callbacks
-    const [renameOpen, setRenameOpen] = useState(false)
-    const [dialogKind, setDialogKind] = useState<SessionActionDialogKind>(null)
+    const { api, session, anchorPoint, callbacks } = props
+    const { onArchiveSelectedSession, onDismiss, onSelectSession } = callbacks
+    const [surface, setSurface] = useState<SessionActionSurface>({ kind: 'menu' })
     const sessionId = session.id
-    const title = useMemo(() => getSessionTitle(session), [session])
-    const dialogConfig = useMemo(() => {
-        return getSessionActionDialogConfig(dialogKind, title, t)
-    }, [dialogKind, t, title])
+    const title = getSessionTitle(session)
+    const dialogKind: SessionActionDialogKind = surface.kind === 'confirm' ? surface.dialogKind : null
+    const dialogConfig = getSessionActionDialogConfig(dialogKind, title, t)
 
     const {
         archiveSession,
@@ -58,46 +52,28 @@ export function SessionListActionController(
     } = useSessionActions(api, sessionId, session.metadata?.flavor ?? null)
 
     useEffect(() => {
-        setRenameOpen(false)
-        setDialogKind(null)
+        setSurface({ kind: 'menu' })
     }, [sessionId])
 
-    useEffect(() => {
-        if (!isMenuOpen && !renameOpen && dialogKind === null) {
-            onDismiss()
-        }
-    }, [dialogKind, isMenuOpen, onDismiss, renameOpen])
-
-    const handleCloseRenameDialog = useCallback(() => {
-        setRenameOpen(false)
-    }, [])
-
-    const handleCloseConfirmDialog = useCallback(() => {
-        setDialogKind(null)
-    }, [])
-
     const openRenameDialog = useCallback(() => {
-        onCloseMenu()
-        setDialogKind(null)
-        setRenameOpen(true)
-    }, [onCloseMenu])
+        setSurface({ kind: 'rename' })
+    }, [])
 
     const openConfirmDialog = useCallback((nextDialogKind: Exclude<SessionActionDialogKind, null>) => {
-        onCloseMenu()
-        setRenameOpen(false)
-        setDialogKind(nextDialogKind)
-    }, [onCloseMenu])
+        setSurface({ kind: 'confirm', dialogKind: nextDialogKind })
+    }, [])
 
     const handleResume = useCallback(async () => {
-        onCloseMenu()
+        onDismiss()
         const resumedSession = await resumeSession()
         onSelectSession(resumedSession.id)
-    }, [onCloseMenu, onSelectSession, resumeSession])
+    }, [onDismiss, onSelectSession, resumeSession])
 
     const handleConfirm = useCallback(async () => {
         switch (dialogKind) {
             case 'archive':
                 await archiveSession()
+                onArchiveSelectedSession?.(sessionId)
                 return
             case 'close':
                 await closeSession()
@@ -111,14 +87,24 @@ export function SessionListActionController(
             default:
                 return
         }
-    }, [archiveSession, closeSession, deleteSession, dialogKind, unarchiveSession])
+    }, [
+        archiveSession,
+        closeSession,
+        deleteSession,
+        dialogKind,
+        onArchiveSelectedSession,
+        sessionId,
+        unarchiveSession
+    ])
 
     return (
         <>
             <SessionActionMenu
-                isOpen={isMenuOpen}
-                onClose={onCloseMenu}
-                anchorPoint={anchorPoint}
+                overlay={{
+                    isOpen: surface.kind === 'menu',
+                    onClose: onDismiss,
+                    anchorPoint
+                }}
                 session={{
                     lifecycleState: session.lifecycleState,
                     resumeAvailable: session.resumeAvailable
@@ -134,23 +120,25 @@ export function SessionListActionController(
             />
 
             <RenameSessionDialog
-                isOpen={renameOpen}
-                onClose={handleCloseRenameDialog}
+                isOpen={surface.kind === 'rename'}
+                onClose={onDismiss}
                 currentName={title}
                 onRename={renameSession}
                 isPending={isPending}
             />
 
             <ConfirmDialog
-                isOpen={dialogKind !== null && dialogConfig !== null}
-                onClose={handleCloseConfirmDialog}
-                title={dialogConfig?.title ?? ''}
-                description={dialogConfig?.description ?? ''}
-                confirmLabel={dialogConfig?.confirmLabel ?? ''}
-                confirmingLabel={dialogConfig?.confirmingLabel ?? ''}
+                dialog={{
+                    isOpen: surface.kind === 'confirm' && dialogConfig !== null,
+                    onClose: onDismiss,
+                    title: dialogConfig?.title ?? '',
+                    description: dialogConfig?.description ?? '',
+                    confirmLabel: dialogConfig?.confirmLabel ?? '',
+                    confirmingLabel: dialogConfig?.confirmingLabel ?? '',
+                    destructive: dialogKind === 'archive' || dialogKind === 'delete'
+                }}
                 onConfirm={handleConfirm}
                 isPending={isPending}
-                destructive={dialogKind === 'archive' || dialogKind === 'delete'}
             />
         </>
     )

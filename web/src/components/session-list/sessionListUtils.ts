@@ -9,7 +9,7 @@ export type SessionListTab = 'sessions' | 'archived'
 export type SessionListSection = {
     id: 'running' | 'recentlyClosed' | 'earlier'
     titleKey: 'sessions.section.running' | 'sessions.section.recentlyClosed' | 'sessions.section.earlier'
-    sessions: SessionSummary[]
+    sessions: readonly SessionSummary[]
 }
 
 export function formatRelativeTime(
@@ -44,23 +44,27 @@ export function formatRelativeTime(
     return new Date(milliseconds).toLocaleDateString()
 }
 
-export function getTodoProgress(session: SessionSummary): { completed: number; total: number } | null {
-    if (!session.todoProgress) {
-        return null
-    }
-
-    if (session.todoProgress.completed === session.todoProgress.total) {
-        return null
-    }
-
-    return session.todoProgress
-}
-
-function sortSessions(sessions: SessionSummary[]): SessionSummary[] {
+function sortSessions(sessions: readonly SessionSummary[]): SessionSummary[] {
     return [...sessions].sort(compareSessionSummaries)
 }
 
-export function buildSessionSections(sessions: SessionSummary[]): SessionListSection[] {
+export function getLikelyNextSessionId(
+    sessions: readonly SessionSummary[],
+    options: Readonly<{ preferredSessionId?: string | null }> = {}
+): string | null {
+    const candidates = sortSessions(
+        sessions.filter((session) => session.lifecycleState !== 'archived')
+    )
+    if (options.preferredSessionId) {
+        const preferred = candidates.find((session) => session.id === options.preferredSessionId)
+        if (preferred) {
+            return preferred.id
+        }
+    }
+    return candidates[0]?.id ?? null
+}
+
+export function buildSessionSections(sessions: readonly SessionSummary[]): SessionListSection[] {
     const running = sortSessions(sessions.filter((session) => session.lifecycleState === 'running'))
     const closedSessions = sortSessions(sessions.filter((session) => session.lifecycleState === 'closed'))
     const cutoff = Date.now() - RECENTLY_CLOSED_WINDOW_MS

@@ -4,6 +4,7 @@ import type { HighlighterCore } from 'shiki/core'
 import { useState, useEffect, type ReactNode } from 'react'
 import { toJsxRuntime } from 'hast-util-to-jsx-runtime'
 import { jsx, jsxs, Fragment } from 'react/jsx-runtime'
+import { useTheme } from '@/hooks/useTheme'
 import {
     CODE_LANGUAGE_ALIASES,
     CODE_BLOCK_PLAIN_TEXT_LANGUAGE,
@@ -52,11 +53,14 @@ export const SHIKI_THEMES = {
     dark: 'github-dark',
 } as const
 
+const SHIKI_RENDER_CACHE_LIMIT = 100
+
 export const langAlias = CODE_LANGUAGE_ALIASES
 
 let highlighterPromise: Promise<HighlighterCore> | null = null
 const themeLoadPromises = new Map<string, Promise<void>>()
 const languageLoadPromises = new Map<string, Promise<boolean>>()
+const highlightedRenderCache = new Map<string, ReactNode>()
 
 function getHighlighter(): Promise<HighlighterCore> {
     if (!highlighterPromise) {
@@ -121,6 +125,37 @@ async function ensureLanguageLoaded(
     return await task
 }
 
+function getHighlightCacheKey(theme: string, language: string, code: string): string {
+    return `${theme}\u0000${language}\u0000${code}`
+}
+
+function readHighlightedRenderCache(key: string): ReactNode | null {
+    const cached = highlightedRenderCache.get(key)
+    if (!cached) {
+        return null
+    }
+
+    highlightedRenderCache.delete(key)
+    highlightedRenderCache.set(key, cached)
+    return cached
+}
+
+function writeHighlightedRenderCache(key: string, rendered: ReactNode): void {
+    if (highlightedRenderCache.has(key)) {
+        highlightedRenderCache.delete(key)
+    }
+
+    highlightedRenderCache.set(key, rendered)
+    if (highlightedRenderCache.size <= SHIKI_RENDER_CACHE_LIMIT) {
+        return
+    }
+
+    const oldestKey = highlightedRenderCache.keys().next().value
+    if (typeof oldestKey === 'string') {
+        highlightedRenderCache.delete(oldestKey)
+    }
+}
+
 /**
  * Custom hook for syntax highlighting with our minimal Shiki bundle
  */
@@ -128,31 +163,42 @@ export function useShikiHighlighter(
     code: string,
     language: string | undefined
 ): ReactNode | null {
+    const { colorScheme } = useTheme()
     const [highlighted, setHighlighted] = useState<ReactNode | null>(null)
 
     useEffect(() => {
         let cancelled = false
         const lang = resolveCodeLanguage(language)
+        const theme = SHIKI_THEMES[colorScheme]
 
         async function highlight() {
             const highlighter = await getHighlighter()
             if (cancelled) return
 
             const loaded = await Promise.all([
-                ensureThemeLoaded(highlighter, SHIKI_THEMES.light),
-                ensureThemeLoaded(highlighter, SHIKI_THEMES.dark),
+                ensureThemeLoaded(highlighter, theme),
                 ensureLanguageLoaded(highlighter, lang),
             ])
             if (cancelled) return
 
-            if (!loaded[2]) {
+            if (!loaded[1]) {
                 setHighlighted(null)
+                return
+            }
+
+            const cacheKey = getHighlightCacheKey(theme, lang, code)
+            const cached = readHighlightedRenderCache(cacheKey)
+            if (cached) {
+                setHighlighted(cached)
                 return
             }
 
             const hast = highlighter.codeToHast(code, {
                 lang,
-                themes: SHIKI_THEMES,
+                themes: {
+                    light: theme,
+                    dark: theme,
+                },
                 defaultColor: false,
                 structure: 'inline',
             })
@@ -164,6 +210,7 @@ export function useShikiHighlighter(
                 jsxs,
                 Fragment,
             })
+            writeHighlightedRenderCache(cacheKey, rendered as ReactNode)
             setHighlighted(rendered as ReactNode)
         }
 
@@ -174,7 +221,7 @@ export function useShikiHighlighter(
             cancelled = true
             clearTimeout(timer)
         }
-    }, [code, language])
+    }, [code, colorScheme, language])
 
     return highlighted
 }

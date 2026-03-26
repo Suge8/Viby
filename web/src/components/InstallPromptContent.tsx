@@ -1,7 +1,11 @@
 import { type CSSProperties, type JSX } from 'react'
 import { home, starNorth, tabArrowUpRight, tabPlus } from '@lucide/lab'
 import { Icon } from 'lucide-react'
-import { BrandIcon, CloseIcon, ShareIcon } from '@/components/icons'
+import { BrandMarkIcon } from '@/components/icons'
+import {
+    FeatureCloseIcon as CloseIcon,
+    FeatureShareIcon as ShareIcon,
+} from '@/components/featureIcons'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -122,7 +126,7 @@ export function InstallBanner(props: {
                     <div className="relative shrink-0">
                         <InstallLabIcon iconNode={home} tone="coral" iconClassName="h-5.5 w-5.5" />
                         <span className="absolute -right-1.5 -top-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--ds-brand)_28%,transparent)] bg-[color-mix(in_srgb,var(--ds-brand)_18%,var(--ds-panel-strong))] text-[var(--ds-brand)] shadow-[var(--ds-shadow-soft)]">
-                            <BrandIcon className="h-3.5 w-3.5" strokeWidth={2.2} />
+                            <BrandMarkIcon className="h-3.5 w-3.5" />
                         </span>
                     </div>
                     <div className="min-w-0 flex-1">

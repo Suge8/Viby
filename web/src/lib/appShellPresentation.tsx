@@ -1,4 +1,3 @@
-import { RouteLoadingFallback } from '@/components/loading/RouteLoadingFallback'
 import type { RealtimeBannerState } from '@/hooks/useRealtimeFeedback'
 
 export type RealtimeSubscription = { all: true; sessionId?: string }
@@ -49,14 +48,4 @@ export function buildRealtimeSubscription(selectedSessionId: string | null): Rea
         all: true,
         sessionId: selectedSessionId
     }
-}
-
-export function renderAuthorizingState(_t: (key: string) => string): React.JSX.Element {
-    return (
-        <RouteLoadingFallback
-            kind="authorizing"
-            withDescription
-            testId="app-authorizing-fallback"
-        />
-    )
 }

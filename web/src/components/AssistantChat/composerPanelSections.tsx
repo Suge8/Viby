@@ -6,7 +6,7 @@ import type {
 } from '@/types/api'
 import { ComposerActionSection } from '@/components/AssistantChat/ComposerActionSection'
 import { ComposerSettingsSection } from '@/components/AssistantChat/ComposerSettingsSection'
-import { SwitchToRemoteIcon } from '@/components/icons'
+import { FeatureSwitchToRemoteIcon as SwitchToRemoteIcon } from '@/components/featureIcons'
 import type { ComposerPanelOption } from '@/lib/sessionConfigPresentation'
 
 type Translate = (key: string) => string

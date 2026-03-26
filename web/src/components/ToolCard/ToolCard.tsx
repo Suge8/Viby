@@ -1,23 +1,27 @@
 import type { ToolCallBlock } from '@/chat/types'
 import type { ApiClient } from '@/api/client'
 import type { SessionMetadataSummary } from '@/types/api'
-import { memo, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Suspense, memo, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { isObject, safeStringify } from '@viby/protocol'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { CodeBlock } from '@/components/CodeBlock'
-import { MarkdownRenderer } from '@/components/MarkdownRenderer'
 import { DiffView } from '@/components/DiffView'
-import { ChevronIcon, ErrorIcon, LockIcon, RefreshIcon, SuccessIcon } from '@/components/icons'
+import { ChevronIcon, ErrorIcon, LockIcon, SuccessIcon } from '@/components/icons'
+import { FeatureRefreshIcon as RefreshIcon } from '@/components/featureIcons'
+import { TextContent } from '@/components/TextContent'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { PermissionFooter } from '@/components/ToolCard/PermissionFooter'
 import { AskUserQuestionFooter } from '@/components/ToolCard/AskUserQuestionFooter'
 import { RequestUserInputFooter } from '@/components/ToolCard/RequestUserInputFooter'
+import {
+    getLazyToolFullViewComponent,
+    getLazyToolResultViewComponent,
+    getLazyToolViewComponent
+} from '@/components/ToolCard/lazyViews'
 import { isAskUserQuestionToolName } from '@/components/ToolCard/askUserQuestion'
 import { isRequestUserInputToolName } from '@/components/ToolCard/requestUserInput'
 import { getToolPresentation } from '@/components/ToolCard/knownTools'
-import { getToolFullViewComponent, getToolViewComponent } from '@/components/ToolCard/views/_all'
-import { getToolResultViewComponent } from '@/components/ToolCard/views/_results'
 import { usePointerFocusRing } from '@/hooks/usePointerFocusRing'
 import { getInputString, getInputStringAny, truncate } from '@/lib/toolInputUtils'
 import { cn } from '@/lib/utils'
@@ -27,6 +31,7 @@ const ELAPSED_INTERVAL_MS = 1000
 const TASK_SUMMARY_VISIBLE_CHILDREN = 3
 const TOOL_TITLE_TRUNCATE_LENGTH = 140
 const TOOL_SUBTITLE_TRUNCATE_LENGTH = 160
+const NO_TOOL_RESULT_TEXT = '(no output)'
 
 function ElapsedView(props: { from: number; active: boolean }) {
     const [now, setNow] = useState(() => Date.now())
@@ -144,7 +149,7 @@ function renderExitPlanModeInput(input: unknown): ReactNode | null {
     if (!isObject(input)) return null
     const plan = getInputString(input, 'plan')
     if (!plan) return null
-    return <MarkdownRenderer content={plan} />
+    return <TextContent text={plan} mode="markdown" />
 }
 
 function renderToolInput(block: ToolCallBlock): ReactNode {
@@ -152,7 +157,7 @@ function renderToolInput(block: ToolCallBlock): ReactNode {
     const input = block.tool.input
 
     if (toolName === 'Task' && isObject(input) && typeof input.prompt === 'string') {
-        return <MarkdownRenderer content={input.prompt} />
+        return <TextContent text={input.prompt} mode="markdown" />
     }
 
     if (toolName === 'Edit') {
@@ -231,6 +236,26 @@ function renderToolInput(block: ToolCallBlock): ReactNode {
     return <CodeBlock code={safeStringify(input)} language="json" highlight="never" />
 }
 
+function placeholderForToolState(state: ToolCallBlock['tool']['state']): string {
+    if (state === 'pending') return 'Waiting for permission…'
+    if (state === 'running') return 'Running…'
+    return NO_TOOL_RESULT_TEXT
+}
+
+function renderToolResultFallback(block: ToolCallBlock): ReactNode {
+    const result = block.tool.result
+
+    if (result === undefined || result === null) {
+        return <div className="text-sm text-[var(--app-hint)]">{placeholderForToolState(block.tool.state)}</div>
+    }
+
+    if (typeof result === 'string') {
+        return <TextContent text={result} mode="plain" />
+    }
+
+    return <CodeBlock code={safeStringify(result)} language="json" highlight="never" />
+}
+
 function StatusIcon(props: { state: ToolCallBlock['tool']['state'] }) {
     if (props.state === 'completed') {
         return <SuccessIcon className="h-3.5 w-3.5" strokeWidth={2.1} />
@@ -284,9 +309,9 @@ function ToolCardInner(props: ToolCardProps) {
     const taskSummary = renderTaskSummary(props.block, props.metadata)
     const runningFrom = props.block.tool.startedAt ?? props.block.tool.createdAt
     const showInline = !presentation.minimal && toolName !== 'Task'
-    const CompactToolView = showInline ? getToolViewComponent(toolName) : null
-    const FullToolView = getToolFullViewComponent(toolName)
-    const ResultToolView = getToolResultViewComponent(toolName)
+    const CompactToolView = showInline ? getLazyToolViewComponent(toolName) : null
+    const FullToolView = getLazyToolFullViewComponent(toolName)
+    const ResultToolView = getLazyToolResultViewComponent(toolName)
     const permission = props.block.tool.permission
     const isAskUserQuestion = isAskUserQuestionToolName(toolName)
     const isRequestUserInput = isRequestUserInputToolName(toolName)
@@ -366,7 +391,9 @@ function ToolCardInner(props: ToolCardProps) {
                                             {isQuestionToolWithAnswers ? t('tool.questionsAnswers') : t('tool.input')}
                                         </div>
                                         {FullToolView ? (
-                                            <FullToolView block={props.block} metadata={props.metadata} />
+                                            <Suspense fallback={renderToolInput(props.block)}>
+                                                <FullToolView block={props.block} metadata={props.metadata} />
+                                            </Suspense>
                                         ) : (
                                             renderToolInput(props.block)
                                         )}
@@ -374,7 +401,9 @@ function ToolCardInner(props: ToolCardProps) {
                                     {!isQuestionToolWithAnswers && (
                                         <div>
                                             <div className="mb-1 text-xs font-medium text-[var(--app-hint)]">{t('tool.result')}</div>
-                                            <ResultToolView block={props.block} metadata={props.metadata} />
+                                            <Suspense fallback={renderToolResultFallback(props.block)}>
+                                                <ResultToolView block={props.block} metadata={props.metadata} />
+                                            </Suspense>
                                         </div>
                                     )}
                                 </div>
@@ -395,7 +424,9 @@ function ToolCardInner(props: ToolCardProps) {
                     {showInline ? (
                         CompactToolView ? (
                             <div className="mt-3">
-                                <CompactToolView block={props.block} metadata={props.metadata} />
+                                <Suspense fallback={renderToolInput(props.block)}>
+                                    <CompactToolView block={props.block} metadata={props.metadata} />
+                                </Suspense>
                             </div>
                         ) : (
                             <div className="mt-3 flex flex-col gap-3">
@@ -405,7 +436,9 @@ function ToolCardInner(props: ToolCardProps) {
                                 </div>
                                 <div>
                                     <div className="mb-1 text-xs font-medium text-[var(--app-hint)]">{t('tool.result')}</div>
-                                    <ResultToolView block={props.block} metadata={props.metadata} />
+                                    <Suspense fallback={renderToolResultFallback(props.block)}>
+                                        <ResultToolView block={props.block} metadata={props.metadata} />
+                                    </Suspense>
                                 </div>
                             </div>
                         )

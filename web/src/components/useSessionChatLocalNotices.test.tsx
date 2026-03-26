@@ -1,7 +1,8 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { I18nProvider } from '@/lib/i18n-context'
+import { MESSAGE_WINDOW_PENDING_OVERFLOW_WARNING_KEY } from '@/lib/messageWindowWarnings'
+import { I18nTestWrapper, preloadI18nForTests } from '@/test/i18n'
 import { useSessionChatLocalNotices } from './useSessionChatLocalNotices'
 
 const harness = vi.hoisted(() => ({
@@ -13,10 +14,6 @@ vi.mock('@/lib/notice-center', () => ({
         addToast: harness.addToast
     })
 }))
-
-function I18nWrapper(props: { children: ReactNode }): React.JSX.Element {
-    return <I18nProvider>{props.children}</I18nProvider>
-}
 
 function createDeferred(): {
     promise: Promise<void>
@@ -43,39 +40,41 @@ describe('useSessionChatLocalNotices', () => {
         vi.restoreAllMocks()
     })
 
-    it('returns no local notices for a closed session without warnings', () => {
+    it('returns no local notices for a closed session without warnings', async () => {
+        await preloadI18nForTests()
         const { result } = renderHook(() => useSessionChatLocalNotices({
             sessionId: 'session-1',
             lifecycleState: 'closed',
             messagesWarning: null,
             onUnarchiveSession: vi.fn(async () => undefined)
         }), {
-            wrapper: I18nWrapper
+            wrapper: I18nTestWrapper
         })
 
         expect(result.current.localNotices).toEqual([])
     })
 
     it('keeps archived restore and message warnings in the local notice stack', async () => {
+        await preloadI18nForTests()
         const deferred = createDeferred()
         const onUnarchiveSession = vi.fn(() => deferred.promise)
         const { result } = renderHook(() => useSessionChatLocalNotices({
             sessionId: 'session-1',
             lifecycleState: 'archived',
-            messagesWarning: 'New replies arrived while you were away.',
+            messagesWarning: MESSAGE_WINDOW_PENDING_OVERFLOW_WARNING_KEY,
             onUnarchiveSession
         }), {
-            wrapper: I18nWrapper
+            wrapper: I18nTestWrapper
         })
 
         expect(result.current.localNotices).toHaveLength(2)
         expect(result.current.localNotices[0]).toMatchObject({
             id: 'chat:session-1:archived',
-            title: 'This session is archived. Restore it to the main list before sending a new message.'
+            title: 'This session is archived. Sending a new message will restore it automatically, or you can restore it now.'
         })
         expect(result.current.localNotices[1]).toMatchObject({
             id: 'chat:session-1:message-window-warning',
-            title: 'New replies arrived while you were away.'
+            title: 'New replies arrived while you were away. Scroll to the bottom to refresh.'
         })
 
         act(() => {
@@ -103,6 +102,7 @@ describe('useSessionChatLocalNotices', () => {
     })
 
     it('shows a toast when archived restore fails', async () => {
+        await preloadI18nForTests()
         const { result } = renderHook(() => useSessionChatLocalNotices({
             sessionId: 'session-1',
             lifecycleState: 'archived',
@@ -111,7 +111,7 @@ describe('useSessionChatLocalNotices', () => {
                 throw new Error('restore failed')
             })
         }), {
-            wrapper: I18nWrapper
+            wrapper: I18nTestWrapper
         })
 
         act(() => {
@@ -121,7 +121,7 @@ describe('useSessionChatLocalNotices', () => {
         await waitFor(() => {
             expect(harness.addToast).toHaveBeenCalledWith({
                 title: 'Something went wrong',
-                description: 'restore failed',
+                description: 'Failed to resume this session.',
                 tone: 'danger'
             })
         })

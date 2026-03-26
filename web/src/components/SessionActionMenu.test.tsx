@@ -6,10 +6,12 @@ import { I18nProvider } from '@/lib/i18n-context'
 vi.mock('@/components/ui/FloatingActionMenu', () => ({
     FloatingActionMenu: ({
         isOpen,
-        items
+        content
     }: {
         isOpen: boolean
-        items: Array<{ id: string; label: string }>
+        content: {
+            items: Array<{ id: string; label: string }>
+        }
     }) => {
         if (!isOpen) {
             return null
@@ -17,7 +19,7 @@ vi.mock('@/components/ui/FloatingActionMenu', () => ({
 
         return (
             <div>
-                {items.map((item) => (
+                {content.items.map((item) => (
                     <button key={item.id} type="button">
                         {item.label}
                     </button>
@@ -27,6 +29,29 @@ vi.mock('@/components/ui/FloatingActionMenu', () => ({
     }
 }))
 
+vi.mock('@/lib/use-translation', () => ({
+    useTranslation: () => ({
+        t: (key: string) => {
+            switch (key) {
+                case 'session.action.rename':
+                    return 'Rename'
+                case 'session.action.resume':
+                    return 'Continue'
+                case 'session.action.archive':
+                    return 'Archive'
+                case 'session.action.unarchive':
+                    return 'Restore'
+                case 'session.action.delete':
+                    return 'Delete'
+                case 'session.more':
+                    return 'More actions'
+                default:
+                    return key
+            }
+        }
+    })
+}))
+
 function renderMenu(options: {
     lifecycleState: 'running' | 'closed' | 'archived'
     resumeAvailable: boolean
@@ -34,9 +59,11 @@ function renderMenu(options: {
     render(
         <I18nProvider>
             <SessionActionMenu
-                isOpen
-                onClose={vi.fn()}
-                anchorPoint={{ x: 0, y: 0 }}
+                overlay={{
+                    isOpen: true,
+                    onClose: vi.fn(),
+                    anchorPoint: { x: 0, y: 0 }
+                }}
                 session={options}
                 actions={{
                     onRename: vi.fn(),
@@ -74,5 +101,18 @@ describe('SessionActionMenu', () => {
         })
 
         expect(screen.getByText('Continue')).toBeInTheDocument()
+    })
+
+    it('shows only unarchive and delete for archived sessions', () => {
+        renderMenu({
+            lifecycleState: 'archived',
+            resumeAvailable: true
+        })
+
+        expect(screen.getByText('Rename')).toBeInTheDocument()
+        expect(screen.getByText('Restore')).toBeInTheDocument()
+        expect(screen.getByText('Delete')).toBeInTheDocument()
+        expect(screen.queryByText('Archive')).not.toBeInTheDocument()
+        expect(screen.queryByText('Continue')).not.toBeInTheDocument()
     })
 })

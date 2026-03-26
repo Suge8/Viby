@@ -4,12 +4,6 @@ import { realtimeQueryOptions } from './realtimeQueryOptions'
 
 export const SESSION_VIEW_QUERY_GC_TIME_MS = 2 * 60 * 1000
 
-export const sessionAutocompleteQueryOptions = {
-    staleTime: Infinity,
-    gcTime: SESSION_VIEW_QUERY_GC_TIME_MS,
-    retry: false,
-} as const
-
 export function createSessionDetailQueryOptions(
     api: ApiClient | null,
     sessionId: string | null

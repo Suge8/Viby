@@ -7,6 +7,8 @@
 **/dist-exe/
 **/*.tsbuildinfo
 web/dist-analyze/
+web/dist-analyze*/
+web/.tmp-bundle-analyze*/
 web/dist-profile/
 **/src-tauri/target/
 hub/src/web/embeddedAssets.generated.ts

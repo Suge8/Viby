@@ -274,4 +274,55 @@ describe('useSessionLiveConfigControls', () => {
         expect(platformHarness.success).toHaveBeenCalledTimes(2)
         expect(platformHarness.error).not.toHaveBeenCalled()
     })
+
+    it('exposes Gemini live model handler without reasoning controls', async () => {
+        const queryClient = createQueryClient()
+        const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
+        const session = createSession({
+            metadata: {
+                path: '/tmp/project',
+                host: 'localhost',
+                flavor: 'gemini'
+            },
+            model: null,
+            modelReasoningEffort: null
+        })
+        primeSessionCaches(queryClient, session)
+        const api = {
+            setModel: vi.fn(async () => ({
+                ...session,
+                model: 'gemini-2.5-flash-lite'
+            }))
+        } as Partial<ApiClient> as ApiClient
+
+        const { result } = renderHook(() => useSessionLiveConfigControls({
+            api,
+            session,
+            liveConfigSupport: {
+                isRemoteManaged: true,
+                canChangePermissionMode: true,
+                canChangeCollaborationMode: false,
+                canChangeModel: true,
+                canChangeModelReasoningEffort: false
+            },
+            onSwitchToRemote: vi.fn(async () => undefined),
+            attachmentsSupported: true,
+            allowSendWhenInactive: false,
+            isResumingSession: false
+        }), {
+            wrapper: createWrapper(queryClient)
+        })
+
+        expect(result.current.composerHandlers.onModelReasoningEffortChange).toBeUndefined()
+
+        await act(async () => {
+            await result.current.composerHandlers.onModelChange?.('gemini-2.5-flash-lite')
+        })
+
+        expect(api.setModel).toHaveBeenCalledWith('session-1', 'gemini-2.5-flash-lite')
+        expect(queryClient.getQueryData<{ session: Session }>(queryKeys.session('session-1'))?.session.model).toBe('gemini-2.5-flash-lite')
+        expect(invalidateQueries).not.toHaveBeenCalled()
+        expect(platformHarness.success).toHaveBeenCalledOnce()
+        expect(platformHarness.error).not.toHaveBeenCalled()
+    })
 })

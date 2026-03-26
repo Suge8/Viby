@@ -3,8 +3,9 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { SurfaceRouteHeader } from '@/components/SurfaceRouteHeader'
 import { NewSession } from '@/components/NewSession'
-import { BrandIcon } from '@/components/icons'
+import { BrandMarkIcon } from '@/components/icons'
 import { useAppGoBack } from '@/hooks/useAppGoBack'
+import { useFinalizeBootShell } from '@/hooks/useFinalizeBootShell'
 import { useMachines } from '@/hooks/queries/useMachines'
 import { useAppContext } from '@/lib/app-context'
 import {
@@ -16,10 +17,11 @@ import { getNoticePreset } from '@/lib/noticePresets'
 import { queryKeys } from '@/lib/query-keys'
 import { useTranslation } from '@/lib/use-translation'
 import { SessionRouteBanner } from '@/routes/sessions/components/SessionRouteBanner'
-import { preloadSessionDetailRoute } from '@/routes/sessions/sessionRoutePreload'
+import { preloadSessionDetailRoute } from '@/routes/sessions/sessionDetailRoutePreload'
 
 export default function NewSessionRoute() {
     const { api } = useAppContext()
+    useFinalizeBootShell()
     const navigate = useNavigate()
     const goBack = useAppGoBack()
     const queryClient = useQueryClient()
@@ -60,7 +62,7 @@ export default function NewSessionRoute() {
                     title={t('newSession.title')}
                     onBack={goBack}
                     eyebrow="Viby"
-                    titleIcon={<BrandIcon className="h-5 w-5 text-[var(--ds-accent-lime)]" />}
+                    titleIcon={<BrandMarkIcon className="h-5.5 w-5.5 text-[var(--ds-text-primary)]" />}
                 />
 
                 {machinesError ? (

@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, renderHook } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import type { PropsWithChildren } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import type { ApiClient } from '@/api/client'
+import { I18nProvider } from '@/lib/i18n-context'
 import { queryKeys } from '@/lib/query-keys'
 import type { Session, SessionsResponse } from '@/types/api'
 import { useSpawnSession } from './useSpawnSession'
@@ -22,9 +23,11 @@ function createQueryClient(): QueryClient {
 function createWrapper(queryClient: QueryClient): (props: PropsWithChildren) => React.JSX.Element {
     return function Wrapper(props: PropsWithChildren): React.JSX.Element {
         return (
-            <QueryClientProvider client={queryClient}>
-                {props.children}
-            </QueryClientProvider>
+            <I18nProvider>
+                <QueryClientProvider client={queryClient}>
+                    {props.children}
+                </QueryClientProvider>
+            </I18nProvider>
         )
     }
 }
@@ -98,5 +101,31 @@ describe('useSpawnSession', () => {
         expect(queryClient.getQueryData<{ session: Session }>(queryKeys.session('session-1'))?.session).toEqual(spawnedSession)
         expect(queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)?.sessions[0]?.id).toBe('session-1')
         expect(invalidateQueries).not.toHaveBeenCalled()
+    })
+
+    it('returns friendly error copy for technical spawn failures', async () => {
+        const queryClient = createQueryClient()
+        const api = {
+            spawnSession: vi.fn(async () => {
+                throw new Error('HTTP 500 Internal Server Error: gRPC spawn failed')
+            })
+        } as Partial<ApiClient> as ApiClient
+
+        const { result } = renderHook(
+            () => useSpawnSession(api),
+            { wrapper: createWrapper(queryClient) }
+        )
+
+        await act(async () => {
+            await expect(result.current.spawnSession({
+                machineId: 'machine-1',
+                directory: '/Users/demo/Project/Viby',
+                agent: 'codex'
+            })).rejects.toThrow('HTTP 500 Internal Server Error: gRPC spawn failed')
+        })
+
+        await waitFor(() => {
+            expect(result.current.error).toBe('Could not create the session right now. Please try again.')
+        })
     })
 })

@@ -80,6 +80,25 @@ describe('design-system mobile chat route layout', () => {
         expect(css).toContain('--chat-composer-shell-bottom-gap: 0px;')
     })
 
+    it('keeps the mobile bottom rail on the fixed lower rail until keyboard retreat is needed', () => {
+        const css = readDesignSystemCss()
+
+        expect(css).toContain('.session-chat-thread-bottom-control-anchor')
+        expect(css).toContain('--chat-side-control-rest-bottom-offset:')
+        expect(css).toContain(".session-chat-layout[data-chat-keyboard-open='true'] .session-chat-thread-bottom-control-anchor")
+        expect(css).toContain('bottom: var(--chat-side-control-bottom-offset);')
+        expect(css).not.toContain('--chat-side-control-lower-top')
+    })
+
+    it('uses a bottom-control entry animation that does not translate on the Y axis', () => {
+        const css = readDesignSystemCss()
+
+        expect(css).toContain('.session-chat-thread-bottom-control')
+        expect(css).toContain('animation: thread-bottom-control-enter')
+        expect(css).toContain('@keyframes thread-bottom-control-enter')
+        expect(css).toContain('transform: scale(0.88);')
+    })
+
     it('does not keep the old visual viewport bottom offset padding path', () => {
         const css = readDesignSystemCss()
 

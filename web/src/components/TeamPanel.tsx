@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { TeamState } from '@viby/protocol/types'
 import { ChevronIcon, UsersIcon } from '@/components/icons'
 import { Button } from '@/components/ui/button'
+import { CollapsiblePanel } from '@/components/ui/CollapsiblePanel'
 
 function memberStatusDot(status?: string): string {
     if (status === 'active') return 'bg-emerald-500'
@@ -29,9 +30,11 @@ export function TeamPanel(props: { teamState: TeamState }) {
     const members = teamState.members ?? []
     const tasks = teamState.tasks ?? []
     const messages = teamState.messages ?? []
-
     const completedTasks = tasks.filter(t => t.status === 'completed').length
     const activeMembers = members.filter(m => m.status === 'active').length
+    const memberLabel = `${members.length} member${members.length !== 1 ? 's' : ''}`
+    const activeMembersLabel = activeMembers > 0 ? ` (${activeMembers} active)` : ''
+    const taskSummaryLabel = tasks.length > 0 ? ` \u00b7 ${completedTasks}/${tasks.length} tasks` : ''
 
     return (
         <div className="mx-3 mt-3">
@@ -39,7 +42,8 @@ export function TeamPanel(props: { teamState: TeamState }) {
                 type="button"
                 variant="secondary"
                 size="sm"
-                onClick={() => setExpanded(!expanded)}
+                onClick={() => setExpanded(current => !current)}
+                aria-expanded={expanded}
                 className="w-full rounded-md bg-[var(--app-subtle-bg)] px-3 py-2 text-left text-sm hover:bg-[var(--app-subtle-bg)] [&>[data-button-content]]:w-full [&>[data-button-content]]:justify-start"
             >
                 <UsersIcon className="h-4 w-4 shrink-0 text-[var(--ds-accent-violet)]" />
@@ -47,18 +51,18 @@ export function TeamPanel(props: { teamState: TeamState }) {
                     Team: {teamState.teamName}
                 </span>
                 <span className="text-xs text-[var(--app-hint)]">
-                    {members.length} member{members.length !== 1 ? 's' : ''}
-                    {activeMembers > 0 ? ` (${activeMembers} active)` : ''}
-                    {tasks.length > 0 ? ` \u00b7 ${completedTasks}/{tasks.length} tasks` : ''}
+                    {memberLabel}
+                    {activeMembersLabel}
+                    {taskSummaryLabel}
                 </span>
                 <ChevronIcon
-                    className={`ml-auto h-4 w-4 shrink-0 text-[var(--app-hint)] transition-transform ${expanded ? 'rotate-180' : ''}`}
-                    collapsed
+                    className="ml-auto h-4 w-4 shrink-0 text-[var(--app-hint)]"
+                    collapsed={!expanded}
                 />
             </Button>
 
-            {expanded && (
-                <div className="mt-1 rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-3 py-2">
+            <CollapsiblePanel open={expanded} className="mt-1" data-testid="team-panel-details">
+                <div className="rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-3 py-2">
                     {teamState.description && (
                         <p className="mb-2 text-xs text-[var(--app-hint)]">{teamState.description}</p>
                     )}
@@ -121,7 +125,7 @@ export function TeamPanel(props: { teamState: TeamState }) {
                         </div>
                     )}
                 </div>
-            )}
+            </CollapsiblePanel>
         </div>
     )
 }

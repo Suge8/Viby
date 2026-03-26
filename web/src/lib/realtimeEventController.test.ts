@@ -1,4 +1,5 @@
 import { QueryClient } from '@tanstack/react-query'
+import { waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { Session, SessionSummary, SessionsResponse, SyncEvent } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
@@ -148,6 +149,46 @@ describe('createRealtimeEventController', () => {
 
         const result = queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)
         expect(result?.sessions[0]).toMatchObject({
+            lifecycleState: 'archived',
+            lifecycleStateSince: 4_000
+        })
+    })
+
+    it('ignores late active-only realtime patches for archived sessions', () => {
+        const queryClient = new QueryClient()
+        const session = createSessionSummary({
+            id: 'session-archived-late-alive',
+            active: false,
+            thinking: false,
+            updatedAt: 5_000,
+            lifecycleState: 'archived',
+            lifecycleStateSince: 4_000
+        })
+
+        queryClient.setQueryData<SessionsResponse>(queryKeys.sessions, {
+            sessions: [session]
+        })
+
+        const controller = createRealtimeEventController({
+            queryClient,
+            onEvent: vi.fn()
+        })
+
+        controller.handleEvent({
+            type: 'session-updated',
+            sessionId: session.id,
+            data: {
+                active: true,
+                activeAt: 6_000,
+                thinking: false
+            }
+        } as SyncEvent)
+
+        const result = queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)
+        expect(result?.sessions[0]).toMatchObject({
+            active: false,
+            thinking: false,
+            activeAt: session.activeAt,
             lifecycleState: 'archived',
             lifecycleStateSince: 4_000
         })
@@ -581,7 +622,7 @@ describe('createRealtimeEventController', () => {
         expect(getMessageWindowState('session-stream').stream).toBeNull()
     })
 
-    it('removes session detail, summary, and message window state when a session is removed', () => {
+    it('removes session detail, summary, and message window state when a session is removed', async () => {
         const queryClient = new QueryClient()
         const session = createSessionSummary({
             id: 'session-removed',
@@ -635,6 +676,8 @@ describe('createRealtimeEventController', () => {
 
         expect(queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)?.sessions).toEqual([])
         expect(queryClient.getQueryData(queryKeys.session(session.id))).toBeUndefined()
-        expect(getMessageWindowState(session.id).messages).toEqual([])
+        await waitFor(() => {
+            expect(getMessageWindowState(session.id).messages).toEqual([])
+        })
     })
 })

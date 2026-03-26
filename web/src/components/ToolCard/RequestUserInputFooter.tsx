@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils'
 import { usePlatform } from '@/hooks/usePlatform'
 import { Spinner } from '@/components/Spinner'
 import { getNoticePreset } from '@/lib/noticePresets'
+import { formatUserFacingErrorMessage } from '@/lib/userFacingError'
 import { useTranslation } from '@/lib/use-translation'
 
 function SelectionMark(props: { checked: boolean }) {
@@ -105,7 +106,10 @@ export function RequestUserInputFooter(props: {
             props.onDone()
         } catch (e) {
             haptic.notification('error')
-            setError(e instanceof Error ? e.message : t('dialog.error.default'))
+            setError(formatUserFacingErrorMessage(e, {
+                t,
+                fallbackKey: 'dialog.error.default'
+            }))
         }
     }
 

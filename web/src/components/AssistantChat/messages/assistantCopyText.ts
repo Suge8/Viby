@@ -1,15 +1,12 @@
-type CopyableAssistantPart =
-    | { type: 'text'; text: string }
-    | { type: 'reasoning'; text: string }
-    | { type: string }
+import type { ThreadAssistantMessagePart } from '@assistant-ui/react'
 
 function isCopyableTextPart(
-    part: CopyableAssistantPart
-): part is Extract<CopyableAssistantPart, { type: 'text' | 'reasoning' }> {
+    part: ThreadAssistantMessagePart
+): part is Extract<ThreadAssistantMessagePart, { type: 'text' | 'reasoning' }> {
     return part.type === 'text' || part.type === 'reasoning'
 }
 
-export function extractAssistantCopyText(parts: readonly CopyableAssistantPart[]): string | null {
+export function extractAssistantCopyText(parts: readonly ThreadAssistantMessagePart[]): string | null {
     const segments: string[] = []
 
     for (const part of parts) {

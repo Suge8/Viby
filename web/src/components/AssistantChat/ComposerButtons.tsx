@@ -1,9 +1,9 @@
 import {
-    ControlsIcon,
     SendIcon,
     SpinnerIcon,
     StopIcon,
 } from '@/components/icons'
+import { FeatureControlsIcon as ControlsIcon } from '@/components/featureIcons'
 import { ComposerAttachmentButton } from '@/components/AssistantChat/ComposerAttachmentButton'
 import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/lib/use-translation'

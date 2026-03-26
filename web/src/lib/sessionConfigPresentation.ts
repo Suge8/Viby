@@ -5,6 +5,7 @@ import {
     getClaudeComposerReasoningEffortOptions,
     getCodexComposerModelOptions,
     getCodexComposerReasoningEffortOptions,
+    getGeminiComposerModelOptions,
     getSessionModelDisplayLabel,
     type SessionConfigOption,
 } from '@/lib/sessionConfigOptions'
@@ -119,6 +120,22 @@ function getModelDescription(value: string | null, flavor: string | null, t: Tra
         return t('sessionConfig.model.custom.description')
     }
 
+    if (flavor === 'gemini') {
+        switch (value) {
+            case 'gemini-2.5-pro':
+                return t('sessionConfig.model.gemini25Pro.description')
+            case 'gemini-2.5-flash':
+                return t('sessionConfig.model.gemini25Flash.description')
+            case 'gemini-2.5-flash-lite':
+                return t('sessionConfig.model.gemini25FlashLite.description')
+            case 'gemini-3-pro-preview':
+            case 'gemini-3-flash-preview':
+                return t('sessionConfig.model.preview.description')
+            default:
+                return t('sessionConfig.model.custom.description')
+        }
+    }
+
     return undefined
 }
 
@@ -143,6 +160,25 @@ function getReasoningDescription(value: ModelReasoningEffort | null, t: Translat
         default:
             return undefined
     }
+}
+
+function getModelOptionsForFlavor(
+    flavor: string | null,
+    currentModel: string | null
+): SessionConfigOption<string | null>[] {
+    if (flavor === 'claude') {
+        return getClaudeComposerModelOptions(currentModel)
+    }
+
+    if (flavor === 'gemini') {
+        return getGeminiComposerModelOptions(currentModel)
+    }
+
+    if (flavor === 'codex') {
+        return getCodexComposerModelOptions(currentModel)
+    }
+
+    return []
 }
 
 export function getLocalizedPermissionModeOptions(flavor: string | null, t: Translate): ComposerPanelOption<PermissionMode>[] {
@@ -176,9 +212,7 @@ export function getLocalizedModelOptions(
     currentModel: string | null,
     t: Translate
 ): ComposerPanelOption<string | null>[] {
-    const options = flavor === 'claude'
-        ? getClaudeComposerModelOptions(currentModel)
-        : getCodexComposerModelOptions(currentModel)
+    const options = getModelOptionsForFlavor(flavor, currentModel)
 
     return options.map((option) => ({
         ...option,

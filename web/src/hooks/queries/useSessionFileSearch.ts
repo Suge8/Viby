@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query'
 import type { ApiClient } from '@/api/client'
 import type { FileSearchItem } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
+import { formatOptionalUserFacingErrorMessage } from '@/lib/userFacingError'
+import { useTranslation } from '@/lib/use-translation'
 
 export function useSessionFileSearch(
     api: ApiClient | null,
@@ -14,6 +16,7 @@ export function useSessionFileSearch(
     isLoading: boolean
     refetch: () => Promise<unknown>
 } {
+    const { t } = useTranslation()
     const resolvedSessionId = sessionId ?? 'unknown'
     const limit = options?.limit ?? 200
     const enabled = options?.enabled ?? Boolean(api && sessionId)
@@ -33,15 +36,17 @@ export function useSessionFileSearch(
         enabled,
     })
 
-    const queryError = result.error instanceof Error
-        ? result.error.message
-        : result.error
-            ? 'Failed to search files'
-            : null
+    const queryError = formatOptionalUserFacingErrorMessage(result.error, {
+        t,
+        fallbackKey: 'error.files.search'
+    })
 
     return {
         files: result.data?.files ?? [],
-        error: queryError ?? result.data?.error ?? null,
+        error: queryError ?? formatOptionalUserFacingErrorMessage(result.data?.error, {
+            t,
+            fallbackKey: 'error.files.search'
+        }),
         isLoading: result.isLoading,
         refetch: result.refetch
     }

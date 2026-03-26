@@ -1,12 +1,16 @@
 import { memo } from 'react'
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
-import { CopyIcon, CheckIcon } from '@/components/icons'
+import {
+    FeatureCheckIcon as CheckIcon,
+    FeatureCopyIcon as CopyIcon,
+} from '@/components/featureIcons'
 import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/lib/use-translation'
 import {
     CodeContent,
     type CodeHighlightMode
 } from '@/components/code-block/CodeContent'
+import { CodeSurface } from '@/components/code-block/CodeSurface'
 
 type CodeBlockProps = {
     code: string
@@ -35,15 +39,13 @@ function CodeBlockComponent(props: CodeBlockProps) {
                 </Button>
             ) : null}
 
-            <div className="min-w-0 w-full max-w-full overflow-x-auto overflow-y-hidden rounded-md bg-[var(--app-code-bg)]">
-                <pre className="shiki m-0 w-max min-w-full p-2 pr-8 text-xs font-mono">
-                    <CodeContent
-                        code={props.code}
-                        language={props.language}
-                        highlight={props.highlight}
-                    />
-                </pre>
-            </div>
+            <CodeSurface preClassName="p-2 pr-8 text-xs">
+                <CodeContent
+                    code={props.code}
+                    language={props.language}
+                    highlight={props.highlight}
+                />
+            </CodeSurface>
         </div>
     )
 }

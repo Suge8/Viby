@@ -19,7 +19,7 @@ describe('formatRenameErrorMessage', () => {
         expect(formatRenameErrorMessage(error, translate)).toBe('dialog.rename.sessionNotFound')
     })
 
-    it('falls back to the original error message for non-API failures', () => {
-        expect(formatRenameErrorMessage(new Error('Session unavailable'), translate)).toBe('Session unavailable')
+    it('uses the translated fallback for non-API failures', () => {
+        expect(formatRenameErrorMessage(new Error('Session unavailable'), translate)).toBe('dialog.rename.error')
     })
 })

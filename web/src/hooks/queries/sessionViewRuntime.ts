@@ -1,5 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query'
-import { clearMessageWindow, clearSessionStream } from '@/lib/message-window-store'
+import { loadMessageWindowStoreModule } from '@/lib/messageWindowStoreModule'
 import { SESSION_SCOPED_QUERY_PREFIXES } from '@/lib/query-keys'
 
 const SESSION_SCOPED_QUERY_PREFIX_SET: ReadonlySet<string> = new Set(SESSION_SCOPED_QUERY_PREFIXES)
@@ -15,8 +15,10 @@ export function disposeSessionViewRuntime(
     queryClient: Pick<QueryClient, 'removeQueries'>,
     sessionId: string
 ): void {
-    clearSessionStream(sessionId)
-    clearMessageWindow(sessionId)
+    void loadMessageWindowStoreModule().then(({ clearMessageWindow, clearSessionStream }) => {
+        clearSessionStream(sessionId)
+        clearMessageWindow(sessionId)
+    })
     queryClient.removeQueries({
         predicate: (query) => isSessionScopedQueryKey(query.queryKey, sessionId)
     })

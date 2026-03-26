@@ -4,24 +4,19 @@ import { createAppElement } from './app-bootstrap'
 import { initializeFontScale } from '@/hooks/useFontScale'
 import { resolveInitialLocale } from '@/lib/i18n-context'
 import { preloadTranslations } from '@/lib/i18nCatalog'
-import { finalizeBootShell, reloadWindowForRecovery } from '@/lib/appRecovery'
+import { reloadWindowForRecovery } from '@/lib/appRecovery'
 import { installVitePreloadErrorHandler } from '@/lib/installVitePreloadErrorHandler'
+import { shouldRegisterServiceWorkerForOrigin } from '@/lib/runtimeAssetPolicy'
 import {
     clearRuntimeAssetRecoveryMarker,
     disableServiceWorkerForCurrentOrigin,
-    invalidateRuntimeAssetsForBuild,
-    shouldRegisterServiceWorkerForOrigin
+    invalidateRuntimeAssetsForBuild
 } from '@/lib/runtimeAssetRecovery'
 const APP_ROOT_ELEMENT_ID = 'root'
 
 function renderApplication(rootElement: HTMLElement): void {
     createRoot(rootElement).render(createAppElement())
     clearRuntimeAssetRecoveryMarker()
-    requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-            finalizeBootShell()
-        })
-    })
 }
 
 async function bootstrap(): Promise<void> {

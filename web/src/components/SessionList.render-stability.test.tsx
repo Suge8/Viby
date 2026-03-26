@@ -7,14 +7,6 @@ import { SessionList } from './SessionList'
 
 const rowRenderCounts = new Map<string, number>()
 
-vi.mock('motion/react', () => ({
-    motion: {
-        div: ({ children, layout, layoutDependency, transition, ...props }: any) => <div {...props}>{children}</div>,
-        section: ({ children, layout, layoutDependency, transition, ...props }: any) => <section {...props}>{children}</section>,
-    },
-    useReducedMotion: () => false
-}))
-
 vi.mock('@/components/ui/button', () => ({
     Button: ({
         children,
@@ -88,7 +80,6 @@ describe('SessionList render stability', () => {
             <I18nProvider>
                 <SessionList
                     sessions={[session]}
-                    renderHeader={false}
                     api={null}
                     selectedSessionId={null}
                     actions={actions}
@@ -110,7 +101,6 @@ describe('SessionList render stability', () => {
                             updatedAt: 1_000
                         })
                     ]}
-                    renderHeader={false}
                     api={null}
                     selectedSessionId={null}
                     actions={actions}
@@ -139,7 +129,6 @@ describe('SessionList render stability', () => {
                             updatedAt: 1_000
                         })
                     ]}
-                    renderHeader={false}
                     api={null}
                     selectedSessionId={null}
                     actions={initialActions}
@@ -161,7 +150,6 @@ describe('SessionList render stability', () => {
                             updatedAt: 3_000
                         })
                     ]}
-                    renderHeader={false}
                     api={null}
                     selectedSessionId={null}
                     actions={initialActions}
@@ -190,7 +178,6 @@ describe('SessionList render stability', () => {
                             updatedAt: 1_000
                         })
                     ]}
-                    renderHeader={false}
                     api={null}
                     selectedSessionId={null}
                     actions={actions}
@@ -212,7 +199,6 @@ describe('SessionList render stability', () => {
                             updatedAt: 1_000
                         })
                     ]}
-                    renderHeader={false}
                     api={null}
                     selectedSessionId={null}
                     actions={actions}

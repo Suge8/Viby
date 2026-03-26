@@ -104,6 +104,7 @@ function areAgentEventsEqual(left: AgentEvent, right: AgentEvent): boolean {
 
 function areUserTextBlocksEqual(left: UserTextBlock, right: UserTextBlock): boolean {
     return left.text === right.text
+        && left.renderMode === right.renderMode
         && left.status === right.status
         && left.originalText === right.originalText
         && left.localId === right.localId
@@ -113,6 +114,7 @@ function areUserTextBlocksEqual(left: UserTextBlock, right: UserTextBlock): bool
 
 function areAgentTextBlocksEqual(left: AgentTextBlock, right: AgentTextBlock): boolean {
     return left.text === right.text
+        && left.renderMode === right.renderMode
         && left.localId === right.localId
         && left.createdAt === right.createdAt
         && left.meta === right.meta

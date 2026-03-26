@@ -1,8 +1,8 @@
 import type { ToolViewComponent, ToolViewProps } from '@/components/ToolCard/views/_all'
 import { isObject, safeStringify } from '@viby/protocol'
 import { CodeBlock } from '@/components/CodeBlock'
-import { MarkdownRenderer } from '@/components/MarkdownRenderer'
 import { ChecklistList, extractTodoChecklist } from '@/components/ToolCard/checklist'
+import { TextContent } from '@/components/TextContent'
 import { basename, resolveDisplayPath } from '@/utils/path'
 
 const TOOL_RESULT_MAX_DEPTH = 2
@@ -120,13 +120,13 @@ function looksLikeJson(text: string): boolean {
     return (trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))
 }
 
-function renderText(text: string, opts: { mode: 'markdown' | 'code' | 'auto'; language?: string } = { mode: 'auto' }) {
+function renderText(text: string, opts: { mode: 'plain' | 'markdown' | 'code'; language?: string } = { mode: 'plain' }) {
     if (opts.mode === 'code') {
         return <CodeBlock code={text} language={opts.language ?? 'text'} />
     }
 
     if (opts.mode === 'markdown') {
-        return <MarkdownRenderer content={text} />
+        return <TextContent text={text} mode="markdown" />
     }
 
     if (looksLikeHtml(text) || looksLikeJson(text)) {
@@ -139,7 +139,7 @@ function renderText(text: string, opts: { mode: 'markdown' | 'code' | 'auto'; la
         )
     }
 
-    return <MarkdownRenderer content={text} />
+    return <TextContent text={text} mode="plain" />
 }
 
 function placeholderForState(state: ToolViewProps['block']['tool']['state']): string {
@@ -287,7 +287,7 @@ const MarkdownResultView: ToolViewComponent = (props: ToolViewProps) => {
     if (text) {
         return (
             <>
-                {renderText(text, { mode: 'auto' })}
+                {renderText(text, { mode: 'markdown' })}
                 <RawJsonDevOnly value={result} />
             </>
         )
@@ -321,7 +321,7 @@ const LineListResultView: ToolViewComponent = (props: ToolViewProps) => {
     if (isProbablyMarkdownList(text)) {
         return (
             <>
-                <MarkdownRenderer content={text} />
+                <TextContent text={text} mode="markdown" />
                 <RawJsonDevOnly value={result} />
             </>
         )
@@ -408,7 +408,7 @@ const MutationResultView: ToolViewComponent = (props: ToolViewProps) => {
         return (
             <>
                 <div className={`text-sm ${className}`}>
-                    {renderText(text, { mode: state === 'error' ? 'code' : 'auto' })}
+                    {renderText(text, { mode: state === 'error' ? 'code' : 'plain' })}
                 </div>
                 <RawJsonDevOnly value={result} />
             </>
@@ -431,7 +431,7 @@ const CodexPatchResultView: ToolViewComponent = (props: ToolViewProps) => {
     if (text) {
         return (
             <>
-                {renderText(text, { mode: 'auto' })}
+                {renderText(text, { mode: 'plain' })}
                 <RawJsonDevOnly value={result} />
             </>
         )
@@ -461,7 +461,7 @@ const CodexReasoningResultView: ToolViewComponent = (props: ToolViewProps) => {
     if (text) {
         return (
             <>
-                {renderText(text, { mode: 'auto' })}
+                {renderText(text, { mode: 'plain' })}
                 <RawJsonDevOnly value={result} />
             </>
         )
@@ -539,14 +539,14 @@ const GenericResultView: ToolViewComponent = (props: ToolViewProps) => {
     if (text) {
         return (
             <>
-                {renderText(text, { mode: 'auto' })}
+                {renderText(text, { mode: 'plain' })}
                 {typeof result === 'object' ? <RawJsonDevOnly value={result} /> : null}
             </>
         )
     }
 
     if (typeof result === 'string') {
-        return renderText(result, { mode: 'auto' })
+        return renderText(result, { mode: 'plain' })
     }
 
     return <CodeBlock code={safeStringify(result)} language="json" highlight="never" />

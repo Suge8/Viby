@@ -1,4 +1,7 @@
-import { FileCodeIcon, FileTextIcon } from '@/components/icons'
+import {
+    FeatureFileCodeIcon as FileCodeIcon,
+    FeatureFileTextIcon as FileTextIcon,
+} from '@/components/featureIcons'
 
 const EXTENSION_COLORS: Record<string, string> = {
     ts: '#3178c6',

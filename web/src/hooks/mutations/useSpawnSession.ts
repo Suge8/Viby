@@ -9,6 +9,8 @@ import type {
 } from '@/types/api'
 import { appendRealtimeTrace } from '@/lib/realtimeTrace'
 import { writeSessionToQueryCache } from '@/lib/sessionQueryCache'
+import { formatOptionalUserFacingErrorMessage } from '@/lib/userFacingError'
+import { useTranslation } from '@/lib/use-translation'
 
 type SpawnInput = {
     machineId: string
@@ -22,21 +24,12 @@ type SpawnInput = {
     collaborationMode?: CodexCollaborationMode
 }
 
-function getSpawnMutationErrorMessage(error: unknown): string | null {
-    if (error instanceof Error) {
-        return error.message
-    }
-    if (error) {
-        return 'Failed to spawn session'
-    }
-    return null
-}
-
 export function useSpawnSession(api: ApiClient | null): {
     spawnSession: (input: SpawnInput) => Promise<SpawnResponse>
     isPending: boolean
     error: string | null
 } {
+    const { t } = useTranslation()
     const queryClient = useQueryClient()
 
     function writeSessionSnapshot(session: Session): void {
@@ -70,6 +63,9 @@ export function useSpawnSession(api: ApiClient | null): {
     return {
         spawnSession: mutation.mutateAsync,
         isPending: mutation.isPending,
-        error: getSpawnMutationErrorMessage(mutation.error),
+        error: formatOptionalUserFacingErrorMessage(mutation.error, {
+            t,
+            fallbackKey: 'error.session.create'
+        }),
     }
 }

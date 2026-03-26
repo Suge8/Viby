@@ -1,13 +1,15 @@
-import type { ComponentType, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import {
-    FolderOpenIcon,
-    LockIcon,
-    MessageSquareIcon,
-    TerminalIcon,
-    WorkspaceIcon,
-} from '@/components/icons'
+    LoadingFilesIcon,
+    LoadingSessionIcon,
+    LoadingTerminalIcon,
+} from '@/components/loading/loadingIcons'
+import { StageBrandMark, STAGE_BRAND_MARK_NEUTRAL_TONE_CLASS_NAME } from '@/components/StageBrandMark'
 
-export type LoadingStateKind = 'authorizing' | 'workspace' | 'session' | 'files' | 'terminal'
+const LOADING_STATE_ICON_CLASS_NAME = 'h-6 w-6'
+const WORKSPACE_LOADING_BRAND_MARK_CLASS_NAME = `ds-stage-empty-icon h-20 w-20 ${STAGE_BRAND_MARK_NEUTRAL_TONE_CLASS_NAME}`
+
+export type LoadingStateKind = 'workspace' | 'session' | 'files' | 'terminal'
 
 type LoadingStatePresentationOptions = {
     kind: LoadingStateKind
@@ -24,31 +26,26 @@ type LoadingStatePresentation = {
 type LoadingStateDefinition = {
     labelKey: string
     descriptionKey?: string
-    Icon: ComponentType<{ className?: string }>
+    icon: ReactNode
 }
 
 const LOADING_STATE_DEFINITIONS: Record<LoadingStateKind, LoadingStateDefinition> = {
-    authorizing: {
-        labelKey: 'authorizing',
-        descriptionKey: 'loading.authorizing.description',
-        Icon: LockIcon,
-    },
     workspace: {
         labelKey: 'loading.workspace',
         descriptionKey: 'loading.workspace.description',
-        Icon: WorkspaceIcon,
+        icon: <StageBrandMark className={WORKSPACE_LOADING_BRAND_MARK_CLASS_NAME} />,
     },
     session: {
         labelKey: 'loading.session',
-        Icon: MessageSquareIcon,
+        icon: <LoadingSessionIcon className={LOADING_STATE_ICON_CLASS_NAME} />,
     },
     files: {
         labelKey: 'loading.files',
-        Icon: FolderOpenIcon,
+        icon: <LoadingFilesIcon className={LOADING_STATE_ICON_CLASS_NAME} />,
     },
     terminal: {
         labelKey: 'loading.terminal',
-        Icon: TerminalIcon,
+        icon: <LoadingTerminalIcon className={LOADING_STATE_ICON_CLASS_NAME} />,
     },
 }
 
@@ -61,6 +58,6 @@ export function getLoadingStatePresentation(options: LoadingStatePresentationOpt
     return {
         label: options.t(definition.labelKey),
         description,
-        icon: <definition.Icon className="h-5 w-5" />,
+        icon: definition.icon,
     }
 }

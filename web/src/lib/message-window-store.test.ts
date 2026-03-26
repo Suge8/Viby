@@ -2,6 +2,7 @@ import type { ApiClient } from '@/api/client'
 import type { DecryptedMessage, MessagesResponse } from '@/types/api'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
+    appendOptimisticMessage,
     applySessionStream,
     catchupMessagesAfter,
     clearMessageWindow,
@@ -10,8 +11,12 @@ import {
     fetchLatestMessages,
     fetchOlderMessages,
     fetchOlderMessagesUntilPreviousUser,
+    flushMessageWindowSnapshot,
     getMessageWindowState,
-    ingestIncomingMessages
+    ingestIncomingMessages,
+    markPendingReplyAccepted,
+    removeMessageWindow,
+    subscribeMessageWindow
 } from './message-window-store'
 
 function buildMessage(seq: number): DecryptedMessage {
@@ -132,6 +137,8 @@ describe('message-window-store', () => {
 
     afterEach(() => {
         clearMessageWindow('session-1')
+        removeMessageWindow('session-1')
+        window.localStorage.clear()
     })
 
     it('keeps expanded history mounted after loading older pages and receiving new messages', async () => {
@@ -264,5 +271,101 @@ describe('message-window-store', () => {
 
         expect(getMessagesSpy).toHaveBeenCalledTimes(1)
         expect(getMessageWindowState('session-1').hasLoadedLatest).toBe(true)
+    })
+
+    it('moves the pending reply from sending to preparing and clears it on the first stream delta', () => {
+        appendOptimisticMessage('session-1', {
+            id: 'local-1',
+            seq: null,
+            localId: 'local-1',
+            createdAt: 1_000,
+            status: 'sending',
+            originalText: 'hello',
+            content: {
+                role: 'user',
+                content: {
+                    type: 'text',
+                    text: 'hello'
+                }
+            }
+        })
+
+        expect(getMessageWindowState('session-1').pendingReply).toEqual({
+            localId: 'local-1',
+            requestStartedAt: 1_000,
+            serverAcceptedAt: null,
+            phase: 'sending'
+        })
+
+        markPendingReplyAccepted('session-1', 'local-1', 1_250)
+
+        expect(getMessageWindowState('session-1').pendingReply).toEqual({
+            localId: 'local-1',
+            requestStartedAt: 1_000,
+            serverAcceptedAt: 1_250,
+            phase: 'preparing'
+        })
+
+        applySessionStream('session-1', {
+            streamId: 'stream-1',
+            startedAt: 1_300,
+            updatedAt: 1_300,
+            text: 'H'
+        })
+
+        expect(getMessageWindowState('session-1').pendingReply).toBeNull()
+    })
+
+    it('restores the warm snapshot after transient runtime cleanup', async () => {
+        const api = createFixedMessagesApi([buildMessage(1)])
+
+        await fetchLatestMessages(api, 'session-1')
+        flushMessageWindowSnapshot('session-1')
+        clearMessageWindow('session-1')
+
+        const unsubscribe = subscribeMessageWindow('session-1', () => undefined)
+        unsubscribe()
+
+        const restored = getMessageWindowState('session-1')
+        expect(restored.messages.at(-1)?.seq).toBe(1)
+        expect(restored.hasLoadedLatest).toBe(true)
+        expect(restored.restoredFromWarmSnapshot).toBe(true)
+    })
+
+    it('refreshes a restored warm snapshot in the background without reopening the loading gate', async () => {
+        const initialApi = createFixedMessagesApi([buildMessage(1)])
+        await fetchLatestMessages(initialApi, 'session-1')
+        flushMessageWindowSnapshot('session-1')
+        clearMessageWindow('session-1')
+
+        const unsubscribe = subscribeMessageWindow('session-1', () => undefined)
+        unsubscribe()
+
+        let resolveRequest!: (value: MessagesResponse) => void
+        const refreshApi = {
+            getMessages: vi.fn(() => {
+                return new Promise<MessagesResponse>((resolve) => {
+                    resolveRequest = resolve
+                })
+            })
+        } as unknown as ApiClient
+
+        const refreshPromise = ensureLatestMessagesLoaded(refreshApi, 'session-1')
+        expect(getMessageWindowState('session-1').isLoading).toBe(false)
+
+        resolveRequest({
+            messages: [buildMessage(2)],
+            page: {
+                limit: 50,
+                beforeSeq: null,
+                nextBeforeSeq: 2,
+                hasMore: false
+            }
+        })
+        await refreshPromise
+
+        const refreshed = getMessageWindowState('session-1')
+        expect(refreshed.messages.at(-1)?.seq).toBe(2)
+        expect(refreshed.restoredFromWarmSnapshot).toBe(false)
     })
 })

@@ -1,9 +1,11 @@
+import type { RefObject } from 'react'
 import type { ComposerActionHandlers, ComposerConfigState } from '@/components/AssistantChat/composerTypes'
+import { AnchoredFloatingOverlay } from '@/components/ChatInput/AnchoredFloatingOverlay'
 import { useComposerLiveConfig } from '@/components/AssistantChat/useComposerLiveConfig'
-import { FloatingOverlay } from '@/components/ChatInput/FloatingOverlay'
 import { useTranslation } from '@/lib/use-translation'
 
 type ComposerControlsOverlayProps = {
+    anchorRef: RefObject<HTMLElement | null>
     config: ComposerConfigState
     handlers: ComposerActionHandlers
     controlsDisabled: boolean
@@ -28,18 +30,17 @@ export default function ComposerControlsOverlay(props: ComposerControlsOverlayPr
     }
 
     return (
-        <div className="absolute bottom-[100%] left-0 right-0 mb-2 flex justify-start">
-            <FloatingOverlay
-                className="ds-composer-overlay ds-composer-overlay-enter w-full max-w-[min(100%,28rem)]"
-                maxHeight={360}
-            >
-                <div className="px-4 pb-1 pt-3">
-                    <div className="text-xs font-medium text-[var(--app-hint)]">
-                        {t('composer.controls')}
-                    </div>
+        <AnchoredFloatingOverlay
+            anchorRef={props.anchorRef}
+            className="ds-composer-overlay ds-composer-overlay-enter max-w-[min(100%,28rem)]"
+            maxHeight={360}
+        >
+            <div className="px-4 pb-1 pt-3">
+                <div className="text-xs font-medium text-[var(--app-hint)]">
+                    {t('composer.controls')}
                 </div>
-                {renderSections(sections)}
-            </FloatingOverlay>
-        </div>
+            </div>
+            {renderSections(sections)}
+        </AnchoredFloatingOverlay>
     )
 }

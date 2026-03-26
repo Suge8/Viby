@@ -1,6 +1,6 @@
 import { useAssistantApi, useAssistantState } from '@assistant-ui/react'
 import { useCallback, useRef, useState } from 'react'
-import { AttachmentIcon } from '@/components/icons'
+import { FeatureAttachmentIcon as AttachmentIcon } from '@/components/featureIcons'
 import { Button } from '@/components/ui/button'
 import { SUPPORTED_ATTACHMENT_ACCEPT, isWildcardAttachmentAccept } from '@/lib/attachmentAccept'
 import { cn } from '@/lib/utils'

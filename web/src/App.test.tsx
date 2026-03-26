@@ -193,10 +193,9 @@ describe('App', () => {
         render(<App />)
 
         await waitFor(() => {
-            expect(installPromptPropsMock).toHaveBeenLastCalledWith({
-                suppressed: true
-            })
+            expect(installPromptPropsMock).not.toHaveBeenCalled()
         })
+        expect(screen.getByTestId('outlet')).toBeInTheDocument()
     })
 
     it('suppresses the install banner while realtime reconnect chrome is active', async () => {
@@ -218,10 +217,83 @@ describe('App', () => {
         render(<App />)
 
         await waitFor(() => {
+            expect(installPromptPropsMock).not.toHaveBeenCalled()
+        })
+        expect(screen.getByTestId('outlet')).toBeInTheDocument()
+    })
+
+    it('only loads the install prompt when app chrome is idle again', async () => {
+        useAuthMock.mockReturnValue({
+            token: 'session-token',
+            api: {} as object,
+            isLoading: false,
+            error: null,
+        })
+        useRealtimeFeedbackMock.mockReturnValue({
+            banner: { kind: 'hidden' },
+            handleConnect: vi.fn(),
+            handleDisconnect: vi.fn(),
+            handleConnectError: vi.fn(),
+            announceRecovery: vi.fn(),
+            runCatchupSync: vi.fn(),
+        })
+
+        render(<App />)
+
+        await waitFor(() => {
             expect(installPromptPropsMock).toHaveBeenLastCalledWith({
-                suppressed: true
+                suppressed: false
             })
         })
+    })
+
+    it('renders the app shell immediately when a session token is already ready, even without an auth source', async () => {
+        useAuthSourceMock.mockReturnValue({
+            authSource: null,
+            setAccessToken: vi.fn(),
+            clearAuth: clearAuthMock,
+        })
+        useAuthMock.mockReturnValue({
+            token: 'session-token',
+            api: {} as object,
+            isLoading: false,
+            error: null,
+        })
+
+        render(<App />)
+
+        expect(screen.getByTestId('outlet')).toBeInTheDocument()
+        expect(screen.queryByTestId('login-prompt')).not.toBeInTheDocument()
+        expect(screen.queryByTestId('loading-state')).not.toBeInTheDocument()
+    })
+
+    it('does not block the app shell on background auth loading when a ready session already exists', async () => {
+        useAuthMock.mockReturnValue({
+            token: 'session-token',
+            api: {} as object,
+            isLoading: true,
+            error: null,
+        })
+
+        render(<App />)
+
+        expect(screen.getByTestId('outlet')).toBeInTheDocument()
+        expect(screen.queryByTestId('loading-state')).not.toBeInTheDocument()
+    })
+
+    it('keeps auth refresh neutral when no ready session exists yet', () => {
+        useAuthMock.mockReturnValue({
+            token: null,
+            api: null,
+            isLoading: true,
+            error: null,
+        })
+
+        const { container } = render(<App />)
+
+        expect(container).toBeEmptyDOMElement()
+        expect(screen.queryByTestId('loading-state')).not.toBeInTheDocument()
+        expect(screen.queryByTestId('login-prompt')).not.toBeInTheDocument()
     })
 
     it('restores the intended href after a recovery reload consumed the navigation target', () => {

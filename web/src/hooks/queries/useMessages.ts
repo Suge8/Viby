@@ -1,19 +1,19 @@
 import { useCallback, useEffect, useSyncExternalStore } from 'react'
 import type { ApiClient } from '@/api/client'
 import type { DecryptedMessage, SessionStreamState } from '@/types/api'
+import type { MessageWindowWarningKey } from '@/lib/messageWindowWarnings'
 import {
     clearMessageWindow,
-    ensureLatestMessagesLoaded,
-    fetchLatestMessages,
-    fetchOlderMessages,
-    fetchOlderMessagesUntilPreviousUser,
+    flushMessageWindowSnapshot,
     flushPendingMessages,
     getMessageWindowState,
+    type PendingReplyState,
     setAtBottom as setMessageWindowAtBottom,
     subscribeMessageWindow,
     type LoadMoreMessagesResult,
     type MessageWindowState,
-} from '@/lib/message-window-store'
+} from '@/lib/messageWindowStoreCore'
+import { loadMessageWindowStoreAsyncModule } from '@/lib/messageWindowStoreModule'
 
 const EMPTY_STATE: MessageWindowState = {
     sessionId: 'unknown',
@@ -29,20 +29,23 @@ const EMPTY_STATE: MessageWindowState = {
     warning: null,
     atBottom: true,
     messagesVersion: 0,
+    pendingReply: null,
     stream: null,
     streamVersion: 0,
+    restoredFromWarmSnapshot: false,
 }
 const DID_NOT_LOAD_OLDER_MESSAGES_RESULT: LoadMoreMessagesResult = { didLoadOlderMessages: false }
 
 export function useMessages(api: ApiClient | null, sessionId: string | null): {
     messages: DecryptedMessage[]
-    warning: string | null
+    warning: MessageWindowWarningKey | null
     isLoading: boolean
     isLoadingMore: boolean
     hasMore: boolean
     pendingCount: number
     hasLoadedLatest: boolean
     messagesVersion: number
+    pendingReply: PendingReplyState | null
     stream: SessionStreamState | null
     streamVersion: number
     loadMore: () => Promise<LoadMoreMessagesResult>
@@ -71,7 +74,10 @@ export function useMessages(api: ApiClient | null, sessionId: string | null): {
         if (!api || !sessionId) {
             return
         }
-        void ensureLatestMessagesLoaded(api, sessionId)
+
+        void loadMessageWindowStoreAsyncModule().then(({ ensureLatestMessagesLoaded }) => {
+            return ensureLatestMessagesLoaded(api, sessionId)
+        })
     }, [api, sessionId])
 
     useEffect(() => {
@@ -79,6 +85,7 @@ export function useMessages(api: ApiClient | null, sessionId: string | null): {
             return
         }
         return () => {
+            flushMessageWindowSnapshot(sessionId)
             clearMessageWindow(sessionId)
         }
     }, [sessionId])
@@ -90,6 +97,7 @@ export function useMessages(api: ApiClient | null, sessionId: string | null): {
         if (!state.hasMore || state.isLoadingMore) {
             return DID_NOT_LOAD_OLDER_MESSAGES_RESULT
         }
+        const { fetchOlderMessages } = await loadMessageWindowStoreAsyncModule()
         return await fetchOlderMessages(api, sessionId)
     }, [api, sessionId, state.hasMore, state.isLoadingMore])
 
@@ -100,11 +108,13 @@ export function useMessages(api: ApiClient | null, sessionId: string | null): {
         if (!state.hasMore || state.isLoadingMore) {
             return DID_NOT_LOAD_OLDER_MESSAGES_RESULT
         }
+        const { fetchOlderMessagesUntilPreviousUser } = await loadMessageWindowStoreAsyncModule()
         return await fetchOlderMessagesUntilPreviousUser(api, sessionId)
     }, [api, sessionId, state.hasMore, state.isLoadingMore])
 
     const refetch = useCallback(async () => {
         if (!api || !sessionId) return
+        const { fetchLatestMessages } = await loadMessageWindowStoreAsyncModule()
         await fetchLatestMessages(api, sessionId)
     }, [api, sessionId])
 
@@ -112,6 +122,7 @@ export function useMessages(api: ApiClient | null, sessionId: string | null): {
         if (!sessionId) return
         const needsRefresh = flushPendingMessages(sessionId)
         if (needsRefresh && api) {
+            const { fetchLatestMessages } = await loadMessageWindowStoreAsyncModule()
             await fetchLatestMessages(api, sessionId)
         }
     }, [api, sessionId])
@@ -130,6 +141,7 @@ export function useMessages(api: ApiClient | null, sessionId: string | null): {
         pendingCount: state.pendingCount,
         hasLoadedLatest: state.hasLoadedLatest,
         messagesVersion: state.messagesVersion,
+        pendingReply: state.pendingReply,
         stream: state.stream,
         streamVersion: state.streamVersion,
         loadMore,

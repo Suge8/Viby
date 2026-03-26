@@ -43,8 +43,6 @@ function renderThread(state?: Partial<Parameters<typeof VibyThread>[0]['state']>
                 state={{
                     hasMoreMessages: false,
                     isLoadingMoreMessages: false,
-                    isResponding: false,
-                    hasStreamingResponse: false,
                     pendingCount: 0,
                     rawMessagesCount: 0,
                     normalizedMessagesCount: 0,
@@ -116,10 +114,17 @@ describe('VibyThread layout', () => {
         })
 
         const historyControl = screen.getByTestId('thread-history-control')
+        const contentStage = container.querySelector('.session-chat-thread-viewport > .ds-stage-shell')
+        const historyAnchor = historyControl.parentElement
+
         expect(historyControl).toBeInTheDocument()
-        expect(historyControl).toHaveTextContent('More messages')
+        expect(historyControl).toHaveAttribute('title', 'misc.moreMessages')
+        expect(historyControl).not.toHaveTextContent('misc.moreMessagesShort')
+        expect(historyAnchor).toHaveClass('top-[var(--chat-side-control-upper-top)]')
+        expect(historyAnchor).toHaveClass('right-[var(--chat-side-control-right-offset)]')
         expect(container.querySelector('.session-chat-thread-viewport')?.contains(historyControl)).toBe(false)
-        expect(container.querySelector('.ds-stage-shell')).toHaveClass('pt-14')
+        expect(contentStage).toHaveClass('pt-14')
+        expect(contentStage).toHaveClass('pr-[calc(var(--chat-side-control-gutter)+0.5rem)]')
     })
 
     it('forces exact message layout measurement while a history transaction is pending', () => {
@@ -174,8 +179,10 @@ describe('VibyThread layout', () => {
             historyJumpTargetMessageIds: ['user:1', 'user:2']
         })
 
+        const contentStage = container.querySelector('.session-chat-thread-viewport > .ds-stage-shell')
+
         expect(screen.queryByTestId('thread-history-control')).not.toBeInTheDocument()
-        expect(container.querySelector('.ds-stage-shell')).toHaveClass('pt-14')
+        expect(contentStage).toHaveClass('pt-14')
     })
 
     it('renders a compact icon-only bottom CTA with an accessible label when the user is away from the bottom', () => {
@@ -202,18 +209,17 @@ describe('VibyThread layout', () => {
             ])
         })
 
-        const button = screen.getByRole('button', { name: 'Back to bottom' })
-        const stage = button.closest('.ds-stage-shell')
-        const wrapper = stage?.parentElement
+        const button = screen.getByRole('button', { name: 'misc.backToBottom' })
+        const buttonAnchor = button.parentElement
 
         expect(button).toBeInTheDocument()
-        expect(button).toHaveAttribute('title', 'Back to bottom')
-        expect(button).toHaveClass('rounded-full')
-        expect(stage).toHaveClass('justify-center')
-        expect(stage).toHaveClass('ds-stage-shell')
-        expect(wrapper).toHaveClass('inset-x-0')
-        expect(wrapper).toHaveClass('z-30')
-        expect(screen.queryByText('Back to bottom')).not.toBeInTheDocument()
+        expect(button).toHaveAttribute('title', 'misc.backToBottom')
+        expect(button).not.toHaveTextContent('misc.backToBottomShort')
+        expect(buttonAnchor).toHaveClass('session-chat-thread-bottom-control-anchor')
+        expect(buttonAnchor).toHaveClass('bottom-[var(--chat-side-control-rest-bottom-offset)]')
+        expect(buttonAnchor).toHaveClass('right-[var(--chat-side-control-right-offset)]')
+        expect(button).toHaveClass('h-[var(--chat-side-control-size)]')
+        expect(button).toHaveClass('w-[var(--chat-side-control-size)]')
     })
 
     it('keeps new-message semantics in the accessible label without rendering a visible badge or caption', () => {
@@ -241,16 +247,16 @@ describe('VibyThread layout', () => {
             ])
         })
 
-        const button = screen.getByRole('button', { name: '2 new message{s}' })
+        const button = screen.getByRole('button', { name: 'misc.newMessage' })
 
         expect(button).toBeInTheDocument()
-        expect(button).toHaveAttribute('title', '2 new message{s}')
-        expect(screen.queryByText('2 new message{s}')).not.toBeInTheDocument()
+        expect(button).toHaveAttribute('title', 'misc.newMessage')
+        expect(button).not.toHaveTextContent('misc.backToBottomShort')
+        expect(screen.queryByText('misc.newMessage')).not.toBeInTheDocument()
     })
 
-    it('renders a lightweight replying indicator inside the thread when thinking without streaming text', () => {
+    it('keeps the thread surface free of reply-status chrome so only transcript content stays in the viewport', () => {
         renderThread({
-            isResponding: true,
             rawMessagesCount: 2,
             normalizedMessagesCount: 2,
             messagesVersion: 1,
@@ -261,11 +267,6 @@ describe('VibyThread layout', () => {
             ])
         })
 
-        const indicator = screen.getByTestId('assistant-replying-indicator')
-        const status = screen.getByRole('status')
-
-        expect(indicator).toHaveTextContent('AI is replying')
-        expect(indicator).toHaveClass('mx-auto')
-        expect(status).toHaveClass('justify-center')
+        expect(screen.queryByTestId('assistant-replying-indicator')).not.toBeInTheDocument()
     })
 })

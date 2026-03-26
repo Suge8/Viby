@@ -1,4 +1,5 @@
 import type { ChatBlock, ToolCallBlock, ToolPermission } from '@/chat/types'
+import { resolveTextRenderMode } from '@/chat/textRenderMode'
 import type { TracedMessage } from '@/chat/tracer'
 import { createCliOutputBlock, isCliOutputText, mergeCliOutputBlocks } from '@/chat/reducerCliOutput'
 import { parseMessageAsEvent } from '@/chat/reducerEvents'
@@ -64,6 +65,7 @@ export function reduceTimeline(
                 localId: msg.localId,
                 createdAt: msg.createdAt,
                 text: msg.content.text,
+                renderMode: 'plain',
                 attachments: msg.content.attachments,
                 status: msg.status,
                 originalText: msg.originalText,
@@ -93,6 +95,7 @@ export function reduceTimeline(
                         localId: msg.localId,
                         createdAt: msg.createdAt,
                         text: c.text,
+                        renderMode: resolveTextRenderMode(c.text),
                         meta: msg.meta
                     })
                     continue
@@ -226,7 +229,8 @@ export function reduceTimeline(
                         id: `${msg.id}:${idx}`,
                         localId: null,
                         createdAt: msg.createdAt,
-                        text: c.prompt
+                        text: c.prompt,
+                        renderMode: 'plain'
                     })
                 }
             }

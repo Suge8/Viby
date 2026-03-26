@@ -11,7 +11,13 @@ describe('extractAssistantCopyText', () => {
 
     it('ignores tool calls and empty text fragments', () => {
         expect(extractAssistantCopyText([
-            { type: 'tool-call' },
+            {
+                type: 'tool-call',
+                toolCallId: 'tool-1',
+                toolName: 'search',
+                args: {},
+                argsText: '{}'
+            },
             { type: 'text', text: '   ' }
         ])).toBeNull()
     })

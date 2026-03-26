@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useAppContext } from '@/lib/app-context'
 import { useAppGoBack } from '@/hooks/useAppGoBack'
+import { useFinalizeBootShell } from '@/hooks/useFinalizeBootShell'
 import { useSession } from '@/hooks/queries/useSession'
 import { getNoticePreset } from '@/lib/noticePresets'
 import { useTranslation } from '@/lib/use-translation'
@@ -21,6 +22,7 @@ const TerminalView = lazy(async () => {
 
 export default function TerminalPage(): ReactNode {
     const { t } = useTranslation()
+    useFinalizeBootShell()
     const warningPreset = getNoticePreset('genericWarning', t)
     const errorPreset = getNoticePreset('genericError', t)
     const infoPreset = getNoticePreset('genericInfo', t)

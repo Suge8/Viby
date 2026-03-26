@@ -4,14 +4,13 @@ import type { ToolCallBlock } from '@/chat/types'
 import { isObject, safeStringify } from '@viby/protocol'
 import { getEventPresentation } from '@/chat/presentation'
 import { CodeBlock } from '@/components/CodeBlock'
-import { MarkdownRenderer } from '@/components/MarkdownRenderer'
-import { LazyRainbowText } from '@/components/LazyRainbowText'
 import { CliOutputMessageContent } from '@/components/AssistantChat/messages/CliOutputMessageContent'
 import { MessageSurface } from '@/components/AssistantChat/messages/MessageSurface'
 import { MessageStatusIndicator } from '@/components/AssistantChat/messages/MessageStatusIndicator'
 import { ToolCard } from '@/components/ToolCard/ToolCard'
 import { useVibyChatContext } from '@/components/AssistantChat/context'
 import { getThreadMessageId, THREAD_MESSAGE_ID_ATTRIBUTE } from '@/components/AssistantChat/threadMessageIdentity'
+import { TextContent } from '@/components/TextContent'
 
 const USER_MESSAGE_CARD_CLASS = 'ds-message-card-right'
 const FULL_WIDTH_MESSAGE_CARD_CLASS = 'ds-message-card'
@@ -72,7 +71,7 @@ function VibyNestedBlockList(props: {
                             <MessageSurface tone="user" copyText={block.text}>
                                 <div className="flex min-w-0 items-end gap-2">
                                     <div className="min-w-0 flex-1">
-                                        <LazyRainbowText text={block.text} />
+                                        <TextContent text={block.text} mode={block.renderMode} />
                                     </div>
                                     {status ? (
                                         <div className="shrink-0 self-end pb-0.5">
@@ -93,7 +92,7 @@ function VibyNestedBlockList(props: {
                             {...{ [THREAD_MESSAGE_ID_ATTRIBUTE]: getThreadMessageId(block) }}
                         >
                             <MessageSurface tone="assistant" copyText={block.text}>
-                                <MarkdownRenderer content={block.text} />
+                                <TextContent text={block.text} mode={block.renderMode} />
                             </MessageSurface>
                         </div>
                     )

@@ -14,6 +14,28 @@ const harness = vi.hoisted(() => ({
     runPreloadedNavigation: vi.fn(),
 }))
 
+function renderWorkspace(props: Record<string, unknown>): React.JSX.Element {
+    harness.lastWorkspaceProps = props
+    return (
+        <div>
+            <button
+                type="button"
+                data-testid="workspace-abort"
+                onClick={() => void ((props.actions as { onAbort: () => Promise<void> }).onAbort)()}
+            >
+                abort
+            </button>
+            <button
+                type="button"
+                data-testid="workspace-switch"
+                onClick={() => void ((props.actions as { onSwitchToRemote: () => Promise<void> }).onSwitchToRemote)()}
+            >
+                switch
+            </button>
+        </div>
+    )
+}
+
 vi.mock('@tanstack/react-router', () => ({
     useNavigate: () => harness.navigate
 }))
@@ -34,23 +56,13 @@ vi.mock('@/lib/navigationTransition', () => ({
 }))
 
 vi.mock('@/routes/sessions/sessionRoutePreload', () => ({
+    loadSessionChatWorkspaceModule: vi.fn(async () => ({ default: renderWorkspace })),
     loadSessionFilesRouteModule: () => harness.loadSessionFilesRouteModule(),
     preloadSessionTerminalExperience: () => harness.preloadSessionTerminalExperience()
 }))
 
 vi.mock('@/components/SessionChatWorkspace', () => ({
-    default: (props: Record<string, unknown>) => {
-        harness.lastWorkspaceProps = props
-        return (
-            <button
-                type="button"
-                data-testid="workspace-abort"
-                onClick={() => void ((props.actions as { onAbort: () => Promise<void> }).onAbort)()}
-            >
-                abort
-            </button>
-        )
-    }
+    default: renderWorkspace
 }))
 
 vi.mock('@/components/SessionHeader', () => ({
@@ -84,7 +96,10 @@ afterEach(() => {
     harness.lastWorkspaceProps = null
 })
 
-function createDeferred() {
+function createDeferred(): {
+    promise: Promise<undefined>
+    resolve: () => void
+} {
     let resolve!: (value: undefined) => void
     const promise = new Promise<undefined>((done) => {
         resolve = done
@@ -99,9 +114,10 @@ function renderSessionChat(options?: {
     active?: boolean
     isDetailPending?: boolean
     hasLoadedLatestMessages?: boolean
+    hasWarmSessionSnapshot?: boolean
     messages?: unknown[]
     onRefresh?: () => void
-}) {
+}): ReturnType<typeof render> {
     return render(
         <I18nProvider>
             <SessionChat
@@ -123,6 +139,7 @@ function renderSessionChat(options?: {
                     }
                 } as never}
                 isDetailPending={options?.isDetailPending}
+                hasWarmSessionSnapshot={options?.hasWarmSessionSnapshot}
                 messages={(options?.messages ?? []) as never}
                 messagesWarning={null}
                 hasMoreMessages={false}
@@ -133,6 +150,7 @@ function renderSessionChat(options?: {
                 pendingCount={0}
                 hasLoadedLatestMessages={options?.hasLoadedLatestMessages ?? true}
                 messagesVersion={0}
+                pendingReply={null}
                 stream={null}
                 streamVersion={0}
                 onBack={vi.fn()}
@@ -153,6 +171,7 @@ describe('SessionChat layout', () => {
         const { container } = renderSessionChat()
         await screen.findByTestId('workspace-abort')
         const chatRoot = container.firstElementChild
+        const chatBody = container.querySelector('.session-chat-page-body')
         const headerNavigation = harness.lastHeaderProps?.navigation as {
             onViewFiles?: () => void
             onViewTerminal?: () => void
@@ -162,6 +181,8 @@ describe('SessionChat layout', () => {
         expect(chatRoot).toHaveClass('h-full')
         expect(chatRoot).not.toHaveClass('flex-1')
         expect(chatRoot).toHaveClass('min-w-0')
+        expect(chatRoot).toHaveClass('session-chat-enter-surface')
+        expect(chatBody).toHaveClass('session-chat-enter-body')
         expect(headerNavigation.onViewFiles).toBeTypeOf('function')
         expect(headerNavigation.onViewTerminal).toBeUndefined()
         expect(harness.lastWorkspaceProps?.messageState).toMatchObject({
@@ -181,6 +202,18 @@ describe('SessionChat layout', () => {
 
         await vi.waitFor(() => {
             expect(harness.abortSession).toHaveBeenCalledTimes(1)
+        })
+        expect(onRefresh).not.toHaveBeenCalled()
+    })
+
+    it('does not force a message refresh immediately after switching to remote', async () => {
+        const onRefresh = vi.fn()
+        renderSessionChat({ onRefresh })
+
+        fireEvent.click(await screen.findByTestId('workspace-switch'))
+
+        await vi.waitFor(() => {
+            expect(harness.switchSession).toHaveBeenCalledTimes(1)
         })
         expect(onRefresh).not.toHaveBeenCalled()
     })
@@ -218,6 +251,18 @@ describe('SessionChat layout', () => {
 
         expect(screen.getByTestId('session-chat-detail-pending')).toBeInTheDocument()
         expect(screen.queryByTestId('workspace-abort')).not.toBeInTheDocument()
+    })
+
+    it('skips the detail pending shell when a warm session snapshot already exists', async () => {
+        renderSessionChat({
+            isDetailPending: true,
+            hasWarmSessionSnapshot: true,
+            hasLoadedLatestMessages: false,
+            messages: []
+        })
+
+        expect(await screen.findAllByTestId('workspace-abort')).toHaveLength(1)
+        expect(screen.queryByTestId('session-chat-detail-pending')).not.toBeInTheDocument()
     })
 
     it('exposes terminal navigation through the header only for active sessions', () => {

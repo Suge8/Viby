@@ -1,11 +1,14 @@
 import { useMemo, type RefObject } from 'react'
-import { AnimatePresence, motion } from 'motion/react'
 import type { SessionType } from './types'
-import { FolderIcon, GitBranchIcon } from '@/components/icons'
+import {
+    FeatureFolderIcon as FolderIcon,
+    FeatureGitBranchIcon as GitBranchIcon,
+} from '@/components/featureIcons'
 import {
     PressableSurface,
     PressableSurfaceSelectionIndicator
 } from '@/components/ui/pressable-surface'
+import { CollapsiblePanel } from '@/components/ui/CollapsiblePanel'
 import { useTranslation } from '@/lib/use-translation'
 import { NewSessionSectionCard } from './NewSessionSectionCard'
 
@@ -72,33 +75,22 @@ export function SessionTypeSelector(props: {
                 })}
             </div>
 
-            <AnimatePresence initial={false}>
-                {props.sessionType === 'worktree' ? (
-                    <motion.div
-                        key="worktree-name"
-                        initial={{ opacity: 0, height: 0, y: -6 }}
-                        animate={{ opacity: 1, height: 'auto', y: 0 }}
-                        exit={{ opacity: 0, height: 0, y: -4 }}
-                        transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-                        className="overflow-hidden"
-                    >
-                        <div className="mt-3 rounded-[18px] border border-[var(--ds-border-default)] bg-[color:color-mix(in_srgb,var(--ds-panel-strong)_92%,transparent)] p-3.5">
-                            <label className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--ds-text-muted)]">
-                                {t('newSession.type.worktree')}
-                            </label>
-                            <input
-                                ref={props.worktreeInputRef}
-                                type="text"
-                                placeholder={t('newSession.type.worktree.placeholder')}
-                                value={props.worktreeName}
-                                onChange={(e) => props.onWorktreeNameChange(e.target.value)}
-                                disabled={props.isDisabled}
-                                className="mt-2.5 min-h-[48px] w-full rounded-[16px] border border-[var(--ds-border-default)] bg-[var(--ds-panel-strong)] px-4 py-3 text-sm font-medium text-[var(--ds-text-primary)] outline-none focus:border-[var(--ds-border-strong)] focus:ring-2 focus:ring-[color:color-mix(in_srgb,var(--ds-accent-violet)_18%,transparent)] disabled:opacity-60"
-                            />
-                        </div>
-                    </motion.div>
-                ) : null}
-            </AnimatePresence>
+            <CollapsiblePanel open={props.sessionType === 'worktree'} className="mt-3">
+                <div className="rounded-[18px] border border-[var(--ds-border-default)] bg-[color:color-mix(in_srgb,var(--ds-panel-strong)_92%,transparent)] p-3.5">
+                    <label className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--ds-text-muted)]">
+                        {t('newSession.type.worktree')}
+                    </label>
+                    <input
+                        ref={props.worktreeInputRef}
+                        type="text"
+                        placeholder={t('newSession.type.worktree.placeholder')}
+                        value={props.worktreeName}
+                        onChange={(e) => props.onWorktreeNameChange(e.target.value)}
+                        disabled={props.isDisabled}
+                        className="mt-2.5 min-h-[48px] w-full rounded-[16px] border border-[var(--ds-border-default)] bg-[var(--ds-panel-strong)] px-4 py-3 text-sm font-medium text-[var(--ds-text-primary)] outline-none focus:border-[var(--ds-border-strong)] focus:ring-2 focus:ring-[color:color-mix(in_srgb,var(--ds-accent-violet)_18%,transparent)] disabled:opacity-60"
+                    />
+                </div>
+            </CollapsiblePanel>
         </NewSessionSectionCard>
     )
 }

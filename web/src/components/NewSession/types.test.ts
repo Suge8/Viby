@@ -45,3 +45,16 @@ describe('Codex model options', () => {
         ])
     })
 })
+
+describe('Gemini model options', () => {
+    it('uses terminal default plus the current gemini-cli explicit model set', () => {
+        expect(MODEL_OPTIONS.gemini).toEqual([
+            { value: 'auto', label: 'Terminal default model', labelKey: 'model.terminalDefault' },
+            { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+            { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+            { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
+            { value: 'gemini-3-pro-preview', label: 'Gemini 3 Pro Preview' },
+            { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' },
+        ])
+    })
+})

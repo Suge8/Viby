@@ -1,4 +1,4 @@
-import { BrandIcon } from '@/components/icons'
+import { BrandMarkIcon } from '@/components/icons'
 import { withDefaultClassName, type AppIconProps } from '@/components/iconUtils'
 
 type SessionAgentBrand = 'codex' | 'claude' | 'gemini' | 'cursor' | 'opencode' | 'unknown'
@@ -46,7 +46,7 @@ export function SessionAgentBrandIcon(props: AppIconProps & {
         case 'opencode':
             return <OpenCodeMarkIcon {...restProps} className={resolvedClassName} />
         default:
-            return <BrandIcon {...restProps} className={resolvedClassName} />
+            return <BrandMarkIcon {...restProps} className={resolvedClassName} />
     }
 }
 

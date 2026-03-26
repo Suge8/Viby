@@ -3,6 +3,11 @@ import type { ApiClient } from '@/api/client'
 import type { GitStatusFiles } from '@/types/api'
 import { buildGitStatusFiles } from '@/lib/gitParsers'
 import { queryKeys } from '@/lib/query-keys'
+import {
+    formatOptionalUserFacingErrorMessage,
+    formatUserFacingErrorMessage
+} from '@/lib/userFacingError'
+import { useTranslation } from '@/lib/use-translation'
 
 export function useGitStatusFiles(api: ApiClient | null, sessionId: string | null): {
     status: GitStatusFiles | null
@@ -10,6 +15,7 @@ export function useGitStatusFiles(api: ApiClient | null, sessionId: string | nul
     isLoading: boolean
     refetch: () => Promise<unknown>
 } {
+    const { t } = useTranslation()
     const resolvedSessionId = sessionId ?? 'unknown'
     const query = useQuery({
         queryKey: queryKeys.gitStatus(resolvedSessionId),
@@ -22,7 +28,13 @@ export function useGitStatusFiles(api: ApiClient | null, sessionId: string | nul
             if (!statusResult.success) {
                 return {
                     status: null,
-                    error: statusResult.error ?? statusResult.stderr ?? 'Git status unavailable'
+                    error: formatUserFacingErrorMessage(
+                        statusResult.error ?? statusResult.stderr,
+                        {
+                            t,
+                            fallbackKey: 'error.files.git'
+                        }
+                    )
                 }
             }
 
@@ -39,10 +51,22 @@ export function useGitStatusFiles(api: ApiClient | null, sessionId: string | nul
 
             const errors: string[] = []
             if (!unstagedResult.success) {
-                errors.push(`Unstaged diff unavailable: ${unstagedResult.error ?? unstagedResult.stderr ?? 'unknown error'}`)
+                errors.push(formatUserFacingErrorMessage(
+                    unstagedResult.error ?? unstagedResult.stderr,
+                    {
+                        t,
+                        fallbackKey: 'file.error.diffUnavailable'
+                    }
+                ))
             }
             if (!stagedResult.success) {
-                errors.push(`Staged diff unavailable: ${stagedResult.error ?? stagedResult.stderr ?? 'unknown error'}`)
+                errors.push(formatUserFacingErrorMessage(
+                    stagedResult.error ?? stagedResult.stderr,
+                    {
+                        t,
+                        fallbackKey: 'file.error.diffUnavailable'
+                    }
+                ))
             }
 
             return { status, error: errors.length ? errors.join(' ') : null }
@@ -50,11 +74,10 @@ export function useGitStatusFiles(api: ApiClient | null, sessionId: string | nul
         enabled: Boolean(api && sessionId),
     })
 
-    const queryError = query.error instanceof Error
-        ? query.error.message
-        : query.error
-            ? 'Git status unavailable'
-            : null
+    const queryError = formatOptionalUserFacingErrorMessage(query.error, {
+        t,
+        fallbackKey: 'error.files.git'
+    })
 
     return {
         status: query.data?.status ?? null,

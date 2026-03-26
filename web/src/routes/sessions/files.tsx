@@ -1,9 +1,9 @@
-import { useCallback, useMemo, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useCallback, useMemo, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router'
-import { DirectoryTree } from '@/components/SessionFiles/DirectoryTree'
 import { useAppContext } from '@/lib/app-context'
 import { useAppGoBack } from '@/hooks/useAppGoBack'
+import { useFinalizeBootShell } from '@/hooks/useFinalizeBootShell'
 import { useGitStatusFiles } from '@/hooks/queries/useGitStatusFiles'
 import { useSession } from '@/hooks/queries/useSession'
 import { useSessionFileSearch } from '@/hooks/queries/useSessionFileSearch'
@@ -22,9 +22,14 @@ import { FileListSectionHeader, FileListSkeleton, GitFileRow, SearchResultRow } 
 import { createFileRouteSearch, getRootLabel, type FilesTab } from '@/routes/sessions/filesPageUtils'
 
 const FILE_TABS: FilesTab[] = ['changes', 'directories']
+const LazyDirectoryTree = lazy(async () => {
+    const module = await import('@/components/SessionFiles/DirectoryTree')
+    return { default: module.DirectoryTree }
+})
 
 export default function FilesPage(): ReactNode {
     const { t } = useTranslation()
+    useFinalizeBootShell()
     const warningPreset = getNoticePreset('genericWarning', t)
     const errorPreset = getNoticePreset('genericError', t)
     const { api } = useAppContext()
@@ -170,12 +175,14 @@ export default function FilesPage(): ReactNode {
                             </div>
                         )
                     ) : activeTab === 'directories' ? (
-                        <DirectoryTree
-                            api={api}
-                            sessionId={sessionId}
-                            rootLabel={rootLabel}
-                            onOpenFile={handleOpenFile}
-                        />
+                        <Suspense fallback={<FileListSkeleton label={t('loading.files')} />}>
+                            <LazyDirectoryTree
+                                api={api}
+                                sessionId={sessionId}
+                                rootLabel={rootLabel}
+                                onOpenFile={handleOpenFile}
+                            />
+                        </Suspense>
                     ) : gitLoading ? (
                         <FileListSkeleton label={t('loading.git')} />
                     ) : gitStatus ? (

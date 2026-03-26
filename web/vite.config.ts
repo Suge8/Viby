@@ -55,7 +55,6 @@ function readConfiguredHubTarget(): string {
 
 const hubTarget = readConfiguredHubTarget()
 const NODE_MODULES_SEGMENT = '/node_modules/'
-
 function resolveProtocolModule(file: string): string {
     return resolve(sharedSrcDir, file)
 }
@@ -76,11 +75,12 @@ function getManualChunkName(id: string): string | undefined {
         return 'vendor-syntax'
     }
 
-    if (
-        id.includes('/node_modules/@assistant-ui/')
-        || id.includes('/node_modules/remark-gfm/')
-    ) {
-        return 'vendor-assistant'
+    if (id.includes('/node_modules/@assistant-ui/react/')) {
+        if (id.includes('/dist/primitives/')) {
+            return 'vendor-assistant-primitives'
+        }
+
+        return 'vendor-assistant-runtime'
     }
 
     return undefined
@@ -148,7 +148,11 @@ export default defineConfig({
                 ]
             },
             injectManifest: {
-                globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}']
+                // `vite-plugin-pwa@1.2.0` + Workbox 7.4 tries to inject back into the
+                // compiled service worker in place, which trips Workbox's same-file guard.
+                // Keep plugin SW compilation, then finalize manifest injection in a
+                // dedicated post-build step that writes through a temporary file.
+                injectionPoint: undefined,
             },
             devOptions: {
                 enabled: true,

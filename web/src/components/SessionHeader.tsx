@@ -1,13 +1,11 @@
-import { useId, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useId, useMemo, useRef, useState } from 'react'
 import type { Session } from '@/types/api'
-import { BackIcon, FolderOpenIcon, MoreIcon, TerminalIcon } from '@/components/icons'
+import { BackIcon, MoreIcon } from '@/components/icons'
 import { Button } from '@/components/ui/button'
 import {
     DEFAULT_FLOATING_ACTION_MENU_ANCHOR_POINT,
-    FloatingActionMenu,
-    type FloatingActionMenuAnchorPoint,
-    type FloatingActionMenuItem
-} from '@/components/ui/FloatingActionMenu'
+    type FloatingActionMenuAnchorPoint
+} from '@/components/ui/FloatingActionMenu.contract'
 import {
     getSessionAgentLabel,
     SessionAgentBrandIcon
@@ -27,39 +25,18 @@ type SessionHeaderProps = {
     navigation: SessionHeaderNavigation
 }
 
+async function loadSessionHeaderActionMenuModule() {
+    return import('@/components/SessionHeaderActionMenu')
+}
+
+const LazySessionHeaderActionMenu = lazy(loadSessionHeaderActionMenuModule)
+
 const HEADER_SHELL_CLASS_NAME = '[--chat-header-side-width:5rem] sm:[--chat-header-side-width:5.5rem] mx-auto w-full ds-stage-shell px-3'
 const HEADER_GRID_CLASS_NAME = 'grid grid-cols-[var(--chat-header-side-width)_minmax(0,1fr)_var(--chat-header-side-width)] items-center gap-2'
 const HEADER_ROOT_CLASS_NAME = `${HEADER_SHELL_CLASS_NAME} ${HEADER_GRID_CLASS_NAME} pb-1.5 pt-1.5 sm:pb-2 sm:pt-2`
 const HEADER_ACTION_BUTTON_CLASS_NAME = 'h-9 w-9 shrink-0 rounded-[var(--ds-radius-lg)] text-[var(--app-hint)] hover:text-[var(--app-fg)] sm:h-10 sm:w-10'
 const HEADER_PANEL_CLASS_NAME = 'min-w-0 rounded-[var(--ds-radius-lg)] border border-[var(--ds-border-default)] bg-[var(--ds-panel-strong)] px-3 py-2 sm:px-4 sm:py-2.5'
 const HEADER_METADATA_ROW_CLASS_NAME = 'mt-1 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[11px] leading-relaxed text-[var(--app-hint)] sm:mt-1.5 sm:gap-2 sm:text-xs'
-
-function getHeaderMenuItems(
-    navigation: SessionHeaderNavigation,
-    t: (key: string) => string
-): FloatingActionMenuItem[] {
-    const items: FloatingActionMenuItem[] = []
-
-    if (navigation.onViewFiles) {
-        items.push({
-            id: 'files',
-            label: t('files.title'),
-            icon: <FolderOpenIcon className="text-[var(--app-hint)]" />,
-            onSelect: navigation.onViewFiles
-        })
-    }
-
-    if (navigation.onViewTerminal) {
-        items.push({
-            id: 'terminal',
-            label: t('terminal.title'),
-            icon: <TerminalIcon className="text-[var(--app-hint)]" />,
-            onSelect: navigation.onViewTerminal
-        })
-    }
-
-    return items
-}
 
 export function SessionHeader(props: SessionHeaderProps): React.JSX.Element {
     const { t } = useTranslation()
@@ -68,7 +45,7 @@ export function SessionHeader(props: SessionHeaderProps): React.JSX.Element {
     const worktreeBranch = session.metadata?.worktree?.branch
     const modelLabel = getSessionModelLabel(session)
     const agentLabel = getSessionAgentLabel(session.metadata?.flavor)
-    const menuItems = useMemo(() => getHeaderMenuItems(navigation, t), [navigation, t])
+    const hasMenuActions = Boolean(navigation.onViewFiles || navigation.onViewTerminal)
     const [menuOpen, setMenuOpen] = useState(false)
     const [menuAnchorPoint, setMenuAnchorPoint] = useState<FloatingActionMenuAnchorPoint>(
         DEFAULT_FLOATING_ACTION_MENU_ANCHOR_POINT
@@ -77,13 +54,17 @@ export function SessionHeader(props: SessionHeaderProps): React.JSX.Element {
     const menuAnchorRef = useRef<HTMLButtonElement | null>(null)
 
     function handleMenuToggle(): void {
-        if (menuItems.length === 0) {
+        if (!hasMenuActions) {
             return
         }
 
-        if (!menuOpen && menuAnchorRef.current) {
-            const rect = menuAnchorRef.current.getBoundingClientRect()
-            setMenuAnchorPoint({ x: rect.right, y: rect.bottom })
+        if (!menuOpen) {
+            void loadSessionHeaderActionMenuModule()
+
+            if (menuAnchorRef.current) {
+                const rect = menuAnchorRef.current.getBoundingClientRect()
+                setMenuAnchorPoint({ x: rect.right, y: rect.bottom })
+            }
         }
 
         setMenuOpen((open) => !open)
@@ -91,7 +72,7 @@ export function SessionHeader(props: SessionHeaderProps): React.JSX.Element {
 
     return (
         <>
-            <div className="shrink-0 bg-[var(--app-bg)] pt-[max(env(safe-area-inset-top),0.125rem)]">
+            <div className="session-chat-header-shell shrink-0 bg-[var(--app-bg)] pt-[max(env(safe-area-inset-top),0.125rem)]">
                 <div className={HEADER_ROOT_CLASS_NAME}>
                     <div className="flex min-w-0 justify-start">
                         <Button
@@ -129,7 +110,7 @@ export function SessionHeader(props: SessionHeaderProps): React.JSX.Element {
                     </div>
 
                     <div className="flex min-w-0 justify-end gap-1.5 sm:gap-2">
-                        {menuItems.length > 0 ? (
+                        {hasMenuActions ? (
                             <Button
                                 type="button"
                                 size="iconSm"
@@ -150,14 +131,17 @@ export function SessionHeader(props: SessionHeaderProps): React.JSX.Element {
                 </div>
             </div>
 
-            <FloatingActionMenu
-                isOpen={menuOpen}
-                onClose={() => setMenuOpen(false)}
-                anchorPoint={menuAnchorPoint}
-                heading={t('session.more')}
-                items={menuItems}
-                menuId={menuId}
-            />
+            {hasMenuActions && menuOpen ? (
+                <Suspense fallback={null}>
+                    <LazySessionHeaderActionMenu
+                        isOpen={menuOpen}
+                        onClose={() => setMenuOpen(false)}
+                        anchorPoint={menuAnchorPoint}
+                        menuId={menuId}
+                        navigation={navigation}
+                    />
+                </Suspense>
+            ) : null}
         </>
     )
 }

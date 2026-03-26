@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+const REDUCED_MOTION_MEDIA_QUERY = '(prefers-reduced-motion: reduce)'
+const NARROW_SCREEN_MEDIA_QUERY = '(max-width: 767px)'
+
 const startTransitionMock = vi.fn((callback: () => void) => {
     callback()
 })
@@ -36,12 +39,14 @@ function installStartViewTransition(
     })
 }
 
-function installMatchMedia(matches: boolean): void {
+function installMatchMedia(matches: boolean | Record<string, boolean>): void {
     Object.defineProperty(window, 'matchMedia', {
         configurable: true,
         writable: true,
-        value: vi.fn().mockImplementation(() => ({
-            matches,
+        value: vi.fn().mockImplementation((query: string) => ({
+            matches: typeof matches === 'boolean'
+                ? matches
+                : Boolean(matches[query]),
             media: '',
             onchange: null,
             addListener: vi.fn(),
@@ -83,6 +88,28 @@ describe('navigationTransition', () => {
 
         expect(startTransitionMock).toHaveBeenCalledTimes(1)
         expect(commit).toHaveBeenCalledTimes(1)
+    })
+
+    it('disables View Transition when an editable element is focused', async () => {
+        installMatchMedia(false)
+        const input = document.createElement('textarea')
+        document.body.appendChild(input)
+        input.focus()
+        const startViewTransitionMock = vi.fn((update: () => void) => {
+            update()
+            return createViewTransitionHandle()
+        })
+        installStartViewTransition(startViewTransitionMock)
+
+        const commit = vi.fn()
+        const { runNavigationTransition } = await import('./navigationTransition')
+
+        runNavigationTransition(commit, { enableViewTransition: true })
+
+        expect(startViewTransitionMock).not.toHaveBeenCalled()
+        expect(startTransitionMock).toHaveBeenCalledTimes(1)
+        expect(commit).toHaveBeenCalledTimes(1)
+        input.remove()
     })
 
     it('reuses the shared default options when no recovery href is provided', async () => {
@@ -130,8 +157,60 @@ describe('navigationTransition', () => {
         expect(commit).toHaveBeenCalledTimes(1)
     })
 
+    it('tracks whether a navigation transition is active while the view transition is in flight', async () => {
+        let resolveFinished!: () => void
+        const finished = new Promise<void>((resolve) => {
+            resolveFinished = resolve
+        })
+        const startViewTransitionMock = vi.fn((update: () => void) => {
+            update()
+            return {
+                ...createViewTransitionHandle(),
+                finished
+            }
+        })
+        installStartViewTransition(startViewTransitionMock)
+
+        const commit = vi.fn()
+        const {
+            isNavigationTransitionActive,
+            runNavigationTransition
+        } = await import('./navigationTransition')
+
+        runNavigationTransition(commit, { enableViewTransition: true })
+        expect(isNavigationTransitionActive()).toBe(true)
+
+        resolveFinished()
+        await Promise.resolve()
+        await Promise.resolve()
+
+        expect(isNavigationTransitionActive()).toBe(false)
+    })
+
     it('disables View Transition when reduced motion is preferred', async () => {
-        installMatchMedia(true)
+        installMatchMedia({
+            [REDUCED_MOTION_MEDIA_QUERY]: true
+        })
+        const startViewTransitionMock = vi.fn((update: () => void) => {
+            update()
+            return createViewTransitionHandle()
+        })
+        installStartViewTransition(startViewTransitionMock)
+
+        const commit = vi.fn()
+        const { runNavigationTransition } = await import('./navigationTransition')
+
+        runNavigationTransition(commit, { enableViewTransition: true })
+
+        expect(startViewTransitionMock).not.toHaveBeenCalled()
+        expect(startTransitionMock).toHaveBeenCalledTimes(1)
+        expect(commit).toHaveBeenCalledTimes(1)
+    })
+
+    it('disables View Transition on narrow screens so mobile navigation stays on the retained path', async () => {
+        installMatchMedia({
+            [NARROW_SCREEN_MEDIA_QUERY]: true
+        })
         const startViewTransitionMock = vi.fn((update: () => void) => {
             update()
             return createViewTransitionHandle()

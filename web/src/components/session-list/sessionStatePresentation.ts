@@ -24,6 +24,7 @@ type SessionStatePresentationOptions = {
     lifecycleState: SessionLifecycleState
     thinking: boolean
     latestActivityKind: SessionActivityKind | null
+    pendingRequestsCount: number
     hasUnseenReply: boolean
 }
 
@@ -93,6 +94,7 @@ function getSessionDisplayState(options: {
     lifecycleState: SessionLifecycleState
     thinking: boolean
     latestActivityKind: SessionActivityKind | null
+    pendingRequestsCount: number
 }): SessionDisplayState {
     if (options.lifecycleState === 'archived') {
         return 'archived'
@@ -100,6 +102,10 @@ function getSessionDisplayState(options: {
 
     if (options.lifecycleState === 'closed') {
         return 'closed'
+    }
+
+    if (options.pendingRequestsCount > 0) {
+        return 'awaitingInput'
     }
 
     if (options.thinking) {

@@ -1,6 +1,7 @@
 import { AttachmentPrimitive, useThreadComposerAttachment } from '@assistant-ui/react'
 import type { PendingAttachment } from '@assistant-ui/react'
-import { AlertIcon, CloseIcon } from '@/components/icons'
+import { AlertIcon } from '@/components/icons'
+import { FeatureCloseIcon as CloseIcon } from '@/components/featureIcons'
 import { Spinner } from '@/components/Spinner'
 
 export function AttachmentItem() {

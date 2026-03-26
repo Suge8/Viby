@@ -13,7 +13,10 @@ import type {
     SessionSummary,
     SyncEvent
 } from '@/types/api'
-import { type SessionPatch } from '@/lib/realtimeEventGuards'
+import {
+    isArchivedKeepalivePatch,
+    type SessionPatch
+} from '@/lib/realtimeEventGuards'
 
 type SessionSummaryCacheResult = {
     next: SessionsResponse | undefined
@@ -34,9 +37,16 @@ export function upsertSessionSummaryCache(
         return previous
     }
 
-    const summary = toSessionSummary(session)
     const nextSessions = previous.sessions.slice()
     const existingIndex = nextSessions.findIndex((item) => item.id === session.id)
+    const existingSummary = existingIndex >= 0 ? nextSessions[existingIndex] : null
+    const summary = existingSummary
+        ? toSessionSummary(session, {
+            latestActivityAt: existingSummary.latestActivityAt,
+            latestActivityKind: existingSummary.latestActivityKind,
+            latestCompletedReplyAt: existingSummary.latestCompletedReplyAt
+        })
+        : toSessionSummary(session)
     if (existingIndex >= 0) {
         nextSessions[existingIndex] = summary
     } else {
@@ -59,6 +69,9 @@ export function patchSessionSummaryCache(
     const target = resolveMutableSessionSummaryTarget(previous, sessionId)
     if (!target) {
         return { next: previous, patched: false }
+    }
+    if (isArchivedKeepalivePatch(target.current.lifecycleState, patch)) {
+        return { next: previous, patched: true }
     }
 
     const nextLifecycleState = resolveNextLifecycleState(target.current, patch)
@@ -139,6 +152,50 @@ export function patchSessionSummaryFromMessageCache(
     }
 }
 
+export function markSessionSummaryPendingUserTurn(
+    previous: SessionsResponse | undefined,
+    sessionId: string,
+    createdAt: number
+): SessionSummaryCacheResult {
+    if (!previous) {
+        return { next: previous, patched: false }
+    }
+
+    const target = resolveMutableSessionSummaryTarget(previous, sessionId)
+    if (!target) {
+        return { next: previous, patched: false }
+    }
+
+    const normalizedCreatedAt = normalizeSessionActivityTimestamp(createdAt)
+    if (normalizedCreatedAt === null) {
+        return { next: previous, patched: false }
+    }
+
+    const nextLatestActivityAt = Math.max(target.current.latestActivityAt ?? 0, normalizedCreatedAt)
+    const nextUpdatedAt = resolveSessionSummaryUpdatedAt(normalizedCreatedAt, target.current.latestCompletedReplyAt)
+
+    if (
+        target.current.latestActivityKind === 'user'
+        && target.current.latestActivityAt === nextLatestActivityAt
+        && target.current.updatedAt === nextUpdatedAt
+    ) {
+        return { next: previous, patched: false }
+    }
+
+    target.nextSessions[target.index] = {
+        ...target.current,
+        updatedAt: nextUpdatedAt,
+        latestActivityAt: nextLatestActivityAt,
+        latestActivityKind: 'user'
+    }
+    target.nextSessions.sort(compareSessionSummaries)
+
+    return {
+        next: { ...previous, sessions: target.nextSessions },
+        patched: true
+    }
+}
+
 export function removeSessionSummaryCache(
     previous: SessionsResponse | undefined,
     sessionId: string
@@ -173,7 +230,6 @@ function resolveNextLifecycleState(
 
     return current.lifecycleState
 }
-
 function resolveNextLifecycleStateSince(current: SessionSummary, patch: SessionPatch): number | null {
     if (patch.lifecycleStateSinceHint !== undefined) {
         return patch.lifecycleStateSinceHint

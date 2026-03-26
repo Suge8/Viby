@@ -1,5 +1,5 @@
 import type { Machine } from '@/types/api'
-import { MonitorIcon } from '@/components/icons'
+import { FeatureMonitorIcon as MonitorIcon } from '@/components/featureIcons'
 import { useTranslation } from '@/lib/use-translation'
 import { NewSessionSectionCard } from './NewSessionSectionCard'
 

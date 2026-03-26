@@ -1,8 +1,10 @@
 import { memo, type ReactNode } from 'react'
+import { PlainCodeContent } from '@/components/code-block/PlainCodeContent'
+import { CodeSurface } from '@/components/code-block/CodeSurface'
 import type { FileSearchItem, GitFileStatus } from '@/types/api'
 import { FileIcon } from '@/components/FileIcon'
-import { FolderIcon } from '@/components/icons'
-import { SkeletonList } from '@/components/loading/LoadingSkeleton'
+import { FeatureFolderIcon as FolderIcon } from '@/components/featureIcons'
+import { SkeletonList, SkeletonRows, type SkeletonRow } from '@/components/loading/LoadingSkeleton'
 import { Button } from '@/components/ui/button'
 
 const FILE_LIST_SKELETON_ROWS = [
@@ -12,6 +14,14 @@ const FILE_LIST_SKELETON_ROWS = [
     { titleWidthClassName: 'w-2/5', subtitleWidthClassName: 'w-1/3' },
     { titleWidthClassName: 'w-3/5', subtitleWidthClassName: 'w-1/2' },
     { titleWidthClassName: 'w-1/2', subtitleWidthClassName: 'w-2/3' },
+] as const
+
+const FILE_CONTENT_SKELETON_ROWS: readonly SkeletonRow[] = [
+    { widthClassName: 'w-full', heightClassName: 'h-5' },
+    { widthClassName: 'w-5/6', heightClassName: 'h-5' },
+    { widthClassName: 'w-11/12', heightClassName: 'h-5' },
+    { widthClassName: 'w-3/4', heightClassName: 'h-5' },
+    { widthClassName: 'w-4/5', heightClassName: 'h-5' },
 ] as const
 
 function StatusBadge(props: { status: GitFileStatus['status'] }): ReactNode {
@@ -166,5 +176,29 @@ export function FileListSkeleton(props: FileListSkeletonProps): ReactNode {
 
     return (
         <SkeletonList label={props.label} rows={rows} />
+    )
+}
+
+type FileContentSkeletonProps = {
+    label: string
+}
+
+export function FileContentSkeleton(props: FileContentSkeletonProps): ReactNode {
+    return (
+        <div className="rounded-md border border-[var(--app-divider)] p-3">
+            <SkeletonRows label={props.label} rows={FILE_CONTENT_SKELETON_ROWS} />
+        </div>
+    )
+}
+
+type PlainFileContentProps = {
+    content: string
+}
+
+export function PlainFileContent(props: PlainFileContentProps): ReactNode {
+    return (
+        <CodeSurface preClassName="p-2 pr-8 text-xs">
+            <PlainCodeContent code={props.content} />
+        </CodeSurface>
     )
 }

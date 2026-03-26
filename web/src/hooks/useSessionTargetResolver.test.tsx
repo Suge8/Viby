@@ -128,4 +128,119 @@ describe('useSessionTargetResolver', () => {
             code: 'resume_unavailable'
         }), 'session-legacy')
     })
+
+    it('auto-unarchives archived sessions before resuming them on the same explicit send chain', async () => {
+        const restoredSession = {
+            id: 'session-1',
+            active: false,
+            metadata: {
+                flavor: 'codex',
+                codexSessionId: 'thread-1',
+                lifecycleState: 'closed'
+            }
+        }
+        const resumedSession = {
+            ...restoredSession,
+            active: true,
+            metadata: {
+                ...restoredSession.metadata,
+                lifecycleState: 'running'
+            }
+        }
+        const api = {
+            unarchiveSession: vi.fn().mockResolvedValue(restoredSession),
+            resumeSession: vi.fn().mockResolvedValue(resumedSession)
+        }
+        const onReady = vi.fn()
+        const onError = vi.fn()
+
+        const { result } = renderHook(() => useSessionTargetResolver({
+            api: api as never,
+            session: {
+                id: 'session-1',
+                active: false,
+                metadata: {
+                    flavor: 'codex',
+                    codexSessionId: 'thread-1',
+                    lifecycleState: 'archived'
+                }
+            } as never,
+            onReady,
+            onError,
+        }))
+
+        await expect(result.current()).resolves.toBeUndefined()
+
+        expect(api.unarchiveSession).toHaveBeenCalledWith('session-1')
+        expect(api.resumeSession).toHaveBeenCalledWith('session-1')
+        expect(onReady).toHaveBeenNthCalledWith(1, restoredSession)
+        expect(onReady).toHaveBeenNthCalledWith(2, resumedSession)
+        expect(onError).not.toHaveBeenCalled()
+    })
+
+    it('keeps background warmup failures silent when requested', async () => {
+        const api = {
+            resumeSession: vi.fn().mockRejectedValue(new Error('no machine online'))
+        }
+        const onReady = vi.fn()
+        const onError = vi.fn()
+
+        const { result } = renderHook(() => useSessionTargetResolver({
+            api: api as never,
+            session: {
+                id: 'session-1',
+                active: false,
+                metadata: {
+                    flavor: 'codex',
+                    codexSessionId: 'thread-1'
+                }
+            } as never,
+            onReady,
+            onError,
+        }))
+
+        await expect(result.current({ silent: true })).rejects.toThrow('no machine online')
+        expect(onReady).not.toHaveBeenCalled()
+        expect(onError).not.toHaveBeenCalled()
+    })
+
+    it('still reports an in-flight background failure when an explicit resume joins later', async () => {
+        let rejectResume: ((error: Error) => void) | null = null
+        const api = {
+            resumeSession: vi.fn().mockImplementation(() => new Promise((_, reject) => {
+                rejectResume = reject
+            }))
+        }
+        const onReady = vi.fn()
+        const onError = vi.fn()
+
+        const { result } = renderHook(() => useSessionTargetResolver({
+            api: api as never,
+            session: {
+                id: 'session-1',
+                active: false,
+                metadata: {
+                    flavor: 'codex',
+                    codexSessionId: 'thread-1'
+                }
+            } as never,
+            onReady,
+            onError,
+        }))
+
+        await act(async () => {
+            const silentResume = result.current({ silent: true }).catch(() => undefined)
+            const explicitResume = result.current()
+
+            rejectResume?.(new Error('resume failed'))
+
+            await expect(explicitResume).rejects.toThrow('resume failed')
+            await silentResume
+        })
+
+        expect(api.resumeSession).toHaveBeenCalledTimes(1)
+        expect(onReady).not.toHaveBeenCalled()
+        expect(onError).toHaveBeenCalledWith(expect.any(Error), 'session-1')
+        expect(onError).toHaveBeenCalledTimes(1)
+    })
 })

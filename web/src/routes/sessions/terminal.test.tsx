@@ -67,6 +67,10 @@ function renderWithProviders() {
     )
 }
 
+function getPrimaryPasteButton(): HTMLButtonElement {
+    return screen.getAllByRole('button', { name: /^(button\.paste|Paste)$/i })[0] as HTMLButtonElement
+}
+
 describe('TerminalPage paste behavior', () => {
     beforeEach(() => {
         vi.clearAllMocks()
@@ -80,13 +84,13 @@ describe('TerminalPage paste behavior', () => {
         })
 
         renderWithProviders()
-        fireEvent.click(screen.getAllByRole('button', { name: 'Paste' })[0])
+        fireEvent.click(getPrimaryPasteButton())
 
         await waitFor(() => {
             expect(readText).toHaveBeenCalledTimes(1)
         })
         expect(writeMock).not.toHaveBeenCalled()
-        expect(screen.queryByText('Paste input')).not.toBeInTheDocument()
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
 
     it('opens manual paste dialog when clipboard read fails', async () => {
@@ -99,8 +103,8 @@ describe('TerminalPage paste behavior', () => {
         })
 
         renderWithProviders()
-        fireEvent.click(screen.getAllByRole('button', { name: 'Paste' })[0])
+        fireEvent.click(getPrimaryPasteButton())
 
-        expect(await screen.findByText('Paste input')).toBeInTheDocument()
+        expect(await screen.findByRole('dialog')).toBeInTheDocument()
     })
 })

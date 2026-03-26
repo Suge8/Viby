@@ -96,7 +96,7 @@ export function useSessionLiveConfigControls(options: SessionConfigMutationOptio
             const sessionApi = assertSessionConfigApi(api)
             assertSessionConfigCapability(
                 liveConfigSupport.canChangeModel,
-                'Model selection is only supported for remote Claude and Codex sessions'
+                'Model selection is only supported for remote Claude, Codex, and Gemini sessions'
             )
 
             return await sessionApi.setModel(sessionId, model)

@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FloatingNoticeViewport } from '@/components/FloatingNoticeViewport'
 import { NoticeProvider } from '@/lib/notice-center'
-import { I18nProvider } from '@/lib/i18n-context'
+import { I18nTestWrapper, preloadI18nForTests } from '@/test/i18n'
 import { MessageSurface } from './MessageSurface'
 
 const copyMock = vi.fn<(text: string) => Promise<void>>()
@@ -33,14 +33,15 @@ vi.mock('@tanstack/react-router', () => ({
     useNavigate: () => vi.fn()
 }))
 
-function renderMessageSurface(children: ReactNode) {
+async function renderMessageSurface(children: ReactNode) {
+    await preloadI18nForTests()
     return render(
-        <I18nProvider>
+        <I18nTestWrapper>
             <NoticeProvider>
                 {children}
                 <FloatingNoticeViewport />
             </NoticeProvider>
-        </I18nProvider>
+        </I18nTestWrapper>
     )
 }
 
@@ -56,7 +57,7 @@ describe('MessageSurface', () => {
     })
 
     it('copies message content and shows the existing floating notice feedback', async () => {
-        const view = renderMessageSurface(
+        const view = await renderMessageSurface(
             <MessageSurface tone="assistant" copyText="hello world">
                 <div>hello world</div>
             </MessageSurface>
@@ -74,15 +75,15 @@ describe('MessageSurface', () => {
     })
 
     it('does not copy when the click originates from a nested interactive element', () => {
-        renderMessageSurface(
+        return renderMessageSurface(
             <MessageSurface tone="assistant" copyText="hello world">
                 <button type="button">Nested action</button>
             </MessageSurface>
-        )
+        ).then(() => {
+            fireEvent.click(screen.getByRole('button', { name: 'Nested action' }))
 
-        fireEvent.click(screen.getByRole('button', { name: 'Nested action' }))
-
-        expect(copyMock).not.toHaveBeenCalled()
+            expect(copyMock).not.toHaveBeenCalled()
+        })
     })
 
     it('still copies even if another selection exists elsewhere on the page', async () => {
@@ -90,7 +91,7 @@ describe('MessageSurface', () => {
             toString: () => 'selected text'
         } as Selection)
 
-        const view = renderMessageSurface(
+        const view = await renderMessageSurface(
             <MessageSurface tone="assistant" copyText="hello world">
                 <div>hello world</div>
             </MessageSurface>

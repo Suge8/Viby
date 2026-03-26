@@ -1,6 +1,7 @@
 import type { RefObject } from 'react'
 import type { CodexCollaborationMode, ModelReasoningEffort, PermissionMode } from '@/types/api'
 import type { Suggestion } from '@/hooks/useActiveSuggestions'
+import type { AssistantReplyingPhase } from '@/components/AssistantChat/assistantReplyingPhase'
 
 export type ComposerPanelId = 'controls'
 
@@ -29,6 +30,8 @@ export type ComposerActionHandlers = {
 export type VibyComposerModel = {
     sessionId: string
     disabled?: boolean
+    onWarmSession?: () => void
+    replyingPhase?: AssistantReplyingPhase | null
     config: ComposerConfigState
     handlers: ComposerActionHandlers
     autocompletePrefixes?: string[]

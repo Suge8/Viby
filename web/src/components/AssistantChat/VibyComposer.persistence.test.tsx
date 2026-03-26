@@ -4,6 +4,7 @@ import { AssistantRuntimeProvider } from '@assistant-ui/react'
 import { ComposerDraftController } from '@/components/AssistantChat/ComposerDraftController'
 import { I18nProvider } from '@/lib/i18n-context'
 import { useVibyRuntime } from '@/lib/assistant-runtime'
+import { preloadI18nForTests } from '@/test/i18n'
 import { VibyComposer } from './VibyComposer'
 
 vi.mock('@tanstack/react-router', () => ({
@@ -104,6 +105,7 @@ describe('VibyComposer draft persistence', () => {
     })
 
     it('persists input text and restores it after remount', async () => {
+        await preloadI18nForTests()
         const firstRender = render(<ComposerPersistenceHarness />)
         const textarea = screen.getByPlaceholderText('Type a message...') as HTMLTextAreaElement
 

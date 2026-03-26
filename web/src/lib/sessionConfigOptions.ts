@@ -1,11 +1,14 @@
 import {
     CLAUDE_REASONING_EFFORTS,
     CLAUDE_SELECTABLE_MODEL_PRESETS,
+    GEMINI_MODEL_PRESETS,
     getClaudeModelLabel,
     getClaudeReasoningEffortLabel,
     getCodexReasoningEffortLabel,
+    getGeminiModelLabel,
     type ClaudeReasoningEffort,
     type CodexReasoningEffort,
+    type GeminiModelPreset,
     type ModelReasoningEffort,
 } from '@viby/protocol'
 
@@ -22,6 +25,7 @@ export type ModelReasoningEffortSelection = ModelReasoningEffort | 'default'
 const TERMINAL_DEFAULT_MODEL_LABEL_KEY = 'model.terminalDefault'
 const TERMINAL_DEFAULT_REASONING_EFFORT_LABEL_KEY = 'reasoningEffort.terminalDefault'
 const CURATED_CODEX_MODELS = ['gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex', 'gpt-5.2'] as const
+const CURATED_GEMINI_MODELS = [...GEMINI_MODEL_PRESETS] as const satisfies readonly GeminiModelPreset[]
 const CURATED_CLAUDE_REASONING_EFFORTS = [...CLAUDE_REASONING_EFFORTS] as const
 const CURATED_CODEX_REASONING_EFFORTS = ['low', 'medium', 'high', 'xhigh'] as const satisfies readonly CodexReasoningEffort[]
 const REASONING_EFFORT_LABEL_KEYS: Record<ModelReasoningEffort, string> = {
@@ -38,6 +42,20 @@ const CODEX_MODEL_LABELS: Record<(typeof CURATED_CODEX_MODELS)[number], string> 
     'gpt-5.4-mini': 'GPT-5.4 Mini',
     'gpt-5.3-codex': 'GPT-5.3 Codex',
     'gpt-5.2': 'GPT-5.2',
+}
+
+function buildCuratedModelOptions<TDefault extends string | null, TModel extends string>(
+    defaultValue: TDefault,
+    models: readonly TModel[],
+    getLabel: (model: TModel) => string
+): SessionConfigOption<TDefault | TModel>[] {
+    return [
+        createTerminalDefaultModelOption(defaultValue),
+        ...models.map((model) => ({
+            value: model,
+            label: getLabel(model),
+        })),
+    ]
 }
 
 function withCurrentOption<T extends string>(
@@ -82,22 +100,10 @@ function createReasoningEffortOption<T extends ModelReasoningEffort | ModelReaso
 }
 
 export const MODEL_OPTIONS: Record<SessionConfigAgentType, SessionConfigOption<string>[]> = {
-    claude: [
-        createTerminalDefaultModelOption('auto'),
-        { value: 'sonnet', label: 'Sonnet' },
-        { value: 'opus', label: 'Opus' },
-    ],
-    codex: [
-        createTerminalDefaultModelOption('auto'),
-        ...CURATED_CODEX_MODELS.map((model) => ({ value: model, label: CODEX_MODEL_LABELS[model] })),
-    ],
+    claude: buildCuratedModelOptions('auto', CLAUDE_SELECTABLE_MODEL_PRESETS, (model) => getClaudeModelLabel(model) ?? model),
+    codex: buildCuratedModelOptions('auto', CURATED_CODEX_MODELS, (model) => CODEX_MODEL_LABELS[model]),
     cursor: [],
-    gemini: [
-        { value: 'auto', label: 'Auto' },
-        { value: 'gemini-3-pro-preview', label: 'Gemini 3 Pro Preview' },
-        { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
-        { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-    ],
+    gemini: buildCuratedModelOptions('auto', CURATED_GEMINI_MODELS, (model) => getGeminiModelLabel(model) ?? model),
     opencode: [],
 }
 
@@ -119,13 +125,7 @@ export const CODEX_REASONING_EFFORT_OPTIONS = REASONING_EFFORT_OPTIONS.codex
 export const CLAUDE_REASONING_EFFORT_OPTIONS = REASONING_EFFORT_OPTIONS.claude
 
 export function getClaudeComposerModelOptions(currentModel?: string | null): SessionConfigOption<string | null>[] {
-    const options: SessionConfigOption<string | null>[] = [
-        createTerminalDefaultModelOption(null),
-        ...CLAUDE_SELECTABLE_MODEL_PRESETS.map((model) => ({
-            value: model,
-            label: getClaudeModelLabel(model) ?? model,
-        })),
-    ]
+    const options = buildCuratedModelOptions(null, CLAUDE_SELECTABLE_MODEL_PRESETS, (model) => getClaudeModelLabel(model) ?? model)
 
     return withCurrentOption(
         normalizeComposerStringValue(currentModel),
@@ -148,6 +148,10 @@ export function getSessionModelDisplayLabel(model: string, flavor?: string | nul
         return CODEX_MODEL_LABELS[normalizedModel as keyof typeof CODEX_MODEL_LABELS] ?? normalizedModel
     }
 
+    if (flavor === 'gemini') {
+        return getGeminiModelLabel(normalizedModel) ?? normalizedModel
+    }
+
     return getClaudeModelLabel(normalizedModel) ?? normalizedModel
 }
 
@@ -156,10 +160,7 @@ export function getModelReasoningEffortDisplayLabel(effort: ModelReasoningEffort
 }
 
 export function getCodexComposerModelOptions(currentModel?: string | null): SessionConfigOption<string | null>[] {
-    const options: SessionConfigOption<string | null>[] = [
-        createTerminalDefaultModelOption(null),
-        ...CURATED_CODEX_MODELS.map((model) => ({ value: model, label: CODEX_MODEL_LABELS[model] })),
-    ]
+    const options = buildCuratedModelOptions(null, CURATED_CODEX_MODELS, (model) => CODEX_MODEL_LABELS[model])
 
     return withCurrentOption(
         normalizeComposerStringValue(currentModel),
@@ -168,6 +169,20 @@ export function getCodexComposerModelOptions(currentModel?: string | null): Sess
         (value) => ({
             value,
             label: value,
+        })
+    )
+}
+
+export function getGeminiComposerModelOptions(currentModel?: string | null): SessionConfigOption<string | null>[] {
+    const options = buildCuratedModelOptions(null, CURATED_GEMINI_MODELS, (model) => getGeminiModelLabel(model) ?? model)
+
+    return withCurrentOption(
+        normalizeComposerStringValue(currentModel),
+        options,
+        (value) => CURATED_GEMINI_MODELS.includes(value as typeof CURATED_GEMINI_MODELS[number]),
+        (value) => ({
+            value,
+            label: getGeminiModelLabel(value) ?? value,
         })
     )
 }

@@ -1,8 +1,12 @@
 import { startTransition } from 'react'
-import {
-    recordRuntimeAssetFailureRecovery,
-    type RuntimeAssetFailure
-} from '@/lib/runtimeAssetRecovery'
+import type { RuntimeAssetFailure } from '@/lib/runtimeAssetFailure'
+
+export const NAVIGATION_TRANSITION_ACTIVE_STATE = 'running'
+export const NAVIGATION_TRANSITION_EVENT_NAME = 'viby:navigation-transition-change'
+const NAVIGATION_TRANSITION_STATE_ATTRIBUTE = 'data-viby-navigation-transition'
+const NAVIGATION_TRANSITION_FALLBACK_RESET_FRAME_COUNT = 2
+const REDUCED_MOTION_MEDIA_QUERY = '(prefers-reduced-motion: reduce)'
+const NARROW_SCREEN_MEDIA_QUERY = '(max-width: 767px)'
 
 type ViewTransitionDocument = Document & {
     startViewTransition?: (update: () => void) => {
@@ -55,6 +59,18 @@ function toRuntimeAssetFailure(error: unknown): RuntimeAssetFailure {
     return {}
 }
 
+async function recordNavigationPreloadFailureRecovery(
+    error: unknown,
+    recoveryHref?: string
+): Promise<void> {
+    const module = await import('@/lib/runtimeAssetFailure')
+    module.recordRuntimeAssetFailureRecovery({
+        reason: 'vite-preload-error',
+        failure: toRuntimeAssetFailure(error),
+        resumeHref: recoveryHref
+    })
+}
+
 function canUseViewTransition(): boolean {
     if (typeof document === 'undefined' || typeof window === 'undefined') {
         return false
@@ -65,7 +81,83 @@ function canUseViewTransition(): boolean {
         return false
     }
 
-    return !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    return !matchesMediaQuery(REDUCED_MOTION_MEDIA_QUERY)
+        && !matchesMediaQuery(NARROW_SCREEN_MEDIA_QUERY)
+        && !hasEditableFocus()
+}
+
+function matchesMediaQuery(query: string): boolean {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+        return false
+    }
+
+    return window.matchMedia(query).matches
+}
+
+function hasEditableFocus(): boolean {
+    if (typeof document === 'undefined') {
+        return false
+    }
+
+    const activeElement = document.activeElement
+    if (!(activeElement instanceof HTMLElement)) {
+        return false
+    }
+
+    if (activeElement.isContentEditable) {
+        return true
+    }
+
+    return activeElement instanceof HTMLInputElement
+        || activeElement instanceof HTMLTextAreaElement
+}
+
+function setNavigationTransitionActive(active: boolean): void {
+    if (typeof document === 'undefined' || typeof window === 'undefined') {
+        return
+    }
+
+    const root = document.documentElement
+    if (active) {
+        root.setAttribute(NAVIGATION_TRANSITION_STATE_ATTRIBUTE, NAVIGATION_TRANSITION_ACTIVE_STATE)
+    } else {
+        root.removeAttribute(NAVIGATION_TRANSITION_STATE_ATTRIBUTE)
+    }
+
+    window.dispatchEvent(new CustomEvent(NAVIGATION_TRANSITION_EVENT_NAME, {
+        detail: {
+            active
+        }
+    }))
+}
+
+function scheduleFallbackTransitionReset(): void {
+    if (typeof window === 'undefined') {
+        setNavigationTransitionActive(false)
+        return
+    }
+
+    let remainingFrames = NAVIGATION_TRANSITION_FALLBACK_RESET_FRAME_COUNT
+    const release = () => {
+        remainingFrames -= 1
+        if (remainingFrames > 0) {
+            window.requestAnimationFrame(release)
+            return
+        }
+
+        setNavigationTransitionActive(false)
+    }
+
+    window.requestAnimationFrame(release)
+}
+
+export function isNavigationTransitionActive(): boolean {
+    if (typeof document === 'undefined') {
+        return false
+    }
+
+    return document.documentElement.getAttribute(NAVIGATION_TRANSITION_STATE_ATTRIBUTE)
+        === NAVIGATION_TRANSITION_ACTIVE_STATE
 }
 
 function normalizeRecoveryHref(value: string | undefined): string | null {
@@ -113,13 +205,19 @@ export function runNavigationTransition(
 ): void {
     if (options.enableViewTransition && canUseViewTransition()) {
         const viewTransitionDocument = document as ViewTransitionDocument
-        viewTransitionDocument.startViewTransition?.(() => {
+        setNavigationTransitionActive(true)
+        const transition = viewTransitionDocument.startViewTransition?.(() => {
             startTransition(commit)
+        })
+        void transition?.finished.finally(() => {
+            setNavigationTransitionActive(false)
         })
         return
     }
 
+    setNavigationTransitionActive(true)
     startTransition(commit)
+    scheduleFallbackTransitionReset()
 }
 
 export async function runNavigationTransitionAfterPreload(
@@ -132,11 +230,7 @@ export async function runNavigationTransitionAfterPreload(
     try {
         await (typeof preload === 'function' ? preload() : preload)
     } catch (error) {
-        recordRuntimeAssetFailureRecovery({
-            reason: 'vite-preload-error',
-            failure: toRuntimeAssetFailure(error),
-            resumeHref: options.recoveryHref
-        })
+        await recordNavigationPreloadFailureRecovery(error, options.recoveryHref)
 
         // Preload is only an enhancement. Navigation must still proceed so the
         // target route can surface its own loading or error state honestly.

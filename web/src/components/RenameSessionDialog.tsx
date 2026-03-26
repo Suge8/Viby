@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
     Dialog,
     DialogContent,
@@ -31,12 +31,14 @@ export function RenameSessionDialog(props: RenameSessionDialogProps) {
         if (isOpen) {
             setName(currentName)
             setError(null)
-            setTimeout(() => {
-                inputRef.current?.focus()
-                inputRef.current?.select()
-            }, 100)
         }
     }, [isOpen, currentName])
+
+    const handleOpenAutoFocus = useCallback((event: Event) => {
+        event.preventDefault()
+        inputRef.current?.focus()
+        inputRef.current?.select()
+    }, [])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -62,7 +64,11 @@ export function RenameSessionDialog(props: RenameSessionDialogProps) {
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className="max-w-sm">
+            <DialogContent
+                className="max-w-sm"
+                onOpenAutoFocus={handleOpenAutoFocus}
+                aria-describedby={undefined}
+            >
                 <DialogHeader>
                     <DialogTitle>{t('dialog.rename.title')}</DialogTitle>
                 </DialogHeader>

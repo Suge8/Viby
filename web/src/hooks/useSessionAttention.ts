@@ -78,7 +78,7 @@ function isDocumentVisible(): boolean {
 }
 
 export function useSessionAttention(
-    sessions: SessionSummary[],
+    sessions: readonly SessionSummary[],
     selectedSessionId: string | null
 ): {
     hasUnseenReply: (session: SessionSummary) => boolean

@@ -6,37 +6,20 @@ import {
     useRef,
     useState,
     type CSSProperties,
-    type ReactNode
 } from 'react'
 import { Button } from '@/components/ui/button'
-
-export type FloatingActionMenuAnchorPoint = {
-    x: number
-    y: number
-}
-
-export const DEFAULT_FLOATING_ACTION_MENU_ANCHOR_POINT: Readonly<FloatingActionMenuAnchorPoint> = {
-    x: 0,
-    y: 0
-}
-
-type FloatingActionMenuItemTone = 'default' | 'danger'
-
-export type FloatingActionMenuItem = {
-    id: string
-    label: string
-    icon: ReactNode
-    onSelect: () => void
-    tone?: FloatingActionMenuItemTone
-}
+import type {
+    FloatingActionMenuAnchorPoint,
+    FloatingActionMenuContent,
+    FloatingActionMenuItem,
+    FloatingActionMenuItemTone
+} from '@/components/ui/FloatingActionMenu.contract'
 
 type FloatingActionMenuProps = {
     isOpen: boolean
     onClose: () => void
     anchorPoint: FloatingActionMenuAnchorPoint
-    heading: string
-    items: readonly FloatingActionMenuItem[]
-    menuId?: string
+    content: FloatingActionMenuContent
 }
 
 type MenuPosition = {
@@ -44,6 +27,11 @@ type MenuPosition = {
     left: number
     transformOrigin: string
 }
+
+const MENU_VIEWPORT_PADDING_PX = 8
+const MENU_ANCHOR_GAP_PX = 8
+const MENU_ITEM_CLASS_NAME =
+    'w-full gap-3 rounded-[var(--ds-radius-md)] px-3 py-3 text-left text-base [&>[data-button-content]]:w-full [&>[data-button-content]]:justify-start'
 
 function buildMenuStyle(menuPosition: MenuPosition | null): CSSProperties | undefined {
     if (!menuPosition) {
@@ -70,10 +58,9 @@ export function FloatingActionMenu(props: FloatingActionMenuProps): React.JSX.El
         isOpen,
         onClose,
         anchorPoint,
-        heading,
-        items,
-        menuId
+        content
     } = props
+    const { heading, items, menuId } = content
     const menuRef = useRef<HTMLDivElement | null>(null)
     const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null)
     const internalId = useId()
@@ -89,17 +76,24 @@ export function FloatingActionMenu(props: FloatingActionMenuProps): React.JSX.El
         const menuRect = menuElement.getBoundingClientRect()
         const viewportWidth = window.innerWidth
         const viewportHeight = window.innerHeight
-        const padding = 8
-        const gap = 8
         const spaceBelow = viewportHeight - anchorPoint.y
         const spaceAbove = anchorPoint.y
-        const openAbove = spaceBelow < menuRect.height + gap && spaceAbove > spaceBelow
+        const openAbove =
+            spaceBelow < menuRect.height + MENU_ANCHOR_GAP_PX && spaceAbove > spaceBelow
 
-        let top = openAbove ? anchorPoint.y - menuRect.height - gap : anchorPoint.y + gap
+        let top = openAbove
+            ? anchorPoint.y - menuRect.height - MENU_ANCHOR_GAP_PX
+            : anchorPoint.y + MENU_ANCHOR_GAP_PX
         let left = anchorPoint.x - menuRect.width / 2
 
-        top = Math.min(Math.max(top, padding), viewportHeight - menuRect.height - padding)
-        left = Math.min(Math.max(left, padding), viewportWidth - menuRect.width - padding)
+        top = Math.min(
+            Math.max(top, MENU_VIEWPORT_PADDING_PX),
+            viewportHeight - menuRect.height - MENU_VIEWPORT_PADDING_PX
+        )
+        left = Math.min(
+            Math.max(left, MENU_VIEWPORT_PADDING_PX),
+            viewportWidth - menuRect.width - MENU_VIEWPORT_PADDING_PX
+        )
 
         setMenuPosition({
             top,
@@ -171,9 +165,6 @@ export function FloatingActionMenu(props: FloatingActionMenuProps): React.JSX.El
         return null
     }
 
-    const baseItemClassName =
-        'w-full gap-3 rounded-[var(--ds-radius-md)] px-3 py-3 text-left text-base [&>[data-button-content]]:w-full [&>[data-button-content]]:justify-start'
-
     return (
         <div
             ref={menuRef}
@@ -198,11 +189,8 @@ export function FloatingActionMenu(props: FloatingActionMenuProps): React.JSX.El
                         type="button"
                         variant="ghost"
                         role="menuitem"
-                        className={getMenuItemClassName(item.tone, baseItemClassName)}
-                        onClick={() => {
-                            onClose()
-                            item.onSelect()
-                        }}
+                        className={getMenuItemClassName(item.tone, MENU_ITEM_CLASS_NAME)}
+                        onClick={item.onSelect}
                     >
                         {item.icon}
                         {item.label}

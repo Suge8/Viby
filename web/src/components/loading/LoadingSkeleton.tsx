@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils'
+import { joinClassNames } from '@/components/loading/loadingClassName'
 
 const SKELETON_TONE_CLASS_NAME = 'bg-[color-mix(in_srgb,var(--app-subtle-bg)_88%,var(--ds-panel-strong)_12%)]'
 
@@ -17,7 +17,7 @@ export function SkeletonBlock(props: SkeletonBlockProps): React.JSX.Element {
     return (
         <div
             aria-hidden="true"
-            className={cn(
+            className={joinClassNames(
                 'ds-loading-shimmer rounded-[var(--ds-radius-md)]',
                 SKELETON_TONE_CLASS_NAME,
                 props.className
@@ -35,7 +35,7 @@ type SkeletonRowsProps = {
 export function SkeletonRows(props: SkeletonRowsProps): React.JSX.Element {
     return (
         <div
-            className={cn('space-y-3', props.className)}
+            className={joinClassNames('space-y-3', props.className)}
             role="status"
             aria-live="polite"
             aria-busy="true"
@@ -47,7 +47,7 @@ export function SkeletonRows(props: SkeletonRowsProps): React.JSX.Element {
                     className={row.align === 'end' ? 'flex justify-end' : 'flex justify-start'}
                 >
                     <SkeletonBlock
-                        className={cn(row.heightClassName, row.widthClassName, row.className)}
+                        className={joinClassNames(row.heightClassName, row.widthClassName, row.className)}
                     />
                 </div>
             ))}
@@ -63,7 +63,7 @@ export function LoadingRail(props: LoadingRailProps): React.JSX.Element {
     return (
         <div
             aria-hidden="true"
-            className={cn(
+            className={joinClassNames(
                 'h-1.5 w-full max-w-40 overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--app-hint)_16%,transparent)]',
                 props.className
             )}
@@ -88,7 +88,7 @@ type SkeletonListProps = {
 export function SkeletonList(props: SkeletonListProps): React.JSX.Element {
     return (
         <div
-            className={cn('space-y-3 p-3', props.className)}
+            className={joinClassNames('space-y-3 p-3', props.className)}
             role="status"
             aria-live="polite"
             aria-busy="true"
@@ -96,10 +96,10 @@ export function SkeletonList(props: SkeletonListProps): React.JSX.Element {
             <span className="sr-only">{props.label}</span>
             {props.rows.map((row, index) => (
                 <div key={`skeleton-list-row-${index}`} className="flex items-center gap-3">
-                    <SkeletonBlock className={cn('h-6 w-6 rounded-[8px]', props.iconClassName)} />
+                    <SkeletonBlock className={joinClassNames('h-6 w-6 rounded-[8px]', props.iconClassName)} />
                     <div className="flex-1 space-y-2">
-                        <SkeletonBlock className={cn('h-3', row.titleWidthClassName)} />
-                        <SkeletonBlock className={cn('h-2', row.subtitleWidthClassName)} />
+                        <SkeletonBlock className={joinClassNames('h-3', row.titleWidthClassName)} />
+                        <SkeletonBlock className={joinClassNames('h-2', row.subtitleWidthClassName)} />
                     </div>
                 </div>
             ))}

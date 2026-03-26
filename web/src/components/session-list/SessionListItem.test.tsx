@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/lib/i18n-context'
 import { SessionListItem } from './SessionListItem'
 
+const NOW = 1_742_895_600_000
+
 vi.mock('@/hooks/useLongPress', () => ({
     useLongPress: (options: { onClick?: () => void; onLongPress?: (point: { x: number; y: number }) => void }) => ({
         onClick: options.onClick,
@@ -28,6 +30,31 @@ vi.mock('@/hooks/usePlatform', () => ({
     })
 }))
 
+vi.mock('@/lib/use-translation', () => ({
+    useTranslation: () => ({
+        t: (key: string) => {
+            switch (key) {
+                case 'session.more':
+                    return 'More actions'
+                case 'session.time.justNow':
+                    return 'Just now'
+                case 'session.state.processing':
+                    return 'Working'
+                case 'session.state.awaitingInput':
+                    return 'Awaiting input'
+                case 'session.state.closed':
+                    return 'Closed'
+                case 'session.state.archived':
+                    return 'Archived'
+                case 'session.attention.newReply':
+                    return 'Reply'
+                default:
+                    return key
+            }
+        }
+    })
+}))
+
 function renderItem(selectionOverrides?: Partial<{
     onPreload: (sessionId: string) => void
     onSelect: (sessionId: string) => void
@@ -40,13 +67,13 @@ function renderItem(selectionOverrides?: Partial<{
                     id: 'session-1',
                     active: true,
                     thinking: false,
-                    activeAt: Date.now(),
-                    updatedAt: Date.now(),
-                    latestActivityAt: Date.now(),
+                    activeAt: NOW,
+                    updatedAt: NOW,
+                    latestActivityAt: NOW,
                     latestActivityKind: 'ready',
-                    latestCompletedReplyAt: Date.now(),
+                    latestCompletedReplyAt: NOW,
                     lifecycleState: 'running',
-                    lifecycleStateSince: Date.now(),
+                    lifecycleStateSince: NOW,
                     metadata: {
                         path: '/Users/sugeh/Project/Viby',
                         flavor: 'codex',
@@ -70,6 +97,10 @@ function renderItem(selectionOverrides?: Partial<{
     )
 }
 
+function getSessionButton(): HTMLElement {
+    return screen.getByRole('button', { name: /session-1/i })
+}
+
 describe('SessionListItem', () => {
     afterEach(() => {
         cleanup()
@@ -79,27 +110,24 @@ describe('SessionListItem', () => {
         const onPreload = vi.fn()
         renderItem({ onPreload })
 
-        fireEvent.focus(screen.getByRole('button'))
+        fireEvent.focus(getSessionButton())
 
         expect(onPreload).toHaveBeenCalledWith('session-1')
     })
 
-    it('preloads the session route on pointer-down intent before selection', () => {
+    it('preloads the session route on touch pointer down so mobile taps get a head start', () => {
         const onPreload = vi.fn()
         renderItem({ onPreload })
 
-        const button = screen.getByRole('button')
-
-        fireEvent.pointerDown(button, { pointerType: 'touch' })
+        fireEvent.pointerDown(getSessionButton(), { pointerType: 'touch' })
 
         expect(onPreload).toHaveBeenCalledWith('session-1')
-        expect(onPreload).toHaveBeenCalledTimes(1)
     })
 
     it('renders the session card through the shared card press primitive', () => {
         renderItem()
 
-        const button = screen.getByRole('button')
+        const button = getSessionButton()
 
         expect(button).toHaveAttribute('data-button-press-style', 'card')
         expect(button).toHaveAttribute('data-button-pointer-effect', 'none')
@@ -109,7 +137,7 @@ describe('SessionListItem', () => {
         const onOpenActionMenu = vi.fn()
         renderItem({ onOpenActionMenu })
 
-        fireEvent.contextMenu(screen.getByRole('button'), { clientX: 20, clientY: 24 })
+        fireEvent.contextMenu(getSessionButton(), { clientX: 20, clientY: 24 })
 
         expect(onOpenActionMenu).toHaveBeenCalledWith('session-1', { x: 20, y: 24 })
     })

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import type { ApiClient } from '@/api/client'
 import type { Machine } from '@/types/api'
 import { InlineNotice } from '@/components/InlineNotice'
@@ -13,6 +12,7 @@ import {
     REASONING_EFFORT_OPTIONS,
 } from '@/lib/sessionConfigOptions'
 import { getNoticePreset } from '@/lib/noticePresets'
+import { formatUserFacingErrorMessage } from '@/lib/userFacingError'
 import { useTranslation } from '@/lib/use-translation'
 import type { AgentType, ModelReasoningEffortSelection, SessionType } from './types'
 import { ActionButtons } from './ActionButtons'
@@ -38,7 +38,6 @@ export function NewSession(props: {
 }) {
     const { haptic } = usePlatform()
     const { t } = useTranslation()
-    const shouldReduceMotion = useReducedMotion()
     const runnerErrorPreset = getNoticePreset('newSessionRunnerError', t)
     const createErrorPreset = getNoticePreset('newSessionCreateError', t)
     const { spawnSession, isPending, error: spawnError } = useSpawnSession(props.api)
@@ -178,10 +177,16 @@ export function NewSession(props: {
             }
 
             haptic.notification('error')
-            setError(result.message)
+            setError(formatUserFacingErrorMessage(result.message, {
+                t,
+                fallbackKey: 'error.session.create'
+            }))
         } catch (e) {
             haptic.notification('error')
-            setError(e instanceof Error ? e.message : 'Failed to create session')
+            setError(formatUserFacingErrorMessage(e, {
+                t,
+                fallbackKey: 'error.session.create'
+            }))
         }
     }
 
@@ -250,24 +255,14 @@ export function NewSession(props: {
                 </BlurFade>
             </div>
 
-            <AnimatePresence initial={false}>
-                {(error ?? spawnError) ? (
-                    <motion.div
-                        key="new-session-error"
-                        initial={shouldReduceMotion ? false : { opacity: 0, y: 8 }}
-                        animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-                        exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
-                        transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-                    >
-                        <InlineNotice
-                            tone={createErrorPreset.tone}
-                            title={createErrorPreset.title}
-                            description={error ?? spawnError}
-                            className="shadow-none"
-                        />
-                    </motion.div>
-                ) : null}
-            </AnimatePresence>
+            {(error ?? spawnError) ? (
+                <InlineNotice
+                    tone={createErrorPreset.tone}
+                    title={createErrorPreset.title}
+                    description={error ?? spawnError}
+                    className="shadow-none"
+                />
+            ) : null}
 
             <ActionButtons
                 isPending={isPending}

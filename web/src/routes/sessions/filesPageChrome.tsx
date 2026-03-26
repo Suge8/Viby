@@ -1,5 +1,9 @@
 import type { ReactNode } from 'react'
-import { GitBranchIcon, RefreshIcon, SearchIcon } from '@/components/icons'
+import {
+    FeatureGitBranchIcon as GitBranchIcon,
+    FeatureRefreshIcon as RefreshIcon,
+    FeatureSearchIcon as SearchIcon,
+} from '@/components/featureIcons'
 import { Button } from '@/components/ui/button'
 
 type FilesActionButtonProps = {

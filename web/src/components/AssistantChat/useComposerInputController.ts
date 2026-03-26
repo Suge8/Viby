@@ -17,7 +17,7 @@ import type { Suggestion } from '@/hooks/useActiveSuggestions'
 import { useActiveWord } from '@/hooks/useActiveWord'
 import { useActiveSuggestions } from '@/hooks/useActiveSuggestions'
 import { applySuggestion } from '@/utils/applySuggestion'
-import { markSkillUsed } from '@/lib/recent-skills'
+import { markSkillUsed } from '@/lib/recent-skill-usage'
 
 type ComposerApi = ReturnType<typeof useAssistantApi>
 type HapticFeedback = (type?: 'light' | 'success' | 'error') => void

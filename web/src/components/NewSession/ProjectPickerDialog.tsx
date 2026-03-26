@@ -1,15 +1,16 @@
 import { memo, useMemo } from 'react'
-import { motion } from 'motion/react'
 import type { ApiClient } from '@/api/client'
 import type { MachineDirectoryRootKind } from '@/types/api'
 import { Spinner } from '@/components/Spinner'
 import {
     BackIcon,
-    FolderIcon,
     FolderOpenIcon,
-    ProjectIcon,
-    RefreshIcon
 } from '@/components/icons'
+import {
+    FeatureFolderIcon as FolderIcon,
+    FeatureProjectIcon as ProjectIcon,
+    FeatureRefreshIcon as RefreshIcon,
+} from '@/components/featureIcons'
 import { InlineNotice } from '@/components/InlineNotice'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -49,6 +50,10 @@ const PATH_ITEM_DELAY_STEP = 0.03
 const DIRECTORY_ITEM_DELAY_STEP = 0.02
 const CONTROL_BUTTON_CLASS_NAME = 'h-9 w-9 rounded-full text-[var(--ds-text-secondary)] hover:border-[var(--ds-border-strong)] hover:text-[var(--ds-text-primary)] disabled:opacity-40'
 
+function getItemDelay(index: number, step: number): number {
+    return Math.min(index * step, MAX_ITEM_ANIMATION_DELAY)
+}
+
 function getRootLabel(
     kind: MachineDirectoryRootKind,
     t: (key: string) => string
@@ -64,11 +69,11 @@ function PickerPathList(props: PickerListProps): React.JSX.Element | null {
     return (
         <div className="grid gap-2 sm:grid-cols-2">
             {props.paths.map((path, index) => (
-                <motion.div
+                <BlurFade
                     key={path}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.18, delay: Math.min(index * PATH_ITEM_DELAY_STEP, MAX_ITEM_ANIMATION_DELAY) }}
+                    delay={getItemDelay(index, PATH_ITEM_DELAY_STEP)}
+                    duration={0.18}
+                    offset={8}
                 >
                     <Button
                         type="button"
@@ -82,7 +87,7 @@ function PickerPathList(props: PickerListProps): React.JSX.Element | null {
                         <ProjectIcon className="h-4 w-4 shrink-0 text-[var(--ds-accent-lime)]" />
                         <span className="truncate text-sm font-medium text-[var(--ds-text-primary)]">{path}</span>
                     </Button>
-                </motion.div>
+                </BlurFade>
             ))}
         </div>
     )
@@ -96,11 +101,11 @@ function PickerDirectoryList(props: DirectoryEntryListProps): React.JSX.Element 
     return (
         <div className="space-y-2">
             {props.entries.map((entry, index) => (
-                <motion.div
+                <BlurFade
                     key={entry.path}
-                    initial={{ opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.18, delay: Math.min(index * DIRECTORY_ITEM_DELAY_STEP, MAX_ITEM_ANIMATION_DELAY) }}
+                    delay={getItemDelay(index, DIRECTORY_ITEM_DELAY_STEP)}
+                    duration={0.18}
+                    offset={8}
                 >
                     <Button
                         type="button"
@@ -116,7 +121,7 @@ function PickerDirectoryList(props: DirectoryEntryListProps): React.JSX.Element 
                         </span>
                         <FolderOpenIcon className="h-4 w-4 shrink-0 text-[var(--ds-text-muted)]" />
                     </Button>
-                </motion.div>
+                </BlurFade>
             ))}
         </div>
     )

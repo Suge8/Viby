@@ -13,7 +13,6 @@ type LoadedTerminalModules = {
     Terminal: typeof import('@xterm/xterm').Terminal
     FitAddon: typeof import('@xterm/addon-fit').FitAddon
     WebLinksAddon: typeof import('@xterm/addon-web-links').WebLinksAddon
-    CanvasAddon: typeof import('@xterm/addon-canvas').CanvasAddon
 }
 
 let terminalModulesPromise: Promise<LoadedTerminalModules> | null = null
@@ -24,12 +23,10 @@ function loadTerminalModules(): Promise<LoadedTerminalModules> {
             import('@xterm/xterm'),
             import('@xterm/addon-fit'),
             import('@xterm/addon-web-links'),
-            import('@xterm/addon-canvas')
-        ]).then(([xterm, fit, webLinks, canvas]) => ({
+        ]).then(([xterm, fit, webLinks]) => ({
             Terminal: xterm.Terminal,
             FitAddon: fit.FitAddon,
             WebLinksAddon: webLinks.WebLinksAddon,
-            CanvasAddon: canvas.CanvasAddon
         }))
     }
 
@@ -64,7 +61,7 @@ function TerminalViewComponent(props: TerminalViewProps) {
         const abortController = new AbortController()
         let cleanup: (() => void) | null = null
 
-        void loadTerminalModules().then(async ({ Terminal, FitAddon, WebLinksAddon, CanvasAddon }) => {
+        void loadTerminalModules().then(async ({ Terminal, FitAddon, WebLinksAddon }) => {
             if (abortController.signal.aborted) {
                 return
             }
@@ -87,10 +84,8 @@ function TerminalViewComponent(props: TerminalViewProps) {
 
             const fitAddon = new FitAddon()
             const webLinksAddon = new WebLinksAddon()
-            const canvasAddon = new CanvasAddon()
             terminal.loadAddon(fitAddon)
             terminal.loadAddon(webLinksAddon)
-            terminal.loadAddon(canvasAddon)
             terminal.open(container)
 
             const observer = new ResizeObserver(() => {
@@ -146,7 +141,6 @@ function TerminalViewComponent(props: TerminalViewProps) {
                 observer.disconnect()
                 fitAddon.dispose()
                 webLinksAddon.dispose()
-                canvasAddon.dispose()
                 terminal.dispose()
             }
         })

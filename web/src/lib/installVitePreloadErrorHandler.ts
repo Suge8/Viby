@@ -1,10 +1,7 @@
 import { reloadWindowForRecovery } from '@/lib/appRecovery'
 import { readPendingNavigationRecoveryHref } from '@/lib/navigationTransition'
-import {
-    isLikelyRuntimeAssetFailure,
-    recoverRuntimeAssets,
-    type RuntimeAssetFailure
-} from '@/lib/runtimeAssetRecovery'
+import type { RuntimeAssetFailure } from '@/lib/runtimeAssetFailure'
+import { recoverRuntimeAssets } from '@/lib/runtimeAssetRecovery'
 
 type VitePreloadErrorEvent = Event & {
     payload?: unknown
@@ -44,6 +41,7 @@ export async function recoverFromVitePreloadError(
     reload?: () => void
 ): Promise<boolean> {
     const failure = extractRuntimeAssetFailure(payload)
+    const { isLikelyRuntimeAssetFailure } = await import('@/lib/runtimeAssetFailure')
     if (!isLikelyRuntimeAssetFailure(failure)) {
         console.error('Skipped runtime asset recovery for non-asset preload failure:', payload)
         return false

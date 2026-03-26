@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query'
 import type { ApiClient } from '@/api/client'
 import type { DirectoryEntry } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
+import { formatOptionalUserFacingErrorMessage } from '@/lib/userFacingError'
+import { useTranslation } from '@/lib/use-translation'
 
 export function useSessionDirectory(
     api: ApiClient | null,
@@ -14,6 +16,7 @@ export function useSessionDirectory(
     isLoading: boolean
     refetch: () => Promise<unknown>
 } {
+    const { t } = useTranslation()
     const resolvedSessionId = sessionId ?? 'unknown'
     const enabled = Boolean(api && sessionId) && (options?.enabled ?? true)
 
@@ -34,15 +37,17 @@ export function useSessionDirectory(
         enabled,
     })
 
-    const queryError = query.error instanceof Error
-        ? query.error.message
-        : query.error
-            ? 'Failed to list directory'
-            : null
+    const queryError = formatOptionalUserFacingErrorMessage(query.error, {
+        t,
+        fallbackKey: 'error.files.directory'
+    })
 
     return {
         entries: query.data?.entries ?? [],
-        error: queryError ?? query.data?.error ?? null,
+        error: queryError ?? formatOptionalUserFacingErrorMessage(query.data?.error, {
+            t,
+            fallbackKey: 'error.files.directory'
+        }),
         isLoading: query.isLoading,
         refetch: query.refetch
     }

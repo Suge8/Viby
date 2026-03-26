@@ -3,6 +3,7 @@ import type { DecryptedMessage, Session, SessionStreamState } from '@/types/api'
 import type { ChatBlock, NormalizedMessage } from '@/chat/types'
 import { normalizeDecryptedMessage } from '@/chat/normalize'
 import { reduceChatBlocks } from '@/chat/reducer'
+import { resolveTextRenderMode } from '@/chat/textRenderMode'
 import { reconcileChatBlocks } from '@/chat/reconcile'
 import {
     collectThreadMessageIds,
@@ -17,7 +18,8 @@ function buildSessionStreamBlock(stream: SessionStreamState): ChatBlock {
         id: `stream:${stream.streamId}`,
         localId: null,
         createdAt: stream.startedAt,
-        text: stream.text
+        text: stream.text,
+        renderMode: resolveTextRenderMode(stream.text)
     }
 }
 
@@ -119,7 +121,6 @@ export function useSessionChatBlocks(options: {
 
     return {
         blocks: reconciled.blocks,
-        hasStreamingResponse: sessionStreamBlock !== null,
         rawMessagesCount: messages.length,
         normalizedMessagesCount: normalizedMessages.length,
         threadMessageIds,

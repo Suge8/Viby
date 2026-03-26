@@ -1,4 +1,4 @@
-import { CheckIcon } from '@/components/icons'
+import { FeatureCheckIcon as CheckIcon } from '@/components/featureIcons'
 import { Button } from '@/components/ui/button'
 import type { ComposerOptionTone, ComposerPanelOption } from '@/lib/sessionConfigPresentation'
 import { useTranslation } from '@/lib/use-translation'

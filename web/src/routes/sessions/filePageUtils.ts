@@ -1,8 +1,18 @@
+import {
+    CODE_LANGUAGE_ALIASES,
+} from '@/components/code-block/codeBlockLanguage'
 import type { GitCommandResponse } from '@/types/api'
-import { langAlias } from '@/lib/shiki'
+import type { FilesTab } from '@/routes/sessions/filesPageUtils'
 import { decodeBase64 } from '@/lib/utils'
 
 export const MAX_COPYABLE_FILE_BYTES = 1_000_000
+export type FileDisplayMode = 'diff' | 'file'
+
+type FileDiffResolution = 'pending' | 'ready' | 'error'
+const FILE_DISPLAY_MODE_BY_TAB: Record<FilesTab, FileDisplayMode> = {
+    changes: 'diff',
+    directories: 'file',
+}
 
 export function decodeFilePath(value: string): string {
     if (!value) {
@@ -24,7 +34,43 @@ export function resolveFileLanguage(path: string): string | undefined {
         return undefined
     }
 
-    return langAlias[extension] ?? extension
+    return CODE_LANGUAGE_ALIASES[extension] ?? extension
+}
+
+export function getPreferredFileDisplayMode(tab: FilesTab | undefined): FileDisplayMode {
+    return tab ? FILE_DISPLAY_MODE_BY_TAB[tab] : FILE_DISPLAY_MODE_BY_TAB.changes
+}
+
+export function resolveActiveFileDisplayMode(options: {
+    hasDiffContent: boolean
+    preferredDisplayMode: FileDisplayMode
+}): FileDisplayMode {
+    if (!options.hasDiffContent) {
+        return 'file'
+    }
+
+    return options.preferredDisplayMode
+}
+
+export function shouldLoadFileContent(options: {
+    displayMode: FileDisplayMode
+    diffResolution: FileDiffResolution
+    diffCommandFailed: boolean
+    hasDiffContent: boolean
+}): boolean {
+    if (options.displayMode === 'file') {
+        return true
+    }
+
+    if (options.diffResolution === 'error') {
+        return true
+    }
+
+    if (options.diffResolution === 'pending') {
+        return false
+    }
+
+    return options.diffCommandFailed || !options.hasDiffContent
 }
 
 export function getUtf8ByteLength(value: string): number {

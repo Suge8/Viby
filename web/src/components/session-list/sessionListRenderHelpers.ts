@@ -1,11 +1,4 @@
-import { getSessionSummarySortTimestamp } from '@viby/protocol'
 import type { SessionSummary } from '@/types/api'
-
-export function getSessionListPositionDependency(
-    session: Pick<SessionSummary, 'lifecycleState' | 'lifecycleStateSince' | 'updatedAt'>
-): string {
-    return `${session.lifecycleState}:${getSessionSummarySortTimestamp(session)}`
-}
 
 export function getSessionTabButtonClassName(active: boolean): string {
     if (active) {

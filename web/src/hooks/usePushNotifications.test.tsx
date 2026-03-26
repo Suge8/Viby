@@ -4,7 +4,7 @@ import { usePushNotifications } from './usePushNotifications'
 
 const shouldRegisterServiceWorkerForOriginMock = vi.fn<(origin: string) => boolean>()
 
-vi.mock('@/lib/runtimeAssetRecovery', () => ({
+vi.mock('@/lib/runtimeAssetPolicy', () => ({
     shouldRegisterServiceWorkerForOrigin: (origin: string) => shouldRegisterServiceWorkerForOriginMock(origin)
 }))
 

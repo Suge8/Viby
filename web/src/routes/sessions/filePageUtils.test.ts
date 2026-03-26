@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { decodeFilePath, extractCommandError, getUtf8ByteLength, isBinaryContent, resolveFileLanguage } from '@/routes/sessions/filePageUtils'
+import {
+    decodeFilePath,
+    extractCommandError,
+    getPreferredFileDisplayMode,
+    getUtf8ByteLength,
+    isBinaryContent,
+    resolveActiveFileDisplayMode,
+    resolveFileLanguage,
+    shouldLoadFileContent,
+} from '@/routes/sessions/filePageUtils'
 
 describe('filePageUtils', () => {
     it('decodes encoded file paths and falls back to raw value', () => {
@@ -13,6 +22,24 @@ describe('filePageUtils', () => {
         expect(resolveFileLanguage('script.sh')).toBe('shellscript')
     })
 
+    it('uses the files tab as the single preferred display mode source', () => {
+        expect(getPreferredFileDisplayMode(undefined)).toBe('diff')
+        expect(getPreferredFileDisplayMode('changes')).toBe('diff')
+        expect(getPreferredFileDisplayMode('directories')).toBe('file')
+    })
+
+    it('falls back to file mode when diff content is unavailable', () => {
+        expect(resolveActiveFileDisplayMode({
+            hasDiffContent: false,
+            preferredDisplayMode: 'diff',
+        })).toBe('file')
+
+        expect(resolveActiveFileDisplayMode({
+            hasDiffContent: true,
+            preferredDisplayMode: 'file',
+        })).toBe('file')
+    })
+
     it('detects binary content and counts utf8 bytes', () => {
         expect(isBinaryContent('hello world')).toBe(false)
         expect(isBinaryContent('abc\u0000def')).toBe(true)
@@ -23,5 +50,35 @@ describe('filePageUtils', () => {
         expect(extractCommandError(undefined)).toBeNull()
         expect(extractCommandError({ success: true, stdout: '' })).toBeNull()
         expect(extractCommandError({ success: false, stderr: 'boom' })).toBe('boom')
+    })
+
+    it('only loads file content when the route actually needs it', () => {
+        expect(shouldLoadFileContent({
+            displayMode: 'diff',
+            diffResolution: 'pending',
+            diffCommandFailed: false,
+            hasDiffContent: false,
+        })).toBe(false)
+
+        expect(shouldLoadFileContent({
+            displayMode: 'diff',
+            diffResolution: 'ready',
+            diffCommandFailed: false,
+            hasDiffContent: true,
+        })).toBe(false)
+
+        expect(shouldLoadFileContent({
+            displayMode: 'file',
+            diffResolution: 'ready',
+            diffCommandFailed: false,
+            hasDiffContent: true,
+        })).toBe(true)
+
+        expect(shouldLoadFileContent({
+            displayMode: 'diff',
+            diffResolution: 'ready',
+            diffCommandFailed: true,
+            hasDiffContent: false,
+        })).toBe(true)
     })
 })

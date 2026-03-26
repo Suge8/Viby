@@ -1,5 +1,4 @@
 import { createContext, useCallback, useEffect, useState, type ReactNode } from 'react'
-import { en } from './locales'
 import { getCachedTranslations, preloadTranslations } from './i18nCatalog'
 
 export type Locale = 'en' | 'zh-CN'
@@ -18,7 +17,7 @@ export const I18nContext = createContext<I18nContextValue | null>(null)
 
 const LEGACY_LOCALE_STORAGE_KEY = 'viby-lang'
 const LOCALE_PREFERENCE_STORAGE_KEY = 'viby-lang-preference'
-const DEFAULT_TRANSLATIONS: Translations = en
+const EMPTY_TRANSLATIONS: Translations = {}
 
 function isLocale(value: string | null): value is Locale {
     return value === 'en' || value === 'zh-CN'
@@ -88,7 +87,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     const [systemLocale, setSystemLocale] = useState<Locale>(() => detectPreferredLocale())
     const locale = localePreference === 'system' ? systemLocale : localePreference
     const [translations, setTranslations] = useState<Translations>(() => {
-        return getCachedTranslations(locale) ?? DEFAULT_TRANSLATIONS
+        return getCachedTranslations(locale) ?? EMPTY_TRANSLATIONS
     })
 
     const setLocale = useCallback((nextLocalePreference: LocalePreference) => {
@@ -98,8 +97,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
     const t = useCallback((key: string, params?: Record<string, string | number>): string => {
         const value = translations[key]
-        const fallback = DEFAULT_TRANSLATIONS[key] ?? key
-        return interpolate(value ?? fallback, params)
+        return interpolate(value ?? key, params)
     }, [translations])
 
     useEffect(() => {

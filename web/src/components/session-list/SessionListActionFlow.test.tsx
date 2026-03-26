@@ -46,33 +46,49 @@ vi.mock('@/hooks/mutations/useSessionActions', () => ({
 
 vi.mock('@/components/SessionActionMenu', () => ({
     SessionActionMenu: ({
-        isOpen,
+        overlay,
         actions
     }: {
-        isOpen: boolean
+        overlay: { isOpen: boolean }
         actions: {
+            onRename: () => void
             onArchive: () => void
         }
     }) => {
-        if (!isOpen) {
+        if (!overlay.isOpen) {
             return null
         }
 
         return (
-            <button type="button" onClick={actions.onArchive}>
-                archive-action
-            </button>
+            <>
+                <button type="button" onClick={actions.onRename}>
+                    rename-action
+                </button>
+                <button type="button" onClick={actions.onArchive}>
+                    archive-action
+                </button>
+            </>
         )
     }
 }))
 
 vi.mock('@/components/RenameSessionDialog', () => ({
-    RenameSessionDialog: () => null
+    RenameSessionDialog: ({ isOpen }: { isOpen: boolean }) => {
+        if (!isOpen) {
+            return null
+        }
+
+        return <div>rename-dialog-open</div>
+    }
 }))
 
 vi.mock('@/components/ui/ConfirmDialog', () => ({
-    ConfirmDialog: ({ isOpen }: { isOpen: boolean }) => {
-        if (!isOpen) {
+    ConfirmDialog: ({
+        dialog
+    }: {
+        dialog: { isOpen: boolean }
+    }) => {
+        if (!dialog.isOpen) {
             return null
         }
 
@@ -107,6 +123,22 @@ function createSessionSummary(): SessionSummary {
     }
 }
 
+function renderSessionList(): void {
+    render(
+        <I18nProvider>
+            <SessionList
+                sessions={[createSessionSummary()]}
+                api={null}
+                selectedSessionId={null}
+                actions={{
+                    onSelect: vi.fn(),
+                    onNewSession: vi.fn()
+                }}
+            />
+        </I18nProvider>
+    )
+}
+
 describe('SessionList action flow', () => {
     afterEach(() => {
         cleanup()
@@ -114,20 +146,7 @@ describe('SessionList action flow', () => {
     })
 
     it('keeps the action controller mounted long enough to open the archive confirm dialog', async () => {
-        render(
-            <I18nProvider>
-                <SessionList
-                    sessions={[createSessionSummary()]}
-                    renderHeader={false}
-                    api={null}
-                    selectedSessionId={null}
-                    actions={{
-                        onSelect: vi.fn(),
-                        onNewSession: vi.fn()
-                    }}
-                />
-            </I18nProvider>
-        )
+        renderSessionList()
 
         fireEvent.contextMenu(screen.getByRole('button', { name: /needs review/i }), {
             clientX: 24,
@@ -137,6 +156,20 @@ describe('SessionList action flow', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'archive-action' }))
 
         expect(screen.getByText('confirm-dialog-open')).toBeInTheDocument()
+        expect(archiveSessionMock).not.toHaveBeenCalled()
+    })
+
+    it('keeps the action controller mounted long enough to open the rename dialog on the first click', async () => {
+        renderSessionList()
+
+        fireEvent.contextMenu(screen.getByRole('button', { name: /needs review/i }), {
+            clientX: 24,
+            clientY: 36
+        })
+
+        fireEvent.click(await screen.findByRole('button', { name: 'rename-action' }))
+
+        expect(screen.getByText('rename-dialog-open')).toBeInTheDocument()
         expect(archiveSessionMock).not.toHaveBeenCalled()
     })
 })

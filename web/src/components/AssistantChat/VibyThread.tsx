@@ -1,8 +1,7 @@
-import { memo, type ReactNode } from 'react'
+import { memo, useMemo, type ReactNode } from 'react'
 import { ThreadPrimitive } from '@assistant-ui/react'
 import type { ApiClient } from '@/api/client'
 import type { SessionMetadataSummary } from '@/types/api'
-import { AssistantReplyingIndicator } from '@/components/AssistantChat/AssistantReplyingIndicator'
 import { VibyChatProvider } from '@/components/AssistantChat/context'
 import { AppNotice } from '@/components/AppNotice'
 import { VibyAssistantMessage } from '@/components/AssistantChat/messages/AssistantMessage'
@@ -11,19 +10,28 @@ import { VibyUserMessage } from '@/components/AssistantChat/messages/UserMessage
 import { Spinner } from '@/components/Spinner'
 import { SkeletonRows } from '@/components/loading/LoadingSkeleton'
 import { CHAT_MESSAGE_SKELETON_ROWS } from '@/components/loading/chatSkeletonRows'
-import { ArrowDownIcon } from '@/components/icons'
+import { ArrowDownIcon, ArrowUpIcon } from '@/components/icons'
 import { Button } from '@/components/ui/button'
 import { type HistoryControlMode, useThreadViewport } from '@/components/AssistantChat/useThreadViewport'
 import type { LoadMoreMessagesResult } from '@/lib/message-window-store'
+import { joinClassNames } from '@/lib/joinClassNames'
 import { useTranslation } from '@/lib/use-translation'
 
 const THREAD_HISTORY_CONTROL_INSET_CLASS_NAME = 'pt-14'
-const THREAD_HISTORY_CONTROL_CLASS_NAME = 'pointer-events-auto min-h-9 gap-2 rounded-full border-[color:color-mix(in_srgb,var(--ds-border-default)_72%,transparent)] bg-[color:color-mix(in_srgb,var(--ds-panel-strong)_90%,transparent)] px-3.5 py-2 text-xs font-medium text-[var(--app-hint)] shadow-[0_10px_24px_rgba(9,15,35,0.08)] backdrop-blur-xl hover:border-[var(--ds-border-strong)] hover:text-[var(--ds-text-primary)] hover:shadow-[0_14px_30px_rgba(9,15,35,0.12)] disabled:cursor-default disabled:opacity-85'
-const THREAD_BOTTOM_CONTROL_WRAPPER_CLASS_NAME = 'pointer-events-none absolute inset-x-0 z-30 px-3'
-const THREAD_BOTTOM_CONTROL_STAGE_CLASS_NAME = 'mx-auto flex w-full ds-stage-shell justify-center'
-const THREAD_BOTTOM_CONTROL_CLASS_NAME = 'rounded-full border-[color:color-mix(in_srgb,var(--ds-brand)_20%,transparent)] bg-[color:color-mix(in_srgb,var(--ds-panel-strong)_92%,transparent)] text-[var(--ds-text-primary)] shadow-[0_18px_48px_rgba(9,15,35,0.16)] backdrop-blur-xl hover:border-[color:color-mix(in_srgb,var(--ds-brand)_34%,transparent)] hover:shadow-[0_22px_56px_rgba(9,15,35,0.2)]'
+const THREAD_SIDE_CONTROL_BASE_CLASS_NAME = 'session-chat-thread-side-control pointer-events-auto flex h-[var(--chat-side-control-size)] w-[var(--chat-side-control-size)] items-center justify-center rounded-[1rem] p-0 text-center shadow-[0_18px_42px_rgba(9,15,35,0.16)] backdrop-blur-xl transition-[transform,box-shadow,border-color,background-color,color,opacity] duration-[var(--ds-motion-base)] ease-[var(--ds-ease-emphasized)] disabled:cursor-default disabled:opacity-85 md:text-xs'
+const THREAD_HISTORY_CONTROL_CLASS_NAME = `${THREAD_SIDE_CONTROL_BASE_CLASS_NAME} session-chat-thread-history-control border-[color:color-mix(in_srgb,var(--ds-border-default)_72%,transparent)] bg-[color:color-mix(in_srgb,var(--ds-panel-strong)_90%,transparent)] text-[var(--app-hint)] hover:border-[var(--ds-border-strong)] hover:text-[var(--ds-text-primary)] hover:shadow-[0_14px_30px_rgba(9,15,35,0.12)] md:h-9 md:w-9 md:rounded-full`
+const THREAD_SIDE_CONTROL_WRAPPER_CLASS_NAME = 'pointer-events-none fixed inset-0 md:absolute'
+const THREAD_HISTORY_CONTROL_WRAPPER_CLASS_NAME = `${THREAD_SIDE_CONTROL_WRAPPER_CLASS_NAME} z-20`
+const THREAD_BOTTOM_CONTROL_WRAPPER_CLASS_NAME = `${THREAD_SIDE_CONTROL_WRAPPER_CLASS_NAME} z-30`
+const THREAD_SIDE_CONTROL_MOBILE_RIGHT_ANCHOR_CLASS_NAME = 'absolute right-[var(--chat-side-control-right-offset)]'
+const THREAD_HISTORY_CONTROL_ANCHOR_CLASS_NAME = `${THREAD_SIDE_CONTROL_MOBILE_RIGHT_ANCHOR_CLASS_NAME} top-[var(--chat-side-control-upper-top)] -translate-y-1/2 md:left-1/2 md:right-auto md:top-2 md:-translate-x-1/2 md:translate-y-0`
+const THREAD_BOTTOM_CONTROL_CLASS_NAME = `${THREAD_SIDE_CONTROL_BASE_CLASS_NAME} session-chat-thread-bottom-control border-[color:color-mix(in_srgb,var(--ds-brand)_20%,transparent)] bg-[color:color-mix(in_srgb,var(--ds-panel-strong)_92%,transparent)] text-[var(--ds-text-primary)] hover:border-[color:color-mix(in_srgb,var(--ds-brand)_34%,transparent)] hover:shadow-[0_22px_56px_rgba(9,15,35,0.2)] md:h-11 md:w-11 md:rounded-full`
 const THREAD_BOTTOM_CONTROL_PENDING_CLASS_NAME = 'border-[color:color-mix(in_srgb,var(--ds-brand)_34%,transparent)] bg-[color:color-mix(in_srgb,var(--ds-brand)_12%,var(--ds-panel-strong)_88%)] text-[var(--ds-brand)]'
-const THREAD_BOTTOM_CONTROL_BOTTOM_OFFSET = 'var(--chat-bottom-control-bottom-offset)'
+const THREAD_BOTTOM_CONTROL_ANCHOR_CLASS_NAME = `session-chat-thread-bottom-control-anchor ${THREAD_SIDE_CONTROL_MOBILE_RIGHT_ANCHOR_CLASS_NAME} bottom-[var(--chat-side-control-rest-bottom-offset)] md:bottom-[var(--chat-bottom-control-bottom-offset)] md:left-1/2 md:right-auto md:top-auto md:-translate-x-1/2`
+const THREAD_SIDE_CONTROL_PENDING_DOT_CLASS_NAME = 'absolute -right-0.5 -top-0.5 h-1.75 w-1.75 rounded-full bg-current opacity-85'
+const THREAD_SIDE_RAIL_INSET_CLASS_NAME = 'pr-[calc(var(--chat-side-control-gutter)+0.5rem)] md:pr-3'
+const THREAD_VIEWPORT_CLASS_NAME = 'session-chat-thread-viewport viby-thread-viewport min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain'
+const THREAD_STAGE_CLASS_NAME = 'mx-auto w-full ds-stage-shell min-w-0 p-3'
 
 function getHistoryControlLabel(options: {
     loading: boolean
@@ -61,6 +69,17 @@ function getThreadBottomControlClassName(hasPendingMessages: boolean): string {
     return THREAD_BOTTOM_CONTROL_CLASS_NAME
 }
 
+function getThreadStageClassName(options: {
+    reserveHistoryControlInset: boolean
+    reserveSideRailInset: boolean
+}): string {
+    return joinClassNames(
+        THREAD_STAGE_CLASS_NAME,
+        options.reserveHistoryControlInset && THREAD_HISTORY_CONTROL_INSET_CLASS_NAME,
+        options.reserveSideRailInset && THREAD_SIDE_RAIL_INSET_CLASS_NAME
+    )
+}
+
 function ThreadBottomControl(props: {
     count: number
     visible: boolean
@@ -78,21 +97,18 @@ function ThreadBottomControl(props: {
     const hasPendingMessages = props.count > 0
 
     return (
-        <div
-            className={THREAD_BOTTOM_CONTROL_WRAPPER_CLASS_NAME}
-            style={{ bottom: THREAD_BOTTOM_CONTROL_BOTTOM_OFFSET }}
-        >
-            <div className={THREAD_BOTTOM_CONTROL_STAGE_CLASS_NAME}>
+        <div className={THREAD_BOTTOM_CONTROL_WRAPPER_CLASS_NAME}>
+            <div className={THREAD_BOTTOM_CONTROL_ANCHOR_CLASS_NAME}>
                 <Button
                     type="button"
                     onClick={props.onClick}
                     aria-label={accessibleLabel}
                     title={accessibleLabel}
                     variant="secondary"
-                    size="icon"
-                    className={`pointer-events-auto ${getThreadBottomControlClassName(hasPendingMessages)}`}
+                    className={getThreadBottomControlClassName(hasPendingMessages)}
                 >
                     <ArrowDownIcon aria-hidden="true" className="h-4 w-4" />
+                    {hasPendingMessages ? <span aria-hidden="true" className={THREAD_SIDE_CONTROL_PENDING_DOT_CLASS_NAME} /> : null}
                 </Button>
             </div>
         </div>
@@ -119,22 +135,30 @@ function ThreadHistoryControl(props: {
     })
 
     return (
-        <Button
-            type="button"
-            data-testid="thread-history-control"
-            onClick={(event) => {
-                props.onClick()
-                event.currentTarget.blur()
-            }}
-            disabled={props.disabled}
-            aria-busy={props.loading}
-            variant="secondary"
-            size="sm"
-            className={THREAD_HISTORY_CONTROL_CLASS_NAME}
-        >
-            {props.loading ? <Spinner size="sm" label={null} className="text-current" /> : <span aria-hidden="true">↑</span>}
-            <span>{label}</span>
-        </Button>
+        <div className={THREAD_HISTORY_CONTROL_WRAPPER_CLASS_NAME}>
+            <div className={THREAD_HISTORY_CONTROL_ANCHOR_CLASS_NAME}>
+                <Button
+                    type="button"
+                    data-testid="thread-history-control"
+                    onClick={(event) => {
+                        props.onClick()
+                        event.currentTarget.blur()
+                    }}
+                    disabled={props.disabled}
+                    aria-busy={props.loading}
+                    aria-label={label}
+                    title={label}
+                    variant="secondary"
+                    className={THREAD_HISTORY_CONTROL_CLASS_NAME}
+                >
+                    {props.loading ? (
+                        <Spinner size="sm" label={null} className="text-current" />
+                    ) : (
+                        <ArrowUpIcon aria-hidden="true" className="h-4 w-4" />
+                    )}
+                </Button>
+            </div>
+        </div>
     )
 }
 
@@ -186,8 +210,6 @@ type VibyThreadHandlers = {
 type VibyThreadState = {
     hasMoreMessages: boolean
     isLoadingMoreMessages: boolean
-    isResponding: boolean
-    hasStreamingResponse: boolean
     pendingCount: number
     rawMessagesCount: number
     normalizedMessagesCount: number
@@ -240,28 +262,41 @@ export const VibyThread = memo(function VibyThread(props: VibyThreadProps): Reac
     const showNormalizationWarning = import.meta.env.DEV
         && props.state.normalizedMessagesCount === 0
         && props.state.rawMessagesCount > 0
-    const showReplyingIndicator = props.state.isResponding && !props.state.hasStreamingResponse
+    const shouldReserveSideRailInset = !showSkeleton && (isHistoryControlVisible || !isAtBottom)
+    const isHistoryControlDisabled = props.state.isLoadingMoreMessages
+        || isHistoryActionPending
+        || props.handlers.isLoadingMessages
+    const threadStageClassName = getThreadStageClassName({
+        reserveHistoryControlInset: shouldReserveHistoryControlInset && !showSkeleton,
+        reserveSideRailInset: shouldReserveSideRailInset
+    })
+    const chatProviderValue = useMemo(() => ({
+        api: props.session.api,
+        sessionId: props.session.sessionId,
+        metadata: props.session.metadata,
+        disabled: props.session.disabled,
+        onRefresh: props.handlers.onRefresh,
+        onRetryMessage: props.handlers.onRetryMessage
+    }), [
+        props.handlers.onRefresh,
+        props.handlers.onRetryMessage,
+        props.session.api,
+        props.session.disabled,
+        props.session.metadata,
+        props.session.sessionId
+    ])
 
     return (
-        <VibyChatProvider value={{
-            api: props.session.api,
-            sessionId: props.session.sessionId,
-            metadata: props.session.metadata,
-            disabled: props.session.disabled,
-            onRefresh: props.handlers.onRefresh,
-            onRetryMessage: props.handlers.onRetryMessage
-        }}>
+        <VibyChatProvider value={chatProviderValue}>
             <ThreadPrimitive.Root className="session-chat-thread-root relative flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-hidden">
                 {!showSkeleton ? (
-                    <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-center px-2 pt-2">
-                        <ThreadHistoryControl
-                            mode={historyControlMode}
-                            visible={isHistoryControlVisible}
-                            loading={isHistoryActionPending}
-                            disabled={props.state.isLoadingMoreMessages || isHistoryActionPending || props.handlers.isLoadingMessages}
-                            onClick={handleHistoryControlClick}
-                        />
-                    </div>
+                    <ThreadHistoryControl
+                        mode={historyControlMode}
+                        visible={isHistoryControlVisible}
+                        loading={isHistoryActionPending}
+                        disabled={isHistoryControlDisabled}
+                        onClick={handleHistoryControlClick}
+                    />
                 ) : null}
                 <ThreadPrimitive.Viewport
                     asChild
@@ -272,9 +307,9 @@ export const VibyThread = memo(function VibyThread(props: VibyThreadProps): Reac
                 >
                     <div
                         ref={viewportRef}
-                        className="session-chat-thread-viewport viby-thread-viewport min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain"
+                        className={THREAD_VIEWPORT_CLASS_NAME}
                     >
-                        <div className={`mx-auto w-full ds-stage-shell min-w-0 p-3 ${shouldReserveHistoryControlInset && !showSkeleton ? THREAD_HISTORY_CONTROL_INSET_CLASS_NAME : ''}`}>
+                        <div className={threadStageClassName}>
                             <div className="ds-thread-lane">
                                 {showSkeleton ? <MessageSkeleton /> : null}
                                 {!showSkeleton && showNormalizationWarning ? (
@@ -290,7 +325,6 @@ export const VibyThread = memo(function VibyThread(props: VibyThreadProps): Reac
                                     data-viby-measure-all={isHistoryActionPending ? 'true' : 'false'}
                                 >
                                     <ThreadPrimitive.Messages components={THREAD_MESSAGE_COMPONENTS} />
-                                    {showReplyingIndicator ? <AssistantReplyingIndicator /> : null}
                                 </div>
                             </div>
                         </div>

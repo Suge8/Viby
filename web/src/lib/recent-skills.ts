@@ -1,5 +1,4 @@
 const RECENT_SKILLS_KEY = 'viby-recent-skills'
-const MAX_RECENT_SKILLS = 200
 
 type RecentSkillsMap = Record<string, number>
 
@@ -31,24 +30,3 @@ export function getRecentSkills(): RecentSkillsMap {
         return {}
     }
 }
-
-export function markSkillUsed(skillName: string): void {
-    const name = skillName.trim()
-    if (!name) return
-    if (typeof window === 'undefined') return
-
-    try {
-        const recent = getRecentSkills()
-        recent[name] = Date.now()
-
-        const entries = Object.entries(recent)
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, MAX_RECENT_SKILLS)
-
-        const next: RecentSkillsMap = Object.fromEntries(entries)
-        localStorage.setItem(RECENT_SKILLS_KEY, JSON.stringify(next))
-    } catch {
-        // Ignore storage errors
-    }
-}
-

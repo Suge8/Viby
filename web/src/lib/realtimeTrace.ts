@@ -11,6 +11,9 @@ export type RealtimeTraceEventType =
     | 'spawn_success'
     | 'chat_opened'
     | 'message_send_start'
+    | 'server_accepted'
+    | 'thinking_visible'
+    | 'first_stream_delta'
     | 'first_reply_detected'
 
 export type RealtimeTraceEntry = {

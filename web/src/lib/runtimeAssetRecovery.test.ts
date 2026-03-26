@@ -1,15 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { consumePendingAppRecovery } from '@/lib/appRecovery'
 import {
+    isLocalNetworkOrigin,
+    isLoopbackOrigin,
+    shouldRegisterServiceWorkerForOrigin
+} from '@/lib/runtimeAssetPolicy'
+import {
+    isLikelyRuntimeAssetFailure,
+    recordRuntimeAssetFailureRecovery
+} from '@/lib/runtimeAssetFailure'
+import {
     clearRuntimeAssetRecoveryMarker,
     disableServiceWorkerForCurrentOrigin,
     invalidateRuntimeAssetsForBuild,
-    isLocalNetworkOrigin,
-    isLikelyRuntimeAssetFailure,
-    isLoopbackOrigin,
-    recordRuntimeAssetFailureRecovery,
     recoverRuntimeAssets,
-    shouldRegisterServiceWorkerForOrigin
 } from '@/lib/runtimeAssetRecovery'
 
 describe('runtimeAssetRecovery', () => {

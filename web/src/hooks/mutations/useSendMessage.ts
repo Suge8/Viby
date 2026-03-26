@@ -1,13 +1,17 @@
-import { useMutation } from '@tanstack/react-query'
-import { useCallback, useRef, useState } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useCallback } from 'react'
 import type { ApiClient } from '@/api/client'
-import type { AttachmentMetadata, DecryptedMessage } from '@/types/api'
+import type { AttachmentMetadata, DecryptedMessage, Session, SessionsResponse } from '@/types/api'
 import { makeClientSideId } from '@/lib/messages'
 import {
     appendOptimisticMessage,
+    clearPendingReply,
     getMessageWindowState,
+    markPendingReplyAccepted,
     updateMessageStatus,
-} from '@/lib/message-window-store'
+} from '@/lib/messageWindowStoreCore'
+import { queryKeys } from '@/lib/query-keys'
+import { markSessionPendingUserTurnInQueryCache } from '@/lib/sessionQueryCache'
 import { usePlatform } from '@/hooks/usePlatform'
 
 type SendMessageInput = {
@@ -21,7 +25,6 @@ type SendMessageInput = {
 type BlockedReason = 'no-api' | 'no-session' | 'pending'
 
 type UseSendMessageOptions = {
-    ensureSessionReady?: () => Promise<void>
     onBlocked?: (reason: BlockedReason) => void
     onSendStart?: (info: {
         sessionId: string
@@ -33,7 +36,23 @@ type UseSendMessageOptions = {
         sessionId: string
         localId: string
         createdAt: number
+        acceptedAt: number
+        session: Session
     }) => Promise<void> | void
+}
+
+type SendStartInfo = {
+    sessionId: string
+    localId: string
+    createdAt: number
+    attachmentsCount: number
+}
+
+function findMessageByLocalIdInCollection(
+    messages: readonly DecryptedMessage[],
+    localId: string
+): DecryptedMessage | null {
+    return messages.find((message) => message.localId === localId) ?? null
 }
 
 function findMessageByLocalId(
@@ -41,13 +60,47 @@ function findMessageByLocalId(
     localId: string,
 ): DecryptedMessage | null {
     const state = getMessageWindowState(sessionId)
-    for (const message of state.messages) {
-        if (message.localId === localId) return message
+
+    return (
+        findMessageByLocalIdInCollection(state.messages, localId) ??
+        findMessageByLocalIdInCollection(state.pending, localId)
+    )
+}
+
+function createOptimisticMessage(input: SendMessageInput): DecryptedMessage {
+    return {
+        id: input.localId,
+        seq: null,
+        localId: input.localId,
+        content: {
+            role: 'user',
+            content: {
+                type: 'text',
+                text: input.text,
+                attachments: input.attachments
+            }
+        },
+        createdAt: input.createdAt,
+        status: 'sending',
+        originalText: input.text,
     }
-    for (const message of state.pending) {
-        if (message.localId === localId) return message
+}
+
+function getOptimisticMessageAttachments(message: DecryptedMessage): AttachmentMetadata[] | undefined {
+    const messageEnvelope = message.content
+    if (!messageEnvelope || typeof messageEnvelope !== 'object') {
+        return undefined
     }
-    return null
+    const role = (messageEnvelope as { role?: unknown }).role
+    if (role !== 'user') {
+        return undefined
+    }
+    const userContent = (messageEnvelope as { content?: unknown }).content
+    if (!userContent || typeof userContent !== 'object') {
+        return undefined
+    }
+    const attachments = (userContent as { attachments?: unknown }).attachments
+    return Array.isArray(attachments) ? attachments as AttachmentMetadata[] : undefined
 }
 
 export function useSendMessage(
@@ -60,8 +113,7 @@ export function useSendMessage(
     isSending: boolean
 } {
     const { haptic } = usePlatform()
-    const [isResolving, setIsResolving] = useState(false)
-    const resolveGuardRef = useRef(false)
+    const queryClient = useQueryClient()
 
     const handleBlocked = useCallback((reason: BlockedReason): void => {
         options?.onBlocked?.(reason)
@@ -70,64 +122,37 @@ export function useSendMessage(
         }
     }, [haptic, options])
 
-    const ensureSendTargetReady = useCallback(async (): Promise<boolean> => {
-        if (!options?.ensureSessionReady) {
-            return true
-        }
-
-        resolveGuardRef.current = true
-        setIsResolving(true)
-        try {
-            await options.ensureSessionReady()
-            return true
-        } catch (error) {
-            haptic.notification('error')
-            console.error('Failed to resolve session before send:', error)
-            return false
-        } finally {
-            resolveGuardRef.current = false
-            setIsResolving(false)
-        }
-    }, [haptic, options])
-
     const mutation = useMutation({
         mutationFn: async (input: SendMessageInput) => {
             if (!api) {
                 throw new Error('API unavailable')
             }
-            await api.sendMessage(input.sessionId, input.text, input.localId, input.attachments)
+            return await api.sendMessage(input.sessionId, input.text, input.localId, input.attachments)
         },
-        onMutate: async (input) => {
-            const optimisticMessage: DecryptedMessage = {
-                id: input.localId,
-                seq: null,
-                localId: input.localId,
-                content: {
-                    role: 'user',
-                    content: {
-                        type: 'text',
-                        text: input.text,
-                        attachments: input.attachments
-                    }
-                },
-                createdAt: input.createdAt,
-                status: 'sending',
-                originalText: input.text,
-            }
-
-            appendOptimisticMessage(input.sessionId, optimisticMessage)
+        onMutate: (input) => {
+            const previousSessions = queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)
+            markSessionPendingUserTurnInQueryCache(queryClient, input.sessionId, input.createdAt)
+            return { previousSessions }
         },
-        onSuccess: (_, input) => {
+        onSuccess: (session, input) => {
+            const acceptedAt = Date.now()
             updateMessageStatus(input.sessionId, input.localId, 'sent')
+            markPendingReplyAccepted(input.sessionId, input.localId, acceptedAt)
             haptic.notification('success')
             void options?.afterServerAccepted?.({
                 sessionId: input.sessionId,
                 localId: input.localId,
-                createdAt: input.createdAt
+                createdAt: input.createdAt,
+                acceptedAt,
+                session
             })
         },
-        onError: (_, input) => {
+        onError: (_, input, context) => {
+            if (context?.previousSessions) {
+                queryClient.setQueryData(queryKeys.sessions, context.previousSessions)
+            }
             updateMessageStatus(input.sessionId, input.localId, 'failed')
+            clearPendingReply(input.sessionId, input.localId)
             haptic.notification('error')
         },
     })
@@ -139,11 +164,22 @@ export function useSendMessage(
         if (!sessionId) {
             return 'no-session'
         }
-        if (mutation.isPending || resolveGuardRef.current) {
+        if (mutation.isPending) {
             return 'pending'
         }
         return null
     }, [api, mutation.isPending, sessionId])
+
+    const startSendAttempt = useCallback((input: SendMessageInput): void => {
+        const sendStartInfo: SendStartInfo = {
+            sessionId: input.sessionId,
+            localId: input.localId,
+            createdAt: input.createdAt,
+            attachmentsCount: input.attachments?.length ?? 0
+        }
+        options?.onSendStart?.(sendStartInfo)
+        mutation.mutate(input)
+    }, [mutation, options])
 
     const sendMessage = useCallback((text: string, attachments?: AttachmentMetadata[]) => {
         const blockedReason = getBlockedReason()
@@ -159,28 +195,17 @@ export function useSendMessage(
 
         const localId = makeClientSideId('local')
         const createdAt = Date.now()
+        const optimisticInput: SendMessageInput = {
+            sessionId: currentSessionId,
+            text,
+            localId,
+            createdAt,
+            attachments,
+        }
 
-        void (async () => {
-            const ready = await ensureSendTargetReady()
-            if (!ready) {
-                return
-            }
-
-            options?.onSendStart?.({
-                sessionId: currentSessionId,
-                localId,
-                createdAt,
-                attachmentsCount: attachments?.length ?? 0
-            })
-            mutation.mutate({
-                sessionId: currentSessionId,
-                text,
-                localId,
-                createdAt,
-                attachments,
-            })
-        })()
-    }, [ensureSendTargetReady, getBlockedReason, handleBlocked, mutation, options, sessionId])
+        appendOptimisticMessage(currentSessionId, createOptimisticMessage(optimisticInput))
+        startSendAttempt(optimisticInput)
+    }, [getBlockedReason, handleBlocked, sessionId, startSendAttempt])
 
     const retryMessage = useCallback((localId: string) => {
         const blockedReason = getBlockedReason()
@@ -194,20 +219,21 @@ export function useSendMessage(
 
         const message = findMessageByLocalId(sessionId, localId)
         if (!message?.originalText) return
-
-        updateMessageStatus(sessionId, localId, 'sending')
-
-        mutation.mutate({
+        const retryInput: SendMessageInput = {
             sessionId,
             text: message.originalText,
             localId,
             createdAt: message.createdAt,
-        })
-    }, [getBlockedReason, handleBlocked, mutation, sessionId])
+            attachments: getOptimisticMessageAttachments(message)
+        }
+
+        updateMessageStatus(sessionId, localId, 'sending')
+        startSendAttempt(retryInput)
+    }, [getBlockedReason, handleBlocked, sessionId, startSendAttempt])
 
     return {
         sendMessage,
         retryMessage,
-        isSending: mutation.isPending || isResolving,
+        isSending: mutation.isPending,
     }
 }

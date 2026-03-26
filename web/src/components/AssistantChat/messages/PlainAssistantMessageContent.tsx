@@ -1,11 +1,15 @@
-type AssistantMessagePart =
-    | { type: 'text'; text: string }
-    | { type: 'reasoning'; text: string }
-    | { type: 'tool-call'; toolName?: string }
-    | { type: string; text?: string; toolName?: string }
+import type { ThreadAssistantMessagePart } from '@assistant-ui/react'
+import { PlainTextContent } from '@/components/PlainTextContent'
 
 type PlainAssistantMessageContentProps = {
-    parts: readonly AssistantMessagePart[]
+    parts: readonly ThreadAssistantMessagePart[]
+}
+
+function getVisibleText(text: string | undefined): string | null {
+    if (typeof text !== 'string') {
+        return null
+    }
+    return text.trim().length > 0 ? text : null
 }
 
 function ToolCallFallback(props: { toolName?: string }): React.JSX.Element {
@@ -21,21 +25,26 @@ export function PlainAssistantMessageContent(props: PlainAssistantMessageContent
         <div className="flex min-w-0 flex-col gap-3">
             {props.parts.map((part, index) => {
                 if (part.type === 'text') {
+                    const visibleText = getVisibleText(part.text)
+                    if (!visibleText) {
+                        return null
+                    }
                     return (
-                        <div key={`text:${index}`} className="whitespace-pre-wrap break-words text-base">
-                            {part.text}
-                        </div>
+                        <PlainTextContent key={`text:${index}`} text={visibleText} />
                     )
                 }
 
                 if (part.type === 'reasoning') {
+                    const visibleText = getVisibleText(part.text)
+                    if (!visibleText) {
+                        return null
+                    }
                     return (
-                        <div
+                        <PlainTextContent
                             key={`reasoning:${index}`}
-                            className="whitespace-pre-wrap break-words text-sm text-[var(--app-hint)]"
-                        >
-                            {part.text}
-                        </div>
+                            text={visibleText}
+                            className="text-sm text-[var(--app-hint)]"
+                        />
                     )
                 }
 

@@ -2,6 +2,8 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 import { getSessionLifecycleState, type LiveSessionConfigSupport } from '@viby/protocol'
 import type { VibyComposerModel } from '@/components/AssistantChat/composerTypes'
 import type { ApiClient } from '@/api/client'
+import type { PendingReplyState } from '@/lib/message-window-store'
+import type { MessageWindowWarningKey } from '@/lib/messageWindowWarnings'
 import type {
     AttachmentMetadata,
     DecryptedMessage,
@@ -10,6 +12,7 @@ import type {
 } from '@/types/api'
 import type { Suggestion } from '@/hooks/useActiveSuggestions'
 import { useChatViewportLayout } from '@/components/AssistantChat/useChatViewportLayout'
+import { resolveAssistantReplyingPhase } from '@/components/AssistantChat/assistantReplyingPhase'
 import { useVibyRuntime } from '@/lib/assistant-runtime'
 import { createAttachmentAdapter } from '@/lib/attachmentAdapter'
 import type { LoadMoreMessagesResult } from '@/lib/message-window-store'
@@ -24,13 +27,14 @@ import {
 
 export type SessionChatWorkspaceMessageState = {
     messages: DecryptedMessage[]
-    warning: string | null
+    warning: MessageWindowWarningKey | null
     hasMore: boolean
     isLoading: boolean
     isLoadingMore: boolean
     isSending: boolean
     pendingCount: number
     messagesVersion: number
+    pendingReply: PendingReplyState | null
     stream: SessionStreamState | null
     streamVersion: number
 }
@@ -51,6 +55,7 @@ export type SessionChatWorkspaceActionHandlers = {
 export type SessionChatWorkspaceRuntimeOptions = {
     liveConfigSupport: LiveSessionConfigSupport
     ensureSessionReady?: () => Promise<void>
+    warmSession?: () => void
     isResumingSession?: boolean
     autocompleteSuggestions?: (query: string) => Promise<Suggestion[]>
 }
@@ -75,6 +80,7 @@ export function useSessionChatWorkspaceModel(props: SessionChatWorkspaceProps) {
         isSending,
         pendingCount,
         messagesVersion,
+        pendingReply,
         stream,
         streamVersion
     } = messageState
@@ -93,6 +99,7 @@ export function useSessionChatWorkspaceModel(props: SessionChatWorkspaceProps) {
     const {
         liveConfigSupport,
         ensureSessionReady,
+        warmSession,
         isResumingSession = false,
         autocompleteSuggestions
     } = runtimeOptions
@@ -100,9 +107,14 @@ export function useSessionChatWorkspaceModel(props: SessionChatWorkspaceProps) {
     const sessionId = session.id
     const lifecycleState = getSessionLifecycleState(session)
     const sessionInactive = lifecycleState !== 'running'
-    const allowSendWhenInactive = lifecycleState === 'closed'
+    const allowSendWhenInactive = sessionInactive
     const [forceScrollToken, setForceScrollToken] = useState(0)
-    const viewportLayout = useChatViewportLayout()
+    const {
+        isStandalone,
+        isKeyboardOpen,
+        bottomInsetPx,
+        floatingControlBottomInsetPx
+    } = useChatViewportLayout()
     const composerRef = useRef<HTMLDivElement | null>(null)
     const composerHeight = useElementHeight(composerRef)
     const chatBlocks = useSessionChatBlocks({
@@ -124,6 +136,13 @@ export function useSessionChatWorkspaceModel(props: SessionChatWorkspaceProps) {
 
         return createAttachmentAdapter(api, sessionId, { ensureSessionReady })
     }, [allowSendWhenInactive, api, ensureSessionReady, session.active, sessionId])
+    const attachmentsSupported = attachmentAdapter !== undefined
+    const replyingPhase = useMemo(() => {
+        return resolveAssistantReplyingPhase({
+            isResponding: session.thinking,
+            pendingReply
+        })
+    }, [pendingReply, session.thinking])
 
     const assistantRuntime = useVibyRuntime({
         session,
@@ -144,7 +163,7 @@ export function useSessionChatWorkspaceModel(props: SessionChatWorkspaceProps) {
         liveConfigSupport,
         onSwitchToRemote,
         autocompleteSuggestions,
-        attachmentsSupported: attachmentAdapter !== undefined,
+        attachmentsSupported,
         allowSendWhenInactive,
         isResumingSession
     })
@@ -159,17 +178,32 @@ export function useSessionChatWorkspaceModel(props: SessionChatWorkspaceProps) {
     const composerModel = useMemo<VibyComposerModel>(() => ({
         sessionId,
         disabled: isSending,
+        onWarmSession: warmSession,
+        replyingPhase,
         config: composerConfig,
         handlers: composerHandlers,
         containerRef: composerRef
-    }), [composerConfig, composerHandlers, composerRef, isSending, sessionId])
+    }), [
+        composerConfig,
+        composerHandlers,
+        composerRef,
+        isSending,
+        replyingPhase,
+        sessionId,
+        warmSession
+    ])
 
     const chatLayoutStyle = useMemo<SessionChatLayoutStyle>(() => {
         return buildSessionChatLayoutStyle({
             composerHeight,
-            bottomInsetPx: viewportLayout.bottomInsetPx
+            bottomInsetPx,
+            floatingControlBottomInsetPx
         })
-    }, [composerHeight, viewportLayout.bottomInsetPx])
+    }, [
+        bottomInsetPx,
+        composerHeight,
+        floatingControlBottomInsetPx
+    ])
 
     const threadSession = useMemo(() => ({
         api,
@@ -199,8 +233,6 @@ export function useSessionChatWorkspaceModel(props: SessionChatWorkspaceProps) {
     const threadState = useMemo(() => ({
         hasMoreMessages: hasMore,
         isLoadingMoreMessages: isLoadingMore,
-        isResponding: session.thinking,
-        hasStreamingResponse: chatBlocks.hasStreamingResponse,
         pendingCount,
         rawMessagesCount: chatBlocks.rawMessagesCount,
         normalizedMessagesCount: chatBlocks.normalizedMessagesCount,
@@ -213,7 +245,6 @@ export function useSessionChatWorkspaceModel(props: SessionChatWorkspaceProps) {
         forceScrollToken,
     }), [
         chatBlocks.conversationMessageIds,
-        chatBlocks.hasStreamingResponse,
         chatBlocks.historyJumpTargetMessageIds,
         chatBlocks.normalizedMessagesCount,
         chatBlocks.rawMessagesCount,
@@ -224,7 +255,6 @@ export function useSessionChatWorkspaceModel(props: SessionChatWorkspaceProps) {
         isLoadingMore,
         messagesVersion,
         pendingCount,
-        session.thinking,
         streamVersion,
     ])
 
@@ -234,8 +264,8 @@ export function useSessionChatWorkspaceModel(props: SessionChatWorkspaceProps) {
         composerModel,
         localNotices,
         viewportState: {
-            isStandalone: viewportLayout.isStandalone,
-            isKeyboardOpen: viewportLayout.isKeyboardOpen
+            isStandalone,
+            isKeyboardOpen
         },
         threadSession,
         threadHandlers,

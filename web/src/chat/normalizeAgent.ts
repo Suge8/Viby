@@ -49,15 +49,17 @@ function normalizeAssistantOutput(
     const blocks: NormalizedAgentContent[] = []
 
     if (typeof modelContent === 'string') {
-        blocks.push({ type: 'text', text: modelContent, uuid, parentUUID })
+        if (modelContent.trim().length > 0) {
+            blocks.push({ type: 'text', text: modelContent, uuid, parentUUID })
+        }
     } else if (Array.isArray(modelContent)) {
         for (const block of modelContent) {
             if (!isObject(block) || typeof block.type !== 'string') continue
-            if (block.type === 'text' && typeof block.text === 'string') {
+            if (block.type === 'text' && typeof block.text === 'string' && block.text.trim().length > 0) {
                 blocks.push({ type: 'text', text: block.text, uuid, parentUUID })
                 continue
             }
-            if (block.type === 'thinking' && typeof block.thinking === 'string') {
+            if (block.type === 'thinking' && typeof block.thinking === 'string' && block.thinking.trim().length > 0) {
                 blocks.push({ type: 'reasoning', text: block.thinking, uuid, parentUUID })
                 continue
             }
@@ -73,6 +75,10 @@ function normalizeAssistantOutput(
     const usage = isObject(message.usage) ? (message.usage as Record<string, unknown>) : null
     const inputTokens = usage ? asNumber(usage.input_tokens) : null
     const outputTokens = usage ? asNumber(usage.output_tokens) : null
+
+    if (blocks.length === 0) {
+        return null
+    }
 
     return {
         id: messageId,

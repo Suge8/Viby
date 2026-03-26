@@ -3,6 +3,7 @@ import { renderHook, waitFor } from '@testing-library/react'
 import type { PropsWithChildren } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import type { ApiClient } from '@/api/client'
+import { I18nProvider } from '@/lib/i18n-context'
 import { useMachineDirectoryBrowser } from './useMachineDirectoryBrowser'
 
 function createWrapper(): (props: PropsWithChildren) => React.JSX.Element {
@@ -16,9 +17,11 @@ function createWrapper(): (props: PropsWithChildren) => React.JSX.Element {
 
     return function Wrapper(props: PropsWithChildren): React.JSX.Element {
         return (
-            <QueryClientProvider client={queryClient}>
-                {props.children}
-            </QueryClientProvider>
+            <I18nProvider>
+                <QueryClientProvider client={queryClient}>
+                    {props.children}
+                </QueryClientProvider>
+            </I18nProvider>
         )
     }
 }
@@ -80,7 +83,7 @@ describe('useMachineDirectoryBrowser', () => {
             expect(result.current.isLoading).toBe(false)
         })
 
-        expect(result.current.error).toBe('Directory not found')
+        expect(result.current.error).toBe('Could not browse this machine right now. Please try again.')
         expect(result.current.roots).toEqual([{ kind: 'home', path: '/Users/demo' }])
         expect(result.current.hasCurrentDirectory).toBe(false)
     })

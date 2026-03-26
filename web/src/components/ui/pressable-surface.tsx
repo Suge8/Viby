@@ -1,5 +1,5 @@
 import type * as React from 'react'
-import { CheckIcon } from '@/components/icons'
+import { FeatureCheckIcon as CheckIcon } from '@/components/featureIcons'
 import { Button, type ButtonProps } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 

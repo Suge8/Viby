@@ -1,6 +1,7 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { ComponentProps, FormHTMLAttributes, TextareaHTMLAttributes } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { REPLYING_INDICATOR_EXIT_DURATION_MS } from '@/components/AssistantChat/useReplyingIndicatorPresence'
 import { I18nProvider } from '@/lib/i18n-context'
 import { VibyComposer } from './VibyComposer'
 
@@ -122,47 +123,24 @@ beforeEach(() => {
     harness.cancelRun.mockReset()
     harness.send.mockReset()
     harness.setText.mockReset()
+    vi.useRealTimers()
 })
 
 afterEach(() => {
     cleanup()
 })
 
-function renderComposer(): void {
+function renderComposer(options?: {
+    configOverrides?: Partial<ComponentProps<typeof VibyComposer>['model']['config']>
+    onWarmSession?: () => void
+    replyingPhase?: ComponentProps<typeof VibyComposer>['model']['replyingPhase']
+}): void {
     const { container } = render(
         <I18nProvider>
             <VibyComposer
                 model={{
                     sessionId: 'session-1',
-                    config: {
-                        permissionMode: 'default',
-                        collaborationMode: 'default',
-                        model: null,
-                        modelReasoningEffort: null,
-                        active: true,
-                        allowSendWhenInactive: false,
-                        controlledByUser: false,
-                        agentFlavor: 'codex',
-                        attachmentsSupported: true
-                    },
-                    handlers: {
-                        onPermissionModeChange: vi.fn()
-                    }
-                }}
-            />
-        </I18nProvider>
-    )
-
-    expect(container.firstElementChild).toHaveClass('ds-composer-shell')
-    expect(container.querySelector('.ds-composer-surface')).not.toBeNull()
-}
-
-function renderComposerWithConfig(configOverrides: Partial<ComponentProps<typeof VibyComposer>['model']['config']>): void {
-    const { container } = render(
-        <I18nProvider>
-            <VibyComposer
-                model={{
-                    sessionId: 'session-1',
+                    replyingPhase: options?.replyingPhase ?? null,
                     config: {
                         permissionMode: 'default',
                         collaborationMode: 'default',
@@ -173,17 +151,23 @@ function renderComposerWithConfig(configOverrides: Partial<ComponentProps<typeof
                         controlledByUser: false,
                         agentFlavor: 'codex',
                         attachmentsSupported: true,
-                        ...configOverrides
+                        ...options?.configOverrides
                     },
                     handlers: {
                         onPermissionModeChange: vi.fn()
-                    }
+                    },
+                    onWarmSession: options?.onWarmSession
                 }}
             />
         </I18nProvider>
     )
 
     expect(container.firstElementChild).toHaveClass('ds-composer-shell')
+    expect(container.querySelector('.ds-composer-surface')).not.toBeNull()
+}
+
+function renderComposerWithConfig(configOverrides: Partial<ComponentProps<typeof VibyComposer>['model']['config']>): void {
+    renderComposer({ configOverrides })
 }
 
 describe('VibyComposer', () => {
@@ -212,7 +196,7 @@ describe('VibyComposer', () => {
             allowSendWhenInactive: true
         })
 
-        expect(harness.inputProps?.placeholder).toBe('Send a message to resume...')
+        expect(harness.inputProps?.placeholder).toMatch(/^(misc\.resumeMessage|Send a message to resume\.\.\.)$/)
     })
 
     it('shows a lightweight resuming placeholder and disables input while the session is being reattached', () => {
@@ -222,7 +206,7 @@ describe('VibyComposer', () => {
             isResuming: true
         })
 
-        expect(harness.inputProps?.placeholder).toBe('Resuming session...')
+        expect(harness.inputProps?.placeholder).toMatch(/^(misc\.resumingSession|Resuming session\.\.\.)$/)
         expect(harness.inputProps?.disabled).toBe(true)
         expect(harness.rootProps?.['aria-busy']).toBe('true')
     })
@@ -238,5 +222,134 @@ describe('VibyComposer', () => {
         expect(
             (harness.lastButtonsProps?.controlsButton as { active?: boolean } | null)?.active
         ).toBe(true)
+    })
+
+    it('warms an inactive session as soon as the composer receives focus', () => {
+        const onWarmSession = vi.fn()
+        renderComposer({
+            configOverrides: {
+                active: false,
+                allowSendWhenInactive: true
+            },
+            onWarmSession
+        })
+
+        fireEvent.focus(screen.getByRole('textbox'))
+
+        expect(onWarmSession).toHaveBeenCalledTimes(1)
+    })
+
+    it('warms an inactive session on the first non-empty typing intent only once', () => {
+        const onWarmSession = vi.fn()
+        renderComposer({
+            configOverrides: {
+                active: false,
+                allowSendWhenInactive: true
+            },
+            onWarmSession
+        })
+
+        fireEvent.change(screen.getByRole('textbox'), { target: { value: '   ' } })
+        fireEvent.change(screen.getByRole('textbox'), { target: { value: 'hello' } })
+        fireEvent.change(screen.getByRole('textbox'), { target: { value: 'hello again' } })
+
+        expect(onWarmSession).toHaveBeenCalledTimes(1)
+    })
+
+    it('renders a minimal replying indicator above the composer surface when the session is replying', () => {
+        const { container } = render(
+            <I18nProvider>
+                <VibyComposer
+                    model={{
+                        sessionId: 'session-1',
+                        replyingPhase: 'replying',
+                        config: {
+                            permissionMode: 'default',
+                            collaborationMode: 'default',
+                            model: null,
+                            modelReasoningEffort: null,
+                            active: true,
+                            allowSendWhenInactive: false,
+                            controlledByUser: false,
+                            agentFlavor: 'codex',
+                            attachmentsSupported: true,
+                        },
+                        handlers: {
+                            onPermissionModeChange: vi.fn()
+                        }
+                    }}
+                />
+            </I18nProvider>
+        )
+
+        const indicator = screen.getByTestId('assistant-replying-indicator')
+        const surface = container.querySelector('.ds-composer-surface')
+
+        expect(screen.getByRole('status', { name: 'AI is replying' })).toBeInTheDocument()
+        expect(indicator).toHaveClass('ds-replying-indicator')
+        expect(indicator.textContent).toBe('')
+        expect(indicator.compareDocumentPosition(surface as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    })
+
+    it('keeps the replying indicator mounted briefly for a smooth fade-out after replying finishes', () => {
+        vi.useFakeTimers()
+
+        const { rerender } = render(
+            <I18nProvider>
+                <VibyComposer
+                    model={{
+                        sessionId: 'session-1',
+                        replyingPhase: 'replying',
+                        config: {
+                            permissionMode: 'default',
+                            collaborationMode: 'default',
+                            model: null,
+                            modelReasoningEffort: null,
+                            active: true,
+                            allowSendWhenInactive: false,
+                            controlledByUser: false,
+                            agentFlavor: 'codex',
+                            attachmentsSupported: true,
+                        },
+                        handlers: {
+                            onPermissionModeChange: vi.fn()
+                        }
+                    }}
+                />
+            </I18nProvider>
+        )
+
+        rerender(
+            <I18nProvider>
+                <VibyComposer
+                    model={{
+                        sessionId: 'session-1',
+                        replyingPhase: null,
+                        config: {
+                            permissionMode: 'default',
+                            collaborationMode: 'default',
+                            model: null,
+                            modelReasoningEffort: null,
+                            active: true,
+                            allowSendWhenInactive: false,
+                            controlledByUser: false,
+                            agentFlavor: 'codex',
+                            attachmentsSupported: true,
+                        },
+                        handlers: {
+                            onPermissionModeChange: vi.fn()
+                        }
+                    }}
+                />
+            </I18nProvider>
+        )
+
+        expect(screen.getByTestId('assistant-replying-indicator').parentElement).toHaveAttribute('data-state', 'exiting')
+
+        act(() => {
+            vi.advanceTimersByTime(REPLYING_INDICATOR_EXIT_DURATION_MS)
+        })
+
+        expect(screen.queryByTestId('assistant-replying-indicator')).not.toBeInTheDocument()
     })
 })

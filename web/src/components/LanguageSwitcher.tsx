@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { CheckIcon, TranslateIcon } from '@/components/icons'
+import {
+    FeatureCheckIcon as CheckIcon,
+    FeatureTranslateIcon as TranslateIcon,
+} from '@/components/featureIcons'
 import { Button } from '@/components/ui/button'
 import { useTranslation, type Locale } from '@/lib/use-translation'
 

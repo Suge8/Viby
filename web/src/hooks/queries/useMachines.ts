@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query'
 import type { ApiClient } from '@/api/client'
 import type { Machine } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
+import { formatOptionalUserFacingErrorMessage } from '@/lib/userFacingError'
+import { useTranslation } from '@/lib/use-translation'
 import { realtimeQueryOptions } from './realtimeQueryOptions'
 
 export function useMachines(api: ApiClient | null, enabled: boolean): {
@@ -10,6 +12,7 @@ export function useMachines(api: ApiClient | null, enabled: boolean): {
     error: string | null
     refetch: () => Promise<unknown>
 } {
+    const { t } = useTranslation()
     const query = useQuery({
         queryKey: queryKeys.machines,
         queryFn: async () => {
@@ -25,7 +28,10 @@ export function useMachines(api: ApiClient | null, enabled: boolean): {
     return {
         machines: query.data?.machines ?? [],
         isLoading: query.isLoading,
-        error: query.error instanceof Error ? query.error.message : query.error ? 'Failed to load machines' : null,
+        error: formatOptionalUserFacingErrorMessage(query.error, {
+            t,
+            fallbackKey: 'error.machines.load'
+        }),
         refetch: query.refetch,
     }
 }

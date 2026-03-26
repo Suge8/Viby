@@ -3,7 +3,7 @@ import type { SessionSummary } from '@/types/api'
 import { useLongPress } from '@/hooks/useLongPress'
 import { usePlatform } from '@/hooks/usePlatform'
 import { Button } from '@/components/ui/button'
-import type { FloatingActionMenuAnchorPoint } from '@/components/ui/FloatingActionMenu'
+import type { FloatingActionMenuAnchorPoint } from '@/components/ui/FloatingActionMenu.contract'
 import { SessionAttentionBadge } from '@/components/session-list/SessionAttentionBadge'
 import { SessionAgentBrandIcon } from '@/components/session-list/sessionAgentPresentation'
 import { SessionStateBadge } from '@/components/session-list/SessionStateBadge'
@@ -18,7 +18,7 @@ import {
 } from './sessionListUtils'
 import { getSessionStatePresentation } from './sessionStatePresentation'
 
-const SESSION_LIST_ITEM_CLASS_NAME = 'session-list-item relative w-full flex-col gap-1 overflow-hidden rounded-[var(--ds-radius-lg)] px-4 py-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)] select-none [&>[data-button-content]]:w-full [&>[data-button-content]]:flex-col [&>[data-button-content]]:items-stretch'
+const SESSION_LIST_ITEM_CLASS_NAME = 'session-list-item relative w-full flex-col gap-1 overflow-hidden rounded-[var(--ds-radius-lg)] px-4 py-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)] select-none transition-[transform,background-color,border-color,box-shadow] duration-200 ease-out [&>[data-button-content]]:w-full [&>[data-button-content]]:flex-col [&>[data-button-content]]:items-stretch'
 const SESSION_ICON_CLASS_NAME = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px]'
 const SESSION_TITLE_CLASS_NAME = 'truncate text-[15px] font-semibold leading-tight text-[var(--ds-text-primary)]'
 const SESSION_METADATA_BLOCK_CLASS_NAME = 'mt-1'
@@ -64,9 +64,10 @@ export const SessionListItem = memo(function SessionListItem(props: SessionListI
             lifecycleState,
             thinking: session.thinking,
             latestActivityKind: session.latestActivityKind,
+            pendingRequestsCount: session.pendingRequestsCount,
             hasUnseenReply
         })
-    }, [hasUnseenReply, lifecycleState, session.latestActivityKind, session.thinking])
+    }, [hasUnseenReply, lifecycleState, session.latestActivityKind, session.pendingRequestsCount, session.thinking])
     const handlePreload = useCallback(() => {
         selection.onPreload?.(session.id)
     }, [selection, session.id])
@@ -75,6 +76,14 @@ export const SessionListItem = memo(function SessionListItem(props: SessionListI
         if (event.pointerType === 'mouse') {
             handlePreload()
         }
+    }, [handlePreload])
+
+    const handlePointerDownCapture = useCallback<React.PointerEventHandler<HTMLButtonElement>>((event) => {
+        if (event.pointerType === 'mouse') {
+            return
+        }
+
+        handlePreload()
     }, [handlePreload])
 
     const cardToneClassName = getCardToneClassName(presentation.cardClassName, selected)
@@ -88,7 +97,7 @@ export const SessionListItem = memo(function SessionListItem(props: SessionListI
             {...longPressHandlers}
             onFocus={handlePreload}
             onPointerEnter={handlePointerEnter}
-            onPointerDownCapture={handlePreload}
+            onPointerDownCapture={handlePointerDownCapture}
             className={`${SESSION_LIST_ITEM_CLASS_NAME} ${cardToneClassName}`}
             style={{ WebkitTouchCallout: 'none' }}
             aria-current={selected ? 'page' : undefined}

@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { supportsLiveModelSelectionForFlavor } from '@viby/protocol'
 import type {
     ClaudeReasoningEffort,
     CodexCollaborationMode,
@@ -8,7 +9,6 @@ import type {
 } from '@/types/api'
 import type { ComposerActionHandlers, ComposerConfigState } from '@/components/AssistantChat/composerTypes'
 import { buildComposerControlSections } from '@/components/AssistantChat/composerPanelSections'
-import { isClaudeFlavor } from '@/lib/agentFlavorUtils'
 import { useComposerPlatform, type ComposerHaptic } from '@/components/AssistantChat/useComposerPlatform'
 import {
     getLocalizedCollaborationModeOptions,
@@ -71,13 +71,17 @@ export function useComposerLiveConfig(
         () => agentFlavor === 'codex' ? getLocalizedCollaborationModeOptions(t) : [],
         [agentFlavor, t]
     )
+    const supportsModelSelection = useMemo(
+        () => supportsLiveModelSelectionForFlavor(agentFlavor),
+        [agentFlavor]
+    )
     const modelOptions = useMemo(() => {
-        if (agentFlavor === 'claude' || agentFlavor === 'codex') {
+        if (supportsModelSelection) {
             return getLocalizedModelOptions(agentFlavor, model, t)
         }
 
         return []
-    }, [agentFlavor, model, t])
+    }, [agentFlavor, model, supportsModelSelection, t])
     const reasoningEffortOptions = useMemo(() => {
         if (agentFlavor === 'claude') {
             return getLocalizedReasoningEffortOptions(
@@ -108,7 +112,7 @@ export function useComposerLiveConfig(
     )
     const showModelSettings = Boolean(
         options.handlers.onModelChange
-        && (isClaudeFlavor(agentFlavor) || agentFlavor === 'codex')
+        && supportsModelSelection
         && modelOptions.length > 0
     )
     const showReasoningEffortSettings = Boolean(

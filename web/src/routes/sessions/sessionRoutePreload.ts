@@ -1,17 +1,30 @@
-import type { QueryClient } from '@tanstack/react-query'
-import type { ApiClient } from '@/api/client'
-import { recordRuntimeAssetFailureRecovery } from '@/lib/runtimeAssetRecovery'
+let sessionsShellModulePromise: Promise<typeof import('@/routes/sessions/SessionsShell')> | null = null
+let sessionChatRouteModulePromise: Promise<typeof import('@/routes/sessions/chat')> | null = null
+let sessionChatWorkspaceModulePromise: Promise<typeof import('@/components/SessionChatWorkspace')> | null = null
 
-export function loadSessionChatRouteModule(): Promise<typeof import('@/routes/sessions/chat')> {
-    return import('@/routes/sessions/chat')
+function loadSessionsShellModule(): Promise<typeof import('@/routes/sessions/SessionsShell')> {
+    sessionsShellModulePromise ??= import('@/routes/sessions/SessionsShell')
+    return sessionsShellModulePromise
 }
 
-export function loadSessionsShellRouteModule(): Promise<typeof import('@/routes/sessions/SessionsShell')> {
-    return import('@/routes/sessions/SessionsShell')
+export async function loadSessionsShellRouteModule(): Promise<{ default: typeof import('@/routes/sessions/SessionsShell').SessionsShell }> {
+    const module = await loadSessionsShellModule()
+    return { default: module.SessionsShell }
+}
+
+export async function loadSessionsIndexRouteModule(): Promise<{ default: typeof import('@/routes/sessions/SessionsShell').SessionsIndexPage }> {
+    const module = await loadSessionsShellModule()
+    return { default: module.SessionsIndexPage }
+}
+
+export function loadSessionChatRouteModule(): Promise<typeof import('@/routes/sessions/chat')> {
+    sessionChatRouteModulePromise ??= import('@/routes/sessions/chat')
+    return sessionChatRouteModulePromise
 }
 
 export function loadSessionChatWorkspaceModule(): Promise<typeof import('@/components/SessionChatWorkspace')> {
-    return import('@/components/SessionChatWorkspace')
+    sessionChatWorkspaceModulePromise ??= import('@/components/SessionChatWorkspace')
+    return sessionChatWorkspaceModulePromise
 }
 
 export function loadSessionFilesRouteModule(): Promise<typeof import('@/routes/sessions/files')> {
@@ -59,45 +72,3 @@ export const SESSIONS_IDLE_PRELOADERS = [
     loadNewSessionRouteModule,
     loadSettingsRouteModule,
 ] as const
-
-export type PreloadSessionDetailRouteOptions = {
-    api: ApiClient | null
-    queryClient: QueryClient
-    sessionId: string
-    includeWorkspace?: boolean
-    includeLatestMessages?: boolean
-    recoveryHref?: string
-}
-
-export async function preloadSessionDetailRoute(options: PreloadSessionDetailRouteOptions): Promise<void> {
-    try {
-        const module = await import('./sessionDetailPreload')
-        await module.preloadSessionDetailRoute(options)
-    } catch (error) {
-        const failure = error instanceof Error
-            ? {
-                message: error.message,
-                stack: error.stack
-            }
-            : {}
-        recordRuntimeAssetFailureRecovery({
-            reason: 'vite-preload-error',
-            failure,
-            resumeHref: options.recoveryHref
-        })
-        throw error
-    }
-}
-
-export function preloadSessionDetailIntent(
-    options: Omit<PreloadSessionDetailRouteOptions, 'includeLatestMessages' | 'includeWorkspace'>
-): void {
-    void preloadSessionDetailRoute({
-        ...options,
-        includeLatestMessages: false,
-        includeWorkspace: false
-    }).catch(() => {
-        // Intent preloads are an enhancement only. Failures should not create a
-        // second navigation path or block the eventual explicit selection.
-    })
-}

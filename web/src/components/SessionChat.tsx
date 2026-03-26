@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useMemo } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { getLiveSessionConfigSupport } from '@viby/protocol'
 import type { ApiClient } from '@/api/client'
@@ -9,27 +9,44 @@ import type {
     SessionStreamState
 } from '@/types/api'
 import type { Suggestion } from '@/hooks/useActiveSuggestions'
+import type { PendingReplyState } from '@/lib/message-window-store'
 import type { LoadMoreMessagesResult } from '@/lib/message-window-store'
+import type { MessageWindowWarningKey } from '@/lib/messageWindowWarnings'
 import { SessionHeader } from '@/components/SessionHeader'
-import { TeamPanel } from '@/components/TeamPanel'
 import { useSessionActions } from '@/hooks/mutations/useSessionActions'
 import {
     runPreloadedNavigation,
 } from '@/lib/navigationTransition'
 import { SessionChatPendingState } from '@/components/loading/SessionChatPendingState'
 import {
+    shouldPreloadSessionChatWorkspace,
+    shouldShowSessionChatPendingShell
+} from '@/components/sessionChatLoadingContract'
+import {
+    loadSessionChatWorkspaceModule,
     loadSessionFilesRouteModule,
     preloadSessionTerminalExperience
 } from '@/routes/sessions/sessionRoutePreload'
 
-const SessionChatWorkspace = lazy(() => import('@/components/SessionChatWorkspace'))
+const SessionChatWorkspace = lazy(loadSessionChatWorkspaceModule)
+const LazyTeamPanel = lazy(async () => {
+    const module = await import('@/components/TeamPanel')
+    return { default: module.TeamPanel }
+})
+const SESSION_CHAT_ENTER_SURFACE_CLASS_NAME = 'session-chat-enter-surface'
+const SESSION_CHAT_ENTER_BODY_CLASS_NAME = 'session-chat-enter-body'
+const SESSION_WORKSPACE_FILES_ROUTE = 'files'
+const SESSION_WORKSPACE_TERMINAL_ROUTE = 'terminal'
+
+type SessionWorkspaceRoute = typeof SESSION_WORKSPACE_FILES_ROUTE | typeof SESSION_WORKSPACE_TERMINAL_ROUTE
 
 type SessionChatProps = {
     api: ApiClient
     session: Session
     isDetailPending?: boolean
+    hasWarmSessionSnapshot?: boolean
     messages: DecryptedMessage[]
-    messagesWarning: string | null
+    messagesWarning: MessageWindowWarningKey | null
     hasMoreMessages: boolean
     isLoadingMessages: boolean
     isLoadingMoreMessages: boolean
@@ -38,6 +55,7 @@ type SessionChatProps = {
     pendingCount: number
     hasLoadedLatestMessages: boolean
     messagesVersion: number
+    pendingReply: PendingReplyState | null
     stream: SessionStreamState | null
     streamVersion: number
     onBack: () => void
@@ -49,6 +67,7 @@ type SessionChatProps = {
     onAtBottomChange: (atBottom: boolean) => void
     onRetryMessage?: (localId: string) => void
     ensureSessionReady?: () => Promise<void>
+    warmSession?: () => void
     autocompleteSuggestions?: (query: string) => Promise<Suggestion[]>
 }
 
@@ -58,6 +77,7 @@ export function SessionChat(props: SessionChatProps): React.JSX.Element {
         api,
         autocompleteSuggestions,
         hasMoreMessages,
+        hasWarmSessionSnapshot,
         isDetailPending,
         isLoadingMessages,
         isLoadingMoreMessages,
@@ -77,7 +97,9 @@ export function SessionChat(props: SessionChatProps): React.JSX.Element {
         pendingCount,
         hasLoadedLatestMessages,
         ensureSessionReady,
+        warmSession,
         session,
+        pendingReply,
         stream,
         streamVersion
     } = props
@@ -103,19 +125,18 @@ export function SessionChat(props: SessionChatProps): React.JSX.Element {
 
     const handleSwitchToRemote = useCallback(async () => {
         await switchSession()
-        onRefresh()
-    }, [onRefresh, switchSession])
+    }, [switchSession])
 
-    const navigateToSessionWorkspaceRoute = useCallback((route: 'files' | 'terminal') => {
+    const navigateToSessionWorkspaceRoute = useCallback((route: SessionWorkspaceRoute) => {
         const recoveryHref = `/sessions/${sessionId}/${route}`
-        const preload = route === 'files'
+        const preload = route === SESSION_WORKSPACE_FILES_ROUTE
             ? loadSessionFilesRouteModule()
             : preloadSessionTerminalExperience()
 
         runPreloadedNavigation(
             preload,
             () => {
-                if (route === 'files') {
+                if (route === SESSION_WORKSPACE_FILES_ROUTE) {
                     void navigate({
                         to: '/sessions/$sessionId/files',
                         params: { sessionId }
@@ -133,11 +154,11 @@ export function SessionChat(props: SessionChatProps): React.JSX.Element {
     }, [navigate, sessionId])
 
     const handleViewFiles = useCallback(() => {
-        navigateToSessionWorkspaceRoute('files')
+        navigateToSessionWorkspaceRoute(SESSION_WORKSPACE_FILES_ROUTE)
     }, [navigateToSessionWorkspaceRoute])
 
     const handleViewTerminal = useCallback(() => {
-        navigateToSessionWorkspaceRoute('terminal')
+        navigateToSessionWorkspaceRoute(SESSION_WORKSPACE_TERMINAL_ROUTE)
     }, [navigateToSessionWorkspaceRoute])
 
     const headerNavigation = useMemo(() => ({
@@ -152,9 +173,27 @@ export function SessionChat(props: SessionChatProps): React.JSX.Element {
         session.metadata?.path
     ])
 
-    const showDetailPendingShell = messages.length === 0 && (
-        isDetailPending === true || !hasLoadedLatestMessages
-    )
+    const showDetailPendingShell = shouldShowSessionChatPendingShell({
+        messagesCount: messages.length,
+        isDetailPending,
+        hasLoadedLatestMessages,
+        hasWarmSessionSnapshot
+    })
+    const shouldPreloadWorkspace = shouldPreloadSessionChatWorkspace({
+        messagesCount: messages.length,
+        isDetailPending,
+        hasLoadedLatestMessages,
+        hasWarmSessionSnapshot
+    })
+
+    useEffect(() => {
+        if (!shouldPreloadWorkspace) {
+            return
+        }
+
+        void loadSessionChatWorkspaceModule()
+    }, [shouldPreloadWorkspace])
+
     const workspaceMessageState = useMemo(() => ({
         messages,
         warning: messagesWarning,
@@ -164,6 +203,7 @@ export function SessionChat(props: SessionChatProps): React.JSX.Element {
         isSending,
         pendingCount,
         messagesVersion,
+        pendingReply,
         stream,
         streamVersion
     }), [
@@ -174,6 +214,7 @@ export function SessionChat(props: SessionChatProps): React.JSX.Element {
         messages,
         messagesVersion,
         messagesWarning,
+        pendingReply,
         pendingCount,
         stream,
         streamVersion
@@ -204,26 +245,29 @@ export function SessionChat(props: SessionChatProps): React.JSX.Element {
     const workspaceRuntimeOptions = useMemo(() => ({
         liveConfigSupport,
         ensureSessionReady,
+        warmSession,
         isResumingSession,
         autocompleteSuggestions
-    }), [autocompleteSuggestions, ensureSessionReady, isResumingSession, liveConfigSupport])
+    }), [autocompleteSuggestions, ensureSessionReady, isResumingSession, liveConfigSupport, warmSession])
 
     return (
-        <div className="session-chat-page flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden">
+        <div className={`session-chat-page ${SESSION_CHAT_ENTER_SURFACE_CLASS_NAME} flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden`}>
             <SessionHeader
                 session={session}
                 navigation={headerNavigation}
             />
 
-            {session.teamState && (
-                <TeamPanel teamState={session.teamState} />
-            )}
+            {session.teamState ? (
+                <Suspense fallback={null}>
+                    <LazyTeamPanel teamState={session.teamState} />
+                </Suspense>
+            ) : null}
 
-            <div className="session-chat-page-body min-h-0 flex-1 overflow-hidden">
+            <div className={`session-chat-page-body ${SESSION_CHAT_ENTER_BODY_CLASS_NAME} min-h-0 flex-1 overflow-hidden`}>
                 {showDetailPendingShell ? (
                     <SessionChatLoadingShell />
                 ) : (
-                    <Suspense fallback={<SessionChatLoadingShell />}>
+                    <Suspense fallback={<SessionChatWorkspaceFallback />}>
                         <SessionChatWorkspace
                             api={api}
                             session={session}
@@ -240,4 +284,8 @@ export function SessionChat(props: SessionChatProps): React.JSX.Element {
 
 function SessionChatLoadingShell(): React.JSX.Element {
     return <SessionChatPendingState testId="session-chat-detail-pending" />
+}
+
+function SessionChatWorkspaceFallback(): React.JSX.Element {
+    return <SessionChatPendingState testId="session-chat-workspace-pending" />
 }

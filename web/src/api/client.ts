@@ -1,6 +1,5 @@
 import type {
     AttachmentMetadata,
-    AuthResponse,
     CodexCollaborationMode,
     DeleteUploadResponse,
     ListDirectoryResponse,
@@ -25,16 +24,13 @@ import type {
     SessionResponse,
     SessionsResponse
 } from '@/types/api'
+import { ApiError, buildApiUrl, parseErrorPayload } from './clientShared'
+export { ApiError } from './clientShared'
 
 type ApiClientOptions = {
     baseUrl?: string
     getToken?: () => string | null
     onUnauthorized?: () => Promise<string | null>
-}
-
-type ErrorPayload = {
-    error?: unknown
-    code?: unknown
 }
 
 type SessionActionResponse = {
@@ -56,21 +52,6 @@ type ResumeSessionLegacyResponse = {
     sessionId: string
 }
 
-type SpawnSuccessResponse = {
-    type: 'success'
-    session: Session
-}
-
-type SpawnLegacySuccessResponse = {
-    type: 'success'
-    sessionId: string
-}
-
-type SpawnErrorResponse = {
-    type: 'error'
-    message: string
-}
-
 type SessionSnapshotAction =
     | 'archive'
     | 'close'
@@ -80,31 +61,19 @@ type SessionSnapshotAction =
     | 'model'
     | 'model-reasoning-effort'
 
-function parseErrorPayload(bodyText: string): { message?: string; code?: string } {
-    try {
-        const parsed = JSON.parse(bodyText) as ErrorPayload
-        return {
-            message: typeof parsed.error === 'string' ? parsed.error : undefined,
-            code: typeof parsed.code === 'string' ? parsed.code : undefined
-        }
-    } catch {
-        return {}
+function createCachedModuleLoader<TModule>(
+    load: () => Promise<TModule>
+): () => Promise<TModule> {
+    let modulePromise: Promise<TModule> | null = null
+
+    return function loadCachedModule(): Promise<TModule> {
+        modulePromise ??= load()
+        return modulePromise
     }
 }
 
-export class ApiError extends Error {
-    status: number
-    code?: string
-    body?: string
-
-    constructor(message: string, status: number, code?: string, body?: string) {
-        super(message)
-        this.name = 'ApiError'
-        this.status = status
-        this.code = code
-        this.body = body
-    }
-}
+export type ApiClientRequest = <T>(path: string, init?: RequestInit) => Promise<T>
+export type ApiClientFetchSessionSnapshot = (sessionId: string) => Promise<Session>
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null
@@ -112,18 +81,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isSession(value: unknown): value is Session {
     return isRecord(value) && typeof value.id === 'string'
-}
-
-function isSpawnErrorResponse(value: unknown): value is SpawnErrorResponse {
-    return isRecord(value) && value.type === 'error' && typeof value.message === 'string'
-}
-
-function isSpawnSuccessResponse(value: unknown): value is SpawnSuccessResponse {
-    return isRecord(value) && value.type === 'success' && isSession(value.session)
-}
-
-function isSpawnLegacySuccessResponse(value: unknown): value is SpawnLegacySuccessResponse {
-    return isRecord(value) && value.type === 'success' && typeof value.sessionId === 'string'
 }
 
 function isResumeSessionResponse(value: unknown): value is ResumeSessionResponse {
@@ -142,28 +99,30 @@ function isSessionActionLegacyResponse(value: unknown): value is SessionActionLe
     return isRecord(value) && value.ok === true
 }
 
+const loadPushModule = createCachedModuleLoader(() => import('./clientPush'))
+const loadWorkspaceModule = createCachedModuleLoader(() => import('./clientWorkspace'))
+const loadMachinesModule = createCachedModuleLoader(() => import('./clientMachines'))
+const loadAutocompleteModule = createCachedModuleLoader(() => import('./clientAutocomplete'))
+
 export class ApiClient {
     private token: string
     private readonly baseUrl: string | null
     private readonly getToken: (() => string | null) | null
     private readonly onUnauthorized: (() => Promise<string | null>) | null
+    private readonly boundRequest: ApiClientRequest
+    private readonly boundFetchSessionSnapshot: ApiClientFetchSessionSnapshot
 
     constructor(token: string, options?: ApiClientOptions) {
         this.token = token
         this.baseUrl = options?.baseUrl ?? null
         this.getToken = options?.getToken ?? null
         this.onUnauthorized = options?.onUnauthorized ?? null
+        this.boundRequest = this.request.bind(this)
+        this.boundFetchSessionSnapshot = this.fetchSessionSnapshot.bind(this)
     }
 
     private buildUrl(path: string): string {
-        if (!this.baseUrl) {
-            return path
-        }
-        try {
-            return new URL(path, this.baseUrl).toString()
-        } catch {
-            return path
-        }
+        return buildApiUrl(this.baseUrl, path)
     }
 
     private async request<T>(
@@ -229,43 +188,23 @@ export class ApiClient {
         throw new Error(`Invalid session action response for ${action}`)
     }
 
-    async authenticate(auth: { accessToken: string }): Promise<AuthResponse> {
-        const res = await fetch(this.buildUrl('/api/auth'), {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify(auth)
-        })
-
-        if (!res.ok) {
-            const body = await res.text().catch(() => '')
-            const parsed = parseErrorPayload(body)
-            const detail = body ? `: ${body}` : ''
-            throw new ApiError(`Auth failed: HTTP ${res.status} ${res.statusText}${detail}`, res.status, parsed.code, body || undefined)
-        }
-
-        return await res.json() as AuthResponse
-    }
-
     async getSessions(): Promise<SessionsResponse> {
         return await this.request<SessionsResponse>('/api/sessions')
     }
 
     async getPushVapidPublicKey(): Promise<PushVapidPublicKeyResponse> {
-        return await this.request<PushVapidPublicKeyResponse>('/api/push/vapid-public-key')
+        const module = await loadPushModule()
+        return await module.getPushVapidPublicKey(this.boundRequest)
     }
 
     async subscribePushNotifications(payload: PushSubscriptionPayload): Promise<void> {
-        await this.request('/api/push/subscribe', {
-            method: 'POST',
-            body: JSON.stringify(payload)
-        })
+        const module = await loadPushModule()
+        await module.subscribePushNotifications(this.boundRequest, payload)
     }
 
     async unsubscribePushNotifications(payload: PushUnsubscribePayload): Promise<void> {
-        await this.request('/api/push/subscribe', {
-            method: 'DELETE',
-            body: JSON.stringify(payload)
-        })
+        const module = await loadPushModule()
+        await module.unsubscribePushNotifications(this.boundRequest, payload)
     }
 
     async getSession(sessionId: string): Promise<SessionResponse> {
@@ -302,66 +241,43 @@ export class ApiClient {
     }
 
     async getGitStatus(sessionId: string): Promise<GitCommandResponse> {
-        return await this.request<GitCommandResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/git-status`)
+        const module = await loadWorkspaceModule()
+        return await module.getGitStatus(this.boundRequest, sessionId)
     }
 
     async getGitDiffNumstat(sessionId: string, staged: boolean): Promise<GitCommandResponse> {
-        const params = new URLSearchParams()
-        params.set('staged', staged ? 'true' : 'false')
-        return await this.request<GitCommandResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/git-diff-numstat?${params.toString()}`)
+        const module = await loadWorkspaceModule()
+        return await module.getGitDiffNumstat(this.boundRequest, sessionId, staged)
     }
 
     async getGitDiffFile(sessionId: string, path: string, staged?: boolean): Promise<GitCommandResponse> {
-        const params = new URLSearchParams()
-        params.set('path', path)
-        if (staged !== undefined) {
-            params.set('staged', staged ? 'true' : 'false')
-        }
-        return await this.request<GitCommandResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/git-diff-file?${params.toString()}`)
+        const module = await loadWorkspaceModule()
+        return await module.getGitDiffFile(this.boundRequest, sessionId, path, staged)
     }
 
     async searchSessionFiles(sessionId: string, query: string, limit?: number): Promise<FileSearchResponse> {
-        const params = new URLSearchParams()
-        if (query) {
-            params.set('query', query)
-        }
-        if (limit !== undefined) {
-            params.set('limit', `${limit}`)
-        }
-        const qs = params.toString()
-        return await this.request<FileSearchResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/files${qs ? `?${qs}` : ''}`)
+        const module = await loadWorkspaceModule()
+        return await module.searchSessionFiles(this.boundRequest, sessionId, query, limit)
     }
 
     async readSessionFile(sessionId: string, path: string): Promise<FileReadResponse> {
-        const params = new URLSearchParams()
-        params.set('path', path)
-        return await this.request<FileReadResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/file?${params.toString()}`)
+        const module = await loadWorkspaceModule()
+        return await module.readSessionFile(this.boundRequest, sessionId, path)
     }
 
     async listSessionDirectory(sessionId: string, path?: string): Promise<ListDirectoryResponse> {
-        const params = new URLSearchParams()
-        if (path) {
-            params.set('path', path)
-        }
-
-        const qs = params.toString()
-        return await this.request<ListDirectoryResponse>(
-            `/api/sessions/${encodeURIComponent(sessionId)}/directory${qs ? `?${qs}` : ''}`
-        )
+        const module = await loadWorkspaceModule()
+        return await module.listSessionDirectory(this.boundRequest, sessionId, path)
     }
 
     async uploadFile(sessionId: string, filename: string, content: string, mimeType: string): Promise<UploadFileResponse> {
-        return await this.request<UploadFileResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/upload`, {
-            method: 'POST',
-            body: JSON.stringify({ filename, content, mimeType })
-        })
+        const module = await loadWorkspaceModule()
+        return await module.uploadFile(this.boundRequest, sessionId, filename, content, mimeType)
     }
 
     async deleteUploadFile(sessionId: string, path: string): Promise<DeleteUploadResponse> {
-        return await this.request<DeleteUploadResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/upload/delete`, {
-            method: 'POST',
-            body: JSON.stringify({ path })
-        })
+        const module = await loadWorkspaceModule()
+        return await module.deleteUploadFile(this.boundRequest, sessionId, path)
     }
 
     async resumeSession(sessionId: string): Promise<Session> {
@@ -379,8 +295,8 @@ export class ApiClient {
         throw new Error('Invalid resume session response')
     }
 
-    async sendMessage(sessionId: string, text: string, localId?: string | null, attachments?: AttachmentMetadata[]): Promise<void> {
-        await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/messages`, {
+    async sendMessage(sessionId: string, text: string, localId?: string | null, attachments?: AttachmentMetadata[]): Promise<Session> {
+        const response = await this.request<unknown>(`/api/sessions/${encodeURIComponent(sessionId)}/messages`, {
             method: 'POST',
             body: JSON.stringify({
                 text,
@@ -388,13 +304,24 @@ export class ApiClient {
                 attachments: attachments ?? undefined
             })
         })
+
+        if (isSessionActionResponse(response)) {
+            return response.session
+        }
+        if (isSessionActionLegacyResponse(response)) {
+            return await this.fetchSessionSnapshot(sessionId)
+        }
+
+        throw new Error('Invalid send message response')
     }
 
-    async abortSession(sessionId: string): Promise<void> {
-        await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/abort`, {
+    async abortSession(sessionId: string): Promise<Session> {
+        const response = await this.request<unknown>(`/api/sessions/${encodeURIComponent(sessionId)}/abort`, {
             method: 'POST',
             body: JSON.stringify({})
         })
+
+        return await this.resolveSessionActionSnapshotResponse(response, sessionId, 'abort')
     }
 
     async archiveSession(sessionId: string): Promise<Session> {
@@ -409,11 +336,13 @@ export class ApiClient {
         return await this.postSessionSnapshotAction(sessionId, 'unarchive', {})
     }
 
-    async switchSession(sessionId: string): Promise<void> {
-        await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/switch`, {
+    async switchSession(sessionId: string): Promise<Session> {
+        const response = await this.request<unknown>(`/api/sessions/${encodeURIComponent(sessionId)}/switch`, {
             method: 'POST',
             body: JSON.stringify({})
         })
+
+        return await this.resolveSessionActionSnapshotResponse(response, sessionId, 'switch')
     }
 
     async setPermissionMode(sessionId: string, mode: PermissionMode): Promise<Session> {
@@ -465,35 +394,24 @@ export class ApiClient {
     }
 
     async getMachines(): Promise<MachinesResponse> {
-        return await this.request<MachinesResponse>('/api/machines')
+        const module = await loadMachinesModule()
+        return await module.getMachines(this.boundRequest)
     }
 
     async checkMachinePathsExists(
         machineId: string,
         paths: string[]
     ): Promise<MachinePathsExistsResponse> {
-        return await this.request<MachinePathsExistsResponse>(
-            `/api/machines/${encodeURIComponent(machineId)}/paths/exists`,
-            {
-                method: 'POST',
-                body: JSON.stringify({ paths })
-            }
-        )
+        const module = await loadMachinesModule()
+        return await module.checkMachinePathsExists(this.boundRequest, machineId, paths)
     }
 
     async browseMachineDirectory(
         machineId: string,
         path?: string
     ): Promise<MachineBrowseDirectoryResponse> {
-        const params = new URLSearchParams()
-        if (path) {
-            params.set('path', path)
-        }
-        const queryString = params.toString()
-
-        return await this.request<MachineBrowseDirectoryResponse>(
-            `/api/machines/${encodeURIComponent(machineId)}/directory${queryString ? `?${queryString}` : ''}`
-        )
+        const module = await loadMachinesModule()
+        return await module.browseMachineDirectory(this.boundRequest, machineId, path)
     }
 
     async spawnSession(input: {
@@ -507,46 +425,18 @@ export class ApiClient {
         worktreeName?: string
         collaborationMode?: CodexCollaborationMode
     }): Promise<SpawnResponse> {
-        const response = await this.request<unknown>(`/api/machines/${encodeURIComponent(input.machineId)}/spawn`, {
-            method: 'POST',
-            body: JSON.stringify({
-                directory: input.directory,
-                agent: input.agent,
-                model: input.model,
-                modelReasoningEffort: input.modelReasoningEffort,
-                permissionMode: input.permissionMode,
-                sessionType: input.sessionType,
-                worktreeName: input.worktreeName,
-                collaborationMode: input.collaborationMode
-            })
-        })
-
-        if (isSpawnErrorResponse(response)) {
-            return response
-        }
-        if (isSpawnSuccessResponse(response)) {
-            return response
-        }
-        if (isSpawnLegacySuccessResponse(response)) {
-            return {
-                type: 'success',
-                session: await this.fetchSessionSnapshot(response.sessionId)
-            }
-        }
-
-        throw new Error('Invalid spawn session response')
+        const module = await loadMachinesModule()
+        return await module.spawnSession(this.boundRequest, this.boundFetchSessionSnapshot, input)
     }
 
     async getSlashCommands(sessionId: string): Promise<SlashCommandsResponse> {
-        return await this.request<SlashCommandsResponse>(
-            `/api/sessions/${encodeURIComponent(sessionId)}/slash-commands`
-        )
+        const module = await loadAutocompleteModule()
+        return await module.getSlashCommands(this.boundRequest, sessionId)
     }
 
     async getSkills(sessionId: string): Promise<SkillsResponse> {
-        return await this.request<SkillsResponse>(
-            `/api/sessions/${encodeURIComponent(sessionId)}/skills`
-        )
+        const module = await loadAutocompleteModule()
+        return await module.getSkills(this.boundRequest, sessionId)
     }
 
     async renameSession(sessionId: string, name: string): Promise<Session> {

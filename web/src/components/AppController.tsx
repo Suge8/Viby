@@ -1,38 +1,58 @@
-import { lazy, Suspense, type JSX, useEffect, useMemo, useRef } from 'react'
-import { useLocation, useRouter } from '@tanstack/react-router'
+import { lazy, Suspense, type ComponentProps, type JSX, useEffect, useMemo, useRef } from 'react'
+import { Outlet, useLocation, useRouter } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
+import type { LoginPromptServerConfig } from '@/components/LoginPrompt'
 import { initializeTheme } from '@/hooks/useTheme'
 import { useAuth } from '@/hooks/useAuth'
 import { useAuthSource } from '@/hooks/useAuthSource'
 import { useViewportInteractionGuards } from '@/hooks/useViewportInteractionGuards'
 import { useServerUrl } from '@/hooks/useServerUrl'
 import {
+    type AppViewportRoute,
     getAppViewportRoute,
-    isUnauthorizedAuthError,
-    renderAuthorizingState
+    isUnauthorizedAuthError
 } from '@/lib/appShellPresentation'
 import { AppContextProvider } from '@/lib/app-context'
 import { NoticeProvider } from '@/lib/notice-center'
-import { useTranslation } from '@/lib/use-translation'
 import { requireHubUrlForLogin } from '@/lib/runtime-config'
-import type { LoginPromptServerConfig } from '@/components/LoginPrompt'
 
 const REQUIRE_SERVER_URL = requireHubUrlForLogin()
-const LazyLoginPrompt = lazy(async () => {
+const AUTH_QUERY_PARAM_KEYS = ['server', 'hub', 'token'] as const
+
+async function loadLoginPromptModule(): Promise<{ default: (props: ComponentProps<typeof import('@/components/LoginPrompt').LoginPrompt>) => JSX.Element }> {
     const module = await import('@/components/LoginPrompt')
     return { default: module.LoginPrompt }
-})
+}
 
-const LazyAppRealtimeRuntime = lazy(async () => {
+const LazyLoginPrompt = lazy(loadLoginPromptModule)
+
+async function loadAppRealtimeRuntimeModule() {
     const module = await import('@/components/AppRealtimeRuntime')
     return { default: module.AppRealtimeRuntime }
-})
+}
 
-export function AppController(): JSX.Element {
-    const { t } = useTranslation()
+const LazyAppRealtimeRuntime = lazy(loadAppRealtimeRuntimeModule)
+
+type AppViewportShellProps = {
+    appViewportRoute: AppViewportRoute
+}
+
+function AppViewportShell(props: AppViewportShellProps): JSX.Element {
+    return (
+        <div className="app-shell flex h-full flex-col" data-viby-route={props.appViewportRoute}>
+            <div className="app-route-layer min-h-0 flex-1">
+                <div className="app-route-transition h-full min-h-0 w-full">
+                    <Outlet />
+                </div>
+            </div>
+        </div>
+    )
+}
+
+export function AppController(): JSX.Element | null {
     const { serverUrl, baseUrl, setServerUrl, clearServerUrl } = useServerUrl()
     const { authSource, setAccessToken, clearAuth } = useAuthSource(baseUrl)
-    const { token, api, isLoading: isAuthLoading, error: authError } = useAuth(authSource, baseUrl)
+    const { token, api, error: authError } = useAuth(authSource, baseUrl)
     const pathname = useLocation({ select: location => location.pathname })
     const router = useRouter()
 
@@ -75,66 +95,62 @@ export function AppController(): JSX.Element {
         if (!authSource || !isUnauthorizedAuthError(authError)) {
             return
         }
+        if (token && api) {
+            return
+        }
 
         clearAuth()
-    }, [authError, authSource, clearAuth])
+    }, [api, authError, authSource, clearAuth, token])
 
     useEffect(() => {
         if (!token || !api) {
             return
         }
+
+        void loadAppRealtimeRuntimeModule()
+
         const { pathname, search, hash, state } = router.history.location
         const searchParams = new URLSearchParams(search)
-        if (!searchParams.has('server') && !searchParams.has('hub') && !searchParams.has('token')) {
+        const hasAuthQueryParams = AUTH_QUERY_PARAM_KEYS.some((key) => searchParams.has(key))
+        if (!hasAuthQueryParams) {
             return
         }
-        searchParams.delete('server')
-        searchParams.delete('hub')
-        searchParams.delete('token')
+        for (const key of AUTH_QUERY_PARAM_KEYS) {
+            searchParams.delete(key)
+        }
         const nextSearch = searchParams.toString()
         const nextHref = `${pathname}${nextSearch ? `?${nextSearch}` : ''}${hash}`
         router.history.replace(nextHref, state)
     }, [token, api, router])
 
-    if (!authSource) {
+    if (token && api) {
         return (
-            <Suspense fallback={renderAuthorizingState(t)}>
+            <NoticeProvider>
+                <AppContextProvider value={{ api, token, baseUrl }}>
+                    <AppViewportShell appViewportRoute={appViewportRoute} />
+                    <Suspense fallback={null}>
+                        <LazyAppRealtimeRuntime
+                            api={api}
+                            token={token}
+                            baseUrl={baseUrl}
+                        />
+                    </Suspense>
+                </AppContextProvider>
+            </NoticeProvider>
+        )
+    }
+
+    if (!authSource || authError) {
+        return (
+            <Suspense fallback={null}>
                 <LazyLoginPrompt
                     onLogin={setAccessToken}
                     server={loginPromptServer}
+                    error={authSource ? authError : undefined}
                 />
             </Suspense>
         )
     }
 
-    if (authError) {
-        return (
-            <Suspense fallback={renderAuthorizingState(t)}>
-                <LazyLoginPrompt
-                    onLogin={setAccessToken}
-                    server={loginPromptServer}
-                    error={authError}
-                />
-            </Suspense>
-        )
-    }
-
-    if (isAuthLoading || !token || !api) {
-        return renderAuthorizingState(t)
-    }
-
-    return (
-        <NoticeProvider>
-            <AppContextProvider value={{ api, token, baseUrl }}>
-                <Suspense fallback={renderAuthorizingState(t)}>
-                    <LazyAppRealtimeRuntime
-                        api={api}
-                        token={token}
-                        baseUrl={baseUrl}
-                        appViewportRoute={appViewportRoute}
-                    />
-                </Suspense>
-            </AppContextProvider>
-        </NoticeProvider>
-    )
+    return null
 }

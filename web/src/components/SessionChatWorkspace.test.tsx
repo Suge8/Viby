@@ -1,8 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, screen } from '@testing-library/react'
 import type { ComponentProps } from 'react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NoticeProvider } from '@/lib/notice-center'
-import { I18nProvider } from '@/lib/i18n-context'
+import { MESSAGE_WINDOW_PENDING_OVERFLOW_WARNING_KEY } from '@/lib/messageWindowWarnings'
+import { renderWithI18n } from '@/test/i18n'
 import type { Session } from '@/types/api'
 import SessionChatWorkspace from './SessionChatWorkspace'
 
@@ -10,7 +11,8 @@ const viewportLayoutHarness = vi.hoisted(() => ({
     value: {
         isStandalone: true,
         isKeyboardOpen: false,
-        bottomInsetPx: 0
+        bottomInsetPx: 0,
+        floatingControlBottomInsetPx: 0
     }
 }))
 
@@ -20,8 +22,18 @@ const sessionActionHarness = vi.hoisted(() => ({
 }))
 
 beforeEach(() => {
+    viewportLayoutHarness.value = {
+        isStandalone: true,
+        isKeyboardOpen: false,
+        bottomInsetPx: 0,
+        floatingControlBottomInsetPx: 0
+    }
     sessionActionHarness.invalidateQueries.mockReset()
     sessionActionHarness.unarchiveSession.mockReset()
+})
+
+afterEach(() => {
+    cleanup()
 })
 
 vi.mock('@assistant-ui/react', () => ({
@@ -119,6 +131,7 @@ function createDefaultMessageState() {
         isSending: false,
         pendingCount: 0,
         messagesVersion: 0,
+        pendingReply: null,
         stream: null,
         streamVersion: 0,
     }
@@ -148,36 +161,33 @@ function createWorkspaceProps(overrides?: Partial<ComponentProps<typeof SessionC
 }
 
 describe('SessionChatWorkspace layout', () => {
-    it('uses a dedicated chat shell row for the thread and composer', () => {
-        const { container } = render(
-            <I18nProvider>
-                <NoticeProvider>
-                    <SessionChatWorkspace {...createWorkspaceProps()} />
-                </NoticeProvider>
-            </I18nProvider>
+    it('uses a dedicated chat shell row for the thread and composer', async () => {
+        const { container } = await renderWithI18n(
+            <NoticeProvider>
+                <SessionChatWorkspace {...createWorkspaceProps()} />
+            </NoticeProvider>
         )
 
         const shell = container.firstElementChild
 
         expect(shell).toHaveClass('ds-chat-shell')
         expect(shell).toHaveClass('flex-1')
-        expect(screen.getByTestId('workspace-thread')).toBeInTheDocument()
-        expect(screen.getByTestId('workspace-composer')).toBeInTheDocument()
+        expect(await screen.findByTestId('workspace-thread')).toBeInTheDocument()
+        expect(await screen.findByTestId('workspace-composer')).toBeInTheDocument()
     })
 
-    it('projects standalone and keyboard viewport state onto the chat shell root', () => {
+    it('projects standalone and keyboard viewport state onto the chat shell root', async () => {
         viewportLayoutHarness.value = {
             isStandalone: true,
             isKeyboardOpen: true,
-            bottomInsetPx: 320
+            bottomInsetPx: 320,
+            floatingControlBottomInsetPx: 288
         }
 
-        const { container } = render(
-            <I18nProvider>
-                <NoticeProvider>
-                    <SessionChatWorkspace {...createWorkspaceProps()} />
-                </NoticeProvider>
-            </I18nProvider>
+        const { container } = await renderWithI18n(
+            <NoticeProvider>
+                <SessionChatWorkspace {...createWorkspaceProps()} />
+            </NoticeProvider>
         )
 
         const shell = container.firstElementChild as HTMLElement
@@ -186,51 +196,52 @@ describe('SessionChatWorkspace layout', () => {
         expect(shell.dataset.chatKeyboardOpen).toBe('true')
         expect(shell.style.getPropertyValue('--chat-composer-offset-bottom')).toBe('320px')
         expect(shell.style.getPropertyValue('--chat-composer-reserved-space')).toBe('92px')
+        expect(shell.style.getPropertyValue('--chat-floating-control-offset-bottom')).toBe('288px')
     })
 
-    it('keeps closed-session recovery guidance local to the composer area', () => {
-        render(
-            <I18nProvider>
-                <NoticeProvider>
-                    <SessionChatWorkspace
-                        {...createWorkspaceProps({
-                            session: createSession({ active: false }),
-                            messageState: {
-                                ...createDefaultMessageState(),
-                                warning: 'New messages arrived while you were away.'
-                            }
-                        })}
-                    />
-                </NoticeProvider>
-            </I18nProvider>
+    it('keeps closed-session recovery guidance local to the composer area', async () => {
+        await renderWithI18n(
+            <NoticeProvider>
+                <SessionChatWorkspace
+                    {...createWorkspaceProps({
+                        session: createSession({ active: false }),
+                        messageState: {
+                            ...createDefaultMessageState(),
+                            warning: MESSAGE_WINDOW_PENDING_OVERFLOW_WARNING_KEY
+                        }
+                    })}
+                />
+            </NoticeProvider>
         )
 
-        expect(screen.getByText('New messages arrived while you were away.')).toBeInTheDocument()
-        expect(screen.queryByText('This session is inactive. Send a new message to ask an online machine to resume it.')).not.toBeInTheDocument()
+        expect(
+            screen.getByText(/^(chat\.messagesWarning\.pendingOverflow|New replies arrived while you were away\. Scroll to the bottom to refresh\.)$/)
+        ).toBeInTheDocument()
+        expect(screen.queryByText(/^(chat\.inactive\.banner|This session is inactive\. Send a new message to ask an online machine to resume it\.)$/)).not.toBeInTheDocument()
     })
 
-    it('renders an archived-session inline notice with a local restore action', () => {
-        render(
-            <I18nProvider>
-                <NoticeProvider>
-                    <SessionChatWorkspace
-                        {...createWorkspaceProps({
-                            session: createSession({
-                                active: false,
-                                metadata: {
-                                    flavor: 'codex',
-                                    lifecycleState: 'archived'
-                                } as never
-                            })
-                        })}
-                    />
-                </NoticeProvider>
-            </I18nProvider>
+    it('renders an archived-session inline notice with a local restore action', async () => {
+        await renderWithI18n(
+            <NoticeProvider>
+                <SessionChatWorkspace
+                    {...createWorkspaceProps({
+                        session: createSession({
+                            active: false,
+                            metadata: {
+                                flavor: 'codex',
+                                lifecycleState: 'archived'
+                            } as never
+                        })
+                    })}
+                />
+            </NoticeProvider>
         )
 
-        expect(screen.getByText('This session is archived. Restore it to the main list before sending a new message.')).toBeInTheDocument()
+        expect(
+            screen.getByText(/^(chat\.archived\.banner|This session is archived\. Sending a new message will restore it automatically, or you can restore it now\.)$/)
+        ).toBeInTheDocument()
 
-        fireEvent.click(screen.getByRole('button', { name: 'Restore' }))
+        fireEvent.click(screen.getByRole('button', { name: /^(session\.action\.unarchive|Restore)$/ }))
 
         expect(sessionActionHarness.unarchiveSession).toHaveBeenCalledOnce()
     })

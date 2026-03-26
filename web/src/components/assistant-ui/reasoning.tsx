@@ -1,10 +1,10 @@
 import { useState, useEffect, type FC, type PropsWithChildren } from 'react'
 import { useMessage } from '@assistant-ui/react'
-import { MarkdownTextPrimitive } from '@assistant-ui/react-markdown'
 import { ChevronIcon } from '@/components/icons'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
-import { defaultComponents, MARKDOWN_PLUGINS } from '@/components/assistant-ui/markdown-text'
+import { CollapsiblePanel } from '@/components/ui/CollapsiblePanel'
+import { MarkdownPrimitive } from '@/components/markdown/MarkdownPrimitive'
+import { joinClassNames } from '@/lib/joinClassNames'
 
 function ShimmerDot() {
     return (
@@ -17,10 +17,8 @@ function ShimmerDot() {
  */
 export const Reasoning: FC = () => {
     return (
-        <MarkdownTextPrimitive
-            remarkPlugins={MARKDOWN_PLUGINS}
-            components={defaultComponents}
-            className={cn('aui-reasoning-content min-w-0 max-w-full break-words text-sm text-[var(--app-hint)]')}
+        <MarkdownPrimitive
+            className="aui-reasoning-content min-w-0 max-w-full break-words text-sm text-[var(--app-hint)]"
         />
     )
 }
@@ -51,8 +49,9 @@ export const ReasoningGroup: FC<PropsWithChildren> = ({ children }) => {
                 type="button"
                 variant="plain"
                 size="sm"
-                onClick={() => setIsOpen(!isOpen)}
-                className={cn(
+                onClick={() => setIsOpen(current => !current)}
+                aria-expanded={isOpen}
+                className={joinClassNames(
                     'gap-1.5 px-0 py-0 text-xs font-medium',
                     'text-[var(--app-hint)] hover:text-[var(--app-fg)]',
                     'transition-colors select-none'
@@ -67,16 +66,11 @@ export const ReasoningGroup: FC<PropsWithChildren> = ({ children }) => {
                 )}
             </Button>
 
-            <div
-                className={cn(
-                    'overflow-hidden transition-all duration-200 ease-in-out',
-                    isOpen ? 'max-h-[5000px] opacity-100' : 'max-h-0 opacity-0'
-                )}
-            >
+            <CollapsiblePanel open={isOpen}>
                 <div className="pl-4 pt-2 border-l-2 border-[var(--app-border)] ml-0.5">
                     {children}
                 </div>
-            </div>
+            </CollapsiblePanel>
         </div>
     )
 }

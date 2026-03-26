@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { SessionLifecycleState } from '@/types/api'
 import type { SessionChatLocalNotice } from '@/components/SessionChatLocalNoticeStack'
+import type { MessageWindowWarningKey } from '@/lib/messageWindowWarnings'
 import { useNoticeCenter } from '@/lib/notice-center'
 import { getNoticePreset } from '@/lib/noticePresets'
+import { formatUserFacingErrorMessage } from '@/lib/userFacingError'
 import { useTranslation } from '@/lib/use-translation'
 
 type UseSessionChatLocalNoticesOptions = {
     sessionId: string
     lifecycleState: SessionLifecycleState
-    messagesWarning: string | null
+    messagesWarning: MessageWindowWarningKey | null
     onUnarchiveSession: () => Promise<void>
 }
 
@@ -39,12 +41,12 @@ function buildArchivedNotice(options: {
 
 function buildMessageWarningNotice(
     noticeIdPrefix: string,
-    messagesWarning: string
+    title: string
 ): SessionChatLocalNotice {
     return {
         id: `${noticeIdPrefix}:message-window-warning`,
         tone: 'warning',
-        title: messagesWarning
+        title
     }
 }
 
@@ -63,6 +65,9 @@ export function useSessionChatLocalNotices(
     const isMountedRef = useRef(true)
     const errorPreset = useMemo(() => getNoticePreset('genericError', t), [t])
     const noticeIdPrefix = `chat:${sessionId}`
+    const messageWarningTitle = useMemo(() => {
+        return messagesWarning ? t(messagesWarning) : null
+    }, [messagesWarning, t])
 
     useEffect(() => {
         return () => {
@@ -78,10 +83,13 @@ export function useSessionChatLocalNotices(
         setIsRestoringArchived(true)
         void onUnarchiveSession()
             .catch((error) => {
-                console.error('Failed to restore archived session from chat detail:', error)
+                console.error('Failed to unarchive session from chat detail:', error)
                 addToast({
                     title: errorPreset.title,
-                    description: error instanceof Error ? error.message : t('chat.resumeFailed.generic'),
+                    description: formatUserFacingErrorMessage(error, {
+                        t,
+                        fallbackKey: 'chat.resumeFailed.generic'
+                    }),
                     tone: errorPreset.tone
                 })
             })
@@ -104,8 +112,8 @@ export function useSessionChatLocalNotices(
             }))
         }
 
-        if (messagesWarning) {
-            notices.push(buildMessageWarningNotice(noticeIdPrefix, messagesWarning))
+        if (messageWarningTitle) {
+            notices.push(buildMessageWarningNotice(noticeIdPrefix, messageWarningTitle))
         }
 
         return notices
@@ -113,7 +121,7 @@ export function useSessionChatLocalNotices(
         handleRestoreArchivedSession,
         isRestoringArchived,
         lifecycleState,
-        messagesWarning,
+        messageWarningTitle,
         noticeIdPrefix,
         t
     ])

@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import type { ApiClient } from '@/api/client'
 import type { MachineDirectoryEntry, MachineDirectoryRoot } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
+import { formatOptionalUserFacingErrorMessage } from '@/lib/userFacingError'
+import { useTranslation } from '@/lib/use-translation'
 
 const MACHINE_DIRECTORY_STALE_TIME_MS = 30_000
 
@@ -29,6 +31,7 @@ type MachineDirectoryBrowserState = {
 export function useMachineDirectoryBrowser(
     options: UseMachineDirectoryBrowserOptions
 ): MachineDirectoryBrowserState {
+    const { t } = useTranslation()
     const { api, machineId, initialPath, enabled = true } = options
     const [requestedPath, setRequestedPath] = useState<string | null>(initialPath?.trim() || null)
 
@@ -63,18 +66,20 @@ export function useMachineDirectoryBrowser(
         return query.data?.currentPath ?? requestedPath ?? ''
     }, [query.data?.currentPath, requestedPath])
 
-    const queryError = query.error instanceof Error
-        ? query.error.message
-        : query.error
-            ? 'Failed to browse directory'
-            : null
+    const queryError = formatOptionalUserFacingErrorMessage(query.error, {
+        t,
+        fallbackKey: 'error.machine.directory'
+    })
 
     return {
         currentPath,
         parentPath: query.data?.parentPath ?? null,
         entries: query.data?.entries ?? [],
         roots: query.data?.roots ?? [],
-        error: queryError ?? query.data?.error ?? null,
+        error: queryError ?? formatOptionalUserFacingErrorMessage(query.data?.error, {
+            t,
+            fallbackKey: 'error.machine.directory'
+        }),
         hasCurrentDirectory: query.data?.success === true && Boolean(query.data.currentPath),
         isLoading: query.isLoading,
         isRefreshing: query.isFetching && !query.isLoading,

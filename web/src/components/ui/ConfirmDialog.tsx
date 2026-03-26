@@ -12,20 +12,27 @@ import { getNoticePreset } from '@/lib/noticePresets'
 import { useTranslation } from '@/lib/use-translation'
 
 type ConfirmDialogProps = {
-    isOpen: boolean
-    onClose: () => void
-    title: string
-    description: string
-    confirmLabel: string
-    confirmingLabel: string
+    dialog: {
+        isOpen: boolean
+        onClose: () => void
+        title: string
+        description: string
+        confirmLabel: string
+        confirmingLabel: string
+        destructive?: boolean
+    }
     onConfirm: () => Promise<void>
     isPending: boolean
-    destructive?: boolean
 }
 
 export function ConfirmDialog(props: ConfirmDialogProps) {
     const { t } = useTranslation()
     const dialogErrorPreset = getNoticePreset('dialogError', t)
+    const {
+        dialog,
+        onConfirm,
+        isPending
+    } = props
     const {
         isOpen,
         onClose,
@@ -33,10 +40,8 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
         description,
         confirmLabel,
         confirmingLabel,
-        onConfirm,
-        isPending,
         destructive = false
-    } = props
+    } = dialog
 
     const [error, setError] = useState<string | null>(null)
 

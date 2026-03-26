@@ -10,70 +10,82 @@ type UseSessionTargetResolverOptions = {
     onError: (error: unknown, currentSessionId: string) => void
 }
 
+type ResolveSessionTargetOptions = {
+    silent?: boolean
+}
+
 type SessionTargetResolverError = Error & {
-    code: 'resume_unavailable' | 'session_archived'
+    code: 'resume_unavailable'
 }
 
-function getSessionTargetResolverErrorMessage(
-    code: SessionTargetResolverError['code']
-): string {
-    switch (code) {
-        case 'session_archived':
-            return 'Archived sessions must be restored before resuming'
-        case 'resume_unavailable':
-            return 'Resume session ID unavailable'
-    }
-}
-
-function createSessionTargetResolverError(
-    code: SessionTargetResolverError['code']
-): SessionTargetResolverError {
-    const error = new Error(getSessionTargetResolverErrorMessage(code)) as SessionTargetResolverError
-    error.code = code
+function createResumeUnavailableError(): SessionTargetResolverError {
+    const error = new Error('Resume session ID unavailable') as SessionTargetResolverError
+    error.code = 'resume_unavailable'
     return error
 }
 
 export function useSessionTargetResolver(
     options: UseSessionTargetResolverOptions
-): () => Promise<void> {
+): (resolveOptions?: ResolveSessionTargetOptions) => Promise<void> {
     const { api, session, onReady, onError } = options
     const inFlightResumeRef = useRef<Promise<void> | null>(null)
+    const inFlightErrorReportedRef = useRef(false)
 
-    return useCallback(async () => {
+    const reportResumeError = useCallback((error: unknown, currentSessionId: string): void => {
+        if (inFlightErrorReportedRef.current) {
+            return
+        }
+        inFlightErrorReportedRef.current = true
+        onError(error, currentSessionId)
+    }, [onError])
+
+    return useCallback(async (resolveOptions?: ResolveSessionTargetOptions) => {
         const currentSessionId = session?.id
+        const silent = resolveOptions?.silent === true
         if (!api || !session || !currentSessionId || session.active) {
             return
         }
 
-        if (getSessionLifecycleState(session) === 'archived') {
-            const error = createSessionTargetResolverError('session_archived')
-            onError(error, currentSessionId)
-            throw error
-        }
-
-        if (!getSessionResumeToken(session.metadata)) {
-            const error = createSessionTargetResolverError('resume_unavailable')
-            onError(error, currentSessionId)
-            throw error
-        }
-
         if (inFlightResumeRef.current) {
+            if (!silent) {
+                void inFlightResumeRef.current.catch((error) => {
+                    reportResumeError(error, currentSessionId)
+                })
+            }
             return await inFlightResumeRef.current
         }
 
-        const resumePromise = api.resumeSession(currentSessionId)
-            .then((resumedSession) => {
-                onReady(resumedSession)
-            })
+        inFlightErrorReportedRef.current = false
+        const resumePromise = (async () => {
+            let nextSession = session
+
+            if (getSessionLifecycleState(nextSession) === 'archived') {
+                nextSession = await api.unarchiveSession(currentSessionId)
+                onReady(nextSession)
+                if (nextSession.active) {
+                    return
+                }
+            }
+
+            if (!getSessionResumeToken(nextSession.metadata)) {
+                throw createResumeUnavailableError()
+            }
+
+            const resumedSession = await api.resumeSession(currentSessionId)
+            onReady(resumedSession)
+        })()
             .catch((error) => {
-                onError(error, currentSessionId)
+                if (!silent) {
+                    reportResumeError(error, currentSessionId)
+                }
                 throw error
             })
             .finally(() => {
                 inFlightResumeRef.current = null
+                inFlightErrorReportedRef.current = false
             })
 
         inFlightResumeRef.current = resumePromise
         return await resumePromise
-    }, [api, onError, onReady, session])
+    }, [api, onReady, reportResumeError, session])
 }

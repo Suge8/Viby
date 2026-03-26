@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, type JSX } from 'react'
+import { useCallback, useEffect, useRef, type JSX } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Outlet, useLocation, useMatchRoute, useNavigate } from '@tanstack/react-router'
 import { SessionList } from '@/components/SessionList'
 import { SessionsEmptyState } from '@/components/SessionsEmptyState'
-import { PlusIcon, SettingsIcon, BrandIcon } from '@/components/icons'
-import { Button } from '@/components/ui/button'
+import { getLikelyNextSessionId } from '@/components/session-list/sessionListUtils'
+import { useFinalizeBootShell } from '@/hooks/useFinalizeBootShell'
 import { disposeSessionViewRuntime } from '@/hooks/queries/sessionViewRuntime'
 import { useSessions } from '@/hooks/queries/useSessions'
 import { useAppContext } from '@/lib/app-context'
@@ -17,22 +17,77 @@ import {
     shouldPreloadIdleSessionRoutes,
 } from '@/lib/networkPreloadPolicy'
 import { getNoticePreset } from '@/lib/noticePresets'
+import { readLastOpenedSessionId, writeLastOpenedSessionId } from '@/lib/sessionEntryPreference'
 import { useTranslation } from '@/lib/use-translation'
+import { SessionsShellHeader } from '@/routes/sessions/components/SessionsShellHeader'
 import { SessionRouteBanner } from '@/routes/sessions/components/SessionRouteBanner'
 import {
+    SESSIONS_IDLE_PRELOADERS,
     loadNewSessionRouteModule,
     loadSettingsRouteModule,
-    preloadSessionDetailIntent,
-    preloadSessionDetailRoute
 } from '@/routes/sessions/sessionRoutePreload'
+import {
+    preloadSessionDetailCriticalRoute,
+    preloadSessionDetailIntent,
+    preloadSessionDetailRoute,
+    warmSessionDetailRouteData
+} from '@/routes/sessions/sessionDetailRoutePreload'
 
 const SESSIONS_DETAIL_VIEWPORT_CLASS_NAME = 'sessions-detail-route-transition'
+const SESSIONS_LIST_PANE_CLASS_NAME = 'sessions-mobile-list-pane'
+const SESSIONS_DETAIL_PANE_CLASS_NAME = 'sessions-mobile-detail-pane'
+const SESSIONS_INDEX_ROUTE = '/sessions'
+const NEW_SESSION_ROUTE = '/sessions/new'
+const SETTINGS_ROUTE = '/settings'
+const EXPLICIT_SESSION_DETAIL_PRELOAD_OPTIONS = {
+    includeLatestMessages: true
+} as const
+const IDLE_SESSION_DETAIL_PRELOAD_OPTIONS = {
+    includeLatestMessages: false
+} as const
 
-type SessionsShellProps = {
-    preloaders: ReadonlyArray<() => Promise<unknown>>
+type IdleTask = () => void
+
+function buildSessionHref(sessionId: string): string {
+    return `/sessions/${sessionId}`
 }
 
-export function SessionsShell(props: SessionsShellProps): JSX.Element {
+function isSelectedSession(
+    selectedSessionId: string | null,
+    sessionId: string
+): boolean {
+    return selectedSessionId === sessionId
+}
+
+function shouldRunIdleSessionPreload(): boolean {
+    return shouldPreloadIdleSessionRoutes(getNetworkInformation())
+}
+
+function scheduleIdleTask(task: IdleTask): (() => void) | undefined {
+    if (typeof window === 'undefined') {
+        return undefined
+    }
+
+    if ('requestIdleCallback' in window) {
+        const idleId = window.requestIdleCallback(task)
+        return () => window.cancelIdleCallback(idleId)
+    }
+
+    const timeoutId = globalThis.setTimeout(task, SESSIONS_IDLE_PRELOAD_DELAY_MS)
+    return () => globalThis.clearTimeout(timeoutId)
+}
+
+function runStaticRouteNavigation(
+    navigate: ReturnType<typeof useNavigate>,
+    route: typeof NEW_SESSION_ROUTE | typeof SETTINGS_ROUTE,
+    preload: Promise<unknown>
+): void {
+    runPreloadedNavigation(preload, () => {
+        void navigate({ to: route })
+    }, route)
+}
+
+export function SessionsShell(): JSX.Element {
     const { api } = useAppContext()
     const navigate = useNavigate()
     const queryClient = useQueryClient()
@@ -42,55 +97,73 @@ export function SessionsShell(props: SessionsShellProps): JSX.Element {
     const errorPreset = getNoticePreset('genericError', t)
     const { sessions, error } = useSessions(api)
 
-    const archivedCount = useMemo(
-        () => sessions.filter((session) => session.lifecycleState === 'archived').length,
-        [sessions]
-    )
-    const openCount = sessions.length - archivedCount
     const sessionMatch = matchRoute({ to: '/sessions/$sessionId', fuzzy: true })
     const selectedSessionId = sessionMatch && sessionMatch.sessionId !== 'new' ? sessionMatch.sessionId : null
     const isSessionsIndex = pathname === '/sessions' || pathname === '/sessions/'
     const previousSessionIdRef = useRef<string | null>(selectedSessionId)
+    const idleWarmedSessionIdRef = useRef<string | null>(selectedSessionId)
 
-    const preloadSession = useCallback((sessionId: string): Promise<void> => {
-        return preloadSessionDetailRoute({
+    useFinalizeBootShell(isSessionsIndex)
+
+    const preloadSessionSelectionCritical = useCallback((sessionId: string): Promise<void> => {
+        return preloadSessionDetailCriticalRoute({
             api,
             queryClient,
-            sessionId,
-            includeWorkspace: true,
-            includeLatestMessages: true
+            sessionId
         })
     }, [api, queryClient])
 
     const handlePreloadSession = useCallback((sessionId: string) => {
-        preloadSessionDetailIntent({
+        if (isSelectedSession(selectedSessionId, sessionId)) {
+            return
+        }
+
+        void preloadSessionDetailIntent({
             api,
             queryClient,
             sessionId,
-            recoveryHref: `/sessions/${sessionId}`
+            recoveryHref: buildSessionHref(sessionId)
         })
-    }, [api, queryClient])
+    }, [api, queryClient, selectedSessionId])
 
     const handleSelectSession = useCallback((sessionId: string) => {
-        const recoveryHref = `/sessions/${sessionId}`
-        runPreloadedNavigation(() => preloadSession(sessionId), () => {
+        if (isSelectedSession(selectedSessionId, sessionId)) {
+            return
+        }
+
+        const recoveryHref = buildSessionHref(sessionId)
+        warmSessionDetailRouteData({
+            api,
+            queryClient,
+            sessionId,
+            ...EXPLICIT_SESSION_DETAIL_PRELOAD_OPTIONS,
+            recoveryHref
+        })
+        runPreloadedNavigation(() => preloadSessionSelectionCritical(sessionId), () => {
             void navigate({
                 to: '/sessions/$sessionId',
                 params: { sessionId },
             })
         }, recoveryHref)
-    }, [navigate, preloadSession])
+    }, [api, navigate, preloadSessionSelectionCritical, queryClient, selectedSessionId])
+
+    const handleArchiveSelectedSession = useCallback((sessionId: string) => {
+        if (selectedSessionId !== sessionId) {
+            return
+        }
+
+        void navigate({
+            to: SESSIONS_INDEX_ROUTE,
+            replace: true
+        })
+    }, [navigate, selectedSessionId])
 
     const handleNewSession = useCallback(() => {
-        runPreloadedNavigation(loadNewSessionRouteModule(), () => {
-            void navigate({ to: '/sessions/new' })
-        }, '/sessions/new')
+        runStaticRouteNavigation(navigate, NEW_SESSION_ROUTE, loadNewSessionRouteModule())
     }, [navigate])
 
     const handleOpenSettings = useCallback(() => {
-        runPreloadedNavigation(loadSettingsRouteModule(), () => {
-            void navigate({ to: '/settings' })
-        }, '/settings')
+        runStaticRouteNavigation(navigate, SETTINGS_ROUTE, loadSettingsRouteModule())
     }, [navigate])
 
     useEffect(() => {
@@ -100,6 +173,13 @@ export function SessionsShell(props: SessionsShellProps): JSX.Element {
         }
         previousSessionIdRef.current = selectedSessionId
     }, [queryClient, selectedSessionId])
+
+    useEffect(() => {
+        if (!selectedSessionId) {
+            return
+        }
+        writeLastOpenedSessionId(selectedSessionId)
+    }, [selectedSessionId])
 
     useEffect(() => {
         return () => {
@@ -112,72 +192,64 @@ export function SessionsShell(props: SessionsShellProps): JSX.Element {
     }, [queryClient])
 
     useEffect(() => {
-        const preloadRoutes = () => {
-            if (!shouldPreloadIdleSessionRoutes(getNetworkInformation())) {
+        return scheduleIdleTask(() => {
+            if (!shouldRunIdleSessionPreload()) {
                 return
             }
 
-            for (const preload of props.preloaders) {
+            for (const preload of SESSIONS_IDLE_PRELOADERS) {
                 void preload()
             }
-        }
+        })
+    }, [])
 
-        if (typeof window === 'undefined') {
+    useEffect(() => {
+        if (selectedSessionId) {
+            idleWarmedSessionIdRef.current = selectedSessionId
             return
         }
 
-        if ('requestIdleCallback' in window) {
-            const idleId = window.requestIdleCallback(preloadRoutes)
-            return () => window.cancelIdleCallback(idleId)
+        const candidateSessionId = getLikelyNextSessionId(sessions, {
+            preferredSessionId: readLastOpenedSessionId()
+        })
+        if (!candidateSessionId || idleWarmedSessionIdRef.current === candidateSessionId) {
+            return
         }
 
-        const timeoutId = globalThis.setTimeout(preloadRoutes, SESSIONS_IDLE_PRELOAD_DELAY_MS)
-        return () => globalThis.clearTimeout(timeoutId)
-    }, [props.preloaders])
+        if (!shouldRunIdleSessionPreload()) {
+            return
+        }
+
+        return scheduleIdleTask(() => {
+            idleWarmedSessionIdRef.current = candidateSessionId
+            void preloadSessionDetailRoute({
+                api,
+                queryClient,
+                sessionId: candidateSessionId,
+                ...IDLE_SESSION_DETAIL_PRELOAD_OPTIONS
+            }).catch(() => {
+                if (idleWarmedSessionIdRef.current === candidateSessionId) {
+                    idleWarmedSessionIdRef.current = null
+                }
+            })
+        })
+    }, [api, queryClient, selectedSessionId, sessions])
+
+    const listPaneVisibilityClassName = isSessionsIndex ? 'flex' : 'hidden lg:flex'
+    const detailPaneVisibilityClassName = isSessionsIndex ? 'hidden lg:flex' : 'flex'
 
     return (
         <div className="flex h-full min-h-0 min-w-0 w-full flex-1">
             <div
-                className={`${isSessionsIndex ? 'flex' : 'hidden lg:flex'} relative w-full lg:w-[420px] xl:w-[480px] shrink-0 flex-col bg-[var(--app-bg)]`}
+                data-testid="sessions-list-pane"
+                data-sessions-pane="list"
+                className={`${listPaneVisibilityClassName} ${SESSIONS_LIST_PANE_CLASS_NAME} relative w-full lg:w-[420px] xl:w-[480px] shrink-0 flex-col bg-[var(--app-bg)]`}
             >
                 <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-px bg-[var(--app-divider)] lg:block" />
-                <div className="bg-[var(--app-bg)] pt-[env(safe-area-inset-top)]">
-                    <div className="mx-auto flex w-full max-w-content items-center justify-between px-3 py-2">
-                        <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                                <BrandIcon className="h-5 w-5 text-[var(--ds-accent-lime)]" />
-                                <span className="text-base font-semibold tracking-[-0.04em] text-[var(--ds-text-primary)]">
-                                    Viby
-                                </span>
-                            </div>
-                            <div className="mt-1 flex items-center gap-1.5 text-xs text-[var(--app-hint)]">
-                                <span>{t('sessions.summary', { open: openCount, archived: archivedCount })}</span>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <Button
-                                type="button"
-                                size="icon"
-                                variant="secondary"
-                                onClick={handleOpenSettings}
-                                className="h-11 w-11 text-[var(--app-hint)] hover:text-[var(--app-fg)]"
-                                title={t('settings.title')}
-                            >
-                                <SettingsIcon className="h-5 w-5 text-[var(--ds-accent-coral)]" />
-                            </Button>
-                            <Button
-                                type="button"
-                                size="icon"
-                                variant="secondary"
-                                onClick={handleNewSession}
-                                className="session-list-new-button h-11 w-11 text-[var(--app-link)] hover:text-[var(--ds-text-primary)]"
-                                title={t('sessions.new')}
-                            >
-                                <PlusIcon className="h-5 w-5 text-[var(--ds-accent-lime)]" />
-                            </Button>
-                        </div>
-                    </div>
-                </div>
+                <SessionsShellHeader
+                    settingsTitle={t('settings.title')}
+                    onOpenSettings={handleOpenSettings}
+                />
 
                 <div className="flex-1 min-h-0 overflow-y-auto desktop-scrollbar-left">
                     {error ? (
@@ -192,18 +264,22 @@ export function SessionsShell(props: SessionsShellProps): JSX.Element {
                     <SessionList
                         sessions={sessions}
                         selectedSessionId={selectedSessionId}
-                        renderHeader={false}
                         api={api}
                         actions={{
                             onSelect: handleSelectSession,
                             onPreloadSession: handlePreloadSession,
-                            onNewSession: handleNewSession
+                            onNewSession: handleNewSession,
+                            onArchiveSelectedSession: handleArchiveSelectedSession
                         }}
                     />
                 </div>
             </div>
 
-            <div className={`${isSessionsIndex ? 'hidden lg:flex' : 'flex'} min-w-0 w-full flex-1 flex-col bg-[var(--app-bg)]`}>
+            <div
+                data-testid="sessions-detail-pane"
+                data-sessions-pane="detail"
+                className={`${detailPaneVisibilityClassName} ${SESSIONS_DETAIL_PANE_CLASS_NAME} min-w-0 w-full flex-1 flex-col bg-[var(--app-bg)]`}
+            >
                 <div
                     data-testid="sessions-detail-viewport"
                     className={`${SESSIONS_DETAIL_VIEWPORT_CLASS_NAME} min-h-0 min-w-0 w-full flex-1 overflow-hidden`}
@@ -220,14 +296,10 @@ export function SessionsIndexPage(): JSX.Element {
     const { api } = useAppContext()
     const { sessions } = useSessions(api)
     const handleCreate = useCallback(() => {
-        runPreloadedNavigation(loadNewSessionRouteModule(), () => {
-            void navigate({ to: '/sessions/new' })
-        }, '/sessions/new')
+        runStaticRouteNavigation(navigate, NEW_SESSION_ROUTE, loadNewSessionRouteModule())
     }, [navigate])
     const handleOpenSettings = useCallback(() => {
-        runPreloadedNavigation(loadSettingsRouteModule(), () => {
-            void navigate({ to: '/settings' })
-        }, '/settings')
+        runStaticRouteNavigation(navigate, SETTINGS_ROUTE, loadSettingsRouteModule())
     }, [navigate])
 
     return (

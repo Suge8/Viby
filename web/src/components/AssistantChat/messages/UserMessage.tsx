@@ -1,12 +1,12 @@
 import { MessagePrimitive, useAssistantState } from '@assistant-ui/react'
 import { CliOutputMessageContent } from '@/components/AssistantChat/messages/CliOutputMessageContent'
-import { LazyRainbowText } from '@/components/LazyRainbowText'
 import { useVibyChatContext } from '@/components/AssistantChat/context'
+import { getVibyMessageMetadata } from '@/components/AssistantChat/messages/messageMetadata'
 import { THREAD_MESSAGE_ID_ATTRIBUTE } from '@/components/AssistantChat/threadMessageIdentity'
-import type { VibyChatMessageMetadata } from '@/lib/assistant-runtime'
 import { MessageStatusIndicator } from '@/components/AssistantChat/messages/MessageStatusIndicator'
 import { MessageAttachments } from '@/components/AssistantChat/messages/MessageAttachments'
 import { MessageSurface } from '@/components/AssistantChat/messages/MessageSurface'
+import { TextContent } from '@/components/TextContent'
 
 export function VibyUserMessage() {
     const ctx = useVibyChatContext()
@@ -18,25 +18,30 @@ export function VibyUserMessage() {
     })
     const status = useAssistantState(({ message }) => {
         if (message.role !== 'user') return undefined
-        const custom = message.metadata.custom as Partial<VibyChatMessageMetadata> | undefined
+        const custom = getVibyMessageMetadata(message)
         return custom?.status
     })
     const localId = useAssistantState(({ message }) => {
         if (message.role !== 'user') return null
-        const custom = message.metadata.custom as Partial<VibyChatMessageMetadata> | undefined
+        const custom = getVibyMessageMetadata(message)
         return custom?.localId ?? null
     })
     const attachments = useAssistantState(({ message }) => {
         if (message.role !== 'user') return undefined
-        const custom = message.metadata.custom as Partial<VibyChatMessageMetadata> | undefined
+        const custom = getVibyMessageMetadata(message)
         return custom?.attachments
     })
+    const renderMode = useAssistantState(({ message }) => {
+        if (message.role !== 'user') return 'plain'
+        const custom = getVibyMessageMetadata(message)
+        return custom?.renderMode ?? 'plain'
+    })
     const isCliOutput = useAssistantState(({ message }) => {
-        const custom = message.metadata.custom as Partial<VibyChatMessageMetadata> | undefined
+        const custom = getVibyMessageMetadata(message)
         return custom?.kind === 'cli-output'
     })
     const cliText = useAssistantState(({ message }) => {
-        const custom = message.metadata.custom as Partial<VibyChatMessageMetadata> | undefined
+        const custom = getVibyMessageMetadata(message)
         if (custom?.kind !== 'cli-output') return ''
         return message.content.find((part) => part.type === 'text')?.text ?? ''
     })
@@ -69,7 +74,7 @@ export function VibyUserMessage() {
             <MessageSurface tone="user" copyText={hasText ? text : null}>
                 <div className="flex min-w-0 items-end gap-2">
                     <div className="min-w-0 flex-1">
-                        {hasText && <LazyRainbowText text={text} />}
+                        {hasText && <TextContent text={text} mode={renderMode} />}
                         {hasAttachments && <MessageAttachments attachments={attachments} />}
                     </div>
                     {status ? (

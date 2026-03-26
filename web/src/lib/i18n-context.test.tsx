@@ -145,4 +145,16 @@ describe('i18n locale detection', () => {
             expect(screen.getByText('登录')).toBeInTheDocument()
         })
     })
+
+    it('loads English translations on demand when bootstrap cache is cold', async () => {
+        render(
+            <I18nProvider>
+                <TranslationProbe />
+            </I18nProvider>
+        )
+
+        await waitFor(() => {
+            expect(screen.getByText('Sign In')).toBeInTheDocument()
+        })
+    })
 })

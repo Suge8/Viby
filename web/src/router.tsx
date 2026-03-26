@@ -5,35 +5,27 @@ import {
     createRootRoute,
     createRoute,
     createRouter,
-    useLocation,
-    useParams,
 } from '@tanstack/react-router'
 import { App } from '@/App'
 import { RouteLoadingFallback } from '@/components/loading/RouteLoadingFallback'
 import {
+    loadSessionsIndexRouteModule,
     loadSessionsShellRouteModule,
+    loadSessionChatRouteModule,
     loadSessionFileRouteModule,
     loadSessionFilesRouteModule,
     loadNewSessionRouteModule,
-    loadSessionChatRouteModule,
     loadSessionTerminalRouteModule,
     loadSettingsRouteModule,
-    SESSIONS_IDLE_PRELOADERS
 } from '@/routes/sessions/sessionRoutePreload'
 import type { LoadingStateKind } from '@/components/loading/loadingStatePresentation'
 
+const SessionsRoutePage = lazy(loadSessionsShellRouteModule)
+const SessionsIndexRoutePage = lazy(loadSessionsIndexRouteModule)
+const SessionChatRoutePage = lazy(loadSessionChatRouteModule)
 const FilesPage = lazy(loadSessionFilesRouteModule)
 const FilePage = lazy(loadSessionFileRouteModule)
 const TerminalPage = lazy(loadSessionTerminalRouteModule)
-const SessionChatRoutePage = lazy(loadSessionChatRouteModule)
-const SessionsShellRoutePage = lazy(async () => {
-    const module = await loadSessionsShellRouteModule()
-    return { default: module.SessionsShell }
-})
-const SessionsIndexRoutePage = lazy(async () => {
-    const module = await loadSessionsShellRouteModule()
-    return { default: module.SessionsIndexPage }
-})
 const NewSessionRoutePage = lazy(loadNewSessionRouteModule)
 const SettingsPage = lazy(loadSettingsRouteModule)
 
@@ -44,7 +36,7 @@ type SessionFileSearch = {
     tab?: SessionSearchTab
 }
 
-type RouteLoadingKind = Exclude<LoadingStateKind, 'authorizing'>
+type RouteLoadingKind = LoadingStateKind
 
 type RouteSuspenseProps = {
     kind: RouteLoadingKind
@@ -109,17 +101,16 @@ function SettingsRoutePage(): React.JSX.Element {
     )
 }
 
-function SessionDetailRoute(): React.JSX.Element {
-    const pathname = useLocation({ select: location => location.pathname })
-    const { sessionId } = useParams({ from: '/sessions/$sessionId' })
-    const basePath = `/sessions/${sessionId}`
-    const isChat = pathname === basePath || pathname === `${basePath}/`
+function SessionDetailRouteLayout(): React.JSX.Element {
+    return <Outlet />
+}
 
-    return isChat ? (
-        <RouteSuspense kind="session">
+function SessionChatRoutePageShell(): React.JSX.Element {
+    return (
+        <Suspense fallback={null}>
             <SessionChatRoutePage />
-        </RouteSuspense>
-    ) : <Outlet />
+        </Suspense>
+    )
 }
 
 function NewSessionRoutePageShell(): React.JSX.Element {
@@ -130,10 +121,10 @@ function NewSessionRoutePageShell(): React.JSX.Element {
     )
 }
 
-function SessionsRoutePage(): React.JSX.Element {
+function SessionsRoutePageShell(): React.JSX.Element {
     return (
         <RouteSuspense kind="workspace">
-            <SessionsShellRoutePage preloaders={SESSIONS_IDLE_PRELOADERS} />
+            <SessionsRoutePage />
         </RouteSuspense>
     )
 }
@@ -159,7 +150,7 @@ const indexRoute = createRoute({
 const sessionsRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: '/sessions',
-    component: SessionsRoutePage,
+    component: SessionsRoutePageShell,
 })
 
 const sessionsIndexRoute = createRoute({
@@ -171,7 +162,13 @@ const sessionsIndexRoute = createRoute({
 const sessionDetailRoute = createRoute({
     getParentRoute: () => sessionsRoute,
     path: '$sessionId',
-    component: SessionDetailRoute,
+    component: SessionDetailRouteLayout,
+})
+
+const sessionChatRoute = createRoute({
+    getParentRoute: () => sessionDetailRoute,
+    path: '/',
+    component: SessionChatRoutePageShell,
 })
 
 const sessionFilesRoute = createRoute({
@@ -228,6 +225,7 @@ export const routeTree = rootRoute.addChildren([
         sessionsIndexRoute,
         newSessionRoute,
         sessionDetailRoute.addChildren([
+            sessionChatRoute,
             sessionTerminalRoute,
             sessionFilesRoute,
             sessionFileRoute,

@@ -1,18 +1,20 @@
 import {
-    BulbIcon as SharedBulbIcon,
-    ClipboardIcon as SharedClipboardIcon,
-    EyeIcon as SharedEyeIcon,
-    FileDiffIcon as SharedFileDiffIcon,
-    GlobeIcon as SharedGlobeIcon,
     MessageSquareIcon as SharedMessageSquareIcon,
     PuzzleIcon as SharedPuzzleIcon,
     QuestionIcon as SharedQuestionIcon,
-    RocketIcon as SharedRocketIcon,
-    SearchIcon as SharedSearchIcon,
     TerminalIcon as SharedTerminalIcon,
     UsersIcon as SharedUsersIcon,
-    WrenchIcon as SharedWrenchIcon,
 } from '@/components/icons'
+import {
+    FeatureBulbIcon as SharedBulbIcon,
+    FeatureCopyIcon as SharedClipboardIcon,
+    FeatureEyeIcon as SharedEyeIcon,
+    FeatureFileDiffIcon as SharedFileDiffIcon,
+    FeatureGlobeIcon as SharedGlobeIcon,
+    FeatureRocketIcon as SharedRocketIcon,
+    FeatureSearchIcon as SharedSearchIcon,
+    FeatureWrenchIcon as SharedWrenchIcon,
+} from '@/components/featureIcons'
 
 type IconProps = {
     className?: string

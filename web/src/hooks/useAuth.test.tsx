@@ -33,4 +33,19 @@ describe('useAuth', () => {
         expect(result.current.isLoading).toBe(false)
         expect(fetchSpy).not.toHaveBeenCalled()
     })
+
+    it('keeps a stored session token available even when the access-token source is missing', async () => {
+        const futureExp = Math.floor(Date.now() / 1000) + 3600
+        const storedToken = createJwt(futureExp)
+        localStorage.setItem('viby_session_token::http://hub.test', storedToken)
+
+        const { result } = renderHook(() => useAuth(null, 'http://hub.test'))
+
+        await waitFor(() => {
+            expect(result.current.token).toBe(storedToken)
+            expect(result.current.api).not.toBeNull()
+        })
+        expect(result.current.error).toBeNull()
+        expect(result.current.isLoading).toBe(false)
+    })
 })

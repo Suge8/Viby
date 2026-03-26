@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { isCodexFamilyFlavor } from '@/lib/agentFlavorUtils'
 import { getNoticePreset } from '@/lib/noticePresets'
 import { getInputStringAny } from '@/lib/toolInputUtils'
+import { formatUserFacingErrorMessage } from '@/lib/userFacingError'
 import { useTranslation } from '@/lib/use-translation'
 
 function isToolAllowedForSession(toolName: string, toolInput: unknown, allowedTools: string[] | undefined): boolean {
@@ -126,7 +127,10 @@ export function PermissionFooter(props: {
             props.onDone()
         } catch (e) {
             haptic.notification('error')
-            setError(e instanceof Error ? e.message : t('tool.requestFailed'))
+            setError(formatUserFacingErrorMessage(e, {
+                t,
+                fallbackKey: 'tool.requestFailed'
+            }))
         }
     }
 

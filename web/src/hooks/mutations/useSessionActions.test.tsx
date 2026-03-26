@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, renderHook } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import type { PropsWithChildren } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import type { ApiClient } from '@/api/client'
@@ -91,6 +91,61 @@ function primeSessionsCache(queryClient: QueryClient, session: Session): void {
 }
 
 describe('useSessionActions', () => {
+    it('optimistically clears thinking for abort and then commits the authoritative snapshot without invalidating', async () => {
+        const queryClient = createQueryClient()
+        const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
+        const activeThinkingSession: Session = {
+            ...createSession('closed'),
+            active: true,
+            activeAt: 3_000,
+            thinking: true,
+            thinkingAt: 3_000,
+            metadata: {
+                ...createSession('closed').metadata!,
+                lifecycleState: 'running',
+                lifecycleStateSince: 3_000
+            }
+        }
+        primeSessionsCache(queryClient, activeThinkingSession)
+
+        let resolveAbort!: (session: Session) => void
+        const abortedSession: Session = {
+            ...activeThinkingSession,
+            thinking: false,
+            thinkingAt: 4_000
+        }
+        const api = {
+            abortSession: vi.fn(() => new Promise<Session>((resolve) => {
+                resolveAbort = resolve
+            }))
+        } as unknown as ApiClient
+
+        const { result } = renderHook(
+            () => useSessionActions(api, 'session-1', 'codex'),
+            { wrapper: createWrapper(queryClient) }
+        )
+
+        let abortPromise: Promise<void> | undefined
+        await act(async () => {
+            abortPromise = result.current.abortSession()
+            await Promise.resolve()
+        })
+
+        await waitFor(() => {
+            expect(queryClient.getQueryData<{ session: Session }>(queryKeys.session('session-1'))?.session.thinking).toBe(false)
+            expect(queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)?.sessions[0]?.thinking).toBe(false)
+        })
+
+        await act(async () => {
+            resolveAbort(abortedSession)
+            await abortPromise
+        })
+
+        expect(api.abortSession).toHaveBeenCalledWith('session-1')
+        expect(queryClient.getQueryData<{ session: Session }>(queryKeys.session('session-1'))?.session.thinkingAt).toBe(4_000)
+        expect(invalidateQueries).not.toHaveBeenCalled()
+    })
+
     it('writes the final archived snapshot into both detail and list caches immediately after archive succeeds', async () => {
         const queryClient = createQueryClient()
         const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
@@ -152,6 +207,54 @@ describe('useSessionActions', () => {
         expect(invalidateQueries).not.toHaveBeenCalled()
     })
 
+    it('writes the switched remote session snapshot directly into cache without invalidating', async () => {
+        const queryClient = createQueryClient()
+        const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
+        const localSession: Session = {
+            ...createSession('closed'),
+            active: true,
+            activeAt: 3_000,
+            metadata: {
+                ...createSession('closed').metadata!,
+                lifecycleState: 'running',
+                lifecycleStateSince: 3_000
+            },
+            agentState: {
+                controlledByUser: true,
+                requests: {},
+                completedRequests: {}
+            }
+        }
+        primeSessionsCache(queryClient, localSession)
+
+        const switchedSession: Session = {
+            ...localSession,
+            agentState: {
+                controlledByUser: false,
+                requests: {},
+                completedRequests: {}
+            },
+            agentStateVersion: 2
+        }
+        const api = {
+            switchSession: vi.fn(async () => switchedSession)
+        } as Partial<ApiClient> as ApiClient
+
+        const { result } = renderHook(
+            () => useSessionActions(api, 'session-1', 'codex'),
+            { wrapper: createWrapper(queryClient) }
+        )
+
+        await act(async () => {
+            await result.current.switchSession()
+        })
+
+        expect(api.switchSession).toHaveBeenCalledWith('session-1')
+        expect(queryClient.getQueryData<{ session: Session }>(queryKeys.session('session-1'))?.session.agentState?.controlledByUser).toBe(false)
+        expect(queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)?.sessions[0]?.active).toBe(true)
+        expect(invalidateQueries).not.toHaveBeenCalled()
+    })
+
     it('applies live model and reasoning updates for remote Claude sessions', async () => {
         const queryClient = createQueryClient()
         const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
@@ -201,6 +304,50 @@ describe('useSessionActions', () => {
         expect(api.setModelReasoningEffort).toHaveBeenCalledWith('session-1', 'max')
         expect(queryClient.getQueryData<{ session: Session }>(queryKeys.session('session-1'))?.session.model).toBe('opus')
         expect(queryClient.getQueryData<{ session: Session }>(queryKeys.session('session-1'))?.session.modelReasoningEffort).toBe('max')
+        expect(invalidateQueries).not.toHaveBeenCalled()
+    })
+
+    it('applies live model updates for remote Gemini sessions', async () => {
+        const queryClient = createQueryClient()
+        const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
+        const baseSession = {
+            ...createSession('closed'),
+            metadata: {
+                ...createSession('closed').metadata!,
+                flavor: 'gemini' as const,
+                lifecycleState: 'running' as const
+            },
+            active: true,
+            model: null,
+            modelReasoningEffort: null
+        }
+        primeSessionsCache(queryClient, baseSession)
+        const api = {
+            setModel: vi.fn(async () => ({
+                ...baseSession,
+                model: 'gemini-2.5-flash-lite'
+            }))
+        } as Partial<ApiClient> as ApiClient
+
+        const { result } = renderHook(
+            () => useSessionActions(api, 'session-1', 'gemini', {
+                liveConfigSupport: {
+                    isRemoteManaged: true,
+                    canChangePermissionMode: true,
+                    canChangeCollaborationMode: false,
+                    canChangeModel: true,
+                    canChangeModelReasoningEffort: false
+                }
+            }),
+            { wrapper: createWrapper(queryClient) }
+        )
+
+        await act(async () => {
+            await result.current.setModel('gemini-2.5-flash-lite')
+        })
+
+        expect(api.setModel).toHaveBeenCalledWith('session-1', 'gemini-2.5-flash-lite')
+        expect(queryClient.getQueryData<{ session: Session }>(queryKeys.session('session-1'))?.session.model).toBe('gemini-2.5-flash-lite')
         expect(invalidateQueries).not.toHaveBeenCalled()
     })
 

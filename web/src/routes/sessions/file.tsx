@@ -1,38 +1,55 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useParams, useSearch } from '@tanstack/react-router'
-import { CodeBlock } from '@/components/CodeBlock'
 import { FileIcon } from '@/components/FileIcon'
-import { CheckIcon, CopyIcon } from '@/components/icons'
+import {
+    FeatureCheckIcon as CheckIcon,
+    FeatureCopyIcon as CopyIcon,
+} from '@/components/featureIcons'
 import { Button } from '@/components/ui/button'
 import { useAppContext } from '@/lib/app-context'
 import { useAppGoBack } from '@/hooks/useAppGoBack'
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
+import { useFinalizeBootShell } from '@/hooks/useFinalizeBootShell'
 import { queryKeys } from '@/lib/query-keys'
+import { formatOptionalUserFacingErrorMessage } from '@/lib/userFacingError'
 import { SessionRouteHeader } from '@/routes/sessions/components/SessionRouteHeader'
 import { SessionRouteTabs } from '@/routes/sessions/components/SessionRouteTabs'
-import { DiffDisplay, FileContentSkeleton } from '@/routes/sessions/filePageViews'
-import { decodeFilePath, extractCommandError, getUtf8ByteLength, isBinaryContent, MAX_COPYABLE_FILE_BYTES, resolveFileLanguage } from '@/routes/sessions/filePageUtils'
+import { FileContentSkeleton, PlainFileContent } from '@/routes/sessions/filesPageViews'
+import {
+    decodeFilePath,
+    extractCommandError,
+    getPreferredFileDisplayMode,
+    getUtf8ByteLength,
+    isBinaryContent,
+    MAX_COPYABLE_FILE_BYTES,
+    resolveActiveFileDisplayMode,
+    resolveFileLanguage,
+    shouldLoadFileContent,
+    type FileDisplayMode,
+} from '@/routes/sessions/filePageUtils'
 import { useTranslation } from '@/lib/use-translation'
 import { decodeBase64 } from '@/lib/utils'
 
-type DisplayMode = 'diff' | 'file'
+const LazyFileContentView = lazy(async () => import('@/routes/sessions/fileContentView'))
 
-const DISPLAY_MODES: DisplayMode[] = ['diff', 'file']
+const DISPLAY_MODES: readonly FileDisplayMode[] = ['diff', 'file'] as const
 
 export default function FilePage(): ReactNode {
     const { t } = useTranslation()
+    useFinalizeBootShell()
     const { api } = useAppContext()
     const { copied: pathCopied, copy: copyPath } = useCopyToClipboard()
     const goBack = useAppGoBack()
     const { sessionId } = useParams({ from: '/sessions/$sessionId/file' })
     const search = useSearch({ from: '/sessions/$sessionId/file' })
-    const [displayMode, setDisplayMode] = useState<DisplayMode>('diff')
 
     const encodedPath = typeof search.path === 'string' ? search.path : ''
     const staged = search.staged
     const filePath = useMemo(() => decodeFilePath(encodedPath), [encodedPath])
     const fileName = filePath.split('/').pop() || filePath || 'File'
+    const preferredDisplayMode = getPreferredFileDisplayMode(search.tab)
+    const [displayMode, setDisplayMode] = useState<FileDisplayMode>(preferredDisplayMode)
 
     const diffQuery = useQuery({
         queryKey: queryKeys.gitFileDiff(sessionId, filePath, staged),
@@ -46,6 +63,21 @@ export default function FilePage(): ReactNode {
         enabled: Boolean(api && sessionId && filePath),
     })
 
+    const diffContent = diffQuery.data?.success ? diffQuery.data.stdout ?? '' : ''
+    const hasDiffContent = diffContent.length > 0
+    let diffResolution: 'error' | 'ready' | 'pending' = 'pending'
+    if (diffQuery.isError) {
+        diffResolution = 'error'
+    } else if (diffQuery.isSuccess) {
+        diffResolution = 'ready'
+    }
+    const shouldRequestFileContent = shouldLoadFileContent({
+        displayMode,
+        diffResolution,
+        diffCommandFailed: diffQuery.data?.success === false,
+        hasDiffContent,
+    })
+
     const fileQuery = useQuery({
         queryKey: queryKeys.sessionFile(sessionId, filePath),
         queryFn: async () => {
@@ -55,10 +87,9 @@ export default function FilePage(): ReactNode {
 
             return await api.readSessionFile(sessionId, filePath)
         },
-        enabled: Boolean(api && sessionId && filePath),
+        enabled: Boolean(api && sessionId && filePath) && shouldRequestFileContent,
     })
 
-    const diffContent = diffQuery.data?.success ? diffQuery.data.stdout ?? '' : ''
     const diffError = extractCommandError(diffQuery.data)
     const fileContentResult = fileQuery.data
     const decodedContentResult = fileContentResult?.success && fileContentResult.content
@@ -74,21 +105,28 @@ export default function FilePage(): ReactNode {
         && !binaryFile
         && decodedContent.length > 0
         && contentSizeBytes <= MAX_COPYABLE_FILE_BYTES
-    const loading = diffQuery.isLoading || fileQuery.isLoading
-    const fileError = fileContentResult && !fileContentResult.success
-        ? fileContentResult.error ?? t('file.error.read')
+    const loading = diffQuery.isLoading || (shouldRequestFileContent && fileQuery.isLoading)
+    const fileError = fileContentResult?.success === false
+        ? formatOptionalUserFacingErrorMessage(fileContentResult.error, {
+            t,
+            fallbackKey: 'file.error.read'
+        })
         : null
-    const hasDiffContent = diffContent.length > 0
-    const diffUnavailableMessage = diffError ? t('file.error.diffUnavailable', { error: diffError }) : null
+    const diffUnavailableMessage = formatOptionalUserFacingErrorMessage(diffError, {
+        t,
+        fallbackKey: 'file.error.diffUnavailable'
+    })
 
     useEffect(() => {
-        if (!hasDiffContent || diffQuery.data?.success === false) {
-            setDisplayMode('file')
-        }
-    }, [diffQuery.data?.success, hasDiffContent])
+        setDisplayMode(preferredDisplayMode)
+    }, [filePath, preferredDisplayMode])
 
+    const activeMode = resolveActiveFileDisplayMode({
+        hasDiffContent,
+        preferredDisplayMode: displayMode,
+    })
     const showModeTabs = hasDiffContent
-    const activeMode: DisplayMode = showModeTabs ? displayMode : 'file'
+    const visibleContent = activeMode === 'diff' && hasDiffContent ? diffContent : decodedContent
 
     return (
         <div className="flex h-full flex-col">
@@ -143,14 +181,23 @@ export default function FilePage(): ReactNode {
                     ) : binaryFile ? (
                         <div className="text-sm text-[var(--app-hint)]">{t('file.error.binary')}</div>
                     ) : activeMode === 'diff' && hasDiffContent ? (
-                        <DiffDisplay diffContent={diffContent} />
+                        <Suspense fallback={<PlainFileContent content={visibleContent} />}>
+                            <LazyFileContentView
+                                content={visibleContent}
+                                language="diff"
+                                mode="diff"
+                                showCopyButton={false}
+                            />
+                        </Suspense>
                     ) : decodedContent ? (
-                        <CodeBlock
-                            code={decodedContent}
-                            language={language}
-                            highlight="always"
-                            showCopyButton={canCopyContent}
-                        />
+                        <Suspense fallback={<PlainFileContent content={visibleContent} />}>
+                            <LazyFileContentView
+                                content={visibleContent}
+                                language={language}
+                                mode="file"
+                                showCopyButton={canCopyContent}
+                            />
+                        </Suspense>
                     ) : activeMode === 'diff' ? (
                         <div className="text-sm text-[var(--app-hint)]">{t('file.error.noChanges')}</div>
                     ) : (

@@ -1,5 +1,5 @@
 import { Suspense, lazy, type JSX, useCallback, useEffect, useMemo, useRef } from 'react'
-import { Outlet, useMatchRoute, useRouter } from '@tanstack/react-router'
+import { useMatchRoute, useRouter } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import type { ApiClient } from '@/api/client'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
@@ -17,15 +17,18 @@ import {
 import { consumeDiscardedPageRecovery, consumePendingAppRecovery } from '@/lib/appRecovery'
 import type { SyncEvent } from '@/types/api'
 
-const LazyAppFloatingNoticeLayer = lazy(async () => {
+async function loadAppFloatingNoticeLayerModule() {
     const module = await import('@/components/AppFloatingNoticeLayer')
     return { default: module.AppFloatingNoticeLayer }
-})
+}
 
-const LazyInstallPrompt = lazy(async () => {
+async function loadInstallPromptModule() {
     const module = await import('@/components/InstallPrompt')
     return { default: module.InstallPrompt }
-})
+}
+
+const LazyAppFloatingNoticeLayer = lazy(loadAppFloatingNoticeLayerModule)
+const LazyInstallPrompt = lazy(loadInstallPromptModule)
 
 type ToastEvent = Extract<SyncEvent, { type: 'toast' }>
 type RealtimeConnectDetails = {
@@ -38,7 +41,6 @@ type AppRealtimeRuntimeProps = {
     api: ApiClient
     token: string
     baseUrl: string
-    appViewportRoute: string
 }
 
 export function AppRealtimeRuntime(props: AppRealtimeRuntimeProps): JSX.Element {
@@ -161,16 +163,11 @@ export function AppRealtimeRuntime(props: AppRealtimeRuntimeProps): JSX.Element 
             <Suspense fallback={null}>
                 <LazyAppFloatingNoticeLayer banner={banner} />
             </Suspense>
-            <div className="app-shell flex h-full flex-col" data-viby-route={props.appViewportRoute}>
-                <div className="app-route-layer min-h-0 flex-1">
-                    <div className="app-route-transition h-full min-h-0 w-full">
-                        <Outlet />
-                    </div>
-                </div>
-            </div>
-            <Suspense fallback={null}>
-                <LazyInstallPrompt suppressed={installPromptSuppressed} />
-            </Suspense>
+            {!installPromptSuppressed ? (
+                <Suspense fallback={null}>
+                    <LazyInstallPrompt suppressed={false} />
+                </Suspense>
+            ) : null}
         </>
     )
 }

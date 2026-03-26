@@ -7,6 +7,11 @@ import {
     useChatViewportLayout
 } from './useChatViewportLayout'
 
+vi.mock('@/lib/navigationTransition', () => ({
+    NAVIGATION_TRANSITION_EVENT_NAME: 'viby:navigation-transition-change',
+    isNavigationTransitionActive: vi.fn(() => false)
+}))
+
 type VisualViewportMock = {
     height: number
     offsetTop: number
@@ -118,6 +123,7 @@ describe('useChatViewportLayout', () => {
             safeAreaInsetBottomPx: 34,
             editableFocusActive: true,
             isStandalone: true,
+            navigationTransitionActive: false,
             previousState: null,
             orientationKey: 'portrait'
         })
@@ -126,6 +132,7 @@ describe('useChatViewportLayout', () => {
             isStandalone: true,
             isKeyboardOpen: true,
             bottomInsetPx: 245,
+            floatingControlBottomInsetPx: 245,
             stableViewportHeightPx: 664
         })
 
@@ -135,6 +142,7 @@ describe('useChatViewportLayout', () => {
             safeAreaInsetBottomPx: 34,
             editableFocusActive: false,
             isStandalone: true,
+            navigationTransitionActive: false,
             previousState: firstFocusState,
             orientationKey: 'portrait'
         })
@@ -143,6 +151,7 @@ describe('useChatViewportLayout', () => {
             isStandalone: true,
             isKeyboardOpen: false,
             bottomInsetPx: 0,
+            floatingControlBottomInsetPx: 0,
             stableViewportHeightPx: 664
         })
 
@@ -152,6 +161,7 @@ describe('useChatViewportLayout', () => {
             safeAreaInsetBottomPx: 34,
             editableFocusActive: true,
             isStandalone: true,
+            navigationTransitionActive: false,
             previousState: blurState,
             orientationKey: 'portrait'
         })
@@ -160,7 +170,41 @@ describe('useChatViewportLayout', () => {
             isStandalone: true,
             isKeyboardOpen: true,
             bottomInsetPx: 245,
+            floatingControlBottomInsetPx: 245,
             stableViewportHeightPx: 664
+        })
+    })
+
+    it('keeps the floating control inset stable while the keyboard viewport jitters during the same focus cycle', () => {
+        const firstFocusState = getNextChatViewportState({
+            layoutViewportHeight: 844,
+            visualViewport: { height: 544, offsetTop: 0 },
+            safeAreaInsetBottomPx: 34,
+            editableFocusActive: true,
+            isStandalone: true,
+            navigationTransitionActive: false,
+            previousState: null,
+            orientationKey: 'portrait'
+        })
+
+        const jitteredFocusState = getNextChatViewportState({
+            layoutViewportHeight: 844,
+            visualViewport: { height: 592, offsetTop: 0 },
+            safeAreaInsetBottomPx: 34,
+            editableFocusActive: true,
+            isStandalone: true,
+            navigationTransitionActive: false,
+            previousState: firstFocusState,
+            orientationKey: 'portrait'
+        })
+
+        expect(firstFocusState).toMatchObject({
+            bottomInsetPx: 266,
+            floatingControlBottomInsetPx: 266
+        })
+        expect(jitteredFocusState).toMatchObject({
+            bottomInsetPx: 218,
+            floatingControlBottomInsetPx: 266
         })
     })
 
@@ -182,7 +226,8 @@ describe('useChatViewportLayout', () => {
         expect(result.current).toEqual({
             isStandalone: true,
             isKeyboardOpen: false,
-            bottomInsetPx: 0
+            bottomInsetPx: 0,
+            floatingControlBottomInsetPx: 0
         })
 
         act(() => {
@@ -194,7 +239,8 @@ describe('useChatViewportLayout', () => {
         expect(result.current).toEqual({
             isStandalone: true,
             isKeyboardOpen: true,
-            bottomInsetPx: 266
+            bottomInsetPx: 266,
+            floatingControlBottomInsetPx: 266
         })
 
         act(() => {
@@ -206,10 +252,43 @@ describe('useChatViewportLayout', () => {
         expect(result.current).toEqual({
             isStandalone: true,
             isKeyboardOpen: false,
-            bottomInsetPx: 0
+            bottomInsetPx: 0,
+            floatingControlBottomInsetPx: 0
         })
 
         input.remove()
+    })
+
+    it('keeps the previous non-editable layout stable while a navigation transition is active', () => {
+        const previousState = getNextChatViewportState({
+            layoutViewportHeight: 844,
+            visualViewport: { height: 844, offsetTop: 0 },
+            safeAreaInsetBottomPx: 34,
+            editableFocusActive: false,
+            isStandalone: true,
+            navigationTransitionActive: false,
+            previousState: null,
+            orientationKey: 'portrait'
+        })
+
+        const nextState = getNextChatViewportState({
+            layoutViewportHeight: 796,
+            visualViewport: { height: 796, offsetTop: 0 },
+            safeAreaInsetBottomPx: 34,
+            editableFocusActive: false,
+            isStandalone: true,
+            navigationTransitionActive: true,
+            previousState,
+            orientationKey: 'portrait'
+        })
+
+        expect(nextState).toMatchObject({
+            isStandalone: true,
+            isKeyboardOpen: false,
+            bottomInsetPx: 0,
+            floatingControlBottomInsetPx: 0,
+            stableViewportHeightPx: 844
+        })
     })
 
     it('ignores transient clipboard editables when tracking keyboard layout', () => {
@@ -237,7 +316,8 @@ describe('useChatViewportLayout', () => {
         expect(result.current).toEqual({
             isStandalone: true,
             isKeyboardOpen: false,
-            bottomInsetPx: 0
+            bottomInsetPx: 0,
+            floatingControlBottomInsetPx: 0
         })
 
         clipboardBuffer.remove()

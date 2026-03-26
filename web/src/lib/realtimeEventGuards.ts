@@ -10,6 +10,15 @@ export type SessionPatch = Partial<
     lifecycleStateSinceHint?: NonNullable<Session['metadata']>['lifecycleStateSince']
 }
 
+export function isArchivedKeepalivePatch(
+    lifecycleState: SessionPatch['lifecycleStateHint'] | null | undefined,
+    patch: SessionPatch
+): boolean {
+    return lifecycleState === 'archived'
+        && patch.lifecycleStateHint === undefined
+        && patch.active === true
+}
+
 function hasRecordShape(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null
 }

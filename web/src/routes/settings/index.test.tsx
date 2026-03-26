@@ -58,7 +58,7 @@ vi.mock('@/hooks/usePWAInstall', () => ({
     isIOSSafariBrowser: () => false
 }))
 
-vi.mock('@/lib/runtimeAssetRecovery', () => ({
+vi.mock('@/lib/runtimeAssetPolicy', () => ({
     shouldRegisterServiceWorkerForOrigin: () => true
 }))
 
@@ -101,21 +101,21 @@ describe('SettingsPage', () => {
         window.localStorage.clear()
     })
 
-    it('renders the About section', () => {
+    it('renders the About section', async () => {
         renderWithProviders(<SettingsPage />)
-        expect(screen.getByText('About')).toBeInTheDocument()
+        expect(await screen.findByText('About')).toBeInTheDocument()
     })
 
-    it('displays the App Version with correct value', () => {
+    it('displays the App Version with correct value', async () => {
         renderWithProviders(<SettingsPage />)
-        expect(screen.getAllByText('App Version').length).toBeGreaterThanOrEqual(1)
-        expect(screen.getAllByText(__APP_VERSION__).length).toBeGreaterThanOrEqual(1)
+        expect((await screen.findAllByText('App Version')).length).toBeGreaterThanOrEqual(1)
+        expect((await screen.findAllByText(__APP_VERSION__)).length).toBeGreaterThanOrEqual(1)
     })
 
-    it('displays the Protocol Version with correct value', () => {
+    it('displays the Protocol Version with correct value', async () => {
         renderWithProviders(<SettingsPage />)
-        expect(screen.getAllByText('Protocol Version').length).toBeGreaterThanOrEqual(1)
-        expect(screen.getAllByText(String(PROTOCOL_VERSION)).length).toBeGreaterThanOrEqual(1)
+        expect((await screen.findAllByText('Protocol Version')).length).toBeGreaterThanOrEqual(1)
+        expect((await screen.findAllByText(String(PROTOCOL_VERSION))).length).toBeGreaterThanOrEqual(1)
     })
 
     it('uses correct i18n keys for About section', () => {
@@ -126,10 +126,10 @@ describe('SettingsPage', () => {
         expect(calledKeys).toContain('settings.about.protocolVersion')
     })
 
-    it('renders the Appearance setting', () => {
+    it('renders the Appearance setting', async () => {
         renderWithProviders(<SettingsPage />)
-        expect(screen.getAllByText('Appearance').length).toBeGreaterThanOrEqual(1)
-        expect(screen.getAllByText('Follow System').length).toBeGreaterThanOrEqual(1)
+        expect((await screen.findAllByText('Appearance')).length).toBeGreaterThanOrEqual(1)
+        expect((await screen.findAllByText('Follow System')).length).toBeGreaterThanOrEqual(1)
     })
 
     it('uses correct i18n keys for Appearance setting', () => {
@@ -151,11 +151,11 @@ describe('SettingsPage', () => {
         expect(screen.queryByText('Personalize Viby for your screen, theme, and reading comfort.')).not.toBeInTheDocument()
     })
 
-    it('renders the notifications section with an explicit enable action', () => {
+    it('renders the notifications section with an explicit enable action', async () => {
         renderWithProviders(<SettingsPage />)
 
-        expect(screen.getAllByText('Notifications').length).toBeGreaterThanOrEqual(1)
-        expect(screen.getAllByText('Push Notifications').length).toBeGreaterThanOrEqual(1)
-        expect(screen.getAllByRole('button', { name: 'Turn On' }).length).toBeGreaterThanOrEqual(1)
+        expect((await screen.findAllByText('Notifications')).length).toBeGreaterThanOrEqual(1)
+        expect((await screen.findAllByText('Push Notifications')).length).toBeGreaterThanOrEqual(1)
+        expect((await screen.findAllByRole('button', { name: 'Turn On' })).length).toBeGreaterThanOrEqual(1)
     })
 })

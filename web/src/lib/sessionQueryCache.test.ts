@@ -1,9 +1,14 @@
 import { QueryClient } from '@tanstack/react-query'
 import { describe, expect, it } from 'vitest'
+import { waitFor } from '@testing-library/react'
 import { ingestIncomingMessages, getMessageWindowState } from '@/lib/message-window-store'
 import { queryKeys } from '@/lib/query-keys'
 import type { Session, SessionsResponse } from '@/types/api'
-import { removeSessionClientState } from './sessionQueryCache'
+import {
+    markSessionPendingUserTurnInQueryCache,
+    removeSessionClientState,
+    writeSessionToQueryCache
+} from './sessionQueryCache'
 
 function createSession(): Session {
     return {
@@ -35,7 +40,7 @@ function createSession(): Session {
 }
 
 describe('removeSessionClientState', () => {
-    it('removes session detail, list summary, and message window state through one helper', () => {
+    it('removes session detail, list summary, and message window state through one helper', async () => {
         const queryClient = new QueryClient()
         const session = createSession()
 
@@ -85,6 +90,100 @@ describe('removeSessionClientState', () => {
 
         expect(queryClient.getQueryData(queryKeys.session(session.id))).toBeUndefined()
         expect(queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)?.sessions).toEqual([])
-        expect(getMessageWindowState(session.id).messages).toEqual([])
+        await waitFor(() => {
+            expect(getMessageWindowState(session.id).messages).toEqual([])
+        })
+    })
+})
+
+describe('writeSessionToQueryCache', () => {
+    it('preserves existing list message activity when the incoming session snapshot has no activity fields', () => {
+        const queryClient = new QueryClient()
+        const session = createSession()
+
+        queryClient.setQueryData<SessionsResponse>(queryKeys.sessions, {
+            sessions: [{
+                id: session.id,
+                active: true,
+                thinking: false,
+                activeAt: 1_500,
+                updatedAt: 2_500,
+                latestActivityAt: 2_500,
+                latestActivityKind: 'user',
+                latestCompletedReplyAt: 2_000,
+                lifecycleState: 'running',
+                lifecycleStateSince: 1_500,
+                metadata: {
+                    path: session.metadata?.path ?? '',
+                    flavor: session.metadata?.flavor ?? null
+                },
+                todoProgress: null,
+                pendingRequestsCount: 0,
+                resumeAvailable: false,
+                model: session.model,
+                modelReasoningEffort: session.modelReasoningEffort,
+                permissionMode: session.permissionMode,
+                collaborationMode: session.collaborationMode
+            }]
+        })
+
+        writeSessionToQueryCache(queryClient, {
+            ...session,
+            active: true,
+            metadata: {
+                ...session.metadata!,
+                lifecycleState: 'running',
+                lifecycleStateSince: 1_500
+            }
+        })
+
+        expect(queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)?.sessions[0]).toMatchObject({
+            latestActivityAt: 2_500,
+            latestActivityKind: 'user',
+            latestCompletedReplyAt: 2_000,
+            lifecycleState: 'running'
+        })
+    })
+})
+
+describe('markSessionPendingUserTurnInQueryCache', () => {
+    it('moves the list summary into pending-user-turn immediately after send start', () => {
+        const queryClient = new QueryClient()
+        const session = createSession()
+
+        queryClient.setQueryData<SessionsResponse>(queryKeys.sessions, {
+            sessions: [{
+                id: session.id,
+                active: true,
+                thinking: false,
+                activeAt: 1_500,
+                updatedAt: 2_000,
+                latestActivityAt: 2_000,
+                latestActivityKind: 'ready',
+                latestCompletedReplyAt: 2_000,
+                lifecycleState: 'running',
+                lifecycleStateSince: 1_500,
+                metadata: {
+                    path: session.metadata?.path ?? '',
+                    flavor: session.metadata?.flavor ?? null
+                },
+                todoProgress: null,
+                pendingRequestsCount: 0,
+                resumeAvailable: false,
+                model: session.model,
+                modelReasoningEffort: session.modelReasoningEffort,
+                permissionMode: session.permissionMode,
+                collaborationMode: session.collaborationMode
+            }]
+        })
+
+        markSessionPendingUserTurnInQueryCache(queryClient, session.id, 3_000)
+
+        expect(queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)?.sessions[0]).toMatchObject({
+            updatedAt: 3_000_000,
+            latestActivityAt: 3_000_000,
+            latestActivityKind: 'user',
+            latestCompletedReplyAt: 2_000
+        })
     })
 })

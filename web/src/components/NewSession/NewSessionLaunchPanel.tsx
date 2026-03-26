@@ -1,13 +1,14 @@
-import { motion, useReducedMotion } from 'motion/react'
 import {
     AlertIcon,
-    BrandIcon,
-    BulbIcon,
-    GlobeIcon,
+    BrandMarkIcon,
     PuzzleIcon,
-    RocketIcon,
     TerminalIcon,
 } from '@/components/icons'
+import {
+    FeatureBulbIcon as BulbIcon,
+    FeatureGlobeIcon as GlobeIcon,
+    FeatureRocketIcon as RocketIcon,
+} from '@/components/featureIcons'
 import {
     PressableSurface,
     PressableSurfaceSelectionIndicator
@@ -42,12 +43,10 @@ type LaunchSectionHeadingProps = {
     title: string
 }
 
-const PANEL_TRANSITION = { duration: 0.24, ease: [0.22, 1, 0.36, 1] as const }
-
 const AGENT_OPTIONS: Array<{ value: AgentType; icon: React.JSX.Element; accentClassName: string }> = [
     {
         value: 'claude',
-        icon: <BrandIcon className="h-4.5 w-4.5" />,
+        icon: <BrandMarkIcon className="h-4.5 w-4.5" />,
         accentClassName: 'text-[var(--ds-accent-coral)]'
     },
     {
@@ -173,19 +172,14 @@ function AgentPicker(props: {
 
 export function NewSessionLaunchPanel(props: LaunchPanelProps): React.JSX.Element {
     const { t } = useTranslation()
-    const shouldReduceMotion = useReducedMotion()
 
     return (
         <NewSessionSectionCard
             title={t('newSession.launchSettings')}
-            icon={<BrandIcon className="h-5 w-5" />}
+            icon={<BrandMarkIcon className="h-5 w-5" />}
             accent="lime"
         >
-            <motion.div
-                layout
-                transition={shouldReduceMotion ? { duration: 0 } : PANEL_TRANSITION}
-                className="space-y-4"
-            >
+            <div className="space-y-4">
                 <AgentPicker
                     agent={props.form.agent}
                     isDisabled={props.options.isDisabled}
@@ -241,7 +235,7 @@ export function NewSessionLaunchPanel(props: LaunchPanelProps): React.JSX.Elemen
                         </label>
                     </div>
                 </div>
-            </motion.div>
+            </div>
         </NewSessionSectionCard>
     )
 }

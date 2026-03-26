@@ -1,15 +1,41 @@
 import type { QueryClient } from '@tanstack/react-query'
 import type { Session, SessionResponse, SessionsResponse, SessionSummary } from '@/types/api'
-import { clearMessageWindow } from '@/lib/message-window-store'
+import { loadMessageWindowStoreModule } from '@/lib/messageWindowStoreModule'
 import { queryKeys } from '@/lib/query-keys'
-import { removeSessionSummaryCache, upsertSessionSummaryCache } from '@/lib/realtimeSessionSummaryCache'
+import {
+    markSessionSummaryPendingUserTurn,
+    removeSessionSummaryCache,
+    upsertSessionSummaryCache
+} from '@/lib/realtimeSessionSummaryCache'
+import { readSessionWarmSnapshot, removeSessionWarmSnapshot, writeSessionWarmSnapshot } from '@/lib/sessionWarmSnapshot'
+import { removeSessionsWarmSnapshot, writeSessionsWarmSnapshot } from '@/lib/sessionsWarmSnapshot'
 
 type SessionFlavor = NonNullable<NonNullable<Session['metadata']>['flavor']> | null
+export type SessionPlaceholderSource = 'cache' | 'warm' | 'summary' | null
 
 export function writeSessionToQueryCache(queryClient: QueryClient, session: Session): void {
     queryClient.setQueryData<SessionResponse>(queryKeys.session(session.id), { session })
+    writeSessionWarmSnapshot(session)
     queryClient.setQueryData<SessionsResponse | undefined>(queryKeys.sessions, (previous) => {
-        return upsertSessionSummaryCache(previous, session)
+        const next = upsertSessionSummaryCache(previous, session)
+        if (next) {
+            writeSessionsWarmSnapshot(next.sessions)
+        }
+        return next
+    })
+}
+
+export function markSessionPendingUserTurnInQueryCache(
+    queryClient: Pick<QueryClient, 'setQueryData'>,
+    sessionId: string,
+    createdAt: number
+): void {
+    queryClient.setQueryData<SessionsResponse | undefined>(queryKeys.sessions, (previous) => {
+        const result = markSessionSummaryPendingUserTurn(previous, sessionId, createdAt)
+        if (result.next) {
+            writeSessionsWarmSnapshot(result.next.sessions)
+        }
+        return result.next
     })
 }
 
@@ -18,10 +44,19 @@ export function removeSessionClientState(
     sessionId: string
 ): void {
     queryClient.setQueryData<SessionsResponse | undefined>(queryKeys.sessions, (previous) => {
-        return removeSessionSummaryCache(previous, sessionId)
+        const next = removeSessionSummaryCache(previous, sessionId)
+        if (next) {
+            writeSessionsWarmSnapshot(next.sessions)
+        } else {
+            removeSessionsWarmSnapshot()
+        }
+        return next
     })
     void queryClient.removeQueries({ queryKey: queryKeys.session(sessionId) })
-    clearMessageWindow(sessionId)
+    removeSessionWarmSnapshot(sessionId)
+    void loadMessageWindowStoreModule().then(({ removeMessageWindow }) => {
+        removeMessageWindow(sessionId)
+    })
 }
 
 export function getSessionResponseFromCache(
@@ -89,17 +124,44 @@ export function getSessionPlaceholderResponse(
     queryClient: Pick<QueryClient, 'getQueryData'>,
     sessionId: string
 ): SessionResponse | undefined {
+    return getSessionPlaceholderSeed(queryClient, sessionId).response
+}
+
+export function getSessionPlaceholderSeed(
+    queryClient: Pick<QueryClient, 'getQueryData'>,
+    sessionId: string
+): {
+    response: SessionResponse | undefined
+    source: SessionPlaceholderSource
+} {
     const cachedResponse = getSessionResponseFromCache(queryClient, sessionId)
     if (cachedResponse) {
-        return cachedResponse
+        return {
+            response: cachedResponse,
+            source: 'cache'
+        }
+    }
+
+    const warmSnapshot = readSessionWarmSnapshot(sessionId)
+    if (warmSnapshot) {
+        return {
+            response: warmSnapshot,
+            source: 'warm'
+        }
     }
 
     const cachedSummary = getSessionSummaryFromCache(queryClient, sessionId)
     if (!cachedSummary) {
-        return undefined
+        return {
+            response: undefined,
+            source: null
+        }
     }
 
     return {
-        session: createSessionSeedFromSummary(cachedSummary)
+        response: {
+            session: createSessionSeedFromSummary(cachedSummary)
+        },
+        source: 'summary'
     }
 }

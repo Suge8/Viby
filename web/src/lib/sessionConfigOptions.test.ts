@@ -7,6 +7,7 @@ import {
     getClaudeComposerReasoningEffortOptions,
     getCodexComposerModelOptions,
     getCodexComposerReasoningEffortOptions,
+    getGeminiComposerModelOptions,
     getNextClaudeComposerModel
 } from './sessionConfigOptions'
 
@@ -26,6 +27,17 @@ describe('sessionConfigOptions', () => {
             { value: 'gpt-5.4-mini', label: 'GPT-5.4 Mini' },
             { value: 'gpt-5.3-codex', label: 'GPT-5.3 Codex' },
             { value: 'gpt-5.2', label: 'GPT-5.2' },
+        ])
+    })
+
+    it('keeps new-session Gemini options aligned with gemini-cli 0.34.0 explicit models', () => {
+        expect(MODEL_OPTIONS.gemini).toEqual([
+            { value: 'auto', label: 'Terminal default model', labelKey: 'model.terminalDefault' },
+            { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+            { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+            { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
+            { value: 'gemini-3-pro-preview', label: 'Gemini 3 Pro Preview' },
+            { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' },
         ])
     })
 
@@ -66,6 +78,18 @@ describe('sessionConfigOptions', () => {
             { value: 'gpt-5.4-mini', label: 'GPT-5.4 Mini' },
             { value: 'gpt-5.3-codex', label: 'GPT-5.3 Codex' },
             { value: 'gpt-5.2', label: 'GPT-5.2' },
+        ])
+    })
+
+    it('includes the active non-curated Gemini model in composer options', () => {
+        expect(getGeminiComposerModelOptions('gemini-3.1-pro-preview')).toEqual([
+            { value: null, label: 'Terminal default model', labelKey: 'model.terminalDefault' },
+            { value: 'gemini-3.1-pro-preview', label: 'gemini-3.1-pro-preview' },
+            { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+            { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+            { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
+            { value: 'gemini-3-pro-preview', label: 'Gemini 3 Pro Preview' },
+            { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' },
         ])
     })
 

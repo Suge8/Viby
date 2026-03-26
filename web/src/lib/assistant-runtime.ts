@@ -3,6 +3,7 @@ import type { AppendMessage, AttachmentAdapter, ThreadMessageLike } from '@assis
 import { useExternalMessageConverter, useExternalStoreRuntime } from '@assistant-ui/react'
 import { safeStringify } from '@viby/protocol'
 import { renderEventLabel } from '@/chat/presentation'
+import type { TextRenderMode } from '@/chat/textRenderMode'
 import type { ChatBlock, CliOutputBlock } from '@/chat/types'
 import type { AgentEvent, ToolCallBlock } from '@/chat/types'
 import type { AttachmentMetadata, MessageStatus as VibyMessageStatus, Session } from '@/types/api'
@@ -10,6 +11,7 @@ import { getThreadMessageId } from '@/components/AssistantChat/threadMessageIden
 
 export type VibyChatMessageMetadata = {
     kind: 'user' | 'assistant' | 'tool' | 'event' | 'cli-output'
+    renderMode?: TextRenderMode
     status?: VibyMessageStatus
     localId?: string | null
     originalText?: string
@@ -31,6 +33,7 @@ function toThreadMessageLike(block: ChatBlock): ThreadMessageLike {
             metadata: {
                 custom: {
                     kind: 'user',
+                    renderMode: block.renderMode,
                     status: block.status,
                     localId: block.localId,
                     originalText: block.originalText,
@@ -47,7 +50,10 @@ function toThreadMessageLike(block: ChatBlock): ThreadMessageLike {
             createdAt: new Date(block.createdAt),
             content: [{ type: 'text', text: block.text }],
             metadata: {
-                custom: { kind: 'assistant' } satisfies VibyChatMessageMetadata
+                custom: {
+                    kind: 'assistant',
+                    renderMode: block.renderMode
+                } satisfies VibyChatMessageMetadata
             }
         }
     }

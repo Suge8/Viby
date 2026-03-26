@@ -1,4 +1,5 @@
 import type { AttachmentMetadata, MessageStatus } from '@/types/api'
+import type { TextRenderMode } from '@/chat/textRenderMode'
 
 export type UsageData = {
     input_tokens: number
@@ -118,6 +119,7 @@ export type UserTextBlock = {
     localId: string | null
     createdAt: number
     text: string
+    renderMode: TextRenderMode
     attachments?: AttachmentMetadata[]
     status?: MessageStatus
     originalText?: string
@@ -130,6 +132,7 @@ export type AgentTextBlock = {
     localId: string | null
     createdAt: number
     text: string
+    renderMode: TextRenderMode
     meta?: unknown
 }
 

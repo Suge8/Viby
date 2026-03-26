@@ -15,6 +15,7 @@ import {
 import {
     getSessionPatch,
     hasUnknownSessionPatchKeys,
+    isArchivedKeepalivePatch,
     isInactiveMachinePatch,
     isMachineRecord,
     isMachineRefreshOnlyPayload,
@@ -132,6 +133,10 @@ export function createRealtimeEventController(options: RealtimeEventControllerOp
 
         options.queryClient.setQueryData<SessionResponse | undefined>(queryKeys.session(sessionId), (previous) => {
             if (!previous?.session) {
+                return previous
+            }
+            if (isArchivedKeepalivePatch(previous.session.metadata?.lifecycleState, patch)) {
+                patched = true
                 return previous
             }
 

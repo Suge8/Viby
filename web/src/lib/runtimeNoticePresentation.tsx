@@ -1,8 +1,11 @@
-import { GlobeIcon, RefreshIcon } from '@/components/icons'
+import {
+    FeatureGlobeIcon as GlobeIcon,
+    FeatureRefreshIcon as RefreshIcon,
+} from '@/components/featureIcons'
 import type { RealtimeBannerState } from '@/hooks/useRealtimeFeedback'
 import type { AppRecoveryReason } from '@/lib/appRecovery'
 import type { Notice } from '@/lib/notice-center'
-import { isLocalNetworkOrigin, shouldRegisterServiceWorkerForOrigin } from '@/lib/runtimeAssetRecovery'
+import { isLocalNetworkOrigin, shouldRegisterServiceWorkerForOrigin } from '@/lib/runtimeAssetPolicy'
 
 const OFFLINE_NOTICE_ID = 'app:offline'
 const RUNTIME_NOTICE_ID = 'app:runtime'

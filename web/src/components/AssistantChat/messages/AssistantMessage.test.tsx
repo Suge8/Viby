@@ -125,4 +125,37 @@ describe('VibyAssistantMessage', () => {
         expect(await screen.findByTestId('rich-assistant-tool-content')).toBeInTheDocument()
         expect(screen.queryByTestId('rich-assistant-text-content')).toBeNull()
     })
+
+    it('uses metadata renderMode instead of rescanning plain text content', async () => {
+        mockState.message = {
+            id: 'assistant-markdown',
+            role: 'assistant',
+            metadata: {
+                custom: {
+                    kind: 'assistant',
+                    renderMode: 'markdown'
+                }
+            },
+            content: [{ type: 'text', text: 'assistant markdown contract' }]
+        }
+
+        renderAssistantMessage()
+
+        expect(await screen.findByTestId('rich-assistant-text-content')).toBeInTheDocument()
+        expect(screen.queryByTestId('rich-assistant-tool-content')).toBeNull()
+    })
+
+    it('skips rendering the assistant surface when the message has no visible content', () => {
+        mockState.message = {
+            id: 'assistant-empty',
+            role: 'assistant',
+            metadata: {},
+            content: [{ type: 'text', text: '   ' }]
+        }
+
+        renderAssistantMessage()
+
+        expect(document.querySelector('.ds-message-surface')).toBeNull()
+        expect(screen.queryByText('assistant content')).toBeNull()
+    })
 })

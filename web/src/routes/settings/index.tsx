@@ -3,13 +3,14 @@ import { SurfaceGroupCard } from '@/components/SurfaceGroupCard'
 import { SurfaceRouteHeader } from '@/components/SurfaceRouteHeader'
 import { BlurFade } from '@/components/ui/blur-fade'
 import { useAppGoBack } from '@/hooks/useAppGoBack'
+import { useFinalizeBootShell } from '@/hooks/useFinalizeBootShell'
 import { getFontScaleOptions, useFontScale, type FontScale } from '@/hooks/useFontScale'
 import { isIOSSafariBrowser } from '@/hooks/usePWAInstall'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 import { useStandaloneDisplayMode } from '@/hooks/useStandaloneDisplayMode'
 import { getAppearanceOptions, useAppearance, type AppearancePreference } from '@/hooks/useTheme'
 import { useAppContext } from '@/lib/app-context'
-import { shouldRegisterServiceWorkerForOrigin } from '@/lib/runtimeAssetRecovery'
+import { shouldRegisterServiceWorkerForOrigin } from '@/lib/runtimeAssetPolicy'
 import { useTranslation, type LocalePreference } from '@/lib/use-translation'
 import { PROTOCOL_VERSION } from '@viby/protocol'
 import {
@@ -126,6 +127,7 @@ function getLocaleOptionLabel(
 
 export default function SettingsPage(): React.JSX.Element {
     const { t, locale, localePreference, setLocale } = useTranslation()
+    useFinalizeBootShell()
     const { api } = useAppContext()
     const goBack = useAppGoBack()
     const [openPanel, setOpenPanel] = useState<SettingsPanelId | null>(null)

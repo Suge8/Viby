@@ -1,10 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ApiClient } from '@/api/client'
+import { authenticateWithAccessToken } from '@/api/authClient'
+import type { ApiClient } from '@/api/client'
 import type { AuthResponse } from '@/types/api'
 
 export type AuthSource = { type: 'accessToken'; token: string }
 
 const SESSION_TOKEN_PREFIX = 'viby_session_token::'
+const SESSION_REFRESH_DEBOUNCE_MS = 15_000
+const SESSION_REFRESH_RETRY_MS = 15_000
+const SESSION_REFRESH_MIN_TTL_MS = 60_000
+
+function readStoredSessionTokenForBaseUrl(baseUrl: string): string | null {
+    return readStoredSessionToken(getSessionTokenKey(baseUrl))
+}
+
+async function loadApiClientModule(): Promise<typeof import('@/api/client')> {
+    return await import('@/api/client')
+}
 
 function decodeJwtExpMs(token: string): number | null {
     const parts = token.split('.')
@@ -70,13 +82,14 @@ export function useAuth(authSource: AuthSource | null, baseUrl: string): {
     isLoading: boolean
     error: string | null
 } {
-    const [token, setToken] = useState<string | null>(() => readStoredSessionToken(getSessionTokenKey(baseUrl)))
+    const [token, setToken] = useState<string | null>(() => readStoredSessionTokenForBaseUrl(baseUrl))
     const [user, setUser] = useState<AuthResponse['user'] | null>(null)
+    const [api, setApi] = useState<ApiClient | null>(null)
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const sessionTokenKey = useMemo(() => getSessionTokenKey(baseUrl), [baseUrl])
     const refreshPromiseRef = useRef<Promise<string | null> | null>(null)
-    const tokenRef = useRef<string | null>(readStoredSessionToken(getSessionTokenKey(baseUrl)))
+    const tokenRef = useRef<string | null>(readStoredSessionTokenForBaseUrl(baseUrl))
     const lastRefreshAttemptRef = useRef(0)
     const authSourceRef = useRef<AuthSource | null>(authSource)
 
@@ -90,6 +103,7 @@ export function useAuth(authSource: AuthSource | null, baseUrl: string): {
         lastRefreshAttemptRef.current = 0
         setToken(storedToken)
         setUser(null)
+        setApi(null)
         setError(null)
         setIsLoading(false)
     }, [sessionTokenKey])
@@ -113,7 +127,7 @@ export function useAuth(authSource: AuthSource | null, baseUrl: string): {
             return currentToken
         }
 
-        if (!options?.force && ttlMs !== null && ttlMs <= minTtlMs && now - lastRefreshAttemptRef.current < 15_000) {
+        if (!options?.force && ttlMs !== null && ttlMs <= minTtlMs && now - lastRefreshAttemptRef.current < SESSION_REFRESH_DEBOUNCE_MS) {
             return currentToken
         }
 
@@ -125,8 +139,7 @@ export function useAuth(authSource: AuthSource | null, baseUrl: string): {
             lastRefreshAttemptRef.current = now
 
             try {
-                const client = new ApiClient('', { baseUrl })
-                const auth = await client.authenticate({ accessToken: source.token })
+                const auth = await authenticateWithAccessToken(baseUrl, source.token)
                 tokenRef.current = auth.token
                 setToken(auth.token)
                 setUser(auth.user)
@@ -156,9 +169,21 @@ export function useAuth(authSource: AuthSource | null, baseUrl: string): {
         }
     }, [baseUrl])
 
-    const api = useMemo(() => (
-        token
-            ? new ApiClient(token, {
+    useEffect(() => {
+        let isCancelled = false
+
+        if (!token) {
+            setApi(null)
+            return
+        }
+
+        void (async () => {
+            const module = await loadApiClientModule()
+            if (isCancelled) {
+                return
+            }
+
+            setApi(new module.ApiClient(token, {
                 baseUrl,
                 getToken: () => tokenRef.current,
                 onUnauthorized: async () => {
@@ -168,15 +193,25 @@ export function useAuth(authSource: AuthSource | null, baseUrl: string): {
                     }
                     return await authenticate(currentSource, { force: true })
                 }
-            })
-            : null
-    ), [authenticate, baseUrl, token])
+            }))
+        })()
+
+        return () => {
+            isCancelled = true
+        }
+    }, [authenticate, baseUrl, token])
 
     useEffect(() => {
         let isCancelled = false
 
         async function run(): Promise<void> {
             if (!authSource) {
+                if (tokenRef.current) {
+                    setError(null)
+                    setIsLoading(false)
+                    return
+                }
+
                 tokenRef.current = null
                 setToken(null)
                 setUser(null)
@@ -187,7 +222,7 @@ export function useAuth(authSource: AuthSource | null, baseUrl: string): {
 
             setIsLoading(tokenRef.current === null)
             try {
-                const nextToken = await authenticate(authSource, { minTtlMs: 60_000 })
+                const nextToken = await authenticate(authSource, { minTtlMs: SESSION_REFRESH_MIN_TTL_MS })
                 if (isCancelled || !nextToken) {
                     return
                 }
@@ -237,11 +272,11 @@ export function useAuth(authSource: AuthSource | null, baseUrl: string): {
             }
             const refreshed = await authenticate(currentSource, { force: true })
             if (!cancelled && !refreshed && Date.now() < expMs) {
-                schedule(15_000)
+                schedule(SESSION_REFRESH_RETRY_MS)
             }
         }
 
-        schedule(expMs - 60_000 - Date.now())
+        schedule(expMs - SESSION_REFRESH_MIN_TTL_MS - Date.now())
 
         return () => {
             cancelled = true
@@ -257,7 +292,7 @@ export function useAuth(authSource: AuthSource | null, baseUrl: string): {
         }
 
         const handleActive = () => {
-            void authenticate(authSourceRef.current ?? authSource, { minTtlMs: 60_000 })
+            void authenticate(authSourceRef.current ?? authSource, { minTtlMs: SESSION_REFRESH_MIN_TTL_MS })
         }
 
         const handleVisibilityChange = () => {

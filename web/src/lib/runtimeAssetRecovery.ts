@@ -1,92 +1,9 @@
 import { recordPendingAppRecovery } from '@/lib/appRecovery'
+import { shouldRegisterServiceWorkerForOrigin } from '@/lib/runtimeAssetPolicy'
 
 const APP_BUILD_ID_STORAGE_KEY = 'viby-app-build-id'
 const RUNTIME_ASSET_RECOVERY_KEY = 'viby-runtime-asset-recovery'
 const LOCAL_SERVICE_WORKER_RESET_KEY = 'viby-local-service-worker-reset'
-const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]'])
-const PRIVATE_IPV6_PREFIXES = ['fc', 'fd', 'fe8', 'fe9', 'fea', 'feb'] as const
-
-const ASSET_FAILURE_MESSAGES = [
-    'failed to fetch dynamically imported module',
-    'importing a module script failed',
-    'loading module from',
-    'dynamically imported module'
-] as const
-
-export type RuntimeAssetFailure = {
-    name?: string | null
-    filename?: string | null
-    message?: string | null
-    stack?: string | null
-}
-
-type RuntimeAssetRecoveryReason = Extract<
-    Parameters<typeof recordPendingAppRecovery>[0],
-    'vite-preload-error' | 'runtime-asset-reload'
->
-
-type RecordRuntimeAssetFailureRecoveryOptions = {
-    reason: RuntimeAssetRecoveryReason
-    failure: RuntimeAssetFailure
-    resumeHref?: string
-}
-
-function normalizeHostname(hostname: string): string {
-    if (hostname.startsWith('[') && hostname.endsWith(']')) {
-        return hostname.slice(1, -1)
-    }
-    return hostname
-}
-
-function parseOrigin(origin: string): URL | null {
-    try {
-        return new URL(origin)
-    } catch {
-        return null
-    }
-}
-
-function normalizeErrorText(value: string | null | undefined): string {
-    return typeof value === 'string' ? value.trim().toLowerCase() : ''
-}
-
-function containsAssetPath(value: string): boolean {
-    return value.includes('/assets/')
-}
-
-function hasKnownAssetLoadFailureText(values: readonly string[]): boolean {
-    return values.some((value) => ASSET_FAILURE_MESSAGES.some((pattern) => value.includes(pattern)))
-}
-
-export function isLikelyRuntimeAssetFailure(failure: RuntimeAssetFailure): boolean {
-    const name = normalizeErrorText(failure.name)
-    const filename = normalizeErrorText(failure.filename)
-    const message = normalizeErrorText(failure.message)
-    const stack = normalizeErrorText(failure.stack)
-
-    if (name === 'chunkloaderror' || name === 'vitepreloaderror') {
-        return true
-    }
-
-    if (hasKnownAssetLoadFailureText([message, stack])) {
-        return true
-    }
-
-    return containsAssetPath(filename) && hasKnownAssetLoadFailureText([message])
-}
-
-export function recordRuntimeAssetFailureRecovery(
-    options: RecordRuntimeAssetFailureRecoveryOptions
-): boolean {
-    if (!isLikelyRuntimeAssetFailure(options.failure)) {
-        return false
-    }
-
-    recordPendingAppRecovery(options.reason, {
-        resumeHref: options.resumeHref
-    })
-    return true
-}
 
 function markRuntimeAssetRecovery(reason: string): boolean {
     if (typeof window === 'undefined') {
@@ -108,57 +25,6 @@ export function clearRuntimeAssetRecoveryMarker(): void {
     }
 
     window.sessionStorage.removeItem(RUNTIME_ASSET_RECOVERY_KEY)
-}
-
-export function isLoopbackOrigin(origin: string): boolean {
-    const parsed = parseOrigin(origin)
-    if (!parsed) {
-        return false
-    }
-
-    return LOOPBACK_HOSTS.has(normalizeHostname(parsed.hostname))
-}
-
-function isPrivateIpv4Hostname(hostname: string): boolean {
-    const parts = hostname.split('.').map((part) => Number.parseInt(part, 10))
-    if (parts.length !== 4 || parts.some((part) => Number.isNaN(part) || part < 0 || part > 255)) {
-        return false
-    }
-
-    const [a, b] = parts
-    return a === 10
-        || (a === 172 && b >= 16 && b <= 31)
-        || (a === 192 && b === 168)
-        || (a === 169 && b === 254)
-        || (a === 100 && b >= 64 && b <= 127)
-}
-
-function isPrivateIpv6Hostname(hostname: string): boolean {
-    const normalized = hostname.toLowerCase()
-    return PRIVATE_IPV6_PREFIXES.some((prefix) => normalized.startsWith(prefix))
-}
-
-export function isLocalNetworkOrigin(origin: string): boolean {
-    const parsed = parseOrigin(origin)
-    if (!parsed) {
-        return false
-    }
-
-    const hostname = normalizeHostname(parsed.hostname)
-    if (LOOPBACK_HOSTS.has(hostname) || hostname.endsWith('.local')) {
-        return true
-    }
-
-    return isPrivateIpv4Hostname(hostname) || isPrivateIpv6Hostname(hostname)
-}
-
-export function shouldRegisterServiceWorkerForOrigin(origin: string): boolean {
-    const parsed = parseOrigin(origin)
-    if (!parsed || parsed.protocol !== 'https:') {
-        return false
-    }
-
-    return !isLocalNetworkOrigin(origin)
 }
 
 async function unregisterServiceWorkers(): Promise<void> {

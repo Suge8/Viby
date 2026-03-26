@@ -49,66 +49,113 @@ vi.mock('@/components/ui/ConfirmDialog', () => ({
     ConfirmDialog: () => null
 }))
 
+vi.mock('@/lib/use-translation', () => ({
+    useTranslation: () => ({
+        t: (key: string, values?: Record<string, number>) => {
+            if (key === 'sessions.summary' && values) {
+                return `${values.open}/${values.archived}`
+            }
+
+            switch (key) {
+                case 'sessions.tab.sessions':
+                    return 'Sessions'
+                case 'sessions.tab.archived':
+                    return 'Archived'
+                case 'sessions.section.running':
+                    return 'Active'
+                case 'sessions.section.recentlyClosed':
+                    return 'Closed'
+                case 'sessions.section.earlier':
+                    return 'Earlier'
+                case 'sessions.empty.sessions':
+                    return 'No sessions'
+                case 'sessions.empty.archived':
+                    return 'No archived sessions'
+                case 'sessions.new':
+                    return 'New Session'
+                case 'session.attention.newReply':
+                    return 'Reply'
+                case 'session.state.processing':
+                    return 'Working'
+                case 'session.state.awaitingInput':
+                    return 'Awaiting input'
+                case 'session.state.closed':
+                    return 'Closed'
+                case 'session.state.archived':
+                    return 'Archived'
+                case 'session.more':
+                    return 'More actions'
+                case 'session.time.justNow':
+                    return 'Just now'
+                default:
+                    return key
+            }
+        }
+    })
+}))
+
 function renderSessionList({
-    selectedSessionId = null
+    selectedSessionId = null,
+    sessions
 }: {
     selectedSessionId?: string | null
+    sessions?: SessionSummary[]
 } = {}) {
     const now = Date.now()
+    const renderedSessions = sessions ?? [
+        createSessionSummary({
+            id: 'session-1',
+            active: true,
+            thinking: true,
+            activeAt: now,
+            updatedAt: now,
+            latestActivityAt: now,
+            latestActivityKind: 'reply',
+            latestCompletedReplyAt: null,
+            lifecycleState: 'running',
+            lifecycleStateSince: now,
+            metadata: {
+                path: '/Users/sugeh/Project/Bao',
+                flavor: 'codex',
+                summary: { text: 'Bao summary', updatedAt: now }
+            },
+            model: 'gpt-5.4-mini',
+            modelReasoningEffort: 'high'
+        }),
+        createSessionSummary({
+            id: 'session-2',
+            lifecycleState: 'closed',
+            lifecycleStateSince: now - 1000,
+            updatedAt: now - 1000,
+            latestActivityAt: now - 1000,
+            latestActivityKind: 'ready',
+            latestCompletedReplyAt: now - 1000,
+            metadata: {
+                path: '/Users/sugeh/Project/Viby',
+                flavor: 'claude',
+                summary: { text: 'Needs review', updatedAt: now - 1000 }
+            }
+        }),
+        createSessionSummary({
+            id: 'session-3',
+            lifecycleState: 'archived',
+            lifecycleStateSince: now - 2000,
+            updatedAt: now - 2000,
+            latestActivityAt: now - 2000,
+            latestActivityKind: 'ready',
+            latestCompletedReplyAt: now - 2000,
+            metadata: {
+                path: '/Users/sugeh/Project/Viby',
+                flavor: 'claude',
+                summary: { text: 'Archived summary', updatedAt: now - 2000 }
+            }
+        })
+    ]
 
     return render(
         <I18nProvider>
             <SessionList
-                sessions={[
-                    createSessionSummary({
-                        id: 'session-1',
-                        active: true,
-                        thinking: true,
-                        activeAt: now,
-                        updatedAt: now,
-                        latestActivityAt: now,
-                        latestActivityKind: 'reply',
-                        latestCompletedReplyAt: null,
-                        lifecycleState: 'running',
-                        lifecycleStateSince: now,
-                        metadata: {
-                            path: '/Users/sugeh/Project/Bao',
-                            flavor: 'codex',
-                            summary: { text: 'Bao summary', updatedAt: now }
-                        },
-                        model: 'gpt-5.4-mini',
-                        modelReasoningEffort: 'high'
-                    }),
-                    createSessionSummary({
-                        id: 'session-2',
-                        lifecycleState: 'closed',
-                        lifecycleStateSince: now - 1000,
-                        updatedAt: now - 1000,
-                        latestActivityAt: now - 1000,
-                        latestActivityKind: 'ready',
-                        latestCompletedReplyAt: now - 1000,
-                        metadata: {
-                            path: '/Users/sugeh/Project/Viby',
-                            flavor: 'claude',
-                            summary: { text: 'Needs review', updatedAt: now - 1000 }
-                        }
-                    }),
-                    createSessionSummary({
-                        id: 'session-3',
-                        lifecycleState: 'archived',
-                        lifecycleStateSince: now - 2000,
-                        updatedAt: now - 2000,
-                        latestActivityAt: now - 2000,
-                        latestActivityKind: 'ready',
-                        latestCompletedReplyAt: now - 2000,
-                        metadata: {
-                            path: '/Users/sugeh/Project/Viby',
-                            flavor: 'claude',
-                            summary: { text: 'Archived summary', updatedAt: now - 2000 }
-                        }
-                    })
-                ]}
-                renderHeader={false}
+                sessions={renderedSessions}
                 api={null}
                 selectedSessionId={selectedSessionId}
                 actions={{
@@ -171,12 +218,245 @@ describe('SessionList', () => {
         expect(screen.getByText('Archived')).toBeInTheDocument()
         expect(screen.getByText('Active')).toBeInTheDocument()
         expect(screen.getByText('Working')).toBeInTheDocument()
-        expect(screen.getByText('Closed')).toBeInTheDocument()
+        expect(screen.getAllByText('Closed').length).toBeGreaterThan(0)
+        expect(screen.getByRole('button', { name: 'New Session' })).toBeInTheDocument()
         expect(screen.queryByText('GPT-5.4 Mini')).not.toBeInTheDocument()
         expect(screen.queryByText('High')).not.toBeInTheDocument()
         expect(screen.queryByText(/model:/i)).not.toBeInTheDocument()
         expect(screen.getByText('Bao summary')).toBeInTheDocument()
         expect(screen.queryByTitle('Reply')).not.toBeInTheDocument()
+    })
+
+    it('keeps the sessions tab when the selected session becomes archived later', () => {
+        const now = Date.now()
+        const { rerender } = renderSessionList({
+            selectedSessionId: 'session-2',
+            sessions: [
+                createSessionSummary({
+                    id: 'session-1',
+                    active: true,
+                    thinking: true,
+                    activeAt: now,
+                    updatedAt: now,
+                    latestActivityAt: now,
+                    latestActivityKind: 'reply',
+                    latestCompletedReplyAt: null,
+                    lifecycleState: 'running',
+                    lifecycleStateSince: now,
+                    metadata: {
+                        path: '/Users/sugeh/Project/Bao',
+                        flavor: 'codex',
+                        summary: { text: 'Bao summary', updatedAt: now }
+                    }
+                }),
+                createSessionSummary({
+                    id: 'session-2',
+                    lifecycleState: 'closed',
+                    lifecycleStateSince: now - 1000,
+                    updatedAt: now - 1000,
+                    latestActivityAt: now - 1000,
+                    latestActivityKind: 'ready',
+                    latestCompletedReplyAt: now - 1000,
+                    metadata: {
+                        path: '/Users/sugeh/Project/Viby',
+                        flavor: 'claude',
+                        summary: { text: 'Needs review', updatedAt: now - 1000 }
+                    }
+                }),
+                createSessionSummary({
+                    id: 'session-3',
+                    lifecycleState: 'archived',
+                    lifecycleStateSince: now - 2000,
+                    updatedAt: now - 2000,
+                    latestActivityAt: now - 2000,
+                    latestActivityKind: 'ready',
+                    latestCompletedReplyAt: now - 2000,
+                    metadata: {
+                        path: '/Users/sugeh/Project/Viby',
+                        flavor: 'claude',
+                        summary: { text: 'Archived summary', updatedAt: now - 2000 }
+                    }
+                })
+            ]
+        })
+
+        rerender(
+            <I18nProvider>
+                <SessionList
+                    sessions={[
+                        createSessionSummary({
+                            id: 'session-1',
+                            active: true,
+                            thinking: true,
+                            activeAt: now,
+                            updatedAt: now,
+                            latestActivityAt: now,
+                            latestActivityKind: 'reply',
+                            latestCompletedReplyAt: null,
+                            lifecycleState: 'running',
+                            lifecycleStateSince: now,
+                            metadata: {
+                                path: '/Users/sugeh/Project/Bao',
+                                flavor: 'codex',
+                                summary: { text: 'Bao summary', updatedAt: now }
+                            }
+                        }),
+                        createSessionSummary({
+                            id: 'session-2',
+                            lifecycleState: 'archived',
+                            lifecycleStateSince: now,
+                            updatedAt: now,
+                            latestActivityAt: now,
+                            latestActivityKind: 'ready',
+                            latestCompletedReplyAt: now,
+                            metadata: {
+                                path: '/Users/sugeh/Project/Viby',
+                                flavor: 'claude',
+                                summary: { text: 'Needs review', updatedAt: now }
+                            }
+                        }),
+                        createSessionSummary({
+                            id: 'session-3',
+                            lifecycleState: 'archived',
+                            lifecycleStateSince: now - 2000,
+                            updatedAt: now - 2000,
+                            latestActivityAt: now - 2000,
+                            latestActivityKind: 'ready',
+                            latestCompletedReplyAt: now - 2000,
+                            metadata: {
+                                path: '/Users/sugeh/Project/Viby',
+                                flavor: 'claude',
+                                summary: { text: 'Archived summary', updatedAt: now - 2000 }
+                            }
+                        })
+                    ]}
+                    api={null}
+                    selectedSessionId="session-2"
+                    actions={{
+                        onSelect: vi.fn(),
+                        onNewSession: vi.fn()
+                    }}
+                />
+            </I18nProvider>
+        )
+
+        expect(screen.getByText('Bao summary')).toBeInTheDocument()
+        expect(screen.queryByText('Archived summary')).not.toBeInTheDocument()
+    })
+
+    it('returns from archived to sessions when the selected session is restored', () => {
+        const now = Date.now()
+        const { rerender } = renderSessionList({
+            selectedSessionId: 'session-3',
+            sessions: [
+                createSessionSummary({
+                    id: 'session-3',
+                    lifecycleState: 'archived',
+                    lifecycleStateSince: now - 2000,
+                    updatedAt: now - 2000,
+                    latestActivityAt: now - 2000,
+                    latestActivityKind: 'ready',
+                    latestCompletedReplyAt: now - 2000,
+                    metadata: {
+                        path: '/Users/sugeh/Project/Viby',
+                        flavor: 'claude',
+                        summary: { text: 'Archived summary', updatedAt: now - 2000 }
+                    }
+                })
+            ]
+        })
+
+        expect(screen.getByText('Archived summary')).toBeInTheDocument()
+
+        rerender(
+            <I18nProvider>
+                <SessionList
+                    sessions={[
+                        createSessionSummary({
+                            id: 'session-3',
+                            lifecycleState: 'closed',
+                            lifecycleStateSince: now,
+                            updatedAt: now,
+                            latestActivityAt: now,
+                            latestActivityKind: 'ready',
+                            latestCompletedReplyAt: now,
+                            metadata: {
+                                path: '/Users/sugeh/Project/Viby',
+                                flavor: 'claude',
+                                summary: { text: 'Archived summary', updatedAt: now }
+                            }
+                        })
+                    ]}
+                    api={null}
+                    selectedSessionId="session-3"
+                    actions={{
+                        onSelect: vi.fn(),
+                        onNewSession: vi.fn()
+                    }}
+                />
+            </I18nProvider>
+        )
+
+        expect(screen.getByText('Archived summary')).toBeInTheDocument()
+        expect(screen.queryByText('No archived sessions')).not.toBeInTheDocument()
+    })
+
+    it('switches to the archived tab when route selection changes to an archived session', () => {
+        const now = Date.now()
+        const sessions = [
+            createSessionSummary({
+                id: 'session-1',
+                active: true,
+                thinking: true,
+                activeAt: now,
+                updatedAt: now,
+                latestActivityAt: now,
+                latestActivityKind: 'reply',
+                latestCompletedReplyAt: null,
+                lifecycleState: 'running',
+                lifecycleStateSince: now,
+                metadata: {
+                    path: '/Users/sugeh/Project/Bao',
+                    flavor: 'codex',
+                    summary: { text: 'Bao summary', updatedAt: now }
+                }
+            }),
+            createSessionSummary({
+                id: 'session-3',
+                lifecycleState: 'archived',
+                lifecycleStateSince: now - 2000,
+                updatedAt: now - 2000,
+                latestActivityAt: now - 2000,
+                latestActivityKind: 'ready',
+                latestCompletedReplyAt: now - 2000,
+                metadata: {
+                    path: '/Users/sugeh/Project/Viby',
+                    flavor: 'claude',
+                    summary: { text: 'Archived summary', updatedAt: now - 2000 }
+                }
+            })
+        ]
+        const { rerender } = renderSessionList({
+            selectedSessionId: 'session-1',
+            sessions
+        })
+
+        rerender(
+            <I18nProvider>
+                <SessionList
+                    sessions={sessions}
+                    api={null}
+                    selectedSessionId="session-3"
+                    actions={{
+                        onSelect: vi.fn(),
+                        onNewSession: vi.fn()
+                    }}
+                />
+            </I18nProvider>
+        )
+
+        expect(screen.getByText('Archived summary')).toBeInTheDocument()
+        expect(screen.queryByText('Bao summary')).not.toBeInTheDocument()
     })
 
     it('renders session cards without the legacy border shell', () => {
@@ -185,7 +465,7 @@ describe('SessionList', () => {
         const workingCard = screen.getByText('Bao summary').closest('button')
 
         expect(workingCard).not.toBeNull()
-        expect(workingCard?.className).not.toMatch(/\bborder\b/)
+        expect(workingCard?.className).not.toMatch(/\bborder-\[/)
     })
 
     it('shows a new reply indicator only for sessions whose activity is newer than the stored seen timestamp', () => {
@@ -221,7 +501,6 @@ describe('SessionList', () => {
                             }
                         })
                     ]}
-                    renderHeader={false}
                     api={null}
                     selectedSessionId={null}
                     actions={{
@@ -259,7 +538,6 @@ describe('SessionList', () => {
                             }
                         })
                     ]}
-                    renderHeader={false}
                     api={null}
                     selectedSessionId={null}
                     actions={{
@@ -318,7 +596,6 @@ describe('SessionList', () => {
                             }
                         })
                     ]}
-                    renderHeader={false}
                     api={null}
                     selectedSessionId={null}
                     actions={{
@@ -330,6 +607,45 @@ describe('SessionList', () => {
         )
 
         expect(screen.getAllByTitle('Reply')).toHaveLength(1)
+    })
+
+    it('shows awaiting input once takeover requests are pending even if thinking has not dropped yet', () => {
+        const now = Date.now()
+
+        render(
+            <I18nProvider>
+                <SessionList
+                    sessions={[
+                        createSessionSummary({
+                            id: 'session-takeover',
+                            active: true,
+                            thinking: true,
+                            updatedAt: now,
+                            latestActivityAt: now,
+                            latestActivityKind: 'reply',
+                            latestCompletedReplyAt: null,
+                            lifecycleState: 'running',
+                            lifecycleStateSince: now,
+                            pendingRequestsCount: 1,
+                            metadata: {
+                                path: '/Users/sugeh/Project/Viby',
+                                flavor: 'codex',
+                                summary: { text: 'Waiting for takeover', updatedAt: now }
+                            }
+                        })
+                    ]}
+                    api={null}
+                    selectedSessionId={null}
+                    actions={{
+                        onSelect: vi.fn(),
+                        onNewSession: vi.fn()
+                    }}
+                />
+            </I18nProvider>
+        )
+
+        expect(screen.getByText('Awaiting input')).toBeInTheDocument()
+        expect(screen.queryByText('Working')).not.toBeInTheDocument()
     })
 
     it('keeps streaming sessions below newer stable sessions until completion', () => {
@@ -372,7 +688,6 @@ describe('SessionList', () => {
                             }
                         })
                     ]}
-                    renderHeader={false}
                     api={null}
                     selectedSessionId={null}
                     actions={{
@@ -432,7 +747,6 @@ describe('SessionList', () => {
                             }
                         })
                     ]}
-                    renderHeader={false}
                     api={null}
                     selectedSessionId={null}
                     actions={{

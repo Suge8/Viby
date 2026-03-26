@@ -1,11 +1,11 @@
-import { en } from './locales'
 import type { Locale, Translations } from './i18n-context'
 
-const defaultTranslations: Translations = en
+const translationCache = new Map<Locale, Translations>()
 
-const translationCache = new Map<Locale, Translations>([
-    ['en', defaultTranslations]
-])
+async function loadEnTranslations(): Promise<Translations> {
+    const module = await import('./locales/en')
+    return module.default
+}
 
 async function loadZhCNTranslations(): Promise<Translations> {
     const module = await import('./locales/zh-CN')
@@ -13,7 +13,7 @@ async function loadZhCNTranslations(): Promise<Translations> {
 }
 
 const localeLoaders: Record<Locale, () => Promise<Translations>> = {
-    en: async () => defaultTranslations,
+    en: loadEnTranslations,
     'zh-CN': loadZhCNTranslations
 }
 

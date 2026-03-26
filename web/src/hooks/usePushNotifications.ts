@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ApiClient } from '@/api/client'
-import { shouldRegisterServiceWorkerForOrigin } from '@/lib/runtimeAssetRecovery'
+import { shouldRegisterServiceWorkerForOrigin } from '@/lib/runtimeAssetPolicy'
 
 export type PushNotificationsError =
     | 'permission-blocked'
