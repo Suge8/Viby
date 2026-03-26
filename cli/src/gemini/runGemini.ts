@@ -15,6 +15,23 @@ import { assertSessionConfigPayload, resolvePermissionModeForFlavor } from '@/ag
 import { formatMessageWithAttachments } from '@/utils/attachmentFormatter';
 import { getInvokedCwd } from '@/utils/invokedCwd';
 
+function resolveSessionModel(value: unknown): string | null {
+    if (value === null) {
+        return null;
+    }
+
+    if (typeof value !== 'string') {
+        throw new Error('Invalid model');
+    }
+
+    const trimmedValue = value.trim();
+    if (!trimmedValue) {
+        throw new Error('Invalid model');
+    }
+
+    return trimmedValue;
+}
+
 export async function runGemini(opts: {
     startedBy?: 'runner' | 'terminal';
     vibySessionId?: string;
@@ -25,12 +42,12 @@ export async function runGemini(opts: {
 } = {}): Promise<void> {
     const workingDirectory = getInvokedCwd();
     const startedBy = opts.startedBy ?? 'terminal';
+    const requestedStartingMode = opts.startingMode;
 
-    logger.debug(`[gemini] Starting with options: startedBy=${startedBy}, startingMode=${opts.startingMode}`);
+    logger.debug(`[gemini] Starting with options: startedBy=${startedBy}, startingMode=${requestedStartingMode}`);
 
-    if (startedBy === 'runner' && opts.startingMode === 'local') {
+    if (startedBy === 'runner' && requestedStartingMode === 'local') {
         logger.debug('[gemini] Runner spawn requested with local mode; forcing remote mode');
-        opts.startingMode = 'remote';
     }
 
     const initialState: AgentState = {
@@ -38,9 +55,7 @@ export async function runGemini(opts: {
     };
 
     const runtimeConfig = resolveGeminiRuntimeConfig({ model: opts.model });
-    const persistedModel = runtimeConfig.modelSource === 'default'
-        ? undefined
-        : runtimeConfig.model;
+    let currentModel = runtimeConfig.model ?? null;
 
     const { api, session } = await bootstrapSession({
         flavor: 'gemini',
@@ -49,10 +64,12 @@ export async function runGemini(opts: {
         workingDirectory,
         agentState: initialState,
         permissionMode: opts.permissionMode ?? 'default',
-        model: persistedModel
+        model: currentModel ?? undefined
     });
 
-    const startingMode: 'local' | 'remote' = opts.startingMode
+    const startingMode: 'local' | 'remote' = (startedBy === 'runner' && requestedStartingMode === 'local')
+        ? 'remote'
+        : requestedStartingMode
         ?? (startedBy === 'runner' ? 'remote' : 'local');
 
     setControlledByUser(session, startingMode);
@@ -64,7 +81,6 @@ export async function runGemini(opts: {
 
     const sessionWrapperRef: { current: GeminiSession | null } = { current: null };
     let currentPermissionMode: PermissionMode = opts.permissionMode ?? 'default';
-    const resolvedModel = runtimeConfig.model;
 
     const hookServer = await startHookServer({
         onSessionHook: (sessionId, data) => {
@@ -92,6 +108,9 @@ export async function runGemini(opts: {
         session,
         logTag: 'gemini',
         stopKeepAlive: () => sessionWrapperRef.current?.stopKeepAlive(),
+        onBeforeClose: async () => {
+            await sessionWrapperRef.current?.disposeRemoteRuntime();
+        },
         onAfterClose: () => {
             hookServer.stop();
             cleanupHookSettingsFile(hookSettingsPath, 'gemini-hook-settings');
@@ -107,27 +126,42 @@ export async function runGemini(opts: {
             return;
         }
         sessionInstance.setPermissionMode(currentPermissionMode);
-        logger.debug(`[gemini] Synced session permission mode for keepalive: ${currentPermissionMode}`);
+        sessionInstance.setModel(currentModel);
+        logger.debug(
+            `[gemini] Synced session mode for keepalive: permissionMode=${currentPermissionMode}, model=${currentModel ?? 'auto'}`
+        );
     };
 
     session.onUserMessage((message) => {
         const formattedText = formatMessageWithAttachments(message.content.text, message.content.attachments);
         const mode: GeminiMode = {
             permissionMode: currentPermissionMode,
-            model: resolvedModel
+            model: currentModel ?? undefined
         };
         messageQueue.push(formattedText, mode);
     });
 
     session.rpcHandlerManager.registerHandler('set-session-config', async (payload: unknown) => {
-        const config = assertSessionConfigPayload(payload) as { permissionMode?: unknown };
+        const config = assertSessionConfigPayload(payload) as {
+            permissionMode?: unknown
+            model?: unknown
+        };
 
         if (config.permissionMode !== undefined) {
             currentPermissionMode = resolvePermissionModeForFlavor(config.permissionMode, 'gemini') as PermissionMode;
         }
 
+        if (config.model !== undefined) {
+            currentModel = resolveSessionModel(config.model);
+        }
+
         syncSessionMode();
-        return { applied: { permissionMode: currentPermissionMode } };
+        return {
+            applied: {
+                permissionMode: currentPermissionMode,
+                model: currentModel
+            }
+        };
     });
 
     try {
@@ -140,7 +174,7 @@ export async function runGemini(opts: {
             api,
             permissionMode: currentPermissionMode,
             resumeSessionId: opts.resumeSessionId,
-            model: resolvedModel,
+            model: currentModel ?? undefined,
             hookSettingsPath,
             onModeChange: createModeChangeHandler(session),
             onSessionReady: (instance) => {

@@ -24,6 +24,7 @@ type DbSessionRow = {
     model_reasoning_effort: ModelReasoningEffort | null
     permission_mode: PermissionMode | null
     collaboration_mode: CodexCollaborationMode | null
+    next_message_seq: number
     todos: string | null
     todos_updated_at: number | null
     team_state: string | null
@@ -76,7 +77,7 @@ export function getOrCreateSession(
         }
     }
 
-    const existing = db.prepare(
+    const existing = db.query(
         'SELECT * FROM sessions WHERE tag = ? ORDER BY created_at DESC LIMIT 1'
     ).get(tag) as DbSessionRow | undefined
     if (existing) {
@@ -88,7 +89,7 @@ export function getOrCreateSession(
     const metadataJson = JSON.stringify(metadata)
     const agentStateJson = agentState === null || agentState === undefined ? null : JSON.stringify(agentState)
 
-    db.prepare(`
+    db.query(`
         INSERT INTO sessions (
             id, tag, machine_id, created_at, updated_at,
             metadata, metadata_version,
@@ -97,6 +98,7 @@ export function getOrCreateSession(
             model_reasoning_effort,
             permission_mode,
             collaboration_mode,
+            next_message_seq,
             todos, todos_updated_at,
             active, active_at, seq
         ) VALUES (
@@ -107,6 +109,7 @@ export function getOrCreateSession(
             @model_reasoning_effort,
             @permission_mode,
             @collaboration_mode,
+            1,
             NULL, NULL,
             0, NULL, 0
         )
@@ -194,7 +197,7 @@ export function setSessionTodos(
 ): boolean {
     try {
         const json = todos === null || todos === undefined ? null : JSON.stringify(todos)
-        const result = db.prepare(`
+        const result = db.query(`
             UPDATE sessions
             SET todos = @todos,
                 todos_updated_at = @todos_updated_at,
@@ -221,7 +224,7 @@ export function setSessionTeamState(
 ): boolean {
     try {
         const json = teamState === null || teamState === undefined ? null : JSON.stringify(teamState)
-        const result = db.prepare(`
+        const result = db.query(`
             UPDATE sessions
             SET team_state = @team_state,
                 team_state_updated_at = @team_state_updated_at,
@@ -246,7 +249,7 @@ export function setSessionAlive(
     activeAt: number
 ): boolean {
     try {
-        const result = db.prepare(`
+        const result = db.query(`
             UPDATE sessions
             SET active = 1,
                 active_at = @active_at
@@ -268,7 +271,7 @@ export function setSessionInactive(
     id: string
 ): boolean {
     try {
-        const result = db.prepare(`
+        const result = db.query(`
             UPDATE sessions
             SET active = 0
             WHERE id = @id
@@ -291,7 +294,7 @@ export function setSessionModel(
     const touchUpdatedAt = options?.touchUpdatedAt === true
 
     try {
-        const result = db.prepare(`
+        const result = db.query(`
             UPDATE sessions
             SET model = @model,
                 updated_at = CASE WHEN @touch_updated_at = 1 THEN @updated_at ELSE updated_at END,
@@ -321,7 +324,7 @@ export function setSessionModelReasoningEffort(
     const touchUpdatedAt = options?.touchUpdatedAt === true
 
     try {
-        const result = db.prepare(`
+        const result = db.query(`
             UPDATE sessions
             SET model_reasoning_effort = @model_reasoning_effort,
                 updated_at = CASE WHEN @touch_updated_at = 1 THEN @updated_at ELSE updated_at END,
@@ -347,7 +350,7 @@ export function setSessionPermissionMode(
     permissionMode: PermissionMode | null
 ): boolean {
     try {
-        const result = db.prepare(`
+        const result = db.query(`
             UPDATE sessions
             SET permission_mode = @permission_mode,
                 seq = seq + 1
@@ -370,7 +373,7 @@ export function setSessionCollaborationMode(
     collaborationMode: CodexCollaborationMode | null
 ): boolean {
     try {
-        const result = db.prepare(`
+        const result = db.query(`
             UPDATE sessions
             SET collaboration_mode = @collaboration_mode,
                 seq = seq + 1
@@ -393,7 +396,7 @@ export function touchSessionUpdatedAt(
     updatedAt: number
 ): boolean {
     try {
-        const result = db.prepare(`
+        const result = db.query(`
             UPDATE sessions
             SET updated_at = @updated_at,
                 seq = seq + 1
@@ -411,16 +414,31 @@ export function touchSessionUpdatedAt(
 }
 
 export function getSession(db: Database, id: string): StoredSession | null {
-    const row = db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as DbSessionRow | undefined
+    const row = db.query('SELECT * FROM sessions WHERE id = ?').get(id) as DbSessionRow | undefined
     return row ? toStoredSession(row) : null
 }
 
 export function getSessions(db: Database): StoredSession[] {
-    const rows = db.prepare('SELECT * FROM sessions ORDER BY updated_at DESC').all() as DbSessionRow[]
+    const rows = db.query('SELECT * FROM sessions ORDER BY updated_at DESC').all() as DbSessionRow[]
     return rows.map(toStoredSession)
 }
 
 export function deleteSession(db: Database, id: string): boolean {
-    const result = db.prepare('DELETE FROM sessions WHERE id = ?').run(id)
+    const result = db.query('DELETE FROM sessions WHERE id = ?').run(id)
     return result.changes > 0
+}
+
+export function allocateNextSessionMessageSeq(db: Database, id: string): number {
+    const row = db.query(`
+        UPDATE sessions
+        SET next_message_seq = next_message_seq + 1
+        WHERE id = ?
+        RETURNING next_message_seq - 1 AS allocated_seq
+    `).get(id) as { allocated_seq: number } | undefined
+
+    if (!row) {
+        throw new Error(`Session not found: ${id}`)
+    }
+
+    return row.allocated_seq
 }

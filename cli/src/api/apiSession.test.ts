@@ -257,6 +257,58 @@ describe('ApiSessionClient recovery', () => {
 })
 
 describe('ApiSessionClient metadata updates', () => {
+    it('strips lifecycle fields before sending metadata updates', async () => {
+        const client = new ApiSessionClient('token', createSession({
+            metadata: {
+                path: '/tmp/project',
+                host: 'localhost',
+                lifecycleState: 'archived',
+                lifecycleStateSince: 1_000,
+                archivedBy: 'web',
+                archiveReason: 'Archived by user'
+            },
+            metadataVersion: 7
+        }))
+        const socket = sockets[0]
+        expect(socket).toBeDefined()
+        if (!socket) {
+            throw new Error('Expected socket to exist')
+        }
+
+        socket.emitWithAck.mockResolvedValueOnce({
+            result: 'success',
+            version: 8,
+            metadata: {
+                path: '/tmp/project',
+                host: 'localhost',
+                name: 'Renamed',
+                lifecycleState: 'archived',
+                lifecycleStateSince: 1_000,
+                archivedBy: 'web',
+                archiveReason: 'Archived by user'
+            }
+        } as any)
+
+        client.updateMetadata((metadata) => ({
+            ...metadata,
+            name: 'Renamed',
+            lifecycleState: 'closed'
+        } as typeof metadata & { lifecycleState: 'closed' }))
+
+        await vi.waitFor(() => {
+            expect(socket.emitWithAck).toHaveBeenCalledWith('update-metadata', {
+                sid: 'session-1',
+                expectedVersion: 7,
+                metadata: {
+                    path: '/tmp/project',
+                    host: 'localhost',
+                    name: 'Renamed'
+                },
+                touchUpdatedAt: undefined
+            })
+        })
+    })
+
     it('defers auto summary metadata writes until ready', () => {
         const emit = vi.fn()
         const updateMetadata = vi.fn()

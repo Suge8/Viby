@@ -3,11 +3,15 @@ import { MessageQueue2 } from '@/utils/MessageQueue2';
 import { AgentSessionBase } from '@/agent/sessionBase';
 import type { OpencodeHookEvent, OpencodeMode, PermissionMode } from './types';
 import type { LocalLaunchExitReason } from '@/agent/localLaunchPolicy';
+import { buildVibyMcpBridge, type VibyMcpBridge } from '@/codex/utils/buildVibyMcpBridge';
+import { createOpencodeBackend } from './utils/opencodeBackend';
 
 type LocalLaunchFailure = {
     message: string;
     exitReason: LocalLaunchExitReason;
 };
+
+type OpencodeBackend = ReturnType<typeof createOpencodeBackend>;
 
 export class OpencodeSession extends AgentSessionBase<OpencodeMode> {
     readonly startedBy: 'runner' | 'terminal';
@@ -15,6 +19,8 @@ export class OpencodeSession extends AgentSessionBase<OpencodeMode> {
     localLaunchFailure: LocalLaunchFailure | null = null;
 
     private hookEventHandlers: Array<(event: OpencodeHookEvent) => void> = [];
+    private remoteBridge: VibyMcpBridge | null = null;
+    private remoteBackend: OpencodeBackend | null = null;
 
     constructor(opts: {
         api: ApiClient;
@@ -71,6 +77,7 @@ export class OpencodeSession extends AgentSessionBase<OpencodeMode> {
 
     setPermissionMode = (mode: PermissionMode): void => {
         this.permissionMode = mode;
+        this.notifyKeepAliveRuntimeChanged();
     };
 
     recordLocalLaunchFailure = (message: string, exitReason: LocalLaunchExitReason): void => {
@@ -87,5 +94,39 @@ export class OpencodeSession extends AgentSessionBase<OpencodeMode> {
 
     sendSessionEvent = (event: Parameters<ApiSessionClient['sendSessionEvent']>[0]): void => {
         this.client.sendSessionEvent(event);
+    };
+
+    async ensureRemoteBridge(): Promise<VibyMcpBridge> {
+        if (!this.remoteBridge) {
+            this.remoteBridge = await buildVibyMcpBridge(this.client);
+        }
+        return this.remoteBridge;
+    }
+
+    ensureRemoteBackend(): OpencodeBackend {
+        if (!this.remoteBackend) {
+            this.remoteBackend = createOpencodeBackend({
+                cwd: this.path
+            });
+        }
+        return this.remoteBackend;
+    }
+
+    getRemoteBackend(): OpencodeBackend | null {
+        return this.remoteBackend
+    }
+
+    disposeRemoteRuntime = async (): Promise<void> => {
+        if (this.remoteBackend) {
+            const backend = this.remoteBackend;
+            this.remoteBackend = null;
+            await backend.disconnect();
+        }
+
+        if (this.remoteBridge) {
+            const bridge = this.remoteBridge;
+            this.remoteBridge = null;
+            bridge.server.stop();
+        }
     };
 }

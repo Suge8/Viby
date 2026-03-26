@@ -24,7 +24,7 @@ export function updateVersionedField<T>(args: VersionedUpdateArgs<T>): Versioned
             ...(args.setClauses ?? [])
         ]
 
-        const result = args.db.prepare(
+        const result = args.db.query(
             `UPDATE ${args.table}
              SET ${setClauses.join(', ')}
              WHERE id = @id AND ${args.versionField} = @expectedVersion`
@@ -39,7 +39,7 @@ export function updateVersionedField<T>(args: VersionedUpdateArgs<T>): Versioned
             return { result: 'success', version: args.expectedVersion + 1, value: args.value }
         }
 
-        const current = args.db.prepare(
+        const current = args.db.query(
             `SELECT ${args.field} AS field_value, ${args.versionField} AS version
              FROM ${args.table}
              WHERE id = ?`

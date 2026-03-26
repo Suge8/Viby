@@ -44,6 +44,20 @@ describe('getLiveSessionConfigSupport', () => {
         })
     })
 
+    it('enables Gemini live model config but keeps reasoning disabled for remote sessions', () => {
+        expect(getLiveSessionConfigSupport({
+            active: true,
+            metadata: { flavor: 'gemini' } as never,
+            agentState: { controlledByUser: false } as never,
+        })).toEqual({
+            isRemoteManaged: true,
+            canChangePermissionMode: true,
+            canChangeCollaborationMode: false,
+            canChangeModel: true,
+            canChangeModelReasoningEffort: false,
+        })
+    })
+
     it('disables all live config when the session is inactive', () => {
         expect(getLiveSessionConfigSupport({
             active: false,

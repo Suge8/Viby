@@ -22,7 +22,7 @@ export type SessionFileScanStats<TEvent> = {
 };
 
 type BaseSessionScannerOptions = {
-    intervalMs: number;
+    fallbackIntervalMs: number;
 };
 
 export abstract class BaseSessionScanner<TEvent> {
@@ -30,7 +30,7 @@ export abstract class BaseSessionScanner<TEvent> {
     private readonly watchers = new Map<string, () => void>();
     private readonly processedEventKeys = new Set<string>();
     private readonly fileCursors = new Map<string, number>();
-    private intervalId: ReturnType<typeof setInterval> | null = null;
+    private fallbackTimer: ReturnType<typeof setTimeout> | null = null;
     private stopped = false;
     private scanPromise: Promise<void> | null = null;
 
@@ -60,6 +60,10 @@ export abstract class BaseSessionScanner<TEvent> {
 
     protected shouldWatchFile(_filePath: string): boolean {
         return true;
+    }
+
+    protected getFallbackIntervalMs(): number {
+        return this.options.fallbackIntervalMs;
     }
 
     protected ensureWatcher(filePath: string): void {
@@ -105,14 +109,14 @@ export abstract class BaseSessionScanner<TEvent> {
     public async start(): Promise<void> {
         await this.initialize();
         await this.sync.invalidateAndAwait();
-        this.intervalId = setInterval(() => this.sync.invalidate(), this.options.intervalMs);
+        this.scheduleFallbackScan();
     }
 
     public async cleanup(): Promise<void> {
         this.stopped = true;
-        if (this.intervalId) {
-            clearInterval(this.intervalId);
-            this.intervalId = null;
+        if (this.fallbackTimer) {
+            clearTimeout(this.fallbackTimer);
+            this.fallbackTimer = null;
         }
         this.sync.stop();
         const pendingScan = this.scanPromise;
@@ -185,5 +189,23 @@ export abstract class BaseSessionScanner<TEvent> {
 
     private recordProcessedKey(key: string): void {
         this.processedEventKeys.add(key);
+    }
+
+    private scheduleFallbackScan(): void {
+        if (this.stopped) {
+            return;
+        }
+        if (this.fallbackTimer) {
+            clearTimeout(this.fallbackTimer);
+            this.fallbackTimer = null;
+        }
+        const intervalMs = this.getFallbackIntervalMs();
+        if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
+            return;
+        }
+        this.fallbackTimer = setTimeout(() => {
+            this.sync.invalidate();
+            this.scheduleFallbackScan();
+        }, intervalMs);
     }
 }

@@ -1,6 +1,7 @@
 import React from 'react';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { emitReadyIfIdle, flushReadyStateBeforeReady } from '@/agent/emitReadyIfIdle';
 import { logger } from '@/ui/logger';
 import { convertAgentMessage } from '@/agent/messageConverter';
 import { OpencodeDisplay } from '@/ui/ink/OpencodeDisplay';
@@ -156,9 +157,12 @@ class CursorRemoteLauncher extends RemoteLauncherBase {
                 messageBuffer.addMessage(`Cursor Agent failed: ${errMsg}`, 'status');
             } finally {
                 session.onThinkingChange(false);
-                if (session.queue.size() === 0 && !this.shouldExit) {
-                    sendReady();
-                }
+                await emitReadyIfIdle({
+                    queueSize: () => session.queue.size(),
+                    shouldExit: () => this.shouldExit,
+                    flushBeforeReady: () => flushReadyStateBeforeReady(session.client),
+                    sendReady
+                });
             }
         }
     }

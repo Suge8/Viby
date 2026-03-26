@@ -1,4 +1,5 @@
 import React from "react";
+import { emitReadyIfIdle, flushReadyStateBeforeReady } from "@/agent/emitReadyIfIdle";
 import { Session } from "./session";
 import { RemoteModeDisplay } from "@/ui/ink/RemoteModeDisplay";
 import { claudeRemote } from "./claudeRemote";
@@ -25,7 +26,7 @@ interface PermissionsField {
     allowedTools?: string[];
 }
 
-class ClaudeRemoteLauncher extends RemoteLauncherBase {
+export class ClaudeRemoteLauncher extends RemoteLauncherBase {
     private readonly session: Session;
     private abortController: AbortController | null = null;
     private abortFuture: Future<void> | null = null;
@@ -45,6 +46,8 @@ class ClaudeRemoteLauncher extends RemoteLauncherBase {
         if (this.abortController && !this.abortController.signal.aborted) {
             this.abortController.abort();
         }
+        this.session.queue.reset();
+        this.session.onThinkingChange(false);
         await this.abortFuture?.promise;
     }
 
@@ -348,9 +351,15 @@ class ClaudeRemoteLauncher extends RemoteLauncherBase {
                             session.clearSessionId();
                         },
                         onReady: () => {
-                            if (!pending && session.queue.size() === 0) {
-                                session.client.sendSessionEvent({ type: 'ready' });
-                            }
+                            void emitReadyIfIdle({
+                                hasPending: () => pending !== null,
+                                queueSize: () => session.queue.size(),
+                                shouldExit: () => Boolean(this.exitReason),
+                                flushBeforeReady: () => flushReadyStateBeforeReady(session.client),
+                                sendReady: () => {
+                                    session.client.sendSessionEvent({ type: 'ready' });
+                                }
+                            });
                         },
                         signal: controller.signal,
                     });

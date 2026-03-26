@@ -6,14 +6,13 @@ import { logger } from '@/ui/logger';
 export const GEMINI_API_KEY_ENV = 'GEMINI_API_KEY';
 export const GOOGLE_API_KEY_ENV = 'GOOGLE_API_KEY';
 export const GEMINI_MODEL_ENV = 'GEMINI_MODEL';
-export const DEFAULT_GEMINI_MODEL = 'gemini-2.5-pro';
 
 export type GeminiLocalConfig = {
     token?: string;
     model?: string;
 };
 
-export type GeminiModelSource = 'explicit' | 'env' | 'local' | 'default';
+export type GeminiModelSource = 'explicit' | 'env' | 'local' | 'terminal-default';
 
 const GEMINI_DIR = join(homedir(), '.gemini');
 const SETTINGS_PATH = join(GEMINI_DIR, 'settings.json');
@@ -66,17 +65,28 @@ function extractToken(settings: Record<string, unknown>): string | undefined {
     return undefined;
 }
 
+function resolveLocalToken(
+    oauthFile: Record<string, unknown> | null,
+    configFile: Record<string, unknown> | null
+): string | undefined {
+    if (oauthFile) {
+        return extractToken(oauthFile);
+    }
+
+    if (configFile) {
+        return extractToken(configFile);
+    }
+
+    return undefined;
+}
+
 export function readGeminiLocalConfig(): GeminiLocalConfig {
     const settingsFile = readJsonFile(SETTINGS_PATH);
     const configFile = readJsonFile(CONFIG_PATH);
     const oauthFile = readJsonFile(OAUTH_PATH);
 
     const model = settingsFile ? extractModel(settingsFile) : undefined;
-    const token = oauthFile
-        ? extractToken(oauthFile)
-        : configFile
-            ? extractToken(configFile)
-            : undefined;
+    const token = resolveLocalToken(oauthFile, configFile);
 
     return {
         model,
@@ -87,11 +97,11 @@ export function readGeminiLocalConfig(): GeminiLocalConfig {
 export function resolveGeminiRuntimeConfig(opts: {
     model?: string;
     token?: string;
-} = {}): { model: string; token?: string; modelSource: GeminiModelSource } {
+} = {}): { model?: string; token?: string; modelSource: GeminiModelSource } {
     const local = readGeminiLocalConfig();
 
-    let modelSource: GeminiModelSource = 'default';
-    let model = DEFAULT_GEMINI_MODEL;
+    let modelSource: GeminiModelSource = 'terminal-default';
+    let model: string | undefined;
 
     if (opts.model) {
         model = opts.model;

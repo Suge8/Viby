@@ -9,11 +9,19 @@ import type { CodexCollaborationMode, Metadata, PermissionMode, Session, Session
 import type { Store } from '../store'
 import { clampAliveTime } from './aliveTime'
 import { EventPublisher } from './eventPublisher'
+import type { SyncEventListener } from './eventPublisher'
 import { extractTodoWriteTodosFromMessageContent, TodosSchema } from './todos'
 
 const SESSION_BROADCAST_THROTTLE_MS = 10_000
 const SESSION_ACTIVE_PERSIST_INTERVAL_MS = 10_000
 const SESSION_INACTIVE_TIMEOUT_MS = 30_000
+
+type WaitForSessionConditionOptions<T> = {
+    timeoutMs: number
+    resolveValue: (session: Session | undefined) => T | null
+    onTimeout: () => T
+    isRelevantEvent?: (event: Parameters<SyncEventListener>[0]) => boolean
+}
 
 export class SessionCache {
     private readonly sessions: Map<string, Session> = new Map()
@@ -62,6 +70,78 @@ export class SessionCache {
 
     getActiveSessions(): Session[] {
         return this.getSessions().filter((session) => session.active)
+    }
+
+    subscribe(listener: SyncEventListener): () => void {
+        return this.publisher.subscribe(listener)
+    }
+
+    async waitForSessionCondition<T>(
+        sessionId: string,
+        options: WaitForSessionConditionOptions<T>
+    ): Promise<T> {
+        const resolveCurrentValue = (): T | null => {
+            const session = this.getSession(sessionId) ?? this.refreshSession(sessionId) ?? undefined
+            return options.resolveValue(session)
+        }
+
+        const immediateValue = resolveCurrentValue()
+        if (immediateValue !== null) {
+            return immediateValue
+        }
+
+        return await new Promise<T>((resolve, reject) => {
+            let settled = false
+            let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+            const cleanup = (unsubscribe: () => void): void => {
+                if (timeoutId) {
+                    clearTimeout(timeoutId)
+                    timeoutId = null
+                }
+                unsubscribe()
+            }
+
+            const settle = (unsubscribe: () => void, finalize: () => T): void => {
+                if (settled) {
+                    return
+                }
+                settled = true
+                cleanup(unsubscribe)
+                try {
+                    resolve(finalize())
+                } catch (error) {
+                    reject(error)
+                }
+            }
+
+            const unsubscribe = this.subscribe((event) => {
+                if (!('sessionId' in event)) {
+                    return
+                }
+                if (event.sessionId !== sessionId) {
+                    return
+                }
+                if (options.isRelevantEvent && !options.isRelevantEvent(event)) {
+                    return
+                }
+
+                const nextValue = resolveCurrentValue()
+                if (nextValue !== null) {
+                    settle(unsubscribe, () => nextValue)
+                }
+            })
+
+            timeoutId = setTimeout(() => {
+                settle(unsubscribe, options.onTimeout)
+            }, options.timeoutMs)
+            timeoutId.unref?.()
+
+            const nextValue = resolveCurrentValue()
+            if (nextValue !== null) {
+                settle(unsubscribe, () => nextValue)
+            }
+        })
     }
 
     getOrCreateSession(
@@ -205,6 +285,9 @@ export class SessionCache {
 
         const session = this.sessions.get(payload.sid) ?? this.refreshSession(payload.sid)
         if (!session) return
+        if (session.metadata?.lifecycleState === 'archived') {
+            return
+        }
 
         const wasActive = session.active
         const wasThinking = session.thinking
@@ -293,6 +376,30 @@ export class SessionCache {
         this.persistSessionInactiveState(payload.sid)
 
         this.publisher.emit({ type: 'session-updated', sessionId: session.id, data: { active: false, thinking: false } })
+    }
+
+    setSessionThinking(sessionId: string, thinking: boolean, transitionAt: number = Date.now()): Session | null {
+        const session = this.sessions.get(sessionId) ?? this.refreshSession(sessionId)
+        if (!session) {
+            return null
+        }
+
+        if (session.thinking === thinking) {
+            return session
+        }
+
+        session.thinking = thinking
+        session.thinkingAt = transitionAt
+        this.publisher.emit({
+            type: 'session-updated',
+            sessionId,
+            data: {
+                active: session.active,
+                activeAt: session.activeAt,
+                thinking: session.thinking
+            }
+        })
+        return session
     }
 
     expireInactive(now: number = Date.now()): void {

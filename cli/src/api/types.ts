@@ -26,6 +26,10 @@ export type {
     ModelReasoningEffort,
     Session
 } from '@viby/protocol/types'
+export type WritableSessionMetadata = Omit<
+    import('@viby/protocol/types').Metadata,
+    'lifecycleState' | 'lifecycleStateSince' | 'archivedBy' | 'archiveReason'
+>
 export type SessionPermissionMode = PermissionMode
 export type SessionCollaborationMode = CodexCollaborationMode
 export type SessionModel = string | null

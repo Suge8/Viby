@@ -3,7 +3,7 @@
 `Viby` 是一个本地优先的 AI 编码代理远程控制平台。
 它把 `Claude Code` 和 `Codex` 收到同一套工作流里：会话始终跑在你的机器上，Web / PWA 负责远程查看、发消息、审批权限、浏览文件和打开终端；`desktop/` 则提供一个原生常驻壳来托管 hub。
 
-最后检查：`2026-03-24`
+最后检查：`2026-03-25`
 
 ## 先看哪里
 
@@ -23,34 +23,44 @@
 - **跨重启恢复更可靠**：Web 和 CLI 的 reconnect 主路径统一为 `snapshot + afterSeq catch-up`；`Socket.IO connectionStateRecovery` 只负责短暂断线补 realtime，不再被当成跨重启业务恢复协议。
 - **会话配置可持久恢复**：session 的 `permission mode` / `collaboration mode` 已落到 Hub SQLite，不再只挂在内存 keepalive 上；重启 hub、重开终端或 runner 接管后，恢复链会继续带回这组配置。
 - **恢复语义同步闭环**：`POST /api/sessions/:id/resume` 现在只会在“旧 agent thread 已重新接回”后返回成功；Hub 不再先看 keepalive 活跃就抢跑判定，Codex remote 也不再保留“启动先假成功、首轮再偷偷补 resume”的分叉。
-- **会话提交链单一**：`spawn / resume / archive / close / unarchive / live config` 这些会改变会话事实的操作，都会由 Hub 返回 authoritative `session` snapshot；Web 直接写回 detail + list cache，不再依赖 `invalidate + refetch` 补偿。
-- **显式恢复更稳**：`closed` 会话只有在用户显式发送消息或上传附件时才会触发恢复；聊天页只保留 route-local 的轻量 `resuming` 状态，页面重连不会偷偷续跑。
+- **会话提交链单一**：`spawn / resume / send / abort / switch / archive / close / unarchive / live config` 这些会改变会话事实的操作，都会由 Hub 返回 authoritative `session` snapshot；Web 直接写回 detail + list cache，不再依赖 `invalidate + refetch` 补偿。
+- **显式恢复更稳**：inactive 会话只会在用户显式发送消息或上传附件时进入恢复链；文本发送命中的 `inactive + empty transcript` 会 fresh-start 同一个 hub session，已有 transcript 的 inactive session 继续 strict resume；`archived` 会先自动恢复回可继续状态，再沿同一条发送链继续，页面重连不会偷偷续跑。
 - **删除清理单点收口**：删除会话后的 detail cache、list summary 和 message window 统一走同一条 client-state cleanup helper，不再在 mutation、realtime 和视图层散写第二套清理逻辑。
+- **错误提示更克制**：Web 用户态错误 surface 已统一收口，不再把 `grpc / rpc / transport / HTTP` 这类底层术语直接暴露给普通用户。
 - **聊天历史更稳**：线程历史按钮统一走 `上一条你发的消息 / 更多消息` 双模式；prepend 历史页时保持当前 viewport anchor，不再因为补历史把视角抖乱。
-- **会话收纳更清楚**：运行中、已关闭、已归档是三种明确状态；已关闭可继续，已归档会移出主列表但仍可恢复。
+- **会话收纳更清楚**：运行中、已关闭、已归档是三种明确状态；已关闭可继续，已归档会移出主列表但仍可恢复；当前详情页中的会话若被归档，Web 会直接回到 `/sessions`，不会再被动把列表切去归档页。
+- **归档边界更硬**：`archived` 只会被显式 `unarchive` 或 authoritative/full session snapshot 拉回；迟到的 keepalive 或 `active-only` realtime patch 不会再把归档会话打回“待输入”。
 - **运行中列表更稳**：会话卡片在处理中只更新内容，不会因为中途权限/工具/控制面事件反复换位；只有进入或离开运行态时才会重排。
 - **远程创建会话**：Hub 启动后会自动把当前机器接入，Web 端可直接发起新会话。
 - **新建会话更顺手**：启动设置会记住上次选择的代理、模型、思考强度、会话类型和 YOLO；目录输入保持单一事实源，项目选择器只负责回填最近路径、已知项目和远端目录浏览结果。
 - **按页加载**：Web 把聊天、新建会话、设置、文件、终端拆成独立切块，默认首屏只拉 sessions 壳层。
+- **进入态单一**：PWA 进入阶段只保留 `index.html` boot shell 这一层可见占位；登录页懒加载、auth refresh 和 route preload 不再各自再冒第二层阻塞页。
+- **入口继续变轻**：`ApiClient` 的非首屏能力、`message-window-store` 和当前 locale 词典都已从主入口收口到按需或 boot-preload 路径，`web` 当前主 `index` 已稳定在约 `428.25 kB`，`new/settings` 低频链路也已移除 `motion` runtime。
 - **统一输入面板**：发送/终止、附件与 controls 入口都收拢到同一 composer；模型、推理强度、权限和协作等 live config 统一进 controls 面板，移动端和桌面端行为一致。
 - **消息层次更清楚**：用户消息使用更明显的品牌色气泡，AI 回复保持轻量透明 surface；文本 AI 回复即使包含 reasoning 也可直接点击复制，复制成功只保留轻量色彩反馈并沿现有 floating notice 提示；局域网 / HTTP 开发环境下也会走兼容复制路径，而且不会把复制内部焦点切换污染聊天视口。
 - **Codex 回复实时可见**：remote Codex assistant 正文现在走 transient streaming；reasoning 仍保持 final-only，durable transcript 继续沿 `snapshot + afterSeq catch-up` 主路径，不会把 token chunk 落库成碎片消息；线程只会在 viewport 仍 pinned 到底部时继续跟底，用户手动上滑后不会再被 streaming 抢回滚动权。
 - **手机端更像原生**：PWA 安装提示统一复用产品 icon 体系；iOS 手动安装引导和 Chromium 安装入口共用同一条 UI / i18n 语义；通知开关统一收口到设置页，只有用户显式开启后才会订阅 Web Push。
 - **桌面键盘更稳**：聊天输入框默认 `Enter` 换行、`Cmd/Ctrl+Enter` 发送；IME 选词期间不会误发消息。
 - **输入状态更稳定**：composer 草稿按 session 做本地持久化，只在初始化时恢复一次；发送后或手动清空后不会再被旧草稿反向回填，默认 24 小时 TTL 到期会自动清理。
-- **会话内热切换边界清晰**：live model / effort 现在对 remote Claude 和 remote Codex 暴露，并统一从下一轮 turn 生效，不会追溯改正在执行的当前轮次。
+- **会话内热切换边界清晰**：live model 现在对 remote Claude / Codex / Gemini 暴露；Gemini 在切回 terminal default 时会把已恢复 ACP session 显式重置回 CLI `auto` 轨道；reasoning effort 继续只对 Claude / Codex 暴露，并统一从下一轮 turn 生效，不会追溯改正在执行的当前轮次。
 - **首轮更快**：Codex remote 会预热 app-server thread，首轮不再为了自动命名额外起标题桥。
 - **桌面常驻**：Tauri 桌面壳始终托管自己启动的 hub，显示入口和 key，并在关窗时缩到托盘。
 
 ## 快速开始
 
 ```bash
-# 1. 启动 hub
-npx viby hub
+# 1. 直接临时运行
+npx @singyy/viby hub
 
-# 2. 打开 Web / PWA
+# 2. 或者全局安装后使用稳定命令
+npm install -g @singyy/viby
+viby hub
+
+# 3. 打开 Web / PWA
 #    然后从新建会话流程里创建会话
 ```
+
+对外 npm 主包名现在是 `@singyy/viby`，但安装后的命令名仍然是 `viby`。
 
 首次启动后，`Viby` 会把访问令牌写入 `~/.viby/settings.toml`。
 终端会打印访问地址和二维码，手机打开后即可登录。
@@ -71,6 +81,12 @@ npx viby hub
 Desktop shell -> Hub sidecar
 CLI(agent) --Socket.IO--> Hub(SQLite + API + Socket.IO) --HTTP/Socket.IO--> Web/PWA
 ```
+
+## 品牌资源
+
+- 品牌原始事实源固定在 `branding/logo.png`
+- Web / PWA / desktop 图标统一由 `bun run generate:brand-assets` 或 `desktop` 下的 `bun run prepare:icons` 重生成
+- `web/public/*` 里的运行时品牌资源需要跟踪；本地分析目录和临时产物应忽略，不要提交
 
 - `cli/`：命令行入口、代理封装、本机连接、诊断
 - `desktop/`：Tauri 原生桌面壳、托盘、sidecar 管理
@@ -204,3 +220,12 @@ bun run build:single-exe
 ```bash
 bun run build:desktop
 ```
+
+如果你要看 Web 构建体积与预算结果，可直接运行：
+
+```bash
+bun run build:web:metrics
+bun run build:web:budget
+```
+
+报告会输出到 `web/dist/reports/build-metrics.{json,md}`。

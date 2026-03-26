@@ -71,6 +71,10 @@ export class MessageService {
         return this.store.messages.getSessionMessageActivities(sessionIds)
     }
 
+    hasMessages(sessionId: string): boolean {
+        return this.store.messages.getMessages(sessionId, 1).length > 0
+    }
+
     async sendMessage(
         sessionId: string,
         payload: {

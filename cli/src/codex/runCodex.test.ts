@@ -13,6 +13,7 @@ const harness = vi.hoisted(() => {
         }) => void) | null,
         rpcHandlers,
         queueModes: [] as EnhancedMode[],
+        disposeAppServerClientCalls: 0,
         sessionState: {
             permissionMode: 'default' as EnhancedMode['permissionMode'],
             model: null as string | null,
@@ -40,11 +41,13 @@ vi.mock('@/agent/sessionFactory', () => ({
 
 vi.mock('@/agent/runnerLifecycle', () => ({
     createModeChangeHandler: () => vi.fn(),
-    createRunnerLifecycle: () => ({
+    createRunnerLifecycle: (options: { onBeforeClose?: () => Promise<void> | void }) => ({
         registerProcessHandlers() {},
         markCrash() {},
         setExitCode() {},
-        cleanupAndExit: async () => {},
+        cleanupAndExit: async () => {
+            await options.onBeforeClose?.()
+        },
     }),
     setControlledByUser() {}
 }))
@@ -107,6 +110,9 @@ vi.mock('./loop', () => ({
             setCollaborationMode(mode: EnhancedMode['collaborationMode']) {
                 harness.sessionState.collaborationMode = mode
             },
+            disposeAppServerClient: async () => {
+                harness.disposeAppServerClientCalls += 1
+            },
             localLaunchFailure: null
         }
 
@@ -149,6 +155,7 @@ describe('runCodex live session config', () => {
         harness.onUserMessage = null
         harness.rpcHandlers.clear()
         harness.queueModes = []
+        harness.disposeAppServerClientCalls = 0
         harness.sessionState.permissionMode = 'default'
         harness.sessionState.model = null
         harness.sessionState.modelReasoningEffort = null
@@ -172,5 +179,6 @@ describe('runCodex live session config', () => {
                 collaborationMode: 'default'
             }
         ])
+        expect(harness.disposeAppServerClientCalls).toBe(1)
     })
 })

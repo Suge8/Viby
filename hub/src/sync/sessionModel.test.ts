@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test'
-import { toSessionSummary } from '@viby/protocol'
+import { getSessionLifecycleState, toSessionSummary } from '@viby/protocol'
 import type { SyncEvent } from '@viby/protocol/types'
+import type { Server } from 'socket.io'
 import { Store } from '../store'
 import { RpcRegistry } from '../socket/rpcRegistry'
 import type { EventPublisher } from './eventPublisher'
@@ -13,6 +14,21 @@ function createPublisher(events: SyncEvent[]): EventPublisher {
             events.push(event)
         }
     } as unknown as EventPublisher
+}
+
+function createIoStub(): Server {
+    return {
+        of() {
+            return {
+                to() {
+                    return {
+                        emit() {
+                        }
+                    }
+                }
+            }
+        }
+    } as unknown as Server
 }
 
 describe('session model', () => {
@@ -225,6 +241,323 @@ describe('session model', () => {
                 }
             }
         })
+    })
+
+    it('ignores late keepalive updates for archived sessions', async () => {
+        const store = new Store(':memory:')
+        const events: SyncEvent[] = []
+        const cache = new SessionCache(store, createPublisher(events))
+
+        const session = cache.getOrCreateSession(
+            'session-archived-late-alive',
+            {
+                path: '/tmp/project',
+                host: 'localhost',
+                flavor: 'codex',
+                codexSessionId: 'codex-thread-archive'
+            },
+            null,
+            'gpt-5.4'
+        )
+
+        const archivedSession = await cache.transitionSessionLifecycle(session.id, 'archived', {
+            markInactive: true,
+            archivedBy: 'web',
+            archiveReason: 'Archived by user',
+            transitionAt: 3_000
+        })
+        events.length = 0
+
+        cache.handleSessionAlive({
+            sid: session.id,
+            time: 4_000,
+            thinking: false
+        })
+
+        expect(cache.getSession(session.id)).toMatchObject({
+            active: false,
+            thinking: false,
+            metadata: {
+                lifecycleState: 'archived',
+                lifecycleStateSince: archivedSession.metadata?.lifecycleStateSince
+            }
+        })
+        expect(store.sessions.getSession(session.id)).toMatchObject({
+            active: false,
+            metadata: {
+                lifecycleState: 'archived',
+                lifecycleStateSince: archivedSession.metadata?.lifecycleStateSince
+            }
+        })
+        expect(events).toEqual([])
+    })
+
+    it('resumes a closed session inside the Hub-owned send command before persisting the user message', async () => {
+        const store = new Store(':memory:')
+        const engine = new SyncEngine(
+            store,
+            createIoStub(),
+            new RpcRegistry(),
+            { broadcast() {} } as never
+        )
+
+        try {
+            const session = engine.getOrCreateSession(
+                'session-send-resume',
+                {
+                    path: '/tmp/project',
+                    host: 'localhost',
+                    machineId: 'machine-1',
+                    flavor: 'gemini',
+                    geminiSessionId: 'gemini-thread-1'
+                },
+                null,
+                'gemini-2.5-pro'
+            )
+            store.messages.addMessage(session.id, {
+                role: 'assistant',
+                content: {
+                    type: 'text',
+                    text: 'existing reply'
+                }
+            })
+
+            ;(engine as any).resumeSession = async (sessionId: string) => {
+                engine.handleSessionAlive({
+                    sid: sessionId,
+                    time: Date.now()
+                })
+                return { type: 'success', sessionId }
+            }
+
+            const result = await engine.sendMessage(session.id, {
+                text: 'hello after close',
+                localId: 'local-1'
+            })
+
+            expect(result.active).toBe(true)
+            expect(getSessionLifecycleState(result)).toBe('running')
+            expect(store.messages.getMessages(session.id, 10)).toContainEqual(expect.objectContaining({
+                localId: 'local-1',
+                content: expect.objectContaining({
+                    role: 'user',
+                    content: expect.objectContaining({
+                        type: 'text',
+                        text: 'hello after close'
+                    })
+                })
+            }))
+        } finally {
+            engine.stop()
+        }
+    })
+
+    it('auto-unarchives archived sessions inside the Hub-owned send command before resuming them', async () => {
+        const store = new Store(':memory:')
+        const engine = new SyncEngine(
+            store,
+            createIoStub(),
+            new RpcRegistry(),
+            { broadcast() {} } as never
+        )
+
+        try {
+            const session = engine.getOrCreateSession(
+                'session-send-unarchive',
+                {
+                    path: '/tmp/project',
+                    host: 'localhost',
+                    machineId: 'machine-1',
+                    flavor: 'gemini',
+                    geminiSessionId: 'gemini-thread-2'
+                },
+                null,
+                'gemini-2.5-pro'
+            )
+            store.messages.addMessage(session.id, {
+                role: 'assistant',
+                content: {
+                    type: 'text',
+                    text: 'existing reply'
+                }
+            })
+
+            await (engine as any).sessionCache.setSessionLifecycleState(session.id, 'archived')
+
+            const steps: string[] = []
+            const originalUnarchiveSession = engine.unarchiveSession.bind(engine)
+            ;(engine as any).unarchiveSession = async (sessionId: string) => {
+                steps.push('unarchive')
+                return await originalUnarchiveSession(sessionId)
+            }
+            ;(engine as any).resumeSession = async (sessionId: string) => {
+                steps.push('resume')
+                engine.handleSessionAlive({
+                    sid: sessionId,
+                    time: Date.now()
+                })
+                return { type: 'success', sessionId }
+            }
+
+            const result = await engine.sendMessage(session.id, {
+                text: 'hello after archive'
+            })
+
+            expect(steps).toEqual(['unarchive', 'resume'])
+            expect(result.active).toBe(true)
+            expect(getSessionLifecycleState(result)).toBe('running')
+            expect(store.messages.getMessages(session.id, 10)).toContainEqual(expect.objectContaining({
+                content: expect.objectContaining({
+                    role: 'user',
+                    content: expect.objectContaining({
+                        type: 'text',
+                        text: 'hello after archive'
+                    })
+                })
+            }))
+        } finally {
+            engine.stop()
+        }
+    })
+
+    it('fresh-starts empty inactive sessions on the explicit send chain instead of requiring resume reattachment', async () => {
+        const store = new Store(':memory:')
+        const engine = new SyncEngine(
+            store,
+            createIoStub(),
+            new RpcRegistry(),
+            { broadcast() {} } as never
+        )
+
+        try {
+            const session = engine.getOrCreateSession(
+                'session-send-empty-inactive',
+                {
+                    path: '/tmp/project',
+                    host: 'localhost',
+                    machineId: 'machine-1',
+                    flavor: 'codex',
+                    codexSessionId: 'codex-thread-old'
+                },
+                null,
+                'gpt-5.4'
+            )
+
+            await (engine as any).sessionCache.setSessionLifecycleState(session.id, 'archived')
+            engine.getOrCreateMachine(
+                'machine-1',
+                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+                null
+            )
+            engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
+
+            const spawnCalls: Array<Record<string, unknown>> = []
+            ;(engine as any).rpcGateway.spawnSession = async (options: Record<string, unknown>) => {
+                spawnCalls.push(options)
+                engine.handleSessionAlive({
+                    sid: session.id,
+                    time: Date.now()
+                })
+                return {
+                    type: 'success',
+                    sessionId: session.id
+                }
+            }
+            ;(engine as any).resumeSession = async () => {
+                throw new Error('resumeSession should not be used for empty inactive sessions')
+            }
+
+            const result = await engine.sendMessage(session.id, {
+                text: 'hello after archive without prior transcript'
+            })
+
+            expect(spawnCalls).toEqual([
+                {
+                    sessionId: session.id,
+                    machineId: 'machine-1',
+                    directory: '/tmp/project',
+                    agent: 'codex',
+                    model: 'gpt-5.4',
+                    modelReasoningEffort: undefined,
+                    permissionMode: undefined,
+                    collaborationMode: undefined
+                }
+            ])
+            expect(result.active).toBe(true)
+            expect(getSessionLifecycleState(result)).toBe('running')
+            expect(store.messages.getMessages(session.id, 10)).toMatchObject([
+                {
+                    content: {
+                        role: 'user',
+                        content: {
+                            type: 'text',
+                            text: 'hello after archive without prior transcript'
+                        }
+                    }
+                }
+            ])
+        } finally {
+            engine.stop()
+        }
+    })
+
+    it('waits for the remote switch owner contract before resolving the switched session snapshot', async () => {
+        const store = new Store(':memory:')
+        const engine = new SyncEngine(
+            store,
+            createIoStub(),
+            new RpcRegistry(),
+            { broadcast() {} } as never
+        )
+
+        try {
+            const session = engine.getOrCreateSession(
+                'session-switch-remote',
+                {
+                    path: '/tmp/project',
+                    host: 'localhost',
+                    machineId: 'machine-1',
+                    flavor: 'codex'
+                },
+                {
+                    controlledByUser: true,
+                    requests: {},
+                    completedRequests: {}
+                },
+                'gpt-5.4'
+            )
+            engine.handleSessionAlive({
+                sid: session.id,
+                time: Date.now(),
+                mode: 'local'
+            })
+
+            ;(engine as any).rpcGateway.switchSession = async () => {
+                setTimeout(() => {
+                    const storedSession = store.sessions.getSession(session.id)
+                    if (!storedSession) {
+                        throw new Error('Expected stored session to exist during switch test')
+                    }
+                    store.sessions.updateSessionAgentState(
+                        session.id,
+                        {
+                            controlledByUser: false,
+                            requests: {},
+                            completedRequests: {}
+                        },
+                        storedSession.agentStateVersion
+                    )
+                    ;((engine as any).sessionCache as { refreshSession: (sessionId: string) => void }).refreshSession(session.id)
+                }, 20)
+            }
+
+            const switchedSession = await engine.switchSession(session.id, 'remote')
+
+            expect(switchedSession.agentState?.controlledByUser).toBe(false)
+            expect(switchedSession.active).toBe(true)
+        } finally {
+            engine.stop()
+        }
     })
 
     it('reuses an explicit session id instead of creating a duplicate session', () => {

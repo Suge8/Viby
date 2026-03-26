@@ -24,7 +24,9 @@
 - `src/runtime/runtimeHost.ts` 是 runtime 生命周期 owner：`start / reload / shutdown` 统一从这里过；`src/runtime/managedRunner.ts` 负责 runner lifecycle 单一 owner，当前统一以单一 active binding 管理 `child runner / reused runner`，不要再在别处并行长第二套 runner/reload 状态机
 - `src/web/server.ts` 把 HTTP `fetch` handler 提炼成可重建函数，这样 `bun --hot` 下可以只换 handler，不用重建整个 socket 宿主
 - `src/sync/syncEngine.ts` 继续作为 sync façade；session lifecycle / resume contract 已收口到 `src/sync/sessionLifecycleService.ts`，消息、机器、RPC 仍各自走单职责 owner
+- session resume / switch 的 waiter 现在统一收口到 `src/sync/sessionCache.ts` 共享实现；不要再在 lifecycle/service 层各自手写 `subscribe + timeout + cleanup`
 - `src/web/routes/sessions.ts` 现在只保留 sessions 路由装配；session action / config 细分到 `src/web/routes/sessionActionRoutes.ts`、`src/web/routes/sessionConfigRoutes.ts`，共享 guard / body 解析收口到 `src/web/routes/sessionRouteSupport.ts`
+- `src/store/messages.ts` 的消息序号现在由 `sessions.next_message_seq` 单点分配；不再在消息热路径里做 `MAX(seq)+1`
 
 ## 关键配置
 
@@ -101,7 +103,7 @@ bun run dev:hub
 - `PATCH /api/sessions/:id`：重命名会话；远程 dev 跨源调用依赖 Hub CORS 允许 `PATCH`
 - `POST /api/sessions/:id/resume`：同步 resume 契约；只有旧 agent session 真正重新接回后才返回成功，失败则直接返回错误并完成 cleanup，Web 不承担补偿重试
 - `POST /api/sessions/:id/permission-mode` / `collaboration-mode` / `model` / `model-reasoning-effort`：统一返回最终 `session` 快照；如果 apply 成功后拿不到 snapshot，Hub 会直接报错，不把空快照漏给 Web
-- CLI `update-metadata` 的普通 title / summary / path 更新不会覆盖已存在的 lifecycle 元数据；归档态必须只由显式 lifecycle 更新修改，避免 archived 被后续 metadata 同步误擦成 closed
+- CLI `update-metadata` 不能修改 lifecycle 元数据；`lifecycleState / lifecycleStateSince / archivedBy / archiveReason` 只允许 Hub lifecycle owner 改写，避免 archived 被任何后续 metadata 同步误擦成 closed
 - `GET /api/sessions/:id/messages`：消息分页
 - `GET /api/sessions/:id/messages?afterSeq=<seq>`：按 SQLite seq 做 reconnect catch-up；用于 Web/CLI 在 unrecovered reconnect 后补齐缺失消息
 - `POST /api/sessions/:id/messages`：发送消息
@@ -166,9 +168,12 @@ Hub 使用 SQLite 作为单一事实源，保存：
 - push 订阅
 - 待办与协作信息
 
-当前 schema version 为 `8`。
-启动时会自动执行 **`v7 -> v8`** 升级，把 `sessions` 表补齐
-`permission_mode / collaboration_mode` 两个 durable config 列。
+当前 schema version 为 `9`。
+启动时会自动执行 **`v7 -> v9`** 和 **`v8 -> v9`** 升级：
+
+- `v7 -> v8`：补齐 `permission_mode / collaboration_mode`
+- `v8 -> v9`：补齐 `next_message_seq`，把消息 `seq` 分配收口到 session owner
+
 更老的 schema 版本不在自动迁移范围内；升级前依旧建议先备份 `~/.viby/viby.db`。
 
 ## 目录结构
@@ -180,6 +185,6 @@ Hub 使用 SQLite 作为单一事实源，保存：
 - `src/socket/`：Socket.IO 入口与 handler
 - `src/sync/`：会话同步 façade、消息服务、RPC 网关
 - `src/sync/sessionLifecycleService.ts`：session close/archive/unarchive 与 resume contract 的单一 owner
-- `src/store/`：SQLite 持久化；schema / `user_version` 是 durable truth source，持久化字段变更必须和显式 migration 同轮提交。当前自动升级边界是 `v7 -> v8`
+- `src/store/`：SQLite 持久化；schema / `user_version` 是 durable truth source，持久化字段变更必须和显式 migration 同轮提交。当前自动升级边界是 `v7 -> v9` / `v8 -> v9`
 - `src/runner/`：hub 自动拉起的 runner
 - `src/notifications/`：推送通知

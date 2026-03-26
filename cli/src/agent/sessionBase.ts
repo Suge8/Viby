@@ -1,15 +1,16 @@
 import type { ApiClient, ApiSessionClient } from '@/lib';
 import type { MessageQueue2 } from '@/utils/MessageQueue2';
 import type {
-    Metadata,
     SessionCollaborationMode,
     SessionModel,
     SessionModelReasoningEffort,
-    SessionPermissionMode
+    SessionPermissionMode,
+    WritableSessionMetadata
 } from '@/api/types';
 import { logger } from '@/ui/logger';
 
-const KEEP_ALIVE_INTERVAL_MS = 2_000;
+const KEEP_ALIVE_BUSY_INTERVAL_MS = 2_000;
+const KEEP_ALIVE_IDLE_INTERVAL_MS = 10_000;
 
 export type AgentSessionBaseOptions<Mode> = {
     api: ApiClient;
@@ -22,7 +23,7 @@ export type AgentSessionBaseOptions<Mode> = {
     mode?: 'local' | 'remote';
     sessionLabel: string;
     sessionIdLabel: string;
-    applySessionIdToMetadata: (metadata: Metadata, sessionId: string) => Metadata;
+    applySessionIdToMetadata: (metadata: WritableSessionMetadata, sessionId: string) => WritableSessionMetadata;
     permissionMode?: SessionPermissionMode;
     model?: SessionModel;
     modelReasoningEffort?: SessionModelReasoningEffort;
@@ -42,10 +43,10 @@ export class AgentSessionBase<Mode> {
     thinking: boolean = false;
 
     private readonly sessionFoundCallbacks: Array<(sessionId: string) => void> = [];
-    private readonly applySessionIdToMetadata: (metadata: Metadata, sessionId: string) => Metadata;
+    private readonly applySessionIdToMetadata: (metadata: WritableSessionMetadata, sessionId: string) => WritableSessionMetadata;
     private readonly sessionLabel: string;
     private readonly sessionIdLabel: string;
-    private keepAliveInterval: NodeJS.Timeout | null = null;
+    private keepAliveTimer: NodeJS.Timeout | null = null;
     protected permissionMode?: SessionPermissionMode;
     protected model?: SessionModel;
     protected modelReasoningEffort?: SessionModelReasoningEffort;
@@ -68,21 +69,18 @@ export class AgentSessionBase<Mode> {
         this.modelReasoningEffort = opts.modelReasoningEffort;
         this.collaborationMode = opts.collaborationMode;
 
-        this.emitKeepAlive();
-        this.keepAliveInterval = setInterval(() => {
-            this.emitKeepAlive();
-        }, KEEP_ALIVE_INTERVAL_MS);
+        this.flushKeepAlive();
 
     }
 
     onThinkingChange = (thinking: boolean) => {
         this.thinking = thinking;
-        this.emitKeepAlive();
+        this.flushKeepAlive();
     };
 
     onModeChange = (mode: 'local' | 'remote') => {
         this.mode = mode;
-        this.emitKeepAlive();
+        this.flushKeepAlive();
         const permissionLabel = this.permissionMode ?? 'unset';
         const modelLabel = this.model === undefined ? 'unset' : (this.model ?? 'auto');
         const reasoningLabel = this.modelReasoningEffort === undefined ? 'unset' : (this.modelReasoningEffort ?? 'auto');
@@ -144,14 +142,33 @@ export class AgentSessionBase<Mode> {
     };
 
     stopKeepAlive = (): void => {
-        if (this.keepAliveInterval) {
-            clearInterval(this.keepAliveInterval);
-            this.keepAliveInterval = null;
+        if (this.keepAliveTimer) {
+            clearTimeout(this.keepAliveTimer);
+            this.keepAliveTimer = null;
         }
     };
 
+    protected notifyKeepAliveRuntimeChanged(): void {
+        this.flushKeepAlive();
+    }
+
     private emitKeepAlive(): void {
         this.client.keepAlive(this.thinking, this.mode, this.getKeepAliveRuntime());
+    }
+
+    private flushKeepAlive(): void {
+        this.emitKeepAlive();
+        this.scheduleNextKeepAlive();
+    }
+
+    private scheduleNextKeepAlive(): void {
+        this.stopKeepAlive();
+        const intervalMs = this.thinking ? KEEP_ALIVE_BUSY_INTERVAL_MS : KEEP_ALIVE_IDLE_INTERVAL_MS;
+        this.keepAliveTimer = setTimeout(() => {
+            this.emitKeepAlive();
+            this.scheduleNextKeepAlive();
+        }, intervalMs);
+        this.keepAliveTimer.unref?.();
     }
 
     protected getKeepAliveRuntime():

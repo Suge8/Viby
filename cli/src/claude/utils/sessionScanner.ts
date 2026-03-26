@@ -15,6 +15,7 @@ const INTERNAL_CLAUDE_EVENT_TYPES = new Set([
     'change',
     'queue-operation',
 ]);
+const CLAUDE_SCANNER_FALLBACK_INTERVAL_MS = 15_000;
 
 export async function createSessionScanner(opts: {
     sessionId: string | null;
@@ -51,7 +52,7 @@ class ClaudeSessionScanner extends BaseSessionScanner<RawJSONLines> {
     private readonly scannedSessions = new Set<string>();
 
     constructor(opts: { sessionId: string | null; workingDirectory: string; onMessage: (message: RawJSONLines) => void }) {
-        super({ intervalMs: 3000 });
+        super({ fallbackIntervalMs: CLAUDE_SCANNER_FALLBACK_INTERVAL_MS });
         this.projectDir = getProjectPath(opts.workingDirectory);
         this.onMessage = opts.onMessage;
         this.currentSessionId = opts.sessionId;

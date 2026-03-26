@@ -1,13 +1,13 @@
 import React from 'react';
 import { randomUUID } from 'node:crypto';
 
-import { CodexAppServerClient } from './codexAppServerClient';
+import type { CodexAppServerClient } from './codexAppServerClient';
 import { CodexPermissionHandler } from './utils/permissionHandler';
 import { ReasoningProcessor } from './utils/reasoningProcessor';
 import { DiffProcessor } from './utils/diffProcessor';
 import { logger } from '@/ui/logger';
 import { CodexDisplay } from '@/ui/ink/CodexDisplay';
-import { emitReadyIfIdle } from './utils/emitReadyIfIdle';
+import { emitReadyIfIdle, flushReadyStateBeforeReady } from '@/agent/emitReadyIfIdle';
 import type { CodexSession } from './session';
 import type { EnhancedMode } from './loop';
 import { hasCodexCliOverrides } from './utils/codexCliOverrides';
@@ -107,7 +107,7 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
     constructor(session: CodexSession) {
         super(process.env.DEBUG ? session.logPath : undefined);
         this.session = session;
-        this.appServerClient = new CodexAppServerClient();
+        this.appServerClient = session.getAppServerClient();
     }
 
     protected createDisplay(context: RemoteLauncherDisplayContext): React.ReactElement {
@@ -176,6 +176,7 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
             this.abortController.abort();
             this.session.queue.reset();
             this.session.sendStreamUpdate({ kind: 'clear' });
+            this.session.onThinkingChange(false);
             this.permissionHandler?.reset();
             this.reasoningProcessor?.abort();
             this.diffProcessor?.reset();
@@ -797,10 +798,11 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
             clearReadyAfterTurnTimer?.();
             readyAfterTurnTimer = setTimeout(() => {
                 readyAfterTurnTimer = null;
-                emitReadyIfIdle({
-                    pending,
+                void emitReadyIfIdle({
+                    hasPending: () => pending !== null,
                     queueSize: () => session.queue.size(),
-                    shouldExit: this.shouldExit,
+                    shouldExit: () => this.shouldExit,
+                    flushBeforeReady: () => flushReadyStateBeforeReady(session.client),
                     sendReady
                 });
             }, 120);
@@ -898,10 +900,11 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
                     appServerEventConverter.reset();
                     session.onThinkingChange(false);
                     clearReadyAfterTurnTimer?.();
-                    emitReadyIfIdle({
-                        pending,
+                    await emitReadyIfIdle({
+                        hasPending: () => pending !== null,
                         queueSize: () => session.queue.size(),
-                        shouldExit: this.shouldExit,
+                        shouldExit: () => this.shouldExit,
+                        flushBeforeReady: () => flushReadyStateBeforeReady(session.client),
                         sendReady
                     });
                 }
@@ -912,11 +915,7 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
 
     protected async cleanup(): Promise<void> {
         logger.debug('[codex-remote]: cleanup start');
-        try {
-            await this.appServerClient.disconnect();
-        } catch (error) {
-            logger.debug('[codex-remote]: Error disconnecting client', error);
-        }
+        this.appServerClient.setNotificationHandler(null);
 
         this.clearAbortHandlers(this.session.client.rpcHandlerManager);
 

@@ -5,6 +5,8 @@ import type { EnhancedMode } from './loop';
 const harness = vi.hoisted(() => ({
     notifications: [] as Array<{ method: string; params: unknown }>,
     registerRequestCalls: [] as string[],
+    constructorCalls: 0,
+    connectCalls: 0,
     initializeCalls: [] as unknown[],
     startThreadCalls: [] as unknown[],
     resumeThreadCalls: [] as unknown[],
@@ -17,9 +19,26 @@ const harness = vi.hoisted(() => ({
 
 vi.mock('./codexAppServerClient', () => {
     class MockCodexAppServerClient {
-        async connect(): Promise<void> {}
+        private connected = false;
+        private initialized = false;
+
+        constructor() {
+            harness.constructorCalls += 1;
+        }
+
+        async connect(): Promise<void> {
+            if (this.connected) {
+                return;
+            }
+            this.connected = true;
+            harness.connectCalls += 1;
+        }
 
         async initialize(params: unknown): Promise<{ protocolVersion: number }> {
+            if (this.initialized) {
+                return { protocolVersion: 1 };
+            }
+            this.initialized = true;
             harness.initializeCalls.push(params);
             return { protocolVersion: 1 };
         }
@@ -70,12 +89,16 @@ vi.mock('./codexAppServerClient', () => {
             return {};
         }
 
-        async disconnect(): Promise<void> {}
+        async disconnect(): Promise<void> {
+            this.connected = false;
+            this.initialized = false;
+        }
     }
 
     return { CodexAppServerClient: MockCodexAppServerClient };
 });
 
+import { CodexAppServerClient } from './codexAppServerClient';
 import { codexRemoteLauncher } from './codexRemoteLauncher';
 
 type FakeAgentState = {
@@ -90,12 +113,17 @@ function createMode(): EnhancedMode {
     };
 }
 
-function createSessionStub(modes: EnhancedMode[] = [createMode()]) {
+function createSessionStub(
+    modes: EnhancedMode[] = [createMode()],
+    options: { autoCloseQueue?: boolean } = {}
+) {
     const queue = new MessageQueue2<EnhancedMode>((mode) => JSON.stringify(mode));
     for (const [index, mode] of modes.entries()) {
         queue.push(`hello from launcher test ${index + 1}`, mode);
     }
-    queue.close();
+    if (options.autoCloseQueue !== false) {
+        queue.close();
+    }
 
     const sessionEvents: Array<{ type: string; [key: string]: unknown }> = [];
     const codexMessages: unknown[] = [];
@@ -104,6 +132,7 @@ function createSessionStub(modes: EnhancedMode[] = [createMode()]) {
     const foundSessionIds: string[] = [];
     let currentModel: string | null | undefined;
     let currentModelReasoningEffort: EnhancedMode['modelReasoningEffort'];
+    let appServerClient: CodexAppServerClient | null = null;
     let agentState: FakeAgentState = {
         requests: {},
         completedRequests: {}
@@ -175,6 +204,12 @@ function createSessionStub(modes: EnhancedMode[] = [createMode()]) {
         },
         sendUserMessage(text: string) {
             client.sendUserMessage(text);
+        },
+        getAppServerClient() {
+            if (!appServerClient) {
+                appServerClient = new CodexAppServerClient();
+            }
+            return appServerClient;
         }
     };
 
@@ -195,6 +230,8 @@ describe('codexRemoteLauncher', () => {
     afterEach(() => {
         harness.notifications = [];
         harness.registerRequestCalls = [];
+        harness.constructorCalls = 0;
+        harness.connectCalls = 0;
         harness.initializeCalls = [];
         harness.startThreadCalls = [];
         harness.resumeThreadCalls = [];
@@ -237,6 +274,17 @@ describe('codexRemoteLauncher', () => {
         expect(sessionEvents.filter((event) => event.type === 'ready').length).toBeGreaterThanOrEqual(1);
         expect(thinkingChanges).toContain(true);
         expect(session.thinking).toBe(false);
+    });
+
+    it('reuses the session-owned app-server client across remote launcher restarts', async () => {
+        const { session } = createSessionStub();
+
+        await codexRemoteLauncher(session as never);
+        await codexRemoteLauncher(session as never);
+
+        expect(harness.constructorCalls).toBe(1);
+        expect(harness.initializeCalls).toHaveLength(1);
+        expect(harness.connectCalls).toBe(1);
     });
 
     it('ignores warmup-only codex events before the first explicit user turn', async () => {
@@ -316,7 +364,7 @@ describe('codexRemoteLauncher', () => {
             session,
             codexMessages,
             streamUpdates
-        } = createSessionStub();
+        } = createSessionStub([createMode()], { autoCloseQueue: false });
 
         const launcherPromise = codexRemoteLauncher(session as never);
 
@@ -326,16 +374,27 @@ describe('codexRemoteLauncher', () => {
 
         harness.notificationHandler?.('item/agentMessage/delta', {
             itemId: 'msg-1',
-            delta: 'Hello'
+            delta: 'Hello',
+            turnId: 'turn-1'
         });
         harness.notificationHandler?.('item/completed', {
-            item: { id: 'msg-1', type: 'agentMessage' }
+            item: { id: 'msg-1', type: 'agentMessage' },
+            turnId: 'turn-1'
         });
         harness.notificationHandler?.('turn/completed', {
             status: 'Completed',
             turn: { id: 'turn-1' }
         });
 
+        await vi.waitFor(() => {
+            expect(streamUpdates).toContainEqual({
+                kind: 'append',
+                streamId: 'msg-1',
+                delta: 'Hello'
+            });
+        });
+
+        session.queue.close();
         await launcherPromise;
 
         expect(streamUpdates).toContainEqual({

@@ -15,7 +15,7 @@ import { CodexCollaborationModeSchema, CodexReasoningEffortSchema } from '@viby/
 import { formatMessageWithAttachments } from '@/utils/attachmentFormatter';
 import { getInvokedCwd } from '@/utils/invokedCwd';
 
-export { emitReadyIfIdle } from './utils/emitReadyIfIdle';
+export { emitReadyIfIdle } from '@/agent/emitReadyIfIdle';
 
 export async function runCodex(opts: {
     startedBy?: 'runner' | 'terminal';
@@ -69,7 +69,10 @@ export async function runCodex(opts: {
     const lifecycle = createRunnerLifecycle({
         session,
         logTag: 'codex',
-        stopKeepAlive: () => sessionWrapperRef.current?.stopKeepAlive()
+        stopKeepAlive: () => sessionWrapperRef.current?.stopKeepAlive(),
+        onBeforeClose: async () => {
+            await sessionWrapperRef.current?.disposeAppServerClient();
+        }
     });
 
     lifecycle.registerProcessHandlers();

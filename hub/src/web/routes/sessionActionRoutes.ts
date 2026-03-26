@@ -158,8 +158,8 @@ export function registerSessionActionRoutes(
             return sessionContext
         }
 
-        await sessionContext.engine.abortSession(sessionContext.sessionId)
-        return c.json({ ok: true })
+        const session = await sessionContext.engine.abortSession(sessionContext.sessionId)
+        return c.json({ ok: true, session })
     })
 
     app.post('/sessions/:id/archive', async (c) => await handleSessionLifecycleAction(c, getSyncEngine, 'archiveSession'))
@@ -172,8 +172,8 @@ export function registerSessionActionRoutes(
             return sessionContext
         }
 
-        await sessionContext.engine.switchSession(sessionContext.sessionId, 'remote')
-        return c.json({ ok: true })
+        const session = await sessionContext.engine.switchSession(sessionContext.sessionId, 'remote')
+        return c.json({ ok: true, session })
     })
 
     app.get('/sessions/:id/slash-commands', async (c) => {

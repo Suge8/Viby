@@ -38,7 +38,7 @@ export function getOrCreateMachine(
     metadata: unknown,
     runnerState: unknown
 ): StoredMachine {
-    const existing = db.prepare('SELECT * FROM machines WHERE id = ?').get(id) as DbMachineRow | undefined
+    const existing = db.query('SELECT * FROM machines WHERE id = ?').get(id) as DbMachineRow | undefined
     if (existing) {
         return toStoredMachine(existing)
     }
@@ -47,7 +47,7 @@ export function getOrCreateMachine(
     const metadataJson = JSON.stringify(metadata)
     const runnerStateJson = runnerState === null || runnerState === undefined ? null : JSON.stringify(runnerState)
 
-    db.prepare(`
+    db.query(`
         INSERT INTO machines (
             id, created_at, updated_at,
             metadata, metadata_version,
@@ -130,11 +130,11 @@ export function updateMachineRunnerState(
 }
 
 export function getMachine(db: Database, id: string): StoredMachine | null {
-    const row = db.prepare('SELECT * FROM machines WHERE id = ?').get(id) as DbMachineRow | undefined
+    const row = db.query('SELECT * FROM machines WHERE id = ?').get(id) as DbMachineRow | undefined
     return row ? toStoredMachine(row) : null
 }
 
 export function getMachines(db: Database): StoredMachine[] {
-    const rows = db.prepare('SELECT * FROM machines ORDER BY updated_at DESC').all() as DbMachineRow[]
+    const rows = db.query('SELECT * FROM machines ORDER BY updated_at DESC').all() as DbMachineRow[]
     return rows.map(toStoredMachine)
 }

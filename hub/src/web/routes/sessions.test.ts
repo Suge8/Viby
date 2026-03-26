@@ -52,15 +52,18 @@ function createSession(overrides?: Partial<Session>): Session {
 function createApp(
     session: Session,
     options?: {
+        abortSessionResult?: Session
         resumeResult?: Awaited<ReturnType<SyncEngine['resumeSession']>>
         dropSessionSnapshotAfterConfig?: boolean
     }
 ) {
+    const abortSessionCalls: string[] = []
     const applySessionConfigCalls: Array<[string, Record<string, unknown>]> = []
     const archiveSessionCalls: string[] = []
     const closeSessionCalls: string[] = []
     const recoveryCalls: Array<[string, { afterSeq: number; limit: number }]> = []
     const resumeSessionCalls: string[] = []
+    const switchSessionCalls: Array<[string, 'remote' | 'local']> = []
     let currentSession = session
     let sessionSnapshotAvailable = true
     const renameSessionCalls: Array<[string, string]> = []
@@ -87,6 +90,15 @@ function createApp(
     }
     const engine = {
         getSession: () => sessionSnapshotAvailable ? currentSession : undefined,
+        abortSession: async (sessionId: string) => {
+            abortSessionCalls.push(sessionId)
+            currentSession = options?.abortSessionResult ?? {
+                ...currentSession,
+                thinking: false,
+                thinkingAt: currentSession.updatedAt + 1
+            }
+            return currentSession
+        },
         applySessionConfig,
         archiveSession: async (sessionId: string) => {
             archiveSessionCalls.push(sessionId)
@@ -165,6 +177,18 @@ function createApp(
             }
             return result
         },
+        switchSession: async (sessionId: string, to: 'remote' | 'local') => {
+            switchSessionCalls.push([sessionId, to])
+            currentSession = {
+                ...currentSession,
+                agentState: {
+                    ...(currentSession.agentState ?? {}),
+                    controlledByUser: to === 'local'
+                },
+                agentStateVersion: currentSession.agentStateVersion + 1
+            }
+            return currentSession
+        },
         unarchiveSession: async (sessionId: string) => {
             unarchiveSessionCalls.push(sessionId)
             currentSession = {
@@ -187,11 +211,13 @@ function createApp(
 
     return {
         app,
+        abortSessionCalls,
         applySessionConfigCalls,
         archiveSessionCalls,
         closeSessionCalls,
         recoveryCalls,
         resumeSessionCalls,
+        switchSessionCalls,
         renameSessionCalls,
         unarchiveSessionCalls
     }
@@ -223,6 +249,68 @@ function createSessionsListApp(options: {
 }
 
 describe('sessions routes', () => {
+    it('returns the authoritative session snapshot when abort succeeds', async () => {
+        const session = createSession({
+            active: true,
+            thinking: true,
+            metadata: {
+                path: '/tmp/project',
+                host: 'localhost',
+                flavor: 'codex',
+                lifecycleState: 'running',
+                lifecycleStateSince: 1
+            }
+        })
+        const abortedSession = {
+            ...session,
+            thinking: false,
+            thinkingAt: 2
+        }
+        const { app, abortSessionCalls } = createApp(session, {
+            abortSessionResult: abortedSession
+        })
+
+        const response = await app.request('/api/sessions/session-1/abort', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({})
+        })
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toEqual({
+            ok: true,
+            session: abortedSession
+        })
+        expect(abortSessionCalls).toEqual(['session-1'])
+    })
+
+    it('returns the authoritative session snapshot when switching to remote succeeds', async () => {
+        const session = createSession({
+            agentState: {
+                controlledByUser: true,
+                requests: {},
+                completedRequests: {}
+            }
+        })
+        const { app, switchSessionCalls } = createApp(session)
+
+        const response = await app.request('/api/sessions/session-1/switch', {
+            method: 'POST'
+        })
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toMatchObject({
+            ok: true,
+            session: {
+                id: 'session-1',
+                agentState: {
+                    controlledByUser: false
+                }
+            }
+        })
+        expect(switchSessionCalls).toEqual([['session-1', 'remote']])
+    })
+
     it('rejects collaboration mode changes for local Codex sessions', async () => {
         const session = createSession({
             agentState: {
@@ -681,7 +769,7 @@ describe('sessions routes', () => {
 
         expect(response.status).toBe(409)
         expect(await response.json()).toEqual({
-            error: 'Model selection can only be changed for remote Claude and Codex sessions'
+            error: 'Model selection can only be changed for remote Claude, Codex, and Gemini sessions'
         })
         expect(applySessionConfigCalls).toEqual([])
     })
@@ -712,6 +800,36 @@ describe('sessions routes', () => {
         })
         expect(applySessionConfigCalls).toEqual([
             ['session-1', { model: 'opus' }]
+        ])
+    })
+
+    it('applies model changes for remote Gemini sessions', async () => {
+        const session = createSession({
+            metadata: {
+                path: '/tmp/project',
+                host: 'localhost',
+                flavor: 'gemini'
+            },
+            model: null
+        })
+        const { app, applySessionConfigCalls } = createApp(session)
+
+        const response = await app.request('/api/sessions/session-1/model', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ model: 'gemini-2.5-flash-lite' })
+        })
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toMatchObject({
+            ok: true,
+            session: {
+                id: 'session-1',
+                model: 'gemini-2.5-flash-lite'
+            }
+        })
+        expect(applySessionConfigCalls).toEqual([
+            ['session-1', { model: 'gemini-2.5-flash-lite' }]
         ])
     })
 

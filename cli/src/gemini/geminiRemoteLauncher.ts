@@ -1,23 +1,22 @@
 import React from 'react';
 import { logger } from '@/ui/logger';
-import { buildVibyMcpBridge } from '@/codex/utils/buildVibyMcpBridge';
 import { forwardAcpAgentMessage, toAcpMcpServers } from '@/agent/acpAgentInterop';
+import { emitReadyIfIdle, flushReadyStateBeforeReady } from '@/agent/emitReadyIfIdle';
 import type { AgentMessage, PromptContent } from '@/agent/types';
 import { RemoteLauncherBase, type RemoteLauncherDisplayContext, type RemoteLauncherExitReason } from '@/modules/common/remote/RemoteLauncherBase';
 import { GeminiDisplay } from '@/ui/ink/GeminiDisplay';
 import type { GeminiSession } from './session';
-import type { PermissionMode } from './types';
-import { createGeminiBackend } from './utils/geminiBackend';
+import type { GeminiMode, PermissionMode } from './types';
+import type { createGeminiBackend } from './utils/geminiBackend';
 import { GeminiPermissionHandler } from './utils/permissionHandler';
-import { resolveGeminiRuntimeConfig } from './utils/config';
+
+const GEMINI_ACP_AUTO_MODEL_ID = 'auto';
 
 class GeminiRemoteLauncher extends RemoteLauncherBase {
     private readonly session: GeminiSession;
     private readonly model?: string;
     private readonly hookSettingsPath?: string;
-    private backend: ReturnType<typeof createGeminiBackend> | null = null;
     private permissionHandler: GeminiPermissionHandler | null = null;
-    private vibyServer: { stop: () => void } | null = null;
     private abortController = new AbortController();
     private displayModel: string | null = null;
     private displayPermissionMode: PermissionMode | null = null;
@@ -44,43 +43,103 @@ class GeminiRemoteLauncher extends RemoteLauncherBase {
         const session = this.session;
         const messageBuffer = this.messageBuffer;
 
-        const { server: vibyServer, mcpServers } = await buildVibyMcpBridge(session.client);
-        this.vibyServer = vibyServer;
+        const { mcpServers } = await session.ensureRemoteBridge();
+        const mcpServerList = toAcpMcpServers(mcpServers);
+        let activeAcpSessionId: string | null = null;
+        let activeModeKey: string | null = null;
 
-        const runtimeConfig = resolveGeminiRuntimeConfig({ model: this.model });
-        this.displayModel = runtimeConfig.model;
-        messageBuffer.addMessage(`[MODEL:${runtimeConfig.model}]`, 'system');
-
-        const backend = createGeminiBackend({
-            model: runtimeConfig.model,
-            token: runtimeConfig.token,
-            resumeSessionId: session.sessionId,
-            hookSettingsPath: this.hookSettingsPath,
-            cwd: session.path,
-            permissionMode: session.getPermissionMode() as string | undefined
+        const getModeKey = (mode: GeminiMode): string => JSON.stringify({
+            permissionMode: mode.permissionMode,
+            model: mode.model ?? null
         });
-        this.backend = backend;
+        const createOrResumeBackendSession = async (
+            backend: ReturnType<typeof createGeminiBackend>
+        ): Promise<{ sessionId: string; loadedSession: boolean }> => {
+            if (!session.sessionId) {
+                const sessionId = await backend.newSession({
+                    cwd: session.path,
+                    mcpServers: mcpServerList
+                });
+                return {
+                    sessionId,
+                    loadedSession: false
+                };
+            }
 
-        backend.onStderrError((error) => {
-            logger.debug('[gemini-remote] stderr error', error);
-            session.sendSessionEvent({ type: 'message', message: error.message });
-            messageBuffer.addMessage(error.message, 'status');
-        });
+            try {
+                const sessionId = await backend.loadSession({
+                    sessionId: session.sessionId,
+                    cwd: session.path,
+                    mcpServers: mcpServerList
+                });
+                return {
+                    sessionId,
+                    loadedSession: true
+                };
+            } catch (error) {
+                logger.warn('[gemini-remote] resume failed, starting new session', error);
+                session.sendSessionEvent({
+                    type: 'message',
+                    message: 'Gemini resume failed; starting a new session.'
+                });
+                const sessionId = await backend.newSession({
+                    cwd: session.path,
+                    mcpServers: mcpServerList
+                });
+                return {
+                    sessionId,
+                    loadedSession: false
+                };
+            }
+        };
 
-        await backend.initialize();
+        const ensureBackendForMode = async (mode: GeminiMode): Promise<string> => {
+            const nextModeKey = getModeKey(mode);
+            if (this.permissionHandler && activeAcpSessionId && activeModeKey === nextModeKey) {
+                return activeAcpSessionId;
+            }
 
-        const acpSessionId = await backend.newSession({
-            cwd: session.path,
-            mcpServers: toAcpMcpServers(mcpServers)
-        });
-        session.onSessionFound(acpSessionId);
+            if (this.permissionHandler) {
+                await this.permissionHandler.cancelAll('Gemini backend reconfigured');
+                this.permissionHandler = null;
+            }
 
-        this.permissionHandler = new GeminiPermissionHandler(
-            session.client,
-            backend,
-            () => session.getPermissionMode() as PermissionMode | undefined
-        );
-        this.applyDisplayMode(session.getPermissionMode() as PermissionMode, runtimeConfig.model);
+            const backend = await session.ensureRemoteBackend({
+                model: mode.model,
+                hookSettingsPath: this.hookSettingsPath,
+                permissionMode: mode.permissionMode
+            });
+
+            backend.onStderrError((error) => {
+                logger.debug('[gemini-remote] stderr error', error);
+                session.sendSessionEvent({ type: 'message', message: error.message });
+                messageBuffer.addMessage(error.message, 'status');
+            });
+
+            await backend.initialize();
+            const { sessionId: acpSessionId, loadedSession } = await createOrResumeBackendSession(backend);
+
+            if (loadedSession) {
+                await backend.setSessionModel(acpSessionId, mode.model ?? GEMINI_ACP_AUTO_MODEL_ID);
+            }
+
+            session.onSessionFound(acpSessionId);
+            this.permissionHandler = new GeminiPermissionHandler(
+                session.client,
+                backend,
+                () => session.getPermissionMode() as PermissionMode | undefined
+            );
+            activeAcpSessionId = acpSessionId;
+            activeModeKey = nextModeKey;
+            this.applyDisplayMode(mode.permissionMode, mode.model);
+            return acpSessionId;
+        };
+
+        const initialMode: GeminiMode = {
+            permissionMode: (session.getPermissionMode() as PermissionMode | undefined) ?? 'default',
+            model: session.getModel() ?? this.model
+        };
+        await ensureBackendForMode(initialMode);
 
         this.setupAbortHandlers(session.client.rpcHandlerManager, {
             onAbort: () => this.handleAbort(),
@@ -100,7 +159,7 @@ class GeminiRemoteLauncher extends RemoteLauncherBase {
                 break;
             }
 
-            this.applyDisplayMode(batch.mode.permissionMode, batch.mode.model);
+            const acpSessionId = await ensureBackendForMode(batch.mode);
             messageBuffer.addMessage(batch.message, 'user');
 
             const promptContent: PromptContent[] = [{
@@ -111,6 +170,11 @@ class GeminiRemoteLauncher extends RemoteLauncherBase {
             session.onThinkingChange(true);
 
             try {
+                const backend = await session.ensureRemoteBackend({
+                    model: batch.mode.model,
+                    hookSettingsPath: this.hookSettingsPath,
+                    permissionMode: batch.mode.permissionMode
+                });
                 await backend.prompt(acpSessionId, promptContent, (message: AgentMessage) => {
                     this.handleAgentMessage(message);
                 });
@@ -124,9 +188,12 @@ class GeminiRemoteLauncher extends RemoteLauncherBase {
             } finally {
                 session.onThinkingChange(false);
                 await this.permissionHandler?.cancelAll('Prompt finished');
-                if (session.queue.size() === 0 && !this.shouldExit) {
-                    sendReady();
-                }
+                await emitReadyIfIdle({
+                    queueSize: () => session.queue.size(),
+                    shouldExit: () => this.shouldExit,
+                    flushBeforeReady: () => flushReadyStateBeforeReady(session.client),
+                    sendReady
+                });
             }
         }
     }
@@ -137,16 +204,6 @@ class GeminiRemoteLauncher extends RemoteLauncherBase {
         if (this.permissionHandler) {
             await this.permissionHandler.cancelAll('Session ended');
             this.permissionHandler = null;
-        }
-
-        if (this.backend) {
-            await this.backend.disconnect();
-            this.backend = null;
-        }
-
-        if (this.vibyServer) {
-            this.vibyServer.stop();
-            this.vibyServer = null;
         }
     }
 
@@ -169,7 +226,7 @@ class GeminiRemoteLauncher extends RemoteLauncherBase {
     }
 
     private async handleAbort(): Promise<void> {
-        const backend = this.backend;
+        const backend = this.session.getRemoteBackend();
         if (backend && this.session.sessionId) {
             await backend.cancelPrompt(this.session.sessionId);
         }

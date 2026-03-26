@@ -8,6 +8,7 @@
  */
 
 import {
+    getSessionLifecycleState,
     getSessionActivityKind,
     shouldMessageAdvanceSessionUpdatedAt
 } from '@viby/protocol'
@@ -56,7 +57,25 @@ export type {
     RpcUploadFileResponse
 } from './rpcGateway'
 
+export type SessionSendMessageErrorCode =
+    | Extract<ResumeSessionResult, { type: 'error' }>['code']
+    | 'session_not_found'
+
+export class SessionSendMessageError extends Error {
+    readonly code: SessionSendMessageErrorCode
+    readonly status: 404 | 409
+
+    constructor(message: string, code: SessionSendMessageErrorCode, status: 404 | 409) {
+        super(message)
+        this.name = 'SessionSendMessageError'
+        this.code = code
+        this.status = status
+    }
+}
+
 export class SyncEngine {
+    private static readonly SWITCH_CONTRACT_TIMEOUT_MS = 3_000
+
     private readonly eventPublisher: EventPublisher
     private readonly sessionCache: SessionCache
     private readonly machineCache: MachineCache
@@ -245,6 +264,48 @@ export class SyncEngine {
         return this.machineCache.getOrCreateMachine(id, metadata, runnerState)
     }
 
+    private async ensureSessionReadyForSend(sessionId: string): Promise<Session> {
+        const session = this.getSession(sessionId)
+        if (!session) {
+            throw new SessionSendMessageError('Session not found', 'session_not_found', 404)
+        }
+
+        if (session.active) {
+            return session
+        }
+
+        const shouldFreshStart = !this.messageService.hasMessages(sessionId)
+
+        if (getSessionLifecycleState(session) === 'archived') {
+            await this.unarchiveSession(sessionId)
+        }
+
+        const resumeResult = shouldFreshStart
+            ? await this.sessionLifecycleService.startSession(sessionId)
+            : await this.resumeSession(sessionId)
+        if (resumeResult.type !== 'success') {
+            throw new SessionSendMessageError(
+                resumeResult.message,
+                resumeResult.code,
+                resumeResult.code === 'session_not_found' ? 404 : 409
+            )
+        }
+
+        const resumedSession = this.getSession(resumeResult.sessionId)
+        if (!resumedSession) {
+            throw new SessionSendMessageError('Session not found', 'session_not_found', 404)
+        }
+        if (!resumedSession.active) {
+            throw new SessionSendMessageError(
+                'Session remained inactive after resume',
+                'resume_failed',
+                409
+            )
+        }
+
+        return resumedSession
+    }
+
     async sendMessage(
         sessionId: string,
         payload: {
@@ -260,9 +321,11 @@ export class SyncEngine {
             }>
             sentFrom?: 'webapp'
         }
-    ): Promise<void> {
+    ): Promise<Session> {
+        const readySession = await this.ensureSessionReadyForSend(sessionId)
         await this.messageService.sendMessage(sessionId, payload)
         this.sessionCache.refreshSession(sessionId)
+        return this.getSession(sessionId) ?? readySession
     }
 
     async approvePermission(
@@ -284,8 +347,13 @@ export class SyncEngine {
         await this.rpcGateway.denyPermission(sessionId, requestId, decision)
     }
 
-    async abortSession(sessionId: string): Promise<void> {
+    async abortSession(sessionId: string): Promise<Session> {
         await this.rpcGateway.abortSession(sessionId)
+        const session = this.sessionCache.setSessionThinking(sessionId, false)
+        if (!session) {
+            throw new Error('Session not found')
+        }
+        return session
     }
 
     async closeSession(sessionId: string): Promise<Session> {
@@ -300,8 +368,32 @@ export class SyncEngine {
         return await this.sessionLifecycleService.unarchiveSession(sessionId)
     }
 
-    async switchSession(sessionId: string, to: 'remote' | 'local'): Promise<void> {
+    private async waitForSwitchedSession(sessionId: string, to: 'remote' | 'local'): Promise<Session> {
+        const expectsControlledByUser = to === 'local'
+        const current = this.getSession(sessionId)
+        if (current?.active && current.agentState?.controlledByUser === expectsControlledByUser) {
+            return current
+        }
+
+        return await this.sessionCache.waitForSessionCondition(sessionId, {
+            timeoutMs: SyncEngine.SWITCH_CONTRACT_TIMEOUT_MS,
+            resolveValue: () => {
+                const session = this.getSession(sessionId)
+                if (!session?.active || session.agentState?.controlledByUser !== expectsControlledByUser) {
+                    return null
+                }
+                return session
+            },
+            onTimeout: () => {
+                throw new Error(`Session switch did not reach ${to} mode`)
+            },
+            isRelevantEvent: (event) => event.type === 'session-added' || event.type === 'session-updated'
+        })
+    }
+
+    async switchSession(sessionId: string, to: 'remote' | 'local'): Promise<Session> {
         await this.rpcGateway.switchSession(sessionId, to)
+        return await this.waitForSwitchedSession(sessionId, to)
     }
 
     async renameSession(sessionId: string, name: string): Promise<Session> {

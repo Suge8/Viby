@@ -31,6 +31,8 @@ type Candidate = {
 };
 
 const DEFAULT_SESSION_START_WINDOW_MS = 2 * 60 * 1000;
+const ACTIVE_SESSION_FALLBACK_SCAN_INTERVAL_MS = 15_000;
+const SESSION_DISCOVERY_SCAN_INTERVAL_MS = 2_000;
 
 export async function createCodexSessionScanner(opts: CodexSessionScannerOptions): Promise<CodexSessionScanner> {
     const targetCwd = opts.cwd && opts.cwd.trim().length > 0 ? normalizePath(opts.cwd) : null;
@@ -85,7 +87,7 @@ class CodexSessionScannerImpl extends BaseSessionScanner<CodexSessionEvent> {
     private loggedAmbiguousRecentActivity = false;
 
     constructor(opts: CodexSessionScannerOptions, targetCwd: string | null) {
-        super({ intervalMs: 2000 });
+        super({ fallbackIntervalMs: SESSION_DISCOVERY_SCAN_INTERVAL_MS });
         const codexHomeDir = process.env.CODEX_HOME || join(homedir(), '.codex');
         this.sessionsRoot = join(codexHomeDir, 'sessions');
         this.onEvent = opts.onEvent;
@@ -115,6 +117,13 @@ class CodexSessionScannerImpl extends BaseSessionScanner<CodexSessionEvent> {
 
     protected shouldScan(): boolean {
         return !this.matchFailed;
+    }
+
+    protected getFallbackIntervalMs(): number {
+        if (!this.activeSessionId && this.targetCwd) {
+            return SESSION_DISCOVERY_SCAN_INTERVAL_MS;
+        }
+        return ACTIVE_SESSION_FALLBACK_SCAN_INTERVAL_MS;
     }
 
     protected shouldWatchFile(filePath: string): boolean {

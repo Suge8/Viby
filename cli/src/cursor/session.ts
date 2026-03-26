@@ -58,6 +58,7 @@ export class CursorSession extends AgentSessionBase<EnhancedMode> {
 
     setPermissionMode = (mode: PermissionMode): void => {
         this.permissionMode = mode;
+        this.notifyKeepAliveRuntimeChanged();
     };
 
     recordLocalLaunchFailure = (message: string, exitReason: LocalLaunchExitReason): void => {

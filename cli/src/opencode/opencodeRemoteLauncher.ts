@@ -1,21 +1,18 @@
 import React from 'react';
 import { logger } from '@/ui/logger';
-import { buildVibyMcpBridge } from '@/codex/utils/buildVibyMcpBridge';
 import { forwardAcpAgentMessage, toAcpMcpServers } from '@/agent/acpAgentInterop';
+import { emitReadyIfIdle, flushReadyStateBeforeReady } from '@/agent/emitReadyIfIdle';
 import type { AgentMessage, PromptContent } from '@/agent/types';
 import { RemoteLauncherBase, type RemoteLauncherDisplayContext, type RemoteLauncherExitReason } from '@/modules/common/remote/RemoteLauncherBase';
 import { OpencodeDisplay } from '@/ui/ink/OpencodeDisplay';
 import type { OpencodeSession } from './session';
 import type { PermissionMode } from './types';
-import { createOpencodeBackend } from './utils/opencodeBackend';
 import { OpencodePermissionHandler } from './utils/permissionHandler';
 import { TITLE_INSTRUCTION } from './utils/systemPrompt';
 
 class OpencodeRemoteLauncher extends RemoteLauncherBase {
     private readonly session: OpencodeSession;
-    private backend: ReturnType<typeof createOpencodeBackend> | null = null;
     private permissionHandler: OpencodePermissionHandler | null = null;
-    private vibyServer: { stop: () => void } | null = null;
     private abortController = new AbortController();
     private displayPermissionMode: PermissionMode | null = null;
     private instructionsSent = false;
@@ -40,13 +37,8 @@ class OpencodeRemoteLauncher extends RemoteLauncherBase {
         const session = this.session;
         const messageBuffer = this.messageBuffer;
 
-        const { server: vibyServer, mcpServers } = await buildVibyMcpBridge(session.client);
-        this.vibyServer = vibyServer;
-
-        const backend = createOpencodeBackend({
-            cwd: session.path
-        });
-        this.backend = backend;
+        const { mcpServers } = await session.ensureRemoteBridge();
+        const backend = session.ensureRemoteBackend();
 
         backend.onStderrError((error) => {
             logger.debug('[opencode-remote] stderr error', error);
@@ -142,9 +134,12 @@ class OpencodeRemoteLauncher extends RemoteLauncherBase {
             } finally {
                 session.onThinkingChange(false);
                 await this.permissionHandler?.cancelAll('Prompt finished');
-                if (session.queue.size() === 0 && !this.shouldExit) {
-                    sendReady();
-                }
+                await emitReadyIfIdle({
+                    queueSize: () => session.queue.size(),
+                    shouldExit: () => this.shouldExit,
+                    flushBeforeReady: () => flushReadyStateBeforeReady(session.client),
+                    sendReady
+                });
             }
         }
     }
@@ -155,16 +150,6 @@ class OpencodeRemoteLauncher extends RemoteLauncherBase {
         if (this.permissionHandler) {
             await this.permissionHandler.cancelAll('Session ended');
             this.permissionHandler = null;
-        }
-
-        if (this.backend) {
-            await this.backend.disconnect();
-            this.backend = null;
-        }
-
-        if (this.vibyServer) {
-            this.vibyServer.stop();
-            this.vibyServer = null;
         }
     }
 
@@ -183,7 +168,7 @@ class OpencodeRemoteLauncher extends RemoteLauncherBase {
     }
 
     private async handleAbort(): Promise<void> {
-        const backend = this.backend;
+        const backend = this.session.getRemoteBackend();
         if (backend && this.session.sessionId) {
             await backend.cancelPrompt(this.session.sessionId);
         }

@@ -5,7 +5,7 @@ import { Store } from '../../../store'
 import type { CliSocketWithData } from '../../socketTypes'
 import { SessionStreamManager } from '../../../sync/sessionStreamManager'
 import {
-    mergeProtectedSessionLifecycleMetadata,
+    mergeSessionMetadataPreservingLifecycle,
     registerSessionHandlers
 } from './sessionHandlers'
 
@@ -116,9 +116,9 @@ function assertSuccessfulMetadataResponse(
     return response as Extract<UpdateMetadataResponse, { result: 'success' }>
 }
 
-describe('mergeProtectedSessionLifecycleMetadata', () => {
+describe('mergeSessionMetadataPreservingLifecycle', () => {
     it('preserves archived lifecycle metadata across unrelated CLI metadata updates', () => {
-        const merged = mergeProtectedSessionLifecycleMetadata(
+        const merged = mergeSessionMetadataPreservingLifecycle(
             {
                 path: '/tmp/project',
                 host: 'localhost',
@@ -151,8 +151,8 @@ describe('mergeProtectedSessionLifecycleMetadata', () => {
         })
     })
 
-    it('allows explicit lifecycle updates to overwrite the stored lifecycle state', () => {
-        const merged = mergeProtectedSessionLifecycleMetadata(
+    it('ignores explicit lifecycle fields from CLI metadata updates', () => {
+        const merged = mergeSessionMetadataPreservingLifecycle(
             {
                 path: '/tmp/project',
                 host: 'localhost',
@@ -172,8 +172,30 @@ describe('mergeProtectedSessionLifecycleMetadata', () => {
         expect(merged).toEqual({
             path: '/tmp/project',
             host: 'localhost',
-            lifecycleState: 'closed',
-            lifecycleStateSince: 2_000
+            lifecycleState: 'archived',
+            lifecycleStateSince: 1_000,
+            archivedBy: 'web',
+            archiveReason: 'Archived by user'
+        })
+    })
+
+    it('does not let CLI metadata create lifecycle fields when none exist yet', () => {
+        const merged = mergeSessionMetadataPreservingLifecycle(
+            {
+                path: '/tmp/project',
+                host: 'localhost'
+            },
+            {
+                path: '/tmp/project',
+                host: 'localhost',
+                lifecycleState: 'closed',
+                lifecycleStateSince: 2_000
+            }
+        )
+
+        expect(merged).toEqual({
+            path: '/tmp/project',
+            host: 'localhost'
         })
     })
 })
@@ -246,15 +268,17 @@ describe('registerSessionHandlers update-metadata', () => {
         ])
     })
 
-    it('allows explicit lifecycle updates to replace archived lifecycle metadata', () => {
+    it('ignores explicit lifecycle updates and keeps archived lifecycle metadata authoritative', () => {
         const harness = createSessionHandlersHarness()
         const handler = assertUpdateMetadataHandler(harness.handlers)
         let response: UpdateMetadataResponse | null = null
         const expectedMetadata = {
             path: '/tmp/project',
             host: 'localhost',
-            lifecycleState: 'closed',
-            lifecycleStateSince: 2_000
+            lifecycleState: 'archived',
+            lifecycleStateSince: 1_000,
+            archivedBy: 'web',
+            archiveReason: 'Archived by user'
         }
 
         handler(

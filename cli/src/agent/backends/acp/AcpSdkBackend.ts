@@ -136,6 +136,18 @@ export class AcpSdkBackend implements AgentBackend {
         return sessionId;
     }
 
+    async setSessionModel(sessionId: string, modelId: string): Promise<void> {
+        if (!this.transport) {
+            throw new Error('ACP transport not initialized');
+        }
+
+        this.activeSessionId = sessionId;
+        await this.transport.sendRequest('session/set_model', {
+            sessionId,
+            modelId
+        });
+    }
+
     async prompt(
         sessionId: string,
         content: PromptContent[],
@@ -173,7 +185,8 @@ export class AcpSdkBackend implements AgentBackend {
         } finally {
             await this.waitForSessionUpdateQuiet(
                 AcpSdkBackend.UPDATE_QUIET_PERIOD_MS,
-                AcpSdkBackend.UPDATE_DRAIN_TIMEOUT_MS
+                AcpSdkBackend.UPDATE_DRAIN_TIMEOUT_MS,
+                Date.now()
             );
             this.messageHandler?.flushText();
             try {
@@ -278,7 +291,11 @@ export class AcpSdkBackend implements AgentBackend {
         this.messageHandler?.handleUpdate(update);
     }
 
-    private async waitForSessionUpdateQuiet(quietMs: number, timeoutMs: number): Promise<void> {
+    private async waitForSessionUpdateQuiet(
+        quietMs: number,
+        timeoutMs: number,
+        minimumQuietStartAt = 0
+    ): Promise<void> {
         if (quietMs <= 0 || timeoutMs <= 0) {
             return;
         }
@@ -286,7 +303,8 @@ export class AcpSdkBackend implements AgentBackend {
         const deadline = Date.now() + timeoutMs;
 
         while (Date.now() < deadline) {
-            const elapsedSinceUpdate = Date.now() - this.lastSessionUpdateAt;
+            const quietStartAt = Math.max(this.lastSessionUpdateAt, minimumQuietStartAt);
+            const elapsedSinceUpdate = Date.now() - quietStartAt;
             if (elapsedSinceUpdate >= quietMs) {
                 return;
             }

@@ -76,14 +76,17 @@ export class Session extends AgentSessionBase<EnhancedMode> {
 
     setPermissionMode = (mode: PermissionMode): void => {
         this.permissionMode = mode;
+        this.notifyKeepAliveRuntimeChanged();
     };
 
     setModel = (model: SessionModel): void => {
         this.model = model;
+        this.notifyKeepAliveRuntimeChanged();
     };
 
     setModelReasoningEffort = (modelReasoningEffort: ClaudeSessionModelReasoningEffort): void => {
         this.modelReasoningEffort = modelReasoningEffort;
+        this.notifyKeepAliveRuntimeChanged();
     };
 
     getModelReasoningEffort(): ClaudeSessionModelReasoningEffort | undefined {

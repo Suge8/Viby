@@ -75,7 +75,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null
 }
 
-export function mergeProtectedSessionLifecycleMetadata(
+export function mergeSessionMetadataPreservingLifecycle(
     currentMetadata: unknown,
     nextMetadata: unknown
 ): unknown {
@@ -83,18 +83,11 @@ export function mergeProtectedSessionLifecycleMetadata(
         return nextMetadata
     }
 
-    if (Object.prototype.hasOwnProperty.call(nextMetadata, 'lifecycleState')) {
-        return nextMetadata
-    }
-
     const mergedMetadata: Record<string, unknown> = { ...nextMetadata }
 
     for (const field of PROTECTED_SESSION_LIFECYCLE_METADATA_FIELDS) {
-        if (Object.prototype.hasOwnProperty.call(mergedMetadata, field)) {
-            continue
-        }
-
         if (!Object.prototype.hasOwnProperty.call(currentMetadata, field)) {
+            delete mergedMetadata[field]
             continue
         }
 
@@ -252,7 +245,7 @@ export function registerSessionHandlers(socket: CliSocketWithData, deps: Session
             return
         }
 
-        const protectedMetadata = mergeProtectedSessionLifecycleMetadata(
+        const protectedMetadata = mergeSessionMetadataPreservingLifecycle(
             sessionAccess.value.metadata,
             metadata
         )

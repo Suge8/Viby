@@ -32,7 +32,8 @@ import type {
     SessionModel,
     SessionModelReasoningEffort,
     SessionPermissionMode,
-    UserMessage
+    UserMessage,
+    WritableSessionMetadata
 } from './types'
 import {
     AgentStateSchema,
@@ -63,6 +64,13 @@ type SessionKeepAliveSnapshot = SessionKeepAliveRuntime & {
     thinking: boolean
     mode: 'local' | 'remote'
 }
+
+const LIFECYCLE_METADATA_FIELDS = [
+    'lifecycleState',
+    'lifecycleStateSince',
+    'archivedBy',
+    'archiveReason'
+] as const
 
 function getInitialSessionMode(metadata: Metadata | null): 'local' | 'remote' {
     return metadata?.startedBy === 'runner' || metadata?.startedFromRunner === true
@@ -101,6 +109,26 @@ function toSessionAlivePayload(sessionId: string, snapshot: SessionKeepAliveSnap
         ...(snapshot.modelReasoningEffort !== undefined ? { modelReasoningEffort: snapshot.modelReasoningEffort } : {}),
         ...(snapshot.collaborationMode !== undefined ? { collaborationMode: snapshot.collaborationMode } : {})
     }
+}
+
+function stripLifecycleMetadataFields<T extends Record<string, unknown>>(metadata: T): T {
+    const nextMetadata = { ...metadata }
+
+    for (const field of LIFECYCLE_METADATA_FIELDS) {
+        delete nextMetadata[field]
+    }
+
+    return nextMetadata
+}
+
+function createWritableSessionMetadataSnapshot(
+    metadata: Metadata | null
+): WritableSessionMetadata {
+    if (!metadata) {
+        return {} as WritableSessionMetadata
+    }
+
+    return stripLifecycleMetadataFields(metadata) as WritableSessionMetadata
 }
 
 type SessionStreamClientUpdate =
@@ -591,11 +619,14 @@ export class ApiSessionClient extends EventEmitter {
         this.socket.emit('session-end', { sid: this.sessionId, time: Date.now() })
     }
 
-    updateMetadata(handler: (metadata: Metadata) => Metadata, options?: MetadataUpdateOptions): void {
+    updateMetadata(
+        handler: (metadata: WritableSessionMetadata) => WritableSessionMetadata,
+        options?: MetadataUpdateOptions
+    ): void {
         this.metadataLock.inLock(async () => {
             await backoff(async () => {
-                const current = this.metadata ?? ({} as Metadata)
-                const updated = handler(current)
+                const current = createWritableSessionMetadataSnapshot(this.metadata)
+                const updated = stripLifecycleMetadataFields(handler(current))
 
                 const answer = await this.socket.emitWithAck('update-metadata', {
                     sid: this.sessionId,
@@ -662,6 +693,10 @@ export class ApiSessionClient extends EventEmitter {
                 })
             })
         })
+    }
+
+    async flushAgentStateUpdates(options?: { timeoutMs?: number }): Promise<void> {
+        await this.drainLock(this.agentStateLock, options?.timeoutMs ?? 5_000)
     }
 
     private flushPendingAutoSummary(): void {

@@ -66,6 +66,8 @@ export class CodexAppServerClient {
     private readonly requestHandlers = new Map<string, RequestHandler>();
     private notificationHandler: ((method: string, params: unknown) => void) | null = null;
     private protocolError: Error | null = null;
+    private initializedResponse: InitializeResponse | null = null;
+    private initializePromise: Promise<InitializeResponse> | null = null;
 
     static readonly DEFAULT_TIMEOUT_MS = 14 * 24 * 60 * 60 * 1000;
 
@@ -102,6 +104,7 @@ export class CodexAppServerClient {
             this.rejectAllPending(new Error(message));
             this.connected = false;
             this.resetParserState();
+            this.resetInitializationState();
             this.process = null;
         });
 
@@ -114,6 +117,7 @@ export class CodexAppServerClient {
             ));
             this.connected = false;
             this.resetParserState();
+            this.resetInitializationState();
             this.process = null;
         });
 
@@ -130,9 +134,28 @@ export class CodexAppServerClient {
     }
 
     async initialize(params: InitializeParams): Promise<InitializeResponse> {
-        const response = await this.sendRequest('initialize', params, { timeoutMs: 30_000 });
-        this.sendNotification('initialized');
-        return response as InitializeResponse;
+        if (this.initializedResponse) {
+            return this.initializedResponse;
+        }
+
+        if (this.initializePromise) {
+            return await this.initializePromise;
+        }
+
+        this.initializePromise = (async () => {
+            const response = await this.sendRequest('initialize', params, { timeoutMs: 30_000 }) as InitializeResponse;
+            this.sendNotification('initialized');
+            this.initializedResponse = response;
+            return response;
+        })();
+
+        try {
+            return await this.initializePromise;
+        } finally {
+            if (!this.initializedResponse) {
+                this.initializePromise = null;
+            }
+        }
     }
 
     async startThread(params: ThreadStartParams, options?: { signal?: AbortSignal }): Promise<ThreadStartResponse> {
@@ -185,6 +208,7 @@ export class CodexAppServerClient {
             this.rejectAllPending(new Error('Codex app-server disconnected'));
             this.connected = false;
             this.resetParserState();
+            this.resetInitializationState();
         }
 
         logger.debug('[CodexAppServer] Disconnected');
@@ -399,6 +423,11 @@ export class CodexAppServerClient {
     private resetParserState(): void {
         this.buffer = '';
         this.protocolError = null;
+    }
+
+    private resetInitializationState(): void {
+        this.initializedResponse = null;
+        this.initializePromise = null;
     }
 
     private rejectAllPending(error: Error): void {

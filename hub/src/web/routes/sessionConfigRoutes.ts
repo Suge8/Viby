@@ -3,7 +3,8 @@ import {
     isModelReasoningEffortAllowedForFlavor,
     getPermissionModesForFlavor,
     isPermissionModeAllowedForFlavor,
-    supportsLiveModelConfigForFlavor
+    supportsLiveModelReasoningEffortForFlavor,
+    supportsLiveModelSelectionForFlavor
 } from '@viby/protocol'
 import { CodexCollaborationModeSchema, ModelReasoningEffortSchema, PermissionModeSchema } from '@viby/protocol/schemas'
 import type { Hono } from 'hono'
@@ -158,11 +159,11 @@ export function registerSessionConfigRoutes(
 
         const flavor = getSessionFlavor(sessionContext.session)
         const liveConfigSupport = getLiveSessionConfigSupport(sessionContext.session)
-        if (!supportsLiveModelConfigForFlavor(flavor)) {
-            return c.json({ error: 'Live model selection is only supported for Claude and Codex sessions' }, 400)
+        if (!supportsLiveModelSelectionForFlavor(flavor)) {
+            return c.json({ error: 'Live model selection is only supported for Claude, Codex, and Gemini sessions' }, 400)
         }
         if (!liveConfigSupport.canChangeModel) {
-            return c.json({ error: 'Model selection can only be changed for remote Claude and Codex sessions' }, 409)
+            return c.json({ error: 'Model selection can only be changed for remote Claude, Codex, and Gemini sessions' }, 409)
         }
 
         try {
@@ -186,7 +187,7 @@ export function registerSessionConfigRoutes(
 
         const flavor = getSessionFlavor(sessionContext.session)
         const liveConfigSupport = getLiveSessionConfigSupport(sessionContext.session)
-        if (!supportsLiveModelConfigForFlavor(flavor)) {
+        if (!supportsLiveModelReasoningEffortForFlavor(flavor)) {
             return c.json({ error: 'Live model reasoning effort is only supported for Claude and Codex sessions' }, 400)
         }
         if (!liveConfigSupport.canChangeModelReasoningEffort) {

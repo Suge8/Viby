@@ -19,6 +19,7 @@ type GeminiTranscript = {
     messages?: GeminiTranscriptMessage[];
     [key: string]: unknown;
 };
+const GEMINI_SCANNER_FALLBACK_INTERVAL_MS = 15_000;
 
 export async function createGeminiSessionScanner(opts: {
     transcriptPath: string | null;
@@ -54,7 +55,7 @@ class GeminiSessionScanner extends BaseSessionScanner<GeminiTranscriptMessage> {
         onMessage: (message: GeminiTranscriptMessage) => void;
         onSessionId?: (sessionId: string) => void;
     }) {
-        super({ intervalMs: 2000 });
+        super({ fallbackIntervalMs: GEMINI_SCANNER_FALLBACK_INTERVAL_MS });
         this.transcriptPath = opts.transcriptPath;
         this.onMessage = opts.onMessage;
         this.onSessionId = opts.onSessionId;

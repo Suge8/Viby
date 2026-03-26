@@ -7,6 +7,12 @@ import { SessionCache } from './sessionCache'
 export type ResumeSessionResult =
     | { type: 'success'; sessionId: string }
     | { type: 'error'; message: string; code: 'session_not_found' | 'no_machine_online' | 'resume_unavailable' | 'resume_failed' | 'session_archived' }
+type ResumeSessionError = Extract<ResumeSessionResult, { type: 'error' }>
+type SessionSpawnOptions = Parameters<RpcGateway['spawnSession']>[0]
+type SessionSpawnPreparation = {
+    spawnOptions: SessionSpawnOptions
+    resumeToken?: string
+}
 
 export type ResumeContractState = 'ready' | 'token_mismatch' | 'inactive_after_spawn' | 'timeout'
 type ResumeContractFailureState = Exclude<ResumeContractState, 'ready'>
@@ -80,6 +86,26 @@ function getResumeContractFailureMessage(state: ResumeContractFailureState): str
     }
 }
 
+function createResumeError(
+    message: string,
+    code: ResumeSessionError['code']
+): ResumeSessionError {
+    return {
+        type: 'error',
+        message,
+        code
+    }
+}
+
+function resolveSessionFlavor(metadata: Session['metadata']): NonNullable<SessionSpawnOptions['agent']> {
+    return metadata?.flavor === 'codex'
+        || metadata?.flavor === 'gemini'
+        || metadata?.flavor === 'opencode'
+        || metadata?.flavor === 'cursor'
+        ? metadata.flavor
+        : 'claude'
+}
+
 export class SessionLifecycleService {
     constructor(
         private readonly sessionCache: SessionCache,
@@ -136,38 +162,23 @@ export class SessionLifecycleService {
     ): Promise<ResumeSessionResult> {
         const session = this.getSession(sessionId)
         if (!session) {
-            return {
-                type: 'error',
-                message: 'Session not found',
-                code: 'session_not_found'
-            }
+            return createResumeError('Session not found', 'session_not_found')
         }
 
         if (session.active) {
             return { type: 'success', sessionId }
         }
 
-        if (getSessionLifecycleState(session) === 'archived') {
-            return { type: 'error', message: 'Archived sessions must be restored before resuming', code: 'session_archived' }
+        const spawnPreparation = this.prepareSessionSpawn(session, {
+            archivedMessage: 'Archived sessions must be restored before resuming',
+            requireResumeToken: true
+        })
+        if ('type' in spawnPreparation) {
+            return spawnPreparation
         }
-
-        const metadata = session.metadata
-        if (!metadata || typeof metadata.path !== 'string') {
-            return { type: 'error', message: 'Session metadata missing path', code: 'resume_unavailable' }
-        }
-
-        const flavor = metadata.flavor === 'codex' || metadata.flavor === 'gemini' || metadata.flavor === 'opencode' || metadata.flavor === 'cursor'
-            ? metadata.flavor
-            : 'claude'
-        const resumeToken = getSessionResumeToken(session.metadata)
-
+        const { spawnOptions, resumeToken } = spawnPreparation
         if (!resumeToken) {
-            return { type: 'error', message: 'Resume session ID unavailable', code: 'resume_unavailable' }
-        }
-
-        const targetMachine = this.resolveResumeTargetMachine(session)
-        if (!targetMachine) {
-            return { type: 'error', message: 'No machine online', code: 'no_machine_online' }
+            return createResumeError('Resume session ID unavailable', 'resume_unavailable')
         }
 
         const resolvedHooks: ResumeSessionHooks = {
@@ -186,17 +197,7 @@ export class SessionLifecycleService {
             return { type: 'error', message, code: 'resume_failed' }
         }
 
-        const spawnResult = await this.rpcGateway.spawnSession({
-            sessionId,
-            machineId: targetMachine.id,
-            directory: metadata.path,
-            agent: flavor,
-            model: session.model ?? undefined,
-            modelReasoningEffort: session.modelReasoningEffort ?? undefined,
-            permissionMode: session.permissionMode,
-            resumeSessionId: resumeToken,
-            collaborationMode: session.collaborationMode
-        })
+        const spawnResult = await this.rpcGateway.spawnSession(spawnOptions)
 
         if (spawnResult.type !== 'success') {
             const restoreError = await resolvedHooks.writeSessionResumeToken(sessionId, resumeToken)
@@ -231,6 +232,42 @@ export class SessionLifecycleService {
                 ? `${baseMessage}. Cleanup also failed: ${cleanupError}`
                 : baseMessage
             return { type: 'error', message, code: 'resume_failed' }
+        }
+
+        return { type: 'success', sessionId: spawnResult.sessionId }
+    }
+
+    async startSession(sessionId: string): Promise<ResumeSessionResult> {
+        const session = this.getSession(sessionId)
+        if (!session) {
+            return createResumeError('Session not found', 'session_not_found')
+        }
+
+        if (session.active) {
+            return { type: 'success', sessionId }
+        }
+
+        const spawnPreparation = this.prepareSessionSpawn(session, {
+            archivedMessage: 'Archived sessions must be restored before starting',
+            requireResumeToken: false
+        })
+        if ('type' in spawnPreparation) {
+            return spawnPreparation
+        }
+
+        const spawnResult = await this.rpcGateway.spawnSession(spawnPreparation.spawnOptions)
+
+        if (spawnResult.type !== 'success') {
+            return { type: 'error', message: spawnResult.message, code: 'resume_failed' }
+        }
+
+        const startedSession = this.getSession(spawnResult.sessionId)
+        if (!startedSession?.active) {
+            return {
+                type: 'error',
+                message: 'Session remained inactive after start',
+                code: 'resume_failed'
+            }
         }
 
         return { type: 'success', sessionId: spawnResult.sessionId }
@@ -283,10 +320,9 @@ export class SessionLifecycleService {
         resumeToken: string,
         timeoutMs: number = RESUME_CONTRACT_TIMEOUT_MS
     ): Promise<ResumeContractState> {
-        const startTime = Date.now()
         let hasBecomeActive = false
 
-        while (Date.now() - startTime < timeoutMs) {
+        const resolveState = (): ResumeContractState | null => {
             const session = this.getSession(sessionId)
             const resumedToken = session ? getSessionResumeToken(session.metadata) : undefined
 
@@ -302,10 +338,23 @@ export class SessionLifecycleService {
                 return 'inactive_after_spawn'
             }
 
-            await new Promise((resolve) => setTimeout(resolve, RESUME_CONTRACT_POLL_INTERVAL_MS))
+            return null
         }
 
-        return 'timeout'
+        const immediateState = resolveState()
+        if (immediateState) {
+            return immediateState
+        }
+
+        return await this.sessionCache.waitForSessionCondition(sessionId, {
+            timeoutMs,
+            resolveValue: () => resolveState(),
+            onTimeout: () => 'timeout',
+            isRelevantEvent: (event) =>
+                event.type === 'session-added'
+                || event.type === 'session-updated'
+                || event.type === 'session-removed'
+        })
     }
 
     async defaultWriteSessionResumeToken(sessionId: string, token: string | undefined): Promise<void> {
@@ -326,6 +375,64 @@ export class SessionLifecycleService {
         }
 
         await this.rpcGateway.killSession(sessionId)
+    }
+
+    private prepareSessionSpawn(
+        session: Session,
+        options: {
+            archivedMessage: string
+            requireResumeToken: boolean
+        }
+    ): SessionSpawnPreparation | ResumeSessionError {
+        if (getSessionLifecycleState(session) === 'archived') {
+            return createResumeError(options.archivedMessage, 'session_archived')
+        }
+
+        const metadata = session.metadata
+        if (!metadata || typeof metadata.path !== 'string') {
+            return createResumeError('Session metadata missing path', 'resume_unavailable')
+        }
+
+        const targetMachine = this.resolveResumeTargetMachine(session)
+        if (!targetMachine) {
+            return createResumeError('No machine online', 'no_machine_online')
+        }
+
+        const resumeToken = options.requireResumeToken
+            ? getSessionResumeToken(session.metadata)
+            : undefined
+        if (options.requireResumeToken && !resumeToken) {
+            return createResumeError('Resume session ID unavailable', 'resume_unavailable')
+        }
+
+        return {
+            resumeToken,
+            spawnOptions: this.buildSessionSpawnOptions(
+                session,
+                targetMachine.id,
+                metadata.path,
+                resumeToken
+            )
+        }
+    }
+
+    private buildSessionSpawnOptions(
+        session: Session,
+        machineId: string,
+        directory: string,
+        resumeSessionId?: string
+    ): SessionSpawnOptions {
+        return {
+            sessionId: session.id,
+            machineId,
+            directory,
+            agent: resolveSessionFlavor(session.metadata),
+            model: session.model ?? undefined,
+            modelReasoningEffort: session.modelReasoningEffort ?? undefined,
+            permissionMode: session.permissionMode,
+            resumeSessionId,
+            collaborationMode: session.collaborationMode
+        }
     }
 
     private resolveResumeTargetMachine(session: Session) {

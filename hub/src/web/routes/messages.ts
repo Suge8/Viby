@@ -2,7 +2,7 @@ import { SESSION_MAX_MESSAGE_PAGE_SIZE, SESSION_TIMELINE_PAGE_SIZE } from '@viby
 import { Hono } from 'hono'
 import { AttachmentMetadataSchema } from '@viby/protocol/schemas'
 import { z } from 'zod'
-import type { SyncEngine } from '../../sync/syncEngine'
+import { SessionSendMessageError, type SyncEngine } from '../../sync/syncEngine'
 import type { WebAppEnv } from '../middleware/auth'
 import { requireSessionFromParam, requireSyncEngine } from './guards'
 
@@ -65,7 +65,7 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null): Ho
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine, { requireActive: true })
+        const sessionResult = requireSessionFromParam(c, engine)
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -82,13 +82,24 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null): Ho
             return c.json({ error: 'Message requires text or attachments' }, 400)
         }
 
-        await engine.sendMessage(sessionId, {
-            text: parsed.data.text,
-            localId: parsed.data.localId,
-            attachments: parsed.data.attachments,
-            sentFrom: 'webapp'
-        })
-        return c.json({ ok: true })
+        try {
+            const session = await engine.sendMessage(sessionId, {
+                text: parsed.data.text,
+                localId: parsed.data.localId,
+                attachments: parsed.data.attachments,
+                sentFrom: 'webapp'
+            })
+            return c.json({ ok: true, session })
+        } catch (error) {
+            if (error instanceof SessionSendMessageError) {
+                return c.json({
+                    error: error.message,
+                    code: error.code
+                }, { status: error.status })
+            }
+
+            throw error
+        }
     })
 
     return app

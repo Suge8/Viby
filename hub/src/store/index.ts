@@ -20,8 +20,8 @@ export { PushStore } from './pushStore'
 export { SessionStore } from './sessionStore'
 
 const IN_MEMORY_DATABASE_PREFIX = 'file::memory:'
-const SCHEMA_VERSION = 8
-const AUTO_MIGRATABLE_SCHEMA_VERSION = 7
+const SCHEMA_VERSION = 9
+const AUTO_MIGRATABLE_SCHEMA_VERSIONS = [7, 8] as const
 const REQUIRED_TABLES = [
     'sessions',
     'machines',
@@ -30,11 +30,13 @@ const REQUIRED_TABLES = [
 ] as const
 const REQUIRED_SESSION_COLUMNS = [
     'permission_mode',
-    'collaboration_mode'
+    'collaboration_mode',
+    'next_message_seq'
 ] as const
 const SESSION_COLUMN_DEFINITIONS: Record<(typeof REQUIRED_SESSION_COLUMNS)[number], string> = {
     permission_mode: 'TEXT',
-    collaboration_mode: 'TEXT'
+    collaboration_mode: 'TEXT',
+    next_message_seq: 'INTEGER NOT NULL DEFAULT 1'
 }
 const SCHEMA_REBUILD_GUIDANCE =
     'Back up and rebuild the database, or run an offline migration to the expected schema version.'
@@ -131,6 +133,7 @@ export class Store {
                 model_reasoning_effort TEXT,
                 permission_mode TEXT,
                 collaboration_mode TEXT,
+                next_message_seq INTEGER NOT NULL DEFAULT 1,
                 todos TEXT,
                 todos_updated_at INTEGER,
                 team_state TEXT,
@@ -183,7 +186,7 @@ export class Store {
     }
 
     private migrateSchema(currentVersion: number): void {
-        if (currentVersion !== AUTO_MIGRATABLE_SCHEMA_VERSION) {
+        if (!AUTO_MIGRATABLE_SCHEMA_VERSIONS.includes(currentVersion as 7 | 8)) {
             throw this.buildSchemaMismatchError(currentVersion)
         }
 
@@ -191,7 +194,10 @@ export class Store {
         this.db.exec('BEGIN IMMEDIATE')
 
         try {
-            this.addMissingSessionColumns()
+            const missingColumns = this.addMissingSessionColumns()
+            if (missingColumns.includes('next_message_seq') || currentVersion < SCHEMA_VERSION) {
+                this.backfillSessionMessageSeqCounters()
+            }
             this.setUserVersion(SCHEMA_VERSION)
             this.db.exec('COMMIT')
         } catch (error) {
@@ -227,13 +233,28 @@ export class Store {
         }
     }
 
-    private addMissingSessionColumns(): void {
+    private addMissingSessionColumns(): Array<(typeof REQUIRED_SESSION_COLUMNS)[number]> {
         const missingColumns = this.getMissingTableColumns('sessions', REQUIRED_SESSION_COLUMNS)
         for (const columnName of missingColumns) {
             this.db.exec(
                 `ALTER TABLE sessions ADD COLUMN ${columnName} ${SESSION_COLUMN_DEFINITIONS[columnName]}`
             )
         }
+        return missingColumns
+    }
+
+    private backfillSessionMessageSeqCounters(): void {
+        this.db.exec(`
+            UPDATE sessions
+            SET next_message_seq = COALESCE(
+                (
+                    SELECT MAX(messages.seq) + 1
+                    FROM messages
+                    WHERE messages.session_id = sessions.id
+                ),
+                1
+            )
+        `)
     }
 
     private assertRequiredSessionColumnsPresent(): void {
@@ -262,7 +283,7 @@ export class Store {
         return new Error(
             `SQLite schema version mismatch for ${location}. ` +
             `Expected ${SCHEMA_VERSION}, found ${currentVersion}. ` +
-            `This build only runs the ${AUTO_MIGRATABLE_SCHEMA_VERSION} -> ${SCHEMA_VERSION} migration automatically. ` +
+            `This build only runs the 7 -> ${SCHEMA_VERSION} and 8 -> ${SCHEMA_VERSION} migrations automatically. ` +
             SCHEMA_REBUILD_GUIDANCE
         )
     }

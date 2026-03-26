@@ -5,6 +5,7 @@ import type { EnhancedMode, PermissionMode } from './loop';
 import type { CodexCliOverrides } from './utils/codexCliOverrides';
 import type { LocalLaunchExitReason } from '@/agent/localLaunchPolicy';
 import type { CodexSessionModelReasoningEffort, SessionModel } from '@/api/types';
+import { CodexAppServerClient } from './codexAppServerClient';
 
 type LocalLaunchFailure = {
     message: string;
@@ -17,6 +18,7 @@ export class CodexSession extends AgentSessionBase<EnhancedMode> {
     readonly startedBy: 'runner' | 'terminal';
     readonly startingMode: 'local' | 'remote';
     localLaunchFailure: LocalLaunchFailure | null = null;
+    private appServerClient: CodexAppServerClient | null = null;
 
     constructor(opts: {
         api: ApiClient;
@@ -69,14 +71,17 @@ export class CodexSession extends AgentSessionBase<EnhancedMode> {
 
     setPermissionMode = (mode: PermissionMode): void => {
         this.permissionMode = mode;
+        this.notifyKeepAliveRuntimeChanged();
     };
 
     setModel = (model: SessionModel): void => {
         this.model = model;
+        this.notifyKeepAliveRuntimeChanged();
     };
 
     setModelReasoningEffort = (modelReasoningEffort: CodexSessionModelReasoningEffort): void => {
         this.modelReasoningEffort = modelReasoningEffort;
+        this.notifyKeepAliveRuntimeChanged();
     };
 
     getModelReasoningEffort(): CodexSessionModelReasoningEffort | undefined {
@@ -85,6 +90,7 @@ export class CodexSession extends AgentSessionBase<EnhancedMode> {
 
     setCollaborationMode = (mode: EnhancedMode['collaborationMode']): void => {
         this.collaborationMode = mode;
+        this.notifyKeepAliveRuntimeChanged();
     };
 
     recordLocalLaunchFailure = (message: string, exitReason: LocalLaunchExitReason): void => {
@@ -105,5 +111,22 @@ export class CodexSession extends AgentSessionBase<EnhancedMode> {
 
     sendStreamUpdate = (update: Parameters<ApiSessionClient['sendStreamUpdate']>[0]): void => {
         this.client.sendStreamUpdate(update);
+    };
+
+    getAppServerClient(): CodexAppServerClient {
+        if (!this.appServerClient) {
+            this.appServerClient = new CodexAppServerClient();
+        }
+        return this.appServerClient;
+    }
+
+    disposeAppServerClient = async (): Promise<void> => {
+        if (!this.appServerClient) {
+            return;
+        }
+
+        const client = this.appServerClient;
+        this.appServerClient = null;
+        await client.disconnect();
     };
 }

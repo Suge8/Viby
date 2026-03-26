@@ -26,16 +26,6 @@ export function createRunnerLifecycle(options: RunnerLifecycleOptions): RunnerLi
     const logPrefix = `[${options.logTag}]`
 
     const closeSession = async () => {
-        options.session.updateMetadata((currentMetadata) => ({
-            ...currentMetadata,
-            lifecycleState: 'closed',
-            lifecycleStateSince: Date.now(),
-            archivedBy: undefined,
-            archiveReason: undefined
-        }), {
-            touchUpdatedAt: true
-        })
-
         options.session.sendSessionDeath()
         await options.session.flush()
         await options.session.close()

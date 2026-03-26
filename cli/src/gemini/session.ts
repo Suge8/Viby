@@ -3,11 +3,15 @@ import { MessageQueue2 } from '@/utils/MessageQueue2';
 import { AgentSessionBase } from '@/agent/sessionBase';
 import type { GeminiMode, PermissionMode } from './types';
 import type { LocalLaunchExitReason } from '@/agent/localLaunchPolicy';
+import { buildVibyMcpBridge, type VibyMcpBridge } from '@/codex/utils/buildVibyMcpBridge';
+import { createGeminiBackend } from './utils/geminiBackend';
 
 type LocalLaunchFailure = {
     message: string;
     exitReason: LocalLaunchExitReason;
 };
+
+type GeminiBackend = ReturnType<typeof createGeminiBackend>;
 
 export class GeminiSession extends AgentSessionBase<GeminiMode> {
     transcriptPath: string | null = null;
@@ -16,6 +20,9 @@ export class GeminiSession extends AgentSessionBase<GeminiMode> {
     localLaunchFailure: LocalLaunchFailure | null = null;
 
     private transcriptPathCallbacks: Array<(path: string) => void> = [];
+    private remoteBridge: VibyMcpBridge | null = null;
+    private remoteBackend: GeminiBackend | null = null;
+    private remoteBackendKey: string | null = null;
 
     constructor(opts: {
         api: ApiClient;
@@ -76,6 +83,12 @@ export class GeminiSession extends AgentSessionBase<GeminiMode> {
 
     setPermissionMode = (mode: PermissionMode): void => {
         this.permissionMode = mode;
+        this.notifyKeepAliveRuntimeChanged();
+    };
+
+    setModel = (model: string | null): void => {
+        this.model = model;
+        this.notifyKeepAliveRuntimeChanged();
     };
 
     recordLocalLaunchFailure = (message: string, exitReason: LocalLaunchExitReason): void => {
@@ -92,5 +105,63 @@ export class GeminiSession extends AgentSessionBase<GeminiMode> {
 
     sendSessionEvent = (event: Parameters<ApiSessionClient['sendSessionEvent']>[0]): void => {
         this.client.sendSessionEvent(event);
+    };
+
+    async ensureRemoteBridge(): Promise<VibyMcpBridge> {
+        if (!this.remoteBridge) {
+            this.remoteBridge = await buildVibyMcpBridge(this.client);
+        }
+        return this.remoteBridge;
+    }
+
+    async ensureRemoteBackend(config: {
+        model?: string | null
+        hookSettingsPath?: string
+        permissionMode?: PermissionMode
+    }): Promise<GeminiBackend> {
+        const nextBackendKey = JSON.stringify({
+            model: config.model ?? null,
+            hookSettingsPath: config.hookSettingsPath ?? null,
+            permissionMode: config.permissionMode ?? null
+        });
+
+        if (this.remoteBackend && this.remoteBackendKey === nextBackendKey) {
+            return this.remoteBackend;
+        }
+
+        if (this.remoteBackend) {
+            await this.remoteBackend.disconnect();
+            this.remoteBackend = null;
+            this.remoteBackendKey = null;
+        }
+
+        this.remoteBackend = createGeminiBackend({
+            model: config.model ?? undefined,
+            resumeSessionId: this.sessionId,
+            hookSettingsPath: config.hookSettingsPath,
+            cwd: this.path,
+            permissionMode: config.permissionMode
+        });
+        this.remoteBackendKey = nextBackendKey;
+        return this.remoteBackend;
+    }
+
+    getRemoteBackend(): GeminiBackend | null {
+        return this.remoteBackend
+    }
+
+    disposeRemoteRuntime = async (): Promise<void> => {
+        if (this.remoteBackend) {
+            const backend = this.remoteBackend;
+            this.remoteBackend = null;
+            this.remoteBackendKey = null;
+            await backend.disconnect();
+        }
+
+        if (this.remoteBridge) {
+            const bridge = this.remoteBridge;
+            this.remoteBridge = null;
+            bridge.server.stop();
+        }
     };
 }

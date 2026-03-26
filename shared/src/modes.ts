@@ -43,10 +43,20 @@ export type ClaudeModelPreset = typeof CLAUDE_MODEL_PRESETS[number]
 export const CLAUDE_SELECTABLE_MODEL_PRESETS = ['sonnet', 'opus'] as const
 export type ClaudeSelectableModelPreset = typeof CLAUDE_SELECTABLE_MODEL_PRESETS[number]
 
+export const GEMINI_MODEL_PRESETS = [
+    'gemini-2.5-pro',
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
+    'gemini-3-pro-preview',
+    'gemini-3-flash-preview'
+] as const
+export type GeminiModelPreset = typeof GEMINI_MODEL_PRESETS[number]
+
 export const AGENT_FLAVORS = ['claude', 'codex', 'gemini', 'opencode', 'cursor'] as const
 export type AgentFlavor = typeof AGENT_FLAVORS[number]
 
-const LIVE_MODEL_CONFIG_FLAVORS = ['claude', 'codex'] as const
+const LIVE_MODEL_SELECTION_FLAVORS = ['claude', 'codex', 'gemini'] as const
+const LIVE_MODEL_REASONING_EFFORT_FLAVORS = ['claude', 'codex'] as const
 
 export const PERMISSION_MODE_LABELS: Record<PermissionMode, string> = {
     default: 'Default',
@@ -100,6 +110,14 @@ export const CLAUDE_MODEL_LABELS: Record<ClaudeModelPreset, string> = {
     'opus[1m]': 'Opus'
 }
 
+export const GEMINI_MODEL_LABELS: Record<GeminiModelPreset, string> = {
+    'gemini-2.5-pro': 'Gemini 2.5 Pro',
+    'gemini-2.5-flash': 'Gemini 2.5 Flash',
+    'gemini-2.5-flash-lite': 'Gemini 2.5 Flash Lite',
+    'gemini-3-pro-preview': 'Gemini 3 Pro Preview',
+    'gemini-3-flash-preview': 'Gemini 3 Flash Preview'
+}
+
 export const CODEX_COLLABORATION_MODE_LABELS: Record<CodexCollaborationMode, string> = {
     default: 'Default',
     plan: 'Plan'
@@ -132,6 +150,15 @@ export function getClaudeModelLabel(model: string): string | null {
     }
 
     return CLAUDE_MODEL_LABELS[trimmedModel as ClaudeModelPreset] ?? null
+}
+
+export function getGeminiModelLabel(model: string): string | null {
+    const trimmedModel = model.trim()
+    if (!trimmedModel) {
+        return null
+    }
+
+    return GEMINI_MODEL_LABELS[trimmedModel as GeminiModelPreset] ?? null
 }
 
 export function getPermissionModeLabel(mode: PermissionMode): string {
@@ -181,8 +208,12 @@ export function getModelReasoningEffortsForFlavor(flavor?: string | null): reado
     return []
 }
 
-export function supportsLiveModelConfigForFlavor(flavor?: string | null): boolean {
-    return LIVE_MODEL_CONFIG_FLAVORS.includes(flavor as typeof LIVE_MODEL_CONFIG_FLAVORS[number])
+export function supportsLiveModelSelectionForFlavor(flavor?: string | null): boolean {
+    return LIVE_MODEL_SELECTION_FLAVORS.includes(flavor as typeof LIVE_MODEL_SELECTION_FLAVORS[number])
+}
+
+export function supportsLiveModelReasoningEffortForFlavor(flavor?: string | null): boolean {
+    return LIVE_MODEL_REASONING_EFFORT_FLAVORS.includes(flavor as typeof LIVE_MODEL_REASONING_EFFORT_FLAVORS[number])
 }
 
 export function getPermissionModeOptionsForFlavor(flavor?: string | null): PermissionModeOption[] {
