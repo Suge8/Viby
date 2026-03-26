@@ -1,12 +1,15 @@
 import { type JSX, useCallback, useEffect, useState } from 'react'
-import { ApiClient } from '@/api/client'
+import { authenticateWithAccessToken } from '@/api/authClient'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { InlineNotice } from '@/components/InlineNotice'
 import { Spinner } from '@/components/Spinner'
-import { BrandIcon, SettingsIcon } from '@/components/icons'
+import { SettingsIcon } from '@/components/icons'
+import { StageBrandMark, STAGE_BRAND_MARK_NEUTRAL_TONE_CLASS_NAME } from '@/components/StageBrandMark'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { useFinalizeBootShell } from '@/hooks/useFinalizeBootShell'
 import { getNoticePreset } from '@/lib/noticePresets'
+import { formatUserFacingErrorMessage } from '@/lib/userFacingError'
 import { useTranslation } from '@/lib/use-translation'
 import type { ServerUrlResult } from '@/hooks/useServerUrl'
 
@@ -15,6 +18,7 @@ const ACCESS_TOKEN_INPUT_NAME = 'accessToken'
 const ACCESS_TOKEN_INPUT_CLASS_NAME = 'w-full rounded-[var(--ds-radius-lg)] border border-[var(--ds-border-default)] bg-[var(--ds-elevated)] px-4 py-4 text-base text-[var(--app-fg)] placeholder:text-[var(--app-hint)] transition-colors focus:border-[var(--ds-border-strong)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-brand)] disabled:opacity-50'
 const HUB_TRIGGER_CLASS_NAME = 'rounded-[var(--ds-radius-pill)] px-2 py-1 text-[var(--app-hint)] hover:text-[var(--app-fg)]'
 const HUB_INPUT_CLASS_NAME = 'w-full rounded-[var(--ds-radius-lg)] border border-[var(--ds-border-default)] bg-[var(--ds-elevated)] px-4 py-3 text-[var(--app-fg)] placeholder:text-[var(--app-hint)] focus:border-[var(--ds-border-strong)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-brand)]'
+const LOGIN_BRAND_MARK_CLASS_NAME = `ds-stage-empty-icon mx-auto mt-3 h-20 w-20 ${STAGE_BRAND_MARK_NEUTRAL_TONE_CLASS_NAME} md:mt-4 md:h-24 md:w-24`
 
 export type LoginPromptServerConfig = {
     baseUrl: string
@@ -37,6 +41,7 @@ function buildServerSummary(server: LoginPromptServerConfig, defaultLabel: strin
 export function LoginPrompt(props: LoginPromptProps): JSX.Element {
     const { error: externalError, onLogin, server } = props
     const { t } = useTranslation()
+    useFinalizeBootShell()
     const loginErrorPreset = getNoticePreset('loginError', t)
     const loginServerErrorPreset = getNoticePreset('loginServerError', t)
     const [accessToken, setAccessToken] = useState('')
@@ -65,15 +70,17 @@ export function LoginPrompt(props: LoginPromptProps): JSX.Element {
         setError(null)
 
         try {
-            const client = new ApiClient('', { baseUrl: server.baseUrl })
-            await client.authenticate({ accessToken: trimmedToken })
+            await authenticateWithAccessToken(server.baseUrl, trimmedToken)
             if (!onLogin) {
                 setError(t('login.error.loginUnavailable'))
                 return
             }
             onLogin(trimmedToken)
         } catch (e) {
-            setError(e instanceof Error ? e.message : t('login.error.authFailed'))
+            setError(formatUserFacingErrorMessage(e, {
+                t,
+                fallbackKey: 'login.error.authFailed'
+            }))
         } finally {
             setIsLoading(false)
         }
@@ -131,8 +138,8 @@ export function LoginPrompt(props: LoginPromptProps): JSX.Element {
             </div>
 
             <div className="relative w-full max-w-md space-y-8 rounded-[var(--ds-radius-2xl)] border border-[var(--ds-border-default)] bg-[var(--ds-panel-strong)] p-6 shadow-[var(--ds-shadow-card)] md:p-8">
-                <div className="space-y-4 text-center">
-                    <BrandIcon className="ds-stage-empty-icon mx-auto h-14 w-14 text-[var(--ds-accent-lime)]" />
+                <div className="space-y-5 pt-2 text-center">
+                    <StageBrandMark className={LOGIN_BRAND_MARK_CLASS_NAME} />
                     <div className="space-y-2">
                         <div className="text-3xl font-semibold tracking-[-0.04em] text-[var(--ds-text-primary)]">
                             {t('login.title')}

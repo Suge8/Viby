@@ -1,7 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { I18nProvider } from '@/lib/i18n-context'
-import { WorkspaceIcon } from '@/components/icons'
 import { LoadingState } from './LoadingState'
 
 describe('LoadingState', () => {
@@ -22,7 +21,7 @@ describe('LoadingState', () => {
                 <LoadingState
                     label="Preparing your workspace…"
                     description="Chat, files, and live updates will pick up here."
-                    icon={<WorkspaceIcon className="h-5 w-5" />}
+                    icon={<span data-testid="custom-loading-icon" />}
                     variant="panel"
                 />
             </I18nProvider>
@@ -30,5 +29,6 @@ describe('LoadingState', () => {
 
         expect(screen.getByTestId('loading-state-hero')).toHaveTextContent('Preparing your workspace…')
         expect(screen.getByText('Chat, files, and live updates will pick up here.')).toBeInTheDocument()
+        expect(screen.getByTestId('custom-loading-icon')).toBeInTheDocument()
     })
 })

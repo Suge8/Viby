@@ -1,30 +1,14 @@
 @import "tailwindcss";
+@config "../tailwind.config.ts";
 
-@theme {
-  --font-family-sans: "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
+@layer base {
+  body {
+    @apply bg-background text-text-primary font-sans;
+    min-height: 100vh;
+    margin: 0;
+  }
 
-  --color-slate-50: #f8fafc;
-  --color-slate-100: #f1f5f9;
-  --color-slate-200: #e2e8f0;
-  --color-slate-300: #cbd5e1;
-  --color-slate-400: #94a3b8;
-  --color-slate-500: #64748b;
-  --color-slate-600: #475569;
-  --color-slate-700: #334155;
-  --color-slate-800: #1e293b;
-  --color-slate-900: #0f172a;
-  --color-slate-950: #020617;
-
-  --color-sky-500: #0ea5e9;
-  --color-sky-600: #0284c7;
-}
-
-html,
-body,
-#root {
-  min-height: 100%;
-}
-
-body {
-  margin: 0;
+  #root {
+    min-height: 100vh;
+  }
 }

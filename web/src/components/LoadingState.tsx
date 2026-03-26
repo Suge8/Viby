@@ -1,9 +1,13 @@
 import type { ReactNode } from 'react'
-import { WorkspaceIcon } from '@/components/icons'
+import { joinClassNames } from '@/components/loading/loadingClassName'
+import { StageBrandMark, STAGE_BRAND_MARK_NEUTRAL_TONE_CLASS_NAME } from '@/components/StageBrandMark'
 import { Spinner } from '@/components/Spinner'
 import { LoadingRail } from '@/components/loading/LoadingSkeleton'
-import { cn } from '@/lib/utils'
 import { useTranslation } from '@/lib/use-translation'
+
+const LOADING_PANEL_CLASS_NAME = 'mx-auto flex w-full max-w-[20rem] flex-col items-center gap-4 text-center'
+const LOADING_INLINE_CLASS_NAME = 'inline-flex items-center gap-2 text-[var(--app-hint)]'
+const LOADING_PANEL_BRAND_MARK_CLASS_NAME = `ds-stage-empty-icon h-20 w-20 ${STAGE_BRAND_MARK_NEUTRAL_TONE_CLASS_NAME}`
 
 type LoadingStateProps = {
     label?: string
@@ -13,29 +17,23 @@ type LoadingStateProps = {
     icon?: ReactNode
 }
 
-function LoadingPanel(props: {
+type LoadingPanelProps = {
     label: string
     description?: string
     className?: string
     icon?: ReactNode
-}): React.JSX.Element {
+}
+
+function LoadingPanel(props: LoadingPanelProps): React.JSX.Element {
     return (
         <div
             data-testid="loading-state-hero"
-            className={cn(
-                'mx-auto flex w-full max-w-[20rem] flex-col items-center gap-4 text-center',
-                props.className
-            )}
+            className={joinClassNames(LOADING_PANEL_CLASS_NAME, props.className)}
             role="status"
             aria-live="polite"
             aria-busy="true"
         >
-            <div className="relative flex h-14 w-14 items-center justify-center rounded-[20px] border border-[color:color-mix(in_srgb,var(--ds-brand)_16%,var(--ds-border-default))] bg-[linear-gradient(160deg,color-mix(in_srgb,var(--ds-panel-strong)_94%,var(--ds-brand)_6%)_0%,color-mix(in_srgb,var(--ds-panel-strong)_92%,var(--ds-accent-coral)_8%)_100%)] text-[var(--ds-brand)] shadow-[0_20px_44px_rgba(9,15,35,0.1)]">
-                <div className="ds-loading-orb absolute inset-[5px] rounded-[16px] bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--ds-brand)_18%,transparent),transparent_72%)]" />
-                <div className="relative z-10">
-                    {props.icon ?? <WorkspaceIcon className="h-5 w-5" />}
-                </div>
-            </div>
+            {props.icon ?? <StageBrandMark className={LOADING_PANEL_BRAND_MARK_CLASS_NAME} />}
             <div className="space-y-1">
                 <p className="text-sm font-semibold tracking-[-0.02em] text-[var(--app-fg)]">
                     {props.label}
@@ -74,7 +72,7 @@ export function LoadingState({
 
     return (
         <div
-            className={cn('inline-flex items-center gap-2 text-[var(--app-hint)]', className)}
+            className={joinClassNames(LOADING_INLINE_CLASS_NAME, className)}
             role="status"
             aria-live="polite"
             aria-busy="true"

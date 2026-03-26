@@ -1,3 +1,8 @@
+const INFO_FIELD_CARD_CLASS_NAME =
+    'bg-surface-item border border-border rounded-md p-4 transition-all duration-200 hover:border-[rgba(255,255,255,0.15)] hover:bg-[rgba(255,255,255,0.01)]'
+const INFO_FIELD_ACTION_CLASS_NAME =
+    'text-sm font-medium text-accent-primary transition-colors hover:underline'
+
 interface InfoFieldProps {
     label: string
     value?: string
@@ -11,20 +16,29 @@ export function InfoField({
     value,
     actionLabel,
     onAction,
-    mono = false
+    mono = false,
 }: InfoFieldProps) {
+    const valueClassName = [
+        'mt-2 text-lg font-semibold text-text-primary',
+        mono ? 'font-mono' : ''
+    ].join(' ').trim()
+
     return (
-        <div className="bg-slate-800/50 border border-slate-700/80 rounded-lg p-4 transition-colors hover:border-slate-600 hover:bg-slate-800">
+        <div className={INFO_FIELD_CARD_CLASS_NAME}>
             <div className="flex justify-between items-center">
-                <span className="text-sm text-slate-400 font-medium">{label}</span>
+                <span className="text-sm text-text-secondary font-medium">{label}</span>
                 {actionLabel && onAction ? (
-                    <button className="text-sm font-medium text-sky-500 hover:text-sky-400 transition-colors" onClick={onAction} type="button">
+                    <button
+                        className={INFO_FIELD_ACTION_CLASS_NAME}
+                        onClick={onAction}
+                        type="button"
+                    >
                         {actionLabel}
                     </button>
                 ) : null}
             </div>
-            <div className={`mt-2 text-lg text-white font-semibold ${mono ? 'font-mono' : ''}`}>
-                {value || <span className="text-slate-500">暂无</span>}
+            <div className={valueClassName}>
+                {value || <span className="text-text-secondary/70">暂无</span>}
             </div>
         </div>
     )

@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button'
-import { BrandIcon, ConversationIcon, PlusIcon, SettingsIcon, WorkspaceIcon } from '@/components/icons'
+import { ConversationIcon, PlusIcon, SettingsIcon, WorkspaceIcon } from '@/components/icons'
+import { StageBrandMark, STAGE_BRAND_MARK_NEUTRAL_TONE_CLASS_NAME } from '@/components/StageBrandMark'
 import { useTranslation } from '@/lib/use-translation'
 
 type SessionsEmptyStateProps = {
@@ -7,6 +8,8 @@ type SessionsEmptyStateProps = {
     onCreate: () => void
     onOpenSettings: () => void
 }
+
+const SESSIONS_EMPTY_STATE_BRAND_MARK_CLASS_NAME = `ds-stage-empty-icon h-24 w-24 ${STAGE_BRAND_MARK_NEUTRAL_TONE_CLASS_NAME} sm:h-28 sm:w-28`
 
 export function SessionsEmptyState(props: SessionsEmptyStateProps) {
     const { t } = useTranslation()
@@ -17,10 +20,14 @@ export function SessionsEmptyState(props: SessionsEmptyStateProps) {
     return (
         <div className="flex h-full min-h-full flex-1 items-center justify-center px-6 py-10">
             <div className="mx-auto flex w-full max-w-[560px] flex-col items-center text-center">
-                <div className="relative mb-8 flex items-center gap-5">
-                    <WorkspaceIcon className="h-12 w-12 text-[var(--ds-accent-coral)]" />
-                    <BrandIcon className="ds-stage-empty-icon h-16 w-16 text-[var(--ds-accent-lime)]" />
-                    <ConversationIcon className="h-12 w-12 text-[var(--ds-accent-gold)]" />
+                <div className="mb-9 flex items-center justify-center gap-3 sm:gap-4">
+                    <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-[color:color-mix(in_srgb,var(--ds-accent-coral)_14%,transparent)] text-[var(--ds-accent-coral)] sm:h-12 sm:w-12">
+                        <WorkspaceIcon className="h-5 w-5 sm:h-5.5 sm:w-5.5" />
+                    </span>
+                    <StageBrandMark className={SESSIONS_EMPTY_STATE_BRAND_MARK_CLASS_NAME} />
+                    <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-[color:color-mix(in_srgb,var(--ds-accent-gold)_14%,transparent)] text-[var(--ds-accent-gold)] sm:h-12 sm:w-12">
+                        <ConversationIcon className="h-5 w-5 sm:h-5.5 sm:w-5.5" />
+                    </span>
                 </div>
 
                 <div className="space-y-3">

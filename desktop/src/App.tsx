@@ -29,6 +29,16 @@ const ENTRY_OPTIONS = [
     { value: 'lan', label: '局域网' }
 ] as const
 
+const APP_SHELL_CLASS_NAME =
+    'bg-background text-text-primary flex min-h-screen items-center justify-center p-4'
+const PANEL_CLASS_NAME = 'w-full max-w-2xl rounded-lg border border-border bg-surface-raised'
+const CHIP_CLASS_NAME =
+    'rounded-full bg-surface-item border border-border px-2 py-1 text-xs font-medium text-text-secondary'
+const CONTROL_PANEL_CLASS_NAME =
+    'flex flex-wrap items-center justify-between gap-4 rounded-md border border-border bg-background p-3'
+const ACTION_PANEL_CLASS_NAME =
+    'flex flex-wrap items-center gap-4 rounded-md border border-border bg-background p-3'
+
 export function App(): JSX.Element {
     const [activeTab, setActiveTab] = useState<DesktopTab>('overview')
     const {
@@ -66,31 +76,27 @@ export function App(): JSX.Element {
         }
     }
 
-    const footerClass = actionError || snapshot?.lastError ? 'text-red-400' : 'text-slate-500'
+    const footerClassName = actionError || snapshot?.lastError
+        ? 'text-red-400'
+        : 'text-text-secondary'
 
     return (
-        <main className="font-sans bg-slate-950 text-slate-300 flex items-center justify-center min-h-screen p-4">
-            <div className="w-full max-w-2xl bg-slate-900/80 backdrop-blur-sm border border-slate-800 rounded-xl shadow-2xl shadow-black/20">
-                <section className="p-6 sm:p-8">
-                    <header className="flex justify-between items-start mb-6">
+        <main className={APP_SHELL_CLASS_NAME}>
+            <div className={PANEL_CLASS_NAME}>
+                <section className="p-6 sm:p-8 flex flex-col gap-6">
+                    <header className="flex justify-between items-start">
                         <div className="flex-grow">
-                            <span className="text-sm font-medium text-sky-500">Viby Desktop</span>
+                            <span className="text-sm font-medium text-accent-primary">Viby Desktop</span>
                             <div className="flex items-center gap-3 mt-1">
-                                <h1 className="text-2xl font-bold text-white">{statusCopy.title}</h1>
+                                <h1 className="text-2xl font-bold text-text-primary">{statusCopy.title}</h1>
                                 <StatusBadge phase={viewState.displayedPhase} running={viewState.running} />
                             </div>
-                            <p className="text-slate-400 mt-1">{statusCopy.subtitle}</p>
+                            <p className="text-text-secondary mt-1">{statusCopy.subtitle}</p>
                         </div>
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                            statusCopy.chipTone === 'managed'
-                                ? 'bg-green-500/10 text-green-400 border border-green-500/20'
-                                : 'bg-slate-700/50 text-slate-400 border border-slate-700'
-                        }`}>
-                            {statusCopy.chip}
-                        </span>
+                        <span className={CHIP_CLASS_NAME}>{statusCopy.chip}</span>
                     </header>
 
-                    <div className="flex flex-wrap items-center justify-between gap-4 mb-6 p-4 bg-slate-800/50 rounded-lg border border-slate-800">
+                    <div className={CONTROL_PANEL_CLASS_NAME}>
                         <SegmentedControl
                             onChange={(value) => setActiveTab(value as DesktopTab)}
                             options={TAB_OPTIONS}
@@ -105,7 +111,7 @@ export function App(): JSX.Element {
                     </div>
 
                     {activeTab === 'overview' ? (
-                        <section className="space-y-6">
+                        <section className="flex flex-col gap-6">
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 {overviewFields.map((item) => (
                                     <InfoField
@@ -119,7 +125,7 @@ export function App(): JSX.Element {
                                 ))}
                             </div>
 
-                            <div className="flex flex-wrap items-center gap-4 p-4 bg-slate-800/50 rounded-lg border border-slate-800">
+                            <div className={ACTION_PANEL_CLASS_NAME}>
                                 <ActionButton
                                     disabled={busy}
                                     label={primaryActionLabel}
@@ -139,8 +145,8 @@ export function App(): JSX.Element {
                             </div>
 
                             <div className="text-center">
-                                <span className="text-sm font-medium text-slate-400">{ownershipHint.title}</span>
-                                <p className="text-xs text-slate-500 mt-1">{ownershipHint.body}</p>
+                                <span className="text-sm font-medium text-text-secondary">{ownershipHint.title}</span>
+                                <p className="text-xs text-text-secondary/70 mt-1">{ownershipHint.body}</p>
                             </div>
                         </section>
                     ) : (
@@ -160,9 +166,11 @@ export function App(): JSX.Element {
                         </section>
                     )}
                 </section>
-                
-                <footer className="px-6 sm:px-8 py-4 border-t border-slate-800">
-                    <span className={`text-xs transition-colors duration-200 ${footerClass}`}>{footerMessage}</span>
+
+                <footer className="px-6 sm:px-8 py-4 border-t border-border">
+                    <span className={`text-xs transition-colors duration-200 ${footerClassName}`}>
+                        {footerMessage}
+                    </span>
                 </footer>
             </div>
         </main>

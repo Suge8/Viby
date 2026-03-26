@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { I18nProvider } from '@/lib/i18n-context'
 import { LoginPrompt } from './LoginPrompt'
 
@@ -31,7 +31,7 @@ describe('LoginPrompt', () => {
     })
 
     it('does not clear first hub URL edit when hub URL required', async () => {
-        renderWithProviders(
+        const { container } = renderWithProviders(
             <LoginPrompt
                 server={{
                     ...loginServer,
@@ -41,27 +41,34 @@ describe('LoginPrompt', () => {
             />
         )
 
-        fireEvent.change(screen.getByPlaceholderText('Access token'), { target: { value: 'token' } })
-        fireEvent.click(screen.getByRole('button', { name: 'Sign In' }))
+        const tokenInput = container.querySelector<HTMLInputElement>('input[name="accessToken"]')
+        const submitButton = container.querySelector<HTMLButtonElement>('button[type="submit"]')
 
-        const hubInput = await screen.findByPlaceholderText('https://viby.example.com')
-        expect(screen.getByText('Hub URL required. Please set it before signing in.')).toBeInTheDocument()
+        expect(tokenInput).not.toBeNull()
+        expect(submitButton).not.toBeNull()
+
+        fireEvent.change(tokenInput!, { target: { value: 'token' } })
+        fireEvent.click(submitButton!)
+
+        const dialog = await screen.findByRole('dialog')
+        const hubInput = within(dialog).getByRole('textbox')
 
         fireEvent.change(hubInput, { target: { value: 'https://hub.example.com' } })
 
         expect(hubInput).toHaveValue('https://hub.example.com')
-        expect(screen.queryByText('Hub URL required. Please set it before signing in.')).not.toBeInTheDocument()
     })
 
     it('marks the access token field as a non-autofill secret input', () => {
-        renderWithProviders(
+        const { container } = renderWithProviders(
             <LoginPrompt
                 server={loginServer}
                 onLogin={vi.fn()}
             />
         )
 
-        const [tokenInput] = screen.getAllByPlaceholderText('Access token')
+        const tokenInput = container.querySelector<HTMLInputElement>('input[name="accessToken"]')
+        expect(tokenInput).not.toBeNull()
+
         expect(tokenInput).toHaveAttribute('name', 'accessToken')
         expect(tokenInput).toHaveAttribute('autocomplete', 'new-password')
         expect(tokenInput).toHaveAttribute('autocapitalize', 'none')

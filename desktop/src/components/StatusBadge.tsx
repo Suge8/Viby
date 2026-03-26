@@ -1,37 +1,43 @@
-import type { HubRuntimePhase } from '@/types'
-import { formatPhaseLabel } from '@/lib/format'
+import type { JSX } from 'react';
+import type { HubRuntimePhase } from '@/types';
 
 interface StatusBadgeProps {
-    phase?: HubRuntimePhase
-    running: boolean
+    phase?: HubRuntimePhase;
+    running: boolean;
 }
 
-const getPhaseStyles = (phase: HubRuntimePhase | undefined, running: boolean): [string, string] => {
+const getPhaseDotClass = (phase: HubRuntimePhase | undefined, running: boolean): string => {
     if (running || phase === 'ready') {
-        return ['bg-green-500', 'text-green-300']
+        return 'bg-green-500';
     }
     switch (phase) {
         case 'starting':
-            return ['bg-yellow-500', 'text-yellow-300']
+            return 'bg-yellow-500 animate-pulse';
         case 'error':
-            return ['bg-red-500', 'text-red-300']
+            return 'bg-red-500';
         case 'stopped':
         default:
-            return ['bg-slate-600', 'text-slate-400']
+            return 'bg-text-secondary/50';
     }
-}
+};
 
-export function StatusBadge({
-    phase,
-    running
-}: StatusBadgeProps) {
-    const [dotClass, textClass] = getPhaseStyles(phase, running)
-    const pulseClass = phase === 'starting' ? 'animate-pulse' : ''
+export function StatusBadge({ phase, running }: StatusBadgeProps): JSX.Element | null {
+    const dotClass = getPhaseDotClass(phase, running);
 
+    // Render a more complex "ping" animation for the active running state
+    if (running || phase === 'ready') {
+        return (
+            <div className="relative flex h-3 w-3 items-center justify-center">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-500" />
+            </div>
+        );
+    }
+
+    // Render a simpler dot for other states
     return (
-        <div className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-slate-800/80 border border-slate-700/80">
-            <span className={`w-2 h-2 rounded-full ${dotClass} ${pulseClass}`} />
-            <span className={`text-sm font-medium ${textClass}`}>{formatPhaseLabel(phase, running)}</span>
+        <div className="relative flex h-3 w-3 items-center justify-center">
+             <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${dotClass}`} />
         </div>
-    )
+    );
 }

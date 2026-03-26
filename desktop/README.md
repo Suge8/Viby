@@ -48,14 +48,16 @@ Tauri shell
 bun install
 ```
 
-2. 生成图标：
+2. 如需单独重生成图标：
 
 ```bash
 cd desktop
 bun run prepare:icons
 ```
 
-这一步会生成 `desktop/src-tauri/icons/*`。
+这一步会从 `branding/logo.png` 生成 `desktop/src-tauri/icons/*`。
+它现在会统一回写 `web/public/*`、桌面 bundle icon 和 tray 资源；
+也可以直接在仓库根执行 `bun run generate:brand-assets` 单独重生成品牌资产。
 后续 `tauri dev/build` 还可能更新 `desktop/src-tauri/gen/schemas/*`；
 这两类都属于本地可再生生成物，仓库默认忽略。
 
@@ -67,6 +69,7 @@ bun run tauri:dev
 
 说明：
 
+- `bun run tauri:dev` / `bun run tauri:build` 现在会自动先跑一次 `prepare:icons`，不再依赖手动前置步骤
 - 开发态通过 `tauri.conf.json` 里的 `beforeDevCommand = "bun run dev:web"` 拉起 Vite dev server，并把窗口指向 `http://127.0.0.1:1420`
 - `bun run dev:desktop` / `bun run tauri:dev` 不会先额外跑 `build:web`；只有 `tauri build` 才会执行 `beforeBuildCommand = "bun run build:web"` 并消费 `desktop/dist`
 - 开发态默认直接拉 `bun src/index.ts hub`
@@ -91,7 +94,6 @@ bun run build:single-exe
 ```bash
 cd desktop
 bun run prepare:sidecar
-bun run prepare:icons
 bun run tauri:build
 ```
 

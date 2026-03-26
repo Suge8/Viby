@@ -14,7 +14,17 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show_item, &open_item, &quit_item])?;
 
-    TrayIconBuilder::with_id("main-tray")
+    let mut builder = TrayIconBuilder::with_id("main-tray")
+        .icon({
+            #[cfg(target_os = "macos")]
+            {
+                tauri::include_image!("./icons/tray-macos-template@2x.png")
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                tauri::include_image!("./icons/tray-windows@2x.png")
+            }
+        })
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| {
@@ -42,7 +52,14 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
                 let _ = show_main_window(tray.app_handle());
             }
         })
-        .build(app)?;
+        ;
+
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder.icon_as_template(true);
+    }
+
+    builder.build(app)?;
 
     Ok(())
 }
