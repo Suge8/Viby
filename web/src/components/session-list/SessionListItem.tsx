@@ -5,6 +5,7 @@ import { usePlatform } from '@/hooks/usePlatform'
 import { Button } from '@/components/ui/button'
 import type { FloatingActionMenuAnchorPoint } from '@/components/ui/FloatingActionMenu.contract'
 import { SessionAttentionBadge } from '@/components/session-list/SessionAttentionBadge'
+import type { SessionListSelection } from '@/components/session-list/sessionListContracts'
 import { SessionAgentBrandIcon } from '@/components/session-list/sessionAgentPresentation'
 import { SessionStateBadge } from '@/components/session-list/SessionStateBadge'
 import {
@@ -24,12 +25,6 @@ const SESSION_TITLE_CLASS_NAME = 'truncate text-[15px] font-semibold leading-tig
 const SESSION_METADATA_BLOCK_CLASS_NAME = 'mt-1'
 const SESSION_META_ROW_CLASS_NAME = 'flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-relaxed text-[var(--app-hint)]'
 const SESSION_STATUS_ROW_CLASS_NAME = 'flex shrink-0 items-center justify-end gap-1'
-
-type SessionListSelection = {
-    onSelect: (sessionId: string) => void
-    onPreload?: (sessionId: string) => void
-    selectedSessionId?: string | null
-}
 
 type SessionListItemProps = {
     session: SessionSummary

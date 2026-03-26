@@ -1,5 +1,6 @@
 import type { CodexCollaborationMode, ModelReasoningEffort, PermissionMode } from './modes'
 import type { Session, WorktreeMetadata } from './schemas'
+import type { SessionSummaryTeam, SessionTeamContext } from './teamSchemas'
 import {
     createEmptySessionMessageActivity,
     type SessionActivityKind,
@@ -42,6 +43,7 @@ export type SessionSummary = {
     modelReasoningEffort: ModelReasoningEffort | null
     permissionMode?: PermissionMode
     collaborationMode?: CodexCollaborationMode
+    team?: SessionSummaryTeam
 }
 
 type SessionSummarySortTimestampSource = Pick<
@@ -136,7 +138,30 @@ export function toSessionSummary(session: Session, messageActivity?: SessionMess
         model: session.model,
         modelReasoningEffort: session.modelReasoningEffort,
         permissionMode: session.permissionMode,
-        collaborationMode: session.collaborationMode
+        collaborationMode: session.collaborationMode,
+        team: toSessionSummaryTeam(session.teamContext)
+    }
+}
+
+function toSessionSummaryTeam(teamContext: SessionTeamContext | undefined): SessionSummaryTeam | undefined {
+    if (!teamContext) {
+        return undefined
+    }
+
+    return {
+        projectId: teamContext.projectId,
+        sessionRole: teamContext.sessionRole,
+        managerSessionId: teamContext.managerSessionId,
+        managerTitle: teamContext.managerTitle,
+        memberRole: teamContext.memberRole,
+        memberRevision: teamContext.memberRevision,
+        membershipState: teamContext.membershipState,
+        controlOwner: teamContext.controlOwner,
+        projectStatus: teamContext.projectStatus,
+        activeMemberCount: teamContext.activeMemberCount ?? 0,
+        archivedMemberCount: teamContext.archivedMemberCount ?? 0,
+        runningMemberCount: teamContext.runningMemberCount ?? 0,
+        blockedTaskCount: teamContext.blockedTaskCount ?? 0
     }
 }
 

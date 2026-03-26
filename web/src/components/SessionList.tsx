@@ -1,14 +1,17 @@
 import { Suspense, lazy, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { SessionSummary } from '@/types/api'
 import type { ApiClient } from '@/api/client'
-import { SessionListItem } from '@/components/session-list/SessionListItem'
-import { areSessionListRowsEquivalent } from '@/components/session-list/sessionListRenderHelpers'
 import { SessionListControls } from '@/components/session-list/SessionListControls'
-import { SessionListSectionHeader } from '@/components/session-list/SessionListSectionHeader'
 import type {
-    SessionListSection,
-    SessionListTab
-} from '@/components/session-list/sessionListUtils'
+    SessionListManagerGroupState,
+    SessionListRenderContext,
+    SessionListSelection
+} from '@/components/session-list/sessionListContracts'
+import {
+    SessionArchiveView,
+    SessionMainView
+} from '@/components/session-list/SessionListViews'
+import type { SessionListTab } from '@/components/session-list/sessionListUtils'
 import { buildSessionSections } from '@/components/session-list/sessionListUtils'
 import {
     DEFAULT_FLOATING_ACTION_MENU_ANCHOR_POINT,
@@ -20,21 +23,12 @@ import { useTranslation } from '@/lib/use-translation'
 const SESSION_LIST_ROOT_CLASS_NAME = 'mx-auto flex w-full max-w-content flex-col'
 const SESSION_LIST_STICKY_CONTROLS_CLASS_NAME =
     '-mt-2 sticky top-0 z-10 px-3 pb-2'
-const SESSION_LIST_SECTION_STACK_CLASS_NAME = 'flex flex-col gap-4 px-3 pb-4 pt-1'
-const SESSION_LIST_ARCHIVE_STACK_CLASS_NAME = 'flex flex-col gap-2 px-3 pb-4 pt-1'
-const SESSION_LIST_SECTION_CARD_STACK_CLASS_NAME = 'flex flex-col gap-2'
 
 type SessionListActions = {
     onSelect: (sessionId: string) => void
     onPreloadSession?: (sessionId: string) => void
     onNewSession: () => void
     onArchiveSelectedSession?: (sessionId: string) => void
-}
-
-type SessionListSelection = {
-    onSelect: (sessionId: string) => void
-    onPreload?: (sessionId: string) => void
-    selectedSessionId?: string | null
 }
 
 type SessionListProps = {
@@ -47,13 +41,6 @@ type SessionListProps = {
 type SessionActionTarget = {
     sessionId: string | null
     anchorPoint: FloatingActionMenuAnchorPoint
-}
-
-type SessionListAnimatedItemProps = {
-    session: SessionSummary
-    hasUnseenReply: boolean
-    selection: SessionListSelection
-    onOpenActionMenu: (sessionId: string, anchorPoint: FloatingActionMenuAnchorPoint) => void
 }
 
 type SessionListDerivedData = {
@@ -129,6 +116,7 @@ function SessionListComponent(props: SessionListProps): React.JSX.Element {
     const { api, actions, selectedSessionId = null, sessions } = props
     const [activeTab, setActiveTab] = useState<SessionListTab>(() => resolveInitialActiveTab(sessions, selectedSessionId))
     const [actionTarget, setActionTarget] = useState<SessionActionTarget>(createClosedActionTarget)
+    const [expandedManagerGroups, setExpandedManagerGroups] = useState<Record<string, boolean>>({})
     const {
         archivedSessions,
         mainSessions,
@@ -137,10 +125,7 @@ function SessionListComponent(props: SessionListProps): React.JSX.Element {
     } = useMemo(() => {
         return deriveSessionListData(sessions, selectedSessionId, actionTarget.sessionId)
     }, [actionTarget.sessionId, selectedSessionId, sessions])
-    const sections = useMemo(
-        () => buildSessionSections(mainSessions),
-        [mainSessions]
-    )
+    const sections = useMemo(() => buildSessionSections(mainSessions), [mainSessions])
     const { hasUnseenReply } = useSessionAttention(sessions, selectedSessionId)
     const previousSelectedSessionIdRef = useRef(selectedSessionId)
     const previousSelectedLifecycleStateRef = useRef(selectedSession?.lifecycleState ?? null)
@@ -162,38 +147,21 @@ function SessionListComponent(props: SessionListProps): React.JSX.Element {
         }
     ]), [archivedSessions.length, mainSessions.length, t])
 
-    useEffect(() => {
-        const previousSelectedSessionId = previousSelectedSessionIdRef.current
-        previousSelectedSessionIdRef.current = selectedSessionId
+    useSelectedSessionTabSync(
+        selectedSession,
+        selectedSessionId,
+        setActiveTab,
+        previousSelectedSessionIdRef,
+        previousSelectedLifecycleStateRef
+    )
+    useAutoExpandSelectedMemberGroup(selectedSession, setExpandedManagerGroups)
 
-        if (previousSelectedSessionId === selectedSessionId) {
+    useEffect(() => {
+        if (!actionTarget.sessionId || actionSession) {
             return
         }
 
-        if (selectedSessionId === selectedSession?.id && selectedSession?.lifecycleState === 'archived') {
-            setActiveTab('archived')
-        }
-    }, [selectedSession?.id, selectedSession?.lifecycleState, selectedSessionId])
-
-    useEffect(() => {
-        const currentLifecycleState = selectedSession?.lifecycleState ?? null
-        const previousLifecycleState = previousSelectedLifecycleStateRef.current
-
-        previousSelectedLifecycleStateRef.current = currentLifecycleState
-
-        if (previousLifecycleState !== 'archived') {
-            return
-        }
-
-        if (currentLifecycleState && currentLifecycleState !== 'archived') {
-            setActiveTab('sessions')
-        }
-    }, [selectedSession?.lifecycleState])
-
-    useEffect(() => {
-        if (actionTarget.sessionId && !actionSession) {
-            setActionTarget(createClosedActionTarget())
-        }
+        setActionTarget(createClosedActionTarget())
     }, [actionSession, actionTarget.sessionId])
 
     const handleOpenActionMenu = useCallback((sessionId: string, anchorPoint: FloatingActionMenuAnchorPoint) => {
@@ -207,6 +175,22 @@ function SessionListComponent(props: SessionListProps): React.JSX.Element {
     const handleDismissActionController = useCallback(() => {
         setActionTarget(createClosedActionTarget())
     }, [])
+
+    const handleToggleManagerGroup = useCallback((managerSessionId: string) => {
+        setExpandedManagerGroups((current) => ({
+            ...current,
+            [managerSessionId]: !current[managerSessionId]
+        }))
+    }, [])
+    const managerGroups = useMemo<SessionListManagerGroupState>(() => ({
+        expandedManagerGroups,
+        onToggleManagerGroup: handleToggleManagerGroup
+    }), [expandedManagerGroups, handleToggleManagerGroup])
+    const renderContext = useMemo<SessionListRenderContext>(() => ({
+        selection,
+        hasUnseenReply,
+        onOpenActionMenu: handleOpenActionMenu
+    }), [handleOpenActionMenu, hasUnseenReply, selection])
 
     return (
         <div className={SESSION_LIST_ROOT_CLASS_NAME}>
@@ -223,17 +207,15 @@ function SessionListComponent(props: SessionListProps): React.JSX.Element {
             {activeTab === 'sessions' ? (
                 <SessionMainView
                     sections={sections}
-                    selection={selection}
-                    hasUnseenReply={hasUnseenReply}
-                    onOpenActionMenu={handleOpenActionMenu}
+                    managerGroups={managerGroups}
+                    renderContext={renderContext}
+                    emptyLabel={t('sessions.empty.sessions')}
                     t={t}
                 />
             ) : (
                 <SessionArchiveView
                     sessions={archivedSessions}
-                    selection={selection}
-                    hasUnseenReply={hasUnseenReply}
-                    onOpenActionMenu={handleOpenActionMenu}
+                    renderContext={renderContext}
                     emptyLabel={t('sessions.empty.archived')}
                 />
             )}
@@ -256,105 +238,68 @@ function SessionListComponent(props: SessionListProps): React.JSX.Element {
     )
 }
 
-function SessionMainView(props: {
-    sections: readonly SessionListSection[]
-    selection: SessionListSelection
-    hasUnseenReply: (session: SessionSummary) => boolean
-    onOpenActionMenu: (sessionId: string, anchorPoint: FloatingActionMenuAnchorPoint) => void
-    t: (key: string, params?: Record<string, string | number>) => string
-}): React.JSX.Element {
-    if (props.sections.length === 0) {
-        return (
-            <div className={SESSION_LIST_SECTION_STACK_CLASS_NAME}>
-                <SessionListEmptyState label={props.t('sessions.empty.sessions')} />
-            </div>
-        )
-    }
+function useSelectedSessionTabSync(
+    selectedSession: SessionSummary | null,
+    selectedSessionId: string | null,
+    setActiveTab: React.Dispatch<React.SetStateAction<SessionListTab>>,
+    previousSelectedSessionIdRef: React.MutableRefObject<string | null>,
+    previousSelectedLifecycleStateRef: React.MutableRefObject<SessionSummary['lifecycleState'] | null>
+): void {
+    useEffect(() => {
+        const previousSelectedSessionId = previousSelectedSessionIdRef.current
+        previousSelectedSessionIdRef.current = selectedSessionId
 
-    return (
-        <div className={SESSION_LIST_SECTION_STACK_CLASS_NAME}>
-            {props.sections.map((section) => (
-                <section key={section.id} className="flex flex-col gap-2">
-                    <SessionListSectionHeader
-                        count={section.sessions.length}
-                        label={props.t(section.titleKey)}
-                    />
-                    <div className={SESSION_LIST_SECTION_CARD_STACK_CLASS_NAME}>
-                        {section.sessions.map((session) => (
-                            <SessionListAnimatedItem
-                                key={session.id}
-                                session={session}
-                                hasUnseenReply={props.hasUnseenReply(session)}
-                                selection={props.selection}
-                                onOpenActionMenu={props.onOpenActionMenu}
-                            />
-                        ))}
-                    </div>
-                </section>
-            ))}
-        </div>
-    )
+        if (previousSelectedSessionId === selectedSessionId) {
+            return
+        }
+
+        if (selectedSessionId === selectedSession?.id && selectedSession?.lifecycleState === 'archived') {
+            setActiveTab('archived')
+        }
+    }, [previousSelectedSessionIdRef, selectedSession, selectedSessionId, setActiveTab])
+
+    useEffect(() => {
+        const currentLifecycleState = selectedSession?.lifecycleState ?? null
+        const previousLifecycleState = previousSelectedLifecycleStateRef.current
+
+        previousSelectedLifecycleStateRef.current = currentLifecycleState
+
+        if (previousLifecycleState !== 'archived') {
+            return
+        }
+
+        if (currentLifecycleState && currentLifecycleState !== 'archived') {
+            setActiveTab('sessions')
+        }
+    }, [previousSelectedLifecycleStateRef, selectedSession, setActiveTab])
 }
 
-function SessionArchiveView(props: {
-    sessions: readonly SessionSummary[]
-    selection: SessionListSelection
-    hasUnseenReply: (session: SessionSummary) => boolean
-    onOpenActionMenu: (sessionId: string, anchorPoint: FloatingActionMenuAnchorPoint) => void
-    emptyLabel: string
-}): React.JSX.Element {
-    return (
-        <div className={SESSION_LIST_ARCHIVE_STACK_CLASS_NAME}>
-            {props.sessions.length === 0 ? (
-                <SessionListEmptyState label={props.emptyLabel} />
-            ) : (
-                props.sessions.map((session) => (
-                    <SessionListAnimatedItem
-                        key={session.id}
-                        session={session}
-                        hasUnseenReply={props.hasUnseenReply(session)}
-                        selection={props.selection}
-                        onOpenActionMenu={props.onOpenActionMenu}
-                    />
-                ))
-            )}
-        </div>
-    )
+function useAutoExpandSelectedMemberGroup(
+    selectedSession: SessionSummary | null,
+    setExpandedManagerGroups: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
+): void {
+    useEffect(() => {
+        if (!selectedSession || selectedSession.lifecycleState === 'archived') {
+            return
+        }
+
+        if (selectedSession.team?.sessionRole !== 'member') {
+            return
+        }
+
+        const managerSessionId = selectedSession.team.managerSessionId
+        setExpandedManagerGroups((current) => {
+            if (current[managerSessionId]) {
+                return current
+            }
+
+            return {
+                ...current,
+                [managerSessionId]: true
+            }
+        })
+    }, [selectedSession, setExpandedManagerGroups])
 }
 
 export const SessionList = memo(SessionListComponent)
 SessionList.displayName = 'SessionList'
-
-const SessionListAnimatedItem = memo(function SessionListAnimatedItem(
-    props: SessionListAnimatedItemProps
-): React.JSX.Element {
-    return (
-        <SessionListItem
-            session={props.session}
-            hasUnseenReply={props.hasUnseenReply}
-            selection={props.selection}
-            onOpenActionMenu={props.onOpenActionMenu}
-        />
-    )
-}, areSessionListAnimatedItemPropsEqual)
-SessionListAnimatedItem.displayName = 'SessionListAnimatedItem'
-
-function areSessionListAnimatedItemPropsEqual(
-    previous: SessionListAnimatedItemProps,
-    next: SessionListAnimatedItemProps
-): boolean {
-    return previous.onOpenActionMenu === next.onOpenActionMenu
-        && previous.hasUnseenReply === next.hasUnseenReply
-        && previous.selection.selectedSessionId === next.selection.selectedSessionId
-        && previous.selection.onSelect === next.selection.onSelect
-        && previous.selection.onPreload === next.selection.onPreload
-        && areSessionListRowsEquivalent(previous.session, next.session)
-}
-
-function SessionListEmptyState(props: { label: string }): React.JSX.Element {
-    return (
-        <div className="rounded-[var(--ds-radius-lg)] border border-dashed border-[var(--app-divider)] px-4 py-6 text-sm text-[var(--app-hint)]">
-            {props.label}
-        </div>
-    )
-}

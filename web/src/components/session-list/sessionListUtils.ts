@@ -9,8 +9,36 @@ export type SessionListTab = 'sessions' | 'archived'
 export type SessionListSection = {
     id: 'running' | 'recentlyClosed' | 'earlier'
     titleKey: 'sessions.section.running' | 'sessions.section.recentlyClosed' | 'sessions.section.earlier'
-    sessions: readonly SessionSummary[]
+    count: number
+    rows: readonly SessionListRow[]
 }
+
+export type SessionListSessionRow = {
+    kind: 'session'
+    id: string
+    session: SessionSummary
+    anchorSession: SessionSummary
+}
+
+export type SessionListManagerGroupRow = {
+    kind: 'manager-group'
+    id: string
+    manager: SessionSummary
+    members: readonly SessionSummary[]
+    anchorSession: SessionSummary
+}
+
+export type SessionListRow = SessionListSessionRow | SessionListManagerGroupRow
+
+type MutableManagerGroupSlot = {
+    kind: 'group-slot'
+    managerSessionId: string
+    manager: SessionSummary | null
+    members: SessionSummary[]
+    anchorSession: SessionSummary
+}
+
+type MutableSessionListRow = SessionListSessionRow | MutableManagerGroupSlot
 
 export function formatRelativeTime(
     value: number,
@@ -65,19 +93,39 @@ export function getLikelyNextSessionId(
 }
 
 export function buildSessionSections(sessions: readonly SessionSummary[]): SessionListSection[] {
-    const running = sortSessions(sessions.filter((session) => session.lifecycleState === 'running'))
-    const closedSessions = sortSessions(sessions.filter((session) => session.lifecycleState === 'closed'))
     const cutoff = Date.now() - RECENTLY_CLOSED_WINDOW_MS
+    const running: SessionListRow[] = []
+    const recentlyClosed: SessionListRow[] = []
+    const earlier: SessionListRow[] = []
+    let runningCount = 0
+    let recentlyClosedCount = 0
+    let earlierCount = 0
 
-    const recentlyClosed = closedSessions.filter((session) => session.updatedAt >= cutoff)
-    const earlier = closedSessions.filter((session) => session.updatedAt < cutoff)
+    for (const row of buildSessionRows(sessions.filter((session) => session.lifecycleState !== 'archived'))) {
+        if (row.anchorSession.lifecycleState === 'running') {
+            running.push(row)
+            runningCount += getSessionListRowCount(row)
+            continue
+        }
+
+        if (row.anchorSession.updatedAt >= cutoff) {
+            recentlyClosed.push(row)
+            recentlyClosedCount += getSessionListRowCount(row)
+            continue
+        }
+
+        earlier.push(row)
+        earlierCount += getSessionListRowCount(row)
+    }
+
     const sections: SessionListSection[] = []
 
     if (running.length > 0) {
         sections.push({
             id: 'running',
             titleKey: 'sessions.section.running',
-            sessions: running
+            count: runningCount,
+            rows: running
         })
     }
 
@@ -85,7 +133,8 @@ export function buildSessionSections(sessions: readonly SessionSummary[]): Sessi
         sections.push({
             id: 'recentlyClosed',
             titleKey: 'sessions.section.recentlyClosed',
-            sessions: recentlyClosed
+            count: recentlyClosedCount,
+            rows: recentlyClosed
         })
     }
 
@@ -93,9 +142,111 @@ export function buildSessionSections(sessions: readonly SessionSummary[]): Sessi
         sections.push({
             id: 'earlier',
             titleKey: 'sessions.section.earlier',
-            sessions: earlier
+            count: earlierCount,
+            rows: earlier
         })
     }
 
     return sections
+}
+
+function buildSessionRows(sessions: readonly SessionSummary[]): SessionListRow[] {
+    const rows: MutableSessionListRow[] = []
+    const managerGroupSlots = new Map<string, MutableManagerGroupSlot>()
+
+    for (const session of sortSessions(sessions)) {
+        const managerSessionId = getManagerSessionId(session)
+        if (!managerSessionId) {
+            rows.push(createSessionRow(session))
+            continue
+        }
+
+        const existingSlot = managerGroupSlots.get(managerSessionId)
+        if (!existingSlot) {
+            const slot = createManagerGroupSlot(managerSessionId, session)
+            managerGroupSlots.set(managerSessionId, slot)
+            rows.push(slot)
+            continue
+        }
+
+        updateManagerGroupSlot(existingSlot, session)
+    }
+
+    return rows.flatMap<SessionListRow>((row) => {
+        if (row.kind === 'session') {
+            return [row]
+        }
+
+        if (!row.manager) {
+            return sortSessions(row.members).map(createSessionRow)
+        }
+
+        return [{
+            kind: 'manager-group',
+            id: row.managerSessionId,
+            manager: row.manager,
+            members: sortSessions(row.members),
+            anchorSession: row.anchorSession
+        }]
+    })
+}
+
+function createSessionRow(session: SessionSummary): SessionListSessionRow {
+    return {
+        kind: 'session',
+        id: session.id,
+        session,
+        anchorSession: session
+    }
+}
+
+function createManagerGroupSlot(
+    managerSessionId: string,
+    session: SessionSummary
+): MutableManagerGroupSlot {
+    return {
+        kind: 'group-slot',
+        managerSessionId,
+        manager: isManagerSession(session) ? session : null,
+        members: isManagerSession(session) ? [] : [session],
+        anchorSession: session
+    }
+}
+
+function updateManagerGroupSlot(slot: MutableManagerGroupSlot, session: SessionSummary): void {
+    if (compareSessionSummaries(session, slot.anchorSession) < 0) {
+        slot.anchorSession = session
+    }
+
+    if (isManagerSession(session)) {
+        slot.manager = session
+        return
+    }
+
+    slot.members.push(session)
+}
+
+function getSessionListRowCount(row: SessionListRow): number {
+    if (row.kind === 'manager-group') {
+        return row.members.length + 1
+    }
+
+    return 1
+}
+
+function getManagerSessionId(session: SessionSummary): string | null {
+    const team = session.team
+    if (!team) {
+        return null
+    }
+
+    if (team.sessionRole === 'manager') {
+        return session.id
+    }
+
+    return team.sessionRole === 'member' ? team.managerSessionId : null
+}
+
+function isManagerSession(session: SessionSummary): boolean {
+    return session.team?.sessionRole === 'manager'
 }

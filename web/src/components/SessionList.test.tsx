@@ -67,6 +67,26 @@ vi.mock('@/lib/use-translation', () => ({
                     return 'Closed'
                 case 'sessions.section.earlier':
                     return 'Earlier'
+                case 'sessions.group.team':
+                    return 'Team'
+                case 'sessions.group.project.active':
+                    return 'Project active'
+                case 'sessions.group.project.delivered':
+                    return 'Project delivered'
+                case 'sessions.group.project.archived':
+                    return 'Project archived'
+                case 'sessions.group.activeMembers':
+                    return `${values?.count ?? 0} active`
+                case 'sessions.group.runningMembers':
+                    return `${values?.count ?? 0} running`
+                case 'sessions.group.blockedTasks':
+                    return `${values?.count ?? 0} blocked`
+                case 'sessions.group.archivedMembers':
+                    return `${values?.count ?? 0} history`
+                case 'sessions.group.showMembers':
+                    return `Show ${values?.count ?? 0} members`
+                case 'sessions.group.hideMembers':
+                    return 'Hide members'
                 case 'sessions.empty.sessions':
                     return 'No sessions'
                 case 'sessions.empty.archived':
@@ -466,6 +486,193 @@ describe('SessionList', () => {
 
         expect(workingCard).not.toBeNull()
         expect(workingCard?.className).not.toMatch(/\bborder-\[/)
+    })
+
+    it('folds member sessions under their manager row and expands on demand', async () => {
+        const now = Date.now()
+
+        renderSessionList({
+            sessions: [
+                createSessionSummary({
+                    id: 'manager-1',
+                    active: true,
+                    thinking: false,
+                    activeAt: now,
+                    updatedAt: now,
+                    latestActivityAt: now,
+                    latestActivityKind: 'ready',
+                    latestCompletedReplyAt: now,
+                    lifecycleState: 'running',
+                    lifecycleStateSince: now,
+                    metadata: {
+                        path: '/Users/sugeh/Project/Viby',
+                        flavor: 'codex',
+                        summary: { text: 'Manager Alpha', updatedAt: now }
+                    },
+                    team: {
+                        projectId: 'project-1',
+                        sessionRole: 'manager',
+                        managerSessionId: 'manager-1',
+                        managerTitle: 'Manager Alpha',
+                        projectStatus: 'active',
+                        activeMemberCount: 2,
+                        archivedMemberCount: 1,
+                        runningMemberCount: 1,
+                        blockedTaskCount: 1
+                    }
+                }),
+                createSessionSummary({
+                    id: 'member-1',
+                    active: true,
+                    thinking: false,
+                    activeAt: now,
+                    updatedAt: now - 1_000,
+                    latestActivityAt: now - 1_000,
+                    latestActivityKind: 'ready',
+                    latestCompletedReplyAt: now - 1_000,
+                    lifecycleState: 'running',
+                    lifecycleStateSince: now - 1_000,
+                    metadata: {
+                        path: '/Users/sugeh/Project/Viby',
+                        flavor: 'claude',
+                        summary: { text: 'Implement API', updatedAt: now - 1_000 }
+                    },
+                    team: {
+                        projectId: 'project-1',
+                        sessionRole: 'member',
+                        managerSessionId: 'manager-1',
+                        managerTitle: 'Manager Alpha',
+                        memberRole: 'implementer',
+                        memberRevision: 1,
+                        membershipState: 'active',
+                        controlOwner: 'manager',
+                        projectStatus: 'active',
+                        activeMemberCount: 2,
+                        archivedMemberCount: 1,
+                        runningMemberCount: 1,
+                        blockedTaskCount: 1
+                    }
+                }),
+                createSessionSummary({
+                    id: 'member-2',
+                    active: false,
+                    thinking: false,
+                    activeAt: now,
+                    updatedAt: now - 2_000,
+                    latestActivityAt: now - 2_000,
+                    latestActivityKind: 'ready',
+                    latestCompletedReplyAt: now - 2_000,
+                    lifecycleState: 'closed',
+                    lifecycleStateSince: now - 2_000,
+                    metadata: {
+                        path: '/Users/sugeh/Project/Viby',
+                        flavor: 'claude',
+                        summary: { text: 'Review patch', updatedAt: now - 2_000 }
+                    },
+                    team: {
+                        projectId: 'project-1',
+                        sessionRole: 'member',
+                        managerSessionId: 'manager-1',
+                        managerTitle: 'Manager Alpha',
+                        memberRole: 'reviewer',
+                        memberRevision: 1,
+                        membershipState: 'active',
+                        controlOwner: 'manager',
+                        projectStatus: 'active',
+                        activeMemberCount: 2,
+                        archivedMemberCount: 1,
+                        runningMemberCount: 1,
+                        blockedTaskCount: 1
+                    }
+                })
+            ]
+        })
+
+        expect(screen.getByText('Manager Alpha')).toBeInTheDocument()
+        expect(screen.getByText('Team')).toBeInTheDocument()
+        expect(screen.getByText('2 active')).toBeInTheDocument()
+        expect(screen.getByText('1 running')).toBeInTheDocument()
+        expect(screen.getByText('1 blocked')).toBeInTheDocument()
+        expect(screen.getByText('1 history')).toBeInTheDocument()
+        expect(screen.queryByText('Implement API')).not.toBeInTheDocument()
+
+        screen.getByRole('button', { name: 'Show 2 members' }).click()
+
+        expect(await screen.findByText('Implement API')).toBeInTheDocument()
+        expect(screen.getByText('Review patch')).toBeInTheDocument()
+    })
+
+    it('auto-expands the owning manager group when a member session is selected', () => {
+        const now = Date.now()
+
+        renderSessionList({
+            selectedSessionId: 'member-selected',
+            sessions: [
+                createSessionSummary({
+                    id: 'manager-selected',
+                    active: true,
+                    thinking: false,
+                    activeAt: now,
+                    updatedAt: now,
+                    latestActivityAt: now,
+                    latestActivityKind: 'ready',
+                    latestCompletedReplyAt: now,
+                    lifecycleState: 'running',
+                    lifecycleStateSince: now,
+                    metadata: {
+                        path: '/Users/sugeh/Project/Viby',
+                        flavor: 'codex',
+                        summary: { text: 'Manager Selected', updatedAt: now }
+                    },
+                    team: {
+                        projectId: 'project-selected',
+                        sessionRole: 'manager',
+                        managerSessionId: 'manager-selected',
+                        managerTitle: 'Manager Selected',
+                        projectStatus: 'active',
+                        activeMemberCount: 1,
+                        archivedMemberCount: 0,
+                        runningMemberCount: 1,
+                        blockedTaskCount: 0
+                    }
+                }),
+                createSessionSummary({
+                    id: 'member-selected',
+                    active: true,
+                    thinking: false,
+                    activeAt: now,
+                    updatedAt: now - 1_000,
+                    latestActivityAt: now - 1_000,
+                    latestActivityKind: 'ready',
+                    latestCompletedReplyAt: now - 1_000,
+                    lifecycleState: 'running',
+                    lifecycleStateSince: now - 1_000,
+                    metadata: {
+                        path: '/Users/sugeh/Project/Viby',
+                        flavor: 'claude',
+                        summary: { text: 'Selected member', updatedAt: now - 1_000 }
+                    },
+                    team: {
+                        projectId: 'project-selected',
+                        sessionRole: 'member',
+                        managerSessionId: 'manager-selected',
+                        managerTitle: 'Manager Selected',
+                        memberRole: 'implementer',
+                        memberRevision: 1,
+                        membershipState: 'active',
+                        controlOwner: 'manager',
+                        projectStatus: 'active',
+                        activeMemberCount: 1,
+                        archivedMemberCount: 0,
+                        runningMemberCount: 1,
+                        blockedTaskCount: 0
+                    }
+                })
+            ]
+        })
+
+        expect(screen.getByText('Selected member')).toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Show 1 members' })).not.toBeInTheDocument()
     })
 
     it('shows a new reply indicator only for sessions whose activity is newer than the stored seen timestamp', () => {
