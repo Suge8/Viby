@@ -604,6 +604,22 @@ label {
         0 14px 32px rgba(20, 42, 86, 0.12);
 }
 
+.ds-message-surface-manager {
+    width: fit-content;
+    max-width: min(92%, var(--ds-thread-width));
+    border-color: color-mix(in srgb, var(--ds-brand) 34%, transparent);
+    background:
+        linear-gradient(
+            135deg,
+            color-mix(in srgb, var(--ds-brand) 30%, var(--ds-panel-strong)) 0%,
+            color-mix(in srgb, var(--ds-brand) 18%, var(--ds-panel-strong)) 100%
+        );
+    color: var(--ds-text-primary);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.12),
+        0 16px 34px rgba(17, 36, 72, 0.16);
+}
+
 .ds-message-surface-assistant {
     border-color: transparent;
     background: color-mix(in srgb, var(--ds-panel-strong) 72%, transparent);

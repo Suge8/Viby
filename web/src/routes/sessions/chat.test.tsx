@@ -161,7 +161,7 @@ vi.mock('@/lib/use-translation', () => ({
     })
 }))
 
-function createSession(sessionId: string) {
+function createSession(sessionId: string, teamContext?: Record<string, unknown>) {
     return {
         id: sessionId,
         active: true,
@@ -171,7 +171,8 @@ function createSession(sessionId: string) {
         },
         agentState: {
             controlledByUser: false
-        }
+        },
+        teamContext
     }
 }
 
@@ -302,6 +303,42 @@ describe('SessionChatRoute', () => {
 
         expect(navigateMock).not.toHaveBeenCalled()
         expect(setQueryDataMock).toHaveBeenCalled()
+    })
+
+    it('navigates back to /sessions when the current member is archived in place', () => {
+        sessionStateRef.current = createSession('session-1', {
+            projectId: 'project-1',
+            sessionRole: 'member',
+            managerSessionId: 'manager-session-1',
+            memberId: 'member-1',
+            memberRole: 'implementer',
+            memberRevision: 1,
+            controlOwner: 'manager',
+            membershipState: 'active',
+            projectStatus: 'active'
+        })
+
+        const { rerender } = render(<SessionChatRoute />)
+        navigateMock.mockClear()
+
+        sessionStateRef.current = createSession('session-1', {
+            projectId: 'project-1',
+            sessionRole: 'member',
+            managerSessionId: 'manager-session-1',
+            memberId: 'member-1',
+            memberRole: 'implementer',
+            memberRevision: 1,
+            controlOwner: 'manager',
+            membershipState: 'archived',
+            projectStatus: 'active'
+        })
+
+        rerender(<SessionChatRoute />)
+
+        expect(navigateMock).toHaveBeenCalledWith({
+            to: '/sessions',
+            replace: true
+        })
     })
 
     it('keeps explicit resume ownership out of the text send mutation options', () => {

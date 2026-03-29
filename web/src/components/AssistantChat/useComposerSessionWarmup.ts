@@ -6,14 +6,11 @@ type UseComposerSessionWarmupOptions = {
     onWarmSession?: () => void
 }
 
-type UseComposerSessionWarmupResult = {
-    handleFocus: () => void
-    handleTextIntent: (value: string) => void
-}
+type ComposerSessionWarmupHandler = (value: string) => void
 
 export function useComposerSessionWarmup(
     options: UseComposerSessionWarmupOptions
-): UseComposerSessionWarmupResult {
+): ComposerSessionWarmupHandler {
     const { active, isResuming, onWarmSession } = options
     const warmupRequestedRef = useRef(false)
 
@@ -32,10 +29,6 @@ export function useComposerSessionWarmup(
         onWarmSession()
     }, [active, isResuming, onWarmSession])
 
-    const handleFocus = useCallback(() => {
-        requestWarmup()
-    }, [requestWarmup])
-
     const handleTextIntent = useCallback((value: string) => {
         if (value.trim().length === 0) {
             return
@@ -44,8 +37,5 @@ export function useComposerSessionWarmup(
         requestWarmup()
     }, [requestWarmup])
 
-    return {
-        handleFocus,
-        handleTextIntent
-    }
+    return handleTextIntent
 }

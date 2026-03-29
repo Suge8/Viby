@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import type { AppendMessage, AttachmentAdapter, ThreadMessageLike } from '@assistant-ui/react'
 import { useExternalMessageConverter, useExternalStoreRuntime } from '@assistant-ui/react'
-import { safeStringify } from '@viby/protocol'
+import { MessageMetaSchema, safeStringify } from '@viby/protocol'
 import { renderEventLabel } from '@/chat/presentation'
 import type { TextRenderMode } from '@/chat/textRenderMode'
 import type { ChatBlock, CliOutputBlock } from '@/chat/types'
@@ -10,7 +10,7 @@ import type { AttachmentMetadata, MessageStatus as VibyMessageStatus, Session } 
 import { getThreadMessageId } from '@/components/AssistantChat/threadMessageIdentity'
 
 export type VibyChatMessageMetadata = {
-    kind: 'user' | 'assistant' | 'tool' | 'event' | 'cli-output'
+    kind: 'user' | 'assistant' | 'tool' | 'event' | 'cli-output' | 'team-notice'
     renderMode?: TextRenderMode
     status?: VibyMessageStatus
     localId?: string | null
@@ -19,12 +19,57 @@ export type VibyChatMessageMetadata = {
     event?: AgentEvent
     source?: CliOutputBlock['source']
     attachments?: AttachmentMetadata[]
+    sentFrom?: 'cli' | 'webapp' | 'manager' | 'user' | 'team-system'
+    teamProjectId?: string
+    managerSessionId?: string
+    memberId?: string
+    sessionRole?: 'manager' | 'member'
+    teamMessageKind?: 'task-assign' | 'follow-up' | 'review-request' | 'verify-request' | 'coordination' | 'system-event'
+    controlOwner?: 'manager' | 'user'
 }
 
-function toThreadMessageLike(block: ChatBlock): ThreadMessageLike {
+function extractTeamMetadata(meta: unknown): Partial<VibyChatMessageMetadata> | null {
+    const parsed = MessageMetaSchema.safeParse(meta)
+    if (!parsed.success) {
+        return null
+    }
+
+    return {
+        sentFrom: parsed.data.sentFrom,
+        teamProjectId: parsed.data.teamProjectId,
+        managerSessionId: parsed.data.managerSessionId,
+        memberId: parsed.data.memberId,
+        sessionRole: parsed.data.sessionRole,
+        teamMessageKind: parsed.data.teamMessageKind,
+        controlOwner: parsed.data.controlOwner
+    }
+}
+
+export function toThreadMessageLike(block: ChatBlock): ThreadMessageLike {
     const messageId = getThreadMessageId(block)
+    const teamMetadata = extractTeamMetadata(block.meta)
 
     if (block.kind === 'user-text') {
+        if (teamMetadata?.sentFrom === 'team-system') {
+            return {
+                role: 'system',
+                id: messageId,
+                createdAt: new Date(block.createdAt),
+                content: [{ type: 'text', text: block.text }],
+                metadata: {
+                    custom: {
+                        kind: 'team-notice',
+                        renderMode: block.renderMode,
+                        status: block.status,
+                        localId: block.localId,
+                        originalText: block.originalText,
+                        attachments: block.attachments,
+                        ...teamMetadata
+                    } satisfies VibyChatMessageMetadata
+                }
+            }
+        }
+
         return {
             role: 'user',
             id: messageId,
@@ -37,7 +82,8 @@ function toThreadMessageLike(block: ChatBlock): ThreadMessageLike {
                     status: block.status,
                     localId: block.localId,
                     originalText: block.originalText,
-                    attachments: block.attachments
+                    attachments: block.attachments,
+                    ...teamMetadata
                 } satisfies VibyChatMessageMetadata
             }
         }

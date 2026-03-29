@@ -26,9 +26,18 @@
 - `src/sync/syncEngine.ts` 继续作为 sync façade；session lifecycle / resume contract 已收口到 `src/sync/sessionLifecycleService.ts`，消息、机器、RPC 仍各自走单职责 owner
 - `src/sync/teamCoordinatorService.ts` 是 team durable mutation 与 manager project bootstrap owner；manager session 的 durable project 必须在 `/cli/sessions` 返回前完成创建/复用
 - `src/sync/teamMemberSessionService.ts` 是 inactive member `resume vs revision` 与 compact carryover brief contract owner；不要再让 Web / CLI / prompt 各写一套判定。当前一期只比较**同角色 inactive candidate**；在没有 `member seat / task lineage` 身份前，不跨角色硬猜 revision lineage
+- `src/sync/teamOrchestrationService.ts` 是 manager recruit / replace / task orchestration / direct member messaging / project delivery owner；`team_members`、`team_tasks`、`team_events` 的真实编排行为只从这里进，再委托 `TeamCoordinatorService` 落 durable mutation
+- `src/sync/teamOrchestrationContext.ts` 只负责 team orchestration read/validation；新 task record / event record builder 只认 `src/sync/teamOrchestrationRecords.ts`，project snapshot assembly 只认 `src/sync/teamOrchestrationProjectSnapshot.ts`，不要再把写侧 builder 混回 context reader
+- `src/sync/teamOrchestrationRoleFlow.ts` 是 project-scoped custom role catalog owner；`src/sync/teamPresetFlow.ts` 是 versioned bootstrap preset import/export owner。两者都只允许围绕 durable role catalog 与 project settings 工作，不回退到第二套 Web/CLI mutable schema
+- `src/sync/teamAcceptanceService.ts` 是 review / verification / manager final acceptance 的 orchestration owner；最终状态继续只落在 `team_tasks + team_events`
+- `src/sync/teamLifecycleService.ts` 是 manager teams archive / restore / history owner；`/api/sessions/:id/archive|unarchive` 进入后，必须在这里把 manager session 映射成 `project archive/reopen`、member session 映射成 `member archive/restore`，且 `removed / superseded` member 不得被通用 restore 偷偷拉回
+- `shared/src/teamAcceptance.ts` 是 review / verification / manager acceptance / delivery-ready 派生读模型 owner；`src/sync/teamCoordinatorService.ts` 会把它物化成 authoritative `snapshot.acceptance`，Web `ProjectPanel` 与 CLI tool result 都应只消费这条读模型，不再各写一套 acceptance state，也不再从截断 `snapshot.events` 逆推
+- generic `team_create_task / team_update_task` 不能直接把 task 写成 `done`；`done` 只允许由 `teamAcceptanceService.acceptTask()` 写入。`src/sync/teamOrchestrationContext.ts` 的 close gate 也只认 `shared/src/teamAcceptance.ts` 派生的 authoritative delivery-ready 结果，不能只看“还有没有 open tasks”
 - session resume / switch 的 waiter 现在统一收口到 `src/sync/sessionCache.ts` 共享实现；不要再在 lifecycle/service 层各自手写 `subscribe + timeout + cleanup`
 - `src/web/routes/sessions.ts` 现在只保留 sessions 路由装配；session action / config 细分到 `src/web/routes/sessionActionRoutes.ts`、`src/web/routes/sessionConfigRoutes.ts`，共享 guard / body 解析收口到 `src/web/routes/sessionRouteSupport.ts`
+- `src/web/routes/teams.ts` 现在只保留 manager-teams route entry；project/member/task 级注册拆到 `src/web/routes/teamRouteRegistrars.ts`，共享 schema/support 继续收口在 `teamRouteSchemas.ts` / `teamRouteSupport.ts`
 - `src/store/messages.ts` 的消息序号现在由 `sessions.next_message_seq` 单点分配；不再在消息热路径里做 `MAX(seq)+1`
+- `src/store/teams.ts` 继续是 team durable CRUD 的单一 public owner；project/role SQL 支撑已拆到 `src/store/teamProjectRoleStore.ts`，row mapper 与 `Session.teamContext` join/query 细节拆到 `src/store/teamRecordMappers.ts` / `src/store/teamSessionContext.ts`，但不允许把第二套 team store owner 再扩回 service 或 route 层
 
 ## 关键配置
 
@@ -104,16 +113,28 @@ bun run dev:hub
 - `POST /api/sessions/:id/archive` / `close` / `unarchive`：返回最终 `session` 快照；用于 Web 立刻把 lifecycle 写回缓存，避免先掉进 `已关闭` 再等待下一拍 metadata 修正
 - `PATCH /api/sessions/:id`：重命名会话；远程 dev 跨源调用依赖 Hub CORS 允许 `PATCH`
 - `POST /api/sessions/:id/resume`：同步 resume 契约；只有旧 agent session 真正重新接回后才返回成功，失败则直接返回错误并完成 cleanup，Web 不承担补偿重试
+- `GET /api/sessions/:id` / `GET /api/sessions/:id/messages`：detail 读模型入口；打开详情页本身只能走只读查询，不得顺手触发 `POST /api/sessions/:id/resume`
+- detail 打开后的恢复 owner 继续只认显式用户意图：真正允许进入 `resume/start` 的路径只有显式发送、显式上传附件，或 Web 已明确记录的首次非空输入意图 warmup；Hub 不为 mount、`autoFocus`、单纯 focus 或只读浏览补开第二条隐式恢复分叉
 - `POST /api/sessions/:id/permission-mode` / `collaboration-mode` / `model` / `model-reasoning-effort`：统一返回最终 `session` 快照；如果 apply 成功后拿不到 snapshot，Hub 会直接报错，不把空快照漏给 Web
 - CLI `update-metadata` 不能修改 lifecycle 元数据；`lifecycleState / lifecycleStateSince / archivedBy / archiveReason` 只允许 Hub lifecycle owner 改写，避免 archived 被任何后续 metadata 同步误擦成 closed
 - `GET /api/sessions/:id/messages`：消息分页
 - `GET /api/sessions/:id/messages?afterSeq=<seq>`：按 SQLite seq 做 reconnect catch-up；用于 Web/CLI 在 unrecovered reconnect 后补齐缺失消息
-- `POST /api/sessions/:id/messages`：发送消息
+- `POST /api/sessions/:id/messages`：发送消息；generic user send 只允许普通 session 或 `controlOwner='user'` 的 member，manager-controlled member transcript 必须继续走 team-owned internal append path
 - `POST /api/sessions/:id/permission-mode`：切换权限模式
 - `POST /api/sessions/:id/model`：切换 remote Claude / Codex 会话模型；从下一轮 turn 生效
 - `POST /api/sessions/:id/model-reasoning-effort`：切换 remote Claude / Codex 会话思考强度；从下一轮 turn 生效；Hub 会按 flavor 校验可用档位
 - `GET /api/machines`：在线机器列表
 - `POST /api/machines/:id/spawn`：远程创建会话；支持 `sessionRole: normal | manager`，成功时直接返回最终 `session` 快照；manager role 会在 `/cli/sessions` 返回前先完成 durable project bootstrap，再把已带 `teamContext` 的 authoritative snapshot 回给 Web
+- `GET /api/team-projects/:projectId` / `history`：manager/member detail surface 读取 team snapshot 与结构化 timeline 的单一入口；project snapshot 会同时返回 authoritative `acceptance` 读模型与 `compactBrief`，后者是 manager autonomy 的唯一 compact orchestration contract，且 `compactBrief.staffing` 会带出 authoritative seat-budget / staffing hints
+- team snapshot 自带的 role catalog 也是 manager/member detail surface 的单一 role label 事实源；Web 只有在拿到 project snapshot 时才允许用 role catalog 生成 `Name (prototype)` 这类 custom role label，列表/成员 chat 顶部仍只消费 `SessionSummary.team`
+- `POST /api/team-projects/:projectId/roles` / `PATCH /api/team-projects/:projectId/roles/:roleId` / `DELETE /api/team-projects/:projectId/roles/:roleId`：project-scoped custom role catalog CRUD；built-in prototype 保持只读，custom role prompt overlay/default config 只从这条 durable owner 进入
+- `GET /api/team-projects/:projectId/preset` / `PUT /api/team-projects/:projectId/preset`：versioned bootstrap preset import/export；preset 只覆盖 `projectSettings + custom roles`，且 import 只允许无 durable members、无 durable tasks 的 bootstrap 状态
+- `POST /api/team-members` / `PATCH /api/team-members/:memberId` / `POST /api/team-members/:memberId/message`：manager teams 编排入口；分别对应 recruit-or-resume、remove-or-replace、经理直达成员 transcript 的 authoritative command
+- `POST /api/team-tasks` / `PATCH /api/team-tasks/:taskId`：manager teams durable task orchestration；task metadata patch 会落 `task-updated` event，而不是伪装成 comment/status change
+- `POST /api/sessions/:id/archive` / `unarchive`：仍是统一 lifecycle API；但进入 Hub 后会走 `teamLifecycleService` 做 team-aware 映射，保证 manager project reopen 不会顺手复活 archived members
+- `POST /api/team-tasks/:taskId/review-request` / `review-result` / `verification-request` / `verification-result` / `accept`：manager teams acceptance chain；都只经 Hub owner 落库，再由 Web/CLI 读取 authoritative `snapshot.acceptance`
+- manager passive notice 继续只走 `SyncEngine.appendPassiveInternalUserMessage()`：同一条 owner 会先完成 manager session 的 authoritative wake/resume，再把 durable notice 写进 transcript；若 wake/resume 失败，控制/acceptance 动作会在 durable mutation 前 fail-fast，不再保留“只写 notice 假成功”的分叉
+- `POST /api/team-projects/:projectId/close`：manager final project delivery；会先检查 authoritative delivery-ready gate，再归档所有 active members，最后把 project status 切到 `delivered`
 - `GET /api/push/vapid-public-key`：Push 公钥
 
 更详细的路由请看 `src/web/routes/`。
@@ -171,12 +192,13 @@ Hub 使用 SQLite 作为单一事实源，保存：
 - push 订阅
 - 待办与协作信息
 
-当前 schema version 为 `10`。
-启动时会自动执行 **`v7 -> v10`**、**`v8 -> v10`** 和 **`v9 -> v10`** 升级：
+当前 schema version 为 `11`。
+启动时会自动执行 **`v7 -> v11`**、**`v8 -> v11`**、**`v9 -> v11`** 和 **`v10 -> v11`** 升级：
 
 - 补齐 `permission_mode / collaboration_mode / next_message_seq`
-- 新增 `team_projects / team_members / team_tasks / team_events`
-- `Session.teamContext / SessionSummary.team` 读模型由 v10 durable data 驱动
+- 新增 `team_projects / team_members / team_tasks / team_events / team_roles`
+- 为 `team_members` 回填 `role_id`，并补齐 built-in role catalog durable seed
+- `Session.teamContext / SessionSummary.team`、custom role catalog 与 bootstrap preset 都由 v11 durable data 驱动
 
 更老的 schema 版本不在自动迁移范围内；升级前依旧建议先备份 `~/.viby/viby.db`。
 
@@ -189,8 +211,9 @@ Hub 使用 SQLite 作为单一事实源，保存：
 - `src/socket/`：Socket.IO 入口与 handler
 - `src/sync/`：会话同步 façade、消息服务、RPC 网关
 - `src/sync/sessionLifecycleService.ts`：session close/archive/unarchive 与 resume contract 的单一 owner
-- `src/sync/teamCoordinatorService.ts`：team durable mutation、legacy projection 接管与 manager project bootstrap owner
+- `src/sync/teamCoordinatorService.ts`：team durable mutation 与 manager project bootstrap owner；不再承担 legacy `teamState` projection 写链
+- `src/sync/teamOrchestrationContext.ts` / `teamOrchestrationRecords.ts` / `teamOrchestrationProjectSnapshot.ts`：分别负责 read+validation、durable record builder、authoritative project snapshot assembly，避免 orchestration context 再混入写侧拼装
 - `src/sync/teamMemberSessionService.ts`：inactive member `resume / revision` 策略与 carryover brief owner
-- `src/store/`：SQLite 持久化；schema / `user_version` 是 durable truth source，持久化字段变更必须和显式 migration 同轮提交。当前自动升级边界是 `v7 -> v10` / `v8 -> v10` / `v9 -> v10`
+- `src/store/`：SQLite 持久化；schema / `user_version` 是 durable truth source，持久化字段变更必须和显式 migration 同轮提交。当前自动升级边界是 `v7 -> v11` / `v8 -> v11` / `v9 -> v11` / `v10 -> v11`
 - `src/runner/`：hub 自动拉起的 runner
 - `src/notifications/`：推送通知

@@ -16,8 +16,16 @@ import { ComposerButtons } from '@/components/AssistantChat/ComposerButtons'
 import { AttachmentItem } from '@/components/AssistantChat/AttachmentItem'
 import { ComposerSuggestionsOverlay } from '@/components/AssistantChat/ComposerSuggestionsOverlay'
 import { useComposerInputController } from '@/components/AssistantChat/useComposerInputController'
+import { useComposerResumeHint } from '@/components/AssistantChat/useComposerResumeHint'
 import { useComposerSessionWarmup } from '@/components/AssistantChat/useComposerSessionWarmup'
 import { useReplyingIndicatorPresence } from '@/components/AssistantChat/useReplyingIndicatorPresence'
+import {
+    areAttachmentsReady,
+    DEFAULT_AUTOCOMPLETE_PREFIXES,
+    defaultSuggestionHandler,
+    getComposerPlaceholder,
+    type ComposerAttachment
+} from '@/components/AssistantChat/vibyComposerSupport'
 import type { ComposerPanelId, VibyComposerModel } from '@/components/AssistantChat/composerTypes'
 import {
     getComposerPermissionModes,
@@ -25,55 +33,10 @@ import {
 } from '@/components/AssistantChat/useComposerControlsVisibility'
 import { useComposerPlatform } from '@/components/AssistantChat/useComposerPlatform'
 import { useTranslation } from '@/lib/use-translation'
-import type { Suggestion } from '@/hooks/useActiveSuggestions'
 
 const LazyComposerControlsOverlay = lazy(async () => import('@/components/AssistantChat/ComposerControlsOverlay'))
 
-type VibyComposerProps = {
-    model: VibyComposerModel
-}
-
-type ComposerAttachment = {
-    status: { type: string }
-    path?: string
-}
-
-const DEFAULT_AUTOCOMPLETE_PREFIXES = ['@', '/', '$'] as const
-function defaultSuggestionHandler(): Promise<Suggestion[]> {
-    return Promise.resolve([])
-}
-
-function getComposerPlaceholder(options: {
-    isResuming: boolean
-    showResumePlaceholder: boolean
-    t: (key: string) => string
-}): string {
-    if (options.isResuming) {
-        return options.t('misc.resumingSession')
-    }
-    if (options.showResumePlaceholder) {
-        return options.t('misc.resumeMessage')
-    }
-    return options.t('misc.typeAMessage')
-}
-
-function isAttachmentReady(attachment: ComposerAttachment): boolean {
-    if (attachment.status.type === 'complete') {
-        return true
-    }
-
-    if (attachment.status.type !== 'requires-action') {
-        return false
-    }
-
-    return typeof attachment.path === 'string' && attachment.path.length > 0
-}
-
-function areAttachmentsReady(
-    attachments: readonly ComposerAttachment[]
-): boolean {
-    return attachments.length === 0 || attachments.every(isAttachmentReady)
-}
+type VibyComposerProps = { model: VibyComposerModel }
 
 function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
     const { t } = useTranslation()
@@ -122,23 +85,17 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
 
     const [isAborting, setIsAborting] = useState(false)
     const [isSwitching, setIsSwitching] = useState(false)
-    const [showResumeHint, setShowResumeHint] = useState(false)
     const overlayAnchorRef = useRef<HTMLDivElement | null>(null)
-
-    const prevControlledByUser = useRef(controlledByUser)
     const replyingIndicatorPresence = useReplyingIndicatorPresence(replyingPhase)
-
-    useEffect(() => {
-        if (prevControlledByUser.current === true && controlledByUser === false) {
-            setShowResumeHint(true)
-        }
-        if (controlledByUser) {
-            setShowResumeHint(false)
-        }
-        prevControlledByUser.current = controlledByUser
-    }, [controlledByUser])
-
-    const showResumePlaceholder = !isResuming && (showResumeHint || (!active && allowSendWhenInactive))
+    const {
+        showResumePlaceholder,
+        clearResumeHint
+    } = useComposerResumeHint({
+        active,
+        allowSendWhenInactive,
+        controlledByUser,
+        isResuming
+    })
 
     const { haptic, isTouch } = useComposerPlatform()
 
@@ -220,10 +177,10 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
         onAbort: handleAbort,
         onPermissionModeChange,
         onModelChange,
-        onSend: () => setShowResumeHint(false),
+        onSend: clearResumeHint,
         haptic,
     })
-    const composerWarmup = useComposerSessionWarmup({
+    const handleComposerWarmupIntent = useComposerSessionWarmup({
         active,
         isResuming,
         onWarmSession: composerModel.onWarmSession
@@ -238,9 +195,9 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
     })
 
     const handleComposerChange = useCallback((event: ReactChangeEvent<HTMLTextAreaElement>) => {
-        composerWarmup.handleTextIntent(event.target.value)
+        handleComposerWarmupIntent(event.currentTarget.value)
         composerInput.handleChange(event)
-    }, [composerInput, composerWarmup])
+    }, [composerInput, handleComposerWarmupIntent])
 
     const handlePrimaryAction = useCallback(() => {
         if (threadIsRunning) {
@@ -249,8 +206,8 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
         }
 
         api.composer().send()
-        setShowResumeHint(false)
-    }, [threadIsRunning, handleAbort, api])
+        clearResumeHint()
+    }, [threadIsRunning, handleAbort, api, clearResumeHint])
 
     return (
         <div ref={composerModel.containerRef} className="session-chat-composer-shell ds-composer-shell shrink-0 px-3">
@@ -304,7 +261,6 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
                                     maxRows={5}
                                     submitOnEnter={false}
                                     cancelOnEscape={false}
-                                    onFocus={composerWarmup.handleFocus}
                                     onChange={handleComposerChange}
                                     onCompositionStart={composerInput.handleCompositionStart}
                                     onCompositionEnd={composerInput.handleCompositionEnd}

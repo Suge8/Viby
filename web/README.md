@@ -3,7 +3,7 @@
 `web/` 是 `Viby` 的 React PWA。
 它负责远程查看会话、发消息、审批权限、浏览文件、打开终端，以及在连接的机器上创建新会话。
 
-最后检查：`2026-03-27`
+最后检查：`2026-03-29`
 
 下面这份 README 分两层：
 
@@ -34,11 +34,18 @@
 - `abort / switch / archive / close / unarchive` 这类会改变 session runtime 或 lifecycle 的 action 统一要求 Hub 直接返回最终 `session` 快照；`useSessionActions.ts` 会直接把快照写回 `session detail + sessions list` cache，`abort` 还会先 optimistic 拉低 `thinking`，不再依赖 `invalidate + refetch` 补偿，避免 UI 先短暂落进错误分区或卡在 `Stopping`
 - `spawn` 也走同一条单次提交链：`POST /api/machines/:id/spawn` 支持 `sessionRole: normal | manager`；成功后直接返回最终 `session` snapshot，`useSpawnSession.ts` 立刻写回 detail + list cache，不再先回 `sessionId` 再等页面二次拉取。manager role 的返回快照已经包含 `/cli/sessions` bootstrap 后的 authoritative `teamContext`
 - `/sessions/new` 现在显式提供 `普通会话 / 经理会话`；`sessionRole` 和 agent / model / reasoning / permission / collaboration 一样只走单一 typed create chain，不在页面本地另造第二套 owner
+- manager teams 详情面统一只认 `teamProject` / `teamProjectHistory` query：`ProjectPanel`、`MemberControlBanner`、按需加载的 history drawer 都只从 authoritative snapshot / timeline 派生；实时层只用 `team-project-updated` 触发这两条 query refresh，不在 Web 本地再造第二套 archive/history 状态机。active / archived 两个 tab 的 team grouping 也统一复用同一套 `sessionListUtils` grouped row owner
+- manager autonomy compact brief 继续只认 Hub snapshot 自带的 `compactBrief`：Web 若后续需要展示 manager orchestration summary，也只能消费这条 authoritative read-model，不在浏览器里拼第二份 wake/replan 摘要
+- manager teams phase-2 的角色目录 / preset surface 继续只认 authoritative routes：`ProjectPanel` 按需加载 `TeamRoleManagerDialog`，role CRUD + preset import/export 都只通过 `web/src/api/client.ts` 直连 Hub；mutation 成功后只 refresh authoritative snapshot，不在浏览器里保留第二份 role/preset cache
+- manager teams 的 recruit / replace / task orchestration 仍是 tool-first product surface：Claude/Codex/Gemini/OpenCode/Cursor runtime 统一通过 session-scoped Viby tools 编排，Web 继续只消费 authoritative read-model，不在浏览器里再长一套并排的 orchestration 状态机
+- manager/member 的 archive / restore 仍复用现有 session lifecycle action；Web 不额外发明 team-specific lifecycle owner。真正把 manager session 映射到 `project archive/reopen`、把 member session 映射到 `member archive/restore` 的地方只在 Hub `teamLifecycleService`
 - live config 同样只认 authoritative snapshot：permission / collaboration / model / reasoning effort 成功后统一直写缓存，不再保留 `onRefresh` 或 mutation 成功后的额外 invalidation
 - `web/src/api/client.ts` 是 session snapshot 响应归一化的单一边界：如果运行中的 Hub 仍返回旧形状 `sessionId` / `ok:true`，只能在这里补 authoritative `getSession()`；hooks 和 UI 一律只消费最终 `Session`，不要把 mixed response shape 继续往上游扩散
+- `ProjectPanel` / `TeamHistoryDrawer` 继续只读 `teamProject / teamProjectHistory` 的 authoritative snapshot；即便 runtime 已开放 `team_spawn_member / team_create_task / team_update_task` 等工具，Web 也不允许回退到“从 `snapshot.events` 或本地 reducer 猜编排状态”
 - `delete` 的 client-state 清理统一走 `removeSessionClientState()`：只保留一条 owner 链负责移除 detail query、summary cache 和 message window
 - 会话列表与终端快捷键的长按语义统一收口到 `web/src/hooks/useLongPress.ts`：桌面右键、鼠标/触屏长按、移动端 touch hold 都只走同一套 pointer 事件链，不再并行维护 `mouse + touch` 两套状态
 - 会话列表卡片当前仍只保留长按 / 右键 action owner；列表正文维持 `标题 + 项目/时间 + 状态胶囊` 的高密度读模型，不再在卡片上常驻第二个 visible action button
+- manager team member row 的命名与 meta 现在也收口到同一条列表读模型：标题固定为稳定的 authoritative role label；列表与 member chat 顶部继续只用 `SessionSummary.team.memberRoleName / memberRole` 得到短标题，而 `ProjectPanel` / `TeamHistoryDrawer` 这类拿得到 role catalog 的 surface 会在 custom role 时显示 `Name (prototype) · r{revision}`；辅助信息固定显示 `manager 来源 + membership state + control owner`，不再回退到 metadata summary/path basename 猜名字
 - 会话列表 action owner 与菜单开关必须分离：`SessionListActionController` 负责对话框状态，`SessionActionMenu` 只负责菜单显隐；关闭菜单不能顺手卸载 rename/archive/close/unarchive 对话框 owner
 - 会话列表 action surface 现在进一步收口成 `menu | rename | confirm` 单一 union state；`SessionList` 只持有 `sessionId + anchorPoint`，不再并行维护 `menuOpen` 或靠 effect 猜测 controller 何时卸载
 - `FloatingActionMenu` 只负责 menu surface 本身：点击 item 只执行 `item.onSelect`，不再隐式先 `onClose`；需要关闭当前 surface 的 owner 必须在上层 action 明确表达
@@ -79,15 +86,15 @@
 - 消息发送、重试与滚动窗口管理
 - 聊天消息复制统一收口到 `MessageSurface -> useCopyToClipboard -> safeCopyToClipboard`：消息本体只保留点击复制与 copied 成功态色彩反馈，不再伪装成 `button`、不再叠加按压缩放或 hover chrome；clipboard fallback 的临时 textarea 会通过 `data-viby-transient-editable` 与 `focus({ preventScroll: true })` 路径隔离，避免长消息点击复制时把 chat viewport 带偏
 - Codex 会话默认直接复用现有 metadata/path 标题回退，不再为首轮 AI 命名额外起桥
-- inactive session 的显式发送与附件上传现在分成两条 owner：文本发送统一走 `hub/src/web/routes/messages.ts -> SyncEngine.sendMessage()` 的单一 Hub command，`inactive + empty transcript` 会在同一个 hub session 上 fresh-start，已有 transcript 的 inactive session 则继续 strict `unarchive -> resume -> send`；附件上传仍由 `useSessionTargetResolver` 做显式恢复准备。两条链都只会在用户显式发送/上传时触发，页面重连不会偷偷续跑
-- inactive session 的 composer 现在会在 `focus + 首次非空输入意图` 时做后台 warmup，把 `resume/start` 冷路径前移；这条 warmup 默认是 silent 的，不会因为用户只是点进输入框就先弹恢复失败 toast。真正的恢复失败提示仍只保留在显式发送/附件上传这条 owner 链上
+- inactive session 的显式发送与附件上传现在分成两条 owner：文本发送统一走 `hub/src/web/routes/messages.ts -> SyncEngine.sendMessage()` 的单一 Hub command，`inactive + empty transcript` 会在同一个 hub session 上 fresh-start，已有 transcript 的 inactive session 则继续 strict `unarchive -> resume -> send`；如果目标是 manager-controlled member，Hub 会直接拒绝 generic send，避免 Web 本地再拼第二道 readonly 逻辑。附件上传仍由 `useSessionTargetResolver` 做显式恢复准备。两条链都只会在用户显式发送/上传时触发，页面重连不会偷偷续跑
+- inactive session 的 composer 现在只会在`首次非空输入意图`时做后台 warmup，把 `resume/start` 冷路径前移；detail open、`autoFocus` 和单纯 focus 不得触发恢复链。这条 warmup 默认是 silent 的，不会因为用户只是浏览详情或点进输入框就先弹恢复失败 toast。真正的恢复失败提示仍只保留在显式发送/附件上传这条 owner 链上
 - 聊天页对显式恢复只保留 route-local 的轻量 `isResumingSession` 状态；composer 在恢复期间只做 placeholder / disabled / `aria-busy` 表达，不扩散成第二套全局状态机
 - 失败消息重试现在和首次发送共用同一条 send owner：会重新建立 `pendingReply`、补齐 `message_send_start` trace，并复用原始附件元数据，不再出现“首次发送有 sending/preparing，重试没有”的状态漂移
 - `resume` 仍保持单次显式操作，但后端完成条件已收口为“旧 agent session 真正重新接回”；Web 不承担补偿重试，也不再需要靠“等一会再点一次”撞过启动竞态
 - `/sessions/$sessionId` 继续只信路由参数作为唯一选中会话事实源；resume 现在是原 session 原地恢复，不再走 `resolvedSessionId`/redirect 兼容链
 - session detail 只允许沿 `sessions query cache -> useSession() placeholder seed -> SessionChat stable shell` 这一条路径衔接；普通站内导航时，detail query 未完成也要保持 header/body 壳体稳定，只在壳体内部显示局部 pending；`chat.tsx` 现在还会在 route param 切换时保留上一个稳定 chat surface，直到新 session 的首帧真正 ready 后再原子接管，避免 detail unresolved / placeholder pending 时先闪回 route-level blocking fallback；一旦进入 `SessionChat`，detail/workspace pending 都必须留在壳体内部的局部 skeleton，不再回退到第二层 centered blocking hero、额外 route wrapper 或整页 `LoadingState`
 - `useSession()` 的 placeholder seed 现在优先级是 `query cache -> warm session snapshot -> sessions summary`；只要已经拿到完整 warm snapshot，聊天壳体就不该再因为 detail query 仍在后台对齐而重新掉回 workspace pending
-- PWA service worker 的 precache 现在只保核心 app-shell 资产；`vendor-terminal` / `vendor-syntax` / `vendor-assistant-runtime` / `vendor-assistant-primitives` / `ShikiCodeContent` 这类非核心重模块都不再进 app-shell precache，避免更新、冷恢复和 runtime asset reset 把重 chunk 一起拖进来
+- PWA service worker 的 precache 现在只保核心 app-shell 资产；`vendor-terminal` / `vendor-syntax` / `SessionChatWorkspace` / `VibyThread` / `VibyComposer` / `MarkdownPrimitive` / `ShikiCodeContent` 这类非核心重模块都不再进 app-shell precache，避免更新、冷恢复和 runtime asset reset 把重 chunk 一起拖进来
 - route-level lazy 的 `SessionsShell-*` 也不再进入 app-shell precache；列表壳继续按真实路由访问时加载，不再在 service worker 安装阶段回卷成“伪核心资产”
 - 聊天页首次挂载继续遵守“稳定壳体先显示，消息快照后台补齐”的 owner：已有会话的普通站内导航只允许被 `sessionDetailRoutePreload.ts` 里的 critical module preload 阻塞；`session detail query` 和 `latest messages` 只能作为后台 warmup 并行推进，失败也不能拖住导航。`SessionChat` 里仍只保留一层 page-internal `Suspense` 作为 runtime lazy owner，不再把“等待最新消息”升级成切页前的硬门槛
 - sessions 列表上的 hover / focus intent preload 继续只做轻量 route chunk + session detail 预热；触屏点击会在 `pointerdown` 时提早启动同一条预热 owner，但列表扫过和 idle path 仍然禁止预热 `latest messages` 或多条 workspace，避免滚动过程把多条 message window / chat runtime 提前灌进内存
@@ -148,7 +155,9 @@
 - `SessionChat` 现在只负责 header、detail pending shell 和 workspace lazy owner；其中 detail/workspace pending 已统一成稳定壳内的局部消息 skeleton，而不是第二层 blocking hero；workspace 内部的消息块归一化/重排、composer live config 控制和 thread view-model 已收口到 `useSessionChatWorkspaceModel -> useSessionChatBlocks / useSessionLiveConfigControls`，避免 route shell 和 workspace 再互相吞职责
 - `SessionChatWorkspace` 本体现在也继续拆成“轻壳 + 子块”：`VibyThread`、`VibyComposer`、`ComposerDraftController` 都已后移成 workspace 内部按需 chunk，并在壳内各自使用局部 fallback；这样会话首开不再被一个 100KB 级工作台大块整体卡住，而是先稳定进 workspace shell，再并行接管 thread / composer
 - chat route 的 workspace preload 现在也只保留 `SessionChat` 一条 owner；`useSessionChatRouteModel.ts` 不再重复维护第二份 `loadSessionChatWorkspaceModule()` effect，避免同一条 preload 语义在 route model 和 shell 两头散写
-- `TeamPanel` 已从 `SessionChat` 热路径后移成按需 chunk；只有会话真的带 `teamState` 时才加载，同时 `TeamPanel-*` 也不会再进 app-shell precache
+- manager/member 顶部 surface 已收口到 `ProjectPanel` / `MemberControlBanner` 两个按需 chunk；聊天主路径只认 `session.teamContext`，不再保留旧 `TeamPanel -> teamState` 产品入口，也不会把这两个低频 surface 塞回 app-shell precache
+- `ProjectPanel` 当前继续只消费 `useTeamProject()` 返回的 authoritative snapshot；open tasks 的 acceptance status 与 Recent Acceptance 都直接读 `snapshot.acceptance`，不再从截断 `snapshot.events` 或本地状态机重算
+- `ProjectPanel` 现在也承担 manager project settings 的唯一用户 surface：`maxActiveMembers` 与 `defaultIsolationMode` 统一经 `PATCH /api/team-projects/:projectId/settings` 更新，返回 authoritative snapshot；`all_simple` 的默认隔离策略只沿这条 Hub owner 影响后续 member spawn，不在 Web 本地保第二套默认值
 - `VibyComposer` 继续只保留基础输入、附件和主操作 eager 路径；controls 是否显示统一走 `useComposerControlsVisibility.ts`，而实际 settings overlay 改成 `ComposerControlsOverlay` 按需加载，避免会话首开就为了模型/权限/协作面板初始化整条控制链
 - 会话列表顶部品牌位、route-level loading hero、登录入口、sessions 空态与静态 boot shell 现在统一消费生成后的 `brand-logo-tight.png` 主符号：header 只展示纯 mark + `Viby` 标题；登录、workspace loading、sessions 空态与 boot shell 统一改成亮暗自适应的黑白单色 mark，不再保留 lime tint、暖色 halo、额外 badge 壳或第二套歪斜 SVG；web favicon 继续用透明主符号，PWA / apple-touch 图标也改成无内嵌卡片的放大主符号，不再额外包白边、描边或浅色底板；品牌脚本也会主动删除 `brand-browser-icon.png`、`brand-logo.png`、`brand-mark.svg` 这三类遗留 web 产物
 - 聊天文本渲染现在已经收口到 `chat/textRenderMode.ts -> reducerTimeline/useSessionChatBlocks -> assistant-runtime metadata -> TextContent` 单一路径：`user-text` 固定写入 `renderMode: plain`，`agent-text` 在 reducer 阶段一次性决定 `plain / markdown`，view 只消费 contract，不再各自扫描正文猜测富文本
@@ -233,13 +242,14 @@ bun run build:metrics
 bun run build:budget
 ```
 
-报告会输出到 `web/dist/reports/build-metrics.{json,md}`。
+报告会输出到 `web/.artifacts/build-metrics/build-metrics.{json,md}`，不会混进 `web/dist` 发布资产。
 
 - `build:budget` 当前会显式检查：
   - 主 `index` JS/CSS
   - `vendor-terminal`
-  - `vendor-assistant-runtime`
-  - `vendor-assistant-primitives`
+  - `SessionChatWorkspace`
+  - `VibyThread`
+  - `VibyComposer`
   - `markdown-runtime`
   - `shiki-code-content`
   - `use-reduced-motion` 必须缺席
@@ -250,19 +260,18 @@ bun run build:budget
 - `ShikiCodeContent` 高亮现在只加载当前活跃主题，并复用同 theme/lang/code 的渲染结果缓存；不会再为当前页面一次性预载 light + dark 两套主题
 - 当前 `build` 会先让 `vite-plugin-pwa` 编译 `src/sw.ts`，再由 `web/scripts/finalizeInjectManifest.ts` 后置注入 precache manifest；这是为了绕开 `vite-plugin-pwa@1.2.0` 和 Workbox 7.4 在同文件注入上的构建冲突，同时继续保留现有 custom service worker owner
 - `web/src/sw.ts` 的 runtime cache 现在只保留一条明确规则：只缓存命中允许状态码的成功响应；API / 同源可选 chunk 默认只缓存 `200`，跨源 CDN runtime cache 允许 `0/200`，避免把 `404/500` 之类失败结果写进 cache
-- app-shell precache 的非关键过滤名单现在也已对齐真实输出 chunk：`SessionsShell-*`、`sessionDetailRoutePreload-*`、`MarkdownPrimitive-*`、`ShikiCodeContent-*`、`TeamPanel-*`、`RichAssistantToolMessageContent-*`、`registerRuntimeServiceWorker-*`、`usePWAInstall-*` 等后移 runtime 不会再因为名字漂移被误放回 precache
+- app-shell precache 的非关键过滤名单现在也已对齐真实输出 chunk：`SessionsShell-*`、`sessionDetailRoutePreload-*`、`MarkdownPrimitive-*`、`ShikiCodeContent-*`、`ProjectPanel-*`、`MemberControlBanner-*`、`RichAssistantToolMessageContent-*`、`registerRuntimeServiceWorker-*`、`usePWAInstall-*` 等后移 runtime 不会再因为名字漂移被误放回 precache
 - 同一条 non-critical precache 过滤名单现在也继续覆盖 `DirectoryTree-*`、`fileContentView-*`、`ComposerControlsOverlay-*`、`TerminalView-*`、`MarkdownRenderer-*`、`FloatingActionMenu.contract-*` 与 `workbox-window.prod.es5-*`，避免 files/file/chat/terminal/PWA 这轮新拆出的子块被 service worker 重新塞回 app-shell
 - 2026-03-25 这轮 code-simplifier closeout 后，fresh `build:metrics` 结果为：主 `index` `325.44 KiB raw / 103.16 KiB gzip`，`vendor-terminal` `325.44 KiB raw / 82.15 KiB gzip`，PWA precache 收到 `67 entries / 1389786 bytes`
 - 2026-03-25 这轮 fresh `build` 下，之前记录的 `runtimeAssetRecovery.ts` mixed import warning 没有复现；当前构建热点仍优先看真实 chunk 体积，而不是假设这条恢复链需要额外拆分
 - 2026-03-25 当前这轮继续收口后，主 `index` 已进一步降到 `325.36 KiB raw / 103.13 KiB gzip`；相比上轮 `332.38 / 104.78 KiB`，说明 boot/auth 从完整 `ApiClient` 中拆开加上后续收口是实际收益，不是“结构更整齐但包体没变”
 - 同一轮继续拆 terminal 后，`vendor-terminal` 也已从 `418.58 KiB raw / 105.62 KiB gzip` 降到 `325.44 KiB raw / 82.15 KiB gzip`；当前收益来自删除默认路径里的可选 canvas renderer，而不是继续新增 chunk 岛
-- 同一轮继续收窄 assistant markdown owner 后，assistant markdown 相关依赖也已从 session 热路径退出；`@assistant-ui/react-markdown` 与 `remark-gfm` 不再被 `vendor-assistant-runtime` 常驻绑进聊天热路径，而是回到 markdown runtime 自己承接
-- 同一轮继续收口 chat 热路径后，`chat-*` route chunk 也已从 `7.29 KiB gzip` 降到 `6.49 KiB gzip`；收益来自删除重复 workspace preload owner，并把低频 `TeamPanel` UI 从聊天首开路径后移，而不是新增新的 vendor split
+- 同一轮继续收窄 assistant markdown owner 后，assistant markdown 相关依赖也已从 session 热路径退出；`@assistant-ui/react-markdown` 与 `remark-gfm` 不再被聊天首帧常驻绑进热路径，而是回到 markdown runtime 自己承接
+- 同一轮继续收口 chat 热路径后，`chat-*` route chunk 的收益仍主要来自删除重复 workspace preload owner，并把 manager/member 顶部 surface 保持在 `ProjectPanel` / `MemberControlBanner` 按需路径，而不是新增新的 vendor split
 - 同一轮继续做 false-lazy closeout 后，`SessionHeaderActionMenu` 只会在点击更多菜单时才导入，`InstallPrompt` 也只会在 app chrome 空闲时才导入；当前 fresh `build:budget` 下，这两个低频 surface 仍保持独立 chunk：`SessionHeaderActionMenu` `0.73 KiB raw / 0.42 KiB gzip`、`InstallPrompt` `8.57 KiB raw / 2.46 KiB gzip`
-- 当前这份脏工作区的最新 fresh `build:budget` 结果里，主 `index` 真相已经变成 `356.74 KiB raw / 113.25 KiB gzip`；因此不要再把上面的 `325 KiB` 视为“当前整仓总包体”的唯一基线。当前仍然稳定保住的是：`vendor-terminal` `325.44 / 82.15 KiB`、`vendor-assistant-runtime` `72.89 / 19.22 KiB`、`vendor-assistant-primitives` `13.02 / 4.45 KiB`、`markdown-runtime` `104.94 / 31.79 KiB`、`shiki-code-content` `146.24 / 48.19 KiB`、PWA precache `58 entries / 922462 bytes`
+- 当前这份脏工作区的最新 fresh `build:budget` 结果里，主 `index` 真相已经变成 `365.54 KiB raw / 116.00 KiB gzip`；因此不要再把上面的 `325 KiB` 视为“当前整仓总包体”的唯一基线。当前更该盯的是：`vendor-terminal` `333.26 / 84.12 KiB`、`SessionChatWorkspace` `119.22 / 33.72 KiB`、`VibyThread` `35.59 / 11.22 KiB`、`VibyComposer` `27.35 / 10.14 KiB`、`markdown-runtime` `113.21 / 34.62 KiB`、`shiki-code-content` `3.83 / 1.57 KiB`、PWA precache `66 entries / 1010245 bytes`
 - 2026-03-26 继续收口 files/file 后，fresh `build` 里 `files-*` 已是 `11.89 KiB raw / 4.06 KiB gzip`，`file-*` 已是 `5.48 KiB raw / 2.28 KiB gzip`；目录树与高亮内容分别独立成 `DirectoryTree-*` `3.73 KiB raw / 1.48 KiB gzip` 和 `fileContentView-*` `0.63 KiB raw / 0.36 KiB gzip`
 - 同一轮也把 file route 的默认显示模式收口为单一事实源：`search.tab` 决定首选模式，`directories` 进来默认落 `file`，其余默认落 `diff`；只有当前文件确实没有 diff 时，页面才会原子回落到 `file`，不会再一边默认展示 diff、一边偷偷把目录入口改成 file 请求路径
-- 同一天继续把 assistant/runtime 与 optional precache 误收口掉之后，`@assistant-ui/react` 已拆成 `vendor-assistant-runtime-* + vendor-assistant-primitives-*` 两块，原先整块 assistant runtime 不再和 primitives 绑死；同时 `ShikiCodeContent-*`、`RichAssistantToolMessageContent-*`、`ComposerControlsOverlay-*`、`TerminalView-*`、`MarkdownRenderer-*`、`ToolCard views _all/_results-*`、PWA install/update runtime 等懒块也被从 app-shell precache 里踢出，PWA precache 从 `1280554 bytes` 连续降到 `922462 bytes`
-
-- `manualChunks` 当前仍在 `web/vite.config.ts` 里显式保留 3 组 runtime 家族：`@xterm -> vendor-terminal`、`shiki + hast-util-to-jsx-runtime -> vendor-syntax`、`@assistant-ui/react -> vendor-assistant-runtime / vendor-assistant-primitives`；`@assistant-ui/react-markdown` 与 `remark-gfm` 继续交给 markdown runtime 自己承接，其余依赖继续交给 Rollup 自动收口
+- 2026-03-30 这轮 static Hub closeout 里，`@assistant-ui/react` 的手工 `vendor-assistant-*` 切块已被移除。根因是生产静态入口会因 assistant runtime/primitives 的 chunk 初始化环依赖，真实触发 `ReferenceError: Cannot access ... before initialization`，随后在 session detail 次生表现成 `Cannot read properties of undefined (reading 'default')`
+- 当前 `manualChunks` 只保留 2 组 runtime 家族：`@xterm -> vendor-terminal`、`shiki + hast-util-to-jsx-runtime -> vendor-syntax`；assistant 相关模块回到 `SessionChatWorkspace`、`VibyThread`、`VibyComposer`、`MarkdownPrimitive` 等真实 lazy owner 自动收口
 - 不要再新增新的 vendor island；如果后续要继续删减或重划现有手工切块，先同步修改 `web/vite.config.ts` 和这里的说明，再验证 static 入口不会重新引入 production-only 初始化环依赖

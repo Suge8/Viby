@@ -13,6 +13,7 @@ import type { PendingReplyState } from '@/lib/message-window-store'
 import type { LoadMoreMessagesResult } from '@/lib/message-window-store'
 import type { MessageWindowWarningKey } from '@/lib/messageWindowWarnings'
 import { SessionHeader } from '@/components/SessionHeader'
+import { SessionChatTeamSurface } from '@/components/session-chat/SessionChatTeamSurface'
 import { useSessionActions } from '@/hooks/mutations/useSessionActions'
 import {
     runPreloadedNavigation,
@@ -29,14 +30,6 @@ import {
 } from '@/routes/sessions/sessionRoutePreload'
 
 const SessionChatWorkspace = lazy(loadSessionChatWorkspaceModule)
-const LazyProjectPanel = lazy(async () => {
-    const module = await import('@/components/ProjectPanel')
-    return { default: module.ProjectPanel }
-})
-const LazyMemberControlBanner = lazy(async () => {
-    const module = await import('@/components/MemberControlBanner')
-    return { default: module.MemberControlBanner }
-})
 const SESSION_CHAT_ENTER_SURFACE_CLASS_NAME = 'session-chat-enter-surface'
 const SESSION_CHAT_ENTER_BODY_CLASS_NAME = 'session-chat-enter-body'
 const SESSION_WORKSPACE_FILES_ROUTE = 'files'
@@ -261,17 +254,7 @@ export function SessionChat(props: SessionChatProps): React.JSX.Element {
                 navigation={headerNavigation}
             />
 
-            {session.teamContext?.sessionRole === 'manager' ? (
-                <Suspense fallback={null}>
-                    <LazyProjectPanel api={api} session={session} />
-                </Suspense>
-            ) : null}
-
-            {session.teamContext?.sessionRole === 'member' ? (
-                <Suspense fallback={null}>
-                    <LazyMemberControlBanner api={api} session={session} />
-                </Suspense>
-            ) : null}
+            <SessionChatTeamSurface api={api} session={session} />
 
             <div className={`session-chat-page-body ${SESSION_CHAT_ENTER_BODY_CLASS_NAME} min-h-0 flex-1 overflow-hidden`}>
                 {showDetailPendingShell ? (

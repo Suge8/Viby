@@ -19,13 +19,24 @@ const COPY_GUARD_SELECTOR = [
     '[data-prevent-message-copy]'
 ].join(',')
 
-export type MessageSurfaceTone = 'assistant' | 'user'
+export type MessageSurfaceTone = 'assistant' | 'user' | 'manager'
 
 type MessageSurfaceProps = {
     children: ReactNode
     tone: MessageSurfaceTone
     copyText?: string | null
     className?: string
+}
+
+function getSurfaceToneClassName(tone: MessageSurfaceTone): string {
+    switch (tone) {
+        case 'user':
+            return 'ds-message-surface-user'
+        case 'manager':
+            return 'ds-message-surface-manager'
+        default:
+            return 'ds-message-surface-assistant'
+    }
 }
 
 function shouldIgnoreCopyTarget(target: EventTarget | null, container: HTMLDivElement): boolean {
@@ -47,7 +58,7 @@ function MessageSurfaceComponent(props: MessageSurfaceProps): React.JSX.Element 
     const surfaceClassName = useMemo(() => {
         return cn(
             'ds-message-surface',
-            props.tone === 'user' ? 'ds-message-surface-user' : 'ds-message-surface-assistant',
+            getSurfaceToneClassName(props.tone),
             isCopyable ? 'ds-message-surface-copyable' : null,
             props.className
         )

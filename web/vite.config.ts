@@ -75,14 +75,6 @@ function getManualChunkName(id: string): string | undefined {
         return 'vendor-syntax'
     }
 
-    if (id.includes('/node_modules/@assistant-ui/react/')) {
-        if (id.includes('/dist/primitives/')) {
-            return 'vendor-assistant-primitives'
-        }
-
-        return 'vendor-assistant-runtime'
-    }
-
     return undefined
 }
 
@@ -176,7 +168,6 @@ export default defineConfig({
         emptyOutDir: true,
         rollupOptions: {
             output: {
-                onlyExplicitManualChunks: true,
                 manualChunks(id) {
                     return getManualChunkName(id)
                 }

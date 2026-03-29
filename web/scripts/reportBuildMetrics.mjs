@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 const DIST_DIR = new URL('../dist', import.meta.url)
 const ASSETS_DIR = new URL('../dist/assets', import.meta.url)
-const REPORT_DIR = new URL('../dist/reports', import.meta.url)
+const REPORT_DIR = new URL('../.artifacts/build-metrics', import.meta.url)
 const TOP_FILE_LIMIT = 12
 
 const CHUNK_BUDGETS = [
@@ -27,16 +27,22 @@ const CHUNK_BUDGETS = [
     maxGzipBytes: 130 * 1024,
   },
   {
-    label: 'vendor-assistant-runtime',
-    pattern: /^vendor-assistant-runtime-.*\.js$/,
-    maxRawBytes: 220 * 1024,
+    label: 'session-chat-workspace',
+    pattern: /^SessionChatWorkspace-.*\.js$/,
+    maxRawBytes: 170 * 1024,
     maxGzipBytes: 45 * 1024,
   },
   {
-    label: 'vendor-assistant-primitives',
-    pattern: /^vendor-assistant-primitives-.*\.js$/,
-    maxRawBytes: 220 * 1024,
-    maxGzipBytes: 45 * 1024,
+    label: 'viby-thread',
+    pattern: /^VibyThread-.*\.js$/,
+    maxRawBytes: 80 * 1024,
+    maxGzipBytes: 25 * 1024,
+  },
+  {
+    label: 'viby-composer',
+    pattern: /^VibyComposer-.*\.js$/,
+    maxRawBytes: 60 * 1024,
+    maxGzipBytes: 20 * 1024,
   },
   {
     label: 'markdown-runtime',

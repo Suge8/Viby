@@ -10,6 +10,7 @@ web/dist-analyze/
 web/dist-analyze*/
 web/.tmp-bundle-analyze*/
 web/dist-profile/
+web/.artifacts/
 **/src-tauri/target/
 hub/src/web/embeddedAssets.generated.ts
 

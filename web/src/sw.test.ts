@@ -160,8 +160,6 @@ describe('service worker push notifications', () => {
             '/assets/settings-hhh888.js',
             '/assets/vendor-terminal-abc123.js',
             '/assets/vendor-syntax-def456.js',
-            '/assets/vendor-assistant-runtime-jkl111.js',
-            '/assets/vendor-assistant-primitives-mno222.js',
             '/assets/markdown-text-ghi789.js',
             '/assets/MarkdownPrimitive-jkl345.js',
             '/assets/markdownConfig-klm456.js',
@@ -177,7 +175,8 @@ describe('service worker push notifications', () => {
             '/assets/sessionAutocompleteQuery-xyz678.js',
             '/assets/SessionHeaderActionMenu-stu901.js',
             '/assets/SessionListActionController-vwx234.js',
-            '/assets/TeamPanel-ghi012.js',
+            '/assets/ProjectPanel-ghi012.js',
+            '/assets/MemberControlBanner-hij123.js',
             '/assets/VibyThread-jkl345.js',
             '/assets/VibyComposer-mno678.js',
             '/assets/ComposerDraftController-pqr901.js',
@@ -226,8 +225,6 @@ describe('service worker push notifications', () => {
         expect(isNonCriticalPrecacheAssetUrl('/assets/new-abc123.js')).toBe(true)
         expect(isNonCriticalPrecacheAssetUrl('/assets/settings-abc123.js')).toBe(true)
         expect(isNonCriticalPrecacheAssetUrl('/assets/vendor-terminal-abc123.js')).toBe(true)
-        expect(isNonCriticalPrecacheAssetUrl('/assets/vendor-assistant-runtime-abc123.js')).toBe(true)
-        expect(isNonCriticalPrecacheAssetUrl('/assets/vendor-assistant-primitives-abc123.js')).toBe(true)
         expect(isNonCriticalPrecacheAssetUrl('/assets/markdown-text-abc123.js')).toBe(true)
         expect(isNonCriticalPrecacheAssetUrl('/assets/MarkdownPrimitive-abc123.js')).toBe(true)
         expect(isNonCriticalPrecacheAssetUrl('/assets/markdownConfig-abc123.js')).toBe(true)
@@ -242,7 +239,8 @@ describe('service worker push notifications', () => {
         expect(isNonCriticalPrecacheAssetUrl('/assets/recent-skills-abc123.js')).toBe(true)
         expect(isNonCriticalPrecacheAssetUrl('/assets/sessionAutocompleteQuery-abc123.js')).toBe(true)
         expect(isNonCriticalPrecacheAssetUrl('/assets/SessionHeaderActionMenu-abc123.js')).toBe(true)
-        expect(isNonCriticalPrecacheAssetUrl('/assets/TeamPanel-abc123.js')).toBe(true)
+        expect(isNonCriticalPrecacheAssetUrl('/assets/ProjectPanel-abc123.js')).toBe(true)
+        expect(isNonCriticalPrecacheAssetUrl('/assets/MemberControlBanner-abc123.js')).toBe(true)
         expect(isNonCriticalPrecacheAssetUrl('/assets/VibyThread-abc123.js')).toBe(true)
         expect(isNonCriticalPrecacheAssetUrl('/assets/VibyComposer-abc123.js')).toBe(true)
         expect(isNonCriticalPrecacheAssetUrl('/assets/ComposerDraftController-abc123.js')).toBe(true)

@@ -3,7 +3,7 @@
 `Viby` 是一个本地优先的 AI 编码代理远程控制平台。
 它把 `Claude Code` 和 `Codex` 收到同一套工作流里：会话始终跑在你的机器上，Web / PWA 负责远程查看、发消息、审批权限、浏览文件和打开终端；`desktop/` 则提供一个原生常驻壳来托管 hub。
 
-最后检查：`2026-03-27`
+最后检查：`2026-03-29`
 
 ## 先看哪里
 
@@ -25,8 +25,16 @@
 - **恢复语义同步闭环**：`POST /api/sessions/:id/resume` 现在只会在“旧 agent thread 已重新接回”后返回成功；Hub 不再先看 keepalive 活跃就抢跑判定，Codex remote 也不再保留“启动先假成功、首轮再偷偷补 resume”的分叉。
 - **会话提交链单一**：`spawn / resume / send / abort / switch / archive / close / unarchive / live config` 这些会改变会话事实的操作，都会由 Hub 返回 authoritative `session` snapshot；Web 直接写回 detail + list cache，不再依赖 `invalidate + refetch` 补偿。
 - **manager teams 基线已冻住**：新建会话支持 `普通会话 / 经理会话`；`sessionRole` 只沿一条 typed create chain 传递，manager session 的 durable project 会在 `/cli/sessions` 返回前完成 bootstrap，并把 `teamContext` 一起带回 Web / CLI。
-- **角色合同单点派生**：manager/member prompt contract 统一从 authoritative `teamContext` 派生；Claude `appendSystemPrompt` 与 Codex `developerInstructions` 共用同一条合同，不在各 provider 再平行维护一份角色说明。
-- **显式恢复更稳**：inactive 会话只会在用户显式发送消息或上传附件时进入恢复链；文本发送命中的 `inactive + empty transcript` 会 fresh-start 同一个 hub session，已有 transcript 的 inactive session 继续 strict resume；`archived` 会先自动恢复回可继续状态，再沿同一条发送链继续，页面重连不会偷偷续跑。
+- **manager teams 编排入口已落地**：manager runtime 现在已经真实开放 `team_spawn_member / team_update_member / team_create_task / team_update_task / team_message_member / team_close_project`；Hub 只经 `teamOrchestrationService + TeamCoordinatorService` 落 durable mutation，CLI runtimes 统一只认 `cli/src/agent/vibyToolRegistry.ts` 这一条 product surface。
+- **manager teams 验收链已落地**：`review -> verification -> manager final acceptance` 现在只经 `team_tasks + team_events` durable chain 落地；Hub snapshot 会额外发布 authoritative `snapshot.acceptance` 读模型，Web/CLI 不再从截断的 generic `snapshot.events` 重算 acceptance。
+- **manager autonomy compact brief 已落地**：`shared/src/teamProjectSnapshot.ts` 现在冻结了 authoritative `snapshot.compactBrief` 合同；Hub 只经 `teamProjectSnapshotBuilder` 派生 compact project/member/task/event/acceptance/wake signal，CLI tool result 直接复用这份 read-model，不再在 prompt/tool/runtime 里各拼第二份自治摘要。
+- **manager autonomy staffing policy 已收口**：seat budget、resume vs revision、blocked/in-review/in-verification staffing hint 现在只由 `TeamMemberSessionService` 派生，再跟着 `compactBrief.staffing + nextActions.resolve-staffing` 一起进入 manager orchestration loop；Web/CLI/prompt 不再各自猜第二份 staffing 规则。
+- **manager teams 生命周期与历史链已闭环**：archive / restore / history 现在只经 Hub `teamLifecycleService` 映射；Web 详情面统一只认 `teamProject / teamProjectHistory` 和 `team-project-updated` 这条 refresh owner，不再在本地并行维护第二套 team lifecycle / history 状态。
+- **manager teams 项目设置与列表读模型已收口**：`ProjectPanel` 现在提供 `maxActiveMembers + defaultIsolationMode` 的 authoritative 用户 surface，`all_simple` 会真实影响后续 member spawn 默认隔离策略；session list 的 member row 也已固定为稳定 `role · r{revision}` 标题，并直接显示 manager 来源、control owner 与 membership state，不再靠 metadata/path 猜名字。
+- **manager teams readonly / wake / archive surface 已补齐**：generic `/sessions/:id/messages` 现在会明确拒绝任何 manager-controlled member 的直写，包括 archived member；manager passive notice 会先走同一条 Hub resume 链完成唤醒，唤醒失败则 action fail-fast，不再“只写 notice 假成功”；archived tab 也继续按经理折叠，history drawer 允许直接打开经理/成员会话并恢复 archived member。
+- **manager teams phase-2 角色目录与 preset 已落地**：project-scoped `team_roles` 已成为 custom role、append-only role prompt extension 和 preset import/export 的 durable owner；preset 固定为 `schemaVersion + projectSettings + custom roles` bootstrap document，Web 只通过按需加载的 `Role Catalog & Preset` dialog 做 role CRUD 与 preset import/export，不在浏览器里维护第二份 role/preset cache。
+- **角色合同与工具面统一**：manager/member prompt contract 统一从 authoritative `teamContext` 派生；Claude `appendSystemPrompt`、Codex `developerInstructions`、Gemini/OpenCode/Cursor 的首轮 prompt 注入都共用 `cli/src/agent/teamPromptContract.ts`；Claude/Codex/Gemini/OpenCode/Cursor 现在也都复用同一条 session-scoped Viby MCP tool surface，其中 Cursor 通过 per-session `CURSOR_CONFIG_DIR + mcp.json` 注入，不往仓库写 `.cursor/mcp.json`。
+- **显式恢复更稳**：inactive 会话只会在用户显式发送消息、显式上传附件，或首次非空输入意图触发的 silent warmup 时进入恢复链；detail open、autoFocus 和页面重连不会偷偷续跑。文本发送命中的 `inactive + empty transcript` 会 fresh-start 同一个 hub session，已有 transcript 的 inactive session 继续 strict resume；`archived` 会先自动恢复回可继续状态，再沿同一条发送链继续。
 - **删除清理单点收口**：删除会话后的 detail cache、list summary 和 message window 统一走同一条 client-state cleanup helper，不再在 mutation、realtime 和视图层散写第二套清理逻辑。
 - **错误提示更克制**：Web 用户态错误 surface 已统一收口，不再把 `grpc / rpc / transport / HTTP` 这类底层术语直接暴露给普通用户。
 - **聊天历史更稳**：线程历史按钮统一走 `上一条你发的消息 / 更多消息` 双模式；prepend 历史页时保持当前 viewport anchor，不再因为补历史把视角抖乱。
@@ -67,12 +75,13 @@ viby hub
 首次启动后，`Viby` 会把访问令牌写入 `~/.viby/settings.toml`。
 终端会打印访问地址和二维码，手机打开后即可登录。
 
-当前 SQLite schema 版本为 `10`。
-当前构建会在启动时自动执行 **`v7 -> v10`**、**`v8 -> v10`**、**`v9 -> v10`** 升级：
+当前 SQLite schema 版本为 `11`。
+当前构建会在启动时自动执行 **`v7 -> v11`**、**`v8 -> v11`**、**`v9 -> v11`**、**`v10 -> v11`** 升级：
 
 - 补齐 `sessions.permission_mode / collaboration_mode / next_message_seq`
-- 新增 `team_projects / team_members / team_tasks / team_events`
-- shared read model 现在包含 `Session.teamContext / SessionSummary.team`
+- 新增 `team_projects / team_members / team_tasks / team_events / team_roles`
+- 为 `team_members` 回填 `role_id`，并补齐 built-in role catalog durable seed
+- shared read model 现在包含 `Session.teamContext / SessionSummary.team`，manager phase-2 role catalog / preset 也由这套 durable schema 驱动
 
 更老的 schema 仍然不在自动迁移范围内；升级前依旧建议先备份 `~/.viby/viby.db`。
 
@@ -234,4 +243,4 @@ bun run build:web:metrics
 bun run build:web:budget
 ```
 
-报告会输出到 `web/dist/reports/build-metrics.{json,md}`。
+报告会输出到 `web/.artifacts/build-metrics/build-metrics.{json,md}`。

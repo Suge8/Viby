@@ -17,6 +17,14 @@ type RetainedSessionChatSnapshot = {
     sessionChatProps: React.ComponentProps<typeof SessionChat>
 }
 
+function getMemberLifecycleState(
+    session: React.ComponentProps<typeof SessionChat>['session']
+): string | null {
+    return session.teamContext?.sessionRole === 'member'
+        ? (session.teamContext.membershipState ?? 'active')
+        : null
+}
+
 function isSessionChatSurfaceReady(
     sessionChatProps: React.ComponentProps<typeof SessionChat>
 ): boolean {
@@ -112,10 +120,32 @@ type ResolvedSessionChatRouteProps = {
 }
 
 function ResolvedSessionChatRoute(props: ResolvedSessionChatRouteProps): React.JSX.Element {
+    const navigate = useNavigate()
     const sessionChatProps = useSessionChatRouteModel(props)
     const surfaceReady = isSessionChatSurfaceReady(sessionChatProps)
+    const previousRouteSessionIdRef = useRef(props.sessionId)
+    const previousMemberLifecycleRef = useRef<string | null>(getMemberLifecycleState(sessionChatProps.session))
 
     useFinalizeBootShell(surfaceReady)
+
+    useEffect(() => {
+        if (previousRouteSessionIdRef.current !== props.sessionId) {
+            previousRouteSessionIdRef.current = props.sessionId
+            previousMemberLifecycleRef.current = getMemberLifecycleState(sessionChatProps.session)
+            return
+        }
+
+        const currentState = getMemberLifecycleState(sessionChatProps.session)
+        const previousState = previousMemberLifecycleRef.current
+        previousMemberLifecycleRef.current = currentState
+
+        if (previousState === 'active' && currentState && currentState !== 'active') {
+            void navigate({
+                to: '/sessions',
+                replace: true
+            })
+        }
+    }, [navigate, props.sessionId, sessionChatProps.session])
 
     useEffect(() => {
         if (!surfaceReady) {

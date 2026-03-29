@@ -224,7 +224,7 @@ describe('VibyComposer', () => {
         ).toBe(true)
     })
 
-    it('warms an inactive session as soon as the composer receives focus', () => {
+    it('does not warm an inactive session just because the composer receives focus', () => {
         const onWarmSession = vi.fn()
         renderComposer({
             configOverrides: {
@@ -236,7 +236,7 @@ describe('VibyComposer', () => {
 
         fireEvent.focus(screen.getByRole('textbox'))
 
-        expect(onWarmSession).toHaveBeenCalledTimes(1)
+        expect(onWarmSession).not.toHaveBeenCalled()
     })
 
     it('warms an inactive session on the first non-empty typing intent only once', () => {

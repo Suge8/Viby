@@ -36,6 +36,11 @@ export function VibyUserMessage() {
         const custom = getVibyMessageMetadata(message)
         return custom?.renderMode ?? 'plain'
     })
+    const sentFrom = useAssistantState(({ message }) => {
+        if (message.role !== 'user') return undefined
+        const custom = getVibyMessageMetadata(message)
+        return custom?.sentFrom
+    })
     const isCliOutput = useAssistantState(({ message }) => {
         const custom = getVibyMessageMetadata(message)
         return custom?.kind === 'cli-output'
@@ -65,15 +70,23 @@ export function VibyUserMessage() {
 
     const hasText = text.length > 0
     const hasAttachments = attachments && attachments.length > 0
+    const isManagerMessage = sentFrom === 'manager'
 
     return (
         <MessagePrimitive.Root
             className="flex min-w-0 max-w-full justify-end px-1"
             {...{ [THREAD_MESSAGE_ID_ATTRIBUTE]: messageId }}
         >
-            <MessageSurface tone="user" copyText={hasText ? text : null}>
+            <MessageSurface tone={isManagerMessage ? 'manager' : 'user'} copyText={hasText ? text : null}>
                 <div className="flex min-w-0 items-end gap-2">
                     <div className="min-w-0 flex-1">
+                        {isManagerMessage ? (
+                            <div className="mb-2 flex justify-end">
+                                <span className="rounded-full border border-[color:color-mix(in_srgb,var(--ds-brand)_30%,transparent)] bg-[color:color-mix(in_srgb,var(--ds-brand)_12%,transparent)] px-2 py-0.5 text-[11px] font-semibold tracking-[0.08em] text-[var(--ds-text-primary)]">
+                                    经理
+                                </span>
+                            </div>
+                        ) : null}
                         {hasText && <TextContent text={text} mode={renderMode} />}
                         {hasAttachments && <MessageAttachments attachments={attachments} />}
                     </div>

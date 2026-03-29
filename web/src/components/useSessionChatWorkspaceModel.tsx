@@ -109,7 +109,9 @@ export function useSessionChatWorkspaceModel(props: SessionChatWorkspaceProps) {
     const lifecycleState = getSessionLifecycleState(session)
     const sessionInactive = lifecycleState !== 'running'
     const allowSendWhenInactive = sessionInactive
-    const memberComposerLocked = teamContext?.sessionRole === 'member' && teamContext.controlOwner !== 'user'
+    const memberComposerLocked = teamContext?.sessionRole === 'member' && (
+        teamContext.membershipState !== 'active' || teamContext.controlOwner !== 'user'
+    )
     const [forceScrollToken, setForceScrollToken] = useState(0)
     const {
         isStandalone,

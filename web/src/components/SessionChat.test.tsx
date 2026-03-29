@@ -72,8 +72,12 @@ vi.mock('@/components/SessionHeader', () => ({
     }
 }))
 
-vi.mock('@/components/TeamPanel', () => ({
-    TeamPanel: () => <div data-testid="team-panel" />
+vi.mock('@/components/ProjectPanel', () => ({
+    ProjectPanel: () => <div data-testid="project-panel" />
+}))
+
+vi.mock('@/components/MemberControlBanner', () => ({
+    MemberControlBanner: () => <div data-testid="member-control-banner" />
 }))
 
 vi.mock('@/hooks/mutations/useSessionActions', () => ({
@@ -117,6 +121,7 @@ function renderSessionChat(options?: {
     hasWarmSessionSnapshot?: boolean
     messages?: unknown[]
     onRefresh?: () => void
+    teamContext?: Record<string, unknown>
 }): ReturnType<typeof render> {
     return render(
         <I18nProvider>
@@ -136,7 +141,8 @@ function renderSessionChat(options?: {
                     },
                     agentState: {
                         controlledByUser: false
-                    }
+                    },
+                    teamContext: options?.teamContext
                 } as never}
                 isDetailPending={options?.isDetailPending}
                 hasWarmSessionSnapshot={options?.hasWarmSessionSnapshot}
@@ -241,6 +247,36 @@ describe('SessionChat layout', () => {
 
         expect(await screen.findAllByTestId('workspace-abort')).toHaveLength(1)
         expect(screen.queryByTestId('session-chat-detail-pending')).not.toBeInTheDocument()
+    })
+
+    it('renders the manager project panel from teamContext instead of the legacy manager surface path', async () => {
+        renderSessionChat({
+            teamContext: {
+                projectId: 'project-1',
+                sessionRole: 'manager',
+                managerSessionId: 'session-1',
+                projectStatus: 'active'
+            }
+        })
+
+        expect(await screen.findByTestId('project-panel')).toBeInTheDocument()
+        expect(screen.queryByTestId('team-panel')).not.toBeInTheDocument()
+    })
+
+    it('renders the member control banner for member sessions', async () => {
+        renderSessionChat({
+            teamContext: {
+                projectId: 'project-1',
+                sessionRole: 'member',
+                managerSessionId: 'manager-session-1',
+                memberId: 'member-1',
+                controlOwner: 'manager',
+                projectStatus: 'active'
+            }
+        })
+
+        expect(await screen.findByTestId('member-control-banner')).toBeInTheDocument()
+        expect(screen.queryByTestId('team-panel')).not.toBeInTheDocument()
     })
 
     it('keeps the stable chat shell visible until the initial message snapshot is ready', () => {
