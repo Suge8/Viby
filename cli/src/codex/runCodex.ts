@@ -37,7 +37,7 @@ export async function runCodex(opts: {
     let state: AgentState = {
         controlledByUser: false
     };
-    const { api, session, sessionInfo } = await bootstrapSession({
+    const { api, session } = await bootstrapSession({
         flavor: 'codex',
         sessionId: opts.vibySessionId,
         startedBy,
@@ -49,8 +49,6 @@ export async function runCodex(opts: {
         modelReasoningEffort: opts.modelReasoningEffort,
         collaborationMode: opts.collaborationMode ?? 'default'
     });
-    const teamRoleDeveloperInstructions = resolveTeamRolePromptContract(sessionInfo.teamContext);
-
     const startingMode: 'local' | 'remote' = startedBy === 'runner' ? 'remote' : 'local';
 
     setControlledByUser(session, startingMode);
@@ -129,7 +127,7 @@ export async function runCodex(opts: {
             model: currentModel,
             modelReasoningEffort: currentModelReasoningEffort,
             collaborationMode: currentCollaborationMode,
-            developerInstructions: teamRoleDeveloperInstructions
+            developerInstructions: resolveTeamRolePromptContract(session.getTeamContextSnapshot())
         };
         const formattedText = formatMessageWithAttachments(message.content.text, message.content.attachments);
         messageQueue.push(formattedText, enhancedMode);

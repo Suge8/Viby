@@ -9,13 +9,18 @@ import type { OpencodeSession } from './session';
 import type { PermissionMode } from './types';
 import { OpencodePermissionHandler } from './utils/permissionHandler';
 import { TITLE_INSTRUCTION } from './utils/systemPrompt';
+import {
+    mergePromptSegments,
+    prependPromptInstructionsToMessage,
+    resolveTeamRolePromptContract
+} from '@/agent/teamPromptContract';
 
 class OpencodeRemoteLauncher extends RemoteLauncherBase {
     private readonly session: OpencodeSession;
     private permissionHandler: OpencodePermissionHandler | null = null;
     private abortController = new AbortController();
     private displayPermissionMode: PermissionMode | null = null;
-    private instructionsSent = false;
+    private appliedSessionInstructions: string | null = null;
 
     constructor(session: OpencodeSession) {
         super(process.env.DEBUG ? session.logPath : undefined);
@@ -93,6 +98,21 @@ class OpencodeRemoteLauncher extends RemoteLauncherBase {
             session.sendSessionEvent({ type: 'ready' });
         };
 
+        const preparePromptText = (message: string): string => {
+            const sessionInstructions = mergePromptSegments(
+                TITLE_INSTRUCTION,
+                resolveTeamRolePromptContract(session.client.getTeamContextSnapshot())
+            )
+            if (!sessionInstructions) {
+                return message
+            }
+            if (this.appliedSessionInstructions === sessionInstructions) {
+                return message
+            }
+            this.appliedSessionInstructions = sessionInstructions
+            return prependPromptInstructionsToMessage(message, sessionInstructions)
+        }
+
         while (!this.shouldExit) {
             const waitSignal = this.abortController.signal;
             const batch = await session.queue.waitForMessagesAndGetAsString(waitSignal);
@@ -106,12 +126,7 @@ class OpencodeRemoteLauncher extends RemoteLauncherBase {
             this.applyDisplayMode(batch.mode.permissionMode);
             messageBuffer.addMessage(batch.message, 'user');
 
-            // Inject title instructions on first prompt
-            let messageText = batch.message;
-            if (!this.instructionsSent) {
-                messageText = `${TITLE_INSTRUCTION}\n\n${batch.message}`;
-                this.instructionsSent = true;
-            }
+            const messageText = preparePromptText(batch.message)
 
             const promptContent: PromptContent[] = [{
                 type: 'text',

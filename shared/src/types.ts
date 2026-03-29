@@ -8,10 +8,6 @@ export type {
     Session,
     SessionStreamState,
     SyncEvent,
-    TeamMember,
-    TeamMessage,
-    TeamState,
-    TeamTask,
     TodoItem,
     WorktreeMetadata
 } from './schemas'
@@ -22,14 +18,46 @@ export type { SessionLifecycleState } from './sessionLifecycle'
 export type { SessionRecoveryPage } from './sessionRecovery'
 export type { MessageMeta, MessageSentFrom, TeamMessageKind } from './messageMeta'
 export type {
+    TeamTaskAcceptanceState,
+    TeamTaskReviewStatus,
+    TeamTaskVerificationStatus
+} from './teamSchemas'
+export type {
+    TeamProjectAcceptanceReadModel,
+    TeamRoleDefinition,
     SessionSummaryTeam,
     SessionTeamContext,
     TeamEventRecord,
     TeamMemberRecord,
     TeamProject,
-    TeamProjectSnapshot,
+    TeamTaskAcceptanceRecord,
     TeamTaskRecord
 } from './teamSchemas'
+export type {
+    TeamProjectCompactBrief,
+    TeamProjectCompactCounts,
+    TeamProjectCompactEvent,
+    TeamProjectCompactMember,
+    TeamProjectCompactProject,
+    TeamProjectCompactStaffing,
+    TeamProjectCompactTask,
+    TeamProjectHistoryResponse,
+    TeamProjectMemberLaunchStrategy,
+    TeamProjectNextActionHint,
+    TeamProjectNextActionKind,
+    TeamProjectSeatPressure,
+    TeamProjectSnapshot,
+    TeamProjectStaffingHint,
+    TeamProjectStaffingHintKind,
+    TeamProjectWakePriority,
+    TeamProjectWakeReason,
+    TeamProjectWakeReasonKind
+} from './teamProjectSnapshot'
+export type {
+    TeamProjectPreset,
+    TeamProjectPresetProjectSettings,
+    TeamProjectPresetRole
+} from './teamProjectPreset'
 export type { MachineCapability } from './machineCapabilities'
 export type {
     MachineDirectoryEntry,
@@ -63,11 +91,13 @@ export type {
     TeamEventKind,
     TeamEventTargetType,
     TeamMemberIsolationMode,
+    TeamMemberRolePrototype,
     TeamMembershipState,
     TeamProviderFlavor,
     TeamProjectIsolationMode,
     TeamProjectStatus,
     TeamReasoningEffort,
+    TeamRoleSource,
     TeamRolePrototype,
     TeamSessionSpawnRole,
     TeamSessionRole,

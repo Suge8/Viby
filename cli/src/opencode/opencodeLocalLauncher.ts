@@ -16,6 +16,10 @@ import { configuration } from '@/configuration';
 import type { PermissionCompletion } from '@/modules/common/permission/BasePermissionHandler';
 import { hashObject } from '@/utils/deterministicJson';
 import { BaseLocalLauncher } from '@/modules/common/launcher/BaseLocalLauncher';
+import {
+    mergePromptSegments,
+    resolveTeamRolePromptContract
+} from '@/agent/teamPromptContract';
 
 type OpencodeLocalLauncherOptions = {
     hookServer: OpencodeHookServer;
@@ -271,7 +275,14 @@ export async function opencodeLocalLauncher(
         logger.debug(`[opencode-local]: Started Viby MCP server at ${bridge.server.url}`);
 
         // Generate opencode.json config with MCP server and instructions
-        const { configPath } = ensureOpencodeConfig(opencodeConfigDir, bridge.mcpServers.viby, TITLE_INSTRUCTION);
+        const { configPath } = ensureOpencodeConfig(
+            opencodeConfigDir,
+            bridge.mcpServers.viby,
+            mergePromptSegments(
+                TITLE_INSTRUCTION,
+                resolveTeamRolePromptContract(session.client.getTeamContextSnapshot())
+            ) ?? TITLE_INSTRUCTION
+        );
         opencodeConfigPath = configPath;
     } catch (error) {
         logger.debug('[opencode-local]: Failed to start Viby MCP server (change_title will be unavailable)', error);

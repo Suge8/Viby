@@ -10,7 +10,6 @@ import { registerRpcHandlers } from './rpcHandlers'
 import { registerSessionHandlers } from './sessionHandlers'
 import { cleanupTerminalHandlers, registerTerminalHandlers } from './terminalHandlers'
 import type { SessionStreamManager } from '../../../sync/sessionStreamManager'
-import { TeamCoordinatorService } from '../../../sync/teamCoordinatorService'
 
 type SessionAlivePayload = {
     sid: string
@@ -47,7 +46,6 @@ export type CliHandlersDeps = {
 export function registerCliHandlers(socket: CliSocketWithData, deps: CliHandlersDeps): void {
     const { io, store, rpcRegistry, terminalRegistry, sessionStreamManager, onSessionAlive, onSessionEnd, onMachineAlive, onWebappEvent } = deps
     const terminalNamespace = io.of('/terminal')
-    const teamCoordinator = new TeamCoordinatorService(store, onWebappEvent)
 
     const resolveSessionAccess = (sessionId: string): AccessResult<StoredSession> => {
         const session = store.sessions.getSession(sessionId)
@@ -89,8 +87,7 @@ export function registerCliHandlers(socket: CliSocketWithData, deps: CliHandlers
         emitAccessError,
         onSessionAlive,
         onSessionEnd,
-        onWebappEvent,
-        teamCoordinator
+        onWebappEvent
     })
     registerMachineHandlers(socket, {
         store,

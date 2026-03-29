@@ -3,8 +3,7 @@ import {
     CodexCollaborationModeSchema,
     MetadataSchema,
     PermissionModeSchema,
-    SessionTeamContextSchema,
-    TeamStateSchema
+    SessionTeamContextSchema
 } from '@viby/protocol/schemas'
 import type { CodexCollaborationMode, Metadata, PermissionMode, Session, SessionLifecycleState } from '@viby/protocol/types'
 import type { Store } from '../store'
@@ -202,11 +201,6 @@ export class SessionCache {
             return parsed.success ? parsed.data : undefined
         })()
 
-        const teamState = (() => {
-            if (stored.teamState === null || stored.teamState === undefined) return undefined
-            const parsed = TeamStateSchema.safeParse(stored.teamState)
-            return parsed.success ? parsed.data : undefined
-        })()
         const teamContext = (() => {
             const resolved = this.store.teams.getSessionTeamContext(stored.id)
             if (!resolved) return undefined
@@ -240,7 +234,6 @@ export class SessionCache {
             thinking: existing?.thinking ?? false,
             thinkingAt: existing?.thinkingAt ?? 0,
             todos,
-            teamState,
             teamContext,
             model: stored.model,
             modelReasoningEffort: stored.modelReasoningEffort,

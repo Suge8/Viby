@@ -18,7 +18,6 @@ import {
     setSessionModel,
     setSessionModelReasoningEffort,
     setSessionPermissionMode,
-    setSessionTeamState,
     setSessionTodos,
     touchSessionUpdatedAt,
     updateSessionAgentState,
@@ -55,10 +54,6 @@ export class SessionStore {
 
     setSessionTodos(id: string, todos: unknown, todosUpdatedAt: number): boolean {
         return setSessionTodos(this.db, id, todos, todosUpdatedAt)
-    }
-
-    setSessionTeamState(id: string, teamState: unknown, updatedAt: number): boolean {
-        return setSessionTeamState(this.db, id, teamState, updatedAt)
     }
 
     setSessionAlive(id: string, activeAt: number): boolean {

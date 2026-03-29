@@ -6,6 +6,7 @@ import type { CodexCliOverrides } from './utils/codexCliOverrides';
 import type { LocalLaunchExitReason } from '@/agent/localLaunchPolicy';
 import type { CodexSessionModelReasoningEffort, SessionModel } from '@/api/types';
 import { CodexAppServerClient } from './codexAppServerClient';
+import { buildVibyMcpBridge, type VibyMcpBridge } from './utils/buildVibyMcpBridge';
 
 type LocalLaunchFailure = {
     message: string;
@@ -19,6 +20,7 @@ export class CodexSession extends AgentSessionBase<EnhancedMode> {
     readonly startingMode: 'local' | 'remote';
     localLaunchFailure: LocalLaunchFailure | null = null;
     private appServerClient: CodexAppServerClient | null = null;
+    private remoteBridge: VibyMcpBridge | null = null;
 
     constructor(opts: {
         api: ApiClient;
@@ -120,13 +122,24 @@ export class CodexSession extends AgentSessionBase<EnhancedMode> {
         return this.appServerClient;
     }
 
+    async ensureRemoteBridge(): Promise<VibyMcpBridge> {
+        if (!this.remoteBridge) {
+            this.remoteBridge = await buildVibyMcpBridge(this.client);
+        }
+        return this.remoteBridge;
+    }
+
     disposeAppServerClient = async (): Promise<void> => {
-        if (!this.appServerClient) {
-            return;
+        if (this.appServerClient) {
+            const client = this.appServerClient;
+            this.appServerClient = null;
+            await client.disconnect();
         }
 
-        const client = this.appServerClient;
-        this.appServerClient = null;
-        await client.disconnect();
+        if (this.remoteBridge) {
+            const bridge = this.remoteBridge;
+            this.remoteBridge = null;
+            bridge.server.stop();
+        }
     };
 }

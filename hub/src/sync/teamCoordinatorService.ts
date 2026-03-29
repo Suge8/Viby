@@ -1,16 +1,24 @@
 import { randomUUID } from 'node:crypto'
-import { basename } from 'node:path'
 import type {
     Session,
     SyncEvent,
     TeamEventRecord,
     TeamMemberRecord,
     TeamProject,
+    TeamProjectHistoryResponse,
     TeamProjectSnapshot,
+    TeamRoleDefinition,
     TeamTaskRecord
 } from '@viby/protocol/types'
 import type { Store } from '../store'
-import { applyTeamStateDelta, extractTeamStateFromMessageContent } from './teams'
+import {
+    DEFAULT_MANAGER_PROJECT_ISOLATION_MODE,
+    DEFAULT_MANAGER_PROJECT_MAX_ACTIVE_MEMBERS,
+    projectsMatch,
+    resolveManagerProjectTitle,
+    uniqueSessionIds
+} from './teamCoordinatorProjectSupport'
+import { buildTeamProjectSnapshot } from './teamProjectSnapshotBuilder'
 
 export type TeamCoordinatorCommand =
     | {
@@ -26,6 +34,19 @@ export type TeamCoordinatorCommand =
         affectedSessionIds?: string[]
     }
     | {
+        type: 'upsert-role'
+        role: TeamRoleDefinition
+        event?: TeamEventRecord
+        affectedSessionIds?: string[]
+    }
+    | {
+        type: 'delete-role'
+        projectId: string
+        roleId: TeamRoleDefinition['id']
+        event?: TeamEventRecord
+        affectedSessionIds?: string[]
+    }
+    | {
         type: 'upsert-task'
         task: TeamTaskRecord
         event?: TeamEventRecord
@@ -36,6 +57,16 @@ export type TeamCoordinatorCommand =
         event: TeamEventRecord
         affectedSessionIds?: string[]
     }
+    | {
+        type: 'batch'
+        project?: TeamProject
+        roles?: TeamRoleDefinition[]
+        deletedRoleIds?: TeamRoleDefinition['id'][]
+        members?: TeamMemberRecord[]
+        tasks?: TeamTaskRecord[]
+        events?: TeamEventRecord[]
+        affectedSessionIds?: string[]
+    }
 
 export type TeamCoordinatorCommandResult = {
     projectId: string
@@ -44,57 +75,7 @@ export type TeamCoordinatorCommandResult = {
     snapshot: TeamProjectSnapshot
 }
 
-type LegacyProjectionInput = {
-    sessionId: string
-    content: unknown
-    createdAt: number
-}
-
 type EmitSyncEvent = (event: SyncEvent) => void
-
-const DEFAULT_MANAGER_PROJECT_TITLE = 'Manager Project'
-const DEFAULT_MANAGER_PROJECT_MAX_ACTIVE_MEMBERS = 6
-const DEFAULT_MANAGER_PROJECT_ISOLATION_MODE: TeamProject['defaultIsolationMode'] = 'hybrid'
-
-function uniqueSessionIds(values: Array<string | null | undefined>): string[] {
-    return Array.from(new Set(values.filter((value): value is string => typeof value === 'string' && value.length > 0)))
-}
-
-function resolveManagerProjectTitle(metadata: Session['metadata']): string {
-    const preferredName = metadata?.name?.trim()
-    if (preferredName) {
-        return preferredName
-    }
-
-    const rootDirectory = metadata?.path?.trim()
-    if (rootDirectory) {
-        const projectName = basename(rootDirectory)
-        if (projectName && projectName !== '.' && projectName !== '/') {
-            return projectName
-        }
-    }
-
-    return DEFAULT_MANAGER_PROJECT_TITLE
-}
-
-function projectsMatch(left: TeamProject, right: TeamProject): boolean {
-    return left.id === right.id
-        && left.managerSessionId === right.managerSessionId
-        && left.machineId === right.machineId
-        && left.rootDirectory === right.rootDirectory
-        && left.title === right.title
-        && left.goal === right.goal
-        && left.status === right.status
-        && left.maxActiveMembers === right.maxActiveMembers
-        && left.defaultIsolationMode === right.defaultIsolationMode
-        && left.createdAt === right.createdAt
-        && left.deliveredAt === right.deliveredAt
-        && left.archivedAt === right.archivedAt
-}
-
-function isTeamProjectionEvent(event: SyncEvent): event is Extract<SyncEvent, { type: 'session-updated' }> {
-    return event.type === 'session-updated'
-}
 
 export class TeamCoordinatorService {
     constructor(
@@ -104,16 +85,18 @@ export class TeamCoordinatorService {
     }
 
     getProjectSnapshot(projectId: string): TeamProjectSnapshot | null {
+        return buildTeamProjectSnapshot(this.store, projectId)
+    }
+
+    getProjectHistory(projectId: string, limit: number = 200): TeamProjectHistoryResponse | null {
         const project = this.store.teams.getProject(projectId)
         if (!project) {
             return null
         }
 
         return {
-            project,
-            members: this.store.teams.listProjectMembers(projectId),
-            tasks: this.store.teams.listProjectTasks(projectId),
-            events: this.store.teams.listProjectEvents(projectId)
+            projectId,
+            events: this.store.teams.listProjectEvents(projectId, limit)
         }
     }
 
@@ -126,38 +109,13 @@ export class TeamCoordinatorService {
         const snapshot = this.requireProjectSnapshot(projectId)
         const affectedSessionIds = this.resolveAffectedSessionIds(snapshot, command.affectedSessionIds)
         this.emitSessionUpdates(affectedSessionIds)
+        this.emitProjectUpdate(projectId, snapshot.project.managerSessionId, affectedSessionIds)
 
         return {
             projectId,
             managerSessionId: snapshot.project.managerSessionId,
             affectedSessionIds,
             snapshot
-        }
-    }
-
-    applyLegacyTranscriptProjection(input: LegacyProjectionInput): { updated: boolean; teamState: Session['teamState'] } {
-        const delta = extractTeamStateFromMessageContent(input.content)
-        if (!delta) {
-            return { updated: false, teamState: undefined }
-        }
-
-        const existingSession = this.store.sessions.getSession(input.sessionId)
-        const nextTeamState = applyTeamStateDelta(
-            (existingSession?.teamState ?? null) as Session['teamState'],
-            delta
-        )
-        const updated = this.store.sessions.setSessionTeamState(
-            input.sessionId,
-            nextTeamState,
-            input.createdAt
-        )
-        if (updated) {
-            this.emitSessionUpdates([input.sessionId])
-        }
-
-        return {
-            updated,
-            teamState: nextTeamState ?? undefined
         }
     }
 
@@ -228,6 +186,18 @@ export class TeamCoordinatorService {
                     this.store.teams.insertEvent(command.event)
                 }
                 return command.member.projectId
+            case 'upsert-role':
+                this.store.teams.upsertRole(command.role)
+                if (command.event) {
+                    this.store.teams.insertEvent(command.event)
+                }
+                return command.role.projectId
+            case 'delete-role':
+                this.store.teams.deleteRole(command.projectId, command.roleId)
+                if (command.event) {
+                    this.store.teams.insertEvent(command.event)
+                }
+                return command.projectId
             case 'upsert-task':
                 this.store.teams.upsertTask(command.task)
                 if (command.event) {
@@ -237,6 +207,38 @@ export class TeamCoordinatorService {
             case 'record-event':
                 this.store.teams.insertEvent(command.event)
                 return command.event.projectId
+            case 'batch': {
+                const projectId = command.project?.id
+                    ?? command.roles?.[0]?.projectId
+                    ?? command.members?.[0]?.projectId
+                    ?? command.tasks?.[0]?.projectId
+                    ?? command.events?.[0]?.projectId
+
+                if (!projectId) {
+                    throw new Error('Batch team command is missing a project target')
+                }
+
+                if (command.project) {
+                    this.store.teams.upsertProject(command.project)
+                }
+                for (const role of command.roles ?? []) {
+                    this.store.teams.upsertRole(role)
+                }
+                for (const roleId of command.deletedRoleIds ?? []) {
+                    this.store.teams.deleteRole(projectId, roleId)
+                }
+                for (const member of command.members ?? []) {
+                    this.store.teams.upsertMember(member)
+                }
+                for (const task of command.tasks ?? []) {
+                    this.store.teams.upsertTask(task)
+                }
+                for (const event of command.events ?? []) {
+                    this.store.teams.insertEvent(event)
+                }
+
+                return projectId
+            }
         }
     }
 
@@ -262,14 +264,24 @@ export class TeamCoordinatorService {
 
     private emitSessionUpdates(sessionIds: string[]): void {
         for (const sessionId of sessionIds) {
-            const event: SyncEvent = {
+            this.emitSyncEvent?.({
                 type: 'session-updated',
                 sessionId,
                 data: { sid: sessionId }
-            }
-            if (isTeamProjectionEvent(event)) {
-                this.emitSyncEvent?.(event)
-            }
+            })
         }
+    }
+
+    private emitProjectUpdate(
+        projectId: string,
+        managerSessionId: string,
+        affectedSessionIds: string[]
+    ): void {
+        this.emitSyncEvent?.({
+            type: 'team-project-updated',
+            projectId,
+            managerSessionId,
+            affectedSessionIds
+        })
     }
 }

@@ -5,6 +5,8 @@ import type { GeminiMode } from './types'
 const harness = vi.hoisted(() => ({
     backendFactoryCalls: [] as Array<Record<string, unknown>>,
     remoteBridgeCalls: 0,
+    nextSessionIds: [] as string[],
+    loadSessionFailuresRemaining: 0,
     backendInstances: [] as Array<{
         initialize: ReturnType<typeof vi.fn>
         newSession: ReturnType<typeof vi.fn>
@@ -31,10 +33,17 @@ const harness = vi.hoisted(() => ({
     },
     buildBackendInstance(opts: Record<string, unknown>) {
         harness.backendFactoryCalls.push(opts)
+        const fallbackSessionId = `acp-session-${harness.backendInstances.length + 1}`
         const backend = {
             initialize: vi.fn(async () => {}),
-            newSession: vi.fn(async () => 'acp-session-1'),
-            loadSession: vi.fn(async ({ sessionId }: { sessionId: string }) => sessionId),
+            newSession: vi.fn(async () => harness.nextSessionIds.shift() ?? fallbackSessionId),
+            loadSession: vi.fn(async ({ sessionId }: { sessionId: string }) => {
+                if (harness.loadSessionFailuresRemaining > 0) {
+                    harness.loadSessionFailuresRemaining -= 1
+                    throw new Error('resume failed')
+                }
+                return sessionId
+            }),
             setSessionModel: vi.fn(async () => {}),
             prompt: vi.fn(async (_sessionId: string, _content: unknown, _onUpdate: (message: unknown) => void) => {}),
             disconnect: vi.fn(async () => {}),
@@ -67,6 +76,22 @@ vi.mock('@/agent/acpAgentInterop', () => ({
     forwardAcpAgentMessage: vi.fn(),
     toAcpMcpServers: vi.fn(() => [])
 }))
+
+vi.mock('@/agent/teamPromptContract', async () => {
+    const actual = await vi.importActual<typeof import('@/agent/teamPromptContract')>('@/agent/teamPromptContract')
+    return {
+        ...actual,
+        resolveTeamRolePromptContract: vi.fn((teamContext?: { sessionRole?: string; memberRole?: string }) => {
+            if (teamContext?.sessionRole === 'manager') {
+                return 'Manager team contract'
+            }
+            if (teamContext?.sessionRole === 'member' && teamContext.memberRole) {
+                return `Member team contract: ${teamContext.memberRole}`
+            }
+            return undefined
+        })
+    }
+})
 
 vi.mock('./utils/permissionHandler', () => ({
     GeminiPermissionHandler: class {
@@ -157,6 +182,14 @@ function createSessionStub(modes: GeminiMode[]) {
         sessionId: null as string | null,
         queue,
         client: {
+            getTeamContextSnapshot() {
+                return {
+                    projectId: 'project-1',
+                    sessionRole: 'manager',
+                    managerSessionId: 'manager-session-1',
+                    projectStatus: 'active'
+                }
+            },
             rpcHandlerManager: {
                 registerHandler(method: string, handler: (params: unknown) => unknown) {
                     harness.rpcHandlers.set(method, handler)
@@ -220,6 +253,8 @@ describe('geminiRemoteLauncher', () => {
     afterEach(() => {
         harness.backendFactoryCalls = []
         harness.remoteBridgeCalls = 0
+        harness.nextSessionIds = []
+        harness.loadSessionFailuresRemaining = 0
         harness.backendInstances = []
         harness.permissionCancelReasons = []
         harness.sessionEvents = []
@@ -278,6 +313,14 @@ describe('geminiRemoteLauncher', () => {
         expect(harness.backendInstances[0]?.loadSession).not.toHaveBeenCalled()
         expect(harness.backendInstances[0]?.setSessionModel).not.toHaveBeenCalled()
         expect(harness.backendInstances[0]?.prompt).toHaveBeenCalledTimes(1)
+        expect(harness.backendInstances[0]?.prompt).toHaveBeenCalledWith(
+            'acp-session-1',
+            [{
+                type: 'text',
+                text: expect.stringContaining('Manager team contract')
+            }],
+            expect.any(Function)
+        )
     })
 
     it('reuses the session-owned bridge and backend across remote launcher restarts', async () => {
@@ -325,5 +368,38 @@ describe('geminiRemoteLauncher', () => {
             'acp-session-1',
             'auto'
         )
+    })
+
+    it('reapplies the team contract when backend reconfiguration falls back to a fresh ACP session', async () => {
+        harness.nextSessionIds = ['acp-session-1', 'acp-session-2']
+        harness.loadSessionFailuresRemaining = 1
+
+        const session = createSessionStub([
+            createMode({ model: 'gemini-2.5-pro' }),
+            createMode({ model: 'gemini-2.5-flash-lite' })
+        ])
+
+        const exitReason = await geminiRemoteLauncher(session as never, {
+            model: 'gemini-2.5-pro'
+        })
+
+        expect(exitReason).toBe('exit')
+        expect(harness.backendInstances[0]?.prompt).toHaveBeenCalledWith(
+            'acp-session-1',
+            [{
+                type: 'text',
+                text: expect.stringContaining('Manager team contract')
+            }],
+            expect.any(Function)
+        )
+        expect(harness.backendInstances[1]?.prompt).toHaveBeenCalledWith(
+            'acp-session-2',
+            [{
+                type: 'text',
+                text: expect.stringContaining('Manager team contract')
+            }],
+            expect.any(Function)
+        )
+        expect(harness.foundSessionIds).toEqual(['acp-session-1', 'acp-session-2'])
     })
 })

@@ -1,23 +1,25 @@
 import { z } from 'zod'
 import { AGENT_FLAVORS, MODEL_REASONING_EFFORTS } from './modes'
+import {
+    TEAM_BUILTIN_ROLE_DEFAULTS,
+    TEAM_MEMBER_ROLE_PROTOTYPES,
+    TEAM_PRESET_SCHEMA_VERSION,
+    TEAM_ROLE_ID_PATTERN,
+    TEAM_ROLE_SOURCES
+} from './teamRoleDefaults'
 
 export const TEAM_SESSION_SPAWN_ROLES = ['normal', 'manager'] as const
 export const TEAM_SESSION_ROLES = ['manager', 'member'] as const
 export const TEAM_ROLE_PROTOTYPES = [
     'manager',
-    'planner',
-    'architect',
-    'implementer',
-    'debugger',
-    'reviewer',
-    'verifier',
-    'designer'
+    ...TEAM_MEMBER_ROLE_PROTOTYPES
 ] as const
 export const TEAM_PROJECT_STATUSES = ['active', 'delivered', 'archived'] as const
 export const TEAM_PROJECT_ISOLATION_MODES = ['hybrid', 'all_simple'] as const
 export const TEAM_MEMBER_ISOLATION_MODES = ['simple', 'worktree'] as const
 export const TEAM_CONTROL_OWNERS = ['manager', 'user'] as const
 export const TEAM_MEMBERSHIP_STATES = ['active', 'archived', 'removed', 'superseded'] as const
+export const TEAM_ROLE_SNAPSHOT_SCHEMA_VERSION = TEAM_PRESET_SCHEMA_VERSION
 export const TEAM_TASK_STATUSES = [
     'todo',
     'running',
@@ -28,17 +30,21 @@ export const TEAM_TASK_STATUSES = [
     'canceled',
     'failed'
 ] as const
+export const TERMINAL_TEAM_TASK_STATUSES = ['done', 'canceled', 'failed'] as const
 export const TEAM_EVENT_KINDS = [
     'project-created',
     'project-updated',
     'project-delivered',
     'project-archived',
+    'project-reopened',
     'member-spawned',
     'member-control-changed',
     'member-archived',
+    'member-restored',
     'member-removed',
     'member-replaced',
     'task-created',
+    'task-updated',
     'task-assigned',
     'task-status-changed',
     'task-commented',
@@ -57,36 +63,93 @@ export const TEAM_EVENT_KINDS = [
 ] as const
 export const TEAM_EVENT_ACTOR_TYPES = ['manager', 'member', 'user', 'system'] as const
 export const TEAM_EVENT_TARGET_TYPES = ['project', 'member', 'task', 'session'] as const
+export const TEAM_TASK_REVIEW_STATUSES = ['idle', 'requested', 'passed', 'failed'] as const
+export const TEAM_TASK_VERIFICATION_STATUSES = ['idle', 'requested', 'passed', 'failed'] as const
 
 export const TeamSessionSpawnRoleSchema = z.enum(TEAM_SESSION_SPAWN_ROLES)
 export const TeamSessionRoleSchema = z.enum(TEAM_SESSION_ROLES)
 export const TeamRolePrototypeSchema = z.enum(TEAM_ROLE_PROTOTYPES)
+export const TeamMemberRolePrototypeSchema = z.enum(TEAM_MEMBER_ROLE_PROTOTYPES)
 export const TeamProjectStatusSchema = z.enum(TEAM_PROJECT_STATUSES)
 export const TeamProjectIsolationModeSchema = z.enum(TEAM_PROJECT_ISOLATION_MODES)
 export const TeamMemberIsolationModeSchema = z.enum(TEAM_MEMBER_ISOLATION_MODES)
 export const TeamControlOwnerSchema = z.enum(TEAM_CONTROL_OWNERS)
 export const TeamMembershipStateSchema = z.enum(TEAM_MEMBERSHIP_STATES)
+export const TeamRoleSourceSchema = z.enum(TEAM_ROLE_SOURCES)
+export const TeamRoleIdSchema = z.string().regex(new RegExp(TEAM_ROLE_ID_PATTERN))
 export const TeamTaskStatusSchema = z.enum(TEAM_TASK_STATUSES)
 export const TeamEventKindSchema = z.enum(TEAM_EVENT_KINDS)
 export const TeamEventActorTypeSchema = z.enum(TEAM_EVENT_ACTOR_TYPES)
 export const TeamEventTargetTypeSchema = z.enum(TEAM_EVENT_TARGET_TYPES)
 export const TeamProviderFlavorSchema = z.enum(AGENT_FLAVORS)
 export const TeamReasoningEffortSchema = z.enum(MODEL_REASONING_EFFORTS)
+export const TeamTaskReviewStatusSchema = z.enum(TEAM_TASK_REVIEW_STATUSES)
+export const TeamTaskVerificationStatusSchema = z.enum(TEAM_TASK_VERIFICATION_STATUSES)
 
 export type TeamSessionSpawnRole = z.infer<typeof TeamSessionSpawnRoleSchema>
 export type TeamSessionRole = z.infer<typeof TeamSessionRoleSchema>
 export type TeamRolePrototype = z.infer<typeof TeamRolePrototypeSchema>
+export type TeamMemberRolePrototype = z.infer<typeof TeamMemberRolePrototypeSchema>
 export type TeamProjectStatus = z.infer<typeof TeamProjectStatusSchema>
 export type TeamProjectIsolationMode = z.infer<typeof TeamProjectIsolationModeSchema>
 export type TeamMemberIsolationMode = z.infer<typeof TeamMemberIsolationModeSchema>
 export type TeamControlOwner = z.infer<typeof TeamControlOwnerSchema>
 export type TeamMembershipState = z.infer<typeof TeamMembershipStateSchema>
+export type TeamRoleSource = z.infer<typeof TeamRoleSourceSchema>
 export type TeamTaskStatus = z.infer<typeof TeamTaskStatusSchema>
 export type TeamEventKind = z.infer<typeof TeamEventKindSchema>
 export type TeamEventActorType = z.infer<typeof TeamEventActorTypeSchema>
 export type TeamEventTargetType = z.infer<typeof TeamEventTargetTypeSchema>
 export type TeamProviderFlavor = z.infer<typeof TeamProviderFlavorSchema>
 export type TeamReasoningEffort = z.infer<typeof TeamReasoningEffortSchema>
+export type TeamTaskReviewStatus = z.infer<typeof TeamTaskReviewStatusSchema>
+export type TeamTaskVerificationStatus = z.infer<typeof TeamTaskVerificationStatusSchema>
+
+const TERMINAL_TEAM_TASK_STATUS_SET = new Set<TeamTaskStatus>(TERMINAL_TEAM_TASK_STATUSES)
+
+export function isTerminalTeamTaskStatus(status: TeamTaskStatus): boolean {
+    return TERMINAL_TEAM_TASK_STATUS_SET.has(status)
+}
+
+export const TeamRoleDefinitionSchema = z.object({
+    projectId: z.string(),
+    id: TeamRoleIdSchema,
+    source: TeamRoleSourceSchema,
+    prototype: TeamMemberRolePrototypeSchema,
+    name: z.string().trim().min(1),
+    promptExtension: z.string().trim().min(1).nullable(),
+    providerFlavor: TeamProviderFlavorSchema,
+    model: z.string().trim().min(1).nullable(),
+    reasoningEffort: TeamReasoningEffortSchema.nullable(),
+    isolationMode: TeamMemberIsolationModeSchema,
+    createdAt: z.number(),
+    updatedAt: z.number()
+})
+
+export type TeamRoleDefinition = z.infer<typeof TeamRoleDefinitionSchema>
+
+export function createBuiltInTeamRoleDefinition(
+    projectId: string,
+    prototype: TeamMemberRolePrototype,
+    timestamp: number
+): TeamRoleDefinition {
+    const defaults = TEAM_BUILTIN_ROLE_DEFAULTS[prototype]
+
+    return {
+        projectId,
+        id: prototype,
+        source: 'builtin',
+        prototype,
+        name: defaults.name,
+        promptExtension: null,
+        providerFlavor: defaults.providerFlavor,
+        model: null,
+        reasoningEffort: null,
+        isolationMode: defaults.isolationMode,
+        createdAt: timestamp,
+        updatedAt: timestamp
+    }
+}
 
 export const TeamProjectSchema = z.object({
     id: z.string(),
@@ -112,6 +175,7 @@ export const TeamMemberRecordSchema = z.object({
     sessionId: z.string(),
     managerSessionId: z.string(),
     role: TeamRolePrototypeSchema,
+    roleId: TeamRoleIdSchema,
     providerFlavor: TeamProviderFlavorSchema.nullable(),
     model: z.string().nullable(),
     reasoningEffort: TeamReasoningEffortSchema.nullable(),
@@ -166,14 +230,28 @@ export const TeamEventRecordSchema = z.object({
 
 export type TeamEventRecord = z.infer<typeof TeamEventRecordSchema>
 
-export const TeamProjectSnapshotSchema = z.object({
-    project: TeamProjectSchema,
-    members: z.array(TeamMemberRecordSchema),
-    tasks: z.array(TeamTaskRecordSchema),
-    events: z.array(TeamEventRecordSchema)
+export const TeamTaskAcceptanceStateSchema = z.object({
+    reviewStatus: TeamTaskReviewStatusSchema,
+    verificationStatus: TeamTaskVerificationStatusSchema,
+    managerAccepted: z.boolean(),
+    skipVerificationReason: z.string().trim().min(1).nullable(),
+    latestAcceptanceEvent: TeamEventRecordSchema.nullable()
 })
 
-export type TeamProjectSnapshot = z.infer<typeof TeamProjectSnapshotSchema>
+export type TeamTaskAcceptanceState = z.infer<typeof TeamTaskAcceptanceStateSchema>
+
+export const TeamTaskAcceptanceRecordSchema = TeamTaskAcceptanceStateSchema.extend({
+    recentEvents: z.array(TeamEventRecordSchema)
+})
+
+export type TeamTaskAcceptanceRecord = z.infer<typeof TeamTaskAcceptanceRecordSchema>
+
+export const TeamProjectAcceptanceReadModelSchema = z.object({
+    tasks: z.record(z.string(), TeamTaskAcceptanceRecordSchema),
+    recentResults: z.array(TeamEventRecordSchema)
+})
+
+export type TeamProjectAcceptanceReadModel = z.infer<typeof TeamProjectAcceptanceReadModelSchema>
 
 export const SessionTeamContextSchema = z.object({
     projectId: z.string(),
@@ -182,6 +260,9 @@ export const SessionTeamContextSchema = z.object({
     managerTitle: z.string().optional(),
     memberId: z.string().optional(),
     memberRole: TeamRolePrototypeSchema.optional(),
+    memberRoleId: TeamRoleIdSchema.optional(),
+    memberRoleName: z.string().optional(),
+    memberRolePromptExtension: z.string().trim().min(1).nullable().optional(),
     memberRevision: z.number().int().positive().optional(),
     controlOwner: TeamControlOwnerSchema.optional(),
     membershipState: TeamMembershipStateSchema.optional(),
@@ -200,6 +281,8 @@ export const SessionSummaryTeamSchema = z.object({
     managerSessionId: z.string(),
     managerTitle: z.string().optional(),
     memberRole: TeamRolePrototypeSchema.optional(),
+    memberRoleId: TeamRoleIdSchema.optional(),
+    memberRoleName: z.string().optional(),
     memberRevision: z.number().int().positive().optional(),
     membershipState: TeamMembershipStateSchema.optional(),
     controlOwner: TeamControlOwnerSchema.optional(),

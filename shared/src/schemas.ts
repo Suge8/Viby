@@ -104,45 +104,6 @@ export type TodoItem = z.infer<typeof TodoItemSchema>
 
 export const TodosSchema = z.array(TodoItemSchema)
 
-export const TeamMemberSchema = z.object({
-    name: z.string(),
-    agentType: z.string().optional(),
-    status: z.enum(['active', 'idle', 'shutdown']).optional()
-})
-
-export type TeamMember = z.infer<typeof TeamMemberSchema>
-
-export const TeamTaskSchema = z.object({
-    id: z.string(),
-    title: z.string(),
-    description: z.string().optional(),
-    status: z.enum(['pending', 'in_progress', 'completed', 'blocked']).optional(),
-    owner: z.string().optional()
-})
-
-export type TeamTask = z.infer<typeof TeamTaskSchema>
-
-export const TeamMessageSchema = z.object({
-    from: z.string(),
-    to: z.string(),
-    summary: z.string(),
-    type: z.enum(['message', 'broadcast', 'shutdown_request', 'shutdown_response']),
-    timestamp: z.number()
-})
-
-export type TeamMessage = z.infer<typeof TeamMessageSchema>
-
-export const TeamStateSchema = z.object({
-    teamName: z.string(),
-    description: z.string().optional(),
-    members: z.array(TeamMemberSchema).optional(),
-    tasks: z.array(TeamTaskSchema).optional(),
-    messages: z.array(TeamMessageSchema).optional(),
-    updatedAt: z.number().optional()
-})
-
-export type TeamState = z.infer<typeof TeamStateSchema>
-
 export const AttachmentMetadataSchema = z.object({
     id: z.string(),
     filename: z.string(),
@@ -187,7 +148,6 @@ export const SessionSchema = z.object({
     thinking: z.boolean(),
     thinkingAt: z.number(),
     todos: TodosSchema.optional(),
-    teamState: TeamStateSchema.optional(),
     teamContext: SessionTeamContextSchema.optional(),
     model: z.string().nullable(),
     modelReasoningEffort: ModelReasoningEffortSchema.nullable(),
@@ -197,6 +157,8 @@ export const SessionSchema = z.object({
 
 export type Session = z.infer<typeof SessionSchema>
 
+export * from './teamProjectPreset'
+export * from './teamProjectSnapshot'
 export * from './teamSchemas'
 export * from './messageMeta'
 
@@ -236,6 +198,12 @@ export const SyncEventSchema = z.discriminatedUnion('type', [
     MachineChangedSchema.extend({
         type: z.literal('machine-updated'),
         data: z.unknown().optional()
+    }),
+    z.object({
+        type: z.literal('team-project-updated'),
+        projectId: z.string(),
+        managerSessionId: z.string(),
+        affectedSessionIds: z.array(z.string())
     }),
     z.object({
         type: z.literal('toast'),

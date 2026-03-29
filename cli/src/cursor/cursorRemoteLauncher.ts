@@ -13,6 +13,11 @@ import {
 import type { CursorSession } from './session';
 import type { CursorStreamEvent } from './utils/cursorEventConverter';
 import { parseCursorEvent, convertCursorEventToAgentMessage } from './utils/cursorEventConverter';
+import {
+    prependPromptInstructionsToMessage,
+    resolveTeamRolePromptContract
+} from '@/agent/teamPromptContract';
+import { buildCursorProcessEnv, ensureCursorConfig } from './utils/cursorConfig';
 
 function buildAgentArgs(opts: {
     message: string;
@@ -51,6 +56,7 @@ class CursorRemoteLauncher extends RemoteLauncherBase {
     private readonly session: CursorSession;
     private abortController = new AbortController();
     private displayPermissionMode: string | null = null;
+    private appliedDeveloperInstructions: string | null = null;
 
     constructor(session: CursorSession) {
         super(process.env.DEBUG ? session.logPath : undefined);
@@ -71,6 +77,9 @@ class CursorRemoteLauncher extends RemoteLauncherBase {
     protected async runMainLoop(): Promise<void> {
         const session = this.session;
         const messageBuffer = this.messageBuffer;
+        const bridge = await session.ensureRemoteBridge();
+        const { configDir } = ensureCursorConfig(session.client.sessionId, bridge.mcpServers.viby);
+        const processEnv = buildCursorProcessEnv(configDir);
 
         this.setupAbortHandlers(session.client.rpcHandlerManager, {
             onAbort: () => this.handleAbort(),
@@ -97,9 +106,22 @@ class CursorRemoteLauncher extends RemoteLauncherBase {
             const { mode: agentMode, yolo } = permissionModeToAgentArgs(mode.permissionMode as string);
             this.applyDisplayMode(mode.permissionMode as string);
             messageBuffer.addMessage(message, 'user');
+            const developerInstructions = resolveTeamRolePromptContract(
+                session.client.getTeamContextSnapshot()
+            )
+            const messageText = (() => {
+                if (!developerInstructions) {
+                    return message;
+                }
+                if (this.appliedDeveloperInstructions === developerInstructions) {
+                    return message;
+                }
+                this.appliedDeveloperInstructions = developerInstructions;
+                return prependPromptInstructionsToMessage(message, developerInstructions);
+            })();
 
             const args = buildAgentArgs({
-                message,
+                message: messageText,
                 cwd: session.path,
                 sessionId: cursorSessionId,
                 mode: agentMode,
@@ -112,7 +134,7 @@ class CursorRemoteLauncher extends RemoteLauncherBase {
             session.onThinkingChange(true);
 
             try {
-                const exitCode = await this.runAgentProcess(args, session.path, (event) => {
+                const exitCode = await this.runAgentProcess(args, session.path, processEnv, (event) => {
                     if (event.type === 'system' && event.subtype === 'init' && event.session_id) {
                         cursorSessionId = event.session_id;
                         session.onSessionFound(event.session_id);
@@ -170,12 +192,13 @@ class CursorRemoteLauncher extends RemoteLauncherBase {
     private runAgentProcess(
         args: string[],
         cwd: string,
+        env: NodeJS.ProcessEnv,
         onEvent: (event: ReturnType<typeof parseCursorEvent> & object) => void
     ): Promise<number | null> {
         return new Promise((resolve, reject) => {
             const child = spawn('agent', args, {
                 cwd,
-                env: process.env,
+                env,
                 stdio: ['ignore', 'pipe', 'pipe'],
                 shell: process.platform === 'win32'
             });

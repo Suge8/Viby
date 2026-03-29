@@ -4,6 +4,7 @@ import type {
     TeamEventRecord,
     TeamMemberRecord,
     TeamProject,
+    TeamRoleDefinition,
     TeamTaskRecord
 } from '@viby/protocol/types'
 import {
@@ -12,12 +13,19 @@ import {
     getTeamMemberBySessionId,
     getTeamProject,
     getTeamProjectByManagerSessionId,
+    getTeamRole,
+    getTeamTask,
+    deleteTeamRole,
+    listTeamAcceptanceEventsByProjectId,
     insertTeamEvent,
     listTeamEventsByProjectId,
     listTeamMembersByProjectId,
+    listTeamRolesByProjectId,
+    listTeamTaskEvents,
     listTeamTasksByProjectId,
     upsertTeamMember,
     upsertTeamProject,
+    upsertTeamRole,
     upsertTeamTask
 } from './teams'
 
@@ -47,6 +55,26 @@ export class TeamStore {
 
     upsertProject(project: TeamProject): TeamProject {
         return upsertTeamProject(this.db, project)
+    }
+
+    getRole(projectId: string, roleId: string): TeamRoleDefinition | null {
+        return getTeamRole(this.db, projectId, roleId)
+    }
+
+    upsertRole(role: TeamRoleDefinition): TeamRoleDefinition {
+        return upsertTeamRole(this.db, role)
+    }
+
+    deleteRole(projectId: string, roleId: string): void {
+        deleteTeamRole(this.db, projectId, roleId)
+    }
+
+    listProjectRoles(projectId: string): TeamRoleDefinition[] {
+        return listTeamRolesByProjectId(this.db, projectId)
+    }
+
+    getTask(taskId: string): TeamTaskRecord | null {
+        return getTeamTask(this.db, taskId)
     }
 
     getMemberBySessionId(sessionId: string): TeamMemberRecord | null {
@@ -79,6 +107,14 @@ export class TeamStore {
 
     listProjectEvents(projectId: string, limit?: number): TeamEventRecord[] {
         return listTeamEventsByProjectId(this.db, projectId, limit)
+    }
+
+    listProjectAcceptanceEvents(projectId: string): TeamEventRecord[] {
+        return listTeamAcceptanceEventsByProjectId(this.db, projectId)
+    }
+
+    listTaskEvents(taskId: string): TeamEventRecord[] {
+        return listTeamTaskEvents(this.db, taskId)
     }
 
     getSessionTeamContext(sessionId: string): SessionTeamContext | null {

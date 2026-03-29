@@ -118,8 +118,6 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         modelReasoningEffort: options.modelReasoningEffort
     });
     logger.debug(`Session created: ${sessionInfo.id}`);
-    const teamRolePromptContract = resolveTeamRolePromptContract(sessionInfo.teamContext);
-
     // Extract SDK metadata in background and update session when ready
     extractSDKMetadataAsync(async (sdkMetadata) => {
         logger.debug('[start] SDK metadata extracted, updating session:', sdkMetadata);
@@ -293,7 +291,10 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
             formatCurrentValue: (value) => formatOverridePresence(value, 'none')
         });
         currentAppendSystemPromptOverride = messageAppendSystemPromptOverride;
-        const messageAppendSystemPrompt = mergePromptSegments(teamRolePromptContract, messageAppendSystemPromptOverride);
+        const messageAppendSystemPrompt = mergePromptSegments(
+            resolveTeamRolePromptContract(session.getTeamContextSnapshot()),
+            messageAppendSystemPromptOverride
+        );
 
         // Resolve allowed tools - use message.meta.allowedTools if provided, otherwise use current
         const messageAllowedTools = resolveStickyOverride({

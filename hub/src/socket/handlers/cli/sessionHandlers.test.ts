@@ -4,7 +4,6 @@ import type { SyncEvent } from '@viby/protocol/types'
 import { Store } from '../../../store'
 import type { CliSocketWithData } from '../../socketTypes'
 import { SessionStreamManager } from '../../../sync/sessionStreamManager'
-import { TeamCoordinatorService } from '../../../sync/teamCoordinatorService'
 import {
     mergeSessionMetadataPreservingLifecycle,
     registerSessionHandlers
@@ -73,9 +72,6 @@ function createSessionHandlersHarness(): SessionHandlersHarness {
     })
     const onWebappEvents: SyncEvent[] = []
     const { socket, handlers, emittedUpdates } = createMockSocket()
-    const teamCoordinator = new TeamCoordinatorService(store, (event) => {
-        onWebappEvents.push(event)
-    })
 
     registerSessionHandlers(socket, {
         store,
@@ -92,8 +88,7 @@ function createSessionHandlersHarness(): SessionHandlersHarness {
         },
         onWebappEvent(event) {
             onWebappEvents.push(event)
-        },
-        teamCoordinator
+        }
     })
 
     return {
@@ -322,7 +317,7 @@ describe('registerSessionHandlers update-metadata', () => {
 })
 
 describe('registerSessionHandlers message', () => {
-    it('routes legacy team projection through TeamCoordinatorService instead of writing teamState inline', () => {
+    it('appends message events without reviving legacy team projection side effects', () => {
         const harness = createSessionHandlersHarness()
         const handler = harness.handlers.message
         expect(handler).toBeDefined()
@@ -344,15 +339,7 @@ describe('registerSessionHandlers message', () => {
             }
         })
 
-        expect(harness.store.sessions.getSession(harness.session.id)?.teamState).toMatchObject({
-            teamName: 'Alpha Team'
-        })
         expect(harness.onWebappEvents).toEqual([
-            {
-                type: 'session-updated',
-                sessionId: harness.session.id,
-                data: { sid: harness.session.id }
-            },
             {
                 type: 'message-received',
                 sessionId: harness.session.id,

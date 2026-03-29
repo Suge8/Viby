@@ -25,6 +25,9 @@ const harness = vi.hoisted(() => {
             sessionRole: 'manager' | 'member'
             managerSessionId: string
             memberRole?: 'planner' | 'architect' | 'implementer' | 'debugger' | 'reviewer' | 'verifier' | 'designer'
+            memberRoleId?: string
+            memberRoleName?: string
+            memberRolePromptExtension?: string | null
             projectStatus: 'active' | 'delivered' | 'archived'
         }
     }
@@ -35,6 +38,9 @@ vi.mock('@/agent/sessionFactory', () => ({
         api: {},
         session: {
             updateMetadata() {},
+            getTeamContextSnapshot() {
+                return harness.teamContext
+            },
             onUserMessage(handler: typeof harness.onUserMessage) {
                 harness.onUserMessage = handler
             },
@@ -211,12 +217,15 @@ describe('runClaude live session config', () => {
         ])
     })
 
-    it('merges the authoritative team role contract into Claude appendSystemPrompt', async () => {
+    it('merges authoritative custom role metadata into Claude appendSystemPrompt', async () => {
         harness.teamContext = {
             projectId: 'project-1',
             sessionRole: 'member',
             managerSessionId: 'manager-session-1',
             memberRole: 'reviewer',
+            memberRoleId: 'reviewer-mobile',
+            memberRoleName: 'Mobile Reviewer',
+            memberRolePromptExtension: 'Prioritize pwa-safe interactions and mobile regressions.',
             projectStatus: 'active'
         }
         harness.nextUserMessageMeta = {
@@ -237,5 +246,8 @@ describe('runClaude live session config', () => {
             })
         ])
         expect(harness.queueModes[0]?.appendSystemPrompt).toContain('Prioritize regressions and missing tests.')
+        expect(harness.queueModes[0]?.appendSystemPrompt).toContain('reviewer-mobile')
+        expect(harness.queueModes[0]?.appendSystemPrompt).toContain('Mobile Reviewer')
+        expect(harness.queueModes[0]?.appendSystemPrompt).toContain('pwa-safe interactions')
     })
 })

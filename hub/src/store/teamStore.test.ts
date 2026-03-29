@@ -56,6 +56,7 @@ describe('TeamStore', () => {
             sessionId: activeMemberSession.id,
             managerSessionId: managerSession.id,
             role: 'implementer',
+            roleId: 'implementer',
             providerFlavor: 'codex',
             model: 'gpt-5.4',
             reasoningEffort: 'high',
@@ -78,6 +79,7 @@ describe('TeamStore', () => {
             sessionId: archivedMemberSession.id,
             managerSessionId: managerSession.id,
             role: 'reviewer',
+            roleId: 'reviewer',
             providerFlavor: 'claude',
             model: 'sonnet',
             reasoningEffort: 'medium',
@@ -128,6 +130,18 @@ describe('TeamStore', () => {
             id: 'project-1',
             title: 'Project Alpha'
         })
+        expect(store.teams.listProjectRoles('project-1')).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                id: 'implementer',
+                prototype: 'implementer',
+                source: 'builtin'
+            }),
+            expect.objectContaining({
+                id: 'reviewer',
+                prototype: 'reviewer',
+                source: 'builtin'
+            })
+        ]))
         expect(store.teams.listProjectMembers('project-1')).toHaveLength(2)
         expect(store.teams.listProjectTasks('project-1')).toHaveLength(1)
         expect(store.teams.listProjectEvents('project-1')).toHaveLength(1)
@@ -150,6 +164,8 @@ describe('TeamStore', () => {
             managerTitle: 'Manager Alpha',
             memberId: 'member-1',
             memberRole: 'implementer',
+            memberRoleId: 'implementer',
+            memberRoleName: 'implementer',
             memberRevision: 1,
             controlOwner: 'manager',
             membershipState: 'active',

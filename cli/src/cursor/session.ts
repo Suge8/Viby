@@ -3,6 +3,7 @@ import { MessageQueue2 } from '@/utils/MessageQueue2';
 import { AgentSessionBase } from '@/agent/sessionBase';
 import type { EnhancedMode, PermissionMode } from './loop';
 import type { LocalLaunchExitReason } from '@/agent/localLaunchPolicy';
+import { buildVibyMcpBridge, type VibyMcpBridge } from '@/codex/utils/buildVibyMcpBridge';
 
 type LocalLaunchFailure = {
     message: string;
@@ -15,6 +16,7 @@ export class CursorSession extends AgentSessionBase<EnhancedMode> {
     readonly startedBy: 'runner' | 'terminal';
     readonly startingMode: 'local' | 'remote';
     localLaunchFailure: LocalLaunchFailure | null = null;
+    private remoteBridge: VibyMcpBridge | null = null;
 
     constructor(opts: {
         api: ApiClient;
@@ -75,5 +77,22 @@ export class CursorSession extends AgentSessionBase<EnhancedMode> {
 
     sendSessionEvent = (event: Parameters<ApiSessionClient['sendSessionEvent']>[0]): void => {
         this.client.sendSessionEvent(event);
+    };
+
+    async ensureRemoteBridge(): Promise<VibyMcpBridge> {
+        if (!this.remoteBridge) {
+            this.remoteBridge = await buildVibyMcpBridge(this.client);
+        }
+        return this.remoteBridge;
+    }
+
+    disposeRemoteRuntime = async (): Promise<void> => {
+        if (!this.remoteBridge) {
+            return;
+        }
+
+        const bridge = this.remoteBridge;
+        this.remoteBridge = null;
+        bridge.server.stop();
     };
 }

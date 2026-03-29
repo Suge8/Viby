@@ -1,6 +1,10 @@
 import { Database } from 'bun:sqlite'
 import { chmodSync, closeSync, existsSync, mkdirSync, openSync } from 'node:fs'
 import { dirname } from 'node:path'
+import {
+    createBuiltInTeamRoleDefinition,
+    TEAM_MEMBER_ROLE_PROTOTYPES
+} from '@viby/protocol'
 
 import { MachineStore } from './machineStore'
 import { MessageStore } from './messageStore'
@@ -17,6 +21,7 @@ export type {
     StoredTeamEvent,
     StoredTeamMember,
     StoredTeamProject,
+    StoredTeamRole,
     StoredTeamTask,
     VersionedUpdateResult
 } from './types'
@@ -27,8 +32,8 @@ export { SessionStore } from './sessionStore'
 export { TeamStore } from './teamStore'
 
 const IN_MEMORY_DATABASE_PREFIX = 'file::memory:'
-const SCHEMA_VERSION = 10
-const AUTO_MIGRATABLE_SCHEMA_VERSIONS = [7, 8, 9] as const
+const SCHEMA_VERSION = 11
+const AUTO_MIGRATABLE_SCHEMA_VERSIONS = [7, 8, 9, 10] as const
 const LEGACY_REQUIRED_TABLES = [
     'sessions',
     'machines',
@@ -38,6 +43,7 @@ const LEGACY_REQUIRED_TABLES = [
 const REQUIRED_TABLES = [
     ...LEGACY_REQUIRED_TABLES,
     'team_projects',
+    'team_roles',
     'team_members',
     'team_tasks',
     'team_events'
@@ -51,6 +57,10 @@ const SESSION_COLUMN_DEFINITIONS: Record<(typeof REQUIRED_SESSION_COLUMNS)[numbe
     permission_mode: 'TEXT',
     collaboration_mode: 'TEXT',
     next_message_seq: 'INTEGER NOT NULL DEFAULT 1'
+}
+const REQUIRED_TEAM_MEMBER_COLUMNS = ['role_id'] as const
+const TEAM_MEMBER_COLUMN_DEFINITIONS: Record<(typeof REQUIRED_TEAM_MEMBER_COLUMNS)[number], string> = {
+    role_id: 'TEXT'
 }
 const SCHEMA_REBUILD_GUIDANCE =
     'Back up and rebuild the database, or run an offline migration to the expected schema version.'
@@ -131,6 +141,7 @@ export class Store {
 
         this.assertRequiredTablesPresent()
         this.assertRequiredSessionColumnsPresent()
+        this.assertRequiredTeamMemberColumnsPresent()
     }
 
     private createSchema(): void {
@@ -212,12 +223,31 @@ export class Store {
             );
             CREATE UNIQUE INDEX IF NOT EXISTS idx_team_projects_manager_session ON team_projects(manager_session_id);
 
+            CREATE TABLE IF NOT EXISTS team_roles (
+                project_id TEXT NOT NULL,
+                id TEXT NOT NULL,
+                source TEXT NOT NULL,
+                prototype TEXT NOT NULL,
+                name TEXT NOT NULL,
+                prompt_extension TEXT,
+                provider_flavor TEXT NOT NULL,
+                model TEXT,
+                reasoning_effort TEXT,
+                isolation_mode TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                PRIMARY KEY (project_id, id),
+                FOREIGN KEY (project_id) REFERENCES team_projects(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_team_roles_project ON team_roles(project_id, source, prototype);
+
             CREATE TABLE IF NOT EXISTS team_members (
                 id TEXT PRIMARY KEY,
                 project_id TEXT NOT NULL,
                 session_id TEXT NOT NULL,
                 manager_session_id TEXT NOT NULL,
                 role TEXT NOT NULL,
+                role_id TEXT NOT NULL,
                 provider_flavor TEXT,
                 model TEXT,
                 reasoning_effort TEXT,
@@ -234,6 +264,7 @@ export class Store {
                 archived_at INTEGER,
                 removed_at INTEGER,
                 FOREIGN KEY (project_id) REFERENCES team_projects(id) ON DELETE CASCADE,
+                FOREIGN KEY (project_id, role_id) REFERENCES team_roles(project_id, id),
                 FOREIGN KEY (session_id) REFERENCES sessions(id)
             );
             CREATE UNIQUE INDEX IF NOT EXISTS idx_team_members_session ON team_members(session_id);
@@ -288,7 +319,7 @@ export class Store {
     }
 
     private migrateSchema(currentVersion: number): void {
-        if (!AUTO_MIGRATABLE_SCHEMA_VERSIONS.includes(currentVersion as 7 | 8 | 9)) {
+        if (!AUTO_MIGRATABLE_SCHEMA_VERSIONS.includes(currentVersion as 7 | 8 | 9 | 10)) {
             throw this.buildSchemaMismatchError(currentVersion)
         }
 
@@ -297,10 +328,17 @@ export class Store {
 
         try {
             const missingColumns = this.addMissingSessionColumns()
-            if (missingColumns.includes('next_message_seq') || currentVersion < SCHEMA_VERSION) {
+            if (missingColumns.includes('next_message_seq') || currentVersion < 10) {
                 this.backfillSessionMessageSeqCounters()
             }
             this.createSchema()
+            const missingTeamMemberColumns = this.addMissingTeamMemberColumns()
+            if (missingTeamMemberColumns.includes('role_id')) {
+                this.backfillTeamMemberRoleIds()
+            }
+            if (currentVersion < SCHEMA_VERSION) {
+                this.seedMissingBuiltInTeamRoles()
+            }
             this.setUserVersion(SCHEMA_VERSION)
             this.db.exec('COMMIT')
         } catch (error) {
@@ -370,6 +408,72 @@ export class Store {
         }
     }
 
+    private addMissingTeamMemberColumns(): Array<(typeof REQUIRED_TEAM_MEMBER_COLUMNS)[number]> {
+        const missingColumns = this.getMissingTableColumns('team_members', REQUIRED_TEAM_MEMBER_COLUMNS)
+        for (const columnName of missingColumns) {
+            this.db.exec(
+                `ALTER TABLE team_members ADD COLUMN ${columnName} ${TEAM_MEMBER_COLUMN_DEFINITIONS[columnName]}`
+            )
+        }
+        return missingColumns
+    }
+
+    private backfillTeamMemberRoleIds(): void {
+        this.db.exec(`
+            UPDATE team_members
+            SET role_id = role
+            WHERE role_id IS NULL OR role_id = ''
+        `)
+    }
+
+    private seedMissingBuiltInTeamRoles(): void {
+        const projectRows = this.db.prepare(`
+            SELECT id, created_at
+            FROM team_projects
+        `).all() as Array<{ id: string; created_at: number }>
+        const insertRole = this.db.prepare(`
+            INSERT OR IGNORE INTO team_roles (
+                project_id, id, source, prototype, name, prompt_extension,
+                provider_flavor, model, reasoning_effort, isolation_mode,
+                created_at, updated_at
+            ) VALUES (
+                @project_id, @id, @source, @prototype, @name, @prompt_extension,
+                @provider_flavor, @model, @reasoning_effort, @isolation_mode,
+                @created_at, @updated_at
+            )
+        `)
+
+        for (const project of projectRows) {
+            for (const prototype of TEAM_MEMBER_ROLE_PROTOTYPES) {
+                const definition = createBuiltInTeamRoleDefinition(project.id, prototype, project.created_at)
+                insertRole.run({
+                    project_id: definition.projectId,
+                    id: definition.id,
+                    source: definition.source,
+                    prototype: definition.prototype,
+                    name: definition.name,
+                    prompt_extension: definition.promptExtension,
+                    provider_flavor: definition.providerFlavor,
+                    model: definition.model,
+                    reasoning_effort: definition.reasoningEffort,
+                    isolation_mode: definition.isolationMode,
+                    created_at: definition.createdAt,
+                    updated_at: definition.updatedAt
+                })
+            }
+        }
+    }
+
+    private assertRequiredTeamMemberColumnsPresent(): void {
+        const missingColumns = this.getMissingTableColumns('team_members', REQUIRED_TEAM_MEMBER_COLUMNS)
+        if (missingColumns.length > 0) {
+            throw new Error(
+                `SQLite schema is missing required team_members columns (${missingColumns.join(', ')}). ` +
+                SCHEMA_REBUILD_GUIDANCE
+            )
+        }
+    }
+
     private getMissingTableColumns<TColumnName extends string>(
         tableName: string,
         requiredColumns: readonly TColumnName[]
@@ -386,7 +490,7 @@ export class Store {
         return new Error(
             `SQLite schema version mismatch for ${location}. ` +
             `Expected ${SCHEMA_VERSION}, found ${currentVersion}. ` +
-            `This build only runs the 7 -> ${SCHEMA_VERSION}, 8 -> ${SCHEMA_VERSION}, and 9 -> ${SCHEMA_VERSION} migrations automatically. ` +
+            `This build only runs the 7 -> ${SCHEMA_VERSION}, 8 -> ${SCHEMA_VERSION}, 9 -> ${SCHEMA_VERSION}, and 10 -> ${SCHEMA_VERSION} migrations automatically. ` +
             SCHEMA_REBUILD_GUIDANCE
         )
     }

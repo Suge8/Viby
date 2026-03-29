@@ -25,6 +25,9 @@ const harness = vi.hoisted(() => {
             sessionRole: 'manager' | 'member'
             managerSessionId: string
             memberRole?: 'planner' | 'architect' | 'implementer' | 'debugger' | 'reviewer' | 'verifier' | 'designer'
+            memberRoleId?: string
+            memberRoleName?: string
+            memberRolePromptExtension?: string | null
             projectStatus: 'active' | 'delivered' | 'archived'
         }
     }
@@ -34,6 +37,9 @@ vi.mock('@/agent/sessionFactory', () => ({
     bootstrapSession: async () => ({
         api: {},
         session: {
+            getTeamContextSnapshot() {
+                return harness.teamContext
+            },
             onUserMessage(handler: typeof harness.onUserMessage) {
                 harness.onUserMessage = handler
             },
@@ -194,11 +200,15 @@ describe('runCodex live session config', () => {
         expect(harness.disposeAppServerClientCalls).toBe(1)
     })
 
-    it('passes the authoritative team role contract into Codex developer instructions', async () => {
+    it('passes authoritative custom role metadata into Codex developer instructions', async () => {
         harness.teamContext = {
             projectId: 'project-1',
-            sessionRole: 'manager',
+            sessionRole: 'member',
             managerSessionId: 'manager-session-1',
+            memberRole: 'debugger',
+            memberRoleId: 'debugger-root-cause',
+            memberRoleName: 'Root Cause Debugger',
+            memberRolePromptExtension: 'Always reproduce the failing path before proposing a fix.',
             projectStatus: 'active'
         }
 
@@ -214,7 +224,9 @@ describe('runCodex live session config', () => {
             modelReasoningEffort: 'high',
             collaborationMode: 'default'
         })
-        expect(harness.queueModes[0]?.developerInstructions).toContain('manager session')
-        expect(harness.queueModes[0]?.developerInstructions).toContain('final acceptance')
+        expect(harness.queueModes[0]?.developerInstructions).toContain('role prototype is "debugger"')
+        expect(harness.queueModes[0]?.developerInstructions).toContain('debugger-root-cause')
+        expect(harness.queueModes[0]?.developerInstructions).toContain('Root Cause Debugger')
+        expect(harness.queueModes[0]?.developerInstructions).toContain('reproduce the failing path')
     })
 })

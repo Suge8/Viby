@@ -65,6 +65,14 @@ vi.mock('@/agent/acpAgentInterop', () => ({
     toAcpMcpServers: vi.fn(() => [])
 }))
 
+vi.mock('@/agent/teamPromptContract', async () => {
+    const actual = await vi.importActual<typeof import('@/agent/teamPromptContract')>('@/agent/teamPromptContract')
+    return {
+        ...actual,
+        resolveTeamRolePromptContract: vi.fn(() => 'Manager team contract')
+    }
+})
+
 vi.mock('./utils/opencodeBackend', () => ({
     createOpencodeBackend: vi.fn(() => harness.buildBackendInstance())
 }))
@@ -152,6 +160,14 @@ function createSessionStub(messageCount: number = 1) {
         sessionId: null as string | null,
         queue,
         client: {
+            getTeamContextSnapshot() {
+                return {
+                    projectId: 'project-1',
+                    sessionRole: 'manager',
+                    managerSessionId: 'manager-session-1',
+                    projectStatus: 'active'
+                }
+            },
             rpcHandlerManager: {
                 registerHandler(method: string, handler: (params: unknown) => unknown) {
                     harness.rpcHandlers.set(method, handler)
@@ -218,5 +234,13 @@ describe('opencodeRemoteLauncher', () => {
             cwd: '/tmp/viby-opencode',
             mcpServers: []
         })
+        expect(harness.backendInstances[0]?.prompt).toHaveBeenCalledWith(
+            'opencode-session-1',
+            [{
+                type: 'text',
+                text: expect.stringContaining('Manager team contract')
+            }],
+            expect.any(Function)
+        )
     })
 })

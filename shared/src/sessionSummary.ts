@@ -154,6 +154,8 @@ function toSessionSummaryTeam(teamContext: SessionTeamContext | undefined): Sess
         managerSessionId: teamContext.managerSessionId,
         managerTitle: teamContext.managerTitle,
         memberRole: teamContext.memberRole,
+        memberRoleId: teamContext.memberRoleId,
+        memberRoleName: teamContext.memberRoleName,
         memberRevision: teamContext.memberRevision,
         membershipState: teamContext.membershipState,
         controlOwner: teamContext.controlOwner,

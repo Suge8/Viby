@@ -27,11 +27,15 @@ type DbSessionRow = {
     next_message_seq: number
     todos: string | null
     todos_updated_at: number | null
-    team_state: string | null
-    team_state_updated_at: number | null
     active: number
     active_at: number | null
     seq: number
+}
+
+const TEAM_MEMBER_PLACEHOLDER_TAG_PREFIX = 'team-member-'
+
+function getSessionRow(db: Database, id: string): DbSessionRow | null {
+    return db.query('SELECT * FROM sessions WHERE id = ?').get(id) as DbSessionRow | undefined ?? null
 }
 
 function toStoredSession(row: DbSessionRow): StoredSession {
@@ -51,12 +55,58 @@ function toStoredSession(row: DbSessionRow): StoredSession {
         collaborationMode: row.collaboration_mode,
         todos: safeJsonParse(row.todos),
         todosUpdatedAt: row.todos_updated_at,
-        teamState: safeJsonParse(row.team_state),
-        teamStateUpdatedAt: row.team_state_updated_at,
         active: row.active === 1,
         activeAt: row.active_at,
         seq: row.seq
     }
+}
+
+function canHydratePlaceholderSession(row: DbSessionRow): boolean {
+    return row.tag?.startsWith(TEAM_MEMBER_PLACEHOLDER_TAG_PREFIX) === true
+        && row.active === 0
+        && row.seq === 0
+        && row.next_message_seq === 1
+}
+
+function hydratePlaceholderSession(
+    db: Database,
+    existing: DbSessionRow,
+    input: CreateStoredSessionInput
+): StoredSession {
+    const metadataJson = JSON.stringify(input.metadata)
+    const agentStateJson = input.agentState === null || input.agentState === undefined
+        ? null
+        : JSON.stringify(input.agentState)
+
+    db.query(`
+        UPDATE sessions
+        SET tag = @tag,
+            metadata = @metadata,
+            agent_state = @agent_state,
+            model = @model,
+            model_reasoning_effort = @model_reasoning_effort,
+            permission_mode = @permission_mode,
+            collaboration_mode = @collaboration_mode,
+            updated_at = @updated_at
+        WHERE id = @id
+    `).run({
+        id: existing.id,
+        tag: input.tag,
+        metadata: metadataJson,
+        agent_state: agentStateJson,
+        model: input.model ?? existing.model,
+        model_reasoning_effort: input.modelReasoningEffort ?? existing.model_reasoning_effort,
+        permission_mode: input.permissionMode ?? existing.permission_mode,
+        collaboration_mode: input.collaborationMode ?? existing.collaboration_mode,
+        updated_at: Date.now()
+    })
+
+    const hydrated = getSessionRow(db, existing.id)
+    if (!hydrated) {
+        throw new Error('Failed to hydrate placeholder session')
+    }
+
+    return toStoredSession(hydrated)
 }
 
 export type CreateStoredSessionInput = {
@@ -86,9 +136,12 @@ export function getOrCreateSession(
     } = input
 
     if (sessionId) {
-        const existingById = getSession(db, sessionId)
+        const existingById = getSessionRow(db, sessionId)
         if (existingById) {
-            return existingById
+            if (canHydratePlaceholderSession(existingById)) {
+                return hydratePlaceholderSession(db, existingById, input)
+            }
+            return toStoredSession(existingById)
         }
     }
 
@@ -223,33 +276,6 @@ export function setSessionTodos(
             id,
             todos: json,
             todos_updated_at: todosUpdatedAt
-        })
-
-        return result.changes === 1
-    } catch {
-        return false
-    }
-}
-
-export function setSessionTeamState(
-    db: Database,
-    id: string,
-    teamState: unknown,
-    updatedAt: number
-): boolean {
-    try {
-        const json = teamState === null || teamState === undefined ? null : JSON.stringify(teamState)
-        const result = db.query(`
-            UPDATE sessions
-            SET team_state = @team_state,
-                team_state_updated_at = @team_state_updated_at,
-                seq = seq + 1
-            WHERE id = @id
-              AND (team_state_updated_at IS NULL OR team_state_updated_at < @team_state_updated_at)
-        `).run({
-            id,
-            team_state: json,
-            team_state_updated_at: updatedAt
         })
 
         return result.changes === 1
@@ -429,7 +455,7 @@ export function touchSessionUpdatedAt(
 }
 
 export function getSession(db: Database, id: string): StoredSession | null {
-    const row = db.query('SELECT * FROM sessions WHERE id = ?').get(id) as DbSessionRow | undefined
+    const row = getSessionRow(db, id) ?? undefined
     return row ? toStoredSession(row) : null
 }
 

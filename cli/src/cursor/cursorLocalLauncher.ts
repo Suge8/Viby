@@ -2,6 +2,7 @@ import { logger } from '@/ui/logger';
 import { cursorLocal } from './cursorLocal';
 import { CursorSession } from './session';
 import { BaseLocalLauncher } from '@/modules/common/launcher/BaseLocalLauncher';
+import { buildCursorProcessEnv, ensureCursorConfig } from './utils/cursorConfig';
 
 function permissionModeToCursorArgs(mode?: string): { mode?: 'plan' | 'ask'; yolo?: boolean } {
     if (mode === 'plan') {
@@ -22,6 +23,9 @@ export async function cursorLocalLauncher(session: CursorSession): Promise<'swit
         session.onSessionFound(resumeChatId);
     }
     const { mode, yolo } = permissionModeToCursorArgs(session.getPermissionMode() as string);
+    const bridge = await session.ensureRemoteBridge();
+    const { configDir } = ensureCursorConfig(session.client.sessionId, bridge.mcpServers.viby);
+    const env = buildCursorProcessEnv(configDir);
 
     const launcher = new BaseLocalLauncher({
         label: 'cursor-local',
@@ -35,6 +39,7 @@ export async function cursorLocalLauncher(session: CursorSession): Promise<'swit
                 path: session.path,
                 chatId: resumeChatId,
                 abort: abortSignal,
+                env,
                 cursorArgs: session.cursorArgs,
                 model: session.model,
                 mode,

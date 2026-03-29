@@ -6,6 +6,7 @@ import type {
     TeamEventRecord,
     TeamMemberRecord,
     TeamProject,
+    TeamRoleDefinition,
     TeamTaskRecord
 } from '@viby/protocol/types'
 
@@ -25,8 +26,6 @@ export type StoredSession = {
     collaborationMode: CodexCollaborationMode | null
     todos: unknown | null
     todosUpdatedAt: number | null
-    teamState: unknown | null
-    teamStateUpdatedAt: number | null
     active: boolean
     activeAt: number | null
     seq: number
@@ -63,6 +62,7 @@ export type StoredPushSubscription = {
 }
 
 export type StoredTeamProject = TeamProject
+export type StoredTeamRole = TeamRoleDefinition
 export type StoredTeamMember = TeamMemberRecord
 export type StoredTeamTask = TeamTaskRecord
 export type StoredTeamEvent = TeamEventRecord

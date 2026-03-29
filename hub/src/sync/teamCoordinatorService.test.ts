@@ -48,7 +48,6 @@ describe('TeamCoordinatorService', () => {
             thinking: false,
             thinkingAt: 0,
             todos: undefined,
-            teamState: undefined,
             teamContext: undefined,
             model: 'gpt-5.4',
             modelReasoningEffort: null,
@@ -76,6 +75,12 @@ describe('TeamCoordinatorService', () => {
                 type: 'session-updated',
                 sessionId: harness.managerSession.id,
                 data: { sid: harness.managerSession.id }
+            },
+            {
+                type: 'team-project-updated',
+                projectId: harness.managerSession.id,
+                managerSessionId: harness.managerSession.id,
+                affectedSessionIds: [harness.managerSession.id]
             }
         ])
     })
@@ -120,6 +125,7 @@ describe('TeamCoordinatorService', () => {
                 sessionId: harness.memberSession.id,
                 managerSessionId: harness.managerSession.id,
                 role: 'implementer',
+                roleId: 'implementer',
                 providerFlavor: 'codex',
                 model: 'gpt-5.4',
                 reasoningEffort: 'high',
@@ -164,40 +170,203 @@ describe('TeamCoordinatorService', () => {
             { type: 'session-updated', sessionId: harness.managerSession.id, data: { sid: harness.managerSession.id } },
             { type: 'session-updated', sessionId: harness.memberSession.id, data: { sid: harness.memberSession.id } }
         ])
-    })
-
-    it('owns the legacy team-state transcript projection instead of leaving it in socket handlers', () => {
-        const harness = createTeamHarness()
-        const result = harness.coordinator.applyLegacyTranscriptProjection({
-            sessionId: harness.managerSession.id,
-            createdAt: 2_000,
-            content: {
-                role: 'agent',
-                content: {
-                    type: 'codex',
-                    data: {
-                        type: 'tool-call',
-                        name: 'TeamCreate',
-                        input: {
-                            team_name: 'Alpha Team',
-                            description: 'Legacy projection only'
-                        }
-                    }
-                }
-            }
-        })
-
-        expect(result.updated).toBe(true)
-        expect(harness.store.sessions.getSession(harness.managerSession.id)?.teamState).toMatchObject({
-            teamName: 'Alpha Team',
-            description: 'Legacy projection only'
-        })
-        expect(harness.events).toEqual([
+        expect(harness.events.filter((event) => event.type === 'team-project-updated')).toEqual([
             {
-                type: 'session-updated',
-                sessionId: harness.managerSession.id,
-                data: { sid: harness.managerSession.id }
+                type: 'team-project-updated',
+                projectId: 'project-1',
+                managerSessionId: harness.managerSession.id,
+                affectedSessionIds: [harness.managerSession.id]
+            },
+            {
+                type: 'team-project-updated',
+                projectId: 'project-1',
+                managerSessionId: harness.managerSession.id,
+                affectedSessionIds: [harness.managerSession.id, harness.memberSession.id]
             }
         ])
     })
+
+
+    it('applies batch project and custom role replacement for preset imports', () => {
+        const harness = createTeamHarness()
+
+        harness.coordinator.applyCommand({
+            type: 'upsert-project',
+            project: {
+                id: 'project-preset',
+                managerSessionId: harness.managerSession.id,
+                machineId: 'machine-1',
+                rootDirectory: '/tmp/project',
+                title: 'Preset Project',
+                goal: 'Validate preset import batch semantics',
+                status: 'active',
+                maxActiveMembers: 6,
+                defaultIsolationMode: 'hybrid',
+                createdAt: 1_000,
+                updatedAt: 1_000,
+                deliveredAt: null,
+                archivedAt: null
+            }
+        })
+        harness.coordinator.applyCommand({
+            type: 'upsert-role',
+            role: {
+                projectId: 'project-preset',
+                id: 'reviewer-legacy',
+                source: 'custom',
+                prototype: 'reviewer',
+                name: 'Legacy Reviewer',
+                promptExtension: 'Old role to be replaced.',
+                providerFlavor: 'codex',
+                model: 'gpt-5.4',
+                reasoningEffort: 'high',
+                isolationMode: 'simple',
+                createdAt: 1_100,
+                updatedAt: 1_100
+            }
+        })
+
+        const result = harness.coordinator.applyCommand({
+            type: 'batch',
+            project: {
+                id: 'project-preset',
+                managerSessionId: harness.managerSession.id,
+                machineId: 'machine-1',
+                rootDirectory: '/tmp/project',
+                title: 'Preset Project',
+                goal: 'Validate preset import batch semantics',
+                status: 'active',
+                maxActiveMembers: 4,
+                defaultIsolationMode: 'all_simple',
+                createdAt: 1_000,
+                updatedAt: 2_000,
+                deliveredAt: null,
+                archivedAt: null
+            },
+            roles: [{
+                projectId: 'project-preset',
+                id: 'reviewer-mobile',
+                source: 'custom',
+                prototype: 'reviewer',
+                name: 'Mobile Reviewer',
+                promptExtension: 'Focus on mobile regressions.',
+                providerFlavor: 'codex',
+                model: 'gpt-5.4',
+                reasoningEffort: 'high',
+                isolationMode: 'simple',
+                createdAt: 2_000,
+                updatedAt: 2_000
+            }],
+            deletedRoleIds: ['reviewer-legacy']
+        })
+
+        expect(result.snapshot.project).toMatchObject({
+            id: 'project-preset',
+            maxActiveMembers: 4,
+            defaultIsolationMode: 'all_simple'
+        })
+        expect(result.snapshot.roles.some((role) => role.id === 'reviewer-mobile')).toBe(true)
+        expect(result.snapshot.roles.some((role) => role.id === 'reviewer-legacy')).toBe(false)
+    })
+
+    it('keeps acceptance read-model durable even when generic project history truncates older acceptance events', () => {
+        const harness = createTeamHarness()
+
+        harness.coordinator.applyCommand({
+            type: 'upsert-project',
+            project: {
+                id: 'project-acceptance',
+                managerSessionId: harness.managerSession.id,
+                machineId: 'machine-1',
+                rootDirectory: '/tmp/project',
+                title: 'Acceptance Project',
+                goal: 'Verify durable acceptance state',
+                status: 'active',
+                maxActiveMembers: 6,
+                defaultIsolationMode: 'hybrid',
+                createdAt: 1_000,
+                updatedAt: 1_000,
+                deliveredAt: null,
+                archivedAt: null
+            }
+        })
+        harness.coordinator.applyCommand({
+            type: 'upsert-task',
+            task: {
+                id: 'task-acceptance',
+                projectId: 'project-acceptance',
+                parentTaskId: null,
+                title: 'Hold acceptance state',
+                description: null,
+                acceptanceCriteria: 'Keep the review result durable',
+                status: 'in_verification',
+                assigneeMemberId: null,
+                reviewerMemberId: null,
+                verifierMemberId: null,
+                priority: 'high',
+                dependsOn: [],
+                retryCount: 0,
+                createdAt: 1_000,
+                updatedAt: 1_001,
+                completedAt: null
+            }
+        })
+        harness.coordinator.applyCommand({
+            type: 'record-event',
+            event: {
+                id: 'event-review-passed',
+                projectId: 'project-acceptance',
+                kind: 'review-passed',
+                actorType: 'member',
+                actorId: 'member-reviewer',
+                targetType: 'task',
+                targetId: 'task-acceptance',
+                payload: {
+                    summary: 'Review passed early'
+                },
+                createdAt: 1_100
+            }
+        })
+
+        for (let index = 0; index < 60; index += 1) {
+            harness.coordinator.applyCommand({
+                type: 'record-event',
+                event: {
+                    id: `event-comment-${index}`,
+                    projectId: 'project-acceptance',
+                    kind: 'task-commented',
+                    actorType: 'manager',
+                    actorId: harness.managerSession.id,
+                    targetType: 'task',
+                    targetId: 'task-acceptance',
+                    payload: {
+                        comment: `comment ${index}`
+                    },
+                    createdAt: 2_000 + index
+                }
+            })
+        }
+
+        const snapshot = harness.coordinator.getProjectSnapshot('project-acceptance')
+        expect(snapshot).not.toBeNull()
+        if (!snapshot) {
+            throw new Error('Expected project snapshot')
+        }
+
+        expect(snapshot.events).toHaveLength(50)
+        expect(snapshot.events.some((event) => event.id === 'event-review-passed')).toBe(false)
+        expect(snapshot.acceptance.tasks['task-acceptance']).toMatchObject({
+            reviewStatus: 'passed',
+            verificationStatus: 'idle',
+            managerAccepted: false,
+            skipVerificationReason: null
+        })
+        expect(snapshot.acceptance.recentResults).toEqual([
+            expect.objectContaining({
+                id: 'event-review-passed',
+                kind: 'review-passed'
+            })
+        ])
+    })
+
 })

@@ -4,18 +4,15 @@ import type {
     Session,
     TeamMemberIsolationMode,
     TeamMemberRecord,
-    TeamProviderFlavor,
-    TeamRolePrototype
+    TeamProviderFlavor
 } from '@viby/protocol/types'
 import type { StoredSession } from '../store'
 
 type InactiveMemberLaunchSession = Pick<Session, 'id' | 'active' | 'metadata'>
 
-export type TeamMemberLaunchRole = Exclude<TeamRolePrototype, 'manager'>
-
 export type InactiveTeamMemberLaunchRequest = {
     projectId: string
-    role: TeamMemberLaunchRole
+    roleId: TeamMemberRecord['roleId']
     providerFlavor: TeamProviderFlavor | null
     isolationMode: TeamMemberIsolationMode
     workspaceRoot: string | null
@@ -199,8 +196,11 @@ export function resolveRevisionReason(
 function buildMemberDescriptor(candidate: InactiveTeamMemberLaunchCandidate): string {
     const provider = candidate.member.providerFlavor ?? 'unknown-provider'
     const model = candidate.member.model ?? 'auto'
+    const roleLabel = candidate.member.roleId === candidate.member.role
+        ? candidate.member.role
+        : `${candidate.member.roleId} (${candidate.member.role})`
 
-    return `${candidate.member.role} rev ${candidate.member.revision} (${provider}, ${model})`
+    return `${roleLabel} rev ${candidate.member.revision} (${provider}, ${model})`
 }
 
 function appendSection(lines: string[], title: string, value: string | null | undefined): void {

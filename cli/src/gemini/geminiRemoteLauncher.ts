@@ -9,6 +9,10 @@ import type { GeminiSession } from './session';
 import type { GeminiMode, PermissionMode } from './types';
 import type { createGeminiBackend } from './utils/geminiBackend';
 import { GeminiPermissionHandler } from './utils/permissionHandler';
+import {
+    prependPromptInstructionsToMessage,
+    resolveTeamRolePromptContract
+} from '@/agent/teamPromptContract';
 
 const GEMINI_ACP_AUTO_MODEL_ID = 'auto';
 
@@ -20,6 +24,7 @@ class GeminiRemoteLauncher extends RemoteLauncherBase {
     private abortController = new AbortController();
     private displayModel: string | null = null;
     private displayPermissionMode: PermissionMode | null = null;
+    private appliedDeveloperInstructions: string | null = null;
 
     constructor(session: GeminiSession, opts: { model?: string; hookSettingsPath?: string }) {
         super(process.env.DEBUG ? session.logPath : undefined);
@@ -118,6 +123,9 @@ class GeminiRemoteLauncher extends RemoteLauncherBase {
 
             await backend.initialize();
             const { sessionId: acpSessionId, loadedSession } = await createOrResumeBackendSession(backend);
+            if (!loadedSession) {
+                this.appliedDeveloperInstructions = null;
+            }
 
             if (loadedSession) {
                 await backend.setSessionModel(acpSessionId, mode.model ?? GEMINI_ACP_AUTO_MODEL_ID);
@@ -150,6 +158,20 @@ class GeminiRemoteLauncher extends RemoteLauncherBase {
             session.sendSessionEvent({ type: 'ready' });
         };
 
+        const preparePromptText = (message: string): string => {
+            const developerInstructions = resolveTeamRolePromptContract(
+                session.client.getTeamContextSnapshot()
+            )
+            if (!developerInstructions) {
+                return message
+            }
+            if (this.appliedDeveloperInstructions === developerInstructions) {
+                return message
+            }
+            this.appliedDeveloperInstructions = developerInstructions
+            return prependPromptInstructionsToMessage(message, developerInstructions)
+        }
+
         while (!this.shouldExit) {
             const batch = await session.queue.waitForMessagesAndGetAsString(this.abortController.signal);
             if (!batch) {
@@ -164,7 +186,7 @@ class GeminiRemoteLauncher extends RemoteLauncherBase {
 
             const promptContent: PromptContent[] = [{
                 type: 'text',
-                text: batch.message
+                text: preparePromptText(batch.message)
             }];
 
             session.onThinkingChange(true);

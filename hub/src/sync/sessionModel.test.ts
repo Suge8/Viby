@@ -147,6 +147,7 @@ describe('session model', () => {
             sessionId: memberSession.id,
             managerSessionId: managerSession.id,
             role: 'implementer',
+            roleId: 'implementer',
             providerFlavor: 'codex',
             model: 'gpt-5.4',
             reasoningEffort: 'high',
@@ -189,6 +190,8 @@ describe('session model', () => {
             sessionRole: 'member',
             memberId: 'member-1',
             memberRole: 'implementer',
+            memberRoleId: 'implementer',
+            memberRoleName: 'implementer',
             managerTitle: 'Manager One',
             activeMemberCount: 1,
             blockedTaskCount: 1
@@ -199,6 +202,8 @@ describe('session model', () => {
                 sessionRole: 'member',
                 managerSessionId: managerSession.id,
                 memberRole: 'implementer',
+                memberRoleId: 'implementer',
+                memberRoleName: 'implementer',
                 memberRevision: 1,
                 membershipState: 'active',
                 controlOwner: 'manager',
@@ -744,6 +749,30 @@ describe('session model', () => {
         expect(cache.getSession(originalSession.id)?.model).toBe('gpt-5.4')
     })
 
+    it('preserves placeholder model config when hydrating a precreated team member session', () => {
+        const store = new Store(':memory:')
+        const events: SyncEvent[] = []
+        const cache = new SessionCache(store, createPublisher(events))
+
+        const placeholderSession = createCachedSession(cache, {
+            tag: 'team-member-member-1',
+            metadata: { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
+            model: 'gpt-5.4',
+            permissionMode: 'read-only',
+            sessionId: 'member-session-id'
+        })
+        const hydratedSession = createCachedSession(cache, {
+            tag: 'runtime-member-session',
+            metadata: { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
+            sessionId: placeholderSession.id
+        })
+
+        expect(hydratedSession.id).toBe(placeholderSession.id)
+        expect(cache.getSession(placeholderSession.id)?.model).toBe('gpt-5.4')
+        expect(cache.getSession(placeholderSession.id)?.permissionMode).toBe('read-only')
+        expect(cache.getSessions()).toHaveLength(1)
+    })
+
     it('renames from the latest stored metadata when the cache version is stale', async () => {
         const store = new Store(':memory:')
         const events: SyncEvent[] = []
@@ -834,7 +863,7 @@ describe('session model', () => {
         expect(store.sessions.getSession(session.id)?.updatedAt).toBe(originalUpdatedAt)
     })
 
-    it('keeps session updatedAt stable for derived todo and team-state projections', () => {
+    it('keeps session updatedAt stable for derived todo projections', () => {
         const store = new Store(':memory:')
         const events: SyncEvent[] = []
         const cache = new SessionCache(store, createPublisher(events))
@@ -847,9 +876,6 @@ describe('session model', () => {
         const originalUpdatedAt = session.updatedAt
 
         expect(store.sessions.setSessionTodos(session.id, [{ id: 'todo-1', content: 'Check', status: 'pending', priority: 'medium' }], originalUpdatedAt + 1_000)).toBe(true)
-        expect(store.sessions.getSession(session.id)?.updatedAt).toBe(originalUpdatedAt)
-
-        expect(store.sessions.setSessionTeamState(session.id, { teamName: 'alpha', updatedAt: originalUpdatedAt + 2_000 }, originalUpdatedAt + 2_000)).toBe(true)
         expect(store.sessions.getSession(session.id)?.updatedAt).toBe(originalUpdatedAt)
     })
 

@@ -30,8 +30,7 @@ describe('machines routes', () => {
             modelReasoningEffort: 'high',
             permissionMode: 'safe-yolo',
             collaborationMode: 'plan',
-            todos: undefined,
-            teamState: undefined
+            todos: undefined
         }
         const engine = {
             getMachine: () => ({

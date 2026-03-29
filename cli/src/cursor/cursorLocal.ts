@@ -24,6 +24,7 @@ export async function cursorLocal(opts: {
     abort: AbortSignal;
     chatId: string | null;
     path: string;
+    env?: NodeJS.ProcessEnv;
     model?: string;
     mode?: 'plan' | 'ask';
     yolo?: boolean;
@@ -67,7 +68,7 @@ export async function cursorLocal(opts: {
             command: 'agent',
             args,
             cwd: opts.path,
-            env: process.env,
+            env: opts.env ?? process.env,
             signal: opts.abort,
             logLabel: 'CursorLocal',
             spawnName: 'agent',
