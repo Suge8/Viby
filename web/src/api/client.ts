@@ -18,7 +18,11 @@ import type {
     SlashCommandsResponse,
     SkillsResponse,
     SpawnResponse,
+    TeamProjectHistoryResponse,
+    TeamProjectPreset,
     TeamProjectSnapshot,
+    TeamProject,
+    TeamRoleDefinition,
     TeamSessionSpawnRole,
     UploadFileResponse,
     ModelReasoningEffort,
@@ -77,6 +81,13 @@ function createCachedModuleLoader<TModule>(
 export type ApiClientRequest = <T>(path: string, init?: RequestInit) => Promise<T>
 export type ApiClientFetchSessionSnapshot = (sessionId: string) => Promise<Session>
 
+type ApprovePermissionOptions = {
+    mode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan'
+    allowTools?: string[]
+    decision?: 'approved' | 'approved_for_session' | 'denied' | 'abort'
+    answers?: Record<string, string[]> | Record<string, { answers: string[] }>
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null
 }
@@ -99,6 +110,39 @@ function isSessionActionResponse(value: unknown): value is SessionActionResponse
 
 function isSessionActionLegacyResponse(value: unknown): value is SessionActionLegacyResponse {
     return isRecord(value) && value.ok === true
+}
+
+function resolveRequestToken(
+    currentToken: string,
+    liveToken: string | null,
+    overrideToken?: string | null
+): string | null {
+    if (overrideToken !== undefined) {
+        return overrideToken ?? liveToken ?? currentToken
+    }
+
+    return liveToken ?? currentToken
+}
+
+function buildApiErrorDetail(message: string | null | undefined, body: string): string {
+    if (message) {
+        return `: ${message}`
+    }
+    if (body) {
+        return `: ${body}`
+    }
+
+    return ''
+}
+
+function normalizeApprovePermissionBody(
+    modeOrOptions?: ApprovePermissionOptions['mode'] | ApprovePermissionOptions
+): ApprovePermissionOptions {
+    if (typeof modeOrOptions === 'string' || modeOrOptions === undefined) {
+        return { mode: modeOrOptions }
+    }
+
+    return modeOrOptions
 }
 
 const loadPushModule = createCachedModuleLoader(() => import('./clientPush'))
@@ -136,9 +180,7 @@ export class ApiClient {
     ): Promise<T> {
         const headers = new Headers(init?.headers)
         const liveToken = this.getToken ? this.getToken() : null
-        const authToken = overrideToken !== undefined
-            ? (overrideToken ?? (liveToken ?? this.token))
-            : (liveToken ?? this.token)
+        const authToken = resolveRequestToken(this.token, liveToken, overrideToken)
         if (authToken) {
             headers.set('authorization', `Bearer ${authToken}`)
         }
@@ -165,7 +207,7 @@ export class ApiClient {
         if (!res.ok) {
             const body = await res.text().catch(() => '')
             const parsed = parseErrorPayload(body)
-            const detail = parsed.message ? `: ${parsed.message}` : body ? `: ${body}` : ''
+            const detail = buildApiErrorDetail(parsed.message, body)
             throw new ApiError(`HTTP ${res.status} ${res.statusText}${detail}`, res.status, parsed.code, body || undefined)
         }
 
@@ -367,19 +409,11 @@ export class ApiClient {
     async approvePermission(
         sessionId: string,
         requestId: string,
-        modeOrOptions?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | {
-            mode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan'
-            allowTools?: string[]
-            decision?: 'approved' | 'approved_for_session' | 'denied' | 'abort'
-            answers?: Record<string, string[]> | Record<string, { answers: string[] }>
-        }
+        modeOrOptions?: ApprovePermissionOptions['mode'] | ApprovePermissionOptions
     ): Promise<void> {
-        const body = typeof modeOrOptions === 'string' || modeOrOptions === undefined
-            ? { mode: modeOrOptions }
-            : modeOrOptions
         await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/permissions/${encodeURIComponent(requestId)}/approve`, {
             method: 'POST',
-            body: JSON.stringify(body)
+            body: JSON.stringify(normalizeApprovePermissionBody(modeOrOptions))
         })
     }
 
@@ -404,6 +438,86 @@ export class ApiClient {
     async getTeamProject(projectId: string): Promise<TeamProjectSnapshot> {
         const module = await loadTeamsModule()
         return await module.getTeamProject(this.boundRequest, projectId)
+    }
+
+    async getTeamProjectHistory(projectId: string): Promise<TeamProjectHistoryResponse> {
+        const module = await loadTeamsModule()
+        return await module.getTeamProjectHistory(this.boundRequest, projectId)
+    }
+
+    async updateTeamProjectSettings(
+        projectId: string,
+        input: {
+            managerSessionId: string
+            maxActiveMembers: number
+            defaultIsolationMode: TeamProject['defaultIsolationMode']
+        }
+    ): Promise<TeamProjectSnapshot> {
+        const module = await loadTeamsModule()
+        return await module.updateTeamProjectSettings(this.boundRequest, projectId, input)
+    }
+
+
+    async getTeamProjectPreset(projectId: string): Promise<TeamProjectPreset> {
+        const module = await loadTeamsModule()
+        return await module.getTeamProjectPreset(this.boundRequest, projectId)
+    }
+
+    async createTeamRole(
+        projectId: string,
+        input: {
+            managerSessionId: string
+            roleId: string
+            prototype: TeamRoleDefinition['prototype']
+            name: string
+            promptExtension?: string | null
+            providerFlavor: TeamRoleDefinition['providerFlavor']
+            model: string | null
+            reasoningEffort: TeamRoleDefinition['reasoningEffort']
+            isolationMode: TeamRoleDefinition['isolationMode']
+        }
+    ): Promise<TeamRoleDefinition> {
+        const module = await loadTeamsModule()
+        return await module.createTeamRole(this.boundRequest, projectId, input)
+    }
+
+    async updateTeamRole(
+        projectId: string,
+        roleId: string,
+        input: {
+            managerSessionId: string
+            name: string
+            promptExtension?: string | null
+            providerFlavor: TeamRoleDefinition['providerFlavor']
+            model: string | null
+            reasoningEffort: TeamRoleDefinition['reasoningEffort']
+            isolationMode: TeamRoleDefinition['isolationMode']
+        }
+    ): Promise<TeamRoleDefinition> {
+        const module = await loadTeamsModule()
+        return await module.updateTeamRole(this.boundRequest, projectId, roleId, input)
+    }
+
+    async deleteTeamRole(
+        projectId: string,
+        roleId: string,
+        input: {
+            managerSessionId: string
+        }
+    ): Promise<string> {
+        const module = await loadTeamsModule()
+        return await module.deleteTeamRole(this.boundRequest, projectId, roleId, input)
+    }
+
+    async applyTeamProjectPreset(
+        projectId: string,
+        input: {
+            managerSessionId: string
+            preset: TeamProjectPreset
+        }
+    ): Promise<TeamProjectSnapshot> {
+        const module = await loadTeamsModule()
+        return await module.applyTeamProjectPreset(this.boundRequest, projectId, input)
     }
 
     async interjectTeamMember(

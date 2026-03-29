@@ -1,5 +1,9 @@
 import { memo, useCallback, useMemo } from 'react'
-import type { SessionSummary } from '@/types/api'
+import type {
+    SessionSummary,
+    TeamControlOwner,
+    TeamMemberRecord
+} from '@/types/api'
 import { useLongPress } from '@/hooks/useLongPress'
 import { usePlatform } from '@/hooks/usePlatform'
 import { Button } from '@/components/ui/button'
@@ -9,8 +13,8 @@ import type { SessionListSelection } from '@/components/session-list/sessionList
 import { SessionAgentBrandIcon } from '@/components/session-list/sessionAgentPresentation'
 import { SessionStateBadge } from '@/components/session-list/SessionStateBadge'
 import {
-    getSessionProjectLabel,
-    getSessionTitle
+    getSessionListContextLabel,
+    getSessionListTitle
 } from '@/lib/sessionPresentation'
 import { useTranslation } from '@/lib/use-translation'
 import {
@@ -24,6 +28,8 @@ const SESSION_ICON_CLASS_NAME = 'flex h-10 w-10 shrink-0 items-center justify-ce
 const SESSION_TITLE_CLASS_NAME = 'truncate text-[15px] font-semibold leading-tight text-[var(--ds-text-primary)]'
 const SESSION_METADATA_BLOCK_CLASS_NAME = 'mt-1'
 const SESSION_META_ROW_CLASS_NAME = 'flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-relaxed text-[var(--app-hint)]'
+const SESSION_TEAM_CHIP_ROW_CLASS_NAME = 'mt-2 flex flex-wrap items-center gap-1.5'
+const SESSION_TEAM_CHIP_CLASS_NAME = 'inline-flex items-center rounded-full bg-[var(--app-subtle-bg)] px-2 py-0.5 text-[11px] font-medium text-[var(--app-hint)]'
 const SESSION_STATUS_ROW_CLASS_NAME = 'flex shrink-0 items-center justify-end gap-1'
 
 type SessionListItemProps = {
@@ -38,6 +44,8 @@ export const SessionListItem = memo(function SessionListItem(props: SessionListI
     const { haptic } = usePlatform()
     const { session, selection, hasUnseenReply, onOpenActionMenu } = props
     const lifecycleState = session.lifecycleState
+    const team = session.team
+    const isMemberSession = team?.sessionRole === 'member'
     const selected = selection.selectedSessionId === session.id
 
     const longPressHandlers = useLongPress({
@@ -51,9 +59,21 @@ export const SessionListItem = memo(function SessionListItem(props: SessionListI
         threshold: SESSION_ACTION_LONG_PRESS_MS
     })
 
-    const title = getSessionTitle(session)
-    const projectLabel = getSessionProjectLabel(session)
+    const title = getSessionListTitle(session)
+    const contextLabel = isMemberSession
+        ? t('session.team.managerSource', { manager: getSessionListContextLabel(session) })
+        : getSessionListContextLabel(session)
     const relativeTime = formatRelativeTime(session.updatedAt, t)
+    const teamChips = useMemo(() => {
+        if (!isMemberSession || !team) {
+            return []
+        }
+
+        return [
+            t(getMembershipStateLabelKey(team.membershipState)),
+            t(getControlOwnerLabelKey(team.controlOwner))
+        ]
+    }, [isMemberSession, t, team])
     const presentation = useMemo(() => {
         return getSessionStatePresentation({
             lifecycleState,
@@ -110,9 +130,18 @@ export const SessionListItem = memo(function SessionListItem(props: SessionListI
                             {title}
                         </div>
                         <div className={`${SESSION_METADATA_BLOCK_CLASS_NAME} ${SESSION_META_ROW_CLASS_NAME}`}>
-                            <span className="truncate">{projectLabel}</span>
+                            <span className="truncate">{contextLabel}</span>
                             {relativeTime ? <span>{relativeTime}</span> : null}
                         </div>
+                        {teamChips.length > 0 ? (
+                            <div className={SESSION_TEAM_CHIP_ROW_CLASS_NAME}>
+                                {teamChips.map((chip) => (
+                                    <span key={chip} className={SESSION_TEAM_CHIP_CLASS_NAME}>
+                                        {chip}
+                                    </span>
+                                ))}
+                            </div>
+                        ) : null}
                     </div>
                 </div>
 
@@ -133,4 +162,23 @@ function getCardToneClassName(cardClassName: string, selected: boolean): string 
     }
 
     return `${cardClassName} ring-2 ring-[color:color-mix(in_srgb,var(--ds-brand)_18%,transparent)] shadow-[var(--ds-shadow-card)]`
+}
+
+function getMembershipStateLabelKey(membershipState: TeamMemberRecord['membershipState'] | undefined): string {
+    switch (membershipState) {
+        case 'archived':
+            return 'session.team.membership.archived'
+        case 'removed':
+            return 'session.team.membership.removed'
+        case 'superseded':
+            return 'session.team.membership.superseded'
+        default:
+            return 'session.team.membership.active'
+    }
+}
+
+function getControlOwnerLabelKey(controlOwner: TeamControlOwner | undefined): string {
+    return controlOwner === 'user'
+        ? 'session.team.control.user'
+        : 'session.team.control.manager'
 }

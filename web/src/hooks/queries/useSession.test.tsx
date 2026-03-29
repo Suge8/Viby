@@ -174,8 +174,7 @@ describe('useSession', () => {
             modelReasoningEffort: 'high',
             permissionMode: 'default',
             collaborationMode: 'default',
-            todos: undefined,
-            teamState: undefined
+            todos: undefined
         })
 
         const api = {

@@ -57,8 +57,7 @@ function createSession(): Session {
         modelReasoningEffort: 'high',
         permissionMode: 'safe-yolo',
         collaborationMode: 'plan',
-        todos: undefined,
-        teamState: undefined
+        todos: undefined
     }
 }
 

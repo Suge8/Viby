@@ -1,4 +1,3 @@
-import type { SessionSummary } from '@/types/api'
 import { SessionListAnimatedItem } from '@/components/session-list/SessionListAnimatedItem'
 import type {
     SessionListManagerGroupState,
@@ -24,7 +23,8 @@ type SessionMainViewProps = {
 }
 
 type SessionArchiveViewProps = {
-    sessions: readonly SessionSummary[]
+    rows: readonly SessionListRow[]
+    managerGroups: SessionListManagerGroupState
     renderContext: SessionListRenderContext
     emptyLabel: string
 }
@@ -58,18 +58,10 @@ export function SessionMainView(props: SessionMainViewProps): React.JSX.Element 
 export function SessionArchiveView(props: SessionArchiveViewProps): React.JSX.Element {
     return (
         <div className={SESSION_LIST_ARCHIVE_STACK_CLASS_NAME}>
-            {props.sessions.length === 0 ? (
+            {props.rows.length === 0 ? (
                 <SessionListEmptyState label={props.emptyLabel} />
             ) : (
-                props.sessions.map((session) => (
-                    <SessionListAnimatedItem
-                        key={session.id}
-                        session={session}
-                        hasUnseenReply={props.renderContext.hasUnseenReply(session)}
-                        selection={props.renderContext.selection}
-                        onOpenActionMenu={props.renderContext.onOpenActionMenu}
-                    />
-                ))
+                props.rows.map((row) => renderSessionListRow(row, props.renderContext, props.managerGroups))
             )}
         </div>
     )

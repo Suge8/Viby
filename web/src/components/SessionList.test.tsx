@@ -51,7 +51,7 @@ vi.mock('@/components/ui/ConfirmDialog', () => ({
 
 vi.mock('@/lib/use-translation', () => ({
     useTranslation: () => ({
-        t: (key: string, values?: Record<string, number>) => {
+        t: (key: string, values?: Record<string, string | number>) => {
             if (key === 'sessions.summary' && values) {
                 return `${values.open}/${values.archived}`
             }
@@ -95,6 +95,20 @@ vi.mock('@/lib/use-translation', () => ({
                     return 'New Session'
                 case 'session.attention.newReply':
                     return 'Reply'
+                case 'session.team.managerSource':
+                    return `Manager: ${values?.manager ?? 'Manager'}`
+                case 'session.team.control.manager':
+                    return 'Manager control'
+                case 'session.team.control.user':
+                    return 'User takeover'
+                case 'session.team.membership.active':
+                    return 'Active member'
+                case 'session.team.membership.archived':
+                    return 'Archived member'
+                case 'session.team.membership.removed':
+                    return 'Removed member'
+                case 'session.team.membership.superseded':
+                    return 'Superseded member'
                 case 'session.state.processing':
                     return 'Working'
                 case 'session.state.awaitingInput':
@@ -543,6 +557,7 @@ describe('SessionList', () => {
                         managerSessionId: 'manager-1',
                         managerTitle: 'Manager Alpha',
                         memberRole: 'implementer',
+                        memberRoleName: 'Mobile Implementer',
                         memberRevision: 1,
                         membershipState: 'active',
                         controlOwner: 'manager',
@@ -575,6 +590,7 @@ describe('SessionList', () => {
                         managerSessionId: 'manager-1',
                         managerTitle: 'Manager Alpha',
                         memberRole: 'reviewer',
+                        memberRoleName: 'Release Reviewer',
                         memberRevision: 1,
                         membershipState: 'active',
                         controlOwner: 'manager',
@@ -594,12 +610,15 @@ describe('SessionList', () => {
         expect(screen.getByText('1 running')).toBeInTheDocument()
         expect(screen.getByText('1 blocked')).toBeInTheDocument()
         expect(screen.getByText('1 history')).toBeInTheDocument()
-        expect(screen.queryByText('Implement API')).not.toBeInTheDocument()
+        expect(screen.queryByText('Mobile Implementer · r1')).not.toBeInTheDocument()
 
         screen.getByRole('button', { name: 'Show 2 members' }).click()
 
-        expect(await screen.findByText('Implement API')).toBeInTheDocument()
-        expect(screen.getByText('Review patch')).toBeInTheDocument()
+        expect(await screen.findByText('Mobile Implementer · r1')).toBeInTheDocument()
+        expect(screen.getByText('Release Reviewer · r1')).toBeInTheDocument()
+        expect(screen.getAllByText('Manager: Manager Alpha').length).toBeGreaterThan(0)
+        expect(screen.getAllByText('Active member').length).toBeGreaterThan(0)
+        expect(screen.getAllByText('Manager control').length).toBeGreaterThan(0)
     })
 
     it('auto-expands the owning manager group when a member session is selected', () => {
@@ -658,6 +677,7 @@ describe('SessionList', () => {
                         managerSessionId: 'manager-selected',
                         managerTitle: 'Manager Selected',
                         memberRole: 'implementer',
+                        memberRoleName: 'Mobile Implementer',
                         memberRevision: 1,
                         membershipState: 'active',
                         controlOwner: 'manager',
@@ -671,8 +691,270 @@ describe('SessionList', () => {
             ]
         })
 
-        expect(screen.getByText('Selected member')).toBeInTheDocument()
+        expect(screen.getByText('Mobile Implementer · r1')).toBeInTheDocument()
         expect(screen.queryByRole('button', { name: 'Show 1 members' })).not.toBeInTheDocument()
+    })
+
+    it('folds archived team sessions under their manager row and auto-expands the selected archived member', async () => {
+        const now = Date.now()
+        const sessions = [
+            createSessionSummary({
+                id: 'manager-archived',
+                active: false,
+                thinking: false,
+                activeAt: now - 3_000,
+                updatedAt: now - 1_000,
+                latestActivityAt: now - 1_000,
+                latestActivityKind: 'ready',
+                latestCompletedReplyAt: now - 1_000,
+                lifecycleState: 'archived',
+                lifecycleStateSince: now - 1_000,
+                metadata: {
+                    path: '/Users/sugeh/Project/Viby',
+                    flavor: 'codex',
+                    summary: { text: 'Archived Manager', updatedAt: now - 1_000 }
+                },
+                team: {
+                    projectId: 'project-archived',
+                    sessionRole: 'manager',
+                    managerSessionId: 'manager-archived',
+                    managerTitle: 'Archived Manager',
+                    projectStatus: 'archived',
+                    activeMemberCount: 0,
+                    archivedMemberCount: 2,
+                    runningMemberCount: 0,
+                    blockedTaskCount: 0
+                }
+            }),
+            createSessionSummary({
+                id: 'member-archived-1',
+                active: false,
+                thinking: false,
+                activeAt: now - 4_000,
+                updatedAt: now - 2_000,
+                latestActivityAt: now - 2_000,
+                latestActivityKind: 'ready',
+                latestCompletedReplyAt: now - 2_000,
+                lifecycleState: 'archived',
+                lifecycleStateSince: now - 2_000,
+                metadata: {
+                    path: '/Users/sugeh/Project/Viby',
+                    flavor: 'claude',
+                    summary: { text: 'Archived implementer', updatedAt: now - 2_000 }
+                },
+                team: {
+                    projectId: 'project-archived',
+                    sessionRole: 'member',
+                    managerSessionId: 'manager-archived',
+                    managerTitle: 'Archived Manager',
+                    memberRole: 'implementer',
+                    memberRoleName: 'Archived Implementer',
+                    memberRevision: 1,
+                    membershipState: 'archived',
+                    controlOwner: 'manager',
+                    projectStatus: 'archived',
+                    activeMemberCount: 0,
+                    archivedMemberCount: 2,
+                    runningMemberCount: 0,
+                    blockedTaskCount: 0
+                }
+            }),
+            createSessionSummary({
+                id: 'member-archived-2',
+                active: false,
+                thinking: false,
+                activeAt: now - 5_000,
+                updatedAt: now - 3_000,
+                latestActivityAt: now - 3_000,
+                latestActivityKind: 'ready',
+                latestCompletedReplyAt: now - 3_000,
+                lifecycleState: 'archived',
+                lifecycleStateSince: now - 3_000,
+                metadata: {
+                    path: '/Users/sugeh/Project/Viby',
+                    flavor: 'claude',
+                    summary: { text: 'Archived reviewer', updatedAt: now - 3_000 }
+                },
+                team: {
+                    projectId: 'project-archived',
+                    sessionRole: 'member',
+                    managerSessionId: 'manager-archived',
+                    managerTitle: 'Archived Manager',
+                    memberRole: 'reviewer',
+                    memberRoleName: 'Archived Reviewer',
+                    memberRevision: 1,
+                    membershipState: 'archived',
+                    controlOwner: 'manager',
+                    projectStatus: 'archived',
+                    activeMemberCount: 0,
+                    archivedMemberCount: 2,
+                    runningMemberCount: 0,
+                    blockedTaskCount: 0
+                }
+            })
+        ]
+        const { rerender } = renderSessionList({
+            selectedSessionId: 'manager-archived',
+            sessions
+        })
+
+        expect(screen.getByText('Archived Manager')).toBeInTheDocument()
+        expect(screen.getByText('Project archived')).toBeInTheDocument()
+        expect(screen.getByText('2 history')).toBeInTheDocument()
+        expect(screen.queryByText('Archived Implementer · r1')).not.toBeInTheDocument()
+
+        screen.getByRole('button', { name: 'Show 2 members' }).click()
+
+        expect(await screen.findByText('Archived Implementer · r1')).toBeInTheDocument()
+        expect(await screen.findByText('Archived Reviewer · r1')).toBeInTheDocument()
+
+        rerender(
+            <I18nProvider>
+                <SessionList
+                    sessions={sessions}
+                    api={null}
+                    selectedSessionId="member-archived-1"
+                    actions={{
+                        onSelect: vi.fn(),
+                        onNewSession: vi.fn()
+                    }}
+                />
+            </I18nProvider>
+        )
+
+        expect(await screen.findByText('Archived Implementer · r1')).toBeInTheDocument()
+        expect(await screen.findByText('Archived Reviewer · r1')).toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Show 2 members' })).not.toBeInTheDocument()
+    })
+
+
+    it('rerenders member row title when the authoritative custom role name changes without a timestamp bump', () => {
+        const now = Date.now()
+        const baseMember = createSessionSummary({
+            id: 'member-role-name',
+            active: true,
+            thinking: false,
+            activeAt: now,
+            updatedAt: now,
+            latestActivityAt: now,
+            latestActivityKind: 'ready',
+            latestCompletedReplyAt: now,
+            lifecycleState: 'running',
+            lifecycleStateSince: now,
+            metadata: {
+                path: '/Users/sugeh/Project/Viby',
+                flavor: 'claude',
+                summary: { text: 'Old member label', updatedAt: now }
+            },
+            team: {
+                projectId: 'project-role-name',
+                sessionRole: 'member',
+                managerSessionId: 'manager-role-name',
+                managerTitle: 'Manager Role Name',
+                memberRole: 'debugger',
+                memberRoleName: 'Mobile Debugger',
+                memberRevision: 2,
+                membershipState: 'active',
+                controlOwner: 'manager',
+                projectStatus: 'active',
+                activeMemberCount: 1,
+                archivedMemberCount: 0,
+                runningMemberCount: 1,
+                blockedTaskCount: 0
+            }
+        })
+        const { rerender } = renderSessionList({ sessions: [baseMember] })
+
+        expect(screen.getByText('Mobile Debugger · r2')).toBeInTheDocument()
+        expect(screen.queryByText('Release Debugger · r2')).not.toBeInTheDocument()
+
+        rerender(
+            <I18nProvider>
+                <SessionList
+                    sessions={[{
+                        ...baseMember,
+                        team: {
+                            ...baseMember.team!,
+                            memberRoleName: 'Release Debugger'
+                        }
+                    }]}
+                    api={null}
+                    selectedSessionId={null}
+                    actions={{
+                        onSelect: vi.fn(),
+                        onNewSession: vi.fn()
+                    }}
+                />
+            </I18nProvider>
+        )
+
+        expect(screen.getByText('Release Debugger · r2')).toBeInTheDocument()
+        expect(screen.queryByText('Mobile Debugger · r2')).not.toBeInTheDocument()
+    })
+
+    it('rerenders member row presentation when team control metadata changes without a timestamp bump', () => {
+        const now = Date.now()
+        const baseMember = createSessionSummary({
+            id: 'member-rerender',
+            active: true,
+            thinking: false,
+            activeAt: now,
+            updatedAt: now,
+            latestActivityAt: now,
+            latestActivityKind: 'ready',
+            latestCompletedReplyAt: now,
+            lifecycleState: 'running',
+            lifecycleStateSince: now,
+            metadata: {
+                path: '/Users/sugeh/Project/Viby',
+                flavor: 'claude',
+                summary: { text: 'Old member label', updatedAt: now }
+            },
+            team: {
+                projectId: 'project-rerender',
+                sessionRole: 'member',
+                managerSessionId: 'manager-rerender',
+                managerTitle: 'Manager Rerender',
+                memberRole: 'debugger',
+                memberRevision: 2,
+                membershipState: 'active',
+                controlOwner: 'manager',
+                projectStatus: 'active',
+                activeMemberCount: 1,
+                archivedMemberCount: 0,
+                runningMemberCount: 1,
+                blockedTaskCount: 0
+            }
+        })
+        const { rerender } = renderSessionList({
+            sessions: [baseMember]
+        })
+
+        expect(screen.getByText('Manager control')).toBeInTheDocument()
+        expect(screen.queryByText('User takeover')).not.toBeInTheDocument()
+
+        rerender(
+            <I18nProvider>
+                <SessionList
+                    sessions={[{
+                        ...baseMember,
+                        team: {
+                            ...baseMember.team!,
+                            controlOwner: 'user'
+                        }
+                    }]}
+                    api={null}
+                    selectedSessionId={null}
+                    actions={{
+                        onSelect: vi.fn(),
+                        onNewSession: vi.fn()
+                    }}
+                />
+            </I18nProvider>
+        )
+
+        expect(screen.getByText('User takeover')).toBeInTheDocument()
+        expect(screen.queryByText('Manager control')).not.toBeInTheDocument()
     })
 
     it('shows a new reply indicator only for sessions whose activity is newer than the stored seen timestamp', () => {

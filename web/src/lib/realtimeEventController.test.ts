@@ -67,7 +67,6 @@ function createSessionRecord(overrides: Partial<Session> & Pick<Session, 'id'>):
         thinking: false,
         thinkingAt: 1_000,
         todos: undefined,
-        teamState: undefined,
         model: null,
         modelReasoningEffort: null,
         permissionMode: undefined,
@@ -243,6 +242,27 @@ describe('createRealtimeEventController', () => {
             active: false,
             lifecycleState: 'archived',
             lifecycleStateSince: 3_100
+        })
+    })
+
+    it('invalidates team project and history queries from the dedicated team realtime owner', async () => {
+        const queryClient = new QueryClient()
+        const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
+        const controller = createRealtimeEventController({
+            queryClient,
+            onEvent: vi.fn()
+        })
+
+        controller.handleEvent({
+            type: 'team-project-updated',
+            projectId: 'project-1',
+            managerSessionId: 'manager-session-1',
+            affectedSessionIds: ['manager-session-1', 'member-session-1']
+        } as SyncEvent)
+
+        await waitFor(() => {
+            expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: queryKeys.teamProject('project-1') })
+            expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: queryKeys.teamProjectHistory('project-1') })
         })
     })
 

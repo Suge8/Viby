@@ -12,13 +12,22 @@ import {
     SessionMainView
 } from '@/components/session-list/SessionListViews'
 import type { SessionListTab } from '@/components/session-list/sessionListUtils'
-import { buildSessionSections } from '@/components/session-list/sessionListUtils'
 import {
-    DEFAULT_FLOATING_ACTION_MENU_ANCHOR_POINT,
-    type FloatingActionMenuAnchorPoint
-} from '@/components/ui/FloatingActionMenu.contract'
+    buildSessionRows,
+    buildSessionSections
+} from '@/components/session-list/sessionListUtils'
+import type { FloatingActionMenuAnchorPoint } from '@/components/ui/FloatingActionMenu.contract'
 import { useSessionAttention } from '@/hooks/useSessionAttention'
 import { useTranslation } from '@/lib/use-translation'
+import {
+    createClosedActionTarget,
+    deriveSessionListData,
+    resolveInitialActiveTab,
+    useAutoExpandSelectedMemberGroup,
+    useSelectedSessionTabSync,
+    type ExpandedManagerGroups,
+    type SessionActionTarget
+} from '@/components/session-list/sessionListState'
 
 const SESSION_LIST_ROOT_CLASS_NAME = 'mx-auto flex w-full max-w-content flex-col'
 const SESSION_LIST_STICKY_CONTROLS_CLASS_NAME =
@@ -38,18 +47,6 @@ type SessionListProps = {
     selectedSessionId?: string | null
 }
 
-type SessionActionTarget = {
-    sessionId: string | null
-    anchorPoint: FloatingActionMenuAnchorPoint
-}
-
-type SessionListDerivedData = {
-    archivedSessions: SessionSummary[]
-    mainSessions: SessionSummary[]
-    selectedSession: SessionSummary | null
-    actionSession: SessionSummary | null
-}
-
 function loadSessionListActionControllerModule() {
     return import('@/components/session-list/SessionListActionController')
 }
@@ -59,64 +56,12 @@ const SessionListActionController = lazy(async () => {
     return { default: module.SessionListActionController }
 })
 
-function createClosedActionTarget(): SessionActionTarget {
-    return {
-        sessionId: null,
-        anchorPoint: DEFAULT_FLOATING_ACTION_MENU_ANCHOR_POINT
-    }
-}
-
-function resolveInitialActiveTab(
-    sessions: readonly SessionSummary[],
-    selectedSessionId: string | null
-): SessionListTab {
-    if (!selectedSessionId) {
-        return 'sessions'
-    }
-
-    const selectedSession = sessions.find((session) => session.id === selectedSessionId)
-    return selectedSession?.lifecycleState === 'archived' ? 'archived' : 'sessions'
-}
-
-function deriveSessionListData(
-    sessions: readonly SessionSummary[],
-    selectedSessionId: string | null,
-    actionSessionId: string | null
-): SessionListDerivedData {
-    const archivedSessions: SessionSummary[] = []
-    const mainSessions: SessionSummary[] = []
-    let selectedSession: SessionSummary | null = null
-    let actionSession: SessionSummary | null = null
-
-    for (const session of sessions) {
-        if (session.lifecycleState === 'archived') {
-            archivedSessions.push(session)
-        } else {
-            mainSessions.push(session)
-        }
-
-        if (session.id === selectedSessionId) {
-            selectedSession = session
-        }
-        if (session.id === actionSessionId) {
-            actionSession = session
-        }
-    }
-
-    return {
-        archivedSessions,
-        mainSessions,
-        selectedSession,
-        actionSession
-    }
-}
-
 function SessionListComponent(props: SessionListProps): React.JSX.Element {
     const { t } = useTranslation()
     const { api, actions, selectedSessionId = null, sessions } = props
     const [activeTab, setActiveTab] = useState<SessionListTab>(() => resolveInitialActiveTab(sessions, selectedSessionId))
     const [actionTarget, setActionTarget] = useState<SessionActionTarget>(createClosedActionTarget)
-    const [expandedManagerGroups, setExpandedManagerGroups] = useState<Record<string, boolean>>({})
+    const [expandedManagerGroups, setExpandedManagerGroups] = useState<ExpandedManagerGroups>({})
     const {
         archivedSessions,
         mainSessions,
@@ -126,6 +71,7 @@ function SessionListComponent(props: SessionListProps): React.JSX.Element {
         return deriveSessionListData(sessions, selectedSessionId, actionTarget.sessionId)
     }, [actionTarget.sessionId, selectedSessionId, sessions])
     const sections = useMemo(() => buildSessionSections(mainSessions), [mainSessions])
+    const archivedRows = useMemo(() => buildSessionRows(archivedSessions), [archivedSessions])
     const { hasUnseenReply } = useSessionAttention(sessions, selectedSessionId)
     const previousSelectedSessionIdRef = useRef(selectedSessionId)
     const previousSelectedLifecycleStateRef = useRef(selectedSession?.lifecycleState ?? null)
@@ -214,7 +160,8 @@ function SessionListComponent(props: SessionListProps): React.JSX.Element {
                 />
             ) : (
                 <SessionArchiveView
-                    sessions={archivedSessions}
+                    rows={archivedRows}
+                    managerGroups={managerGroups}
                     renderContext={renderContext}
                     emptyLabel={t('sessions.empty.archived')}
                 />
@@ -236,69 +183,6 @@ function SessionListComponent(props: SessionListProps): React.JSX.Element {
             ) : null}
         </div>
     )
-}
-
-function useSelectedSessionTabSync(
-    selectedSession: SessionSummary | null,
-    selectedSessionId: string | null,
-    setActiveTab: React.Dispatch<React.SetStateAction<SessionListTab>>,
-    previousSelectedSessionIdRef: React.MutableRefObject<string | null>,
-    previousSelectedLifecycleStateRef: React.MutableRefObject<SessionSummary['lifecycleState'] | null>
-): void {
-    useEffect(() => {
-        const previousSelectedSessionId = previousSelectedSessionIdRef.current
-        previousSelectedSessionIdRef.current = selectedSessionId
-
-        if (previousSelectedSessionId === selectedSessionId) {
-            return
-        }
-
-        if (selectedSessionId === selectedSession?.id && selectedSession?.lifecycleState === 'archived') {
-            setActiveTab('archived')
-        }
-    }, [previousSelectedSessionIdRef, selectedSession, selectedSessionId, setActiveTab])
-
-    useEffect(() => {
-        const currentLifecycleState = selectedSession?.lifecycleState ?? null
-        const previousLifecycleState = previousSelectedLifecycleStateRef.current
-
-        previousSelectedLifecycleStateRef.current = currentLifecycleState
-
-        if (previousLifecycleState !== 'archived') {
-            return
-        }
-
-        if (currentLifecycleState && currentLifecycleState !== 'archived') {
-            setActiveTab('sessions')
-        }
-    }, [previousSelectedLifecycleStateRef, selectedSession, setActiveTab])
-}
-
-function useAutoExpandSelectedMemberGroup(
-    selectedSession: SessionSummary | null,
-    setExpandedManagerGroups: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
-): void {
-    useEffect(() => {
-        if (!selectedSession || selectedSession.lifecycleState === 'archived') {
-            return
-        }
-
-        if (selectedSession.team?.sessionRole !== 'member') {
-            return
-        }
-
-        const managerSessionId = selectedSession.team.managerSessionId
-        setExpandedManagerGroups((current) => {
-            if (current[managerSessionId]) {
-                return current
-            }
-
-            return {
-                ...current,
-                [managerSessionId]: true
-            }
-        })
-    }, [selectedSession, setExpandedManagerGroups])
 }
 
 export const SessionList = memo(SessionListComponent)

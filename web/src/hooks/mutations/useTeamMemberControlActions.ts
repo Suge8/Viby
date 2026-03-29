@@ -1,5 +1,9 @@
 import { useCallback } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import {
+    useMutation,
+    useQueryClient,
+    type UseMutationResult
+} from '@tanstack/react-query'
 import type { ApiClient } from '@/api/client'
 import type { Session } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
@@ -14,25 +18,66 @@ type TeamMemberActionTarget = {
     managerSessionId: string
 }
 
+type TeamMemberInterjectInput = {
+    text: string
+    localId?: string | null
+}
+
+type TeamMemberMutationRunner<TInput> = (
+    api: ApiClient,
+    target: TeamMemberActionTarget,
+    input: TInput
+) => Promise<Session>
+
 function invalidateTeamQueries(
     queryClient: ReturnType<typeof useQueryClient>,
     target: TeamMemberActionTarget
-): Promise<unknown[]> {
+): Promise<void> {
     return Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.teamProject(target.projectId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.teamProjectHistory(target.projectId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.messages(target.sessionId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.session(target.sessionId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.messages(target.managerSessionId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.session(target.managerSessionId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
-    ])
+    ]).then(() => undefined)
+}
+
+function requireTeamMemberActionDeps(
+    api: ApiClient | null,
+    target: TeamMemberActionTarget | null
+): {
+    api: ApiClient
+    target: TeamMemberActionTarget
+} {
+    if (!api || !target) {
+        throw new Error('Team member unavailable')
+    }
+
+    return { api, target }
+}
+
+function useTeamMemberMutation<TInput>(
+    api: ApiClient | null,
+    target: TeamMemberActionTarget | null,
+    onSuccess: (session: Session) => Promise<void>,
+    run: TeamMemberMutationRunner<TInput>
+): UseMutationResult<Session, Error, TInput> {
+    return useMutation({
+        mutationFn: async (input: TInput) => {
+            const deps = requireTeamMemberActionDeps(api, target)
+            return await run(deps.api, deps.target, input)
+        },
+        onSuccess
+    })
 }
 
 export function useTeamMemberControlActions(
     api: ApiClient | null,
     target: TeamMemberActionTarget | null
 ): {
-    interject: (input: { text: string; localId?: string | null }) => Promise<Session>
+    interject: (input: TeamMemberInterjectInput) => Promise<Session>
     takeOver: () => Promise<Session>
     returnToManager: () => Promise<Session>
     isPending: boolean
@@ -40,66 +85,54 @@ export function useTeamMemberControlActions(
 } {
     const { t } = useTranslation()
     const queryClient = useQueryClient()
-
-    const interjectMutation = useMutation({
-        mutationFn: async (input: { text: string; localId?: string | null }) => {
-            if (!api || !target) {
-                throw new Error('Team member unavailable')
-            }
-            return await api.interjectTeamMember(target.memberId, input)
-        },
-        onSuccess: async (session) => {
-            if (!target) {
-                return
-            }
-            writeSessionToQueryCache(queryClient, session)
-            await invalidateTeamQueries(queryClient, target)
+    const handleSuccess = useCallback(async (session: Session) => {
+        if (!target) {
+            return
         }
-    })
 
-    const takeOverMutation = useMutation({
-        mutationFn: async () => {
-            if (!api || !target) {
-                throw new Error('Team member unavailable')
-            }
-            return await api.takeOverTeamMember(target.memberId)
-        },
-        onSuccess: async (session) => {
-            if (!target) {
-                return
-            }
-            writeSessionToQueryCache(queryClient, session)
-            await invalidateTeamQueries(queryClient, target)
+        writeSessionToQueryCache(queryClient, session)
+        await invalidateTeamQueries(queryClient, target)
+    }, [queryClient, target])
+
+    const interjectMutation = useTeamMemberMutation(
+        api,
+        target,
+        handleSuccess,
+        async (client, resolvedTarget, input: TeamMemberInterjectInput) => {
+            return await client.interjectTeamMember(resolvedTarget.memberId, input)
         }
-    })
-
-    const returnMutation = useMutation({
-        mutationFn: async () => {
-            if (!api || !target) {
-                throw new Error('Team member unavailable')
-            }
-            return await api.returnTeamMember(target.memberId)
-        },
-        onSuccess: async (session) => {
-            if (!target) {
-                return
-            }
-            writeSessionToQueryCache(queryClient, session)
-            await invalidateTeamQueries(queryClient, target)
+    )
+    const takeOverMutation = useTeamMemberMutation(
+        api,
+        target,
+        handleSuccess,
+        async (client, resolvedTarget, _input: void) => {
+            return await client.takeOverTeamMember(resolvedTarget.memberId)
         }
-    })
+    )
+    const returnMutation = useTeamMemberMutation(
+        api,
+        target,
+        handleSuccess,
+        async (client, resolvedTarget, _input: void) => {
+            return await client.returnTeamMember(resolvedTarget.memberId)
+        }
+    )
+    const interjectMutateAsync = interjectMutation.mutateAsync
+    const takeOverMutateAsync = takeOverMutation.mutateAsync
+    const returnMutateAsync = returnMutation.mutateAsync
 
-    const interject = useCallback(async (input: { text: string; localId?: string | null }) => {
-        return await interjectMutation.mutateAsync(input)
-    }, [interjectMutation.mutateAsync])
+    const interject = useCallback(async (input: TeamMemberInterjectInput) => {
+        return await interjectMutateAsync(input)
+    }, [interjectMutateAsync])
 
     const takeOver = useCallback(async () => {
-        return await takeOverMutation.mutateAsync()
-    }, [takeOverMutation.mutateAsync])
+        return await takeOverMutateAsync(undefined)
+    }, [takeOverMutateAsync])
 
     const returnToManager = useCallback(async () => {
-        return await returnMutation.mutateAsync()
-    }, [returnMutation.mutateAsync])
+        return await returnMutateAsync(undefined)
+    }, [returnMutateAsync])
 
     const mutationError = interjectMutation.error
         ?? takeOverMutation.error

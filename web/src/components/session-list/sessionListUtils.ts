@@ -150,7 +150,7 @@ export function buildSessionSections(sessions: readonly SessionSummary[]): Sessi
     return sections
 }
 
-function buildSessionRows(sessions: readonly SessionSummary[]): SessionListRow[] {
+export function buildSessionRows(sessions: readonly SessionSummary[]): SessionListRow[] {
     const rows: MutableSessionListRow[] = []
     const managerGroupSlots = new Map<string, MutableManagerGroupSlot>()
 

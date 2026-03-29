@@ -30,7 +30,12 @@ import {
 import { removeSessionClientState, writeSessionToQueryCache } from '@/lib/sessionQueryCache'
 export type ToastEvent = Extract<SyncEvent, { type: 'toast' }>
 const INVALIDATION_BATCH_MS = 16
-type PendingInvalidations = { sessions: boolean; machines: boolean; sessionIds: Set<string> }
+type PendingInvalidations = {
+    sessions: boolean
+    machines: boolean
+    sessionIds: Set<string>
+    teamProjectIds: Set<string>
+}
 type RealtimeEventControllerOptions = {
     queryClient: QueryClient
     onEvent: (event: SyncEvent) => void
@@ -44,21 +49,29 @@ export function createRealtimeEventController(options: RealtimeEventControllerOp
     const pendingInvalidations: PendingInvalidations = {
         sessions: false,
         machines: false,
-        sessionIds: new Set<string>()
+        sessionIds: new Set<string>(),
+        teamProjectIds: new Set<string>()
     }
 
     function flushInvalidations(): void {
-        if (!pendingInvalidations.sessions && !pendingInvalidations.machines && pendingInvalidations.sessionIds.size === 0) {
+        if (
+            !pendingInvalidations.sessions
+            && !pendingInvalidations.machines
+            && pendingInvalidations.sessionIds.size === 0
+            && pendingInvalidations.teamProjectIds.size === 0
+        ) {
             return
         }
 
         const shouldInvalidateSessions = pendingInvalidations.sessions
         const shouldInvalidateMachines = pendingInvalidations.machines
         const sessionIds = Array.from(pendingInvalidations.sessionIds)
+        const teamProjectIds = Array.from(pendingInvalidations.teamProjectIds)
 
         pendingInvalidations.sessions = false
         pendingInvalidations.machines = false
         pendingInvalidations.sessionIds.clear()
+        pendingInvalidations.teamProjectIds.clear()
 
         const tasks: Array<Promise<unknown>> = []
         if (shouldInvalidateSessions) {
@@ -66,6 +79,10 @@ export function createRealtimeEventController(options: RealtimeEventControllerOp
         }
         for (const sessionId of sessionIds) {
             tasks.push(options.queryClient.invalidateQueries({ queryKey: queryKeys.session(sessionId) }))
+        }
+        for (const projectId of teamProjectIds) {
+            tasks.push(options.queryClient.invalidateQueries({ queryKey: queryKeys.teamProject(projectId) }))
+            tasks.push(options.queryClient.invalidateQueries({ queryKey: queryKeys.teamProjectHistory(projectId) }))
         }
         if (shouldInvalidateMachines) {
             tasks.push(options.queryClient.invalidateQueries({ queryKey: queryKeys.machines }))
@@ -98,6 +115,11 @@ export function createRealtimeEventController(options: RealtimeEventControllerOp
 
     function queueMachinesInvalidation(): void {
         pendingInvalidations.machines = true
+        scheduleInvalidationFlush()
+    }
+
+    function queueTeamProjectInvalidation(projectId: string): void {
+        pendingInvalidations.teamProjectIds.add(projectId)
         scheduleInvalidationFlush()
     }
 
@@ -271,6 +293,10 @@ export function createRealtimeEventController(options: RealtimeEventControllerOp
             }
         }
 
+        if (event.type === 'team-project-updated') {
+            queueTeamProjectInvalidation(event.projectId)
+        }
+
         options.onEvent(event)
     }
 
@@ -282,6 +308,7 @@ export function createRealtimeEventController(options: RealtimeEventControllerOp
         pendingInvalidations.sessions = false
         pendingInvalidations.machines = false
         pendingInvalidations.sessionIds.clear()
+        pendingInvalidations.teamProjectIds.clear()
     }
 
     return {

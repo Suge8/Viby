@@ -102,8 +102,7 @@ export function createSessionSeedFromSummary(summary: SessionSummary): Session {
         modelReasoningEffort: summary.modelReasoningEffort,
         permissionMode: summary.permissionMode,
         collaborationMode: summary.collaborationMode,
-        todos: undefined,
-        teamState: undefined
+        todos: undefined
     }
 }
 

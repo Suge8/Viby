@@ -9,6 +9,9 @@ export function getSessionTabButtonClassName(active: boolean): string {
 }
 
 export function areSessionListRowsEquivalent(previous: SessionSummary, next: SessionSummary): boolean {
+    const previousTeam = previous.team
+    const nextTeam = next.team
+
     return previous.id === next.id
         && previous.updatedAt === next.updatedAt
         && previous.lifecycleState === next.lifecycleState
@@ -25,4 +28,17 @@ export function areSessionListRowsEquivalent(previous: SessionSummary, next: Ses
         && previous.metadata?.flavor === next.metadata?.flavor
         && previous.metadata?.worktree?.branch === next.metadata?.worktree?.branch
         && previous.metadata?.worktree?.basePath === next.metadata?.worktree?.basePath
+        && previousTeam?.sessionRole === nextTeam?.sessionRole
+        && previousTeam?.managerSessionId === nextTeam?.managerSessionId
+        && previousTeam?.managerTitle === nextTeam?.managerTitle
+        && previousTeam?.memberRole === nextTeam?.memberRole
+        && previousTeam?.memberRoleName === nextTeam?.memberRoleName
+        && previousTeam?.memberRevision === nextTeam?.memberRevision
+        && previousTeam?.controlOwner === nextTeam?.controlOwner
+        && previousTeam?.membershipState === nextTeam?.membershipState
+        && previousTeam?.projectStatus === nextTeam?.projectStatus
+        && previousTeam?.activeMemberCount === nextTeam?.activeMemberCount
+        && previousTeam?.archivedMemberCount === nextTeam?.archivedMemberCount
+        && previousTeam?.runningMemberCount === nextTeam?.runningMemberCount
+        && previousTeam?.blockedTaskCount === nextTeam?.blockedTaskCount
 }

@@ -27,8 +27,7 @@ function createSession() {
         modelReasoningEffort: null,
         permissionMode: 'default',
         collaborationMode: 'default',
-        todos: undefined,
-        teamState: undefined
+        todos: undefined
     } as const
 }
 
