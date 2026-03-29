@@ -38,6 +38,11 @@ export function getCodexThreadMode(session: CodexSession, fallback?: EnhancedMod
     };
 }
 
+function shouldAttachSessionScopedVibyMcp(session: CodexSession): boolean {
+    const teamContext = session.client.getTeamContextSnapshot?.()
+    return typeof teamContext?.projectId === 'string' && teamContext.projectId.length > 0
+}
+
 export async function ensureCodexThreadStarted(args: {
     session: CodexSession
     appServerClient: CodexAppServerClient
@@ -45,10 +50,13 @@ export async function ensureCodexThreadStarted(args: {
     abortSignal: AbortSignal
     onModelResolved: (value: unknown) => void
 }): Promise<string> {
+    const mcpServers = shouldAttachSessionScopedVibyMcp(args.session)
+        ? (await args.session.ensureRemoteBridge()).mcpServers
+        : EMPTY_MCP_SERVERS
     const threadParams = buildThreadStartParams({
         cwd: args.session.path,
         mode: args.mode,
-        mcpServers: EMPTY_MCP_SERVERS,
+        mcpServers,
         cliOverrides: args.session.codexCliOverrides,
         developerInstructions: args.mode.developerInstructions
     });

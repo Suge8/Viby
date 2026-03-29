@@ -210,6 +210,14 @@ function createSessionStub(
                 appServerClient = new CodexAppServerClient();
             }
             return appServerClient;
+        },
+        async ensureRemoteBridge() {
+            return {
+                server: {
+                    stop() {}
+                },
+                mcpServers: {}
+            };
         }
     };
 

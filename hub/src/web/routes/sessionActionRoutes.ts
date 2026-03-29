@@ -1,7 +1,10 @@
 import { SESSION_RECOVERY_PAGE_SIZE } from '@viby/protocol'
 import type { Context, Hono } from 'hono'
 import { z } from 'zod'
-import type { SyncEngine } from '../../sync/syncEngine'
+import {
+    TeamLifecycleError,
+    type SyncEngine
+} from '../../sync/syncEngine'
 import type { WebAppEnv } from '../middleware/auth'
 import {
     getErrorMessage,
@@ -30,11 +33,37 @@ type SessionLifecycleAction = 'archiveSession' | 'closeSession' | 'unarchiveSess
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 
+function getBase64Padding(base64: string): number {
+    if (base64.endsWith('==')) {
+        return 2
+    }
+    if (base64.endsWith('=')) {
+        return 1
+    }
+
+    return 0
+}
+
 function estimateBase64Bytes(base64: string): number {
     const len = base64.length
-    if (len === 0) return 0
-    const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0
-    return Math.floor((len * 3) / 4) - padding
+    if (len === 0) {
+        return 0
+    }
+
+    return Math.floor((len * 3) / 4) - getBase64Padding(base64)
+}
+
+function getResumeErrorStatus(code: string): 404 | 409 | 500 | 503 {
+    switch (code) {
+        case 'no_machine_online':
+            return 503
+        case 'session_not_found':
+            return 404
+        case 'session_archived':
+            return 409
+        default:
+            return 500
+    }
 }
 
 async function handleSessionLifecycleAction(
@@ -47,8 +76,19 @@ async function handleSessionLifecycleAction(
         return sessionContext
     }
 
-    const session = await sessionContext.engine[action](sessionContext.sessionId)
-    return c.json({ ok: true, session })
+    try {
+        const session = await sessionContext.engine[action](sessionContext.sessionId)
+        return c.json({ ok: true, session })
+    } catch (error) {
+        if (error instanceof TeamLifecycleError) {
+            return c.json({
+                error: error.message,
+                code: error.code
+            }, error.status)
+        }
+
+        throw error
+    }
 }
 
 export function registerSessionActionRoutes(
@@ -80,11 +120,7 @@ export function registerSessionActionRoutes(
 
         const result = await sessionContext.engine.resumeSession(sessionContext.sessionId)
         if (result.type === 'error') {
-            const status = result.code === 'no_machine_online' ? 503
-                : result.code === 'session_not_found' ? 404
-                    : result.code === 'session_archived' ? 409
-                        : 500
-            return c.json({ error: result.message, code: result.code }, status)
+            return c.json({ error: result.message, code: result.code }, getResumeErrorStatus(result.code))
         }
 
         const resumedSession = sessionContext.engine.getSession(result.sessionId)

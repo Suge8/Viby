@@ -127,7 +127,13 @@ export class SessionLifecycleService {
         })
     }
 
-    async archiveSession(sessionId: string): Promise<Session> {
+    async archiveSession(
+        sessionId: string,
+        options?: {
+            archivedBy?: string
+            archiveReason?: string
+        }
+    ): Promise<Session> {
         const session = assertSessionExists(this.getSession(sessionId))
 
         if (getSessionLifecycleState(session) === 'archived' && !session.active) {
@@ -137,8 +143,8 @@ export class SessionLifecycleService {
         await this.stopSessionIfActive(sessionId, session.active)
         return await this.sessionCache.transitionSessionLifecycle(sessionId, 'archived', {
             markInactive: session.active,
-            archivedBy: ARCHIVED_BY_WEB,
-            archiveReason: ARCHIVED_BY_USER_REASON
+            archivedBy: options?.archivedBy ?? ARCHIVED_BY_WEB,
+            archiveReason: options?.archiveReason ?? ARCHIVED_BY_USER_REASON
         })
     }
 

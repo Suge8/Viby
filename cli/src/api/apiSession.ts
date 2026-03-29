@@ -1,8 +1,8 @@
 import { EventEmitter } from 'node:events'
 import { randomUUID } from 'node:crypto'
 import { io, type Socket } from 'socket.io-client'
-import axios, { type AxiosRequestConfig } from 'axios'
-import type { ZodType } from 'zod'
+import axios, { type AxiosRequestConfig, type AxiosResponse } from 'axios'
+import { z, type ZodType } from 'zod'
 import { logger } from '@/ui/logger'
 import { backoff } from '@/utils/time'
 import { apiValidationError } from '@/utils/errorUtils'
@@ -12,16 +12,22 @@ import { configuration } from '@/configuration'
 import {
     SESSION_RECOVERY_PAGE_SIZE,
     findNextRecoveryCursor,
+    SessionTeamContextSchema,
+    TerminalClosePayloadSchema,
+    TerminalOpenPayloadSchema,
+    TeamMemberRecordSchema,
+    TeamProjectSchema,
+    TeamProjectSnapshotSchema,
+    TeamRoleDefinitionSchema,
+    TeamRoleIdSchema,
+    TeamTaskRecordSchema,
+    TerminalResizePayloadSchema,
+    TerminalWritePayloadSchema,
     type ClientToServerEvents,
     type ServerToClientEvents,
     type Update
 } from '@viby/protocol'
-import {
-    TerminalClosePayloadSchema,
-    TerminalOpenPayloadSchema,
-    TerminalResizePayloadSchema,
-    TerminalWritePayloadSchema
-} from '@viby/protocol'
+import { SessionSchema } from '@viby/protocol/schemas'
 import type {
     AgentState,
     MessageContent,
@@ -35,6 +41,11 @@ import type {
     UserMessage,
     WritableSessionMetadata
 } from './types'
+import type {
+    SessionTeamContext,
+    TeamProjectSnapshot,
+    TeamTaskRecord
+} from '@viby/protocol/types'
 import {
     AgentStateSchema,
     type CliSessionRecoveryResponse,
@@ -64,6 +75,48 @@ type SessionKeepAliveSnapshot = SessionKeepAliveRuntime & {
     thinking: boolean
     mode: 'local' | 'remote'
 }
+
+const TeamTaskActionResponseSchema = z.object({
+    ok: z.literal(true),
+    task: TeamTaskRecordSchema
+})
+
+const TeamMemberLaunchSchema = z.object({
+    strategy: z.enum(['spawn', 'resume', 'revision']),
+    reason: z.string(),
+    previousMemberId: z.string().nullable()
+})
+
+const TeamMemberActionResponseSchema = z.object({
+    ok: z.literal(true),
+    member: TeamMemberRecordSchema,
+    session: SessionSchema.optional(),
+    launch: TeamMemberLaunchSchema.optional(),
+    action: z.enum(['remove', 'replace']).optional(),
+    replacedMemberId: z.string().optional()
+})
+
+const TeamProjectActionResponseSchema = z.object({
+    ok: z.literal(true),
+    project: TeamProjectSchema
+})
+
+const TeamRoleActionResponseSchema = z.object({
+    ok: z.literal(true),
+    role: TeamRoleDefinitionSchema
+})
+
+const TeamRoleDeleteResponseSchema = z.object({
+    ok: z.literal(true),
+    roleId: TeamRoleIdSchema
+})
+
+const ApiAuthResponseSchema = z.object({
+    token: z.string().min(1),
+    user: z.object({
+        id: z.number()
+    })
+})
 
 const LIFECYCLE_METADATA_FIELDS = [
     'lifecycleState',
@@ -145,6 +198,7 @@ type SessionStreamClientUpdate =
 export class ApiSessionClient extends EventEmitter {
     private readonly token: string
     readonly sessionId: string
+    private teamContextSnapshot: SessionTeamContext | undefined
     private metadata: Metadata | null
     private metadataVersion: number
     private agentState: AgentState | null
@@ -161,12 +215,15 @@ export class ApiSessionClient extends EventEmitter {
     private readonly terminalManager: TerminalManager
     private agentStateLock = new AsyncLock()
     private metadataLock = new AsyncLock()
+    private teamApiAuthLock = new AsyncLock()
     private lastKeepAliveSnapshot: SessionKeepAliveSnapshot
+    private teamApiToken: string | null = null
 
     constructor(token: string, session: Session) {
         super()
         this.token = token
         this.sessionId = session.id
+        this.teamContextSnapshot = session.teamContext
         this.metadata = session.metadata
         this.metadataVersion = session.metadataVersion
         this.agentState = session.agentState
@@ -314,6 +371,10 @@ export class ApiSessionClient extends EventEmitter {
         this.socket.connect()
     }
 
+    get teamContext(): SessionTeamContext | undefined {
+        return this.teamContextSnapshot
+    }
+
     onUserMessage(callback: (data: UserMessage) => void): void {
         this.pendingMessageCallback = callback
         while (this.pendingMessages.length > 0) {
@@ -340,8 +401,217 @@ export class ApiSessionClient extends EventEmitter {
         }
     }
 
+    private getApiAuthUrl(): string {
+        return `${configuration.apiUrl}/api/auth`
+    }
+
     private getSessionRecoveryUrl(): string {
         return `${configuration.apiUrl}/cli/sessions/${encodeURIComponent(this.sessionId)}/recovery`
+    }
+
+    private getTeamProjectUrl(projectId: string): string {
+        return `${configuration.apiUrl}/api/team-projects/${encodeURIComponent(projectId)}`
+    }
+
+    private getTeamProjectCloseUrl(projectId: string): string {
+        return `${this.getTeamProjectUrl(projectId)}/close`
+    }
+
+    private getTeamProjectRolesUrl(projectId: string): string {
+        return `${this.getTeamProjectUrl(projectId)}/roles`
+    }
+
+    private getTeamProjectRoleUrl(projectId: string, roleId: string): string {
+        return `${this.getTeamProjectRolesUrl(projectId)}/${encodeURIComponent(roleId)}`
+    }
+
+    private getTeamMembersUrl(): string {
+        return `${configuration.apiUrl}/api/team-members`
+    }
+
+    private getTeamMemberUrl(memberId: string): string {
+        return `${this.getTeamMembersUrl()}/${encodeURIComponent(memberId)}`
+    }
+
+    private getTeamMemberMessageUrl(memberId: string): string {
+        return `${this.getTeamMemberUrl(memberId)}/message`
+    }
+
+    private getTeamTasksUrl(): string {
+        return `${configuration.apiUrl}/api/team-tasks`
+    }
+
+    private getTeamTaskUrl(taskId: string): string {
+        return `${this.getTeamTasksUrl()}/${encodeURIComponent(taskId)}`
+    }
+
+    private getTeamTaskActionUrl(taskId: string, action: string): string {
+        return `${this.getTeamTaskUrl(taskId)}/${action}`
+    }
+
+    private clearTeamApiToken(): void {
+        this.teamApiToken = null
+    }
+
+    private isUnauthorizedApiError(error: unknown): boolean {
+        return axios.isAxiosError(error) && error.response?.status === 401
+    }
+
+    private async getTeamApiToken(forceRefresh = false): Promise<string> {
+        if (!forceRefresh && this.teamApiToken) {
+            return this.teamApiToken
+        }
+
+        return await this.teamApiAuthLock.inLock(async () => {
+            if (!forceRefresh && this.teamApiToken) {
+                return this.teamApiToken
+            }
+
+            const response = await axios.post(
+                this.getApiAuthUrl(),
+                {
+                    accessToken: this.token
+                },
+                {
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    timeout: API_SESSION_REQUEST_TIMEOUT_MS
+                }
+            )
+            const parsed = ApiAuthResponseSchema.safeParse(response.data)
+            if (!parsed.success) {
+                throw apiValidationError('Invalid /api/auth response', response)
+            }
+
+            this.teamApiToken = parsed.data.token
+            return parsed.data.token
+        })
+    }
+
+    private async createTeamApiRequestConfig(): Promise<AxiosRequestConfig> {
+        const token = await this.getTeamApiToken()
+        return {
+            headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            timeout: API_SESSION_REQUEST_TIMEOUT_MS
+        }
+    }
+
+    private async executeTeamApiRequest<T>(
+        request: (config: AxiosRequestConfig) => Promise<AxiosResponse>,
+        schema: ZodType<T>,
+        validationErrorMessage: string
+    ): Promise<T> {
+        const run = async (): Promise<T> => {
+            const response = await request(await this.createTeamApiRequestConfig())
+            const parsed = schema.safeParse(response.data)
+            if (!parsed.success) {
+                throw apiValidationError(validationErrorMessage, response)
+            }
+
+            return parsed.data
+        }
+
+        try {
+            return await run()
+        } catch (error) {
+            if (!this.isUnauthorizedApiError(error)) {
+                throw error
+            }
+
+            this.clearTeamApiToken()
+            const response = await request(await this.createTeamApiRequestConfig())
+            const parsed = schema.safeParse(response.data)
+            if (!parsed.success) {
+                throw apiValidationError(validationErrorMessage, response)
+            }
+
+            return parsed.data
+        }
+    }
+
+    private async getAuthorizedJson<T>(
+        url: string,
+        schema: ZodType<T>,
+        validationErrorMessage: string
+    ): Promise<T> {
+        return await this.executeTeamApiRequest(
+            async (config) => await axios.get(url, config),
+            schema,
+            validationErrorMessage
+        )
+    }
+
+    private async postAuthorizedJson<T>(
+        url: string,
+        body: Record<string, unknown>,
+        schema: ZodType<T>,
+        validationErrorMessage: string
+    ): Promise<T> {
+        return await this.executeTeamApiRequest(
+            async (config) => await axios.post(url, body, config),
+            schema,
+            validationErrorMessage
+        )
+    }
+
+    private async patchAuthorizedJson<T>(
+        url: string,
+        body: Record<string, unknown>,
+        schema: ZodType<T>,
+        validationErrorMessage: string
+    ): Promise<T> {
+        return await this.executeTeamApiRequest(
+            async (config) => await axios.patch(url, body, config),
+            schema,
+            validationErrorMessage
+        )
+    }
+
+    private async deleteAuthorizedJson<T>(
+        url: string,
+        body: Record<string, unknown>,
+        schema: ZodType<T>,
+        validationErrorMessage: string
+    ): Promise<T> {
+        return await this.executeTeamApiRequest(
+            async (config) => await axios.delete(url, {
+                ...config,
+                data: body
+            }),
+            schema,
+            validationErrorMessage
+        )
+    }
+
+    private async postTeamTaskAction(
+        taskId: string,
+        action: 'review-request' | 'review-result' | 'verification-request' | 'verification-result' | 'accept',
+        body: Record<string, unknown>
+    ): Promise<TeamTaskRecord> {
+        const response = await this.postAuthorizedJson(
+            this.getTeamTaskActionUrl(taskId, action),
+            body,
+            TeamTaskActionResponseSchema,
+            `Invalid /api/team-tasks/:id/${action} response`
+        )
+
+        return response.task
+    }
+
+    private async postTeamMemberAction(
+        url: string,
+        body: Record<string, unknown>
+    ) {
+        return await this.postAuthorizedJson(
+            url,
+            body,
+            TeamMemberActionResponseSchema,
+            'Invalid team member action response'
+        )
     }
 
     private async fetchSessionRecoveryPage(afterSeq: number): Promise<CliSessionRecoveryResponse> {
@@ -403,7 +673,13 @@ export class ApiSessionClient extends EventEmitter {
         metadataVersion: number
         agentState: unknown | null
         agentStateVersion: number
+        teamContext?: unknown
     }): void {
+        const teamContextResult = SessionTeamContextSchema.optional().safeParse(session.teamContext)
+        if (teamContextResult.success) {
+            this.teamContextSnapshot = teamContextResult.data
+        }
+
         if (session.metadataVersion > this.metadataVersion) {
             const metadataResult = MetadataSchema.safeParse(session.metadata)
             if (metadataResult.success) {
@@ -423,6 +699,10 @@ export class ApiSessionClient extends EventEmitter {
             }
             this.agentStateVersion = session.agentStateVersion
         }
+    }
+
+    getTeamContextSnapshot(): SessionTeamContext | undefined {
+        return this.teamContextSnapshot
     }
 
     private async recoverSessionState(): Promise<void> {
@@ -532,6 +812,307 @@ export class ApiSessionClient extends EventEmitter {
 
     getMetadataSnapshot(): Metadata | null {
         return this.metadata
+    }
+
+    async getTeamProject(projectId: string): Promise<TeamProjectSnapshot> {
+        return await this.getAuthorizedJson(
+            this.getTeamProjectUrl(projectId),
+            TeamProjectSnapshotSchema,
+            'Invalid /api/team-projects/:id response'
+        )
+    }
+
+    async createTeamRole(
+        projectId: string,
+        input: {
+            managerSessionId: string
+            roleId: TeamProjectSnapshot['roles'][number]['id']
+            prototype: TeamProjectSnapshot['roles'][number]['prototype']
+            name: string
+            promptExtension?: string | null
+            providerFlavor?: TeamProjectSnapshot['roles'][number]['providerFlavor']
+            model?: string | null
+            reasoningEffort?: TeamProjectSnapshot['roles'][number]['reasoningEffort']
+            isolationMode?: TeamProjectSnapshot['roles'][number]['isolationMode']
+        }
+    ): Promise<TeamProjectSnapshot['roles'][number]> {
+        const response = await this.postAuthorizedJson(
+            this.getTeamProjectRolesUrl(projectId),
+            {
+                ...input,
+                promptExtension: input.promptExtension ?? undefined
+            },
+            TeamRoleActionResponseSchema,
+            'Invalid /api/team-projects/:id/roles response'
+        )
+
+        return response.role
+    }
+
+    async updateTeamRole(
+        projectId: string,
+        roleId: string,
+        input: {
+            managerSessionId: string
+            name?: string
+            promptExtension?: string | null
+            providerFlavor?: TeamProjectSnapshot['roles'][number]['providerFlavor']
+            model?: string | null
+            reasoningEffort?: TeamProjectSnapshot['roles'][number]['reasoningEffort']
+            isolationMode?: TeamProjectSnapshot['roles'][number]['isolationMode']
+        }
+    ): Promise<TeamProjectSnapshot['roles'][number]> {
+        const response = await this.patchAuthorizedJson(
+            this.getTeamProjectRoleUrl(projectId, roleId),
+            {
+                managerSessionId: input.managerSessionId,
+                name: input.name,
+                promptExtension: input.promptExtension,
+                providerFlavor: input.providerFlavor,
+                model: input.model,
+                reasoningEffort: input.reasoningEffort,
+                isolationMode: input.isolationMode
+            },
+            TeamRoleActionResponseSchema,
+            'Invalid /api/team-projects/:id/roles/:roleId response'
+        )
+
+        return response.role
+    }
+
+    async deleteTeamRole(
+        projectId: string,
+        roleId: string,
+        input: {
+            managerSessionId: string
+        }
+    ): Promise<string> {
+        const response = await this.deleteAuthorizedJson(
+            this.getTeamProjectRoleUrl(projectId, roleId),
+            { managerSessionId: input.managerSessionId },
+            TeamRoleDeleteResponseSchema,
+            'Invalid /api/team-projects/:id/roles/:roleId delete response'
+        )
+
+        return response.roleId
+    }
+
+    async spawnTeamMember(input: {
+        managerSessionId: string
+        roleId: TeamProjectSnapshot['roles'][number]['id']
+        providerFlavor?: 'claude' | 'codex' | 'cursor' | 'gemini' | 'opencode' | null
+        model?: string | null
+        reasoningEffort?: Session['modelReasoningEffort'] | null
+        isolationMode?: 'simple' | 'worktree'
+        taskId?: string | null
+        instruction?: string | null
+        contextTrusted?: boolean
+        workspaceTrusted?: boolean
+        requireFreshPerspective?: boolean
+        permissionMode?: SessionPermissionMode
+        collaborationMode?: SessionCollaborationMode
+        taskGoal?: string | null
+        artifactSummary?: string | null
+        attemptSummary?: string | null
+        failureSummary?: string | null
+        reviewSummary?: string | null
+        filePointers?: string[]
+    }) {
+        return await this.postTeamMemberAction(this.getTeamMembersUrl(), {
+            ...input,
+            taskId: input.taskId ?? undefined,
+            instruction: input.instruction ?? undefined,
+            taskGoal: input.taskGoal ?? undefined,
+            artifactSummary: input.artifactSummary ?? undefined,
+            attemptSummary: input.attemptSummary ?? undefined,
+            failureSummary: input.failureSummary ?? undefined,
+            reviewSummary: input.reviewSummary ?? undefined
+        })
+    }
+
+    async updateTeamMember(
+        memberId: string,
+        input:
+            | {
+                action: 'remove'
+                managerSessionId: string
+            }
+            | {
+                action: 'replace'
+                managerSessionId: string
+                providerFlavor?: 'claude' | 'codex' | 'cursor' | 'gemini' | 'opencode' | null
+                model?: string | null
+                reasoningEffort?: Session['modelReasoningEffort'] | null
+                isolationMode?: 'simple' | 'worktree'
+                taskId?: string | null
+                instruction?: string | null
+                contextTrusted?: boolean
+                workspaceTrusted?: boolean
+                requireFreshPerspective?: boolean
+                permissionMode?: SessionPermissionMode
+                collaborationMode?: SessionCollaborationMode
+                taskGoal?: string | null
+                artifactSummary?: string | null
+                attemptSummary?: string | null
+                failureSummary?: string | null
+                reviewSummary?: string | null
+                filePointers?: string[]
+            }
+    ) {
+        return await this.patchAuthorizedJson(
+            this.getTeamMemberUrl(memberId),
+            input,
+            TeamMemberActionResponseSchema,
+            'Invalid team member update response'
+        )
+    }
+
+    async messageTeamMember(
+        memberId: string,
+        input: {
+            managerSessionId: string
+            text: string
+            kind?: 'task-assign' | 'follow-up' | 'coordination'
+        }
+    ) {
+        return await this.postTeamMemberAction(this.getTeamMemberMessageUrl(memberId), input)
+    }
+
+    async createTeamTask(input: {
+        managerSessionId: string
+        title: string
+        description?: string | null
+        acceptanceCriteria?: string | null
+        parentTaskId?: string | null
+        status?: 'todo' | 'running' | 'blocked' | 'canceled' | 'failed'
+        assigneeMemberId?: string | null
+        reviewerMemberId?: string | null
+        verifierMemberId?: string | null
+        priority?: string | null
+        dependsOn?: string[]
+        note?: string | null
+    }): Promise<TeamTaskRecord> {
+        const response = await this.postAuthorizedJson(
+            this.getTeamTasksUrl(),
+            input,
+            TeamTaskActionResponseSchema,
+            'Invalid /api/team-tasks response'
+        )
+
+        return response.task
+    }
+
+    async updateTeamTask(
+        taskId: string,
+        input: {
+            managerSessionId: string
+            title?: string
+            description?: string | null
+            acceptanceCriteria?: string | null
+            status?: 'todo' | 'running' | 'blocked' | 'canceled' | 'failed'
+            assigneeMemberId?: string | null
+            reviewerMemberId?: string | null
+            verifierMemberId?: string | null
+            priority?: string | null
+            dependsOn?: string[]
+            note?: string | null
+        }
+    ): Promise<TeamTaskRecord> {
+        const response = await this.patchAuthorizedJson(
+            this.getTeamTaskUrl(taskId),
+            input,
+            TeamTaskActionResponseSchema,
+            'Invalid /api/team-tasks/:id response'
+        )
+
+        return response.task
+    }
+
+    async closeTeamProject(
+        projectId: string,
+        input: {
+            managerSessionId: string
+            summary?: string | null
+        }
+    ) {
+        const response = await this.postAuthorizedJson(
+            this.getTeamProjectCloseUrl(projectId),
+            {
+                managerSessionId: input.managerSessionId,
+                summary: input.summary ?? undefined
+            },
+            TeamProjectActionResponseSchema,
+            'Invalid /api/team-projects/:id/close response'
+        )
+
+        return response.project
+    }
+
+    async requestTaskReview(
+        taskId: string,
+        input: {
+            managerSessionId: string
+            reviewerMemberId: string
+            note?: string | null
+        }
+    ): Promise<TeamTaskRecord> {
+        return await this.postTeamTaskAction(taskId, 'review-request', {
+            managerSessionId: input.managerSessionId,
+            reviewerMemberId: input.reviewerMemberId,
+            note: input.note ?? undefined
+        })
+    }
+
+    async submitTaskReviewResult(
+        taskId: string,
+        input: {
+            memberId: string
+            decision: 'accept' | 'request_changes'
+            summary: string
+        }
+    ): Promise<TeamTaskRecord> {
+        return await this.postTeamTaskAction(taskId, 'review-result', input)
+    }
+
+    async requestTaskVerification(
+        taskId: string,
+        input: {
+            managerSessionId: string
+            verifierMemberId: string
+            note?: string | null
+        }
+    ): Promise<TeamTaskRecord> {
+        return await this.postTeamTaskAction(taskId, 'verification-request', {
+            managerSessionId: input.managerSessionId,
+            verifierMemberId: input.verifierMemberId,
+            note: input.note ?? undefined
+        })
+    }
+
+    async submitTaskVerificationResult(
+        taskId: string,
+        input: {
+            memberId: string
+            decision: 'pass' | 'fail'
+            summary: string
+        }
+    ): Promise<TeamTaskRecord> {
+        return await this.postTeamTaskAction(taskId, 'verification-result', input)
+    }
+
+    async acceptTeamTask(
+        taskId: string,
+        input: {
+            managerSessionId: string
+            summary?: string | null
+            skipVerificationReason?: string | null
+        }
+    ): Promise<TeamTaskRecord> {
+        return await this.postTeamTaskAction(taskId, 'accept', {
+            managerSessionId: input.managerSessionId,
+            summary: input.summary ?? undefined,
+            skipVerificationReason: input.skipVerificationReason ?? undefined
+        })
     }
 
     sendCodexMessage(body: unknown): void {

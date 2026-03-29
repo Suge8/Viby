@@ -1,116 +1,89 @@
 /**
  * VIBY MCP server
- * Provides VIBY CLI specific tools including chat session title management
+ * Provides session-scoped VIBY tools over Streamable HTTP MCP.
  */
 
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { createServer } from "node:http";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { AddressInfo } from "node:net";
-import { z } from "zod";
-import { logger } from "@/ui/logger";
-import { ApiSessionClient } from "@/api/apiSession";
-import { randomUUID } from "node:crypto";
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
+import { ApiSessionClient } from '@/api/apiSession'
+import {
+    createToolErrorResult,
+    getEnabledVibyToolDefinitions
+} from '@/agent/vibyToolRegistry'
+import { logger } from '@/ui/logger'
 
-export async function startVibyServer(client: ApiSessionClient) {
-    // Handler that sends title updates via the client
-    const handler = async (title: string) => {
-        logger.debug('[vibyMCP] Changing title to:', title);
-        try {
-            // Send title as a summary message, similar to title generator
-            client.sendClaudeSessionMessage({
-                type: 'summary',
-                summary: title,
-                leafUuid: randomUUID()
-            });
-            
-            return { success: true };
-        } catch (error) {
-            return { success: false, error: String(error) };
-        }
-    };
-
-    //
-    // Create the MCP server
-    //
-
+export async function startVibyServer(client: ApiSessionClient): Promise<{
+    url: string
+    toolNames: string[]
+    stop: () => void
+}> {
     const mcp = new McpServer({
-        name: "VIBY MCP",
-        version: "1.0.0",
-    });
+        name: 'VIBY MCP',
+        version: '1.0.0'
+    })
 
-    // Avoid TS instantiation depth issues by widening the schema type.
-    const changeTitleInputSchema: z.ZodTypeAny = z.object({
-        title: z.string().describe('The new title for the chat session'),
-    });
-
-    mcp.registerTool<any, any>('change_title', {
-        description: 'Change the title of the current chat session',
-        title: 'Change Chat Title',
-        inputSchema: changeTitleInputSchema,
-    }, async (args: { title: string }) => {
-        const response = await handler(args.title);
-        logger.debug('[vibyMCP] Response:', response);
-        
-        if (response.success) {
-            return {
-                content: [
-                    {
-                        type: 'text' as const,
-                        text: `Successfully changed chat title to: "${args.title}"`,
-                    },
-                ],
-                isError: false,
-            };
-        } else {
-            return {
-                content: [
-                    {
-                        type: 'text' as const,
-                        text: `Failed to change chat title: ${response.error || 'Unknown error'}`,
-                    },
-                ],
-                isError: true,
-            };
-        }
-    });
+    const toolDefinitions = getEnabledVibyToolDefinitions(client.teamContext)
+    for (const definition of toolDefinitions) {
+        mcp.registerTool<any, any>(definition.name, {
+            description: definition.description,
+            title: definition.title,
+            inputSchema: definition.inputSchema
+        }, async (args: Record<string, unknown>) => {
+            try {
+                const parsedArgs = definition.inputSchema.parse(args)
+                const response = await definition.execute({
+                    client,
+                    teamContext: client.teamContext
+                }, parsedArgs)
+                logger.debug('[vibyMCP] Tool response', {
+                    toolName: definition.name,
+                    isError: response.isError
+                })
+                return response
+            } catch (error) {
+                logger.debug('[vibyMCP] Tool failed', {
+                    toolName: definition.name,
+                    error
+                })
+                return createToolErrorResult(error)
+            }
+        })
+    }
 
     const transport = new StreamableHTTPServerTransport({
         // NOTE: Returning session id here will result in claude
         // sdk spawn to fail with `Invalid Request: Server already initialized`
         sessionIdGenerator: undefined
-    });
-    await mcp.connect(transport);
-
-    //
-    // Create the HTTP server
-    //
+    })
+    await mcp.connect(transport)
 
     const server = createServer(async (req, res) => {
         try {
-            await transport.handleRequest(req, res);
+            await transport.handleRequest(req, res)
         } catch (error) {
-            logger.debug("Error handling request:", error);
+            logger.debug('Error handling request:', error)
             if (!res.headersSent) {
-                res.writeHead(500).end();
+                res.writeHead(500).end()
             }
         }
-    });
+    })
 
     const baseUrl = await new Promise<URL>((resolve) => {
-        server.listen(0, "127.0.0.1", () => {
-            const addr = server.address() as AddressInfo;
-            resolve(new URL(`http://127.0.0.1:${addr.port}`));
-        });
-    });
+        server.listen(0, '127.0.0.1', () => {
+            const addr = server.address() as AddressInfo
+            resolve(new URL(`http://127.0.0.1:${addr.port}`))
+        })
+    })
 
     return {
         url: baseUrl.toString(),
-        toolNames: ['change_title'],
+        toolNames: toolDefinitions.map((definition) => definition.name),
         stop: () => {
-            logger.debug('[vibyMCP] Stopping server');
-            mcp.close();
-            server.close();
+            logger.debug('[vibyMCP] Stopping server')
+            mcp.close()
+            server.close()
         }
     }
 }

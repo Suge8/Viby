@@ -54,7 +54,41 @@ import {
     type InactiveTeamMemberLaunchRequest,
     type RevisionCarryoverMessageInput
 } from './teamMemberSessionService'
+import {
+    TeamAcceptanceError,
+    TeamAcceptanceService,
+    type AcceptTeamTaskInput,
+    type RequestTaskReviewInput,
+    type RequestTaskVerificationInput,
+    type SubmitTaskReviewResultInput,
+    type SubmitTaskVerificationResultInput
+} from './teamAcceptanceService'
 import { TeamCoordinatorService } from './teamCoordinatorService'
+import {
+    TeamLifecycleError,
+    TeamLifecycleService
+} from './teamLifecycleService'
+import {
+    TeamOrchestrationError,
+    TeamOrchestrationService,
+    type CloseTeamProjectInput,
+    type CreateTeamRoleInput,
+    type CreateTeamTaskInput,
+    type DeleteTeamRoleInput,
+    type ExportTeamProjectPresetInput,
+    type ImportTeamProjectPresetInput,
+    type MessageTeamMemberInput,
+    type SpawnTeamMemberInput,
+    type UpdateTeamProjectSettingsInput,
+    type UpdateTeamMemberInput,
+    type UpdateTeamRoleInput,
+    type UpdateTeamTaskInput
+} from './teamOrchestrationService'
+import {
+    buildHandbackNoticeText,
+    buildHandbackSummary,
+    resolveManagerInstructionBlock
+} from './teamControlSemantics'
 
 export type { Session, SyncEvent } from '@viby/protocol/types'
 export type { Machine } from './machineCache'
@@ -73,15 +107,40 @@ export type {
     InactiveTeamMemberLaunchRequest,
     RevisionCarryoverMessageInput
 } from './teamMemberSessionService'
+export type {
+    AcceptTeamTaskInput,
+    RequestTaskReviewInput,
+    RequestTaskVerificationInput,
+    SubmitTaskReviewResultInput,
+    SubmitTaskVerificationResultInput
+} from './teamAcceptanceService'
+export { TeamAcceptanceError } from './teamAcceptanceService'
+export { TeamLifecycleError } from './teamLifecycleService'
+export type {
+    CloseTeamProjectInput,
+    CreateTeamRoleInput,
+    CreateTeamTaskInput,
+    DeleteTeamRoleInput,
+    ExportTeamProjectPresetInput,
+    ImportTeamProjectPresetInput,
+    MessageTeamMemberInput,
+    SpawnTeamMemberInput,
+    UpdateTeamProjectSettingsInput,
+    UpdateTeamMemberInput,
+    UpdateTeamRoleInput,
+    UpdateTeamTaskInput
+} from './teamOrchestrationService'
+export { TeamOrchestrationError } from './teamOrchestrationService'
 
 export type SessionSendMessageErrorCode =
     | Extract<ResumeSessionResult, { type: 'error' }>['code']
     | 'session_not_found'
+    | 'team_member_control_conflict'
 
 export type TeamMemberControlErrorCode =
     | 'team_member_not_found'
     | 'team_member_inactive'
-    | 'team_member_not_manager_controlled'
+    | 'team_member_control_conflict'
     | 'team_session_not_found'
 
 type GetOrCreateSessionOptions = Parameters<SessionCache['getOrCreateSession']>[0] & {
@@ -126,6 +185,7 @@ export class TeamMemberControlError extends Error {
 export class SyncEngine {
     private static readonly SWITCH_CONTRACT_TIMEOUT_MS = 3_000
 
+    private readonly store: Store
     private readonly eventPublisher: EventPublisher
     private readonly sessionCache: SessionCache
     private readonly machineCache: MachineCache
@@ -134,6 +194,9 @@ export class SyncEngine {
     private readonly sessionLifecycleService: SessionLifecycleService
     private readonly teamMemberSessionService: TeamMemberSessionService
     private readonly teamCoordinatorService: TeamCoordinatorService
+    private readonly teamLifecycleService: TeamLifecycleService
+    private readonly teamAcceptanceService: TeamAcceptanceService
+    private readonly teamOrchestrationService: TeamOrchestrationService
     private inactivityTimer: NodeJS.Timeout | null = null
 
     constructor(
@@ -142,6 +205,7 @@ export class SyncEngine {
         rpcRegistry: RpcRegistry,
         broadcaster: SyncEventBroadcaster
     ) {
+        this.store = store
         this.eventPublisher = new EventPublisher(broadcaster)
         this.sessionCache = new SessionCache(store, this.eventPublisher)
         this.machineCache = new MachineCache(store, this.eventPublisher)
@@ -151,10 +215,40 @@ export class SyncEngine {
         this.teamCoordinatorService = new TeamCoordinatorService(store, (event) => {
             this.handleRealtimeEvent(event)
         })
+        this.teamAcceptanceService = new TeamAcceptanceService(
+            store,
+            this.teamCoordinatorService,
+            {
+                appendInternalUserMessage: async (sessionId, payload) => {
+                    await this.appendInternalUserMessage(sessionId, payload)
+                },
+                appendPassiveInternalUserMessage: async (sessionId, payload) => {
+                    await this.appendPassiveInternalUserMessage(sessionId, payload)
+                },
+                ensurePassiveInternalUserMessageTarget: async (sessionId) => {
+                    await this.ensurePassiveInternalUserMessageTarget(sessionId)
+                }
+            }
+        )
         this.sessionLifecycleService = new SessionLifecycleService(
             this.sessionCache,
             this.machineCache,
             this.rpcGateway
+        )
+        this.teamLifecycleService = new TeamLifecycleService(
+            store,
+            this.sessionCache,
+            this.sessionLifecycleService,
+            this.teamCoordinatorService
+        )
+        this.teamOrchestrationService = new TeamOrchestrationService(
+            store,
+            this.teamCoordinatorService,
+            this.teamMemberSessionService,
+            this.teamLifecycleService,
+            async (options) => await this.spawnSession(options),
+            async (sessionId, payload) => await this.appendInternalUserMessage(sessionId, payload),
+            (sessionId) => this.getSession(sessionId)
         )
         this.reloadAll()
         this.inactivityTimer = setInterval(() => this.expireInactive(), 5_000)
@@ -213,6 +307,10 @@ export class SyncEngine {
 
     getTeamProjectSnapshot(projectId: string): TeamProjectSnapshot | null {
         return this.teamCoordinatorService.getProjectSnapshot(projectId)
+    }
+
+    getTeamProjectHistory(projectId: string) {
+        return this.teamLifecycleService.getProjectHistory(projectId)
     }
 
     getSessionRecoveryPage(sessionId: string, options: { afterSeq: number; limit: number }): SessionRecoveryPage {
@@ -372,6 +470,7 @@ export class SyncEngine {
             sentFrom?: 'webapp'
         }
     ): Promise<Session> {
+        this.ensureGenericSendAllowed(sessionId)
         return await this.appendInternalUserMessage(sessionId, {
             text: payload.text,
             localId: payload.localId,
@@ -406,6 +505,7 @@ export class SyncEngine {
 
     async interjectTeamMember(memberId: string, payload: TeamInterjectPayload): Promise<Session> {
         const target = this.requireTeamMemberTarget(memberId, { requireManagerControl: true })
+        await this.ensurePassiveInternalUserMessageTarget(target.member.managerSessionId)
         const noticeMeta = this.buildTeamMessageMeta(target.member, 'manager', {
             sentFrom: 'team-system',
             teamMessageKind: 'system-event',
@@ -457,6 +557,7 @@ export class SyncEngine {
         if (target.member.controlOwner === 'user') {
             return this.requireSessionSnapshot(target.member.sessionId)
         }
+        await this.ensurePassiveInternalUserMessageTarget(target.member.managerSessionId)
 
         const nextMember: TeamMemberRecord = {
             ...target.member,
@@ -504,6 +605,11 @@ export class SyncEngine {
         if (target.member.controlOwner === 'manager') {
             return this.requireSessionSnapshot(target.member.sessionId)
         }
+        await this.ensurePassiveInternalUserMessageTarget(target.member.managerSessionId)
+        const handbackSummary = buildHandbackSummary(this.store, target.member, {
+            session: this.getSession(target.member.sessionId),
+            currentTask: target.currentTask
+        })
 
         const nextMember: TeamMemberRecord = {
             ...target.member,
@@ -522,7 +628,9 @@ export class SyncEngine {
                 actorId: null,
                 targetType: 'member',
                 targetId: nextMember.id,
-                payload: null,
+                payload: {
+                    summary: handbackSummary
+                },
                 createdAt: nextMember.updatedAt
             },
             affectedSessionIds: [nextMember.managerSessionId, nextMember.sessionId]
@@ -531,10 +639,7 @@ export class SyncEngine {
         await this.appendPassiveInternalUserMessage(
             nextMember.managerSessionId,
             {
-                text: this.buildManagerNoticeText('return', {
-                    ...target,
-                    member: nextMember
-                }),
+                text: buildHandbackNoticeText(nextMember, handbackSummary, target.currentTask),
                 meta: this.buildTeamMessageMeta(nextMember, 'manager', {
                     sentFrom: 'team-system',
                     teamMessageKind: 'system-event',
@@ -544,6 +649,149 @@ export class SyncEngine {
         )
 
         return this.requireSessionSnapshot(nextMember.sessionId)
+    }
+
+    async requestTaskReview(input: RequestTaskReviewInput): Promise<TeamTaskRecord> {
+        const result = await this.teamAcceptanceService.requestReview(input)
+        this.refreshTeamSessions([
+            input.managerSessionId,
+            result.task.reviewerMemberId ? this.store.teams.getMember(result.task.reviewerMemberId)?.sessionId : null
+        ])
+        return result.task
+    }
+
+    async submitTaskReviewResult(input: SubmitTaskReviewResultInput): Promise<TeamTaskRecord> {
+        const result = await this.teamAcceptanceService.submitReviewResult(input)
+        this.sessionCache.refreshSession(result.snapshot.project.managerSessionId)
+        return result.task
+    }
+
+    async requestTaskVerification(input: RequestTaskVerificationInput): Promise<TeamTaskRecord> {
+        const result = await this.teamAcceptanceService.requestVerification(input)
+        this.refreshTeamSessions([
+            input.managerSessionId,
+            result.task.verifierMemberId ? this.store.teams.getMember(result.task.verifierMemberId)?.sessionId : null
+        ])
+        return result.task
+    }
+
+    async submitTaskVerificationResult(input: SubmitTaskVerificationResultInput): Promise<TeamTaskRecord> {
+        const result = await this.teamAcceptanceService.submitVerificationResult(input)
+        this.sessionCache.refreshSession(result.snapshot.project.managerSessionId)
+        return result.task
+    }
+
+    async acceptTeamTask(input: AcceptTeamTaskInput): Promise<TeamTaskRecord> {
+        const result = await this.teamAcceptanceService.acceptTask(input)
+        this.sessionCache.refreshSession(input.managerSessionId)
+        return result.task
+    }
+
+    async spawnTeamMember(input: SpawnTeamMemberInput) {
+        const result = await this.teamOrchestrationService.spawnMember(input)
+        this.refreshTeamSessions([
+            input.managerSessionId,
+            result.member.sessionId,
+            ...result.snapshot.members.map((member) => member.sessionId)
+        ])
+        return result
+    }
+
+    async updateTeamMember(input: UpdateTeamMemberInput) {
+        const result = await this.teamOrchestrationService.updateMember(input)
+        this.refreshTeamSessions([
+            input.managerSessionId,
+            ...result.snapshot.members.map((member) => member.sessionId)
+        ])
+        return result
+    }
+
+
+    async createTeamRole(input: CreateTeamRoleInput) {
+        const result = await this.teamOrchestrationService.createRole(input)
+        this.refreshTeamSessions([
+            input.managerSessionId,
+            ...result.snapshot.members.map((member) => member.sessionId)
+        ])
+        return result.role
+    }
+
+    async updateTeamRole(input: UpdateTeamRoleInput) {
+        const result = await this.teamOrchestrationService.updateRole(input)
+        this.refreshTeamSessions([
+            input.managerSessionId,
+            ...result.snapshot.members.map((member) => member.sessionId)
+        ])
+        return result.role
+    }
+
+    async deleteTeamRole(input: DeleteTeamRoleInput) {
+        const result = await this.teamOrchestrationService.deleteRole(input)
+        this.refreshTeamSessions([
+            input.managerSessionId,
+            ...result.snapshot.members.map((member) => member.sessionId)
+        ])
+        return result.roleId
+    }
+
+
+    async exportTeamProjectPreset(input: ExportTeamProjectPresetInput) {
+        return await this.teamOrchestrationService.exportProjectPreset(input)
+    }
+
+    async importTeamProjectPreset(input: ImportTeamProjectPresetInput): Promise<TeamProjectSnapshot> {
+        const result = await this.teamOrchestrationService.importProjectPreset(input)
+        this.refreshTeamSessions([
+            input.managerSessionId,
+            ...result.snapshot.members.map((member) => member.sessionId)
+        ])
+        return result.snapshot
+    }
+
+    async createTeamTask(input: CreateTeamTaskInput): Promise<TeamTaskRecord> {
+        const result = await this.teamOrchestrationService.createTask(input)
+        this.refreshTeamSessions([
+            input.managerSessionId,
+            ...result.snapshot.members.map((member) => member.sessionId)
+        ])
+        return result.task
+    }
+
+    async updateTeamProjectSettings(input: UpdateTeamProjectSettingsInput): Promise<TeamProjectSnapshot> {
+        const result = await this.teamOrchestrationService.updateProjectSettings(input)
+        this.refreshTeamSessions([
+            input.managerSessionId,
+            ...result.snapshot.members.map((member) => member.sessionId)
+        ])
+        return result.snapshot
+    }
+
+    async updateTeamTask(input: UpdateTeamTaskInput): Promise<TeamTaskRecord> {
+        const result = await this.teamOrchestrationService.updateTask(input)
+        this.refreshTeamSessions([
+            input.managerSessionId,
+            ...result.snapshot.members.map((member) => member.sessionId)
+        ])
+        return result.task
+    }
+
+    async messageTeamMember(input: MessageTeamMemberInput) {
+        const result = await this.teamOrchestrationService.messageMember(input)
+        this.refreshTeamSessions([
+            input.managerSessionId,
+            result.member.sessionId,
+            ...result.snapshot.members.map((member) => member.sessionId)
+        ])
+        return result
+    }
+
+    async closeTeamProject(input: CloseTeamProjectInput) {
+        const result = await this.teamOrchestrationService.closeProject(input)
+        this.refreshTeamSessions([
+            input.managerSessionId,
+            ...result.snapshot.members.map((member) => member.sessionId)
+        ])
+        return result
     }
 
     async approvePermission(
@@ -579,11 +827,11 @@ export class SyncEngine {
     }
 
     async archiveSession(sessionId: string): Promise<Session> {
-        return await this.sessionLifecycleService.archiveSession(sessionId)
+        return await this.teamLifecycleService.archiveSession(sessionId)
     }
 
     async unarchiveSession(sessionId: string): Promise<Session> {
-        return await this.sessionLifecycleService.unarchiveSession(sessionId)
+        return await this.teamLifecycleService.unarchiveSession(sessionId)
     }
 
     private async waitForSwitchedSession(sessionId: string, to: 'remote' | 'local'): Promise<Session> {
@@ -698,14 +946,40 @@ export class SyncEngine {
             meta?: MessageMeta
         }
     ): Promise<Session> {
+        const readySession = await this.ensurePassiveInternalUserMessageTarget(sessionId)
+        await this.messageService.appendUserMessage(sessionId, payload)
+        this.sessionCache.refreshSession(sessionId)
+        return this.getSession(sessionId) ?? readySession
+    }
+
+    private ensureGenericSendAllowed(sessionId: string): void {
+        const member = this.store.teams.getMemberBySessionId(sessionId)
+        if (!member || member.controlOwner === 'user') {
+            return
+        }
+
+        const instructionBlock = member.membershipState === 'active'
+            ? resolveManagerInstructionBlock(this.store, member)
+            : null
+        throw new SessionSendMessageError(
+            instructionBlock?.kind === 'pending_interject'
+                ? 'Team member is still completing a user interjection'
+                : 'Team member is currently under manager control',
+            'team_member_control_conflict',
+            409
+        )
+    }
+
+    private async ensurePassiveInternalUserMessageTarget(sessionId: string): Promise<Session> {
         const existingSession = this.getSession(sessionId)
         if (!existingSession) {
             throw new TeamMemberControlError('Session not found', 'team_session_not_found', 404)
         }
+        if (existingSession.active) {
+            return existingSession
+        }
 
-        await this.messageService.appendUserMessage(sessionId, payload)
-        this.sessionCache.refreshSession(sessionId)
-        return this.getSession(sessionId) ?? existingSession
+        return await this.ensureSessionReadyForSend(sessionId)
     }
 
     private buildTeamMessageMeta(
@@ -763,12 +1037,17 @@ export class SyncEngine {
         if (member.membershipState !== 'active') {
             throw new TeamMemberControlError('Team member is not active', 'team_member_inactive', 409)
         }
-        if (options?.requireManagerControl && member.controlOwner !== 'manager') {
-            throw new TeamMemberControlError(
-                'Team member is not manager-controlled',
-                'team_member_not_manager_controlled',
-                409
-            )
+        if (options?.requireManagerControl) {
+            const instructionBlock = resolveManagerInstructionBlock(this.store, member)
+            if (instructionBlock) {
+                throw new TeamMemberControlError(
+                    instructionBlock.kind === 'pending_interject'
+                        ? 'Team member is still completing a user interjection'
+                        : 'Team member is currently under user control',
+                    'team_member_control_conflict',
+                    409
+                )
+            }
         }
 
         const snapshot = this.teamCoordinatorService.getProjectSnapshot(member.projectId)
@@ -785,6 +1064,15 @@ export class SyncEngine {
             currentTask: member.spawnedForTaskId
                 ? snapshot.tasks.find((task) => task.id === member.spawnedForTaskId) ?? null
                 : null
+        }
+    }
+
+    private refreshTeamSessions(sessionIds: Array<string | null | undefined>): void {
+        for (const sessionId of sessionIds) {
+            if (!sessionId) {
+                continue
+            }
+            this.sessionCache.refreshSession(sessionId)
         }
     }
 

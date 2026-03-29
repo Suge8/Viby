@@ -203,4 +203,30 @@ describe('messages routes', () => {
         })
         expect(sendMessageCalls).toEqual([])
     })
+
+    it('surfaces readonly conflicts from the Hub-owned send command', async () => {
+        const { app, sendMessageCalls } = createApp({
+            sendMessage: async () => {
+                throw new SessionSendMessageError(
+                    'Team member is currently under manager control',
+                    'team_member_control_conflict' as never,
+                    409
+                )
+            }
+        })
+
+        const response = await app.request('/api/sessions/session-1/messages', {
+            method: 'POST',
+            body: JSON.stringify({
+                text: 'should be blocked'
+            })
+        })
+
+        expect(response.status).toBe(409)
+        expect(await response.json()).toEqual({
+            error: 'Team member is currently under manager control',
+            code: 'team_member_control_conflict'
+        })
+        expect(sendMessageCalls).toEqual([])
+    })
 })
