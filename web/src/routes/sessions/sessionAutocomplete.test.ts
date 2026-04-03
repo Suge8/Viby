@@ -34,7 +34,7 @@ describe('sessionAutocomplete', () => {
             }))
         }
         const getSuggestions = createSessionAutocompleteSuggestions({
-            agentType: 'codex',
+            driver: 'codex',
             api: api as never,
             queryClient,
             sessionId: 'session-1'
@@ -45,6 +45,41 @@ describe('sessionAutocomplete', () => {
             expect(api.getSkills).toHaveBeenCalledTimes(1)
         })
         expect(api.getSlashCommands).not.toHaveBeenCalled()
+    })
+
+
+    it('falls back to the legacy agentType option when the driver is absent', async () => {
+        const queryClient = createQueryClient()
+        const api = {
+            getSlashCommands: vi.fn(async () => ({
+                success: true,
+                commands: []
+            }))
+        }
+        const getSuggestions = createSessionAutocompleteSuggestions({
+            agentType: 'codex',
+            api: api as never,
+            queryClient,
+            sessionId: 'session-1'
+        })
+
+        const suggestions = await getSuggestions('/')
+
+        expect(suggestions.some((item) => item.text === '/review')).toBe(true)
+    })
+
+    it('defaults malformed drivers to Claude builtins without breaking cached queries', async () => {
+        const queryClient = createQueryClient()
+        const getSuggestions = createSessionAutocompleteSuggestions({
+            driver: 'unknown',
+            api: null,
+            queryClient,
+            sessionId: 'session-1'
+        })
+
+        const suggestions = await getSuggestions('/')
+
+        expect(suggestions.some((item) => item.text === '/compact')).toBe(true)
     })
 
     it('returns slash builtins immediately and prefetches remote commands on demand', async () => {

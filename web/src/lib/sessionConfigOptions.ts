@@ -10,9 +10,9 @@ import {
     type CodexReasoningEffort,
     type GeminiModelPreset,
     type ModelReasoningEffort,
+    type PiModelCapability,
+    type SessionDriver,
 } from '@viby/protocol'
-
-type SessionConfigAgentType = 'claude' | 'codex' | 'cursor' | 'gemini' | 'opencode'
 
 export type SessionConfigOption<T extends string | null> = {
     value: T
@@ -99,15 +99,16 @@ function createReasoningEffortOption<T extends ModelReasoningEffort | ModelReaso
     }
 }
 
-export const MODEL_OPTIONS: Record<SessionConfigAgentType, SessionConfigOption<string>[]> = {
+export const MODEL_OPTIONS: Record<SessionDriver, SessionConfigOption<string>[]> = {
     claude: buildCuratedModelOptions('auto', CLAUDE_SELECTABLE_MODEL_PRESETS, (model) => getClaudeModelLabel(model) ?? model),
     codex: buildCuratedModelOptions('auto', CURATED_CODEX_MODELS, (model) => CODEX_MODEL_LABELS[model]),
     cursor: [],
     gemini: buildCuratedModelOptions('auto', CURATED_GEMINI_MODELS, (model) => getGeminiModelLabel(model) ?? model),
     opencode: [],
+    pi: [createTerminalDefaultModelOption('auto')],
 }
 
-export const REASONING_EFFORT_OPTIONS: Record<SessionConfigAgentType, SessionConfigOption<ModelReasoningEffortSelection>[]> = {
+export const REASONING_EFFORT_OPTIONS: Record<SessionDriver, SessionConfigOption<ModelReasoningEffortSelection>[]> = {
     claude: [
         createTerminalDefaultReasoningEffortOption('default'),
         ...CURATED_CLAUDE_REASONING_EFFORTS.map((effort) => createReasoningEffortOption(effort)),
@@ -119,10 +120,32 @@ export const REASONING_EFFORT_OPTIONS: Record<SessionConfigAgentType, SessionCon
     cursor: [],
     gemini: [],
     opencode: [],
+    pi: [createTerminalDefaultReasoningEffortOption('default')],
 }
 
 export const CODEX_REASONING_EFFORT_OPTIONS = REASONING_EFFORT_OPTIONS.codex
 export const CLAUDE_REASONING_EFFORT_OPTIONS = REASONING_EFFORT_OPTIONS.claude
+
+function getComposerReasoningEffortOptions<T extends ModelReasoningEffort>(
+    currentEffort: T | null | undefined,
+    supportedEfforts: readonly T[]
+): SessionConfigOption<T | null>[] {
+    if (supportedEfforts.length === 0 && !currentEffort) {
+        return []
+    }
+
+    const options: SessionConfigOption<T | null>[] = [
+        createTerminalDefaultReasoningEffortOption(null),
+        ...supportedEfforts.map((effort) => createReasoningEffortOption(effort)),
+    ]
+
+    return withCurrentOption(
+        currentEffort,
+        options,
+        (value) => supportedEfforts.includes(value),
+        (value) => createReasoningEffortOption(value)
+    )
+}
 
 export function getClaudeComposerModelOptions(currentModel?: string | null): SessionConfigOption<string | null>[] {
     const options = buildCuratedModelOptions(null, CLAUDE_SELECTABLE_MODEL_PRESETS, (model) => getClaudeModelLabel(model) ?? model)
@@ -138,17 +161,29 @@ export function getClaudeComposerModelOptions(currentModel?: string | null): Ses
     )
 }
 
-export function getSessionModelDisplayLabel(model: string, flavor?: string | null): string {
+export function getSessionModelDisplayLabel(model: string, sessionDriver?: string | null): string {
+    return getSessionModelDisplayLabelWithCapabilities(model, sessionDriver)
+}
+
+export function getSessionModelDisplayLabelWithCapabilities(
+    model: string,
+    sessionDriver?: string | null,
+    piModelCapabilities?: readonly PiModelCapability[] | null
+): string {
     const normalizedModel = model.trim()
     if (!normalizedModel) {
         return model
     }
 
-    if (flavor === 'codex') {
+    if (sessionDriver === 'pi') {
+        return piModelCapabilities?.find((capability) => capability.id === normalizedModel)?.label ?? normalizedModel
+    }
+
+    if (sessionDriver === 'codex') {
         return CODEX_MODEL_LABELS[normalizedModel as keyof typeof CODEX_MODEL_LABELS] ?? normalizedModel
     }
 
-    if (flavor === 'gemini') {
+    if (sessionDriver === 'gemini') {
         return getGeminiModelLabel(normalizedModel) ?? normalizedModel
     }
 
@@ -187,36 +222,115 @@ export function getGeminiComposerModelOptions(currentModel?: string | null): Ses
     )
 }
 
-export function getCodexComposerReasoningEffortOptions(
-    currentEffort?: CodexReasoningEffort | null
-): SessionConfigOption<CodexReasoningEffort | null>[] {
-    const options: SessionConfigOption<CodexReasoningEffort | null>[] = [
-        createTerminalDefaultReasoningEffortOption(null),
-        ...CURATED_CODEX_REASONING_EFFORTS.map((effort) => createReasoningEffortOption(effort)),
+function normalizePiModelCapabilities(capabilities?: readonly PiModelCapability[] | null): PiModelCapability[] {
+    if (!capabilities || capabilities.length === 0) {
+        return []
+    }
+
+    const seen = new Set<string>()
+    const normalized: PiModelCapability[] = []
+    for (const capability of capabilities) {
+        const id = capability.id.trim()
+        if (!id || seen.has(id)) {
+            continue
+        }
+
+        seen.add(id)
+        normalized.push({
+            ...capability,
+            id,
+            label: capability.label.trim() || id,
+            supportedThinkingLevels: capability.supportedThinkingLevels
+        })
+    }
+
+    return normalized
+}
+
+export function findPiModelCapability(
+    currentModel?: string | null,
+    capabilities?: readonly PiModelCapability[] | null
+): PiModelCapability | null {
+    const normalizedCapabilities = normalizePiModelCapabilities(capabilities)
+    const normalizedModel = normalizeComposerStringValue(currentModel)
+    if (!normalizedModel) {
+        return null
+    }
+
+    return normalizedCapabilities.find((capability) => capability.id === normalizedModel) ?? null
+}
+
+export function getPiLaunchModelOptions(
+    capabilities?: readonly PiModelCapability[] | null
+): SessionConfigOption<string>[] {
+    const normalizedCapabilities = normalizePiModelCapabilities(capabilities)
+
+    return [
+        createTerminalDefaultModelOption('auto'),
+        ...normalizedCapabilities.map((capability) => ({
+            value: capability.id,
+            label: capability.label,
+        })),
+    ]
+}
+
+export function getPiLaunchReasoningEffortOptions(
+    supportedEfforts?: readonly ModelReasoningEffort[] | null
+): SessionConfigOption<ModelReasoningEffortSelection>[] {
+    return [
+        createTerminalDefaultReasoningEffortOption('default'),
+        ...((supportedEfforts ?? []) as readonly ModelReasoningEffort[]).map((effort) => createReasoningEffortOption(effort)),
+    ]
+}
+
+export function getPiComposerModelOptions(
+    currentModel?: string | null,
+    capabilities?: readonly PiModelCapability[] | null
+): SessionConfigOption<string | null>[] {
+    const normalizedCapabilities = normalizePiModelCapabilities(capabilities)
+    if (normalizedCapabilities.length === 0 && !normalizeComposerStringValue(currentModel)) {
+        return []
+    }
+
+    const options: SessionConfigOption<string | null>[] = [
+        createTerminalDefaultModelOption(null),
+        ...normalizedCapabilities.map((capability) => ({
+            value: capability.id,
+            label: capability.label,
+        })),
     ]
 
     return withCurrentOption(
-        currentEffort,
+        normalizeComposerStringValue(currentModel),
         options,
-        (value) => CURATED_CODEX_REASONING_EFFORTS.includes(value as typeof CURATED_CODEX_REASONING_EFFORTS[number]),
-        (value) => createReasoningEffortOption(value)
+        (value) => normalizedCapabilities.some((capability) => capability.id === value),
+        (value) => ({
+            value,
+            label: value,
+        })
+    )
+}
+
+export function getCodexComposerReasoningEffortOptions(
+    currentEffort?: CodexReasoningEffort | null
+): SessionConfigOption<CodexReasoningEffort | null>[] {
+    return getComposerReasoningEffortOptions(currentEffort, CURATED_CODEX_REASONING_EFFORTS)
+}
+
+export function getPiComposerReasoningEffortOptions(
+    currentEffort?: ModelReasoningEffort | null,
+    supportedEfforts?: readonly ModelReasoningEffort[] | null
+): SessionConfigOption<ModelReasoningEffort | null>[] {
+    return getComposerReasoningEffortOptions(
+        currentEffort,
+        (supportedEfforts ?? []) as readonly ModelReasoningEffort[]
     )
 }
 
 export function getClaudeComposerReasoningEffortOptions(
     currentEffort?: ClaudeReasoningEffort | null
 ): SessionConfigOption<ClaudeReasoningEffort | null>[] {
-    const options: SessionConfigOption<ClaudeReasoningEffort | null>[] = [
-        createTerminalDefaultReasoningEffortOption(null),
-        ...CURATED_CLAUDE_REASONING_EFFORTS.map((effort) => createReasoningEffortOption(effort)),
-    ]
-
-    return withCurrentOption(
-        currentEffort,
-        options,
-        (value) => CURATED_CLAUDE_REASONING_EFFORTS.includes(value as typeof CURATED_CLAUDE_REASONING_EFFORTS[number]),
-        (value) => createReasoningEffortOption(value)
-    )
+    return getComposerReasoningEffortOptions(currentEffort, CURATED_CLAUDE_REASONING_EFFORTS)
 }
 
 export function getNextClaudeComposerModel(currentModel?: string | null): string | null {

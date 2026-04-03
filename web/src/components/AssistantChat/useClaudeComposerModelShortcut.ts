@@ -1,21 +1,21 @@
 import { useEffect } from 'react'
-import { isClaudeFlavor } from '@/lib/agentFlavorUtils'
+import type { SessionDriver } from '@viby/protocol'
 import { getNextClaudeComposerModel } from '@/lib/sessionConfigOptions'
 
 type HapticFeedback = (type?: 'light' | 'success' | 'error') => void
 
 type UseClaudeComposerModelShortcutOptions = {
-    agentFlavor: string | null
+    sessionDriver: SessionDriver | null
     model: string | null
     onModelChange?: (model: string | null) => void
     haptic: HapticFeedback
 }
 
 export function useClaudeComposerModelShortcut(options: UseClaudeComposerModelShortcutOptions): void {
-    const { agentFlavor, model, onModelChange, haptic } = options
+    const { sessionDriver, model, onModelChange, haptic } = options
 
     useEffect(() => {
-        if (!onModelChange || !isClaudeFlavor(agentFlavor)) {
+        if (!onModelChange || sessionDriver !== 'claude') {
             return
         }
         const handleModelChange = onModelChange
@@ -32,5 +32,5 @@ export function useClaudeComposerModelShortcut(options: UseClaudeComposerModelSh
 
         window.addEventListener('keydown', handleGlobalKeyDown)
         return () => window.removeEventListener('keydown', handleGlobalKeyDown)
-    }, [agentFlavor, haptic, model, onModelChange])
+    }, [haptic, model, onModelChange, sessionDriver])
 }

@@ -4,14 +4,14 @@ import type { SessionChatLocalNotice } from '@/components/SessionChatLocalNotice
 import type { MessageWindowWarningKey } from '@/lib/messageWindowWarnings'
 import { useNoticeCenter } from '@/lib/notice-center'
 import { getNoticePreset } from '@/lib/noticePresets'
-import { formatUserFacingErrorMessage } from '@/lib/userFacingError'
+import { formatSessionRecoveryErrorMessage } from '@/lib/sessionRecoveryError'
 import { useTranslation } from '@/lib/use-translation'
 
 type UseSessionChatLocalNoticesOptions = {
     sessionId: string
     lifecycleState: SessionLifecycleState
     messagesWarning: MessageWindowWarningKey | null
-    onUnarchiveSession: () => Promise<void>
+    onRestoreSession: () => Promise<void>
 }
 
 type UseSessionChatLocalNoticesResult = {
@@ -59,7 +59,7 @@ export function useSessionChatLocalNotices(
         sessionId,
         lifecycleState,
         messagesWarning,
-        onUnarchiveSession
+        onRestoreSession
     } = options
     const [isRestoringArchived, setIsRestoringArchived] = useState(false)
     const isMountedRef = useRef(true)
@@ -81,15 +81,12 @@ export function useSessionChatLocalNotices(
         }
 
         setIsRestoringArchived(true)
-        void onUnarchiveSession()
+        void onRestoreSession()
             .catch((error) => {
-                console.error('Failed to unarchive session from chat detail:', error)
+                console.error('Failed to restore session from chat detail:', error)
                 addToast({
                     title: errorPreset.title,
-                    description: formatUserFacingErrorMessage(error, {
-                        t,
-                        fallbackKey: 'chat.resumeFailed.generic'
-                    }),
+                    description: formatSessionRecoveryErrorMessage(error, t),
                     tone: errorPreset.tone
                 })
             })
@@ -98,7 +95,7 @@ export function useSessionChatLocalNotices(
                     setIsRestoringArchived(false)
                 }
             })
-    }, [addToast, errorPreset.title, errorPreset.tone, isRestoringArchived, onUnarchiveSession, t])
+    }, [addToast, errorPreset.title, errorPreset.tone, isRestoringArchived, onRestoreSession, t])
 
     const localNotices = useMemo<readonly SessionChatLocalNotice[]>(() => {
         const notices: SessionChatLocalNotice[] = []

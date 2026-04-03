@@ -46,7 +46,7 @@ function createSessionSummary() {
             path: '/Users/demo/Project/Viby',
             name: 'Seeded session',
             machineId: 'machine-1',
-            flavor: 'codex',
+            driver: 'codex',
             summary: {
                 text: 'Session summary',
                 updatedAt: 20
@@ -105,11 +105,11 @@ describe('useSession', () => {
                 metadata: {
                     path: '/Users/demo/Project/Viby',
                     host: 'demo.local',
-                    flavor: 'codex'
+                    driver: 'codex'
                 },
                 metadataVersion: 4,
                 agentState: {
-                    controlledByUser: false
+                    controlOwner: 'viby'
                 },
                 agentStateVersion: 5,
                 thinking: false,
@@ -161,7 +161,7 @@ describe('useSession', () => {
             metadata: {
                 path: '/Users/demo/Project/Viby',
                 host: 'demo.local',
-                flavor: 'codex',
+                driver: 'codex',
                 lifecycleState: 'closed',
                 lifecycleStateSince: 30
             },

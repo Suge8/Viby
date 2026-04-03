@@ -38,7 +38,7 @@ function createSessionSummary(
         lifecycleStateSince: 1_000,
         metadata: {
             path: '/tmp/project',
-            flavor: 'claude',
+            driver: 'claude',
             summary: {
                 text: 'Streaming title',
                 updatedAt: 1_000

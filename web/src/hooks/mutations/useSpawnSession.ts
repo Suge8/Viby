@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { ApiClient } from '@/api/client'
 import type {
+    AgentFlavor,
     CodexCollaborationMode,
     ModelReasoningEffort,
     PermissionMode,
@@ -16,7 +17,7 @@ import { useTranslation } from '@/lib/use-translation'
 type SpawnInput = {
     machineId: string
     directory: string
-    agent?: 'claude' | 'codex' | 'cursor' | 'gemini' | 'opencode'
+    agent?: AgentFlavor
     model?: string
     modelReasoningEffort?: ModelReasoningEffort
     permissionMode?: PermissionMode

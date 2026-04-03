@@ -18,6 +18,7 @@ const viewportLayoutHarness = vi.hoisted(() => ({
 
 const sessionActionHarness = vi.hoisted(() => ({
     invalidateQueries: vi.fn(async () => undefined),
+    ensureSessionReady: vi.fn(async () => undefined),
     unarchiveSession: vi.fn(async () => undefined)
 }))
 
@@ -29,6 +30,7 @@ beforeEach(() => {
         floatingControlBottomInsetPx: 0
     }
     sessionActionHarness.invalidateQueries.mockReset()
+    sessionActionHarness.ensureSessionReady.mockReset()
     sessionActionHarness.unarchiveSession.mockReset()
 })
 
@@ -112,7 +114,7 @@ function createSession(overrides?: Partial<Session>): Session {
         model: 'gpt-5.4-mini',
         modelReasoningEffort: null,
         metadata: {
-            flavor: 'codex'
+            driver: 'codex'
         },
         agentState: {
             controlledByUser: false
@@ -151,10 +153,12 @@ function createWorkspaceProps(overrides?: Partial<ComponentProps<typeof SessionC
             onAtBottomChange: vi.fn(),
             onAbort: vi.fn(async () => undefined),
             onUnarchiveSession: sessionActionHarness.unarchiveSession,
-            onSwitchToRemote: vi.fn(async () => undefined),
+            onSwitchSessionDriver: vi.fn(async () => undefined),
+            isSwitchingSessionDriver: false,
         },
         runtimeOptions: {
             liveConfigSupport: DEFAULT_LIVE_CONFIG_SUPPORT,
+            ensureSessionReady: sessionActionHarness.ensureSessionReady,
         },
         ...overrides
     }
@@ -228,7 +232,7 @@ describe('SessionChatWorkspace layout', () => {
                         session: createSession({
                             active: false,
                             metadata: {
-                                flavor: 'codex',
+                                driver: 'codex',
                                 lifecycleState: 'archived'
                             } as never
                         })
@@ -238,11 +242,12 @@ describe('SessionChatWorkspace layout', () => {
         )
 
         expect(
-            screen.getByText(/^(chat\.archived\.banner|This session is archived\. Sending a new message will restore it automatically, or you can restore it now\.)$/)
+            screen.getByText(/^(chat\.archived\.banner|This session is archived\. Sending a new message or tapping Restore will bring it back online automatically\.)$/)
         ).toBeInTheDocument()
 
         fireEvent.click(screen.getByRole('button', { name: /^(session\.action\.unarchive|Restore)$/ }))
 
-        expect(sessionActionHarness.unarchiveSession).toHaveBeenCalledOnce()
+        expect(sessionActionHarness.ensureSessionReady).toHaveBeenCalledOnce()
+        expect(sessionActionHarness.unarchiveSession).not.toHaveBeenCalled()
     })
 })

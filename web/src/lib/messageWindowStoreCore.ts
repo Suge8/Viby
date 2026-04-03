@@ -16,6 +16,7 @@ import {
     type MessageWindowState,
     type PendingReplyState
 } from '@/lib/messageWindowState'
+import type { MessageWindowWarningKey } from '@/lib/messageWindowWarnings'
 import {
     applyAppendedOptimisticMessage,
     applyClearedPendingReply,
@@ -41,10 +42,12 @@ export type MessageWindowSetStateOptions = Readonly<{
 
 const states = new Map<string, InternalState>()
 const listeners = new Map<string, Set<() => void>>()
+const stateEvictionTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
 // Throttled notification: coalesce rapid state updates into at most one
 // notification per NOTIFY_THROTTLE_MS during streaming.
 const NOTIFY_THROTTLE_MS = 150
+const MESSAGE_WINDOW_STATE_EVICTION_DELAY_MS = 60_000
 const pendingNotifySessionIds = new Set<string>()
 let notifyRafId: ReturnType<typeof requestAnimationFrame> | null = null
 let lastNotifyAt = 0
@@ -81,6 +84,31 @@ function flushNotifications(): void {
             listener()
         }
     }
+}
+
+function clearStateEvictionTimer(sessionId: string): void {
+    const timerId = stateEvictionTimers.get(sessionId)
+    if (!timerId) {
+        return
+    }
+
+    clearTimeout(timerId)
+    stateEvictionTimers.delete(sessionId)
+}
+
+function scheduleStateEviction(sessionId: string): void {
+    clearStateEvictionTimer(sessionId)
+    const timerId = setTimeout(() => {
+        stateEvictionTimers.delete(sessionId)
+        if ((listeners.get(sessionId)?.size ?? 0) > 0) {
+            return
+        }
+
+        states.delete(sessionId)
+        clearPendingVisibilityCache(sessionId)
+    }, MESSAGE_WINDOW_STATE_EVICTION_DELAY_MS)
+
+    stateEvictionTimers.set(sessionId, timerId)
 }
 
 function createState(sessionId: string): InternalState {
@@ -149,6 +177,7 @@ export function getMessageWindowState(sessionId: string): MessageWindowState {
 }
 
 export function subscribeMessageWindow(sessionId: string, listener: () => void): () => void {
+    clearStateEvictionTimer(sessionId)
     const subs = listeners.get(sessionId) ?? new Set()
     subs.add(listener)
     listeners.set(sessionId, subs)
@@ -160,13 +189,13 @@ export function subscribeMessageWindow(sessionId: string, listener: () => void):
         current.delete(listener)
         if (current.size === 0) {
             listeners.delete(sessionId)
-            states.delete(sessionId)
-            clearPendingVisibilityCache(sessionId)
+            scheduleStateEviction(sessionId)
         }
     }
 }
 
 export function clearMessageWindow(sessionId: string): void {
+    clearStateEvictionTimer(sessionId)
     clearPendingVisibilityCache(sessionId)
     if (!states.has(sessionId)) {
         return
@@ -178,6 +207,7 @@ export function clearMessageWindow(sessionId: string): void {
 }
 
 export function removeMessageWindow(sessionId: string): void {
+    clearStateEvictionTimer(sessionId)
     clearMessageWindow(sessionId)
     removeMessageWindowWarmSnapshot(sessionId)
     states.delete(sessionId)
@@ -250,6 +280,27 @@ export function setAtBottom(sessionId: string, atBottom: boolean): void {
             return prev
         }
         return buildState(prev, { atBottom })
+    }, { immediate: true })
+}
+
+export function setMessageWindowWarning(sessionId: string, warning: MessageWindowWarningKey): void {
+    updateMessageWindowState(sessionId, (prev) => {
+        if (prev.warning === warning) {
+            return prev
+        }
+        return buildState(prev, { warning })
+    }, { immediate: true })
+}
+
+export function clearMessageWindowWarning(sessionId: string, warning?: MessageWindowWarningKey): void {
+    updateMessageWindowState(sessionId, (prev) => {
+        if (!prev.warning) {
+            return prev
+        }
+        if (warning && prev.warning !== warning) {
+            return prev
+        }
+        return buildState(prev, { warning: null })
     }, { immediate: true })
 }
 

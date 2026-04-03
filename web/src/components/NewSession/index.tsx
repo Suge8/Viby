@@ -7,10 +7,6 @@ import { usePlatform } from '@/hooks/usePlatform'
 import { useSpawnSession } from '@/hooks/mutations/useSpawnSession'
 import { useSessions } from '@/hooks/queries/useSessions'
 import { useRecentPaths } from '@/hooks/useRecentPaths'
-import {
-    MODEL_OPTIONS,
-    REASONING_EFFORT_OPTIONS,
-} from '@/lib/sessionConfigOptions'
 import { getNoticePreset } from '@/lib/noticePresets'
 import { formatUserFacingErrorMessage } from '@/lib/userFacingError'
 import { useTranslation } from '@/lib/use-translation'
@@ -27,6 +23,8 @@ import {
 import { SessionTypeSelector } from './SessionTypeSelector'
 import { resolveLaunchPermissionMode } from './launchConfig'
 import { useNewSessionDirectoryState } from './useNewSessionDirectoryState'
+import { usePiLaunchConfig } from './usePiLaunchConfig'
+import { usePiLaunchOptions } from './usePiLaunchOptions'
 import { formatRunnerSpawnError } from '../../utils/formatRunnerSpawnError'
 
 export function NewSession(props: {
@@ -87,10 +85,15 @@ export function NewSession(props: {
         getRecentPaths,
         getLastUsedMachineId
     })
-    const runnerSpawnError = useMemo(
-        () => formatRunnerSpawnError(selectedMachine),
-        [selectedMachine]
-    )
+    const runnerSpawnError = useMemo(() => formatRunnerSpawnError(selectedMachine), [selectedMachine])
+
+    const { config: piLaunchConfig, error: piLaunchConfigError } = usePiLaunchConfig({
+        api: props.api,
+        agent,
+        machineId: selectedMachineId,
+        directory: trimmedDirectory,
+        t
+    })
 
     const updateAgentSetting = useCallback((targetAgent: AgentType, nextValues: Partial<{
         model: string
@@ -193,9 +196,19 @@ export function NewSession(props: {
         }
     }
 
+    const { modelOptions, reasoningOptions } = usePiLaunchOptions({
+        agent,
+        model,
+        modelReasoningEffort,
+        machineId: selectedMachineId,
+        directory: trimmedDirectory,
+        piLaunchConfig,
+        updateAgentSetting,
+        setModel,
+        setModelReasoningEffort
+    })
+
     const canCreate = Boolean(selectedMachineId && trimmedDirectory && !isFormDisabled && !missingWorktreeDirectory)
-    const modelOptions = MODEL_OPTIONS[agent]
-    const reasoningOptions = REASONING_EFFORT_OPTIONS[agent]
     return (
         <div className="flex flex-col gap-4 pb-8 pt-4">
             <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
@@ -247,7 +260,8 @@ export function NewSession(props: {
                         options={{
                             modelOptions,
                             reasoningOptions,
-                            isDisabled: isFormDisabled
+                            isDisabled: isFormDisabled,
+                            piLaunchConfigError
                         }}
                         handlers={{
                             onAgentChange: handleAgentChange,

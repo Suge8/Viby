@@ -3,7 +3,6 @@ import type { ApiClient } from '@/api/client'
 import type { DecryptedMessage, SessionStreamState } from '@/types/api'
 import type { MessageWindowWarningKey } from '@/lib/messageWindowWarnings'
 import {
-    clearMessageWindow,
     flushMessageWindowSnapshot,
     flushPendingMessages,
     getMessageWindowState,
@@ -86,7 +85,6 @@ export function useMessages(api: ApiClient | null, sessionId: string | null): {
         }
         return () => {
             flushMessageWindowSnapshot(sessionId)
-            clearMessageWindow(sessionId)
         }
     }, [sessionId])
 
@@ -114,8 +112,8 @@ export function useMessages(api: ApiClient | null, sessionId: string | null): {
 
     const refetch = useCallback(async () => {
         if (!api || !sessionId) return
-        const { fetchLatestMessages } = await loadMessageWindowStoreAsyncModule()
-        await fetchLatestMessages(api, sessionId)
+        const { recoverLatestMessages } = await loadMessageWindowStoreAsyncModule()
+        await recoverLatestMessages(api, sessionId)
     }, [api, sessionId])
 
     const flushPending = useCallback(async () => {

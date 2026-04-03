@@ -1,3 +1,4 @@
+import { getActiveSessionTurnState } from '@viby/protocol'
 import type { SessionActivityKind, SessionLifecycleState } from '@/types/api'
 
 export type SessionStateLabelKey =
@@ -27,6 +28,11 @@ type SessionStatePresentationOptions = {
     pendingRequestsCount: number
     hasUnseenReply: boolean
 }
+
+type SessionStateStatusOptions = Pick<
+    SessionStatePresentationOptions,
+    'lifecycleState' | 'thinking' | 'latestActivityKind' | 'pendingRequestsCount'
+>
 
 type SessionStatePalette = {
     badgeClassName: string
@@ -90,12 +96,7 @@ export function getSessionStatePresentation(
     }
 }
 
-function getSessionDisplayState(options: {
-    lifecycleState: SessionLifecycleState
-    thinking: boolean
-    latestActivityKind: SessionActivityKind | null
-    pendingRequestsCount: number
-}): SessionDisplayState {
+function getSessionDisplayState(options: SessionStateStatusOptions): SessionDisplayState {
     if (options.lifecycleState === 'archived') {
         return 'archived'
     }
@@ -104,25 +105,13 @@ function getSessionDisplayState(options: {
         return 'closed'
     }
 
-    if (options.pendingRequestsCount > 0) {
-        return 'awaitingInput'
-    }
-
-    if (options.thinking) {
-        return 'processing'
-    }
-
-    if (options.latestActivityKind === 'reply' || options.latestActivityKind === 'user') {
-        return 'processing'
-    }
-
-    return 'awaitingInput'
+    return getActiveSessionTurnState(options) === 'processing'
+        ? 'processing'
+        : 'awaitingInput'
 }
 
 function getSessionCardClassName(cardClassName: string, hasUnseenReply: boolean): string {
-    if (!hasUnseenReply) {
-        return cardClassName
-    }
-
-    return `${cardClassName} ${ATTENTION_CARD_CLASS_NAME}`
+    return hasUnseenReply
+        ? `${cardClassName} ${ATTENTION_CARD_CLASS_NAME}`
+        : cardClassName
 }

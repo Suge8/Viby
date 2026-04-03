@@ -15,6 +15,8 @@ export type RealtimeTraceEventType =
     | 'thinking_visible'
     | 'first_stream_delta'
     | 'first_reply_detected'
+    | 'post_switch_send_failed'
+    | 'post_switch_no_reply'
 
 export type RealtimeTraceEntry = {
     at: number

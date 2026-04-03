@@ -5,23 +5,17 @@ import type { PendingReplyState } from '@/lib/messageWindowStoreCore'
 import type { SessionStreamState } from '@/types/api'
 import type { Session } from '@/types/api'
 import { useSessionTargetResolver } from '@/hooks/useSessionTargetResolver'
-import { clearPendingReply } from '@/lib/messageWindowStoreCore'
 import { useNoticeCenter } from '@/lib/notice-center'
 import { appendRealtimeTrace } from '@/lib/realtimeTrace'
+import { formatSessionRecoveryErrorMessage } from '@/lib/sessionRecoveryError'
 import { writeSessionToQueryCache } from '@/lib/sessionQueryCache'
-import { formatUserFacingErrorMessage } from '@/lib/userFacingError'
 import { useTranslation } from '@/lib/use-translation'
-
-type PendingReplyTraceDetails = {
-    sessionId: string
-    waitMs?: number
-}
 
 function buildPendingReplyTraceDetails(options: {
     sessionId: string
     requestStartedAt: number | null
     extraDetails?: Record<string, unknown>
-}): PendingReplyTraceDetails & Record<string, unknown> {
+}): Record<string, unknown> {
     const waitMs = options.requestStartedAt !== null
         ? Date.now() - options.requestStartedAt
         : undefined
@@ -30,26 +24,6 @@ function buildPendingReplyTraceDetails(options: {
         ...(waitMs !== undefined ? { waitMs } : {}),
         ...(options.extraDetails ?? {})
     }
-}
-
-function formatResumeErrorMessage(error: unknown, t: (key: string) => string): string {
-    return formatUserFacingErrorMessage(error, {
-        t,
-        fallbackKey: 'chat.resumeFailed.generic',
-        codeMap: {
-            session_archived: 'chat.resumeFailed.sessionArchived',
-            resume_unavailable: 'chat.resumeFailed.resumeUnavailable',
-            no_machine_online: 'chat.resumeFailed.noMachineOnline',
-            session_not_found: 'chat.resumeFailed.sessionNotFound',
-            resume_failed: 'chat.resumeFailed.resumeFailed'
-        },
-        messageMap: [
-            {
-                match: 'Resume session ID unavailable',
-                key: 'chat.resumeFailed.resumeUnavailable'
-            }
-        ]
-    })
 }
 
 export function useSessionResumeController(options: {
@@ -75,7 +49,7 @@ export function useSessionResumeController(options: {
         onError: (error, currentSessionId) => {
             addToast({
                 title: t('chat.resumeFailed.title'),
-                description: formatResumeErrorMessage(error, t),
+                description: formatSessionRecoveryErrorMessage(error, t),
                 tone: 'danger',
                 href: `/sessions/${currentSessionId}`
             })
@@ -131,6 +105,7 @@ export function useSessionChatTracing(options: {
 }): void {
     const previousThinkingRef = useRef(options.thinking)
     const lastTracedStreamIdRef = useRef<string | null>(null)
+    const requestStartedAt = options.pendingReply?.requestStartedAt ?? null
 
     useEffect(() => {
         previousThinkingRef.current = options.thinking
@@ -148,17 +123,11 @@ export function useSessionChatTracing(options: {
             type: 'thinking_visible',
             details: buildPendingReplyTraceDetails({
                 sessionId: options.sessionId,
-                requestStartedAt: options.pendingReply?.requestStartedAt ?? null
+                requestStartedAt
             })
         })
-        clearPendingReply(options.sessionId, options.pendingReply?.localId)
         previousThinkingRef.current = options.thinking
-    }, [
-        options.pendingReply?.localId,
-        options.pendingReply?.requestStartedAt,
-        options.sessionId,
-        options.thinking
-    ])
+    }, [options.sessionId, options.thinking, requestStartedAt])
 
     useEffect(() => {
         const stream = options.stream
@@ -178,18 +147,12 @@ export function useSessionChatTracing(options: {
             type: 'first_stream_delta',
             details: buildPendingReplyTraceDetails({
                 sessionId: options.sessionId,
-                requestStartedAt: options.pendingReply?.requestStartedAt ?? null,
+                requestStartedAt,
                 extraDetails: {
                     streamId: stream.streamId
                 }
             })
         })
-        clearPendingReply(options.sessionId, options.pendingReply?.localId)
         lastTracedStreamIdRef.current = stream.streamId
-    }, [
-        options.pendingReply?.localId,
-        options.pendingReply?.requestStartedAt,
-        options.sessionId,
-        options.stream
-    ])
+    }, [options.sessionId, options.stream, requestStartedAt])
 }

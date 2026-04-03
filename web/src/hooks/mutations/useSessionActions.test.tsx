@@ -41,7 +41,7 @@ function createSession(lifecycleState: 'closed' | 'archived'): Session {
         metadata: {
             path: '/Users/demo/Project/Viby',
             host: 'demo.local',
-            flavor: 'codex',
+            driver: 'codex',
             lifecycleState,
             lifecycleStateSince: 2_000
         },
@@ -78,7 +78,7 @@ function primeSessionsCache(queryClient: QueryClient, session: Session): void {
                 lifecycleStateSince: session.metadata?.lifecycleStateSince ?? null,
                 metadata: {
                     path: session.metadata?.path ?? '',
-                    flavor: session.metadata?.flavor ?? null
+                    driver: session.metadata?.driver ?? null
                 },
                 todoProgress: null,
                 pendingRequestsCount: 0,
@@ -207,37 +207,32 @@ describe('useSessionActions', () => {
         expect(invalidateQueries).not.toHaveBeenCalled()
     })
 
-    it('writes the switched remote session snapshot directly into cache without invalidating', async () => {
+    it('writes the switched Claude session snapshot directly into cache without invalidating', async () => {
         const queryClient = createQueryClient()
         const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
-        const localSession: Session = {
+        const codexSession: Session = {
             ...createSession('closed'),
             active: true,
             activeAt: 3_000,
             metadata: {
                 ...createSession('closed').metadata!,
+                driver: 'codex',
                 lifecycleState: 'running',
                 lifecycleStateSince: 3_000
-            },
-            agentState: {
-                controlledByUser: true,
-                requests: {},
-                completedRequests: {}
             }
         }
-        primeSessionsCache(queryClient, localSession)
+        primeSessionsCache(queryClient, codexSession)
 
         const switchedSession: Session = {
-            ...localSession,
-            agentState: {
-                controlledByUser: false,
-                requests: {},
-                completedRequests: {}
+            ...codexSession,
+            metadata: {
+                ...codexSession.metadata!,
+                driver: 'claude'
             },
-            agentStateVersion: 2
+            metadataVersion: 2
         }
         const api = {
-            switchSession: vi.fn(async () => switchedSession)
+            switchSessionDriver: vi.fn(async () => switchedSession)
         } as Partial<ApiClient> as ApiClient
 
         const { result } = renderHook(
@@ -246,23 +241,154 @@ describe('useSessionActions', () => {
         )
 
         await act(async () => {
-            await result.current.switchSession()
+            await result.current.switchSessionDriver('claude')
         })
 
-        expect(api.switchSession).toHaveBeenCalledWith('session-1')
-        expect(queryClient.getQueryData<{ session: Session }>(queryKeys.session('session-1'))?.session.agentState?.controlledByUser).toBe(false)
-        expect(queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)?.sessions[0]?.active).toBe(true)
+        expect(api.switchSessionDriver).toHaveBeenCalledWith('session-1', 'claude')
+        expect(queryClient.getQueryData<{ session: Session }>(queryKeys.session('session-1'))?.session.metadata?.driver).toBe('claude')
+        expect(queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)?.sessions[0]?.metadata?.driver).toBe('claude')
         expect(invalidateQueries).not.toHaveBeenCalled()
     })
 
-    it('applies live model and reasoning updates for remote Claude sessions', async () => {
+    it('writes the switched Codex session snapshot directly into cache without invalidating', async () => {
+        const queryClient = createQueryClient()
+        const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
+        const claudeSession: Session = {
+            ...createSession('closed'),
+            active: true,
+            activeAt: 3_000,
+            metadata: {
+                ...createSession('closed').metadata!,
+                driver: 'claude',
+                lifecycleState: 'running',
+                lifecycleStateSince: 3_000
+            }
+        }
+        primeSessionsCache(queryClient, claudeSession)
+
+        const switchedSession: Session = {
+            ...claudeSession,
+            metadata: {
+                ...claudeSession.metadata!,
+                driver: 'codex'
+            },
+            metadataVersion: 2
+        }
+        const api = {
+            switchSessionDriver: vi.fn(async () => switchedSession)
+        } as Partial<ApiClient> as ApiClient
+
+        const { result } = renderHook(
+            () => useSessionActions(api, 'session-1', 'claude'),
+            { wrapper: createWrapper(queryClient) }
+        )
+
+        await act(async () => {
+            await result.current.switchSessionDriver('codex')
+        })
+
+        expect(api.switchSessionDriver).toHaveBeenCalledWith('session-1', 'codex')
+        expect(queryClient.getQueryData<{ session: Session }>(queryKeys.session('session-1'))?.session.metadata?.driver).toBe('codex')
+        expect(queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)?.sessions[0]?.metadata?.driver).toBe('codex')
+        expect(invalidateQueries).not.toHaveBeenCalled()
+    })
+
+    it('fails fast when the session target is missing', async () => {
+        const queryClient = createQueryClient()
+        const { result } = renderHook(
+            () => useSessionActions(null, 'session-1', 'codex'),
+            { wrapper: createWrapper(queryClient) }
+        )
+
+        await expect(result.current.switchSessionDriver('claude')).rejects.toThrow('Session unavailable')
+    })
+
+    it('fails fast when the target driver is missing or unsupported', async () => {
+        const queryClient = createQueryClient()
+        const api = {
+            switchSessionDriver: vi.fn(async () => createSession('closed'))
+        } as Partial<ApiClient> as ApiClient
+        const { result } = renderHook(
+            () => useSessionActions(api, 'session-1', 'codex'),
+            { wrapper: createWrapper(queryClient) }
+        )
+
+        await expect(result.current.switchSessionDriver(null)).rejects.toThrow(
+            'Same-session agent switching requires an explicit Claude or Codex target driver'
+        )
+        await expect(result.current.switchSessionDriver('gemini')).rejects.toThrow(
+            'Same-session agent switching requires an explicit Claude or Codex target driver'
+        )
+        expect(api.switchSessionDriver).not.toHaveBeenCalled()
+    })
+
+    it('applies collaboration changes using the authoritative driver', async () => {
+        const queryClient = createQueryClient()
+        const session = createSession('closed')
+        primeSessionsCache(queryClient, session)
+        const api = {
+            setCollaborationMode: vi.fn(async () => ({
+                ...session,
+                collaborationMode: 'plan' as const
+            }))
+        } as Partial<ApiClient> as ApiClient
+
+        const { result } = renderHook(
+            () => useSessionActions(api, 'session-1', 'codex', {
+                liveConfigSupport: {
+                    isRemoteManaged: true,
+                    canChangePermissionMode: true,
+                    canChangeCollaborationMode: true,
+                    canChangeModel: true,
+                    canChangeModelReasoningEffort: true
+                }
+            }),
+            { wrapper: createWrapper(queryClient) }
+        )
+
+        await act(async () => {
+            await result.current.setCollaborationMode('plan')
+        })
+
+        expect(api.setCollaborationMode).toHaveBeenCalledWith('session-1', 'plan')
+        expect(queryClient.getQueryData<{ session: Session }>(queryKeys.session('session-1'))?.session.collaborationMode).toBe('plan')
+    })
+
+    it('rejects driver-switch failures without mutating local cache state', async () => {
+        const queryClient = createQueryClient()
+        const baseSession: Session = {
+            ...createSession('closed'),
+            active: true,
+            metadata: {
+                ...createSession('closed').metadata!,
+                driver: 'codex'
+            }
+        }
+        primeSessionsCache(queryClient, baseSession)
+        const api = {
+            switchSessionDriver: vi.fn(async () => {
+                throw new Error('switch failed')
+            })
+        } as Partial<ApiClient> as ApiClient
+
+        const { result } = renderHook(
+            () => useSessionActions(api, 'session-1', 'codex'),
+            { wrapper: createWrapper(queryClient) }
+        )
+
+        await expect(result.current.switchSessionDriver('claude')).rejects.toThrow('switch failed')
+        expect(queryClient.getQueryData<{ session: Session }>(queryKeys.session('session-1'))?.session.metadata?.driver).toBe('codex')
+        expect(queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)?.sessions[0]?.metadata?.driver).toBe('codex')
+    })
+
+    it('applies live model and reasoning updates for Viby-managed Claude sessions', async () => {
         const queryClient = createQueryClient()
         const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
         const baseSession = {
             ...createSession('closed'),
             metadata: {
                 ...createSession('closed').metadata!,
-                flavor: 'claude' as const,
+                driver: 'claude' as const,
                 lifecycleState: 'running' as const
             },
             active: true,
@@ -307,14 +433,14 @@ describe('useSessionActions', () => {
         expect(invalidateQueries).not.toHaveBeenCalled()
     })
 
-    it('applies live model updates for remote Gemini sessions', async () => {
+    it('applies live model updates for Viby-managed Gemini sessions', async () => {
         const queryClient = createQueryClient()
         const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
         const baseSession = {
             ...createSession('closed'),
             metadata: {
                 ...createSession('closed').metadata!,
-                flavor: 'gemini' as const,
+                driver: 'gemini' as const,
                 lifecycleState: 'running' as const
             },
             active: true,

@@ -1,7 +1,9 @@
 import { useMemo } from 'react'
-import { supportsLiveModelSelectionForFlavor } from '@viby/protocol'
+import {
+    supportsLiveModelReasoningEffortForDriver,
+    supportsLiveModelSelectionForDriver
+} from '@viby/protocol'
 import type {
-    ClaudeReasoningEffort,
     CodexCollaborationMode,
     CodexReasoningEffort,
     ModelReasoningEffort,
@@ -11,6 +13,7 @@ import type { ComposerActionHandlers, ComposerConfigState } from '@/components/A
 import { buildComposerControlSections } from '@/components/AssistantChat/composerPanelSections'
 import { useComposerPlatform, type ComposerHaptic } from '@/components/AssistantChat/useComposerPlatform'
 import {
+    type ComposerPanelOption,
     getLocalizedCollaborationModeOptions,
     getLocalizedModelOptions,
     getLocalizedPermissionModeOptions,
@@ -47,6 +50,24 @@ function createHapticRunner(onClose: () => void, controlsDisabled: boolean, hapt
     }
 }
 
+function getComposerReasoningEffortOptions(
+    sessionDriver: string | null,
+    modelReasoningEffort: ModelReasoningEffort | null,
+    codexReasoningEffort: CodexReasoningEffort | null,
+    availableReasoningEfforts: readonly ModelReasoningEffort[] | null,
+    t: (key: string, params?: Record<string, string | number>) => string
+): ComposerPanelOption<ModelReasoningEffort | null>[] {
+    if (!supportsLiveModelReasoningEffortForDriver(sessionDriver)) {
+        return []
+    }
+
+    if (sessionDriver === 'codex') {
+        return getLocalizedReasoningEffortOptions(sessionDriver, codexReasoningEffort, null, t)
+    }
+
+    return getLocalizedReasoningEffortOptions(sessionDriver, modelReasoningEffort, availableReasoningEfforts, t)
+}
+
 export function useComposerLiveConfig(
     options: UseComposerLiveConfigOptions
 ): readonly React.ReactNode[] {
@@ -55,48 +76,50 @@ export function useComposerLiveConfig(
         permissionMode = 'default',
         collaborationMode = 'default',
         model = null,
+        piModelCapabilities = null,
+        availableReasoningEfforts = null,
         modelReasoningEffort = null,
-        agentFlavor = null,
-        controlledByUser = false,
+        sessionDriver = null,
+        switchTargetDriver = null,
+        switchDriverPending = false,
     } = options.config
     const codexReasoningEffort = useMemo(
         () => normalizeCodexReasoningEffort(modelReasoningEffort),
         [modelReasoningEffort]
     )
     const permissionModeOptions = useMemo(
-        () => getLocalizedPermissionModeOptions(agentFlavor, t),
-        [agentFlavor, t]
+        () => getLocalizedPermissionModeOptions(sessionDriver, t),
+        [sessionDriver, t]
     )
     const collaborationModeOptions = useMemo(
-        () => agentFlavor === 'codex' ? getLocalizedCollaborationModeOptions(t) : [],
-        [agentFlavor, t]
+        () => sessionDriver === 'codex' ? getLocalizedCollaborationModeOptions(t) : [],
+        [sessionDriver, t]
     )
     const supportsModelSelection = useMemo(
-        () => supportsLiveModelSelectionForFlavor(agentFlavor),
-        [agentFlavor]
+        () => supportsLiveModelSelectionForDriver(sessionDriver),
+        [sessionDriver]
     )
     const modelOptions = useMemo(() => {
         if (supportsModelSelection) {
-            return getLocalizedModelOptions(agentFlavor, model, t)
+            return getLocalizedModelOptions(sessionDriver, model, piModelCapabilities, t)
         }
 
         return []
-    }, [agentFlavor, model, supportsModelSelection, t])
-    const reasoningEffortOptions = useMemo(() => {
-        if (agentFlavor === 'claude') {
-            return getLocalizedReasoningEffortOptions(
-                agentFlavor,
-                modelReasoningEffort as ClaudeReasoningEffort | null,
-                t
-            )
-        }
-
-        if (agentFlavor === 'codex') {
-            return getLocalizedReasoningEffortOptions(agentFlavor, codexReasoningEffort, t)
-        }
-
-        return []
-    }, [agentFlavor, codexReasoningEffort, modelReasoningEffort, t])
+    }, [model, piModelCapabilities, sessionDriver, supportsModelSelection, t])
+    const supportsReasoningEffort = useMemo(
+        () => supportsLiveModelReasoningEffortForDriver(sessionDriver),
+        [sessionDriver]
+    )
+    const reasoningEffortOptions = useMemo(
+        () => getComposerReasoningEffortOptions(
+            sessionDriver,
+            modelReasoningEffort,
+            codexReasoningEffort,
+            availableReasoningEfforts,
+            t
+        ),
+        [availableReasoningEfforts, codexReasoningEffort, modelReasoningEffort, sessionDriver, t]
+    )
 
     const { haptic } = useComposerPlatform()
     const runAction = useMemo(
@@ -117,7 +140,7 @@ export function useComposerLiveConfig(
     )
     const showReasoningEffortSettings = Boolean(
         options.handlers.onModelReasoningEffortChange
-        && (agentFlavor === 'claude' || agentFlavor === 'codex')
+        && supportsReasoningEffort
         && reasoningEffortOptions.length > 0
     )
 
@@ -129,15 +152,16 @@ export function useComposerLiveConfig(
         onModelChange: (value: string | null) => runAction(options.handlers.onModelChange, value),
         onModelReasoningEffortChange: (value: ModelReasoningEffort | null) => runAction(options.handlers.onModelReasoningEffortChange, value),
         onPermissionChange: (value: PermissionMode) => runAction(options.handlers.onPermissionModeChange, value),
-        onSwitchToRemote: controlledByUser && options.handlers.onSwitchToRemote
+        switchTargetDriver,
+        switchDriverPending,
+        onSwitchSessionDriver: switchTargetDriver && options.handlers.onSwitchSessionDriver
             ? () => {
-                if (options.controlsDisabled) {
+                if (options.controlsDisabled || switchDriverPending) {
                     return
                 }
 
                 options.onClose()
-                haptic('light')
-                void options.handlers.onSwitchToRemote?.()
+                void options.handlers.onSwitchSessionDriver?.()
             }
             : undefined,
         model,
@@ -154,8 +178,6 @@ export function useComposerLiveConfig(
     }), [
         collaborationMode,
         collaborationModeOptions,
-        controlledByUser,
-        haptic,
         model,
         modelOptions,
         modelReasoningEffort,
@@ -164,7 +186,7 @@ export function useComposerLiveConfig(
         options.handlers.onModelChange,
         options.handlers.onModelReasoningEffortChange,
         options.handlers.onPermissionModeChange,
-        options.handlers.onSwitchToRemote,
+        options.handlers.onSwitchSessionDriver,
         options.onClose,
         permissionMode,
         permissionModeOptions,
@@ -174,6 +196,8 @@ export function useComposerLiveConfig(
         showModelSettings,
         showPermissionSettings,
         showReasoningEffortSettings,
+        switchDriverPending,
+        switchTargetDriver,
         t,
     ])
 }

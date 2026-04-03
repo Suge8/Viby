@@ -17,6 +17,7 @@ type HarnessProps = {
     messagesVersion?: number
     streamVersion?: number
     forceScrollToken?: number
+    pinToBottomOnSessionEntry?: boolean
     orderedMessageIds?: readonly string[]
     renderedMessageIds?: readonly string[]
     conversationMessageIds?: readonly string[]
@@ -194,6 +195,7 @@ function Harness(props: HarnessProps): React.JSX.Element {
         threadMessageOwnerById: new Map((props.orderedMessageIds ?? []).map((messageId) => [messageId, messageId])),
         historyJumpTargetMessageIds: props.historyJumpTargetMessageIds ?? [],
         forceScrollToken: props.forceScrollToken ?? 0,
+        pinToBottomOnSessionEntry: props.pinToBottomOnSessionEntry ?? false,
     })
 
     return (
@@ -1423,7 +1425,7 @@ describe('useThreadViewport', () => {
     })
 
     it('sticks to the bottom when entering a session that already has loaded messages', () => {
-        const { rerender } = render(<Harness sessionId="session-1" />)
+        const { rerender } = render(<Harness sessionId="session-1" pinToBottomOnSessionEntry />)
 
         const viewport = screen.getByTestId('viewport') as HTMLDivElement
         const model = decorateViewport(viewport, {
@@ -1433,6 +1435,44 @@ describe('useThreadViewport', () => {
         })
 
         rerender(<Harness sessionId="session-2" />)
+
+        expect(model.getScrollTop()).toBe(560)
+    })
+
+    it('pins the current session to the bottom when the first loaded message layout resolves', () => {
+        const { result, rerender } = renderHook((messagesVersion: number) => useThreadViewport({
+            sessionId: 'session-entry',
+            hasMoreMessages: true,
+            isLoadingMessages: false,
+            isLoadingMoreMessages: false,
+            pinToBottomOnSessionEntry: true,
+            onLoadHistoryUntilPreviousUser: async () => ({ didLoadOlderMessages: true }),
+            onLoadMore: async () => ({ didLoadOlderMessages: true }),
+            onAtBottomChange: vi.fn(),
+            onFlushPending: vi.fn(),
+            messagesVersion,
+            streamVersion: 0,
+            orderedMessageIds: ['assistant:1'],
+            conversationMessageIds: ['assistant:1'],
+            threadMessageOwnerById: new Map([['assistant:1', 'assistant:1']]),
+            historyJumpTargetMessageIds: [],
+            forceScrollToken: 0,
+        }), {
+            initialProps: 0
+        })
+
+        const viewport = document.createElement('div')
+        const model = decorateViewport(viewport, {
+            clientHeight: 400,
+            scrollHeight: 960,
+            initialScrollTop: 320
+        })
+
+        act(() => {
+            result.current.viewportRef.current = viewport
+        })
+
+        rerender(1)
 
         expect(model.getScrollTop()).toBe(560)
     })

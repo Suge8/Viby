@@ -1,25 +1,26 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { resolveSessionDriver } from '@viby/protocol'
 import type { ApiClient } from '@/api/client'
-import type { Session } from '@/types/api'
 import { SessionChat } from '@/components/SessionChat'
 import { useAppGoBack } from '@/hooks/useAppGoBack'
 import { useSendMessage } from '@/hooks/mutations/useSendMessage'
 import { useMessages } from '@/hooks/queries/useMessages'
 import { useSession } from '@/hooks/queries/useSession'
-import { getMessageWindowState } from '@/lib/messageWindowStoreCore'
-import { loadMessageWindowStoreAsyncModule } from '@/lib/messageWindowStoreModule'
-import { useNoticeCenter } from '@/lib/notice-center'
-import { queryKeys } from '@/lib/query-keys'
 import { appendRealtimeTrace } from '@/lib/realtimeTrace'
-import { runSendCatchup } from '@/lib/sendCatchup'
-import { writeSessionToQueryCache } from '@/lib/sessionQueryCache'
+import { formatSessionRecoveryErrorMessage } from '@/lib/sessionRecoveryError'
+import { useNoticeCenter } from '@/lib/notice-center'
+import { useTranslation } from '@/lib/use-translation'
 import { createSessionAutocompleteSuggestions } from '@/routes/sessions/sessionAutocomplete'
+import {
+    type AcceptedSend,
+    handleAcceptedSend,
+    syncResolvedPostSwitchWarning
+} from '@/routes/sessions/postSwitchSendRecovery'
 import {
     useSessionChatTracing,
     useSessionResumeController
 } from '@/routes/sessions/sessionChatRouteRuntime'
-import { useTranslation } from '@/lib/use-translation'
 
 type SessionChatRouteModelOptions = {
     api: ApiClient
@@ -80,6 +81,15 @@ export function useSessionChatRouteModel(
         stream
     })
 
+    useEffect(() => {
+        syncResolvedPostSwitchWarning({
+            sessionId,
+            messages,
+            warning: messagesWarning,
+            streamText: stream?.text ?? ''
+        })
+    }, [messages, messagesWarning, sessionId, stream?.text])
+
     const handleSendBlocked = useCallback((reason: 'no-api' | 'no-session' | 'pending') => {
         if (reason !== 'no-api') {
             return
@@ -93,57 +103,11 @@ export function useSessionChatRouteModel(
         })
     }, [addToast, sessionId, t])
 
-    const handleAfterServerAccepted = useCallback(async ({
-        sessionId: acceptedSessionId,
-        createdAt,
-        acceptedAt,
-        session: acceptedSession
-    }: {
-        sessionId: string
-        localId: string
-        createdAt: number
-        acceptedAt: number
-        session: Session
-    }) => {
-        appendRealtimeTrace({
-            at: acceptedAt,
-            type: 'server_accepted',
-            details: {
-                sessionId: acceptedSessionId,
-                waitMs: acceptedAt - createdAt
-            }
-        })
-
-        writeSessionToQueryCache(queryClient, acceptedSession)
-
-        await runSendCatchup({
-            createdAt,
-            onReplyDetected: ({ reply, attempt }) => {
-                appendRealtimeTrace({
-                    at: Date.now(),
-                    type: 'first_reply_detected',
-                    details: {
-                        sessionId: acceptedSessionId,
-                        replyId: reply.id,
-                        replyCreatedAt: reply.createdAt,
-                        attempt,
-                        waitMs: Date.now() - createdAt
-                    }
-                })
-            },
-            syncOnce: async () => {
-                await queryClient.fetchQuery({
-                    queryKey: queryKeys.session(acceptedSessionId),
-                    queryFn: () => api.getSession(acceptedSessionId),
-                })
-
-                const { fetchLatestMessages } = await loadMessageWindowStoreAsyncModule()
-                await fetchLatestMessages(api, acceptedSessionId)
-
-                return {
-                    messages: getMessageWindowState(acceptedSessionId).messages
-                }
-            }
+    const handleAfterServerAccepted = useCallback(async (acceptedSend: AcceptedSend) => {
+        await handleAcceptedSend({
+            acceptedSend,
+            api,
+            queryClient
         })
     }, [api, queryClient])
 
@@ -161,16 +125,24 @@ export function useSessionChatRouteModel(
                 }
             })
         },
-        afterServerAccepted: handleAfterServerAccepted
+        afterServerAccepted: handleAfterServerAccepted,
+        onSendError: ({ sessionId: failedSessionId, error }) => {
+            addToast({
+                title: t('chat.resumeFailed.title'),
+                description: formatSessionRecoveryErrorMessage(error, t),
+                tone: 'danger',
+                href: `/sessions/${failedSessionId}`
+            })
+        }
     })
 
-    const agentType = session.metadata?.flavor ?? 'claude'
+    const sessionDriver = resolveSessionDriver(session.metadata)
     const autocompleteSuggestions = useMemo(() => createSessionAutocompleteSuggestions({
-        agentType,
+        driver: sessionDriver,
         api,
         queryClient,
         sessionId
-    }), [agentType, api, queryClient, sessionId])
+    }), [api, queryClient, sessionDriver, sessionId])
 
     const refreshSelectedSession = useCallback(() => {
         void refetchSession()

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionsResponse, SessionSummary } from '@/types/api'
-import { patchSessionSummaryCache } from './realtimeSessionSummaryCache'
+import { patchSessionSummaryCache, patchSessionSummaryFromMessageCache } from './realtimeSessionSummaryCache'
 
 function createSessionSummary(
     overrides: Partial<SessionSummary> & Pick<SessionSummary, 'id'>
@@ -26,7 +26,7 @@ function createSessionSummary(
         lifecycleStateSince: 0,
         metadata: {
             path: '/tmp/project',
-            flavor: 'codex',
+            driver: 'codex',
             summary: { text: 'Summary', updatedAt: 0 }
         },
         todoProgress: null,
@@ -89,5 +89,42 @@ describe('patchSessionSummaryCache', () => {
             permissionMode: 'yolo',
             collaborationMode: 'plan'
         })
+    })
+})
+
+describe('patchSessionSummaryFromMessageCache', () => {
+    it('keeps driver-switched marker events out of summary activity and updatedAt', () => {
+        const previous: SessionsResponse = {
+            sessions: [
+                createSessionSummary({
+                    id: 'session-1',
+                    updatedAt: 5_000,
+                    latestActivityAt: 4_000,
+                    latestActivityKind: 'ready',
+                    latestCompletedReplyAt: 4_000
+                })
+            ]
+        }
+
+        const result = patchSessionSummaryFromMessageCache(previous, 'session-1', {
+            id: 'message-1',
+            seq: 3,
+            localId: null,
+            createdAt: 6_000,
+            content: {
+                role: 'agent',
+                content: {
+                    type: 'event',
+                    data: {
+                        type: 'driver-switched',
+                        previousDriver: 'codex',
+                        targetDriver: 'claude'
+                    }
+                }
+            }
+        })
+
+        expect(result.patched).toBe(false)
+        expect(result.next).toBe(previous)
     })
 })

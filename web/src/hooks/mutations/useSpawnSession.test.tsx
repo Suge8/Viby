@@ -43,7 +43,7 @@ function createSession(): Session {
         metadata: {
             path: '/Users/demo/Project/Viby',
             host: 'demo.local',
-            flavor: 'codex',
+            driver: 'codex',
             machineId: 'machine-1',
             lifecycleState: 'running',
             lifecycleStateSince: 1_000

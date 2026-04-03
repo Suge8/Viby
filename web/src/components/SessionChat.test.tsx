@@ -5,11 +5,12 @@ import { SessionChat } from './SessionChat'
 
 const harness = vi.hoisted(() => ({
     abortSession: vi.fn(async () => undefined),
-    switchSession: vi.fn(async () => undefined),
+    switchSessionDriver: vi.fn(async () => undefined),
     navigate: vi.fn(),
     lastHeaderProps: null as Record<string, unknown> | null,
     lastWorkspaceProps: null as Record<string, unknown> | null,
     loadSessionFilesRouteModule: vi.fn(async () => undefined),
+    preloadSessionChatWorkspaceSurfaces: vi.fn(async () => undefined),
     preloadSessionTerminalExperience: vi.fn(async () => undefined),
     runPreloadedNavigation: vi.fn(),
 }))
@@ -28,7 +29,7 @@ function renderWorkspace(props: Record<string, unknown>): React.JSX.Element {
             <button
                 type="button"
                 data-testid="workspace-switch"
-                onClick={() => void ((props.actions as { onSwitchToRemote: () => Promise<void> }).onSwitchToRemote)()}
+                onClick={() => void ((props.actions as { onSwitchSessionDriver: () => Promise<void> }).onSwitchSessionDriver)()}
             >
                 switch
             </button>
@@ -61,6 +62,10 @@ vi.mock('@/routes/sessions/sessionRoutePreload', () => ({
     preloadSessionTerminalExperience: () => harness.preloadSessionTerminalExperience()
 }))
 
+vi.mock('@/components/sessionChatWorkspaceModules', () => ({
+    preloadSessionChatWorkspaceSurfaces: () => harness.preloadSessionChatWorkspaceSurfaces()
+}))
+
 vi.mock('@/components/SessionChatWorkspace', () => ({
     default: renderWorkspace
 }))
@@ -84,16 +89,18 @@ vi.mock('@/hooks/mutations/useSessionActions', () => ({
     useSessionActions: () => ({
         abortSession: harness.abortSession,
         unarchiveSession: vi.fn(async () => undefined),
-        switchSession: harness.switchSession
+        switchSessionDriver: harness.switchSessionDriver,
+        isSwitchingSessionDriver: false
     })
 }))
 
 afterEach(() => {
     cleanup()
     harness.abortSession.mockClear()
-    harness.switchSession.mockClear()
+    harness.switchSessionDriver.mockClear()
     harness.navigate.mockClear()
     harness.loadSessionFilesRouteModule.mockClear()
+    harness.preloadSessionChatWorkspaceSurfaces.mockClear()
     harness.preloadSessionTerminalExperience.mockClear()
     harness.runPreloadedNavigation.mockClear()
     harness.lastHeaderProps = null
@@ -136,7 +143,7 @@ function renderSessionChat(options?: {
                     model: 'gpt-5.4-mini',
                     modelReasoningEffort: null,
                     metadata: {
-                        flavor: 'codex',
+                        driver: 'codex',
                         path: '/Users/sugeh/Project/Bao'
                     },
                     agentState: {
@@ -212,14 +219,14 @@ describe('SessionChat layout', () => {
         expect(onRefresh).not.toHaveBeenCalled()
     })
 
-    it('does not force a message refresh immediately after switching to remote', async () => {
+    it('does not force a message refresh immediately after switching drivers', async () => {
         const onRefresh = vi.fn()
         renderSessionChat({ onRefresh })
 
         fireEvent.click(await screen.findByTestId('workspace-switch'))
 
         await vi.waitFor(() => {
-            expect(harness.switchSession).toHaveBeenCalledTimes(1)
+            expect(harness.switchSessionDriver).toHaveBeenCalledWith('claude')
         })
         expect(onRefresh).not.toHaveBeenCalled()
     })
@@ -270,7 +277,7 @@ describe('SessionChat layout', () => {
                 sessionRole: 'member',
                 managerSessionId: 'manager-session-1',
                 memberId: 'member-1',
-                controlOwner: 'manager',
+                controlledByUser: 'manager',
                 projectStatus: 'active'
             }
         })

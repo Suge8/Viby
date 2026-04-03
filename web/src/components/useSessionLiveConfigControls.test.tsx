@@ -11,7 +11,8 @@ import { useSessionLiveConfigControls } from './useSessionLiveConfigControls'
 
 const platformHarness = vi.hoisted(() => ({
     success: vi.fn(),
-    error: vi.fn()
+    error: vi.fn(),
+    addToast: vi.fn(),
 }))
 
 vi.mock('@/hooks/usePlatform', () => ({
@@ -26,6 +27,18 @@ vi.mock('@/hooks/usePlatform', () => ({
                 platformHarness.error()
             }
         }
+    })
+}))
+
+vi.mock('@/lib/notice-center', () => ({
+    useNoticeCenter: () => ({
+        addToast: platformHarness.addToast
+    })
+}))
+
+vi.mock('@/lib/use-translation', () => ({
+    useTranslation: () => ({
+        t: (key: string) => key
     })
 }))
 
@@ -59,7 +72,9 @@ function createSession(overrides?: Partial<Session>): Session {
         model: 'gpt-5.4-mini',
         modelReasoningEffort: null,
         metadata: {
-            flavor: 'codex'
+            path: '/tmp/project',
+            host: 'localhost',
+            driver: 'codex'
         },
         agentState: {
             controlledByUser: false
@@ -86,7 +101,7 @@ function primeSessionCaches(queryClient: QueryClient, session: Session): void {
             lifecycleStateSince: session.metadata?.lifecycleStateSince ?? null,
             metadata: {
                 path: session.metadata?.path ?? '',
-                flavor: session.metadata?.flavor ?? null
+                driver: session.metadata?.driver ?? null
             },
             todoProgress: null,
             pendingRequestsCount: 0,
@@ -99,10 +114,31 @@ function primeSessionCaches(queryClient: QueryClient, session: Session): void {
     })
 }
 
+function createOptions(overrides?: Partial<Parameters<typeof useSessionLiveConfigControls>[0]>): Parameters<typeof useSessionLiveConfigControls>[0] {
+    return {
+        api: {} as ApiClient,
+        session: createSession(),
+        liveConfigSupport: {
+            isRemoteManaged: true,
+            canChangePermissionMode: true,
+            canChangeCollaborationMode: true,
+            canChangeModel: true,
+            canChangeModelReasoningEffort: true
+        },
+        onSwitchSessionDriver: vi.fn(async () => undefined),
+        isSwitchingSessionDriver: false,
+        attachmentsSupported: true,
+        allowSendWhenInactive: false,
+        isResumingSession: false,
+        ...overrides
+    }
+}
+
 describe('useSessionLiveConfigControls', () => {
     beforeEach(() => {
         platformHarness.success.mockReset()
         platformHarness.error.mockReset()
+        platformHarness.addToast.mockReset()
     })
 
     it('writes the updated live config snapshot directly into both caches', async () => {
@@ -117,23 +153,10 @@ describe('useSessionLiveConfigControls', () => {
             }))
         } as Partial<ApiClient> as ApiClient
 
-        const { result } = renderHook(() => useSessionLiveConfigControls({
-            api,
-            session,
-            liveConfigSupport: {
-                isRemoteManaged: true,
-                canChangePermissionMode: true,
-                canChangeCollaborationMode: true,
-                canChangeModel: true,
-                canChangeModelReasoningEffort: true
-            },
-            onSwitchToRemote: vi.fn(async () => undefined),
-            attachmentsSupported: true,
-            allowSendWhenInactive: false,
-            isResumingSession: false
-        }), {
-            wrapper: createWrapper(queryClient)
-        })
+        const { result } = renderHook(
+            () => useSessionLiveConfigControls(createOptions({ api, session })),
+            { wrapper: createWrapper(queryClient) }
+        )
 
         await act(async () => {
             await result.current.composerHandlers.onPermissionModeChange?.('read-only')
@@ -147,182 +170,223 @@ describe('useSessionLiveConfigControls', () => {
         expect(platformHarness.error).not.toHaveBeenCalled()
     })
 
-    it('hides permission controls when the session cannot change permission mode', () => {
+    it('derives Pi capability-backed model and reasoning controls from authoritative metadata', () => {
         const queryClient = createQueryClient()
-        const session = createSession()
-        const api = {
-            setPermissionMode: vi.fn(async () => session)
-        } as Partial<ApiClient> as ApiClient
+        const { result } = renderHook(
+            () => useSessionLiveConfigControls(createOptions({
+                session: createSession({
+                    model: 'openai/gpt-5.4-mini',
+                    metadata: {
+                        path: '/tmp/project',
+                        host: 'localhost',
+                        driver: 'pi',
+                        piModelScope: {
+                            models: [
+                                {
+                                    id: 'openai/gpt-5.4',
+                                    label: 'GPT-5.4',
+                                    supportedThinkingLevels: ['none', 'low', 'medium', 'high']
+                                },
+                                {
+                                    id: 'openai/gpt-5.4-mini',
+                                    label: 'GPT-5.4 Mini',
+                                    supportedThinkingLevels: ['none', 'low']
+                                }
+                            ]
+                        }
+                    } as Session['metadata'],
+                    agentState: { controlledByUser: false }
+                })
+            })),
+            { wrapper: createWrapper(queryClient) }
+        )
 
-        const { result } = renderHook(() => useSessionLiveConfigControls({
-            api,
-            session,
-            liveConfigSupport: {
-                isRemoteManaged: false,
-                canChangePermissionMode: false,
-                canChangeCollaborationMode: false,
-                canChangeModel: false,
-                canChangeModelReasoningEffort: false
+        expect(result.current.composerConfig.piModelCapabilities).toEqual([
+            {
+                id: 'openai/gpt-5.4',
+                label: 'GPT-5.4',
+                supportedThinkingLevels: ['none', 'low', 'medium', 'high']
             },
-            onSwitchToRemote: vi.fn(async () => undefined),
-            attachmentsSupported: true,
-            allowSendWhenInactive: false,
-            isResumingSession: false
-        }), {
-            wrapper: createWrapper(queryClient)
-        })
-
-        expect(result.current.composerHandlers.onPermissionModeChange).toBeUndefined()
-        expect(api.setPermissionMode).not.toHaveBeenCalled()
-        expect(platformHarness.success).not.toHaveBeenCalled()
-        expect(platformHarness.error).not.toHaveBeenCalled()
+            {
+                id: 'openai/gpt-5.4-mini',
+                label: 'GPT-5.4 Mini',
+                supportedThinkingLevels: ['none', 'low']
+            }
+        ])
+        expect(result.current.composerConfig.availableReasoningEfforts).toEqual(['none', 'low'])
     })
 
-    it('rejects invalid permission modes for the current flavor without mutating cache', async () => {
+    it('derives the switch target from the authoritative current driver', () => {
         const queryClient = createQueryClient()
-        const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
-        const session = createSession()
-        const api = {
-            setPermissionMode: vi.fn(async () => session)
-        } as Partial<ApiClient> as ApiClient
+        const { result: codexResult } = renderHook(
+            () => useSessionLiveConfigControls(createOptions({
+                session: createSession({
+                    metadata: {
+                        path: '/tmp/project',
+                        host: 'localhost',
+                        driver: 'codex'
+                    },
+                    agentState: { controlledByUser: true }
+                })
+            })),
+            { wrapper: createWrapper(queryClient) }
+        )
+        const { result: claudeResult } = renderHook(
+            () => useSessionLiveConfigControls(createOptions({
+                session: createSession({
+                    metadata: {
+                        path: '/tmp/project',
+                        host: 'localhost',
+                        driver: 'claude'
+                    }
+                })
+            })),
+            { wrapper: createWrapper(queryClient) }
+        )
 
+        expect(codexResult.current.composerConfig.switchTargetDriver).toBe('claude')
+        expect(claudeResult.current.composerConfig.switchTargetDriver).toBe('codex')
+    })
+
+    it('suppresses the switch action for unsupported or inactive sessions', () => {
+        const queryClient = createQueryClient()
+        const { result: unsupportedResult } = renderHook(
+            () => useSessionLiveConfigControls(createOptions({
+                session: createSession({
+                    metadata: {
+                        path: '/tmp/project',
+                        host: 'localhost',
+                        driver: null
+                    }
+                })
+            })),
+            { wrapper: createWrapper(queryClient) }
+        )
+        const { result: inactiveResult } = renderHook(
+            () => useSessionLiveConfigControls(createOptions({
+                session: createSession({
+                    active: false,
+                    metadata: {
+                        path: '/tmp/project',
+                        host: 'localhost',
+                        driver: 'claude'
+                    }
+                })
+            })),
+            { wrapper: createWrapper(queryClient) }
+        )
+
+        expect(unsupportedResult.current.composerConfig.switchTargetDriver).toBeNull()
+        expect(unsupportedResult.current.composerHandlers.onSwitchSessionDriver).toBeUndefined()
+        expect(inactiveResult.current.composerConfig.switchTargetDriver).toBeNull()
+        expect(inactiveResult.current.composerHandlers.onSwitchSessionDriver).toBeUndefined()
+    })
+
+    it('exposes switch pending state from the mutation owner without a local copy', () => {
+        const queryClient = createQueryClient()
+        const { result } = renderHook(
+            () => useSessionLiveConfigControls(createOptions({ isSwitchingSessionDriver: true })),
+            { wrapper: createWrapper(queryClient) }
+        )
+
+        expect(result.current.composerConfig.switchDriverPending).toBe(true)
+    })
+
+    it('shows a localized danger toast for session_not_idle switch failures', async () => {
+        const queryClient = createQueryClient()
         const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-        const { result } = renderHook(() => useSessionLiveConfigControls({
-            api,
-            session: createSession(),
-            liveConfigSupport: {
-                isRemoteManaged: true,
-                canChangePermissionMode: true,
-                canChangeCollaborationMode: true,
-                canChangeModel: true,
-                canChangeModelReasoningEffort: true
-            },
-            onSwitchToRemote: vi.fn(async () => undefined),
-            attachmentsSupported: true,
-            allowSendWhenInactive: false,
-            isResumingSession: false
-        }), {
-            wrapper: createWrapper(queryClient)
+        const onSwitchSessionDriver = vi.fn(async () => {
+            throw Object.assign(new Error('HTTP 409 Conflict: session busy'), {
+                code: 'session_not_idle'
+            })
         })
+        const { result } = renderHook(
+            () => useSessionLiveConfigControls(createOptions({ onSwitchSessionDriver })),
+            { wrapper: createWrapper(queryClient) }
+        )
 
         await act(async () => {
-            await result.current.composerHandlers.onPermissionModeChange?.('plan')
+            await result.current.composerHandlers.onSwitchSessionDriver?.()
         })
 
-        expect(api.setPermissionMode).not.toHaveBeenCalled()
-        expect(invalidateQueries).not.toHaveBeenCalled()
-        expect(platformHarness.success).not.toHaveBeenCalled()
+        expect(onSwitchSessionDriver).toHaveBeenCalledOnce()
         expect(platformHarness.error).toHaveBeenCalledOnce()
-
+        expect(platformHarness.success).not.toHaveBeenCalled()
+        expect(platformHarness.addToast).toHaveBeenCalledWith({
+            title: 'chat.switchDriver.failed.title',
+            description: 'chat.switchDriver.failed.sessionNotIdle',
+            tone: 'danger'
+        })
         errorSpy.mockRestore()
     })
 
-    it('exposes live Claude model and reasoning handlers when the session supports them', async () => {
+    it('falls back to generic switch copy for malformed or technical failures', async () => {
         const queryClient = createQueryClient()
-        const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
-        const session = createSession({
-            metadata: {
-                path: '/tmp/project',
-                host: 'localhost',
-                flavor: 'claude'
-            },
-            model: 'sonnet',
-            modelReasoningEffort: 'high'
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+        const onSwitchSessionDriver = vi.fn(async () => {
+            throw new Error('gRPC transport closed while attaching switched session')
         })
-        primeSessionCaches(queryClient, session)
-        const api = {
-            setModel: vi.fn(async () => ({
-                ...session,
-                model: 'opus'
-            })),
-            setModelReasoningEffort: vi.fn(async () => ({
-                ...session,
-                model: 'opus',
-                modelReasoningEffort: 'max'
-            }))
-        } as Partial<ApiClient> as ApiClient
-
-        const { result } = renderHook(() => useSessionLiveConfigControls({
-            api,
-            session,
-            liveConfigSupport: {
-                isRemoteManaged: true,
-                canChangePermissionMode: true,
-                canChangeCollaborationMode: false,
-                canChangeModel: true,
-                canChangeModelReasoningEffort: true
-            },
-            onSwitchToRemote: vi.fn(async () => undefined),
-            attachmentsSupported: true,
-            allowSendWhenInactive: false,
-            isResumingSession: false
-        }), {
-            wrapper: createWrapper(queryClient)
-        })
+        const { result } = renderHook(
+            () => useSessionLiveConfigControls(createOptions({ onSwitchSessionDriver })),
+            { wrapper: createWrapper(queryClient) }
+        )
 
         await act(async () => {
-            await result.current.composerHandlers.onModelChange?.('opus')
-            await result.current.composerHandlers.onModelReasoningEffortChange?.('max')
+            await result.current.composerHandlers.onSwitchSessionDriver?.()
         })
 
-        expect(api.setModel).toHaveBeenCalledWith('session-1', 'opus')
-        expect(api.setModelReasoningEffort).toHaveBeenCalledWith('session-1', 'max')
-        expect(queryClient.getQueryData<{ session: Session }>(queryKeys.session('session-1'))?.session.model).toBe('opus')
-        expect(queryClient.getQueryData<{ session: Session }>(queryKeys.session('session-1'))?.session.modelReasoningEffort).toBe('max')
-        expect(invalidateQueries).not.toHaveBeenCalled()
-        expect(platformHarness.success).toHaveBeenCalledTimes(2)
+        expect(platformHarness.addToast).toHaveBeenCalledWith({
+            title: 'chat.switchDriver.failed.title',
+            description: 'chat.switchDriver.failed.generic',
+            tone: 'danger'
+        })
+        errorSpy.mockRestore()
+    })
+
+    it('does not run a second switch while the authoritative mutation is pending', async () => {
+        const queryClient = createQueryClient()
+        const onSwitchSessionDriver = vi.fn(async () => undefined)
+        const { result } = renderHook(
+            () => useSessionLiveConfigControls(createOptions({
+                onSwitchSessionDriver,
+                isSwitchingSessionDriver: true
+            })),
+            { wrapper: createWrapper(queryClient) }
+        )
+
+        await act(async () => {
+            await result.current.composerHandlers.onSwitchSessionDriver?.()
+        })
+
+        expect(onSwitchSessionDriver).not.toHaveBeenCalled()
+        expect(platformHarness.addToast).not.toHaveBeenCalled()
+        expect(platformHarness.success).not.toHaveBeenCalled()
         expect(platformHarness.error).not.toHaveBeenCalled()
     })
 
-    it('exposes Gemini live model handler without reasoning controls', async () => {
+    it('surfaces failed live-config mutations without mutating cache', async () => {
         const queryClient = createQueryClient()
-        const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
-        const session = createSession({
-            metadata: {
-                path: '/tmp/project',
-                host: 'localhost',
-                flavor: 'gemini'
-            },
-            model: null,
-            modelReasoningEffort: null
-        })
+        const session = createSession()
         primeSessionCaches(queryClient, session)
         const api = {
-            setModel: vi.fn(async () => ({
-                ...session,
-                model: 'gemini-2.5-flash-lite'
-            }))
+            setPermissionMode: vi.fn(async () => {
+                throw new Error('boom')
+            })
         } as Partial<ApiClient> as ApiClient
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
-        const { result } = renderHook(() => useSessionLiveConfigControls({
-            api,
-            session,
-            liveConfigSupport: {
-                isRemoteManaged: true,
-                canChangePermissionMode: true,
-                canChangeCollaborationMode: false,
-                canChangeModel: true,
-                canChangeModelReasoningEffort: false
-            },
-            onSwitchToRemote: vi.fn(async () => undefined),
-            attachmentsSupported: true,
-            allowSendWhenInactive: false,
-            isResumingSession: false
-        }), {
-            wrapper: createWrapper(queryClient)
-        })
-
-        expect(result.current.composerHandlers.onModelReasoningEffortChange).toBeUndefined()
+        const { result } = renderHook(
+            () => useSessionLiveConfigControls(createOptions({ api, session })),
+            { wrapper: createWrapper(queryClient) }
+        )
 
         await act(async () => {
-            await result.current.composerHandlers.onModelChange?.('gemini-2.5-flash-lite')
+            await result.current.composerHandlers.onPermissionModeChange?.('read-only')
         })
 
-        expect(api.setModel).toHaveBeenCalledWith('session-1', 'gemini-2.5-flash-lite')
-        expect(queryClient.getQueryData<{ session: Session }>(queryKeys.session('session-1'))?.session.model).toBe('gemini-2.5-flash-lite')
-        expect(invalidateQueries).not.toHaveBeenCalled()
-        expect(platformHarness.success).toHaveBeenCalledOnce()
-        expect(platformHarness.error).not.toHaveBeenCalled()
+        expect(queryClient.getQueryData<{ session: Session }>(queryKeys.session('session-1'))?.session.permissionMode).toBe('default')
+        expect(platformHarness.success).not.toHaveBeenCalled()
+        expect(platformHarness.error).toHaveBeenCalledOnce()
+        errorSpy.mockRestore()
     })
 })

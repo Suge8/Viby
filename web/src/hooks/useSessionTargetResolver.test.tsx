@@ -8,7 +8,7 @@ describe('useSessionTargetResolver', () => {
             id: 'session-1',
             active: true,
             metadata: {
-                flavor: 'codex',
+                driver: 'codex',
                 codexSessionId: 'thread-1'
             }
         }
@@ -18,7 +18,7 @@ describe('useSessionTargetResolver', () => {
         const onReady = vi.fn()
         const onError = vi.fn()
 
-        const { result, rerender } = renderHook((session: { id: string; active: boolean; metadata: { flavor: 'codex'; codexSessionId?: string } }) => useSessionTargetResolver({
+        const { result, rerender } = renderHook((session: { id: string; active: boolean; metadata: { driver: 'codex'; codexSessionId?: string } }) => useSessionTargetResolver({
             api: api as never,
             session: session as never,
             onReady,
@@ -28,7 +28,7 @@ describe('useSessionTargetResolver', () => {
                 id: 'session-1',
                 active: false,
                 metadata: {
-                    flavor: 'codex',
+                    driver: 'codex',
                     codexSessionId: 'thread-1'
                 }
             }
@@ -44,7 +44,7 @@ describe('useSessionTargetResolver', () => {
             id: 'session-1',
             active: true,
             metadata: {
-                flavor: 'codex',
+                driver: 'codex',
                 codexSessionId: 'thread-1'
             }
         })
@@ -54,7 +54,7 @@ describe('useSessionTargetResolver', () => {
     })
 
     it('dedupes concurrent resume requests while a resume is in flight', async () => {
-        let resolveResume: ((session: { id: string; active: boolean; metadata: { flavor: 'codex'; codexSessionId: string } }) => void) | null = null
+        let resolveResume: ((session: { id: string; active: boolean; metadata: { driver: 'codex'; codexSessionId: string } }) => void) | null = null
         const api = {
             resumeSession: vi.fn().mockImplementation(() => new Promise((resolve) => {
                 resolveResume = resolve
@@ -68,7 +68,7 @@ describe('useSessionTargetResolver', () => {
                 id: 'session-1',
                 active: false,
                 metadata: {
-                    flavor: 'codex',
+                    driver: 'codex',
                     codexSessionId: 'thread-1'
                 }
             } as never,
@@ -87,7 +87,7 @@ describe('useSessionTargetResolver', () => {
                 id: 'session-1',
                 active: true,
                 metadata: {
-                    flavor: 'codex',
+                    driver: 'codex',
                     codexSessionId: 'thread-1'
                 }
             })
@@ -112,7 +112,7 @@ describe('useSessionTargetResolver', () => {
                 id: 'session-legacy',
                 active: false,
                 metadata: {
-                    flavor: 'codex'
+                    driver: 'codex'
                 }
             } as never,
             onReady,
@@ -134,7 +134,7 @@ describe('useSessionTargetResolver', () => {
             id: 'session-1',
             active: false,
             metadata: {
-                flavor: 'codex',
+                driver: 'codex',
                 codexSessionId: 'thread-1',
                 lifecycleState: 'closed'
             }
@@ -160,7 +160,7 @@ describe('useSessionTargetResolver', () => {
                 id: 'session-1',
                 active: false,
                 metadata: {
-                    flavor: 'codex',
+                    driver: 'codex',
                     codexSessionId: 'thread-1',
                     lifecycleState: 'archived'
                 }
@@ -191,7 +191,7 @@ describe('useSessionTargetResolver', () => {
                 id: 'session-1',
                 active: false,
                 metadata: {
-                    flavor: 'codex',
+                    driver: 'codex',
                     codexSessionId: 'thread-1'
                 }
             } as never,
@@ -220,7 +220,7 @@ describe('useSessionTargetResolver', () => {
                 id: 'session-1',
                 active: false,
                 metadata: {
-                    flavor: 'codex',
+                    driver: 'codex',
                     codexSessionId: 'thread-1'
                 }
             } as never,

@@ -1,11 +1,16 @@
 import { useCallback, useMemo } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { isPermissionModeAllowedForFlavor, type LiveSessionConfigSupport } from '@viby/protocol'
+import {
+    isPermissionModeAllowedForDriver,
+    supportsLiveModelReasoningEffortForDriver,
+    type LiveSessionConfigSupport,
+    type SessionDriver
+} from '@viby/protocol'
 import type { ApiClient } from '@/api/client'
 import type { CodexCollaborationMode, ModelReasoningEffort, PermissionMode, Session, SessionResponse, SessionsResponse } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
+import { assertSameSessionSwitchTargetDriver, type SameSessionSwitchTargetDriver } from '@/lib/sameSessionDriverSwitch'
 import { removeSessionClientState, writeSessionToQueryCache } from '@/lib/sessionQueryCache'
-import { isKnownFlavor } from '@/lib/agentFlavorUtils'
 
 function getRequiredSessionTarget(
     api: ApiClient | null,
@@ -38,7 +43,7 @@ function getMutationPendingState(
 export function useSessionActions(
     api: ApiClient | null,
     sessionId: string | null,
-    agentFlavor?: string | null,
+    sessionDriver?: SessionDriver | null,
     options?: {
         liveConfigSupport?: LiveSessionConfigSupport
     }
@@ -48,7 +53,7 @@ export function useSessionActions(
     closeSession: () => Promise<void>
     archiveSession: () => Promise<void>
     unarchiveSession: () => Promise<void>
-    switchSession: () => Promise<void>
+    switchSessionDriver: (targetDriver: SessionDriver | null | undefined) => Promise<void>
     setPermissionMode: (mode: PermissionMode) => Promise<void>
     setCollaborationMode: (mode: CodexCollaborationMode) => Promise<void>
     setModel: (model: string | null) => Promise<void>
@@ -56,6 +61,7 @@ export function useSessionActions(
     renameSession: (name: string) => Promise<void>
     deleteSession: () => Promise<void>
     isPending: boolean
+    isSwitchingSessionDriver: boolean
 } {
     const queryClient = useQueryClient()
 
@@ -131,9 +137,13 @@ export function useSessionActions(
     })
 
     const switchMutation = useMutation({
-        mutationFn: createSessionMutationFn(api, sessionId, async (resolvedApi, resolvedSessionId) => {
-            return await resolvedApi.switchSession(resolvedSessionId)
-        }),
+        mutationFn: createSessionMutationFn(
+            api,
+            sessionId,
+            async (resolvedApi, resolvedSessionId, targetDriver: SameSessionSwitchTargetDriver) => {
+                return await resolvedApi.switchSessionDriver(resolvedSessionId, targetDriver)
+            }
+        ),
         onSuccess: writeSessionSnapshot,
     })
 
@@ -141,10 +151,10 @@ export function useSessionActions(
         mutationFn: async (mode: PermissionMode) => {
             const target = getRequiredSessionTarget(api, sessionId)
             if (options?.liveConfigSupport && !options.liveConfigSupport.canChangePermissionMode) {
-                throw new Error('Permission mode is only supported for remote-managed active sessions')
+                throw new Error('Permission mode is only supported for Viby-managed active sessions')
             }
-            if (isKnownFlavor(agentFlavor) && !isPermissionModeAllowedForFlavor(mode, agentFlavor)) {
-                throw new Error('Invalid permission mode for session flavor')
+            if (sessionDriver && !isPermissionModeAllowedForDriver(mode, sessionDriver)) {
+                throw new Error('Invalid permission mode for session driver')
             }
             return await target.api.setPermissionMode(target.sessionId, mode)
         },
@@ -154,11 +164,11 @@ export function useSessionActions(
     const collaborationMutation = useMutation({
         mutationFn: async (mode: CodexCollaborationMode) => {
             const target = getRequiredSessionTarget(api, sessionId)
-            if (agentFlavor !== 'codex') {
+            if (sessionDriver !== 'codex') {
                 throw new Error('Collaboration mode is only supported for Codex sessions')
             }
             if (!options?.liveConfigSupport?.canChangeCollaborationMode) {
-                throw new Error('Collaboration mode is only supported for remote Codex sessions')
+                throw new Error('Collaboration mode is only supported for Viby-managed Codex sessions')
             }
             return await target.api.setCollaborationMode(target.sessionId, mode)
         },
@@ -169,7 +179,7 @@ export function useSessionActions(
         mutationFn: async (model: string | null) => {
             const target = getRequiredSessionTarget(api, sessionId)
             if (!options?.liveConfigSupport?.canChangeModel) {
-                throw new Error('Model selection is only supported for remote Claude, Codex, and Gemini sessions')
+                throw new Error('Model selection is only supported for Viby-managed Claude, Codex, Gemini, and Pi sessions')
             }
             return await target.api.setModel(target.sessionId, model)
         },
@@ -179,11 +189,11 @@ export function useSessionActions(
     const modelReasoningEffortMutation = useMutation({
         mutationFn: async (modelReasoningEffort: ModelReasoningEffort | null) => {
             const target = getRequiredSessionTarget(api, sessionId)
-            if (agentFlavor !== 'codex' && agentFlavor !== 'claude') {
-                throw new Error('Model reasoning effort is only supported for Claude and Codex sessions')
+            if (!supportsLiveModelReasoningEffortForDriver(sessionDriver)) {
+                throw new Error('Model reasoning effort is not supported for this session driver')
             }
             if (!options?.liveConfigSupport?.canChangeModelReasoningEffort) {
-                throw new Error('Model reasoning effort is only supported for remote Claude and Codex sessions')
+                throw new Error('Model reasoning effort is only supported for Viby-managed sessions with reasoning controls')
             }
             return await target.api.setModelReasoningEffort(target.sessionId, modelReasoningEffort)
         },
@@ -202,7 +212,9 @@ export function useSessionActions(
             await resolvedApi.deleteSession(resolvedSessionId)
         }),
         onSuccess: async () => {
-            if (!sessionId) return
+            if (!sessionId) {
+                return
+            }
             removeSessionClientState(queryClient, sessionId)
         },
     })
@@ -227,8 +239,10 @@ export function useSessionActions(
         await unarchiveMutation.mutateAsync(undefined)
     }, [unarchiveMutation.mutateAsync])
 
-    const switchSession = useCallback(async (): Promise<void> => {
-        await switchMutation.mutateAsync(undefined)
+    const switchSessionDriver = useCallback(async (
+        targetDriver: SessionDriver | null | undefined
+    ): Promise<void> => {
+        await switchMutation.mutateAsync(assertSameSessionSwitchTargetDriver(targetDriver))
     }, [switchMutation.mutateAsync])
 
     const deleteSession = useCallback(async (): Promise<void> => {
@@ -278,7 +292,7 @@ export function useSessionActions(
         closeSession,
         archiveSession,
         unarchiveSession,
-        switchSession,
+        switchSessionDriver,
         setPermissionMode,
         setCollaborationMode,
         setModel,
@@ -286,6 +300,7 @@ export function useSessionActions(
         renameSession,
         deleteSession,
         isPending,
+        isSwitchingSessionDriver: switchMutation.isPending,
     }), [
         abortSession,
         archiveSession,
@@ -298,7 +313,8 @@ export function useSessionActions(
         setModel,
         setModelReasoningEffort,
         setPermissionMode,
-        switchSession,
+        switchMutation.isPending,
+        switchSessionDriver,
         unarchiveSession
     ])
 }

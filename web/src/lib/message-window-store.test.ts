@@ -1,5 +1,5 @@
 import type { ApiClient } from '@/api/client'
-import type { DecryptedMessage, MessagesResponse } from '@/types/api'
+import type { DecryptedMessage, MessagesResponse, SessionRecoveryPage } from '@/types/api'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
     appendOptimisticMessage,
@@ -35,6 +35,36 @@ function buildRoleMessage(seq: number, role: 'assistant' | 'user'): DecryptedMes
                 type: 'text',
                 text: `message ${seq}`
             }
+        }
+    }
+}
+
+function createRecoveryPage(sessionId: string, messages: DecryptedMessage[], afterSeq: number, limit: number): SessionRecoveryPage {
+    return {
+        session: {
+            id: sessionId,
+            seq: messages.at(-1)?.seq ?? afterSeq,
+            createdAt: 1,
+            updatedAt: (messages.at(-1)?.createdAt ?? afterSeq * 1_000),
+            active: true,
+            activeAt: messages.at(-1)?.createdAt ?? afterSeq * 1_000,
+            metadata: null,
+            metadataVersion: 0,
+            agentState: null,
+            agentStateVersion: 0,
+            thinking: false,
+            thinkingAt: 0,
+            model: null,
+            modelReasoningEffort: null,
+            permissionMode: 'default',
+            collaborationMode: 'default'
+        },
+        messages,
+        page: {
+            afterSeq,
+            nextAfterSeq: messages.at(-1)?.seq ?? afterSeq,
+            limit,
+            hasMore: false
         }
     }
 }
@@ -76,6 +106,16 @@ function createMessagesApi(totalMessages: number): ApiClient {
                     hasMore: available.length > messages.length
                 }
             }
+        },
+        async getSessionRecovery(
+            sessionId: string,
+            options: { afterSeq: number; limit?: number }
+        ): Promise<SessionRecoveryPage> {
+            const limit = options.limit ?? 200
+            const messages = allMessages
+                .filter((message) => (message.seq ?? 0) > options.afterSeq)
+                .slice(0, limit)
+            return createRecoveryPage(sessionId, messages, options.afterSeq, limit)
         }
     } as ApiClient
 }
@@ -118,6 +158,16 @@ function createFixedMessagesApi(messages: DecryptedMessage[]): ApiClient {
                     hasMore: available.length > pageMessages.length
                 }
             }
+        },
+        async getSessionRecovery(
+            sessionId: string,
+            options: { afterSeq: number; limit?: number }
+        ): Promise<SessionRecoveryPage> {
+            const limit = options.limit ?? 200
+            const nextMessages = messages
+                .filter((message) => (message.seq ?? 0) > options.afterSeq)
+                .slice(0, limit)
+            return createRecoveryPage(sessionId, nextMessages, options.afterSeq, limit)
         }
     } as ApiClient
 }
@@ -224,6 +274,58 @@ describe('message-window-store', () => {
         expect(getMessageWindowState('session-1').stream).toBeNull()
     })
 
+    it('drops a transient stream once the matching durable Pi assistant message arrives', () => {
+        applySessionStream('session-1', {
+            streamId: 'pi-assistant-1000',
+            startedAt: 1,
+            updatedAt: 2,
+            text: 'Hello from Pi'
+        })
+
+        ingestIncomingMessages('session-1', [{
+            id: 'message-pi-1',
+            seq: 1,
+            localId: null,
+            createdAt: 1_000,
+            content: {
+                role: 'agent',
+                content: {
+                    type: 'output',
+                    data: {
+                        type: 'assistant',
+                        message: {
+                            role: 'assistant',
+                            api: 'pi',
+                            provider: 'openai',
+                            model: 'gpt-5.4-mini',
+                            usage: {
+                                input: 1,
+                                output: 1,
+                                cacheRead: 0,
+                                cacheWrite: 0,
+                                totalTokens: 2,
+                                cost: {
+                                    input: 0,
+                                    output: 0,
+                                    cacheRead: 0,
+                                    cacheWrite: 0,
+                                    total: 0
+                                }
+                            },
+                            stopReason: 'stop',
+                            timestamp: 1_000,
+                            content: [
+                                { type: 'text', text: 'Hello from Pi' }
+                            ]
+                        }
+                    }
+                }
+            }
+        }])
+
+        expect(getMessageWindowState('session-1').stream).toBeNull()
+    })
+
     it('ignores stale stream clears for a different stream id', () => {
         applySessionStream('session-1', {
             streamId: 'stream-1',
@@ -273,7 +375,7 @@ describe('message-window-store', () => {
         expect(getMessageWindowState('session-1').hasLoadedLatest).toBe(true)
     })
 
-    it('moves the pending reply from sending to preparing and clears it on the first stream delta', () => {
+    it('moves the pending reply from sending to preparing and lets the stream owner clear it on the first delta', () => {
         appendOptimisticMessage('session-1', {
             id: 'local-1',
             seq: null,
@@ -316,56 +418,87 @@ describe('message-window-store', () => {
         expect(getMessageWindowState('session-1').pendingReply).toBeNull()
     })
 
+    it('keeps the in-memory message window alive across a short runtime teardown', async () => {
+        vi.useFakeTimers()
+
+        try {
+            const api = createFixedMessagesApi([buildMessage(1)])
+            await fetchLatestMessages(api, 'session-1')
+
+            const unsubscribe = subscribeMessageWindow('session-1', () => undefined)
+            unsubscribe()
+
+            vi.advanceTimersByTime(59_000)
+
+            const retained = getMessageWindowState('session-1')
+            expect(retained.messages.at(-1)?.seq).toBe(1)
+            expect(retained.restoredFromWarmSnapshot).toBe(false)
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
     it('restores the warm snapshot after transient runtime cleanup', async () => {
-        const api = createFixedMessagesApi([buildMessage(1)])
+        vi.useFakeTimers()
 
-        await fetchLatestMessages(api, 'session-1')
-        flushMessageWindowSnapshot('session-1')
-        clearMessageWindow('session-1')
+        try {
+            const api = createFixedMessagesApi([buildMessage(1)])
 
-        const unsubscribe = subscribeMessageWindow('session-1', () => undefined)
-        unsubscribe()
+            await fetchLatestMessages(api, 'session-1')
+            flushMessageWindowSnapshot('session-1')
 
-        const restored = getMessageWindowState('session-1')
-        expect(restored.messages.at(-1)?.seq).toBe(1)
-        expect(restored.hasLoadedLatest).toBe(true)
-        expect(restored.restoredFromWarmSnapshot).toBe(true)
+            const unsubscribe = subscribeMessageWindow('session-1', () => undefined)
+            unsubscribe()
+
+            vi.advanceTimersByTime(60_000)
+
+            const restored = getMessageWindowState('session-1')
+            expect(restored.messages.at(-1)?.seq).toBe(1)
+            expect(restored.hasLoadedLatest).toBe(true)
+            expect(restored.restoredFromWarmSnapshot).toBe(true)
+        } finally {
+            vi.useRealTimers()
+        }
     })
 
     it('refreshes a restored warm snapshot in the background without reopening the loading gate', async () => {
-        const initialApi = createFixedMessagesApi([buildMessage(1)])
-        await fetchLatestMessages(initialApi, 'session-1')
-        flushMessageWindowSnapshot('session-1')
-        clearMessageWindow('session-1')
+        vi.useFakeTimers()
 
-        const unsubscribe = subscribeMessageWindow('session-1', () => undefined)
-        unsubscribe()
+        try {
+            const initialApi = createFixedMessagesApi([buildMessage(1)])
+            await fetchLatestMessages(initialApi, 'session-1')
+            flushMessageWindowSnapshot('session-1')
 
-        let resolveRequest!: (value: MessagesResponse) => void
-        const refreshApi = {
-            getMessages: vi.fn(() => {
-                return new Promise<MessagesResponse>((resolve) => {
-                    resolveRequest = resolve
+            const unsubscribe = subscribeMessageWindow('session-1', () => undefined)
+            unsubscribe()
+            vi.advanceTimersByTime(60_000)
+
+            let resolveRecovery!: (value: SessionRecoveryPage) => void
+            const refreshApi = {
+                getMessages: vi.fn(),
+                getSessionRecovery: vi.fn(() => {
+                    return new Promise<SessionRecoveryPage>((resolve) => {
+                        resolveRecovery = resolve
+                    })
                 })
+            } as unknown as ApiClient
+
+            const refreshPromise = ensureLatestMessagesLoaded(refreshApi, 'session-1')
+            expect(getMessageWindowState('session-1').isLoading).toBe(false)
+
+            resolveRecovery(createRecoveryPage('session-1', [buildMessage(2)], 1, 200))
+            await refreshPromise
+
+            const refreshed = getMessageWindowState('session-1')
+            expect(refreshApi.getMessages).not.toHaveBeenCalled()
+            expect(refreshApi.getSessionRecovery).toHaveBeenCalledWith('session-1', {
+                afterSeq: 1,
+                limit: 200
             })
-        } as unknown as ApiClient
-
-        const refreshPromise = ensureLatestMessagesLoaded(refreshApi, 'session-1')
-        expect(getMessageWindowState('session-1').isLoading).toBe(false)
-
-        resolveRequest({
-            messages: [buildMessage(2)],
-            page: {
-                limit: 50,
-                beforeSeq: null,
-                nextBeforeSeq: 2,
-                hasMore: false
-            }
-        })
-        await refreshPromise
-
-        const refreshed = getMessageWindowState('session-1')
-        expect(refreshed.messages.at(-1)?.seq).toBe(2)
-        expect(refreshed.restoredFromWarmSnapshot).toBe(false)
+            expect(refreshed.messages.at(-1)?.seq).toBe(2)
+            expect(refreshed.restoredFromWarmSnapshot).toBe(false)
+        } finally {
+            vi.useRealTimers()
+        }
     })
 })

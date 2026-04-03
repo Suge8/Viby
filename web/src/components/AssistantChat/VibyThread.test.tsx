@@ -43,6 +43,7 @@ function renderThread(state?: Partial<Parameters<typeof VibyThread>[0]['state']>
                 state={{
                     hasMoreMessages: false,
                     isLoadingMoreMessages: false,
+                    pinToBottomOnSessionEntry: false,
                     pendingCount: 0,
                     rawMessagesCount: 0,
                     normalizedMessagesCount: 0,

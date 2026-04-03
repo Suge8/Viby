@@ -18,6 +18,7 @@ const getNetworkInformationMock = vi.fn(() => null)
 const shouldPreloadIdleSessionRoutesMock = vi.fn<(connection?: unknown) => boolean>(() => false)
 const queryClientMock = { prefetchQuery: vi.fn() }
 const runPreloadedNavigationMock = vi.fn()
+const runNavigationTransitionMock = vi.fn()
 const useFinalizeBootShellMock = vi.fn()
 
 function createDeferred(): {
@@ -119,6 +120,17 @@ vi.mock('@/lib/networkPreloadPolicy', () => ({
 }))
 
 vi.mock('@/lib/navigationTransition', () => ({
+    createNavigationTransitionOptions: (recoveryHref?: string) => ({
+        enableViewTransition: true,
+        recoveryHref
+    }),
+    runNavigationTransition: (
+        commit: () => void,
+        options?: { recoveryHref?: string }
+    ) => {
+        runNavigationTransitionMock(commit, options)
+        commit()
+    },
     runPreloadedNavigation: async (
         preload: (() => Promise<unknown>) | Promise<unknown>,
         commit: () => void,
@@ -168,6 +180,7 @@ describe('SessionsShell', () => {
         shouldPreloadIdleSessionRoutesMock.mockReset()
         queryClientMock.prefetchQuery.mockReset()
         runPreloadedNavigationMock.mockReset()
+        runNavigationTransitionMock.mockReset()
         useFinalizeBootShellMock.mockReset()
         getNetworkInformationMock.mockReturnValue(null)
         shouldPreloadIdleSessionRoutesMock.mockReturnValue(false)
@@ -217,6 +230,42 @@ describe('SessionsShell', () => {
             sessionId: 'session-1',
             recoveryHref: '/sessions/session-1'
         })
+    })
+
+    it('commits session navigation immediately while keeping critical preload in the background', () => {
+        const deferred = createDeferred()
+        useLocationMock.mockReturnValue('/sessions')
+        useMatchRouteMock.mockReturnValue(false)
+        preloadSessionDetailCriticalRouteMock.mockReturnValue(deferred.promise)
+
+        render(<SessionsShell />)
+
+        fireEvent.click(screen.getByText('open-session'))
+
+        expect(preloadSessionDetailCriticalRouteMock).toHaveBeenCalledWith({
+            api: null,
+            queryClient: queryClientMock,
+            sessionId: 'session-1'
+        })
+        expect(warmSessionDetailRouteDataMock).toHaveBeenCalledWith({
+            api: null,
+            queryClient: queryClientMock,
+            sessionId: 'session-1',
+            includeLatestMessages: true,
+            recoveryHref: '/sessions/session-1'
+        })
+        expect(runNavigationTransitionMock).toHaveBeenCalledWith(
+            expect.any(Function),
+            expect.objectContaining({
+                recoveryHref: '/sessions/session-1'
+            })
+        )
+        expect(navigateMock).toHaveBeenCalledWith({
+            to: '/sessions/$sessionId',
+            params: { sessionId: 'session-1' },
+        })
+
+        deferred.resolve()
     })
 
     it('does not re-preload the currently selected session on list intent', () => {
@@ -351,7 +400,7 @@ describe('SessionsShell', () => {
         expect(preloadSessionDetailRouteMock).not.toHaveBeenCalled()
     })
 
-    it('waits only for the critical route preload before navigating into a session', async () => {
+    it('commits session navigation without waiting for the critical route preload to finish', async () => {
         const deferred = createDeferred()
         preloadSessionDetailCriticalRouteMock.mockReturnValueOnce(deferred.promise)
         useLocationMock.mockReturnValue('/sessions')
@@ -373,21 +422,22 @@ describe('SessionsShell', () => {
             includeLatestMessages: true,
             recoveryHref: '/sessions/session-1'
         })
-        expect(navigateMock).not.toHaveBeenCalled()
+        expect(navigateMock).toHaveBeenCalledWith({
+            to: '/sessions/$sessionId',
+            params: { sessionId: 'session-1' }
+        })
+        expect(runNavigationTransitionMock).toHaveBeenCalledWith(
+            expect.any(Function),
+            expect.objectContaining({
+                recoveryHref: '/sessions/session-1'
+            })
+        )
 
         deferred.resolve()
 
         await waitFor(() => {
-            expect(navigateMock).toHaveBeenCalledWith({
-                to: '/sessions/$sessionId',
-                params: { sessionId: 'session-1' }
-            })
+            expect(preloadSessionDetailCriticalRouteMock).toHaveBeenCalledTimes(1)
         })
-        expect(runPreloadedNavigationMock).toHaveBeenLastCalledWith(
-            expect.any(Function),
-            expect.any(Function),
-            '/sessions/session-1'
-        )
     })
 
     it('does not re-run navigation work when the current session is selected again', () => {

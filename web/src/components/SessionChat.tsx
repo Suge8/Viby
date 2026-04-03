@@ -1,6 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { getLiveSessionConfigSupport } from '@viby/protocol'
+import { getLiveSessionConfigSupport, resolveSessionDriver } from '@viby/protocol'
 import type { ApiClient } from '@/api/client'
 import type {
     AttachmentMetadata,
@@ -13,12 +13,10 @@ import type { PendingReplyState } from '@/lib/message-window-store'
 import type { LoadMoreMessagesResult } from '@/lib/message-window-store'
 import type { MessageWindowWarningKey } from '@/lib/messageWindowWarnings'
 import { SessionHeader } from '@/components/SessionHeader'
-import { SessionChatTeamSurface } from '@/components/session-chat/SessionChatTeamSurface'
 import { useSessionActions } from '@/hooks/mutations/useSessionActions'
-import {
-    runPreloadedNavigation,
-} from '@/lib/navigationTransition'
+import { runPreloadedNavigation } from '@/lib/navigationTransition'
 import { SessionChatPendingState } from '@/components/loading/SessionChatPendingState'
+import { assertSameSessionSwitchTargetDriver, getOtherSameSessionSwitchTargetDriver } from '@/lib/sameSessionDriverSwitch'
 import {
     shouldPreloadSessionChatWorkspace,
     shouldShowSessionChatPendingShell
@@ -28,8 +26,13 @@ import {
     loadSessionFilesRouteModule,
     preloadSessionTerminalExperience
 } from '@/routes/sessions/sessionRoutePreload'
+import { preloadSessionChatWorkspaceSurfaces } from '@/components/sessionChatWorkspaceModules'
 
 const SessionChatWorkspace = lazy(loadSessionChatWorkspaceModule)
+const SessionChatTeamSurface = lazy(async () => {
+    const module = await import('@/components/session-chat/SessionChatTeamSurface')
+    return { default: module.SessionChatTeamSurface }
+})
 const SESSION_CHAT_ENTER_SURFACE_CLASS_NAME = 'session-chat-enter-surface'
 const SESSION_CHAT_ENTER_BODY_CLASS_NAME = 'session-chat-enter-body'
 const SESSION_WORKSPACE_FILES_ROUTE = 'files'
@@ -66,6 +69,7 @@ type SessionChatProps = {
     ensureSessionReady?: () => Promise<void>
     warmSession?: () => void
     autocompleteSuggestions?: (query: string) => Promise<Suggestion[]>
+    persistComposerDraft?: boolean
 }
 
 export function SessionChat(props: SessionChatProps): React.JSX.Element {
@@ -101,28 +105,27 @@ export function SessionChat(props: SessionChatProps): React.JSX.Element {
         streamVersion
     } = props
     const sessionId = session.id
-    const agentFlavor = session.metadata?.flavor ?? null
+    const sessionDriver = resolveSessionDriver(session.metadata)
     const liveConfigSupport = getLiveSessionConfigSupport(session)
     const {
         abortSession,
         unarchiveSession,
-        switchSession
-    } = useSessionActions(
-        api,
-        sessionId,
-        agentFlavor,
-        {
-            liveConfigSupport
-        }
-    )
+        switchSessionDriver,
+        isSwitchingSessionDriver
+    } = useSessionActions(api, sessionId, sessionDriver, {
+        liveConfigSupport
+    })
 
     const handleAbort = useCallback(async () => {
         await abortSession()
     }, [abortSession])
 
-    const handleSwitchToRemote = useCallback(async () => {
-        await switchSession()
-    }, [switchSession])
+    const handleSwitchSessionDriver = useCallback(async () => {
+        const targetDriver = assertSameSessionSwitchTargetDriver(
+            getOtherSameSessionSwitchTargetDriver(sessionDriver)
+        )
+        await switchSessionDriver(targetDriver)
+    }, [sessionDriver, switchSessionDriver])
 
     const navigateToSessionWorkspaceRoute = useCallback((route: SessionWorkspaceRoute) => {
         const recoveryHref = `/sessions/${sessionId}/${route}`
@@ -188,7 +191,10 @@ export function SessionChat(props: SessionChatProps): React.JSX.Element {
             return
         }
 
-        void loadSessionChatWorkspaceModule()
+        void Promise.all([
+            loadSessionChatWorkspaceModule(),
+            preloadSessionChatWorkspaceSurfaces()
+        ])
     }, [shouldPreloadWorkspace])
 
     const workspaceMessageState = useMemo(() => ({
@@ -211,8 +217,8 @@ export function SessionChat(props: SessionChatProps): React.JSX.Element {
         messages,
         messagesVersion,
         messagesWarning,
-        pendingReply,
         pendingCount,
+        pendingReply,
         stream,
         streamVersion
     ])
@@ -226,10 +232,12 @@ export function SessionChat(props: SessionChatProps): React.JSX.Element {
         onRetryMessage,
         onAbort: handleAbort,
         onUnarchiveSession: unarchiveSession,
-        onSwitchToRemote: handleSwitchToRemote
+        onSwitchSessionDriver: handleSwitchSessionDriver,
+        isSwitchingSessionDriver
     }), [
         handleAbort,
-        handleSwitchToRemote,
+        handleSwitchSessionDriver,
+        isSwitchingSessionDriver,
         onAtBottomChange,
         onFlushPending,
         onLoadHistoryUntilPreviousUser,
@@ -254,7 +262,11 @@ export function SessionChat(props: SessionChatProps): React.JSX.Element {
                 navigation={headerNavigation}
             />
 
-            <SessionChatTeamSurface api={api} session={session} />
+            {session.teamContext ? (
+                <Suspense fallback={null}>
+                    <SessionChatTeamSurface api={api} session={session} />
+                </Suspense>
+            ) : null}
 
             <div className={`session-chat-page-body ${SESSION_CHAT_ENTER_BODY_CLASS_NAME} min-h-0 flex-1 overflow-hidden`}>
                 {showDetailPendingShell ? (
@@ -267,6 +279,7 @@ export function SessionChat(props: SessionChatProps): React.JSX.Element {
                             messageState={workspaceMessageState}
                             actions={workspaceActions}
                             runtimeOptions={workspaceRuntimeOptions}
+                            persistComposerDraft={props.persistComposerDraft}
                         />
                     </Suspense>
                 )}

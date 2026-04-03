@@ -1,3 +1,4 @@
+import { resolveSessionDriver } from '@viby/protocol'
 import { Suspense, lazy, useId, useMemo, useRef, useState } from 'react'
 import type { Session } from '@/types/api'
 import { BackIcon, MoreIcon } from '@/components/icons'
@@ -43,8 +44,9 @@ export function SessionHeader(props: SessionHeaderProps): React.JSX.Element {
     const { session, navigation } = props
     const title = useMemo(() => getSessionTitle(session), [session])
     const worktreeBranch = session.metadata?.worktree?.branch
+    const sessionDriver = resolveSessionDriver(session.metadata)
     const modelLabel = getSessionModelLabel(session)
-    const agentLabel = getSessionAgentLabel(session.metadata?.flavor)
+    const agentLabel = getSessionAgentLabel(sessionDriver)
     const hasMenuActions = Boolean(navigation.onViewFiles || navigation.onViewTerminal)
     const [menuOpen, setMenuOpen] = useState(false)
     const [menuAnchorPoint, setMenuAnchorPoint] = useState<FloatingActionMenuAnchorPoint>(
@@ -93,7 +95,7 @@ export function SessionHeader(props: SessionHeaderProps): React.JSX.Element {
                         <div className={HEADER_METADATA_ROW_CLASS_NAME}>
                             <span className="inline-flex items-center gap-1">
                                 <SessionAgentBrandIcon
-                                    flavor={session.metadata?.flavor ?? null}
+                                    driver={sessionDriver}
                                     className="h-3.5 w-3.5"
                                 />
                                 {agentLabel}

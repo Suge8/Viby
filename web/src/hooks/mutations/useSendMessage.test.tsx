@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import type { PropsWithChildren } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ApiClient } from '@/api/client'
+import { ApiError, type ApiClient } from '@/api/client'
 import { clearMessageWindow, getMessageWindowState } from '@/lib/message-window-store'
 import { queryKeys } from '@/lib/query-keys'
 import type { SessionsResponse } from '@/types/api'
@@ -57,7 +57,7 @@ function seedSessionsSummary(queryClient: QueryClient): void {
             lifecycleStateSince: 1_000,
             metadata: {
                 path: '/tmp/project',
-                flavor: 'codex'
+                driver: 'codex'
             },
             todoProgress: null,
             pendingRequestsCount: 0,
@@ -111,7 +111,7 @@ describe('useSendMessage', () => {
                     id: 'session-1',
                     active: true,
                     metadata: {
-                        flavor: 'codex',
+                        driver: 'codex',
                         codexSessionId: 'thread-1'
                     }
                 } as never
@@ -200,6 +200,38 @@ describe('useSendMessage', () => {
         })
     })
 
+    it('refreshes authoritative session snapshots instead of rolling back lifecycle state after server-side send failures', async () => {
+        const queryClient = createQueryClient()
+        seedSessionsSummary(queryClient)
+        const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
+        const onSendError = vi.fn()
+        const api = {
+            sendMessage: vi.fn(async () => {
+                throw new ApiError('HTTP 409 Conflict: No machine online', 409, 'no_machine_online')
+            })
+        } as unknown as ApiClient
+
+        const { result } = renderHook(
+            () => useSendMessage(api, 'session-1', { onSendError }),
+            { wrapper: createWrapper(queryClient) }
+        )
+
+        act(() => {
+            result.current.sendMessage('hello after archive')
+        })
+
+        await waitFor(() => {
+            expect(getMessageWindowState('session-1').messages[0]?.status).toBe('failed')
+        })
+
+        expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: queryKeys.session('session-1') })
+        expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: queryKeys.sessions })
+        expect(onSendError).toHaveBeenCalledWith(expect.objectContaining({
+            sessionId: 'session-1',
+            error: expect.objectContaining({ code: 'no_machine_online' })
+        }))
+    })
+
     it('rebuilds pending reply state and preserves attachments when retrying a failed send', async () => {
         const queryClient = createQueryClient()
         seedSessionsSummary(queryClient)
@@ -217,7 +249,7 @@ describe('useSendMessage', () => {
                     id: 'session-1',
                     active: true,
                     metadata: {
-                        flavor: 'codex',
+                        driver: 'codex',
                         codexSessionId: 'thread-1'
                     }
                 } as never)

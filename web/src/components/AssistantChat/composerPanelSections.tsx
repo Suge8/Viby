@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import type { SameSessionSwitchTargetDriver } from '@/lib/sameSessionDriverSwitch'
 import type {
     CodexCollaborationMode,
     ModelReasoningEffort,
@@ -9,14 +10,16 @@ import { ComposerSettingsSection } from '@/components/AssistantChat/ComposerSett
 import { FeatureSwitchToRemoteIcon as SwitchToRemoteIcon } from '@/components/featureIcons'
 import type { ComposerPanelOption } from '@/lib/sessionConfigPresentation'
 
-type Translate = (key: string) => string
+type Translate = (key: string, params?: Record<string, string | number>) => string
 
 type ComposerActionItemDescriptor = {
     key: string
     label: string
+    pendingLabel?: string
     description: string
     icon: ReactNode
     disabled: boolean
+    pending?: boolean
     onSelect: () => void
 }
 
@@ -31,7 +34,9 @@ type BuildComposerControlSectionsOptions = {
     onModelChange: (model: string | null) => void
     onModelReasoningEffortChange: (modelReasoningEffort: ModelReasoningEffort | null) => void
     onPermissionChange: (mode: PermissionMode) => void
-    onSwitchToRemote?: () => void
+    switchTargetDriver?: SameSessionSwitchTargetDriver | null
+    switchDriverPending?: boolean
+    onSwitchSessionDriver?: () => void
     permissionMode: PermissionMode
     permissionModeOptions: ComposerPanelOption<PermissionMode>[]
     reasoningEffortOptions: ComposerPanelOption<ModelReasoningEffort | null>[]
@@ -40,6 +45,10 @@ type BuildComposerControlSectionsOptions = {
     showPermissionSettings: boolean
     showReasoningEffortSettings: boolean
     t: Translate
+}
+
+function getSwitchTargetLabel(targetDriver: SameSessionSwitchTargetDriver, t: Translate): string {
+    return t(`composer.switchDriver.target.${targetDriver}`)
 }
 
 function appendSettingsSection<T extends string | null>(
@@ -74,19 +83,24 @@ function appendSettingsSection<T extends string | null>(
 
 function buildComposerActionItems(options: {
     controlsDisabled: boolean
-    onSwitchToRemote?: () => void
+    switchTargetDriver?: SameSessionSwitchTargetDriver | null
+    switchDriverPending?: boolean
+    onSwitchSessionDriver?: () => void
     t: Translate
 }): ComposerActionItemDescriptor[] {
     const items: ComposerActionItemDescriptor[] = []
 
-    if (options.onSwitchToRemote) {
+    if (options.switchTargetDriver && options.onSwitchSessionDriver) {
+        const targetLabel = getSwitchTargetLabel(options.switchTargetDriver, options.t)
         items.push({
-            key: 'switch-remote',
-            label: options.t('composer.switchRemote'),
-            description: options.t('chat.switchRemote'),
+            key: 'switch-driver',
+            label: options.t('composer.switchDriver', { driver: targetLabel }),
+            pendingLabel: options.t('composer.switchDriver.pending', { driver: targetLabel }),
+            description: options.t('chat.switchDriver', { driver: targetLabel }),
             icon: <SwitchToRemoteIcon className="h-4 w-4" />,
-            disabled: options.controlsDisabled,
-            onSelect: options.onSwitchToRemote
+            disabled: options.controlsDisabled || options.switchDriverPending === true,
+            pending: options.switchDriverPending === true,
+            onSelect: options.onSwitchSessionDriver
         })
     }
 
@@ -142,7 +156,9 @@ export function buildComposerControlSections(options: BuildComposerControlSectio
 
     const actionItems = buildComposerActionItems({
         controlsDisabled: options.controlsDisabled,
-        onSwitchToRemote: options.onSwitchToRemote,
+        switchTargetDriver: options.switchTargetDriver,
+        switchDriverPending: options.switchDriverPending,
+        onSwitchSessionDriver: options.onSwitchSessionDriver,
         t: options.t
     })
 

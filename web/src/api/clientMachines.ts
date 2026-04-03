@@ -1,4 +1,6 @@
 import type {
+    AgentFlavor,
+    AgentLaunchConfigResponse,
     CodexCollaborationMode,
     MachineBrowseDirectoryResponse,
     MachinePathsExistsResponse,
@@ -82,13 +84,30 @@ export async function browseMachineDirectory(
     )
 }
 
+export async function resolveAgentLaunchConfig(
+    request: ApiClientRequest,
+    machineId: string,
+    input: {
+        agent: AgentFlavor
+        directory: string
+    }
+): Promise<AgentLaunchConfigResponse> {
+    return await request<AgentLaunchConfigResponse>(
+        `/api/machines/${encodeURIComponent(machineId)}/agent-launch-config`,
+        {
+            method: 'POST',
+            body: JSON.stringify(input)
+        }
+    )
+}
+
 export async function spawnSession(
     request: ApiClientRequest,
     fetchSessionSnapshot: ApiClientFetchSessionSnapshot,
     input: {
         machineId: string
         directory: string
-        agent?: 'claude' | 'codex' | 'cursor' | 'gemini' | 'opencode'
+        agent?: AgentFlavor
         model?: string
         modelReasoningEffort?: ModelReasoningEffort
         permissionMode?: PermissionMode

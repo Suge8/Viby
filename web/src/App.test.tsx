@@ -13,8 +13,9 @@ const useServerUrlMock = vi.fn()
 const useAuthSourceMock = vi.fn()
 const useAuthMock = vi.fn()
 const useRealtimeFeedbackMock = vi.fn()
-const useRealtimeConnectionMock = vi.fn()
+const useRealtimeConnectionMock = vi.fn<(options: unknown) => void>()
 const usePushNotificationsMock = vi.fn()
+const runRealtimeRecoveryMock = vi.fn<(options: unknown) => Promise<void>>(() => Promise.resolve())
 const addToastMock = vi.fn()
 const clearAuthMock = vi.fn()
 const installPromptPropsMock = vi.fn()
@@ -58,6 +59,10 @@ vi.mock('@/hooks/usePushNotifications', () => ({
     usePushNotifications: () => usePushNotificationsMock(),
 }))
 
+vi.mock('@/lib/realtimeRecovery', () => ({
+    runRealtimeRecovery: (options: unknown) => runRealtimeRecoveryMock(options),
+}))
+
 vi.mock('@/lib/runtime-config', () => ({
     requireHubUrlForLogin: () => false,
 }))
@@ -95,6 +100,24 @@ vi.mock('@/components/AppFloatingNoticeLayer', () => ({
 vi.mock('@/components/LoadingState', () => ({
     LoadingState: (props: { label?: string }) => <div data-testid="loading-state">{props.label}</div>,
 }))
+
+type RealtimeConnectHandler = (details: {
+    initial: boolean
+    recovered: boolean
+    transport: string | null
+}) => void
+
+function getRealtimeConnectHandler(): RealtimeConnectHandler {
+    const realtimeOptions = useRealtimeConnectionMock.mock.calls.at(-1)?.[0] as {
+        onConnect: RealtimeConnectHandler
+    } | undefined
+
+    if (!realtimeOptions) {
+        throw new Error('Expected useRealtimeConnection to be called before reading onConnect')
+    }
+
+    return realtimeOptions.onConnect
+}
 
 describe('App', () => {
     afterEach(() => {
@@ -142,6 +165,8 @@ describe('App', () => {
         addToastMock.mockReset()
         clearAuthMock.mockReset()
         useRealtimeConnectionMock.mockReset()
+        runRealtimeRecoveryMock.mockReset()
+        runRealtimeRecoveryMock.mockImplementation(() => Promise.resolve())
         initializeThemeMock.mockReset()
         installPromptPropsMock.mockReset()
     })
@@ -344,6 +369,111 @@ describe('App', () => {
         await waitFor(() => {
             expect(document.documentElement.dataset.vibyRoute).toBe('session-chat')
             expect(document.body.dataset.vibyRoute).toBe('session-chat')
+        })
+    })
+
+    it('runs authoritative reconnect recovery even when the socket reports recovered', async () => {
+        const api = {} as object
+        const runCatchupSyncMock = vi.fn((task: Promise<unknown>) => task)
+
+        useMatchRouteMock.mockReturnValue(() => ({ sessionId: 'session-1' }))
+        useAuthMock.mockReturnValue({
+            token: 'session-token',
+            api,
+            isLoading: false,
+            error: null,
+        })
+        useRealtimeFeedbackMock.mockReturnValue({
+            banner: { kind: 'hidden' },
+            handleConnect: vi.fn(),
+            handleDisconnect: vi.fn(),
+            handleConnectError: vi.fn(),
+            announceRecovery: vi.fn(),
+            runCatchupSync: runCatchupSyncMock,
+        })
+
+        render(<App />)
+
+        await waitFor(() => {
+            expect(useRealtimeConnectionMock).toHaveBeenCalled()
+        })
+
+        getRealtimeConnectHandler()({ initial: false, recovered: true, transport: 'websocket' })
+
+        await waitFor(() => {
+            expect(runCatchupSyncMock).toHaveBeenCalledTimes(1)
+            expect(runRealtimeRecoveryMock).toHaveBeenCalledWith(expect.objectContaining({
+                api,
+                selectedSessionId: 'session-1'
+            }))
+        })
+    })
+
+    it('runs authoritative reconnect recovery after an ordinary reconnect', async () => {
+        const api = {} as object
+        const runCatchupSyncMock = vi.fn((task: Promise<unknown>) => task)
+
+        useAuthMock.mockReturnValue({
+            token: 'session-token',
+            api,
+            isLoading: false,
+            error: null,
+        })
+        useRealtimeFeedbackMock.mockReturnValue({
+            banner: { kind: 'hidden' },
+            handleConnect: vi.fn(),
+            handleDisconnect: vi.fn(),
+            handleConnectError: vi.fn(),
+            announceRecovery: vi.fn(),
+            runCatchupSync: runCatchupSyncMock,
+        })
+
+        render(<App />)
+
+        await waitFor(() => {
+            expect(useRealtimeConnectionMock).toHaveBeenCalled()
+        })
+
+        getRealtimeConnectHandler()({ initial: false, recovered: false, transport: 'websocket' })
+
+        await waitFor(() => {
+            expect(runCatchupSyncMock).toHaveBeenCalledTimes(1)
+            expect(runRealtimeRecoveryMock).toHaveBeenCalledWith(expect.objectContaining({
+                api,
+                selectedSessionId: null
+            }))
+        })
+    })
+
+    it('skips reconnect recovery on the first realtime connect', async () => {
+        const runCatchupSyncMock = vi.fn((task: Promise<unknown>) => task)
+
+        useAuthMock.mockReturnValue({
+            token: 'session-token',
+            api: {} as object,
+            isLoading: false,
+            error: null,
+        })
+        useRealtimeFeedbackMock.mockReturnValue({
+            banner: { kind: 'hidden' },
+            handleConnect: vi.fn(),
+            handleDisconnect: vi.fn(),
+            handleConnectError: vi.fn(),
+            announceRecovery: vi.fn(),
+            runCatchupSync: runCatchupSyncMock,
+        })
+
+        render(<App />)
+
+        await waitFor(() => {
+            expect(useRealtimeConnectionMock).toHaveBeenCalled()
+        })
+
+        getRealtimeConnectHandler()({ initial: true, recovered: false, transport: 'websocket' })
+
+        await waitFor(() => {
+            expect(runCatchupSyncMock).not.toHaveBeenCalled()
+            expect(runRealtimeRecoveryMock).not.toHaveBeenCalled()
         })
     })
 

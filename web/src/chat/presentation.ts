@@ -15,6 +15,20 @@ function formatDuration(ms: number): string {
     return `${mins}m ${secs}s`
 }
 
+function formatDriverLabel(driver: unknown): string | null {
+    if (driver === 'claude') {
+        return 'Claude'
+    }
+    if (driver === 'codex') {
+        return 'Codex'
+    }
+    if (typeof driver === 'string' && driver.trim().length > 0) {
+        return driver
+    }
+
+    return null
+}
+
 export type EventPresentation = {
     icon: string | null
     text: string
@@ -35,9 +49,37 @@ export function getEventPresentation(event: AgentEvent): EventPresentation {
         }
         return { icon: '⚠️', text: 'API error', tone: 'warning' }
     }
-    if (event.type === 'switch') {
-        const mode = event.mode === 'local' ? 'local' : 'remote'
-        return { icon: '🔄', text: `Switched to ${mode}`, tone: 'info' }
+    if (event.type === 'driver-switched') {
+        const previousDriver = formatDriverLabel(event.previousDriver)
+        const targetDriver = formatDriverLabel(event.targetDriver)
+        if (previousDriver && targetDriver) {
+            return { icon: '↔️', text: `${previousDriver} changed to ${targetDriver}`, tone: 'info' }
+        }
+        if (targetDriver) {
+            return { icon: '↔️', text: `Changed to ${targetDriver}`, tone: 'info' }
+        }
+        return { icon: '↔️', text: 'Agent changed', tone: 'info' }
+    }
+    if (event.type === 'driver-switch-send-failed') {
+        if (event.code === 'empty_first_turn') {
+            return {
+                icon: '⚠️',
+                text: 'The first post-switch message was empty and was not sent.',
+                tone: 'warning'
+            }
+        }
+        if (event.code === 'timeout') {
+            return {
+                icon: '⚠️',
+                text: 'The first post-switch message timed out before the new agent accepted it.',
+                tone: 'warning'
+            }
+        }
+        return {
+            icon: '⚠️',
+            text: 'The first post-switch message failed before the new agent accepted it.',
+            tone: 'warning'
+        }
     }
     if (event.type === 'title-changed') {
         const title = typeof event.title === 'string' ? event.title : ''

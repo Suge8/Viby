@@ -24,7 +24,7 @@ async function renderHeader(options?: SessionHeaderRenderOptions) {
                 model: 'gpt-5.4',
                 modelReasoningEffort: null,
                 metadata: {
-                    flavor: 'codex'
+                    driver: 'codex'
                 }
             } as never}
             navigation={{
@@ -67,6 +67,79 @@ describe('SessionHeader', () => {
 
         expect(screen.getByText('Codex')).toBeInTheDocument()
         expect(screen.queryByText('codex')).not.toBeInTheDocument()
+    })
+
+
+    it('uses the explicit driver label when rendering the session header', async () => {
+        await renderWithI18n(
+            <SessionHeader
+                session={{
+                    id: 'session-legacy',
+                    active: true,
+                    thinking: false,
+                    permissionMode: 'default',
+                    collaborationMode: 'default',
+                    model: 'gpt-5.4',
+                    modelReasoningEffort: null,
+                    metadata: {
+                        driver: 'codex'
+                    }
+                } as never}
+                navigation={{
+                    onBack: vi.fn()
+                }}
+            />
+        )
+
+        expect(screen.getByText('Codex')).toBeInTheDocument()
+    })
+
+    it('renders Pi agent with correct label', async () => {
+        await renderWithI18n(
+            <SessionHeader
+                session={{
+                    id: 'session-pi',
+                    active: true,
+                    thinking: false,
+                    permissionMode: 'default',
+                    collaborationMode: 'default',
+                    model: 'openai/gpt-5.4',
+                    modelReasoningEffort: null,
+                    metadata: {
+                        driver: 'pi'
+                    }
+                } as never}
+                navigation={{
+                    onBack: vi.fn()
+                }}
+            />
+        )
+
+        expect(screen.getByText('Pi')).toBeInTheDocument()
+    })
+
+    it('renders unknown agent gracefully', async () => {
+        await renderWithI18n(
+            <SessionHeader
+                session={{
+                    id: 'session-unknown',
+                    active: true,
+                    thinking: false,
+                    permissionMode: 'default',
+                    collaborationMode: 'default',
+                    model: 'gpt-5.4',
+                    modelReasoningEffort: null,
+                    metadata: {
+                        driver: 'unknown-flavor'
+                    }
+                } as never}
+                navigation={{
+                    onBack: vi.fn()
+                }}
+            />
+        )
+
+        expect(screen.getByText('Unknown')).toBeInTheDocument()
     })
 
     it('moves files and terminal actions into the more menu', async () => {

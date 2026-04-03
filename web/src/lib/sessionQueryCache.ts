@@ -1,4 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query'
+import { resolveSessionDriver } from '@viby/protocol'
 import type { Session, SessionResponse, SessionsResponse, SessionSummary } from '@/types/api'
 import { loadMessageWindowStoreModule } from '@/lib/messageWindowStoreModule'
 import { queryKeys } from '@/lib/query-keys'
@@ -10,7 +11,6 @@ import {
 import { readSessionWarmSnapshot, removeSessionWarmSnapshot, writeSessionWarmSnapshot } from '@/lib/sessionWarmSnapshot'
 import { removeSessionsWarmSnapshot, writeSessionsWarmSnapshot } from '@/lib/sessionsWarmSnapshot'
 
-type SessionFlavor = NonNullable<NonNullable<Session['metadata']>['flavor']> | null
 export type SessionPlaceholderSource = 'cache' | 'warm' | 'summary' | null
 
 export function writeSessionToQueryCache(queryClient: QueryClient, session: Session): void {
@@ -75,6 +75,8 @@ export function getSessionSummaryFromCache(
 }
 
 export function createSessionSeedFromSummary(summary: SessionSummary): Session {
+    const driver = resolveSessionDriver(summary.metadata)
+
     return {
         id: summary.id,
         seq: 0,
@@ -88,7 +90,7 @@ export function createSessionSeedFromSummary(summary: SessionSummary): Session {
             name: summary.metadata.name,
             summary: summary.metadata.summary,
             machineId: summary.metadata.machineId,
-            flavor: normalizeSessionSeedFlavor(summary.metadata.flavor),
+            driver,
             worktree: summary.metadata.worktree,
             lifecycleState: summary.lifecycleState,
             lifecycleStateSince: summary.lifecycleStateSince ?? undefined
@@ -103,19 +105,6 @@ export function createSessionSeedFromSummary(summary: SessionSummary): Session {
         permissionMode: summary.permissionMode,
         collaborationMode: summary.collaborationMode,
         todos: undefined
-    }
-}
-
-function normalizeSessionSeedFlavor(flavor: string | null | undefined): SessionFlavor {
-    switch (flavor) {
-        case 'claude':
-        case 'codex':
-        case 'cursor':
-        case 'gemini':
-        case 'opencode':
-            return flavor
-        default:
-            return null
     }
 }
 

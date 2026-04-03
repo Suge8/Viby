@@ -1,14 +1,16 @@
-import type { ModelReasoningEffort } from '@/types/api'
+import { resolveSessionDriver, type SessionDriver } from '@viby/protocol'
+import type { ModelReasoningEffort, PiModelScope } from '@/types/api'
 import {
     getModelReasoningEffortDisplayLabel,
-    getSessionModelDisplayLabel
+    getSessionModelDisplayLabelWithCapabilities
 } from '@/lib/sessionConfigOptions'
 
 type SessionModelSource = {
     model?: string | null
     modelReasoningEffort?: ModelReasoningEffort | null
     metadata?: {
-        flavor?: string | null
+        driver?: SessionDriver | null
+        piModelScope?: PiModelScope
     } | null
 }
 
@@ -20,9 +22,14 @@ export type SessionModelLabel = {
 export function getSessionModelLabel(session: SessionModelSource): SessionModelLabel | null {
     const explicitModel = typeof session.model === 'string' ? session.model.trim() : ''
     if (explicitModel) {
+        const driver = resolveSessionDriver(session.metadata)
         return {
             key: 'session.item.model',
-            value: getSessionModelDisplayLabel(explicitModel, session.metadata?.flavor ?? null)
+            value: getSessionModelDisplayLabelWithCapabilities(
+                explicitModel,
+                driver,
+                driver === 'pi' ? session.metadata?.piModelScope?.models : undefined
+            )
         }
     }
 

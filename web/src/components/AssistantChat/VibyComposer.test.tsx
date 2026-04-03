@@ -74,13 +74,14 @@ vi.mock('@/components/AssistantChat/ComposerButtons', () => ({
         harness.lastButtonsProps = props
         const controlsButton = props.controlsButton as {
             visible: boolean
+            disabled?: boolean
             onToggle: () => void
         }
 
         return (
             <div data-testid="composer-buttons">
                 {controlsButton.visible ? (
-                    <button type="button" onClick={controlsButton.onToggle}>
+                    <button type="button" disabled={controlsButton.disabled === true} onClick={controlsButton.onToggle}>
                         toggle-controls
                     </button>
                 ) : null}
@@ -149,7 +150,7 @@ function renderComposer(options?: {
                         active: true,
                         allowSendWhenInactive: false,
                         controlledByUser: false,
-                        agentFlavor: 'codex',
+                        sessionDriver: 'codex',
                         attachmentsSupported: true,
                         ...options?.configOverrides
                     },
@@ -224,6 +225,16 @@ describe('VibyComposer', () => {
         ).toBe(true)
     })
 
+    it('keeps the controls affordance disabled while a same-session switch is pending', () => {
+        renderComposerWithConfig({
+            switchTargetDriver: 'claude',
+            switchDriverPending: true
+        })
+
+        expect(screen.getByText('toggle-controls')).toBeDisabled()
+        expect((harness.lastButtonsProps?.controlsButton as { disabled?: boolean } | null)?.disabled).toBe(true)
+    })
+
     it('does not warm an inactive session just because the composer receives focus', () => {
         const onWarmSession = vi.fn()
         renderComposer({
@@ -271,7 +282,7 @@ describe('VibyComposer', () => {
                             active: true,
                             allowSendWhenInactive: false,
                             controlledByUser: false,
-                            agentFlavor: 'codex',
+                            sessionDriver: 'codex',
                             attachmentsSupported: true,
                         },
                         handlers: {
@@ -308,7 +319,7 @@ describe('VibyComposer', () => {
                             active: true,
                             allowSendWhenInactive: false,
                             controlledByUser: false,
-                            agentFlavor: 'codex',
+                            sessionDriver: 'codex',
                             attachmentsSupported: true,
                         },
                         handlers: {
@@ -333,7 +344,7 @@ describe('VibyComposer', () => {
                             active: true,
                             allowSendWhenInactive: false,
                             controlledByUser: false,
-                            agentFlavor: 'codex',
+                            sessionDriver: 'codex',
                             attachmentsSupported: true,
                         },
                         handlers: {

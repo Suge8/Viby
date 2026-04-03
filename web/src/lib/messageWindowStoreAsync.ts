@@ -37,9 +37,58 @@ export async function ensureLatestMessagesLoaded(api: ApiClient, sessionId: stri
         return
     }
 
-    await fetchLatestMessages(api, sessionId, {
+    await recoverLatestMessages(api, sessionId, {
         background: current.restoredFromWarmSnapshot
     })
+}
+
+export async function recoverLatestMessages(
+    api: ApiClient,
+    sessionId: string,
+    options: Readonly<{ background?: boolean }> = {}
+): Promise<void> {
+    const current = getInternalMessageWindowState(sessionId)
+    if (current.restoredFromWarmSnapshot && typeof current.newestSeq === 'number') {
+        await recoverMessagesAfter(api, sessionId, current.newestSeq)
+        return
+    }
+
+    await fetchLatestMessages(api, sessionId, options)
+}
+
+async function recoverMessagesAfter(api: ApiClient, sessionId: string, afterSeq: number): Promise<void> {
+    let cursor = afterSeq
+
+    while (true) {
+        const recovery = await api.getSessionRecovery(sessionId, {
+            afterSeq: cursor,
+            limit: CATCHUP_PAGE_SIZE
+        })
+
+        updateMessageWindowState(sessionId, (prev) => {
+            if (prev.hasLoadedLatest && prev.warning === null && !prev.restoredFromWarmSnapshot) {
+                return prev
+            }
+
+            return buildState(prev, {
+                hasLoadedLatest: true,
+                warning: null,
+                restoredFromWarmSnapshot: false
+            })
+        })
+
+        if (recovery.messages.length === 0) {
+            return
+        }
+
+        ingestIncomingMessages(sessionId, recovery.messages)
+        const nextCursor = recovery.page.nextAfterSeq
+        if (!recovery.page.hasMore || nextCursor <= cursor) {
+            return
+        }
+
+        cursor = nextCursor
+    }
 }
 
 export async function fetchLatestMessages(

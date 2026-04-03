@@ -88,7 +88,7 @@ function renderItem(selectionOverrides?: Partial<{
         lifecycleStateSince: NOW,
         metadata: {
             path: '/Users/sugeh/Project/Viby',
-            flavor: 'codex',
+            driver: 'codex',
             name: 'session-1'
         },
         todoProgress: null,
@@ -142,6 +142,12 @@ describe('SessionListItem', () => {
         expect(onPreload).toHaveBeenCalledWith('session-1')
     })
 
+    it('marks the card as a direct-manipulation tap target on mobile', () => {
+        renderItem()
+
+        expect((getSessionButton() as HTMLButtonElement).style.touchAction).toBe('manipulation')
+    })
+
     it('renders the session card through the shared card press primitive', () => {
         renderItem()
 
@@ -173,7 +179,7 @@ describe('SessionListItem', () => {
             session: {
                 metadata: {
                     path: '/Users/sugeh/Project/Viby',
-                    flavor: 'claude',
+                    driver: 'claude',
                     summary: { text: 'Implement API', updatedAt: NOW }
                 },
                 team: {

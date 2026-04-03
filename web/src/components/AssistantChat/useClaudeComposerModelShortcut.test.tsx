@@ -13,7 +13,7 @@ afterEach(() => {
 describe('useClaudeComposerModelShortcut', () => {
     it('does not attach a global shortcut listener for non-Claude sessions', () => {
         renderHook(() => useClaudeComposerModelShortcut({
-            agentFlavor: 'codex',
+            sessionDriver: 'codex',
             model: 'gpt-5.4',
             onModelChange: vi.fn(),
             haptic: vi.fn()

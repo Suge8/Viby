@@ -48,6 +48,34 @@ describe('NewSession preferences', () => {
         })
     })
 
+    it('accepts pi as a persisted agent preference', () => {
+        localStorage.setItem('viby:newSession:preferences', JSON.stringify({
+            agent: 'pi',
+            sessionRole: 'normal',
+            sessionType: 'simple',
+            yoloMode: false,
+            agentSettings: {
+                pi: {
+                    model: 'auto',
+                    modelReasoningEffort: 'default',
+                }
+            }
+        }))
+
+        expect(loadNewSessionPreferences()).toEqual({
+            agent: 'pi',
+            sessionRole: 'normal',
+            sessionType: 'simple',
+            yoloMode: false,
+            agentSettings: {
+                pi: {
+                    model: 'auto',
+                    modelReasoningEffort: 'default',
+                }
+            }
+        })
+    })
+
     it('falls back to defaults when storage contains invalid values', () => {
         localStorage.setItem('viby:newSession:preferences', JSON.stringify({
             agent: 'unknown-agent',

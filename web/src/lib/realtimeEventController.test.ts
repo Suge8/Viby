@@ -30,7 +30,7 @@ function createSessionSummary(
         lifecycleStateSince: 0,
         metadata: {
             path: '/tmp/project',
-            flavor: 'codex',
+            driver: 'codex',
             summary: { text: 'Summary', updatedAt: 0 }
         },
         todoProgress: null,
@@ -55,7 +55,7 @@ function createSessionRecord(overrides: Partial<Session> & Pick<Session, 'id'>):
         metadata: {
             path: '/tmp/project',
             host: 'localhost',
-            flavor: 'codex'
+            driver: 'codex'
         },
         metadataVersion: 1,
         agentState: {
@@ -581,7 +581,7 @@ describe('createRealtimeEventController', () => {
                 metadata: {
                     path: '/tmp/project',
                     host: 'localhost',
-                    flavor: 'codex',
+                    driver: 'codex',
                     lifecycleState: 'running',
                     lifecycleStateSince: 500
                 },
@@ -663,7 +663,7 @@ describe('createRealtimeEventController', () => {
                 metadata: {
                     path: '/tmp/project',
                     host: 'localhost',
-                    flavor: 'codex',
+                    driver: 'codex',
                     lifecycleState: 'closed',
                     lifecycleStateSince: 2_000
                 }

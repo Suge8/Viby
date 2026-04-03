@@ -150,7 +150,7 @@ function renderSessionList({
             lifecycleStateSince: now,
             metadata: {
                 path: '/Users/sugeh/Project/Bao',
-                flavor: 'codex',
+                driver: 'codex',
                 summary: { text: 'Bao summary', updatedAt: now }
             },
             model: 'gpt-5.4-mini',
@@ -166,7 +166,7 @@ function renderSessionList({
             latestCompletedReplyAt: now - 1000,
             metadata: {
                 path: '/Users/sugeh/Project/Viby',
-                flavor: 'claude',
+                driver: 'claude',
                 summary: { text: 'Needs review', updatedAt: now - 1000 }
             }
         }),
@@ -180,7 +180,7 @@ function renderSessionList({
             latestCompletedReplyAt: now - 2000,
             metadata: {
                 path: '/Users/sugeh/Project/Viby',
-                flavor: 'claude',
+                driver: 'claude',
                 summary: { text: 'Archived summary', updatedAt: now - 2000 }
             }
         })
@@ -222,7 +222,7 @@ function createSessionSummary(overrides: Partial<SessionSummary> & Pick<SessionS
         lifecycleStateSince: null,
         metadata: {
             path: '/Users/sugeh/Project/Viby',
-            flavor: 'codex',
+            driver: 'codex',
             summary: { text: 'Summary', updatedAt: 0 }
         },
         todoProgress: null,
@@ -279,7 +279,7 @@ describe('SessionList', () => {
                     lifecycleStateSince: now,
                     metadata: {
                         path: '/Users/sugeh/Project/Bao',
-                        flavor: 'codex',
+                        driver: 'codex',
                         summary: { text: 'Bao summary', updatedAt: now }
                     }
                 }),
@@ -293,7 +293,7 @@ describe('SessionList', () => {
                     latestCompletedReplyAt: now - 1000,
                     metadata: {
                         path: '/Users/sugeh/Project/Viby',
-                        flavor: 'claude',
+                        driver: 'claude',
                         summary: { text: 'Needs review', updatedAt: now - 1000 }
                     }
                 }),
@@ -307,7 +307,7 @@ describe('SessionList', () => {
                     latestCompletedReplyAt: now - 2000,
                     metadata: {
                         path: '/Users/sugeh/Project/Viby',
-                        flavor: 'claude',
+                        driver: 'claude',
                         summary: { text: 'Archived summary', updatedAt: now - 2000 }
                     }
                 })
@@ -331,7 +331,7 @@ describe('SessionList', () => {
                             lifecycleStateSince: now,
                             metadata: {
                                 path: '/Users/sugeh/Project/Bao',
-                                flavor: 'codex',
+                                driver: 'codex',
                                 summary: { text: 'Bao summary', updatedAt: now }
                             }
                         }),
@@ -345,7 +345,7 @@ describe('SessionList', () => {
                             latestCompletedReplyAt: now,
                             metadata: {
                                 path: '/Users/sugeh/Project/Viby',
-                                flavor: 'claude',
+                                driver: 'claude',
                                 summary: { text: 'Needs review', updatedAt: now }
                             }
                         }),
@@ -359,7 +359,7 @@ describe('SessionList', () => {
                             latestCompletedReplyAt: now - 2000,
                             metadata: {
                                 path: '/Users/sugeh/Project/Viby',
-                                flavor: 'claude',
+                                driver: 'claude',
                                 summary: { text: 'Archived summary', updatedAt: now - 2000 }
                             }
                         })
@@ -393,7 +393,7 @@ describe('SessionList', () => {
                     latestCompletedReplyAt: now - 2000,
                     metadata: {
                         path: '/Users/sugeh/Project/Viby',
-                        flavor: 'claude',
+                        driver: 'claude',
                         summary: { text: 'Archived summary', updatedAt: now - 2000 }
                     }
                 })
@@ -416,7 +416,7 @@ describe('SessionList', () => {
                             latestCompletedReplyAt: now,
                             metadata: {
                                 path: '/Users/sugeh/Project/Viby',
-                                flavor: 'claude',
+                                driver: 'claude',
                                 summary: { text: 'Archived summary', updatedAt: now }
                             }
                         })
@@ -451,7 +451,7 @@ describe('SessionList', () => {
                 lifecycleStateSince: now,
                 metadata: {
                     path: '/Users/sugeh/Project/Bao',
-                    flavor: 'codex',
+                    driver: 'codex',
                     summary: { text: 'Bao summary', updatedAt: now }
                 }
             }),
@@ -465,7 +465,7 @@ describe('SessionList', () => {
                 latestCompletedReplyAt: now - 2000,
                 metadata: {
                     path: '/Users/sugeh/Project/Viby',
-                    flavor: 'claude',
+                    driver: 'claude',
                     summary: { text: 'Archived summary', updatedAt: now - 2000 }
                 }
             })
@@ -520,7 +520,7 @@ describe('SessionList', () => {
                     lifecycleStateSince: now,
                     metadata: {
                         path: '/Users/sugeh/Project/Viby',
-                        flavor: 'codex',
+                        driver: 'codex',
                         summary: { text: 'Manager Alpha', updatedAt: now }
                     },
                     team: {
@@ -548,7 +548,7 @@ describe('SessionList', () => {
                     lifecycleStateSince: now - 1_000,
                     metadata: {
                         path: '/Users/sugeh/Project/Viby',
-                        flavor: 'claude',
+                        driver: 'claude',
                         summary: { text: 'Implement API', updatedAt: now - 1_000 }
                     },
                     team: {
@@ -581,7 +581,7 @@ describe('SessionList', () => {
                     lifecycleStateSince: now - 2_000,
                     metadata: {
                         path: '/Users/sugeh/Project/Viby',
-                        flavor: 'claude',
+                        driver: 'claude',
                         summary: { text: 'Review patch', updatedAt: now - 2_000 }
                     },
                     team: {
@@ -640,7 +640,7 @@ describe('SessionList', () => {
                     lifecycleStateSince: now,
                     metadata: {
                         path: '/Users/sugeh/Project/Viby',
-                        flavor: 'codex',
+                        driver: 'codex',
                         summary: { text: 'Manager Selected', updatedAt: now }
                     },
                     team: {
@@ -668,7 +668,7 @@ describe('SessionList', () => {
                     lifecycleStateSince: now - 1_000,
                     metadata: {
                         path: '/Users/sugeh/Project/Viby',
-                        flavor: 'claude',
+                        driver: 'claude',
                         summary: { text: 'Selected member', updatedAt: now - 1_000 }
                     },
                     team: {
@@ -711,7 +711,7 @@ describe('SessionList', () => {
                 lifecycleStateSince: now - 1_000,
                 metadata: {
                     path: '/Users/sugeh/Project/Viby',
-                    flavor: 'codex',
+                    driver: 'codex',
                     summary: { text: 'Archived Manager', updatedAt: now - 1_000 }
                 },
                 team: {
@@ -739,7 +739,7 @@ describe('SessionList', () => {
                 lifecycleStateSince: now - 2_000,
                 metadata: {
                     path: '/Users/sugeh/Project/Viby',
-                    flavor: 'claude',
+                    driver: 'claude',
                     summary: { text: 'Archived implementer', updatedAt: now - 2_000 }
                 },
                 team: {
@@ -772,7 +772,7 @@ describe('SessionList', () => {
                 lifecycleStateSince: now - 3_000,
                 metadata: {
                     path: '/Users/sugeh/Project/Viby',
-                    flavor: 'claude',
+                    driver: 'claude',
                     summary: { text: 'Archived reviewer', updatedAt: now - 3_000 }
                 },
                 team: {
@@ -843,7 +843,7 @@ describe('SessionList', () => {
             lifecycleStateSince: now,
             metadata: {
                 path: '/Users/sugeh/Project/Viby',
-                flavor: 'claude',
+                driver: 'claude',
                 summary: { text: 'Old member label', updatedAt: now }
             },
             team: {
@@ -907,7 +907,7 @@ describe('SessionList', () => {
             lifecycleStateSince: now,
             metadata: {
                 path: '/Users/sugeh/Project/Viby',
-                flavor: 'claude',
+                driver: 'claude',
                 summary: { text: 'Old member label', updatedAt: now }
             },
             team: {
@@ -985,7 +985,7 @@ describe('SessionList', () => {
                             updatedAt: now,
                             metadata: {
                                 path: '/Users/sugeh/Project/Viby',
-                                flavor: 'claude',
+                                driver: 'claude',
                                 summary: { text: 'Needs review', updatedAt: now - 500 }
                             }
                         })
@@ -1022,7 +1022,7 @@ describe('SessionList', () => {
                             lifecycleStateSince: now,
                             metadata: {
                                 path: '/Users/sugeh/Project/Viby',
-                                flavor: 'claude',
+                                driver: 'claude',
                                 summary: { text: 'Streaming reply', updatedAt: now }
                             }
                         })
@@ -1064,7 +1064,7 @@ describe('SessionList', () => {
                             lifecycleStateSince: now,
                             metadata: {
                                 path: '/Users/sugeh/Project/Viby',
-                                flavor: 'claude',
+                                driver: 'claude',
                                 summary: { text: 'Still streaming', updatedAt: now }
                             }
                         }),
@@ -1080,7 +1080,7 @@ describe('SessionList', () => {
                             lifecycleStateSince: now,
                             metadata: {
                                 path: '/Users/sugeh/Project/Viby',
-                                flavor: 'codex',
+                                driver: 'codex',
                                 summary: { text: 'Ready reply', updatedAt: now }
                             }
                         })
@@ -1098,7 +1098,7 @@ describe('SessionList', () => {
         expect(screen.getAllByTitle('Reply')).toHaveLength(1)
     })
 
-    it('shows awaiting input once takeover requests are pending even if thinking has not dropped yet', () => {
+    it('shows awaiting input once takeover requests are pending even before the turn leaves processing', () => {
         const now = Date.now()
 
         render(
@@ -1118,7 +1118,7 @@ describe('SessionList', () => {
                             pendingRequestsCount: 1,
                             metadata: {
                                 path: '/Users/sugeh/Project/Viby',
-                                flavor: 'codex',
+                                driver: 'codex',
                                 summary: { text: 'Waiting for takeover', updatedAt: now }
                             }
                         })
@@ -1156,7 +1156,7 @@ describe('SessionList', () => {
                             lifecycleStateSince: now - 1_000,
                             metadata: {
                                 path: '/Users/sugeh/Project/Viby',
-                                flavor: 'claude',
+                                driver: 'claude',
                                 summary: { text: 'Streaming session', updatedAt: now }
                             }
                         }),
@@ -1172,7 +1172,7 @@ describe('SessionList', () => {
                             lifecycleStateSince: now - 100,
                             metadata: {
                                 path: '/Users/sugeh/Project/Viby',
-                                flavor: 'codex',
+                                driver: 'codex',
                                 summary: { text: 'Stable session', updatedAt: now - 100 }
                             }
                         })
@@ -1215,7 +1215,7 @@ describe('SessionList', () => {
                             pendingRequestsCount: 1,
                             metadata: {
                                 path: '/Users/sugeh/Project/Viby',
-                                flavor: 'codex',
+                                driver: 'codex',
                                 summary: { text: 'Awaiting approval', updatedAt: now - 1_000 }
                             }
                         }),
@@ -1231,7 +1231,7 @@ describe('SessionList', () => {
                             lifecycleStateSince: now - 100,
                             metadata: {
                                 path: '/Users/sugeh/Project/Viby',
-                                flavor: 'claude',
+                                driver: 'claude',
                                 summary: { text: 'Stable session', updatedAt: now - 100 }
                             }
                         })

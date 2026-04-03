@@ -22,7 +22,7 @@ function createSessionSummary(
         lifecycleStateSince: NOW,
         metadata: {
             path: '/Users/sugeh/Project/Viby',
-            flavor: 'codex',
+            driver: 'codex',
             summary: {
                 text: id,
                 updatedAt: NOW

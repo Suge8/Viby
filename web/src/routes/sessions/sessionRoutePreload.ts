@@ -1,6 +1,7 @@
 let sessionsShellModulePromise: Promise<typeof import('@/routes/sessions/SessionsShell')> | null = null
 let sessionChatRouteModulePromise: Promise<typeof import('@/routes/sessions/chat')> | null = null
 let sessionChatWorkspaceModulePromise: Promise<typeof import('@/components/SessionChatWorkspace')> | null = null
+let sessionChatWorkspaceSurfacesModulePromise: Promise<typeof import('@/components/sessionChatWorkspaceModules')> | null = null
 
 function loadSessionsShellModule(): Promise<typeof import('@/routes/sessions/SessionsShell')> {
     sessionsShellModulePromise ??= import('@/routes/sessions/SessionsShell')
@@ -25,6 +26,11 @@ export function loadSessionChatRouteModule(): Promise<typeof import('@/routes/se
 export function loadSessionChatWorkspaceModule(): Promise<typeof import('@/components/SessionChatWorkspace')> {
     sessionChatWorkspaceModulePromise ??= import('@/components/SessionChatWorkspace')
     return sessionChatWorkspaceModulePromise
+}
+
+function loadSessionChatWorkspaceSurfacesModule(): Promise<typeof import('@/components/sessionChatWorkspaceModules')> {
+    sessionChatWorkspaceSurfacesModulePromise ??= import('@/components/sessionChatWorkspaceModules')
+    return sessionChatWorkspaceSurfacesModulePromise
 }
 
 export function loadSessionFilesRouteModule(): Promise<typeof import('@/routes/sessions/files')> {
@@ -57,6 +63,9 @@ export async function preloadSessionChatExperience(options?: {
     const tasks: Promise<unknown>[] = [loadSessionChatRouteModule()]
     if (options?.includeWorkspace) {
         tasks.push(loadSessionChatWorkspaceModule())
+        tasks.push(loadSessionChatWorkspaceSurfacesModule().then((module) => {
+            return module.preloadSessionChatWorkspaceSurfaces()
+        }))
     }
     await Promise.all(tasks)
 }

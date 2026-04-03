@@ -3,7 +3,8 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 const harness = vi.hoisted(() => ({
     ensureLatestMessagesLoaded: vi.fn(async () => undefined),
     recordRuntimeAssetFailureRecovery: vi.fn(),
-    loadWorkspaceModule: vi.fn()
+    loadWorkspaceModule: vi.fn(),
+    preloadWorkspaceSurfaces: vi.fn(async () => undefined)
 }))
 
 vi.mock('@/components/SessionChatWorkspace', () => ({
@@ -16,6 +17,10 @@ vi.mock('@/components/SessionChatWorkspace', () => ({
 
 vi.mock('@/lib/message-window-store', () => ({
     ensureLatestMessagesLoaded: harness.ensureLatestMessagesLoaded
+}))
+
+vi.mock('@/components/sessionChatWorkspaceModules', () => ({
+    preloadSessionChatWorkspaceSurfaces: harness.preloadWorkspaceSurfaces
 }))
 
 vi.mock('@/lib/query-keys', () => ({
@@ -52,6 +57,7 @@ describe('sessionRoutePreload', () => {
         harness.ensureLatestMessagesLoaded.mockClear()
         harness.recordRuntimeAssetFailureRecovery.mockClear()
         harness.loadWorkspaceModule.mockClear()
+        harness.preloadWorkspaceSurfaces.mockClear()
     })
 
     it('preloads the latest message snapshot together with session detail data', async () => {
@@ -122,6 +128,7 @@ describe('sessionRoutePreload', () => {
         await preloadSessionChatExperience()
 
         expect(harness.loadWorkspaceModule).not.toHaveBeenCalled()
+        expect(harness.preloadWorkspaceSurfaces).not.toHaveBeenCalled()
     })
 
     it('keeps explicit workspace preload on the module path without touching message fetch ownership', async () => {
@@ -130,6 +137,7 @@ describe('sessionRoutePreload', () => {
         await expect(preloadSessionChatExperience({ includeWorkspace: true })).resolves.toBeUndefined()
 
         expect(harness.ensureLatestMessagesLoaded).not.toHaveBeenCalled()
+        expect(harness.preloadWorkspaceSurfaces).toHaveBeenCalledTimes(1)
     })
 
     it('warms workspace runtime in the background without blocking data warmup', async () => {

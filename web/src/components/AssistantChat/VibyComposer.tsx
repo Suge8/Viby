@@ -53,7 +53,7 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
         active = true,
         allowSendWhenInactive = false,
         controlledByUser = false,
-        agentFlavor = null,
+        sessionDriver = null,
         attachmentsSupported = true,
     } = composerModel.config
     const {
@@ -61,7 +61,6 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
         onPermissionModeChange,
         onModelChange,
         onModelReasoningEffortChange,
-        onSwitchToRemote,
     } = composerModel.handlers
     const autocompleteSuggestions = composerModel.handlers.autocompleteSuggestions ?? defaultSuggestionHandler
 
@@ -75,6 +74,7 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
     const threadIsDisabled = useAssistantState(({ thread }) => thread.isDisabled)
 
     const controlsDisabled = disabled || isResuming || (!active && !allowSendWhenInactive) || threadIsDisabled
+    const switchDriverPending = composerModel.config.switchDriverPending === true
     const trimmed = composerText.trim()
     const hasText = trimmed.length > 0
     const hasAttachments = attachments.length > 0
@@ -84,7 +84,6 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
     const canSend = (hasText || hasAttachments) && attachmentsReady && !controlsDisabled && !threadIsRunning
 
     const [isAborting, setIsAborting] = useState(false)
-    const [isSwitching, setIsSwitching] = useState(false)
     const overlayAnchorRef = useRef<HTMLDivElement | null>(null)
     const replyingIndicatorPresence = useReplyingIndicatorPresence(replyingPhase)
     const {
@@ -100,14 +99,13 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
     const { haptic, isTouch } = useComposerPlatform()
 
     const abortDisabled = controlsDisabled || isAborting || !threadIsRunning
-    const switchDisabled = controlsDisabled || isSwitching || !controlledByUser
     const showControlsButton = useMemo(
         () => hasComposerControls(composerModel.config, composerModel.handlers),
         [composerModel.config, composerModel.handlers]
     )
     const permissionModes = useMemo(
-        () => getComposerPermissionModes(agentFlavor),
-        [agentFlavor]
+        () => getComposerPermissionModes(sessionDriver),
+        [sessionDriver]
     )
     const [openPanel, setOpenPanel] = useState<ComposerPanelId | null>(null)
     const [hasRequestedControlsOverlay, setHasRequestedControlsOverlay] = useState(false)
@@ -119,16 +117,10 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
     }, [isAborting, threadIsRunning])
 
     useEffect(() => {
-        if (!isSwitching) return
-        if (controlledByUser) return
-        setIsSwitching(false)
-    }, [isSwitching, controlledByUser])
-
-    useEffect(() => {
-        if (controlsDisabled || !showControlsButton) {
+        if (controlsDisabled || !showControlsButton || switchDriverPending) {
             setOpenPanel(null)
         }
-    }, [controlsDisabled, showControlsButton])
+    }, [controlsDisabled, showControlsButton, switchDriverPending])
 
     const handleAbort = useCallback(() => {
         if (abortDisabled) return
@@ -137,31 +129,20 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
         api.thread().cancelRun()
     }, [abortDisabled, api, haptic])
 
-    const handleSwitch = useCallback(async () => {
-        if (switchDisabled || !onSwitchToRemote) return
-        haptic('light')
-        setIsSwitching(true)
-        try {
-            await onSwitchToRemote()
-        } catch {
-            setIsSwitching(false)
-        }
-    }, [switchDisabled, onSwitchToRemote, haptic])
-
     const handleFormSubmit = useCallback((event: ReactFormEvent<HTMLFormElement>) => {
         // Keep send on the explicit button / shortcut path only.
         event.preventDefault()
     }, [])
 
     const handleTogglePanel = useCallback((panel: ComposerPanelId) => {
-        if (controlsDisabled || !showControlsButton) {
+        if (controlsDisabled || !showControlsButton || switchDriverPending) {
             return
         }
 
         haptic('light')
         setHasRequestedControlsOverlay(true)
         setOpenPanel((currentPanel) => currentPanel === panel ? null : panel)
-    }, [controlsDisabled, haptic, showControlsButton])
+    }, [controlsDisabled, haptic, showControlsButton, switchDriverPending])
 
     const composerInput = useComposerInputController({
         api,
@@ -172,7 +153,7 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
         permissionModes,
         autocompletePrefixes,
         autocompleteSuggestions,
-        agentFlavor,
+        sessionDriver,
         model,
         onAbort: handleAbort,
         onPermissionModeChange,
@@ -236,10 +217,9 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
                                     anchorRef={overlayAnchorRef}
                                     config={composerModel.config}
                                     handlers={{
-                                        ...composerModel.handlers,
-                                        onSwitchToRemote: controlledByUser ? handleSwitch : undefined
+                                        ...composerModel.handlers
                                     }}
-                                    controlsDisabled={controlsDisabled}
+                                    controlsDisabled={controlsDisabled || switchDriverPending}
                                     onClose={() => setOpenPanel(null)}
                                 />
                             </Suspense>
@@ -277,7 +257,7 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
                                 controlsButton={{
                                     visible: showControlsButton,
                                     active: openPanel === 'controls',
-                                    disabled: controlsDisabled,
+                                    disabled: controlsDisabled || switchDriverPending,
                                     onToggle: () => handleTogglePanel('controls')
                                 }}
                                 primaryAction={{

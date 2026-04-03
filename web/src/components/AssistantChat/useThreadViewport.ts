@@ -16,6 +16,7 @@ type UseThreadViewportOptions = {
     hasMoreMessages: boolean
     isLoadingMessages: boolean
     isLoadingMoreMessages: boolean
+    pinToBottomOnSessionEntry?: boolean
     onLoadHistoryUntilPreviousUser: () => Promise<LoadMoreMessagesResult>
     onLoadMore: () => Promise<LoadMoreMessagesResult>
     onAtBottomChange: (atBottom: boolean) => void
@@ -152,6 +153,7 @@ export function useThreadViewport(options: UseThreadViewportOptions): UseThreadV
     const hasPreviousUserTargetRef = useRef(false)
     const historyActionTokenRef = useRef(0)
     const forceScrollTokenRef = useRef(options.forceScrollToken)
+    const shouldPinToBottomOnSessionEntryRef = useRef(options.pinToBottomOnSessionEntry === true)
     const isLoadingMessagesRef = useRef(options.isLoadingMessages)
     const isLoadingMoreRef = useRef(options.isLoadingMoreMessages)
     const hasMoreMessagesRef = useRef(options.hasMoreMessages)
@@ -165,6 +167,7 @@ export function useThreadViewport(options: UseThreadViewportOptions): UseThreadV
     const [isHistoryActionPending, setIsHistoryActionPending] = useState(false)
     const [isAtBottom, setIsAtBottom] = useState(true)
 
+    shouldPinToBottomOnSessionEntryRef.current = options.pinToBottomOnSessionEntry === true
     isLoadingMessagesRef.current = options.isLoadingMessages
     isLoadingMoreRef.current = options.isLoadingMoreMessages
     hasMoreMessagesRef.current = options.hasMoreMessages
@@ -562,10 +565,12 @@ export function useThreadViewport(options: UseThreadViewportOptions): UseThreadV
         markViewportAsPinnedToBottom(false)
         clearHistoryControlState()
         forceScrollTokenRef.current = options.forceScrollToken
+        shouldPinToBottomOnSessionEntryRef.current = options.pinToBottomOnSessionEntry === true
     }, [
         cancelPendingMessageAlignment,
         clearHistoryControlState,
         markViewportAsPinnedToBottom,
+        options.pinToBottomOnSessionEntry,
         options.sessionId,
         resetPendingHistoryAction
     ])
@@ -603,6 +608,12 @@ export function useThreadViewport(options: UseThreadViewportOptions): UseThreadV
 
         const pendingHistoryAction = pendingHistoryActionRef.current
         if (!pendingHistoryAction) {
+            if (shouldPinToBottomOnSessionEntryRef.current && options.orderedMessageIds.length > 0) {
+                shouldPinToBottomOnSessionEntryRef.current = false
+                stickToViewportBottom(viewport)
+                syncViewportState(viewport)
+                return
+            }
             if (pinnedToBottomRef.current) {
                 stickToViewportBottom(viewport)
             }
@@ -623,8 +634,10 @@ export function useThreadViewport(options: UseThreadViewportOptions): UseThreadV
         finishPendingHistoryAction(viewport, pendingHistoryAction)
     }, [
         options.messagesVersion,
+        options.orderedMessageIds.length,
         continuePendingPreviousUserJump,
         finishPendingHistoryAction,
+        stickToViewportBottom,
         syncViewportState
     ])
 

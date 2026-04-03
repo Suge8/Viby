@@ -110,10 +110,12 @@ export function AppRealtimeRuntime(props: AppRealtimeRuntimeProps): JSX.Element 
     const handleRealtimeConnect = useCallback((details: RealtimeConnectDetails) => {
         handleConnect(details)
 
-        if (details.initial || details.recovered) {
+        if (details.initial) {
             return
         }
 
+        // Socket recovery is only a transport optimization; the authoritative
+        // session/message catch-up still comes from Hub recovery.
         runCatchupSync(
             runRealtimeRecovery({
                 queryClient,

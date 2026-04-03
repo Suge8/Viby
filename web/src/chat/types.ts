@@ -10,7 +10,8 @@ export type UsageData = {
 }
 
 export type AgentEvent =
-    | { type: 'switch'; mode: 'local' | 'remote' }
+    | { type: 'driver-switched'; previousDriver?: string; targetDriver?: string }
+    | { type: 'driver-switch-send-failed'; stage?: 'socket_update' | 'callback_flush'; code?: 'empty_first_turn' | 'timeout' | 'unknown' }
     | { type: 'message'; message: string }
     | { type: 'title-changed'; title: string }
     | { type: 'limit-reached'; endsAt: number }

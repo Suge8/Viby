@@ -1,4 +1,6 @@
 import type {
+    AgentFlavor,
+    AgentLaunchConfigResponse,
     AttachmentMetadata,
     CodexCollaborationMode,
     DeleteUploadResponse,
@@ -30,6 +32,11 @@ import type {
     SessionResponse,
     SessionsResponse
 } from '@/types/api'
+import {
+    assertSameSessionSwitchTargetDriver,
+    isSameSessionSwitchTargetDriver,
+    type SameSessionSwitchTargetDriver,
+} from '@/lib/sameSessionDriverSwitch'
 import { ApiError, buildApiUrl, parseErrorPayload } from './clientShared'
 export { ApiError } from './clientShared'
 
@@ -56,6 +63,12 @@ type SessionActionLegacyResponse = {
 type ResumeSessionLegacyResponse = {
     type: 'success'
     sessionId: string
+}
+
+type DriverSwitchResponse = {
+    ok: true
+    targetDriver: SameSessionSwitchTargetDriver
+    session: Session
 }
 
 type SessionSnapshotAction =
@@ -110,6 +123,13 @@ function isSessionActionResponse(value: unknown): value is SessionActionResponse
 
 function isSessionActionLegacyResponse(value: unknown): value is SessionActionLegacyResponse {
     return isRecord(value) && value.ok === true
+}
+
+function isDriverSwitchResponse(value: unknown): value is DriverSwitchResponse {
+    return isRecord(value)
+        && value.ok === true
+        && isSameSessionSwitchTargetDriver(value.targetDriver)
+        && isSession(value.session)
 }
 
 function resolveRequestToken(
@@ -381,13 +401,18 @@ export class ApiClient {
         return await this.postSessionSnapshotAction(sessionId, 'unarchive', {})
     }
 
-    async switchSession(sessionId: string): Promise<Session> {
-        const response = await this.request<unknown>(`/api/sessions/${encodeURIComponent(sessionId)}/switch`, {
+    async switchSessionDriver(sessionId: string, targetDriver: SameSessionSwitchTargetDriver): Promise<Session> {
+        const validatedTargetDriver = assertSameSessionSwitchTargetDriver(targetDriver)
+        const response = await this.request<unknown>(`/api/sessions/${encodeURIComponent(sessionId)}/driver-switch`, {
             method: 'POST',
-            body: JSON.stringify({})
+            body: JSON.stringify({ targetDriver: validatedTargetDriver })
         })
 
-        return await this.resolveSessionActionSnapshotResponse(response, sessionId, 'switch')
+        if (!isDriverSwitchResponse(response)) {
+            throw new Error('Invalid driver switch response')
+        }
+
+        return response.session
     }
 
     async setPermissionMode(sessionId: string, mode: PermissionMode): Promise<Session> {
@@ -557,10 +582,21 @@ export class ApiClient {
         return await module.browseMachineDirectory(this.boundRequest, machineId, path)
     }
 
+    async resolveAgentLaunchConfig(
+        machineId: string,
+        input: {
+            agent: AgentFlavor
+            directory: string
+        }
+    ): Promise<AgentLaunchConfigResponse> {
+        const module = await loadMachinesModule()
+        return await module.resolveAgentLaunchConfig(this.boundRequest, machineId, input)
+    }
+
     async spawnSession(input: {
         machineId: string
         directory: string
-        agent?: 'claude' | 'codex' | 'cursor' | 'gemini' | 'opencode'
+        agent?: AgentFlavor
         model?: string
         modelReasoningEffort?: ModelReasoningEffort
         permissionMode?: PermissionMode

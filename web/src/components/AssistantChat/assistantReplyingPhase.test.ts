@@ -14,7 +14,7 @@ describe('resolveAssistantReplyingPhase', () => {
         })).toBe('replying')
     })
 
-    it('falls back to the optimistic pending phase before runtime thinking becomes visible', () => {
+    it('falls back to the optimistic pendingReply phase before runtime thinking becomes visible', () => {
         expect(resolveAssistantReplyingPhase({
             isResponding: false,
             pendingReply: {
@@ -26,7 +26,7 @@ describe('resolveAssistantReplyingPhase', () => {
         })).toBe('sending')
     })
 
-    it('clears the indicator once neither pending send nor thinking is active', () => {
+    it('clears the indicator once neither pendingReply nor runtime thinking is active', () => {
         expect(resolveAssistantReplyingPhase({
             isResponding: false,
             pendingReply: null

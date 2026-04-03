@@ -1,10 +1,12 @@
 import { QueryClient } from '@tanstack/react-query'
-import { describe, expect, it } from 'vitest'
 import { waitFor } from '@testing-library/react'
+import { describe, expect, it } from 'vitest'
 import { ingestIncomingMessages, getMessageWindowState } from '@/lib/message-window-store'
 import { queryKeys } from '@/lib/query-keys'
-import type { Session, SessionsResponse } from '@/types/api'
+import type { Session, SessionSummary, SessionsResponse } from '@/types/api'
 import {
+    createSessionSeedFromSummary,
+    getSessionPlaceholderSeed,
     markSessionPendingUserTurnInQueryCache,
     removeSessionClientState,
     writeSessionToQueryCache
@@ -21,7 +23,7 @@ function createSession(): Session {
         metadata: {
             path: '/Users/demo/Project/Viby',
             host: 'demo.local',
-            flavor: 'codex',
+            driver: 'codex',
             lifecycleState: 'closed',
             lifecycleStateSince: 2_000
         },
@@ -37,6 +39,89 @@ function createSession(): Session {
         todos: undefined
     }
 }
+
+function createSummary(overrides?: Partial<SessionSummary>): SessionSummary {
+    return {
+        id: 'session-1',
+        active: false,
+        thinking: false,
+        activeAt: 1_500,
+        updatedAt: 2_000,
+        latestActivityAt: 2_000,
+        latestActivityKind: 'ready',
+        latestCompletedReplyAt: 2_000,
+        lifecycleState: 'closed',
+        lifecycleStateSince: 2_000,
+        metadata: {
+            path: '/Users/demo/Project/Viby',
+            driver: 'codex'
+        },
+        todoProgress: null,
+        pendingRequestsCount: 0,
+        resumeAvailable: false,
+        model: 'gpt-5.4',
+        modelReasoningEffort: 'high',
+        permissionMode: 'default',
+        collaborationMode: 'default',
+        ...overrides
+    }
+}
+
+describe('createSessionSeedFromSummary', () => {
+    it('preserves the authoritative driver when seeding a session from summary data', () => {
+        const session = createSessionSeedFromSummary(createSummary())
+
+        expect(session.metadata).toMatchObject({
+            driver: 'codex'
+        })
+        expect(session.metadata && 'flavor' in session.metadata).toBe(false)
+    })
+
+    it('preserves a valid summary driver when the summary points at Gemini', () => {
+        const session = createSessionSeedFromSummary(createSummary({
+            metadata: {
+                path: '/Users/demo/Project/Viby',
+                driver: 'gemini'
+            }
+        }))
+
+        expect(session.metadata).toMatchObject({
+            driver: 'gemini'
+        })
+        expect(session.metadata && 'flavor' in session.metadata).toBe(false)
+    })
+
+    it('keeps malformed summary driver data unknown instead of guessing', () => {
+        const session = createSessionSeedFromSummary(createSummary({
+            metadata: {
+                path: '/Users/demo/Project/Viby',
+                driver: 'invalid' as never
+            }
+        }))
+
+        expect(session.metadata).toMatchObject({
+            driver: null
+        })
+        expect(session.metadata && 'flavor' in session.metadata).toBe(false)
+    })
+})
+
+describe('getSessionPlaceholderSeed', () => {
+    it('builds a summary placeholder seed with the authoritative driver before detail loads', () => {
+        const queryClient = new QueryClient()
+        queryClient.setQueryData<SessionsResponse>(queryKeys.sessions, {
+            sessions: [createSummary()]
+        })
+
+        const result = getSessionPlaceholderSeed(queryClient, 'session-1')
+
+        expect(result.source).toBe('summary')
+        expect(result.response?.session.metadata).toMatchObject({
+            driver: 'codex'
+        })
+        expect(result.response?.session.metadata && 'flavor' in result.response.session.metadata).toBe(false)
+    })
+})
 
 describe('removeSessionClientState', () => {
     it('removes session detail, list summary, and message window state through one helper', async () => {
@@ -58,7 +143,7 @@ describe('removeSessionClientState', () => {
                 lifecycleStateSince: 2_000,
                 metadata: {
                     path: session.metadata?.path ?? '',
-                    flavor: session.metadata?.flavor ?? null
+                    driver: session.metadata?.driver ?? null
                 },
                 todoProgress: null,
                 pendingRequestsCount: 0,
@@ -114,7 +199,7 @@ describe('writeSessionToQueryCache', () => {
                 lifecycleStateSince: 1_500,
                 metadata: {
                     path: session.metadata?.path ?? '',
-                    flavor: session.metadata?.flavor ?? null
+                    driver: session.metadata?.driver ?? null
                 },
                 todoProgress: null,
                 pendingRequestsCount: 0,
@@ -164,7 +249,7 @@ describe('markSessionPendingUserTurnInQueryCache', () => {
                 lifecycleStateSince: 1_500,
                 metadata: {
                     path: session.metadata?.path ?? '',
-                    flavor: session.metadata?.flavor ?? null
+                    driver: session.metadata?.driver ?? null
                 },
                 todoProgress: null,
                 pendingRequestsCount: 0,

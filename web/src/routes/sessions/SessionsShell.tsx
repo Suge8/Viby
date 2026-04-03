@@ -9,6 +9,8 @@ import { disposeSessionViewRuntime } from '@/hooks/queries/sessionViewRuntime'
 import { useSessions } from '@/hooks/queries/useSessions'
 import { useAppContext } from '@/lib/app-context'
 import {
+    createNavigationTransitionOptions,
+    runNavigationTransition,
     runPreloadedNavigation,
 } from '@/lib/navigationTransition'
 import {
@@ -132,6 +134,9 @@ export function SessionsShell(): JSX.Element {
         }
 
         const recoveryHref = buildSessionHref(sessionId)
+        void preloadSessionSelectionCritical(sessionId).catch(() => {
+            // Explicit selection must not wait for preload completion.
+        })
         warmSessionDetailRouteData({
             api,
             queryClient,
@@ -139,12 +144,13 @@ export function SessionsShell(): JSX.Element {
             ...EXPLICIT_SESSION_DETAIL_PRELOAD_OPTIONS,
             recoveryHref
         })
-        runPreloadedNavigation(() => preloadSessionSelectionCritical(sessionId), () => {
+
+        runNavigationTransition(() => {
             void navigate({
                 to: '/sessions/$sessionId',
                 params: { sessionId },
             })
-        }, recoveryHref)
+        }, createNavigationTransitionOptions(recoveryHref))
     }, [api, navigate, preloadSessionSelectionCritical, queryClient, selectedSessionId])
 
     const handleArchiveSelectedSession = useCallback((sessionId: string) => {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { resolveSessionDriver } from '@viby/protocol'
 import type { ApiClient } from '@/api/client'
 import type { SessionSummary } from '@/types/api'
 import { SessionActionMenu } from '@/components/SessionActionMenu'
@@ -37,6 +38,7 @@ export function SessionListActionController(
     const { onArchiveSelectedSession, onDismiss, onSelectSession } = callbacks
     const [surface, setSurface] = useState<SessionActionSurface>({ kind: 'menu' })
     const sessionId = session.id
+    const sessionDriver = resolveSessionDriver(session.metadata)
     const title = getSessionTitle(session)
     const dialogKind: SessionActionDialogKind = surface.kind === 'confirm' ? surface.dialogKind : null
     const dialogConfig = getSessionActionDialogConfig(dialogKind, title, t)
@@ -49,7 +51,7 @@ export function SessionListActionController(
         renameSession,
         resumeSession,
         unarchiveSession
-    } = useSessionActions(api, sessionId, session.metadata?.flavor ?? null)
+    } = useSessionActions(api, sessionId, sessionDriver)
 
     useEffect(() => {
         setSurface({ kind: 'menu' })

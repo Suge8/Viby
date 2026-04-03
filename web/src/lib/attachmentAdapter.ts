@@ -91,21 +91,13 @@ function resolveAttachmentContentType(
     return mimeType || 'application/octet-stream'
 }
 
-type CreateAttachmentAdapterOptions = {
-    ensureSessionReady?: () => Promise<void>
-}
-
-export function createAttachmentAdapter(
-    api: ApiClient,
-    sessionId: string,
-    options?: CreateAttachmentAdapterOptions
-): AttachmentAdapter {
+export function createAttachmentAdapter(api: ApiClient, sessionId: string): AttachmentAdapter {
     const cancelledAttachmentIds = new Set<string>()
 
-    const deleteUpload = async (targetSessionId: string, path?: string) => {
+    const deleteUpload = async (path?: string) => {
         if (!path) return
         try {
-            await api.deleteUploadFile(targetSessionId, path)
+            await api.deleteUploadFile(sessionId, path)
         } catch {
             // Best effort cleanup
         }
@@ -159,11 +151,10 @@ export function createAttachmentAdapter(
                     status: { type: 'running', reason: 'uploading', progress: 50 }
                 }
 
-                await options?.ensureSessionReady?.()
                 const result = await api.uploadFile(sessionId, file.name, content, contentType)
                 if (cancelledAttachmentIds.has(id)) {
                     if (result.success && result.path) {
-                        await deleteUpload(sessionId, result.path)
+                        await deleteUpload(result.path)
                     }
                     return
                 }
@@ -211,14 +202,13 @@ export function createAttachmentAdapter(
         async remove(attachment: Attachment): Promise<void> {
             cancelledAttachmentIds.add(attachment.id)
             const pendingAttachment = attachment as PendingUploadAttachment
-            await deleteUpload(sessionId, pendingAttachment.path)
+            await deleteUpload(pendingAttachment.path)
         },
 
         async send(attachment: PendingAttachment): Promise<CompleteAttachment> {
             const pending = attachment as PendingUploadAttachment
             const path = pending.path
 
-            // Build AttachmentMetadata to be sent with the message
             const metadata: AttachmentMetadata | undefined = path ? {
                 id: attachment.id,
                 filename: attachment.name,

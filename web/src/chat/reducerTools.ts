@@ -1,6 +1,8 @@
 import type { AgentState } from '@/types/api'
 import type { ChatBlock, ChatToolCall, NormalizedMessage, ToolCallBlock, ToolPermission } from '@/chat/types'
 
+const TOOL_PLACEHOLDER_NAMES = new Set(['', 'tool', 'unknown'])
+
 export type PermissionEntry = {
     toolName: string
     input: unknown
@@ -50,6 +52,36 @@ export function getPermissions(agentState: AgentState | null | undefined): Map<s
     return map
 }
 
+function isPlaceholderToolName(name: string): boolean {
+    return TOOL_PLACEHOLDER_NAMES.has(name.trim().toLowerCase())
+}
+
+function findBlockInsertIndex(blocks: readonly ChatBlock[], createdAt: number): number {
+    for (let index = 0; index < blocks.length; index += 1) {
+        const block = blocks[index]
+        if (block && block.createdAt > createdAt) {
+            return index
+        }
+    }
+
+    return blocks.length
+}
+
+function insertBlockByCreatedAt(blocks: ChatBlock[], block: ToolCallBlock): void {
+    blocks.splice(findBlockInsertIndex(blocks, block.createdAt), 0, block)
+}
+
+function moveBlockByCreatedAt(blocks: ChatBlock[], block: ToolCallBlock): void {
+    const currentIndex = blocks.indexOf(block)
+    if (currentIndex === -1) {
+        insertBlockByCreatedAt(blocks, block)
+        return
+    }
+
+    blocks.splice(currentIndex, 1)
+    insertBlockByCreatedAt(blocks, block)
+}
+
 export function ensureToolBlock(
     blocks: ChatBlock[],
     toolBlocksById: Map<string, ToolCallBlock>,
@@ -66,15 +98,11 @@ export function ensureToolBlock(
 ): ToolCallBlock {
     const existing = toolBlocksById.get(id)
     if (existing) {
-        const isPlaceholderToolName = (name: string): boolean => {
-            const normalized = name.trim().toLowerCase()
-            return normalized === '' || normalized === 'tool' || normalized === 'unknown'
-        }
-
         // Preserve earliest createdAt for stable ordering.
         if (seed.createdAt < existing.createdAt) {
             existing.createdAt = seed.createdAt
             existing.tool.createdAt = seed.createdAt
+            moveBlockByCreatedAt(blocks, existing)
         }
         if (seed.permission) {
             existing.tool.permission = { ...existing.tool.permission, ...seed.permission }
@@ -123,7 +151,7 @@ export function ensureToolBlock(
     }
 
     toolBlocksById.set(id, block)
-    blocks.push(block)
+    insertBlockByCreatedAt(blocks, block)
     return block
 }
 

@@ -8,6 +8,7 @@ import {
 } from '@tanstack/react-router'
 import { App } from '@/App'
 import { RouteLoadingFallback } from '@/components/loading/RouteLoadingFallback'
+import { shouldRestoreWindowScroll } from '@/lib/appShellPresentation'
 import {
     loadSessionsIndexRouteModule,
     loadSessionsShellRouteModule,
@@ -240,7 +241,7 @@ export function createAppRouter(history?: RouterHistory) {
     return createRouter({
         routeTree,
         history,
-        scrollRestoration: true,
+        scrollRestoration: ({ location }) => shouldRestoreWindowScroll(location.pathname),
     })
 }
 

@@ -1,4 +1,4 @@
-import { getPermissionModesForFlavor, type CodexCollaborationMode, type PermissionMode } from '@viby/protocol'
+import { getPermissionModesForDriver, type CodexCollaborationMode, type PermissionMode, type PiModelCapability } from '@viby/protocol'
 import type { ModelReasoningEffort } from '@/types/api'
 import {
     getClaudeComposerModelOptions,
@@ -6,7 +6,9 @@ import {
     getCodexComposerModelOptions,
     getCodexComposerReasoningEffortOptions,
     getGeminiComposerModelOptions,
-    getSessionModelDisplayLabel,
+    getPiComposerModelOptions,
+    getPiComposerReasoningEffortOptions,
+    getSessionModelDisplayLabelWithCapabilities,
     type SessionConfigOption,
 } from '@/lib/sessionConfigOptions'
 
@@ -36,13 +38,18 @@ function getPermissionTone(mode: PermissionMode): ComposerOptionTone {
     }
 }
 
-function translateModelOption<T extends string | null>(option: SessionConfigOption<T>, flavor: string | null, t: Translate): string {
+function translateModelOption<T extends string | null>(
+    option: SessionConfigOption<T>,
+    sessionDriver: string | null,
+    piModelCapabilities: readonly PiModelCapability[] | null | undefined,
+    t: Translate
+): string {
     if (option.labelKey) {
         return t(option.labelKey)
     }
 
     if (typeof option.value === 'string') {
-        return getSessionModelDisplayLabel(option.value, flavor)
+        return getSessionModelDisplayLabelWithCapabilities(option.value, sessionDriver, piModelCapabilities)
     }
 
     return option.label
@@ -96,12 +103,12 @@ function getCollaborationDescription(mode: CodexCollaborationMode, t: Translate)
         : t('sessionConfig.collaboration.default.description')
 }
 
-function getModelDescription(value: string | null, flavor: string | null, t: Translate): string | undefined {
+function getModelDescription(value: string | null, sessionDriver: string | null, t: Translate): string | undefined {
     if (value === null) {
         return t('sessionConfig.model.terminalDefault.description')
     }
 
-    if (flavor === 'codex') {
+    if (sessionDriver === 'codex') {
         switch (value) {
             case 'gpt-5.4':
                 return t('sessionConfig.model.gpt54.description')
@@ -116,11 +123,11 @@ function getModelDescription(value: string | null, flavor: string | null, t: Tra
         }
     }
 
-    if (flavor === 'claude') {
+    if (sessionDriver === 'claude') {
         return t('sessionConfig.model.custom.description')
     }
 
-    if (flavor === 'gemini') {
+    if (sessionDriver === 'gemini') {
         switch (value) {
             case 'gemini-2.5-pro':
                 return t('sessionConfig.model.gemini25Pro.description')
@@ -162,27 +169,32 @@ function getReasoningDescription(value: ModelReasoningEffort | null, t: Translat
     }
 }
 
-function getModelOptionsForFlavor(
-    flavor: string | null,
-    currentModel: string | null
+function getModelOptionsForDriver(
+    sessionDriver: string | null,
+    currentModel: string | null,
+    piModelCapabilities?: readonly PiModelCapability[] | null
 ): SessionConfigOption<string | null>[] {
-    if (flavor === 'claude') {
+    if (sessionDriver === 'claude') {
         return getClaudeComposerModelOptions(currentModel)
     }
 
-    if (flavor === 'gemini') {
+    if (sessionDriver === 'gemini') {
         return getGeminiComposerModelOptions(currentModel)
     }
 
-    if (flavor === 'codex') {
+    if (sessionDriver === 'pi') {
+        return getPiComposerModelOptions(currentModel, piModelCapabilities)
+    }
+
+    if (sessionDriver === 'codex') {
         return getCodexComposerModelOptions(currentModel)
     }
 
     return []
 }
 
-export function getLocalizedPermissionModeOptions(flavor: string | null, t: Translate): ComposerPanelOption<PermissionMode>[] {
-    return getPermissionModesForFlavor(flavor).map((mode) => ({
+export function getLocalizedPermissionModeOptions(sessionDriver: string | null, t: Translate): ComposerPanelOption<PermissionMode>[] {
+    return getPermissionModesForDriver(sessionDriver).map((mode) => ({
         value: mode,
         label: getPermissionLabel(mode, t),
         description: getPermissionDescription(mode, t),
@@ -208,28 +220,32 @@ export function getLocalizedCollaborationModeOptions(t: Translate): ComposerPane
 }
 
 export function getLocalizedModelOptions(
-    flavor: string | null,
+    sessionDriver: string | null,
     currentModel: string | null,
+    piModelCapabilities: readonly PiModelCapability[] | null | undefined,
     t: Translate
 ): ComposerPanelOption<string | null>[] {
-    const options = getModelOptionsForFlavor(flavor, currentModel)
+    const options = getModelOptionsForDriver(sessionDriver, currentModel, piModelCapabilities)
 
     return options.map((option) => ({
         ...option,
-        label: translateModelOption(option, flavor, t),
-        description: getModelDescription(option.value, flavor, t),
+        label: translateModelOption(option, sessionDriver, piModelCapabilities, t),
+        description: getModelDescription(option.value, sessionDriver, t),
         tone: option.value === null ? 'neutral' : 'brand',
     }))
 }
 
 export function getLocalizedReasoningEffortOptions(
-    flavor: string | null,
+    sessionDriver: string | null,
     currentEffort: ModelReasoningEffort | null,
+    supportedEfforts: readonly ModelReasoningEffort[] | null | undefined,
     t: Translate
 ): ComposerPanelOption<ModelReasoningEffort | null>[] {
-    const options = flavor === 'claude'
+    const options = sessionDriver === 'claude'
         ? getClaudeComposerReasoningEffortOptions(currentEffort as never)
-        : getCodexComposerReasoningEffortOptions(currentEffort as never)
+        : sessionDriver === 'pi'
+            ? getPiComposerReasoningEffortOptions(currentEffort, supportedEfforts)
+            : getCodexComposerReasoningEffortOptions(currentEffort as never)
 
     return options.map((option) => ({
         ...option,

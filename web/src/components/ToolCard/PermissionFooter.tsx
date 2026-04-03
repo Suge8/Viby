@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { resolveSessionDriver } from '@viby/protocol'
 import type { ApiClient } from '@/api/client'
 import type { SessionMetadataSummary } from '@/types/api'
 import type { ChatToolCall, ToolPermission } from '@/chat/types'
@@ -6,7 +7,6 @@ import { usePlatform } from '@/hooks/usePlatform'
 import { InlineNotice } from '@/components/InlineNotice'
 import { Spinner } from '@/components/Spinner'
 import { Button } from '@/components/ui/button'
-import { isCodexFamilyFlavor } from '@/lib/agentFlavorUtils'
 import { getNoticePreset } from '@/lib/noticePresets'
 import { getInputStringAny } from '@/lib/toolInputUtils'
 import { formatUserFacingErrorMessage } from '@/lib/userFacingError'
@@ -27,7 +27,10 @@ function isToolAllowedForSession(toolName: string, toolInput: unknown, allowedTo
 }
 
 function isCodexSession(metadata: SessionMetadataSummary | null, toolName: string): boolean {
-    return isCodexFamilyFlavor(metadata?.flavor)
+    const sessionDriver = resolveSessionDriver(metadata)
+    return sessionDriver === 'codex'
+        || sessionDriver === 'gemini'
+        || sessionDriver === 'opencode'
         || toolName.startsWith('Codex')
         || toolName.startsWith('Gemini')
         || toolName.startsWith('OpenCode')

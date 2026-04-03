@@ -14,8 +14,8 @@ const CONTEXT_HEADROOM_TOKENS = 10_000
 const DEFAULT_CLAUDE_CONTEXT_WINDOW_TOKENS = 200_000
 const LARGE_CLAUDE_CONTEXT_WINDOW_TOKENS = 1_000_000
 
-export function getContextBudgetTokens(model: string | null | undefined, flavor?: string | null): number | null {
-    if (flavor !== 'claude') {
+export function getContextBudgetTokens(model: string | null | undefined, sessionDriver?: string | null): number | null {
+    if (sessionDriver !== 'claude') {
         return null
     }
 

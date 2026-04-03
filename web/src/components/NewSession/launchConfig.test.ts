@@ -16,5 +16,6 @@ describe('resolveLaunchPermissionMode', () => {
         expect(resolveLaunchPermissionMode('cursor', true)).toBe('yolo')
         expect(resolveLaunchPermissionMode('gemini', true)).toBe('yolo')
         expect(resolveLaunchPermissionMode('opencode', true)).toBe('yolo')
+        expect(resolveLaunchPermissionMode('pi', true)).toBe('yolo')
     })
 })

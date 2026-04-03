@@ -112,7 +112,7 @@ function createSessionSummary(): SessionSummary {
         lifecycleStateSince: now,
         metadata: {
             path: '/Users/sugeh/Project/Viby',
-            flavor: 'codex',
+            driver: 'codex',
             summary: { text: 'Needs review', updatedAt: now }
         },
         todoProgress: null,

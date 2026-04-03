@@ -50,6 +50,26 @@ describe('FloatingActionMenu', () => {
         expect(onClose).not.toHaveBeenCalled()
     })
 
+    it('renders through a document portal so split-pane containment cannot clip it', () => {
+        render(
+            <div data-testid="host-shell">
+                <FloatingActionMenu
+                    isOpen
+                    onClose={vi.fn()}
+                    anchorPoint={{ x: 24, y: 36 }}
+                    content={createMenuContent(vi.fn())}
+                />
+            </div>
+        )
+
+        const menu = screen.getByRole('menu')
+        const menuSurface = menu.closest('.ds-dialog-surface')
+
+        expect(menuSurface).not.toBeNull()
+        expect(menuSurface?.parentElement).toBe(document.body)
+        expect(screen.getByTestId('host-shell')).not.toContainElement(menu)
+    })
+
     it('closes when pointer interaction happens outside the menu', () => {
         const onClose = vi.fn()
 

@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
-import type { ApiClient } from '@/api/client'
+import { ApiError, type ApiClient } from '@/api/client'
 import type { AttachmentMetadata, DecryptedMessage, Session, SessionsResponse } from '@/types/api'
 import { makeClientSideId } from '@/lib/messages'
 import {
@@ -38,6 +38,12 @@ type UseSendMessageOptions = {
         createdAt: number
         acceptedAt: number
         session: Session
+    }) => Promise<void> | void
+    onSendError?: (info: {
+        sessionId: string
+        localId: string
+        createdAt: number
+        error: unknown
     }) => Promise<void> | void
 }
 
@@ -147,13 +153,23 @@ export function useSendMessage(
                 session
             })
         },
-        onError: (_, input, context) => {
-            if (context?.previousSessions) {
+        onError: (error, input, context) => {
+            if (error instanceof ApiError) {
+                void queryClient.invalidateQueries({ queryKey: queryKeys.session(input.sessionId) })
+                void queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
+            } else if (context?.previousSessions) {
                 queryClient.setQueryData(queryKeys.sessions, context.previousSessions)
             }
+
             updateMessageStatus(input.sessionId, input.localId, 'failed')
             clearPendingReply(input.sessionId, input.localId)
             haptic.notification('error')
+            void options?.onSendError?.({
+                sessionId: input.sessionId,
+                localId: input.localId,
+                createdAt: input.createdAt,
+                error
+            })
         },
     })
 

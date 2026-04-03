@@ -1,12 +1,15 @@
 import type { ReactNode } from 'react'
+import { Spinner } from '@/components/Spinner'
 import { Button } from '@/components/ui/button'
 
 type ComposerActionItem = {
     key: string
     label: string
+    pendingLabel?: string
     description?: string
     icon: ReactNode
     disabled: boolean
+    pending?: boolean
     onSelect: () => void
 }
 
@@ -39,6 +42,7 @@ export function ComposerActionSection(props: ComposerActionSectionProps): ReactN
                                 ? 'cursor-not-allowed opacity-50'
                                 : 'hover:bg-[color:color-mix(in_srgb,var(--ds-panel-strong)_92%,transparent)]'
                         }`}
+                        aria-busy={item.pending === true}
                         onClick={item.onSelect}
                         onMouseDown={(event) => event.preventDefault()}
                     >
@@ -46,8 +50,9 @@ export function ComposerActionSection(props: ComposerActionSectionProps): ReactN
                             {item.icon}
                         </span>
                         <span className="min-w-0 flex-1">
-                            <span className="block text-sm font-medium text-[var(--app-fg)]">
-                                {item.label}
+                            <span className="flex items-center gap-2 text-sm font-medium text-[var(--app-fg)]">
+                                <span>{item.pending ? item.pendingLabel ?? item.label : item.label}</span>
+                                {item.pending ? <Spinner size="sm" label={null} className="text-current" /> : null}
                             </span>
                             {item.description ? (
                                 <span className="mt-0.5 block text-[11px] text-[var(--app-hint)]">

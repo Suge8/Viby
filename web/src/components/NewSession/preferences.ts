@@ -1,3 +1,4 @@
+import { AGENT_FLAVORS } from '@viby/protocol'
 import { MODEL_OPTIONS, REASONING_EFFORT_OPTIONS } from '@/lib/sessionConfigOptions'
 import type { AgentType, ModelReasoningEffortSelection, SessionRole, SessionType } from './types'
 
@@ -22,7 +23,7 @@ const DEFAULT_NEW_SESSION_PREFERENCES: NewSessionPreferences = {
     yoloMode: false,
     agentSettings: {},
 }
-const VALID_AGENTS: AgentType[] = ['claude', 'codex', 'cursor', 'gemini', 'opencode']
+const VALID_AGENTS = AGENT_FLAVORS as readonly AgentType[]
 const VALID_SESSION_ROLES: SessionRole[] = ['normal', 'manager']
 const VALID_SESSION_TYPES: SessionType[] = ['simple', 'worktree']
 

@@ -3,6 +3,10 @@ import type { RealtimeBannerState } from '@/hooks/useRealtimeFeedback'
 export type RealtimeSubscription = { all: true; sessionId?: string }
 export type AppViewportRoute = 'default' | 'session-chat'
 
+function isSessionChatPath(pathname: string): boolean {
+    return /^\/sessions\/[^/]+\/?$/.test(pathname) && pathname !== '/sessions/new'
+}
+
 export function isUnauthorizedAuthError(error: string | null): boolean {
     if (!error) {
         return false
@@ -12,11 +16,12 @@ export function isUnauthorizedAuthError(error: string | null): boolean {
 }
 
 export function getAppViewportRoute(pathname: string): AppViewportRoute {
-    if (/^\/sessions\/[^/]+\/?$/.test(pathname) && pathname !== '/sessions/new') {
-        return 'session-chat'
-    }
+    return isSessionChatPath(pathname) ? 'session-chat' : 'default'
+}
 
-    return 'default'
+export function shouldRestoreWindowScroll(pathname: string): boolean {
+    // Chat routes own their transcript viewport scroll; restoring window scroll adds visible top flashes.
+    return !isSessionChatPath(pathname)
 }
 
 export function shouldSuppressInstallPrompt(options: {

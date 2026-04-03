@@ -1,5 +1,5 @@
 import { unwrapRoleWrappedRecordEnvelope } from '@viby/protocol/messages'
-import { safeStringify } from '@viby/protocol'
+import { safeStringify } from '@viby/protocol/utils'
 import type { DecryptedMessage } from '@/types/api'
 import type { NormalizedMessage } from '@/chat/types'
 import { isCodexContent, isSkippableAgentContent, normalizeAgentRecord } from '@/chat/normalizeAgent'

@@ -31,19 +31,17 @@ describe('createAttachmentAdapter', () => {
         expect(adapter.accept).not.toBe('*/*')
     })
 
-    it('ensures the current session is ready before uploading and cleans up against the same session id', async () => {
+    it('uploads and cleans up against the same session id', async () => {
         const api = {
             uploadFile: vi.fn().mockResolvedValue({ success: true, path: '/tmp/uploaded.png' }),
             deleteUploadFile: vi.fn().mockResolvedValue({ success: true }),
         }
-        const ensureSessionReady = vi.fn(async () => undefined)
-        const adapter = createAttachmentAdapter(api as never, 'session-1', { ensureSessionReady })
+        const adapter = createAttachmentAdapter(api as never, 'session-1')
         const file = new File(['image-bytes'], 'screenshot.png', { type: 'image/png' })
 
         const states = await collectAttachmentStates(adapter, file)
         const pendingAttachment = states.at(-1)
 
-        expect(ensureSessionReady).toHaveBeenCalledTimes(1)
         expect(api.uploadFile).toHaveBeenCalledWith('session-1', 'screenshot.png', expect.any(String), 'image/png')
         expect(pendingAttachment).toMatchObject({
             status: { type: 'requires-action', reason: 'composer-send' },

@@ -1,4 +1,5 @@
 import { type useAssistantApi } from '@assistant-ui/react'
+import type { SessionDriver } from '@viby/protocol'
 import {
     type ChangeEvent as ReactChangeEvent,
     type ClipboardEvent as ReactClipboardEvent,
@@ -31,7 +32,7 @@ type UseComposerInputControllerOptions = {
     permissionModes: readonly PermissionMode[]
     autocompletePrefixes: readonly string[]
     autocompleteSuggestions: (query: string) => Promise<Suggestion[]>
-    agentFlavor: string | null
+    sessionDriver: SessionDriver | null
     model: string | null
     onAbort: () => void
     onPermissionModeChange?: (mode: PermissionMode) => void
@@ -77,7 +78,7 @@ export function useComposerInputController(
         permissionModes,
         autocompletePrefixes,
         autocompleteSuggestions,
-        agentFlavor,
+        sessionDriver,
         model,
         onAbort,
         onPermissionModeChange,
@@ -96,7 +97,7 @@ export function useComposerInputController(
     )
 
     useClaudeComposerModelShortcut({
-        agentFlavor,
+        sessionDriver,
         model,
         onModelChange,
         haptic
@@ -114,7 +115,7 @@ export function useComposerInputController(
 
         let textToInsert = suggestion.text
         let addSpace = true
-        if (agentFlavor === 'codex' && suggestion.source === 'user' && suggestion.content) {
+        if (sessionDriver === 'codex' && suggestion.source === 'user' && suggestion.content) {
             textToInsert = suggestion.content
             addSpace = false
         }
@@ -148,7 +149,7 @@ export function useComposerInputController(
         }, RESTORE_SELECTION_DELAY_MS)
 
         haptic('light')
-    }, [agentFlavor, api, autocompletePrefixes, haptic, inputState, suggestions])
+    }, [api, autocompletePrefixes, haptic, inputState, sessionDriver, suggestions])
 
     const handleKeyDown = useCallback((event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
         const key = event.key

@@ -10,7 +10,6 @@ const addToastMock = vi.fn()
 const sendMessageOptionsMock = vi.fn()
 const routeHarness = vi.hoisted(() => ({
     appendRealtimeTraceMock: vi.fn(),
-    clearPendingReplyMock: vi.fn(),
     loadSessionChatWorkspaceModule: vi.fn(async () => ({ default: () => null })),
     messagesState: {
         messages: [],
@@ -114,7 +113,6 @@ vi.mock('@/lib/app-context', () => ({
 }))
 
 vi.mock('@/lib/messageWindowStoreCore', () => ({
-    clearPendingReply: routeHarness.clearPendingReplyMock,
     getMessageWindowState: vi.fn(() => ({ messages: [] })),
     seedMessageWindowFromSession: vi.fn(),
 }))
@@ -167,10 +165,10 @@ function createSession(sessionId: string, teamContext?: Record<string, unknown>)
         active: true,
         thinking: false,
         metadata: {
-            flavor: 'codex'
+            driver: 'codex'
         },
         agentState: {
-            controlledByUser: false
+            controlOwner: 'viby'
         },
         teamContext
     }
@@ -194,7 +192,6 @@ describe('SessionChatRoute', () => {
         addToastMock.mockReset()
         sendMessageOptionsMock.mockReset()
         routeHarness.appendRealtimeTraceMock.mockReset()
-        routeHarness.clearPendingReplyMock.mockReset()
         routeHarness.loadSessionChatWorkspaceModule.mockReset()
         setQueryDataMock.mockReset()
         useFinalizeBootShellMock.mockReset()
@@ -243,6 +240,41 @@ describe('SessionChatRoute', () => {
         expect(useFinalizeBootShellMock).toHaveBeenLastCalledWith(true)
     })
 
+    it('revalidates the selected session detail and latest messages once per explicit session entry', () => {
+        const sessionRefetch = vi.fn()
+        const messagesRefetch = vi.fn()
+        routeHarness.messagesState = {
+            ...routeHarness.messagesState,
+            refetch: messagesRefetch
+        }
+        useSessionMock.mockImplementation((_api: unknown, sessionId: string) => ({
+            session: {
+                ...sessionStateRef.current,
+                id: sessionId
+            },
+            error: null,
+            isPlaceholderData: false,
+            hasWarmSnapshot: false,
+            refetch: sessionRefetch,
+        }))
+
+        const { rerender } = render(<SessionChatRoute />)
+
+        expect(sessionRefetch).toHaveBeenCalledTimes(1)
+        expect(messagesRefetch).toHaveBeenCalledTimes(1)
+
+        rerender(<SessionChatRoute />)
+
+        expect(sessionRefetch).toHaveBeenCalledTimes(1)
+        expect(messagesRefetch).toHaveBeenCalledTimes(1)
+
+        useParamsMock.mockReturnValue({ sessionId: 'session-2' })
+        rerender(<SessionChatRoute />)
+
+        expect(sessionRefetch).toHaveBeenCalledTimes(2)
+        expect(messagesRefetch).toHaveBeenCalledTimes(2)
+    })
+
     it('retains the previous stable chat surface until the next session is ready', () => {
         const { rerender } = render(<SessionChatRoute />)
 
@@ -266,6 +298,7 @@ describe('SessionChatRoute', () => {
 
         expect(screen.getByTestId('retained-session-chat')).toBeInTheDocument()
         expect(sessionChatPropsMock.mock.lastCall?.[0]?.session.id).toBe('session-1')
+        expect(sessionChatPropsMock.mock.lastCall?.[0]?.persistComposerDraft).toBe(false)
         expect(useFinalizeBootShellMock).toHaveBeenLastCalledWith(undefined)
 
         useSessionMock.mockImplementation((_api: unknown, sessionId: string) => ({
@@ -402,9 +435,10 @@ describe('SessionChatRoute', () => {
 
         expect(screen.getByTestId('retained-session-chat')).toBeInTheDocument()
         expect(sessionChatPropsMock.mock.lastCall?.[0]?.session.id).toBe('session-1')
+        expect(sessionChatPropsMock.mock.lastCall?.[0]?.persistComposerDraft).toBe(false)
     })
 
-    it('traces when backend thinking becomes visible for a pending reply', () => {
+    it('traces when backend thinking becomes visible for a pending reply without owning pendingReply cleanup', () => {
         routeHarness.messagesState = {
             ...routeHarness.messagesState,
             pendingReply: {
@@ -418,7 +452,6 @@ describe('SessionChatRoute', () => {
         const { rerender } = render(<SessionChatRoute />)
 
         routeHarness.appendRealtimeTraceMock.mockClear()
-        routeHarness.clearPendingReplyMock.mockClear()
         sessionStateRef.current = {
             ...sessionStateRef.current,
             thinking: true
@@ -431,10 +464,9 @@ describe('SessionChatRoute', () => {
                 sessionId: 'session-1'
             })
         }))
-        expect(routeHarness.clearPendingReplyMock).toHaveBeenCalledWith('session-1', 'local-1')
     })
 
-    it('traces the first stream delta and clears the pending reply once streaming starts', () => {
+    it('traces the first stream delta without owning pendingReply cleanup once streaming starts', () => {
         routeHarness.messagesState = {
             ...routeHarness.messagesState,
             pendingReply: {
@@ -448,7 +480,6 @@ describe('SessionChatRoute', () => {
         const { rerender } = render(<SessionChatRoute />)
 
         routeHarness.appendRealtimeTraceMock.mockClear()
-        routeHarness.clearPendingReplyMock.mockClear()
         routeHarness.messagesState = {
             ...routeHarness.messagesState,
             stream: {
@@ -468,6 +499,5 @@ describe('SessionChatRoute', () => {
                 streamId: 'stream-1'
             })
         }))
-        expect(routeHarness.clearPendingReplyMock).toHaveBeenCalledWith('session-1', 'local-1')
     })
 })

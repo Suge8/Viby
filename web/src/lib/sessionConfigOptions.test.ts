@@ -8,6 +8,8 @@ import {
     getCodexComposerModelOptions,
     getCodexComposerReasoningEffortOptions,
     getGeminiComposerModelOptions,
+    getPiComposerModelOptions,
+    getPiComposerReasoningEffortOptions,
     getNextClaudeComposerModel
 } from './sessionConfigOptions'
 
@@ -61,6 +63,13 @@ describe('sessionConfigOptions', () => {
         ])
     })
 
+    it('keeps new-session Pi selection on the terminal default path while preserving runtime-owned reasoning levels', () => {
+        expect(MODEL_OPTIONS.pi).toEqual([
+            { value: 'auto', label: 'Terminal default model', labelKey: 'model.terminalDefault' },
+        ])
+        expect(getPiComposerReasoningEffortOptions()).toEqual([])
+    })
+
     it('includes the active non-preset Claude model in composer options', () => {
         expect(getClaudeComposerModelOptions('claude-opus-4-1-20250805')).toEqual([
             { value: null, label: 'Terminal default model', labelKey: 'model.terminalDefault' },
@@ -90,6 +99,37 @@ describe('sessionConfigOptions', () => {
             { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
             { value: 'gemini-3-pro-preview', label: 'Gemini 3 Pro Preview' },
             { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' },
+        ])
+    })
+
+    it('uses the authoritative Pi model scope for composer model options', () => {
+        expect(getPiComposerModelOptions('openai/gpt-5.4-mini', [
+            {
+                id: 'openai/gpt-5.4',
+                label: 'GPT-5.4',
+                supportedThinkingLevels: ['none', 'low', 'medium', 'high']
+            },
+            {
+                id: 'openai/gpt-5.4-mini',
+                label: 'GPT-5.4 Mini',
+                supportedThinkingLevels: ['none', 'low']
+            }
+        ])).toEqual([
+            { value: null, label: 'Terminal default model', labelKey: 'model.terminalDefault' },
+            { value: 'openai/gpt-5.4', label: 'GPT-5.4' },
+            { value: 'openai/gpt-5.4-mini', label: 'GPT-5.4 Mini' },
+        ])
+    })
+
+    it('does not invent a Pi model selector when the runtime has not published any model scope', () => {
+        expect(getPiComposerModelOptions(null, [])).toEqual([])
+    })
+
+    it('limits Pi reasoning options to the current model capability instead of guessing all efforts', () => {
+        expect(getPiComposerReasoningEffortOptions('low', ['none', 'low'])).toEqual([
+            { value: null, label: 'Terminal default reasoning effort', labelKey: 'reasoningEffort.terminalDefault' },
+            { value: 'none', label: 'None', labelKey: 'reasoningEffort.none' },
+            { value: 'low', label: 'Low', labelKey: 'reasoningEffort.low' },
         ])
     })
 

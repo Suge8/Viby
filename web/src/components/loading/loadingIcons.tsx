@@ -1,30 +1,29 @@
+import type { ComponentProps } from 'react'
 import { FolderOpen, LoaderCircle, MessageCircleMore, Terminal } from 'lucide-react'
 import { BrandMarkIcon } from '@/components/icons'
 
-type LoadingIconProps = {
-    className?: string
-}
+type LoadingIconProps = ComponentProps<typeof LoaderCircle>
 
 export function LoadingBrandMarkIcon(props: LoadingIconProps): React.JSX.Element {
-    return <BrandMarkIcon className={props.className} />
+    return <BrandMarkIcon {...props} />
 }
 
 export function LoadingSpinnerIcon(props: LoadingIconProps): React.JSX.Element {
-    return <LoaderCircle aria-hidden="true" className={props.className} strokeWidth={2.1} />
+    return <LoaderCircle {...props} strokeWidth={2.1} />
 }
 
 export function LoadingWorkspaceIcon(props: LoadingIconProps): React.JSX.Element {
-    return <LoadingBrandMarkIcon className={props.className} />
+    return <LoadingBrandMarkIcon {...props} />
 }
 
 export function LoadingSessionIcon(props: LoadingIconProps): React.JSX.Element {
-    return <MessageCircleMore aria-hidden="true" className={props.className} strokeWidth={2.1} />
+    return <MessageCircleMore {...props} strokeWidth={2.1} />
 }
 
 export function LoadingFilesIcon(props: LoadingIconProps): React.JSX.Element {
-    return <FolderOpen aria-hidden="true" className={props.className} strokeWidth={2.1} />
+    return <FolderOpen {...props} strokeWidth={2.1} />
 }
 
 export function LoadingTerminalIcon(props: LoadingIconProps): React.JSX.Element {
-    return <Terminal aria-hidden="true" className={props.className} strokeWidth={2.1} />
+    return <Terminal {...props} strokeWidth={2.1} />
 }

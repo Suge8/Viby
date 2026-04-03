@@ -1,3 +1,4 @@
+import { resolveSessionDriver } from '@viby/protocol'
 import { memo, useCallback, useMemo } from 'react'
 import type {
     SessionSummary,
@@ -45,6 +46,7 @@ export const SessionListItem = memo(function SessionListItem(props: SessionListI
     const { session, selection, hasUnseenReply, onOpenActionMenu } = props
     const lifecycleState = session.lifecycleState
     const team = session.team
+    const sessionDriver = resolveSessionDriver(session.metadata)
     const isMemberSession = team?.sessionRole === 'member'
     const selected = selection.selectedSessionId === session.id
 
@@ -114,15 +116,18 @@ export const SessionListItem = memo(function SessionListItem(props: SessionListI
             onPointerEnter={handlePointerEnter}
             onPointerDownCapture={handlePointerDownCapture}
             className={`${SESSION_LIST_ITEM_CLASS_NAME} ${cardToneClassName}`}
-            style={{ WebkitTouchCallout: 'none' }}
+            style={{
+                WebkitTouchCallout: 'none',
+                touchAction: 'manipulation'
+            }}
             aria-current={selected ? 'page' : undefined}
         >
             <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0 flex items-center gap-3">
                     <div className={`${SESSION_ICON_CLASS_NAME} ${presentation.iconContainerClassName}`}>
                         <SessionAgentBrandIcon
-                            flavor={session.metadata?.flavor ?? null}
-                            className={`h-5 w-5 shrink-0 ${presentation.iconClassName}`}
+                            driver={sessionDriver}
+                            className={`h-6 w-6 shrink-0 ${presentation.iconClassName}`}
                         />
                     </div>
                     <div className="min-w-0">

@@ -24,7 +24,7 @@ function createSessionSummary(
         lifecycleStateSince: 0,
         metadata: {
             path: '/Users/sugeh/Project/Viby',
-            flavor: 'codex',
+            driver: 'codex',
             summary: { text: 'Summary', updatedAt: 0 }
         },
         todoProgress: null,

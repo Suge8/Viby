@@ -1,8 +1,11 @@
 import type {
     AgentFlavor,
+    AgentLaunchConfig,
     DecryptedMessage as ProtocolDecryptedMessage,
     MachineCapability,
     MachineDirectoryResponse as ProtocolMachineDirectoryResponse,
+    PiModelCapability,
+    PiModelScope,
     SessionRecoveryPage,
     SessionStreamState,
     SessionActivityKind,
@@ -28,10 +31,13 @@ import type {
     TeamSessionRole,
     TeamTaskAcceptanceRecord,
     TeamTaskRecord,
-    WorktreeMetadata
+    WorktreeMetadata,
+    ResolveAgentLaunchConfigResponse,
 } from '@viby/protocol/types'
 
 export type {
+    AgentFlavor,
+    AgentLaunchConfig,
     AgentState,
     AttachmentMetadata,
     ClaudeReasoningEffort,
@@ -43,6 +49,8 @@ export type {
     MachineDirectoryRootKind,
     CodexReasoningEffort,
     ModelReasoningEffort,
+    PiModelCapability,
+    PiModelScope,
     PermissionMode,
     SessionActivityKind,
     Session,
@@ -71,7 +79,8 @@ export type {
     TeamTaskAcceptanceRecord,
     TeamTaskRecord,
     TodoItem,
-    WorktreeMetadata
+    WorktreeMetadata,
+    ResolveAgentLaunchConfigResponse
 } from '@viby/protocol/types'
 
 export type SessionMetadataSummary = {
@@ -83,7 +92,7 @@ export type SessionMetadataSummary = {
     summary?: { text: string; updatedAt: number }
     machineId?: string
     tools?: string[]
-    flavor?: AgentFlavor | null
+    driver?: AgentFlavor | null
     worktree?: WorktreeMetadata
 }
 
@@ -148,6 +157,7 @@ export type MessagesResponse = {
 export type MachinesResponse = { machines: Machine[] }
 export type MachinePathsExistsResponse = { exists: Record<string, boolean> }
 export type MachineBrowseDirectoryResponse = ProtocolMachineDirectoryResponse
+export type AgentLaunchConfigResponse = ResolveAgentLaunchConfigResponse
 
 export type SpawnResponse =
     | { type: 'success'; session: Session }

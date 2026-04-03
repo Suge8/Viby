@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import type { AppendMessage, AttachmentAdapter, ThreadMessageLike } from '@assistant-ui/react'
 import { useExternalMessageConverter, useExternalStoreRuntime } from '@assistant-ui/react'
-import { MessageMetaSchema, safeStringify } from '@viby/protocol'
+import { safeStringify } from '@viby/protocol/utils'
 import { renderEventLabel } from '@/chat/presentation'
 import type { TextRenderMode } from '@/chat/textRenderMode'
 import type { ChatBlock, CliOutputBlock } from '@/chat/types'
@@ -29,19 +29,90 @@ export type VibyChatMessageMetadata = {
 }
 
 function extractTeamMetadata(meta: unknown): Partial<VibyChatMessageMetadata> | null {
-    const parsed = MessageMetaSchema.safeParse(meta)
-    if (!parsed.success) {
+    if (!meta || typeof meta !== 'object') {
+        return null
+    }
+
+    const record = meta as Record<string, unknown>
+    const sentFrom = parseTeamSentFrom(record.sentFrom)
+    const sessionRole = parseSessionRole(record.sessionRole)
+    const teamMessageKind = parseTeamMessageKind(record.teamMessageKind)
+    const controlOwner = parseControlOwner(record.controlOwner)
+    const teamProjectId = asOptionalString(record.teamProjectId)
+    const managerSessionId = asOptionalString(record.managerSessionId)
+    const memberId = asOptionalString(record.memberId)
+
+    const hasTeamMetadata = sentFrom !== undefined
+        || sessionRole !== undefined
+        || teamMessageKind !== undefined
+        || controlOwner !== undefined
+        || teamProjectId !== undefined
+        || managerSessionId !== undefined
+        || memberId !== undefined
+
+    if (!hasTeamMetadata) {
         return null
     }
 
     return {
-        sentFrom: parsed.data.sentFrom,
-        teamProjectId: parsed.data.teamProjectId,
-        managerSessionId: parsed.data.managerSessionId,
-        memberId: parsed.data.memberId,
-        sessionRole: parsed.data.sessionRole,
-        teamMessageKind: parsed.data.teamMessageKind,
-        controlOwner: parsed.data.controlOwner
+        sentFrom,
+        teamProjectId,
+        managerSessionId,
+        memberId,
+        sessionRole,
+        teamMessageKind,
+        controlOwner
+    }
+}
+
+function asOptionalString(value: unknown): string | undefined {
+    return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
+function parseTeamSentFrom(value: unknown): VibyChatMessageMetadata['sentFrom'] | undefined {
+    switch (value) {
+        case 'cli':
+        case 'webapp':
+        case 'manager':
+        case 'user':
+        case 'team-system':
+            return value
+        default:
+            return undefined
+    }
+}
+
+function parseSessionRole(value: unknown): VibyChatMessageMetadata['sessionRole'] | undefined {
+    switch (value) {
+        case 'manager':
+        case 'member':
+            return value
+        default:
+            return undefined
+    }
+}
+
+function parseTeamMessageKind(value: unknown): VibyChatMessageMetadata['teamMessageKind'] | undefined {
+    switch (value) {
+        case 'task-assign':
+        case 'follow-up':
+        case 'review-request':
+        case 'verify-request':
+        case 'coordination':
+        case 'system-event':
+            return value
+        default:
+            return undefined
+    }
+}
+
+function parseControlOwner(value: unknown): VibyChatMessageMetadata['controlOwner'] | undefined {
+    switch (value) {
+        case 'manager':
+        case 'user':
+            return value
+        default:
+            return undefined
     }
 }
 

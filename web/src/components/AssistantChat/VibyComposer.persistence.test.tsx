@@ -58,7 +58,7 @@ function ComposerPersistenceHarness(): React.JSX.Element {
             collaborationMode: 'default',
             model: null,
             modelReasoningEffort: null,
-            metadata: { flavor: 'codex' },
+            metadata: { driver: 'codex' },
             agentState: { controlledByUser: false }
         } as never,
         blocks: [],
@@ -82,7 +82,7 @@ function ComposerPersistenceHarness(): React.JSX.Element {
                             active: true,
                             allowSendWhenInactive: false,
                             controlledByUser: false,
-                            agentFlavor: 'codex',
+                            sessionDriver: 'codex',
                             attachmentsSupported: true
                         },
                         handlers: {

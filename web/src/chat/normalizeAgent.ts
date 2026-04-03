@@ -63,9 +63,12 @@ function normalizeAssistantOutput(
                 blocks.push({ type: 'reasoning', text: block.thinking, uuid, parentUUID })
                 continue
             }
-            if (block.type === 'tool_use' && typeof block.id === 'string') {
-                const name = asString(block.name) ?? 'Tool'
-                const input = 'input' in block ? (block as Record<string, unknown>).input : undefined
+            if ((block.type === 'tool_use' || block.type === 'toolCall') && typeof block.id === 'string') {
+                const toolBlock = block as Record<string, unknown>
+                const name = asString(toolBlock.name) ?? 'Tool'
+                const input = 'input' in toolBlock
+                    ? toolBlock.input
+                    : ('arguments' in toolBlock ? toolBlock.arguments : undefined)
                 const description = isObject(input) && typeof input.description === 'string' ? input.description : null
                 blocks.push({ type: 'tool-call', id: block.id, name, input, description, uuid, parentUUID })
             }
@@ -73,8 +76,8 @@ function normalizeAssistantOutput(
     }
 
     const usage = isObject(message.usage) ? (message.usage as Record<string, unknown>) : null
-    const inputTokens = usage ? asNumber(usage.input_tokens) : null
-    const outputTokens = usage ? asNumber(usage.output_tokens) : null
+    const inputTokens = usage ? (asNumber(usage.input_tokens) ?? asNumber(usage.input)) : null
+    const outputTokens = usage ? (asNumber(usage.output_tokens) ?? asNumber(usage.output)) : null
 
     if (blocks.length === 0) {
         return null
@@ -369,6 +372,14 @@ export function normalizeAgentRecord(
                 }],
                 meta
             }
+        }
+
+        if (data.type === 'assistant') {
+            return normalizeAssistantOutput(messageId, localId, createdAt, data, meta)
+        }
+
+        if (data.type === 'user') {
+            return normalizeUserOutput(messageId, localId, createdAt, data, meta)
         }
     }
 

@@ -7,6 +7,7 @@ import {
     useState,
     type CSSProperties,
 } from 'react'
+import { createPortal } from 'react-dom'
 import { Button } from '@/components/ui/button'
 import type {
     FloatingActionMenuAnchorPoint,
@@ -165,7 +166,7 @@ export function FloatingActionMenu(props: FloatingActionMenuProps): React.JSX.El
         return null
     }
 
-    return (
+    return createPortal(
         <div
             ref={menuRef}
             className="ds-dialog-surface fixed z-50 min-w-[220px] rounded-[var(--ds-radius-lg)] p-2 animate-menu-pop"
@@ -197,6 +198,7 @@ export function FloatingActionMenu(props: FloatingActionMenuProps): React.JSX.El
                     </Button>
                 ))}
             </div>
-        </div>
+        </div>,
+        document.body
     )
 }

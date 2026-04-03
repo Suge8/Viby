@@ -210,6 +210,7 @@ type VibyThreadHandlers = {
 type VibyThreadState = {
     hasMoreMessages: boolean
     isLoadingMoreMessages: boolean
+    pinToBottomOnSessionEntry: boolean
     pendingCount: number
     rawMessagesCount: number
     normalizedMessagesCount: number
@@ -243,6 +244,7 @@ export const VibyThread = memo(function VibyThread(props: VibyThreadProps): Reac
         hasMoreMessages: props.state.hasMoreMessages,
         isLoadingMessages: props.handlers.isLoadingMessages,
         isLoadingMoreMessages: props.state.isLoadingMoreMessages,
+        pinToBottomOnSessionEntry: props.state.pinToBottomOnSessionEntry,
         onLoadHistoryUntilPreviousUser: props.handlers.onLoadHistoryUntilPreviousUser,
         onLoadMore: props.handlers.onLoadMore,
         onAtBottomChange: props.handlers.onAtBottomChange,

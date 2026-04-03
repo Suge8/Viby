@@ -1,6 +1,7 @@
+import { useContext } from 'react'
 import { joinClassNames } from '@/components/loading/loadingClassName'
 import { LoadingSpinnerIcon } from '@/components/loading/loadingIcons'
-import { useTranslation } from '@/lib/use-translation'
+import { I18nContext } from '@/lib/i18n-context'
 
 type SpinnerProps = {
     size?: 'sm' | 'md' | 'lg'
@@ -14,13 +15,17 @@ const SPINNER_SIZE_CLASS_NAMES = {
     lg: 'h-6 w-6'
 } as const
 
+const FALLBACK_LOADING_LABEL = 'Loading'
+
 export function Spinner({
     size = 'md',
     className,
     label
 }: SpinnerProps) {
-    const { t } = useTranslation()
-    const effectiveLabel = label === undefined ? t('loading') : label
+    const i18n = useContext(I18nContext)
+    const effectiveLabel = label === undefined
+        ? i18n?.t('loading') ?? FALLBACK_LOADING_LABEL
+        : label
     const accessibilityProps = effectiveLabel === null
         ? { 'aria-hidden': true }
         : { role: 'status', 'aria-label': effectiveLabel }

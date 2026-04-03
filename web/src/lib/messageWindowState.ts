@@ -1,4 +1,4 @@
-import { extractCodexMessageItemId } from '@viby/protocol'
+import { extractAssistantMessageStreamId } from '@viby/protocol'
 import type { DecryptedMessage, MessageStatus, SessionStreamState } from '@/types/api'
 import { normalizeDecryptedMessage } from '@/chat/normalize'
 import { isCliOutputText } from '@/chat/reducerCliOutput'
@@ -231,7 +231,7 @@ export function resolveStreamAfterMessages(
     }
 
     for (const message of messages) {
-        if (extractCodexMessageItemId(message.content) === stream.streamId) {
+        if (extractAssistantMessageStreamId(message.content) === stream.streamId) {
             return null
         }
     }

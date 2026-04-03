@@ -5,6 +5,7 @@ import type { Suggestion } from '@/hooks/useActiveSuggestions'
 type SessionAutocompleteHandler = (query: string) => Promise<Suggestion[]>
 
 type CreateSessionAutocompleteSuggestionsOptions = {
+    driver?: string | null
     agentType?: string
     api: ApiClient | null
     queryClient: QueryClient
@@ -30,7 +31,8 @@ function loadSlashAutocompleteModule(): Promise<SlashAutocompleteModule> {
 export function createSessionAutocompleteSuggestions(
     options: CreateSessionAutocompleteSuggestionsOptions
 ): SessionAutocompleteHandler {
-    const { agentType = 'claude', api, queryClient, sessionId } = options
+    const resolvedDriver = options.driver ?? options.agentType ?? 'claude'
+    const { api, queryClient, sessionId } = options
 
     return async (query: string) => {
         if (query.startsWith('$')) {
@@ -45,7 +47,7 @@ export function createSessionAutocompleteSuggestions(
 
         const { getSlashCommandSuggestions } = await loadSlashAutocompleteModule()
         return await getSlashCommandSuggestions({
-            agentType,
+            agentType: resolvedDriver,
             api,
             query,
             queryClient,

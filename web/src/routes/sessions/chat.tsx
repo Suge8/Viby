@@ -10,6 +10,7 @@ import { useNoticeCenter } from '@/lib/notice-center'
 import { getNoticePreset } from '@/lib/noticePresets'
 import { appendRealtimeTrace } from '@/lib/realtimeTrace'
 import { useTranslation } from '@/lib/use-translation'
+import { useSessionEntryRevalidate } from '@/routes/sessions/useSessionEntryRevalidate'
 import { useSessionChatRouteModel } from '@/routes/sessions/useSessionChatRouteModel'
 
 type RetainedSessionChatSnapshot = {
@@ -128,6 +129,11 @@ function ResolvedSessionChatRoute(props: ResolvedSessionChatRouteProps): React.J
 
     useFinalizeBootShell(surfaceReady)
 
+    useSessionEntryRevalidate({
+        sessionId: props.sessionId,
+        onRevalidate: sessionChatProps.onRefresh
+    })
+
     useEffect(() => {
         if (previousRouteSessionIdRef.current !== props.sessionId) {
             previousRouteSessionIdRef.current = props.sessionId
@@ -176,7 +182,10 @@ function RetainedSessionChatSurface(props: {
             className="h-full min-h-0 w-full pointer-events-none"
             aria-hidden="true"
         >
-            <SessionChat {...props.snapshot.sessionChatProps} />
+            <SessionChat
+                {...props.snapshot.sessionChatProps}
+                persistComposerDraft={false}
+            />
         </div>
     )
 }

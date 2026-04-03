@@ -1,12 +1,11 @@
 import {
     AlertIcon,
     BrandMarkIcon,
-    PuzzleIcon,
-    TerminalIcon,
 } from '@/components/icons'
+import { SessionAgentBrandIcon } from '@/components/session-list/sessionAgentPresentation'
+import { InlineNotice } from '@/components/InlineNotice'
 import {
     FeatureBulbIcon as BulbIcon,
-    FeatureGlobeIcon as GlobeIcon,
     FeatureRocketIcon as RocketIcon,
 } from '@/components/featureIcons'
 import {
@@ -31,6 +30,7 @@ type LaunchPanelProps = {
         modelOptions: Array<{ value: string; label: string; labelKey?: string }>
         reasoningOptions: Array<{ value: ModelReasoningEffortSelection; label: string; labelKey?: string }>
         isDisabled: boolean
+        piLaunchConfigError?: string | null
     }
     handlers: {
         onAgentChange: (agent: AgentType) => void
@@ -49,28 +49,33 @@ type LaunchSectionHeadingProps = {
 const AGENT_OPTIONS: Array<{ value: AgentType; icon: React.JSX.Element; accentClassName: string }> = [
     {
         value: 'claude',
-        icon: <BrandMarkIcon className="h-4.5 w-4.5" />,
+        icon: <SessionAgentBrandIcon driver="claude" className="h-5.5 w-5.5" />,
         accentClassName: 'text-[var(--ds-accent-coral)]'
     },
     {
         value: 'codex',
-        icon: <RocketIcon className="h-4.5 w-4.5" />,
+        icon: <SessionAgentBrandIcon driver="codex" className="h-5.5 w-5.5" />,
         accentClassName: 'text-[var(--ds-accent-lime)]'
     },
     {
         value: 'cursor',
-        icon: <TerminalIcon className="h-4.5 w-4.5" />,
+        icon: <SessionAgentBrandIcon driver="cursor" className="h-5.5 w-5.5" />,
         accentClassName: 'text-[var(--ds-accent-violet)]'
     },
     {
         value: 'gemini',
-        icon: <GlobeIcon className="h-4.5 w-4.5" />,
+        icon: <SessionAgentBrandIcon driver="gemini" className="h-5.5 w-5.5" />,
         accentClassName: 'text-[var(--ds-accent-gold)]'
     },
     {
         value: 'opencode',
-        icon: <PuzzleIcon className="h-4.5 w-4.5" />,
+        icon: <SessionAgentBrandIcon driver="opencode" className="h-5.5 w-5.5" />,
         accentClassName: 'text-[var(--ds-text-primary)]'
+    },
+    {
+        value: 'pi',
+        icon: <SessionAgentBrandIcon driver="pi" className="h-5.5 w-5.5" />,
+        accentClassName: 'text-[var(--ds-accent-gold)]'
     },
 ]
 
@@ -222,6 +227,15 @@ export function NewSessionLaunchPanel(props: LaunchPanelProps): React.JSX.Elemen
                     options={props.options.reasoningOptions}
                     onChange={props.handlers.onReasoningEffortChange}
                 />
+
+                {props.form.agent === 'pi' && props.options.piLaunchConfigError ? (
+                    <InlineNotice
+                        tone="warning"
+                        title={t('newSession.piLaunchConfig.errorTitle')}
+                        description={props.options.piLaunchConfigError}
+                        className="shadow-none"
+                    />
+                ) : null}
 
                 <div className="rounded-[20px] border border-[var(--ds-border-default)] bg-[color:color-mix(in_srgb,var(--ds-panel-strong)_96%,transparent)] px-4 py-3">
                     <div className="flex items-start justify-between gap-4">

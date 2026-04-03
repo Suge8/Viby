@@ -28,7 +28,7 @@ function createSession(id: string = 'session-1'): Session {
         metadata: {
             path: '/tmp/project',
             host: 'localhost',
-            flavor: 'codex',
+            driver: 'codex',
             machineId: 'machine-1',
             lifecycleState: 'running',
             lifecycleStateSince: 1_000

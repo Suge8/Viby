@@ -160,6 +160,7 @@ export default defineConfig({
             { find: '@viby/protocol/modes', replacement: resolveProtocolModule('modes.ts') },
             { find: '@viby/protocol/schemas', replacement: resolveProtocolModule('schemas.ts') },
             { find: '@viby/protocol/types', replacement: resolveProtocolModule('types.ts') },
+            { find: '@viby/protocol/utils', replacement: resolveProtocolModule('utils.ts') },
             { find: '@viby/protocol', replacement: resolveProtocolModule('index.ts') },
         ]
     },

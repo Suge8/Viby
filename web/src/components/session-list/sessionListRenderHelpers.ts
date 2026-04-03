@@ -25,7 +25,7 @@ export function areSessionListRowsEquivalent(previous: SessionSummary, next: Ses
         && previous.metadata?.name === next.metadata?.name
         && previous.metadata?.summary?.text === next.metadata?.summary?.text
         && previous.metadata?.path === next.metadata?.path
-        && previous.metadata?.flavor === next.metadata?.flavor
+        && previous.metadata?.driver === next.metadata?.driver
         && previous.metadata?.worktree?.branch === next.metadata?.worktree?.branch
         && previous.metadata?.worktree?.basePath === next.metadata?.worktree?.basePath
         && previousTeam?.sessionRole === nextTeam?.sessionRole
