@@ -17,6 +17,7 @@ import {
     writeDevRemoteLock,
     type RemoteDevContext,
 } from './devRemoteHelpers'
+import { buildUnexpectedChildExitOutcome } from './devRemoteSupervisor'
 
 const DEV_REMOTE_SEPARATOR_WIDTH = 72
 const HUB_LISTEN_HOST = '0.0.0.0'
@@ -294,15 +295,6 @@ async function main(): Promise<void> {
 
     let shuttingDown = false
     let exitCode = 0
-    let remainingChildren = children.length
-
-    const maybeExitIfDone = (): void => {
-        if (shuttingDown || remainingChildren > 0) {
-            return
-        }
-        process.exit(exitCode)
-    }
-
     const shutdown = async (): Promise<void> => {
         if (shuttingDown) {
             return
@@ -326,25 +318,17 @@ async function main(): Promise<void> {
         })
 
         child.process.on('exit', (code, signal) => {
-            remainingChildren -= 1
             const details = formatExit(code, signal)
-            if (code && code !== 0) {
-                exitCode = code
-            }
 
             if (shuttingDown) {
                 console.log(`[${child.label}] exited (${details})`)
                 return
             }
 
-            if (child.label === 'hub') {
-                console.error(`[hub] exited (${details}). Direct hub and remote realtime will disconnect until restarted.`)
-                maybeExitIfDone()
-                return
-            }
-
-            console.error(`[web] exited (${details}). Remote HMR is unavailable until restarted, but hub may still be serving 37173.`)
-            maybeExitIfDone()
+            const outcome = buildUnexpectedChildExitOutcome(child.label, details, code)
+            exitCode = outcome.exitCode
+            console.error(outcome.message)
+            void shutdown()
         })
     }
 

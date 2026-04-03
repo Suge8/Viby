@@ -113,6 +113,13 @@ function createMode(): EnhancedMode {
     };
 }
 
+function createDriverSwitchInstructions(): string {
+    return [
+        'Private continuity handoff for a driver switch inside the same Viby session.',
+        '{"previousDriver":"claude"}'
+    ].join('\n\n');
+}
+
 function createSessionStub(
     modes: EnhancedMode[] = [createMode()],
     options: { autoCloseQueue?: boolean } = {}
@@ -363,6 +370,67 @@ describe('codexRemoteLauncher', () => {
 
         const exitReason = await launcherPromise;
         expect(exitReason).toBe('exit');
+    });
+
+    it('passes first-turn developer instructions once and preserves ready lifecycle on later turns', async () => {
+        harness.delayFirstTurnCompletion = true;
+
+        const {
+            session,
+            sessionEvents,
+            thinkingChanges
+        } = createSessionStub([
+            {
+                permissionMode: 'default',
+                collaborationMode: 'default',
+                developerInstructions: createDriverSwitchInstructions()
+            },
+            {
+                permissionMode: 'default',
+                collaborationMode: 'default'
+            }
+        ]);
+
+        const launcherPromise = codexRemoteLauncher(session as never);
+
+        await vi.waitFor(() => {
+            expect(harness.startTurnCalls).toHaveLength(1);
+        });
+
+        expect(harness.startTurnCalls[0]).toMatchObject({
+            collaborationMode: {
+                mode: 'default',
+                settings: {
+                    developer_instructions: createDriverSwitchInstructions()
+                }
+            }
+        });
+
+        const firstCompleted = { status: 'Completed', turn: { id: 'turn-1' } };
+        harness.notifications.push({ method: 'turn/completed', params: firstCompleted });
+        harness.notificationHandler?.('turn/completed', firstCompleted);
+
+        await vi.waitFor(() => {
+            expect(harness.startTurnCalls).toHaveLength(2);
+        });
+
+        expect(harness.startTurnCalls[1]).toMatchObject({
+            collaborationMode: {
+                mode: 'default',
+                settings: {}
+            }
+        });
+        expect(JSON.stringify(harness.startTurnCalls[1])).not.toContain('Private continuity handoff for a driver switch inside the same Viby session.');
+
+        const secondCompleted = { status: 'Completed', turn: { id: 'turn-2' } };
+        harness.notifications.push({ method: 'turn/completed', params: secondCompleted });
+        harness.notificationHandler?.('turn/completed', secondCompleted);
+
+        const exitReason = await launcherPromise;
+        expect(exitReason).toBe('exit');
+        expect(sessionEvents.filter((event) => event.type === 'ready').length).toBeGreaterThanOrEqual(1);
+        expect(thinkingChanges).toContain(true);
+        expect(session.thinking).toBe(false);
     });
 
     it('forwards assistant text deltas over transient stream updates and clears on final message', async () => {

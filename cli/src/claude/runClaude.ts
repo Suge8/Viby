@@ -14,13 +14,14 @@ import { registerKillSessionHandler } from './registerKillSessionHandler';
 import type { Session } from './session';
 import { bootstrapSession } from '@/agent/sessionFactory';
 import { createModeChangeHandler, createRunnerLifecycle, setControlledByUser } from '@/agent/runnerLifecycle';
-import { assertSessionConfigPayload, resolvePermissionModeForFlavor } from '@/agent/providerConfig';
-import { isPermissionModeAllowedForFlavor } from '@viby/protocol';
+import { assertSessionConfigPayload, resolvePermissionModeForDriver } from '@/agent/providerConfig';
+import { isPermissionModeAllowedForDriver, type SessionHandoffSnapshot } from '@viby/protocol';
 import { ClaudeReasoningEffortSchema } from '@viby/protocol/schemas';
 import { formatMessageWithAttachments } from '@/utils/attachmentFormatter';
 import { normalizeClaudeSessionModel } from './model';
 import { getInvokedCwd } from '@/utils/invokedCwd';
 import { mergePromptSegments, resolveTeamRolePromptContract } from '@/agent/teamPromptContract';
+import { createPendingDriverSwitchHandoffState } from '@/agent/driverSwitchHandoffState';
 
 export interface StartOptions {
     vibySessionId?: string
@@ -33,6 +34,7 @@ export interface StartOptions {
     claudeEnvVars?: Record<string, string>
     claudeArgs?: string[]
     startedBy?: 'runner' | 'terminal'
+    driverSwitchHandoff?: SessionHandoffSnapshot
 }
 
 type StickyStringMessageMetaKey =
@@ -95,6 +97,9 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
     // Log environment info at startup
     logger.debugLargeJson('[START] VIBY process started', getEnvironmentInfo());
     logger.debug(`[START] Options: startedBy=${startedBy}, startingMode=${options.startingMode}`);
+    if (options.driverSwitchHandoff) {
+        logger.debug('[START] Loaded driver switch handoff for Claude bootstrap')
+    }
 
     // Validate runner spawn requirements
     if (startedBy === 'runner' && options.startingMode === 'local') {
@@ -107,7 +112,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
     const initialState: AgentState = {};
     const initialModel = normalizeClaudeSessionModel(options.model);
     const { api, session, sessionInfo } = await bootstrapSession({
-        flavor: 'claude',
+        driver: 'claude',
         sessionId: options.vibySessionId,
         startedBy,
         workingDirectory,
@@ -208,6 +213,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         allowedTools: mode.allowedTools,
         disallowedTools: mode.disallowedTools
     }));
+    const pendingDriverSwitchHandoff = createPendingDriverSwitchHandoffState(options.driverSwitchHandoff)
 
     // Forward messages to the queue
     let currentPermissionMode: PermissionMode = options.permissionMode ?? 'default';
@@ -235,7 +241,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
     session.onUserMessage((message) => {
         const messageMeta = (message.meta ?? null) as Record<string, unknown> | null;
         const sessionPermissionMode = currentSessionRef.current?.getPermissionMode();
-        if (sessionPermissionMode && isPermissionModeAllowedForFlavor(sessionPermissionMode, 'claude')) {
+        if (sessionPermissionMode && isPermissionModeAllowedForDriver(sessionPermissionMode, 'claude')) {
             currentPermissionMode = sessionPermissionMode as PermissionMode;
         }
         const sessionModel = currentSessionRef.current?.getModel();
@@ -322,11 +328,11 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         });
         currentDisallowedTools = messageDisallowedTools;
 
-        // Check for special commands before processing
-        const specialCommand = parseSpecialCommand(message.content.text);
-
         // Format message text with attachments for Claude
         const formattedText = formatMessageWithAttachments(message.content.text, message.content.attachments);
+
+        // Check for special commands before processing
+        const specialCommand = parseSpecialCommand(message.content.text);
 
         if (specialCommand.type === 'compact') {
             logger.debug('[start] Detected /compact command');
@@ -366,6 +372,15 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
             return;
         }
 
+        const driverSwitchInstructions = pendingDriverSwitchHandoff.consumeForUserMessage(formattedText)
+        if (driverSwitchInstructions) {
+            logger.debug('[loop] Consuming pending Claude driver switch handoff on the first real user turn')
+        }
+        const firstTurnAppendSystemPrompt = mergePromptSegments(
+            messageAppendSystemPrompt,
+            driverSwitchInstructions
+        )
+
         // Push with resolved permission mode, model, system prompts, and tools
         const enhancedMode: EnhancedMode = {
             permissionMode: messagePermissionMode ?? 'default',
@@ -373,7 +388,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
             modelReasoningEffort: currentModelReasoningEffort,
             fallbackModel: messageFallbackModel,
             customSystemPrompt: messageCustomSystemPrompt,
-            appendSystemPrompt: messageAppendSystemPrompt,
+            appendSystemPrompt: firstTurnAppendSystemPrompt,
             allowedTools: messageAllowedTools,
             disallowedTools: messageDisallowedTools
         };
@@ -414,7 +429,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         };
 
         if (config.permissionMode !== undefined) {
-            currentPermissionMode = resolvePermissionModeForFlavor(config.permissionMode, 'claude') as PermissionMode;
+            currentPermissionMode = resolvePermissionModeForDriver(config.permissionMode, 'claude') as PermissionMode;
         }
 
         if (config.model !== undefined) {

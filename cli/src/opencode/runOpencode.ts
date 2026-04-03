@@ -8,7 +8,7 @@ import type { OpencodeSession } from './session';
 import type { OpencodeMode, PermissionMode } from './types';
 import { bootstrapSession } from '@/agent/sessionFactory';
 import { createModeChangeHandler, createRunnerLifecycle, setControlledByUser } from '@/agent/runnerLifecycle';
-import { assertSessionConfigPayload, resolvePermissionModeForFlavor } from '@/agent/providerConfig';
+import { assertSessionConfigPayload, resolvePermissionModeForDriver } from '@/agent/providerConfig';
 import { startOpencodeHookServer } from './utils/startOpencodeHookServer';
 import { formatMessageWithAttachments } from '@/utils/attachmentFormatter';
 import { getInvokedCwd } from '@/utils/invokedCwd';
@@ -36,7 +36,7 @@ export async function runOpencode(opts: {
     };
 
     const { api, session } = await bootstrapSession({
-        flavor: 'opencode',
+        driver: 'opencode',
         sessionId: opts.vibySessionId,
         startedBy,
         workingDirectory,
@@ -103,7 +103,7 @@ export async function runOpencode(opts: {
         const config = assertSessionConfigPayload(payload) as { permissionMode?: unknown };
 
         if (config.permissionMode !== undefined) {
-            currentPermissionMode = resolvePermissionModeForFlavor(config.permissionMode, 'opencode') as PermissionMode;
+            currentPermissionMode = resolvePermissionModeForDriver(config.permissionMode, 'opencode') as PermissionMode;
         }
 
         syncSessionMode();

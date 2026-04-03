@@ -1,7 +1,12 @@
 import { io, type Socket } from 'socket.io-client'
 import { logger } from '@/ui/logger'
 import { configuration } from '@/configuration'
+import {
+    ResolveAgentLaunchConfigRequestSchema,
+    type ResolveAgentLaunchConfigResponse,
+} from '@viby/protocol'
 import type { Update, UpdateMachineBody } from '@viby/protocol'
+import { resolvePiAgentLaunchConfig } from '@/pi/launchConfig'
 import type { RunnerState, Machine, MachineMetadata } from './types'
 import { RunnerStateSchema, MachineMetadataSchema } from './types'
 import { backoff } from '@/utils/time'
@@ -55,6 +60,24 @@ type MachineRpcHandlers = {
 
 export interface ApiMachineClientOptions {
     getMachineMetadata?: () => MachineMetadata
+}
+
+function readRecord(value: unknown): Record<string, unknown> {
+    return typeof value === 'object' && value !== null
+        ? value as Record<string, unknown>
+        : {}
+}
+
+function readOptionalString(value: unknown): string | undefined {
+    return typeof value === 'string' ? value : undefined
+}
+
+function readRequiredString(value: unknown, message: string): string {
+    if (typeof value !== 'string' || !value) {
+        throw new Error(message)
+    }
+
+    return value
 }
 
 function machineCapabilitiesMatch(
@@ -111,7 +134,8 @@ export class ApiMachineClient {
     }
 
     setRPCHandlers({ spawnSession, stopSession, requestShutdown }: MachineRpcHandlers): void {
-        this.rpcHandlerManager.registerHandler('spawn-viby-session', async (params: any) => {
+        this.rpcHandlerManager.registerHandler('spawn-viby-session', async (params: unknown) => {
+            const request = readRecord(params)
             const {
                 directory,
                 sessionId,
@@ -126,26 +150,25 @@ export class ApiMachineClient {
                 collaborationMode,
                 token,
                 sessionType,
-                worktreeName
-            } = params || {}
-            if (!directory) {
-                throw new Error('Directory is required')
-            }
+                worktreeName,
+                driverSwitch
+            } = request
             const result = await spawnSession({
-                directory,
-                sessionId,
-                resumeSessionId,
-                machineId,
-                approvedNewDirectoryCreation,
-                agent,
-                model,
-                modelReasoningEffort,
-                permissionMode,
-                sessionRole,
-                collaborationMode,
-                token,
-                sessionType,
-                worktreeName
+                directory: readRequiredString(directory, 'Directory is required'),
+                sessionId: readOptionalString(sessionId),
+                resumeSessionId: readOptionalString(resumeSessionId),
+                machineId: readOptionalString(machineId),
+                approvedNewDirectoryCreation: approvedNewDirectoryCreation === true,
+                agent: agent as SpawnSessionOptions['agent'],
+                model: readOptionalString(model),
+                modelReasoningEffort: modelReasoningEffort as SpawnSessionOptions['modelReasoningEffort'],
+                permissionMode: permissionMode as SpawnSessionOptions['permissionMode'],
+                sessionRole: sessionRole as SpawnSessionOptions['sessionRole'],
+                collaborationMode: collaborationMode as SpawnSessionOptions['collaborationMode'],
+                token: readOptionalString(token),
+                sessionType: sessionType as SpawnSessionOptions['sessionType'],
+                worktreeName: readOptionalString(worktreeName),
+                driverSwitch: driverSwitch as SpawnSessionOptions['driverSwitch']
             })
 
             switch (result.type) {
@@ -158,11 +181,9 @@ export class ApiMachineClient {
             }
         })
 
-        this.rpcHandlerManager.registerHandler('stop-session', (params: any) => {
-            const { sessionId } = params || {}
-            if (!sessionId) {
-                throw new Error('Session ID is required')
-            }
+        this.rpcHandlerManager.registerHandler('stop-session', (params: unknown) => {
+            const request = readRecord(params)
+            const sessionId = readRequiredString(request.sessionId, 'Session ID is required')
             const success = stopSession(sessionId)
             if (!success) {
                 throw new Error('Session not found or failed to stop')
@@ -174,6 +195,35 @@ export class ApiMachineClient {
         this.rpcHandlerManager.registerHandler('stop-runner', () => {
             setTimeout(() => requestShutdown(), 100)
             return { message: 'Runner stop request acknowledged' }
+        })
+
+        this.rpcHandlerManager.registerHandler('resolve-agent-launch-config', async (params: unknown): Promise<ResolveAgentLaunchConfigResponse> => {
+            const parsed = ResolveAgentLaunchConfigRequestSchema.safeParse(params)
+            if (!parsed.success) {
+                return {
+                    type: 'error',
+                    message: 'Invalid agent launch config request'
+                }
+            }
+
+            if (parsed.data.agent !== 'pi') {
+                return {
+                    type: 'error',
+                    message: `Unsupported agent launch config request: ${parsed.data.agent}`
+                }
+            }
+
+            try {
+                return {
+                    type: 'success',
+                    config: await resolvePiAgentLaunchConfig(parsed.data.directory)
+                }
+            } catch (error) {
+                return {
+                    type: 'error',
+                    message: error instanceof Error ? error.message : 'Failed to resolve agent launch config'
+                }
+            }
         })
     }
 

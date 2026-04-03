@@ -9,6 +9,7 @@ export type ReadyEventOptions = {
 
 type ReadyStateClient = {
     flushAgentStateUpdates?: (options?: { timeoutMs?: number }) => Promise<void>;
+    flushKeepAliveSnapshot?: (options?: { timeoutMs?: number }) => Promise<void>;
 };
 
 function shouldEmitReady(options: ReadyEventOptions): boolean {
@@ -43,4 +44,5 @@ export async function emitReadyIfIdle(options: ReadyEventOptions): Promise<boole
 
 export async function flushReadyStateBeforeReady(client: ReadyStateClient): Promise<void> {
     await client.flushAgentStateUpdates?.();
+    await client.flushKeepAliveSnapshot?.();
 }

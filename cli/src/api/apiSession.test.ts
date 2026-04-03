@@ -343,6 +343,139 @@ describe('ApiSessionClient recovery', () => {
     })
 })
 
+describe('ApiSessionClient user message delivery failures', () => {
+    it('emits one durable driver-switch-send-failed event when live user delivery rejects the first post-switch turn', () => {
+        const client = new ApiSessionClient('token', createSession())
+        const socket = sockets[0]
+        expect(socket).toBeDefined()
+        if (!socket) {
+            throw new Error('Expected socket to exist')
+        }
+
+        const messageListener = vi.fn()
+        client.on('message', messageListener)
+        client.onUserMessage(() => {
+            throw new Error('Cannot inject driver switch continuity into an empty first user turn')
+        })
+
+        socket.emit('update', {
+            body: {
+                t: 'new-message',
+                message: {
+                    id: 'message-1',
+                    seq: 1,
+                    createdAt: 1_000,
+                    content: {
+                        role: 'user',
+                        content: {
+                            type: 'text',
+                            text: '   ',
+                            attachments: []
+                        }
+                    }
+                }
+            }
+        })
+
+        const failureEvent = socket.emitCalls.find((entry) => entry.event === 'message')
+        expect(failureEvent?.event).toBe('message')
+        expect(failureEvent?.args[0]).toMatchObject({
+            sid: 'session-1',
+            message: {
+                role: 'agent',
+                content: {
+                    type: 'event',
+                    data: {
+                        type: 'driver-switch-send-failed',
+                        stage: 'socket_update',
+                        code: 'empty_first_turn'
+                    }
+                }
+            }
+        })
+
+        socket.emit('update', {
+            body: {
+                t: 'new-message',
+                message: {
+                    id: 'message-2',
+                    seq: 2,
+                    createdAt: 2_000,
+                    content: {
+                        role: 'agent',
+                        content: {
+                            type: 'event',
+                            data: {
+                                type: 'ready'
+                            }
+                        }
+                    }
+                }
+            }
+        })
+
+        expect(messageListener).toHaveBeenCalledTimes(1)
+        expect(messageListener).toHaveBeenCalledWith({
+            role: 'agent',
+            content: {
+                type: 'event',
+                data: {
+                    type: 'ready'
+                }
+            }
+        })
+    })
+
+    it('falls back to a generic typed failure code when queued user delivery throws an unknown object', () => {
+        const client = new ApiSessionClient('token', createSession())
+        const socket = sockets[0]
+        expect(socket).toBeDefined()
+        if (!socket) {
+            throw new Error('Expected socket to exist')
+        }
+
+        socket.emit('update', {
+            body: {
+                t: 'new-message',
+                message: {
+                    id: 'message-1',
+                    seq: 1,
+                    createdAt: 1_000,
+                    content: {
+                        role: 'user',
+                        content: {
+                            type: 'text',
+                            text: 'queued first turn',
+                            attachments: []
+                        }
+                    }
+                }
+            }
+        })
+
+        client.onUserMessage(() => {
+            throw { unexpected: true }
+        })
+
+        const failureEvent = socket.emitCalls.find((entry) => entry.event === 'message')
+        expect(failureEvent?.event).toBe('message')
+        expect(failureEvent?.args[0]).toMatchObject({
+            sid: 'session-1',
+            message: {
+                role: 'agent',
+                content: {
+                    type: 'event',
+                    data: {
+                        type: 'driver-switch-send-failed',
+                        stage: 'callback_flush',
+                        code: 'unknown'
+                    }
+                }
+            }
+        })
+    })
+})
+
 describe('ApiSessionClient metadata updates', () => {
     it('strips lifecycle fields before sending metadata updates', async () => {
         const client = new ApiSessionClient('token', createSession({
@@ -546,6 +679,34 @@ describe('ApiSessionClient keepalive continuity', () => {
         expect(sessionAlivePayload).not.toHaveProperty('model')
         expect(sessionAlivePayload).not.toHaveProperty('modelReasoningEffort')
     })
+
+    it('flushes the latest keepalive snapshot through the reliable channel before ready', async () => {
+        const client = new ApiSessionClient('token', createSession())
+        const socket = sockets[0]
+        expect(socket).toBeDefined()
+        if (!socket) {
+            throw new Error('Expected socket to exist')
+        }
+
+        socket.emit('connect')
+        ;(socket as FakeSocket & { connected?: boolean }).connected = true
+        socket.emitCalls.length = 0
+        socket.volatileEmitCalls.length = 0
+
+        client.keepAlive(false, 'remote', {
+            permissionMode: 'safe-yolo'
+        })
+        expect(socket.volatileEmitCalls.at(-1)?.event).toBe('session-alive')
+
+        await client.flushKeepAliveSnapshot()
+
+        expect(getLatestSessionAlivePayload(socket)).toEqual(expect.objectContaining({
+            sid: 'session-1',
+            thinking: false,
+            mode: 'remote',
+            permissionMode: 'safe-yolo'
+        }))
+    })
 })
 
 describe('ApiSessionClient manager teams helpers', () => {
@@ -744,7 +905,7 @@ describe('ApiSessionClient manager teams helpers', () => {
             metadata: {
                 path: '/tmp/project-worktrees/member-2',
                 host: 'localhost',
-                flavor: 'codex'
+                driver: 'codex'
             }
         })
         const createdRole = {

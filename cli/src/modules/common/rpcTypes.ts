@@ -1,9 +1,11 @@
 import type {
+    AgentFlavor,
     SessionCollaborationMode,
     SessionModelReasoningEffort,
     SessionPermissionMode,
     TeamSessionSpawnRole
 } from '@/api/types'
+import type { SessionDriver, SessionHandoffSnapshot } from '@viby/protocol/types'
 
 export interface SpawnSessionOptions {
     machineId?: string
@@ -11,7 +13,7 @@ export interface SpawnSessionOptions {
     sessionId?: string
     resumeSessionId?: string
     approvedNewDirectoryCreation?: boolean
-    agent?: 'claude' | 'codex' | 'cursor' | 'gemini' | 'opencode'
+    agent?: AgentFlavor
     model?: string
     modelReasoningEffort?: SessionModelReasoningEffort
     permissionMode?: SessionPermissionMode
@@ -20,6 +22,10 @@ export interface SpawnSessionOptions {
     token?: string
     sessionType?: 'simple' | 'worktree'
     worktreeName?: string
+    driverSwitch?: {
+        targetDriver: SessionDriver
+        handoffSnapshot: SessionHandoffSnapshot
+    }
 }
 
 export type SpawnSessionResult =

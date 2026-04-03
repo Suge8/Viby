@@ -58,8 +58,10 @@ import { registerCommonHandlers } from '../modules/common/registerCommonHandlers
 import { cleanupUploadDir } from '../modules/common/handlers/uploads'
 import { TerminalManager } from '@/terminal/TerminalManager'
 import { applyVersionedAck } from './versionedUpdate'
+import { EMPTY_DRIVER_SWITCH_FIRST_TURN_ERROR } from '@/agent/driverSwitchHandoffState'
 
 const API_SESSION_REQUEST_TIMEOUT_MS = 15_000
+const SESSION_STATE_FLUSH_TIMEOUT_MS = 5_000
 type MetadataUpdateOptions = {
     touchUpdatedAt?: boolean
 }
@@ -195,6 +197,24 @@ type SessionStreamClientUpdate =
         streamId?: string
     }
 
+type DriverSwitchSendFailureStage = 'socket_update' | 'callback_flush'
+type DriverSwitchSendFailureCode = 'empty_first_turn' | 'timeout' | 'unknown'
+
+function resolveDriverSwitchSendFailureCode(error: unknown): DriverSwitchSendFailureCode {
+    if (error instanceof Error && error.message === EMPTY_DRIVER_SWITCH_FIRST_TURN_ERROR) {
+        return 'empty_first_turn'
+    }
+
+    if (
+        (error instanceof Error && error.name === 'TimeoutError')
+        || (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ETIMEDOUT')
+    ) {
+        return 'timeout'
+    }
+
+    return 'unknown'
+}
+
 export class ApiSessionClient extends EventEmitter {
     private readonly token: string
     readonly sessionId: string
@@ -218,6 +238,13 @@ export class ApiSessionClient extends EventEmitter {
     private teamApiAuthLock = new AsyncLock()
     private lastKeepAliveSnapshot: SessionKeepAliveSnapshot
     private teamApiToken: string | null = null
+
+    private emitSessionMessage(content: unknown): void {
+        this.socket.emit('message', {
+            sid: this.sessionId,
+            message: content
+        })
+    }
 
     constructor(token: string, session: Session) {
         super()
@@ -378,13 +405,46 @@ export class ApiSessionClient extends EventEmitter {
     onUserMessage(callback: (data: UserMessage) => void): void {
         this.pendingMessageCallback = callback
         while (this.pendingMessages.length > 0) {
-            callback(this.pendingMessages.shift()!)
+            this.deliverUserMessage(this.pendingMessages.shift()!, 'callback_flush')
+        }
+    }
+
+    private emitDriverSwitchSendFailure(stage: DriverSwitchSendFailureStage, error: unknown): void {
+        const code = resolveDriverSwitchSendFailureCode(error)
+        logger.debug('[API] Driver switch send failed during user message delivery', { stage, code })
+
+        try {
+            this.sendSessionEvent({
+                type: 'driver-switch-send-failed',
+                stage,
+                code
+            })
+        } catch (eventError) {
+            logger.debug('[API] Failed to emit driver switch send failure event', {
+                stage,
+                code,
+                error: eventError
+            })
+        }
+    }
+
+    private deliverUserMessage(message: UserMessage, stage: DriverSwitchSendFailureStage): void {
+        const callback = this.pendingMessageCallback
+        if (!callback) {
+            this.pendingMessages.push(message)
+            return
+        }
+
+        try {
+            callback(message)
+        } catch (error) {
+            this.emitDriverSwitchSendFailure(stage, error)
         }
     }
 
     private enqueueUserMessage(message: UserMessage): void {
         if (this.pendingMessageCallback) {
-            this.pendingMessageCallback(message)
+            this.deliverUserMessage(message, 'socket_update')
         } else {
             this.pendingMessages.push(message)
         }
@@ -762,22 +822,10 @@ export class ApiSessionClient extends EventEmitter {
                 }
             }
         } else {
-            content = {
-                role: 'agent',
-                content: {
-                    type: 'output',
-                    data: body
-                },
-                meta: {
-                    sentFrom: 'cli'
-                }
-            }
+            content = this.createOutputMessageContent(body)
         }
 
-        this.socket.emit('message', {
-            sid: this.sessionId,
-            message: content
-        })
+        this.emitSessionMessage(content)
 
         if (body.type === 'summary') {
             this.pendingAutoSummary = {
@@ -785,6 +833,23 @@ export class ApiSessionClient extends EventEmitter {
                 updatedAt: Date.now()
             }
         }
+    }
+
+    private createOutputMessageContent(body: unknown): MessageContent {
+        return {
+            role: 'agent',
+            content: {
+                type: 'output',
+                data: body
+            },
+            meta: {
+                sentFrom: 'cli'
+            }
+        }
+    }
+
+    sendOutputMessage(body: unknown): void {
+        this.emitSessionMessage(this.createOutputMessageContent(body))
     }
 
     sendUserMessage(text: string, meta?: MessageMeta): void {
@@ -804,10 +869,7 @@ export class ApiSessionClient extends EventEmitter {
             }
         }
 
-        this.socket.emit('message', {
-            sid: this.sessionId,
-            message: content
-        })
+        this.emitSessionMessage(content)
     }
 
     getMetadataSnapshot(): Metadata | null {
@@ -900,7 +962,7 @@ export class ApiSessionClient extends EventEmitter {
     async spawnTeamMember(input: {
         managerSessionId: string
         roleId: TeamProjectSnapshot['roles'][number]['id']
-        providerFlavor?: 'claude' | 'codex' | 'cursor' | 'gemini' | 'opencode' | null
+        providerFlavor?: TeamProjectSnapshot['roles'][number]['providerFlavor'] | null
         model?: string | null
         reasoningEffort?: Session['modelReasoningEffort'] | null
         isolationMode?: 'simple' | 'worktree'
@@ -940,7 +1002,7 @@ export class ApiSessionClient extends EventEmitter {
             | {
                 action: 'replace'
                 managerSessionId: string
-                providerFlavor?: 'claude' | 'codex' | 'cursor' | 'gemini' | 'opencode' | null
+                providerFlavor?: TeamProjectSnapshot['roles'][number]['providerFlavor'] | null
                 model?: string | null
                 reasoningEffort?: Session['modelReasoningEffort'] | null
                 isolationMode?: 'simple' | 'worktree'
@@ -1126,10 +1188,7 @@ export class ApiSessionClient extends EventEmitter {
                 sentFrom: 'cli'
             }
         }
-        this.socket.emit('message', {
-            sid: this.sessionId,
-            message: content
-        })
+        this.emitSessionMessage(content)
     }
 
     sendStreamUpdate(update: SessionStreamClientUpdate): void {
@@ -1149,6 +1208,10 @@ export class ApiSessionClient extends EventEmitter {
         type: 'permission-mode-changed'
         mode: SessionPermissionMode
     } | {
+        type: 'driver-switch-send-failed'
+        stage: DriverSwitchSendFailureStage
+        code: DriverSwitchSendFailureCode
+    } | {
         type: 'ready'
     }, id?: string): void {
         const content = {
@@ -1164,10 +1227,7 @@ export class ApiSessionClient extends EventEmitter {
             this.flushPendingAutoSummary()
         }
 
-        this.socket.emit('message', {
-            sid: this.sessionId,
-            message: content
-        })
+        this.emitSessionMessage(content)
     }
 
     keepAlive(
@@ -1200,11 +1260,11 @@ export class ApiSessionClient extends EventEmitter {
         this.socket.emit('session-end', { sid: this.sessionId, time: Date.now() })
     }
 
-    updateMetadata(
+    async updateMetadataAndWait(
         handler: (metadata: WritableSessionMetadata) => WritableSessionMetadata,
         options?: MetadataUpdateOptions
-    ): void {
-        this.metadataLock.inLock(async () => {
+    ): Promise<void> {
+        await this.metadataLock.inLock(async () => {
             await backoff(async () => {
                 const current = createWritableSessionMetadataSnapshot(this.metadata)
                 const updated = stripLifecycleMetadataFields(handler(current))
@@ -1237,6 +1297,15 @@ export class ApiSessionClient extends EventEmitter {
                     versionMismatchMessage: 'Metadata version mismatch'
                 })
             })
+        })
+    }
+
+    updateMetadata(
+        handler: (metadata: WritableSessionMetadata) => WritableSessionMetadata,
+        options?: MetadataUpdateOptions
+    ): void {
+        void this.updateMetadataAndWait(handler, options).catch((error) => {
+            logger.debug('[API] Metadata update failed', error)
         })
     }
 
@@ -1277,7 +1346,17 @@ export class ApiSessionClient extends EventEmitter {
     }
 
     async flushAgentStateUpdates(options?: { timeoutMs?: number }): Promise<void> {
-        await this.drainLock(this.agentStateLock, options?.timeoutMs ?? 5_000)
+        await this.drainLock(this.agentStateLock, options?.timeoutMs ?? SESSION_STATE_FLUSH_TIMEOUT_MS)
+    }
+
+    async flushKeepAliveSnapshot(options?: { timeoutMs?: number }): Promise<void> {
+        const timeoutMs = options?.timeoutMs ?? SESSION_STATE_FLUSH_TIMEOUT_MS
+        const connected = await this.waitForConnected(timeoutMs)
+        if (!connected) {
+            return
+        }
+
+        this.emitSessionAlive(this.lastKeepAliveSnapshot)
     }
 
     private flushPendingAutoSummary(): void {

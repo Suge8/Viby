@@ -11,7 +11,7 @@ import { createModeChangeHandler, createRunnerLifecycle, setControlledByUser } f
 import { startHookServer } from '@/claude/utils/startHookServer';
 import { cleanupHookSettingsFile, generateHookSettingsFile } from '@/modules/common/hooks/generateHookSettings';
 import { resolveGeminiRuntimeConfig } from './utils/config';
-import { assertSessionConfigPayload, resolvePermissionModeForFlavor } from '@/agent/providerConfig';
+import { assertSessionConfigPayload, resolvePermissionModeForDriver } from '@/agent/providerConfig';
 import { formatMessageWithAttachments } from '@/utils/attachmentFormatter';
 import { getInvokedCwd } from '@/utils/invokedCwd';
 
@@ -59,7 +59,7 @@ export async function runGemini(opts: {
     let currentModel = runtimeConfig.model ?? null;
 
     const { api, session } = await bootstrapSession({
-        flavor: 'gemini',
+        driver: 'gemini',
         sessionId: opts.vibySessionId,
         startedBy,
         workingDirectory,
@@ -150,7 +150,7 @@ export async function runGemini(opts: {
         };
 
         if (config.permissionMode !== undefined) {
-            currentPermissionMode = resolvePermissionModeForFlavor(config.permissionMode, 'gemini') as PermissionMode;
+            currentPermissionMode = resolvePermissionModeForDriver(config.permissionMode, 'gemini') as PermissionMode;
         }
 
         if (config.model !== undefined) {

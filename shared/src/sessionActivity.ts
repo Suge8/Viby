@@ -3,6 +3,10 @@ import { isObject } from './utils'
 
 export type SessionActivityKind = 'reply' | 'ready' | 'user'
 
+type MessageEventData = {
+    type: string
+}
+
 export type SessionMessageActivity = {
     latestActivityAt: number | null
     latestActivityKind: SessionActivityKind | null
@@ -50,9 +54,14 @@ export function getSessionActivityKind(content: unknown): SessionActivityKind | 
         isObject(payload)
         && payload.type === 'event'
         && isObject(payload.data)
-        && payload.data.type === 'ready'
     ) {
-        return 'ready'
+        const eventData = payload.data as MessageEventData
+        if (eventData.type === 'ready') {
+            return 'ready'
+        }
+        if (eventData.type === 'driver-switched' || eventData.type === 'driver-switch-send-failed') {
+            return null
+        }
     }
 
     return 'reply'

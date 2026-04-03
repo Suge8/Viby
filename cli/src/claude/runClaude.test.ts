@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { SessionHandoffSnapshot } from '@viby/protocol/types'
 import type { EnhancedMode } from './loop'
 
 const harness = vi.hoisted(() => {
@@ -14,6 +15,11 @@ const harness = vi.hoisted(() => {
         }) => void) | null,
         rpcHandlers,
         queueModes: [] as EnhancedMode[],
+        queuedUserMessages: [] as Array<{
+            text: string
+            attachments?: unknown[]
+            meta?: Record<string, unknown>
+        }>,
         sessionState: {
             permissionMode: 'default' as EnhancedMode['permissionMode'],
             model: null as string | null,
@@ -63,6 +69,7 @@ vi.mock('@/agent/runnerLifecycle', () => ({
         registerProcessHandlers() {},
         markCrash() {},
         setExitCode() {},
+        cleanup: async () => {},
         cleanupAndExit: async () => {},
     }),
     setControlledByUser() {}
@@ -173,13 +180,18 @@ vi.mock('./loop', () => ({
             }
         })
 
-        harness.onUserMessage({
-            content: {
-                text: 'ping',
-                attachments: []
-            },
-            ...(harness.nextUserMessageMeta ? { meta: harness.nextUserMessageMeta } : {})
-        })
+        const queuedUserMessages = harness.queuedUserMessages.length > 0
+            ? harness.queuedUserMessages
+            : [{ text: 'ping', attachments: [], meta: harness.nextUserMessageMeta }]
+        for (const queuedUserMessage of queuedUserMessages) {
+            harness.onUserMessage({
+                content: {
+                    text: queuedUserMessage.text,
+                    attachments: queuedUserMessage.attachments ?? []
+                },
+                ...(queuedUserMessage.meta ? { meta: queuedUserMessage.meta } : {})
+            })
+        }
 
         harness.queueModes = options.messageQueue.queue.map((entry) => entry.mode)
     }
@@ -187,11 +199,50 @@ vi.mock('./loop', () => ({
 
 import { runClaude } from './runClaude'
 
+function createDriverSwitchHandoff(): SessionHandoffSnapshot {
+    return {
+        driver: 'codex',
+        workingDirectory: '/repo/project',
+        liveConfig: {
+            model: 'gpt-5.4',
+            modelReasoningEffort: 'high',
+            permissionMode: 'safe-yolo',
+            collaborationMode: 'plan'
+        },
+        attachments: [
+            {
+                filename: 'spec.md',
+                mimeType: 'text/markdown',
+                path: '/repo/project/spec.md',
+                size: 42
+            }
+        ],
+        history: [
+            {
+                id: 'message-1',
+                seq: 1,
+                createdAt: 1,
+                role: 'user',
+                text: 'Need the switch to preserve continuity.',
+                attachmentPaths: ['/repo/project/spec.md']
+            },
+            {
+                id: 'message-2',
+                seq: 2,
+                createdAt: 2,
+                role: 'assistant',
+                text: 'I will continue on the same session after the switch.'
+            }
+        ]
+    }
+}
+
 describe('runClaude live session config', () => {
     beforeEach(() => {
         harness.onUserMessage = null
         harness.rpcHandlers.clear()
         harness.queueModes = []
+        harness.queuedUserMessages = []
         harness.sessionState.permissionMode = 'default'
         harness.sessionState.model = null
         harness.sessionState.modelReasoningEffort = null
@@ -249,5 +300,36 @@ describe('runClaude live session config', () => {
         expect(harness.queueModes[0]?.appendSystemPrompt).toContain('reviewer-mobile')
         expect(harness.queueModes[0]?.appendSystemPrompt).toContain('Mobile Reviewer')
         expect(harness.queueModes[0]?.appendSystemPrompt).toContain('pwa-safe interactions')
+    })
+
+    it('injects driver switch continuity exactly once into the first real Claude turn', async () => {
+        harness.queuedUserMessages = [
+            { text: 'Continue from the old driver.', attachments: [] },
+            { text: 'Second turn should not replay the handoff.', attachments: [] }
+        ]
+
+        await runClaude({
+            startedBy: 'runner',
+            model: 'sonnet',
+            driverSwitchHandoff: createDriverSwitchHandoff()
+        })
+
+        expect(harness.queueModes).toHaveLength(2)
+        expect(harness.queueModes[0]?.appendSystemPrompt).toContain('Private continuity handoff for a driver switch inside the same Viby session.')
+        expect(harness.queueModes[0]?.appendSystemPrompt).toContain('"previousDriver": "codex"')
+        expect(harness.queueModes[0]?.appendSystemPrompt).toContain('Need the switch to preserve continuity.')
+        expect(harness.queueModes[1]?.appendSystemPrompt ?? '').not.toContain('Private continuity handoff for a driver switch inside the same Viby session.')
+    })
+
+    it('rejects an empty first Claude turn after a driver switch instead of replaying stale continuity', async () => {
+        harness.queuedUserMessages = [
+            { text: '   ', attachments: [] }
+        ]
+
+        await expect(runClaude({
+            startedBy: 'runner',
+            model: 'sonnet',
+            driverSwitchHandoff: createDriverSwitchHandoff()
+        })).rejects.toThrow('Cannot inject driver switch continuity into an empty first user turn')
     })
 })

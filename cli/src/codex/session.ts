@@ -1,4 +1,5 @@
 import { ApiClient, ApiSessionClient } from '@/lib';
+import { setSessionDriverRuntimeHandle } from '@viby/protocol';
 import { MessageQueue2 } from '@/utils/MessageQueue2';
 import { AgentSessionBase } from '@/agent/sessionBase';
 import type { EnhancedMode, PermissionMode } from './loop';
@@ -53,7 +54,7 @@ export class CodexSession extends AgentSessionBase<EnhancedMode> {
             sessionIdLabel: 'Codex',
             applySessionIdToMetadata: (metadata, sessionId) => ({
                 ...metadata,
-                codexSessionId: sessionId
+                ...setSessionDriverRuntimeHandle(metadata, 'codex', { sessionId })
             }),
             permissionMode: opts.permissionMode,
             model: opts.model,

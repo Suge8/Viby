@@ -1,8 +1,26 @@
 import axios from 'axios'
 import type { AxiosResponse } from 'axios'
 import type { ZodType } from 'zod'
-import type { AgentState, CreateMachineResponse, CreateSessionResponse, RunnerState, Machine, MachineMetadata, Metadata, Session } from '@/api/types'
-import { AgentStateSchema, CreateMachineResponseSchema, CreateSessionResponseSchema, RunnerStateSchema, MachineMetadataSchema, MetadataSchema } from '@/api/types'
+import type {
+    AgentState,
+    CliSessionRecoveryResponse,
+    CreateMachineResponse,
+    CreateSessionResponse,
+    RunnerState,
+    Machine,
+    MachineMetadata,
+    Metadata,
+    Session
+} from '@/api/types'
+import {
+    AgentStateSchema,
+    CliSessionRecoveryResponseSchema,
+    CreateMachineResponseSchema,
+    CreateSessionResponseSchema,
+    RunnerStateSchema,
+    MachineMetadataSchema,
+    MetadataSchema
+} from '@/api/types'
 import { configuration } from '@/configuration'
 import { getAuthToken } from '@/api/auth'
 import { apiValidationError } from '@/utils/errorUtils'
@@ -145,6 +163,33 @@ export class ApiClient {
             'Invalid /cli/machines response'
         )
         return this.toMachineSnapshot(parsed.machine)
+    }
+
+    async getSessionRecoveryPage(opts: {
+        sessionId: string
+        afterSeq?: number
+        limit?: number
+    }): Promise<CliSessionRecoveryResponse> {
+        const response = await axios.get<CliSessionRecoveryResponse>(
+            `${configuration.apiUrl}/cli/sessions/${encodeURIComponent(opts.sessionId)}/recovery`,
+            {
+                headers: {
+                    Authorization: `Bearer ${this.token}`,
+                    'Content-Type': 'application/json'
+                },
+                params: {
+                    afterSeq: opts.afterSeq ?? 0,
+                    limit: opts.limit
+                },
+                timeout: 60_000
+            }
+        )
+
+        return this.parseApiPayload(
+            response,
+            CliSessionRecoveryResponseSchema,
+            'Invalid /cli/sessions/:id/recovery response'
+        )
     }
 
     sessionSyncClient(session: Session): ApiSessionClient {

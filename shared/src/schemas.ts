@@ -1,5 +1,13 @@
 import { z } from 'zod'
-import { AGENT_FLAVORS, CLAUDE_REASONING_EFFORTS, CODEX_COLLABORATION_MODES, CODEX_REASONING_EFFORTS, MODEL_REASONING_EFFORTS, PERMISSION_MODES } from './modes'
+import {
+    AGENT_FLAVORS,
+    CLAUDE_REASONING_EFFORTS,
+    CODEX_COLLABORATION_MODES,
+    CODEX_REASONING_EFFORTS,
+    MODEL_REASONING_EFFORTS,
+    PERMISSION_MODES,
+    PI_REASONING_EFFORTS
+} from './modes'
 import { SESSION_LIFECYCLE_STATES } from './sessionLifecycle'
 import { SessionTeamContextSchema } from './teamSchemas'
 
@@ -25,6 +33,60 @@ export const WorktreeMetadataSchema = z.object({
 
 export type WorktreeMetadata = z.infer<typeof WorktreeMetadataSchema>
 
+export const PiReasoningEffortSchema = z.enum(PI_REASONING_EFFORTS)
+
+export const PiModelCapabilitySchema = z.object({
+    id: z.string(),
+    label: z.string(),
+    supportedThinkingLevels: z.array(PiReasoningEffortSchema),
+    defaultThinkingLevel: PiReasoningEffortSchema.optional()
+})
+
+export type PiModelCapability = z.infer<typeof PiModelCapabilitySchema>
+
+export const PiModelScopeSchema = z.union([
+    z.object({
+        models: z.array(PiModelCapabilitySchema)
+    }),
+    z.object({
+        availableModels: z.array(z.string())
+    })
+]).transform((value) => {
+    if ('models' in value) {
+        return value
+    }
+
+    return {
+        models: value.availableModels.map((id) => ({
+            id,
+            label: id,
+            supportedThinkingLevels: [...PI_REASONING_EFFORTS]
+        }))
+    }
+})
+
+export type PiModelScope = z.infer<typeof PiModelScopeSchema>
+
+export const SessionDriverSchema = z.enum(AGENT_FLAVORS)
+export type SessionDriver = z.infer<typeof SessionDriverSchema>
+
+export const SessionDriverRuntimeHandleSchema = z.object({
+    sessionId: z.string().optional()
+})
+export type SessionDriverRuntimeHandle = z.infer<typeof SessionDriverRuntimeHandleSchema>
+
+const SessionDriverHandlesShape = {
+    claude: SessionDriverRuntimeHandleSchema.optional(),
+    codex: SessionDriverRuntimeHandleSchema.optional(),
+    gemini: SessionDriverRuntimeHandleSchema.optional(),
+    opencode: SessionDriverRuntimeHandleSchema.optional(),
+    cursor: SessionDriverRuntimeHandleSchema.optional(),
+    pi: SessionDriverRuntimeHandleSchema.optional()
+} satisfies Record<SessionDriver, z.ZodOptional<typeof SessionDriverRuntimeHandleSchema>>
+
+export const SessionDriverHandlesSchema = z.object(SessionDriverHandlesShape)
+export type SessionDriverHandles = z.infer<typeof SessionDriverHandlesSchema>
+
 export const MetadataSchema = z.object({
     path: z.string(),
     host: z.string(),
@@ -38,6 +100,7 @@ export const MetadataSchema = z.object({
     geminiSessionId: z.string().optional(),
     opencodeSessionId: z.string().optional(),
     cursorSessionId: z.string().optional(),
+    piSessionId: z.string().optional(),
     tools: z.array(z.string()).optional(),
     slashCommands: z.array(z.string()).optional(),
     homeDir: z.string().optional(),
@@ -51,8 +114,10 @@ export const MetadataSchema = z.object({
     lifecycleStateSince: z.number().optional(),
     archivedBy: z.string().optional(),
     archiveReason: z.string().optional(),
-    flavor: z.enum(AGENT_FLAVORS).nullish(),
-    worktree: WorktreeMetadataSchema.optional()
+    driver: SessionDriverSchema.nullish(),
+    runtimeHandles: SessionDriverHandlesSchema.optional(),
+    worktree: WorktreeMetadataSchema.optional(),
+    piModelScope: PiModelScopeSchema.optional()
 })
 
 export type Metadata = z.infer<typeof MetadataSchema>

@@ -69,7 +69,7 @@ describe('ApiClient', () => {
             metadata: {
                 path: '/tmp/project',
                 host: 'localhost',
-                flavor: 'codex'
+                driver: 'codex'
             },
             state: null,
             sessionRole: 'manager'

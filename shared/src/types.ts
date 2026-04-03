@@ -5,6 +5,8 @@ export type {
     AttachmentMetadata,
     DecryptedMessage,
     Metadata,
+    PiModelCapability,
+    PiModelScope,
     Session,
     SessionStreamState,
     SyncEvent,
@@ -13,9 +15,21 @@ export type {
 } from './schemas'
 
 export type { SessionSummary, SessionSummaryMetadata } from './sessionSummary'
+export type {
+    SessionDriver,
+    SessionDriverHandles,
+    SessionDriverRuntimeHandle
+} from './sessionDriver'
 export type { SessionActivityKind, SessionMessageActivity } from './sessionActivity'
 export type { SessionLifecycleState } from './sessionLifecycle'
 export type { SessionRecoveryPage } from './sessionRecovery'
+export type {
+    SessionHandoffAttachment,
+    SessionHandoffContractErrorCode,
+    SessionHandoffLiveConfig,
+    SessionHandoffMessage,
+    SessionHandoffSnapshot,
+} from './sessionHandoff'
 export type { MessageMeta, MessageSentFrom, TeamMessageKind } from './messageMeta'
 export type {
     TeamTaskAcceptanceState,
@@ -58,6 +72,11 @@ export type {
     TeamProjectPresetProjectSettings,
     TeamProjectPresetRole
 } from './teamProjectPreset'
+export type {
+    AgentLaunchConfig,
+    ResolveAgentLaunchConfigRequest,
+    ResolveAgentLaunchConfigResponse
+} from './agentLaunchConfig'
 export type { MachineCapability } from './machineCapabilities'
 export type {
     MachineDirectoryEntry,
@@ -80,6 +99,7 @@ export type {
     GeminiPermissionMode,
     ModelReasoningEffort,
     OpencodePermissionMode,
+    PiPermissionMode,
     ClaudeModelPreset,
     PermissionMode,
     PermissionModeOption,

@@ -5,7 +5,6 @@ import { resolve } from 'node:path'
 import { ApiClient } from '@/api/api'
 import type { ApiSessionClient } from '@/api/apiSession'
 import type {
-    AgentFlavor,
     AgentState,
     MachineMetadata,
     Metadata,
@@ -15,7 +14,7 @@ import type {
     SessionPermissionMode,
     TeamSessionSpawnRole
 } from '@/api/types'
-import { MACHINE_BROWSE_DIRECTORY_CAPABILITY } from '@viby/protocol'
+import { MACHINE_BROWSE_DIRECTORY_CAPABILITY, getSessionDriverRuntimeHandles } from '@viby/protocol'
 import { notifyRunnerSessionStarted } from '@/runner/controlClient'
 import { readSettings } from '@/persistence'
 import { configuration } from '@/configuration'
@@ -24,11 +23,12 @@ import { runtimePath } from '@/projectPath'
 import { getInvokedCwd } from '@/utils/invokedCwd'
 import { readWorktreeEnv } from '@/utils/worktreeEnv'
 import packageJson from '../../package.json'
+import type { SessionDriver } from '@viby/protocol'
 
 export type SessionStartedBy = 'runner' | 'terminal'
 
 export type SessionBootstrapOptions = {
-    flavor: AgentFlavor
+    driver: SessionDriver
     sessionId?: string
     startedBy?: SessionStartedBy
     workingDirectory?: string
@@ -65,7 +65,7 @@ export function buildMachineMetadata(): MachineMetadata {
 }
 
 export function buildSessionMetadata(options: {
-    flavor: AgentFlavor
+    driver: SessionDriver
     startedBy: SessionStartedBy
     workingDirectory: string
     machineId: string
@@ -75,6 +75,7 @@ export function buildSessionMetadata(options: {
     const vibyLibDir = runtimePath()
     const worktreeInfo = readWorktreeEnv()
     const now = options.now ?? Date.now()
+    const metadataOverrides = options.metadataOverrides ?? {}
 
     return {
         path: options.workingDirectory,
@@ -91,10 +92,47 @@ export function buildSessionMetadata(options: {
         startedBy: options.startedBy,
         lifecycleState: 'running',
         lifecycleStateSince: now,
-        flavor: options.flavor,
-        worktree: worktreeInfo ?? undefined,
-        ...options.metadataOverrides
+        ...metadataOverrides,
+        driver: options.driver,
+        worktree: metadataOverrides.worktree ?? worktreeInfo ?? undefined,
     }
+}
+
+function mergeBootstrapMetadata(current: Metadata | null, desired: Metadata): Metadata {
+    const preservedRuntimeHandles = getSessionDriverRuntimeHandles(current)
+
+    return {
+        ...(current ?? {}),
+        ...desired,
+        ...(preservedRuntimeHandles ? { runtimeHandles: preservedRuntimeHandles } : {})
+    }
+}
+
+async function syncBootstrapMetadata(options: {
+    session: ApiSessionClient
+    desiredMetadata: Metadata
+    sessionId?: string
+}): Promise<Metadata> {
+    if (!options.sessionId) {
+        return options.desiredMetadata
+    }
+
+    const currentMetadata = options.session.getMetadataSnapshot()
+    const nextMetadata = mergeBootstrapMetadata(currentMetadata, options.desiredMetadata)
+    if (JSON.stringify(currentMetadata) === JSON.stringify(nextMetadata)) {
+        return currentMetadata ?? nextMetadata
+    }
+
+    await options.session.updateMetadataAndWait(() => nextMetadata, {
+        touchUpdatedAt: false
+    })
+
+    const syncedMetadata = options.session.getMetadataSnapshot()
+    if (!syncedMetadata || syncedMetadata.driver !== nextMetadata.driver) {
+        throw new Error(`Session bootstrap metadata sync failed for ${options.sessionId}`)
+    }
+
+    return syncedMetadata
 }
 
 async function getMachineIdOrExit(): Promise<string> {
@@ -137,7 +175,7 @@ export async function bootstrapSession(options: SessionBootstrapOptions): Promis
     })
 
     const metadata = buildSessionMetadata({
-        flavor: options.flavor,
+        driver: options.driver,
         startedBy,
         workingDirectory,
         machineId,
@@ -157,14 +195,19 @@ export async function bootstrapSession(options: SessionBootstrapOptions): Promis
     })
 
     const session = api.sessionSyncClient(sessionInfo)
+    const syncedMetadata = await syncBootstrapMetadata({
+        session,
+        desiredMetadata: metadata,
+        sessionId: options.sessionId
+    })
 
-    await reportSessionStarted(sessionInfo.id, metadata)
+    await reportSessionStarted(sessionInfo.id, syncedMetadata)
 
     return {
         api,
         session,
         sessionInfo,
-        metadata,
+        metadata: syncedMetadata,
         machineId,
         startedBy,
         workingDirectory

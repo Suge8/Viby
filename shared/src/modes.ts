@@ -13,11 +13,17 @@ export type CodexReasoningEffort = typeof CODEX_REASONING_EFFORTS[number]
 export const CLAUDE_REASONING_EFFORTS = ['low', 'medium', 'high', 'max'] as const
 export type ClaudeReasoningEffort = typeof CLAUDE_REASONING_EFFORTS[number]
 
+export const PI_REASONING_EFFORTS = CODEX_REASONING_EFFORTS
+export type PiReasoningEffort = typeof PI_REASONING_EFFORTS[number]
+
 export const MODEL_REASONING_EFFORTS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const
 export type ModelReasoningEffort = typeof MODEL_REASONING_EFFORTS[number]
 
 export const GEMINI_PERMISSION_MODES = ['default', 'read-only', 'safe-yolo', 'yolo'] as const
 export type GeminiPermissionMode = typeof GEMINI_PERMISSION_MODES[number]
+
+export const PI_PERMISSION_MODES = ['default', 'read-only', 'safe-yolo', 'yolo'] as const
+export type PiPermissionMode = typeof PI_PERMISSION_MODES[number]
 
 export const OPENCODE_PERMISSION_MODES = ['default', 'yolo'] as const
 export type OpencodePermissionMode = typeof OPENCODE_PERMISSION_MODES[number]
@@ -52,11 +58,11 @@ export const GEMINI_MODEL_PRESETS = [
 ] as const
 export type GeminiModelPreset = typeof GEMINI_MODEL_PRESETS[number]
 
-export const AGENT_FLAVORS = ['claude', 'codex', 'gemini', 'opencode', 'cursor'] as const
+export const AGENT_FLAVORS = ['claude', 'codex', 'gemini', 'opencode', 'cursor', 'pi'] as const
 export type AgentFlavor = typeof AGENT_FLAVORS[number]
 
-const LIVE_MODEL_SELECTION_FLAVORS = ['claude', 'codex', 'gemini'] as const
-const LIVE_MODEL_REASONING_EFFORT_FLAVORS = ['claude', 'codex'] as const
+const LIVE_MODEL_SELECTION_DRIVERS = ['claude', 'codex', 'gemini', 'pi'] as const
+const LIVE_MODEL_REASONING_EFFORT_DRIVERS = ['claude', 'codex', 'pi'] as const
 
 export const PERMISSION_MODE_LABELS: Record<PermissionMode, string> = {
     default: 'Default',
@@ -181,58 +187,64 @@ export function getClaudeReasoningEffortLabel(effort: ClaudeReasoningEffort): st
     return CLAUDE_REASONING_EFFORT_LABELS[effort]
 }
 
-export function getPermissionModesForFlavor(flavor?: string | null): readonly PermissionMode[] {
-    if (flavor === 'codex') {
+export function getPermissionModesForDriver(driver?: string | null): readonly PermissionMode[] {
+    if (driver === 'codex') {
         return CODEX_PERMISSION_MODES
     }
-    if (flavor === 'gemini') {
+    if (driver === 'gemini') {
         return GEMINI_PERMISSION_MODES
     }
-    if (flavor === 'opencode') {
+    if (driver === 'pi') {
+        return PI_PERMISSION_MODES
+    }
+    if (driver === 'opencode') {
         return OPENCODE_PERMISSION_MODES
     }
-    if (flavor === 'cursor') {
+    if (driver === 'cursor') {
         return CURSOR_PERMISSION_MODES
     }
     return CLAUDE_PERMISSION_MODES
 }
 
-export function getModelReasoningEffortsForFlavor(flavor?: string | null): readonly ModelReasoningEffort[] {
-    if (flavor === 'codex') {
+export function getModelReasoningEffortsForDriver(driver?: string | null): readonly ModelReasoningEffort[] {
+    if (driver === 'codex') {
         return CODEX_REASONING_EFFORTS
     }
-    if (flavor === 'claude') {
+    if (driver === 'claude') {
         return CLAUDE_REASONING_EFFORTS
+    }
+    if (driver === 'pi') {
+        return PI_REASONING_EFFORTS
     }
 
     return []
 }
 
-export function supportsLiveModelSelectionForFlavor(flavor?: string | null): boolean {
-    return LIVE_MODEL_SELECTION_FLAVORS.includes(flavor as typeof LIVE_MODEL_SELECTION_FLAVORS[number])
+export function supportsLiveModelSelectionForDriver(driver?: string | null): boolean {
+    return LIVE_MODEL_SELECTION_DRIVERS.includes(driver as typeof LIVE_MODEL_SELECTION_DRIVERS[number])
 }
 
-export function supportsLiveModelReasoningEffortForFlavor(flavor?: string | null): boolean {
-    return LIVE_MODEL_REASONING_EFFORT_FLAVORS.includes(flavor as typeof LIVE_MODEL_REASONING_EFFORT_FLAVORS[number])
+export function supportsLiveModelReasoningEffortForDriver(driver?: string | null): boolean {
+    return LIVE_MODEL_REASONING_EFFORT_DRIVERS.includes(driver as typeof LIVE_MODEL_REASONING_EFFORT_DRIVERS[number])
 }
 
-export function getPermissionModeOptionsForFlavor(flavor?: string | null): PermissionModeOption[] {
-    return getPermissionModesForFlavor(flavor).map((mode) => ({
+export function getPermissionModeOptionsForDriver(driver?: string | null): PermissionModeOption[] {
+    return getPermissionModesForDriver(driver).map((mode) => ({
         mode,
         label: getPermissionModeLabel(mode),
         tone: getPermissionModeTone(mode)
     }))
 }
 
-export function isPermissionModeAllowedForFlavor(mode: PermissionMode, flavor?: string | null): boolean {
-    return getPermissionModesForFlavor(flavor).includes(mode)
+export function isPermissionModeAllowedForDriver(mode: PermissionMode, driver?: string | null): boolean {
+    return getPermissionModesForDriver(driver).includes(mode)
 }
 
-export function isModelReasoningEffortAllowedForFlavor(
+export function isModelReasoningEffortAllowedForDriver(
     effort: ModelReasoningEffort,
-    flavor?: string | null
+    driver?: string | null
 ): boolean {
-    return getModelReasoningEffortsForFlavor(flavor).includes(effort)
+    return getModelReasoningEffortsForDriver(driver).includes(effort)
 }
 
 export function getCodexCollaborationModeOptions(): CodexCollaborationModeOption[] {

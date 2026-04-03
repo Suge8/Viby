@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { SessionHandoffSnapshot } from '@viby/protocol/types'
 import type { EnhancedMode } from './loop'
 
 const harness = vi.hoisted(() => {
@@ -13,6 +14,10 @@ const harness = vi.hoisted(() => {
         }) => void) | null,
         rpcHandlers,
         queueModes: [] as EnhancedMode[],
+        queuedUserMessages: [] as Array<{
+            text: string
+            attachments?: unknown[]
+        }>,
         disposeAppServerClientCalls: 0,
         sessionState: {
             permissionMode: 'default' as EnhancedMode['permissionMode'],
@@ -62,6 +67,9 @@ vi.mock('@/agent/runnerLifecycle', () => ({
         registerProcessHandlers() {},
         markCrash() {},
         setExitCode() {},
+        cleanup: async () => {
+            await options.onBeforeClose?.()
+        },
         cleanupAndExit: async () => {
             await options.onBeforeClose?.()
         },
@@ -154,12 +162,17 @@ vi.mock('./loop', () => ({
             }
         })
 
-        harness.onUserMessage({
-            content: {
-                text: 'ping',
-                attachments: []
-            }
-        })
+        const queuedUserMessages = harness.queuedUserMessages.length > 0
+            ? harness.queuedUserMessages
+            : [{ text: 'ping', attachments: [] }]
+        for (const queuedUserMessage of queuedUserMessages) {
+            harness.onUserMessage({
+                content: {
+                    text: queuedUserMessage.text,
+                    attachments: queuedUserMessage.attachments ?? []
+                }
+            })
+        }
 
         harness.queueModes = options.messageQueue.queue.map((entry) => entry.mode)
     }
@@ -167,11 +180,42 @@ vi.mock('./loop', () => ({
 
 import { runCodex } from './runCodex'
 
+function createDriverSwitchHandoff(): SessionHandoffSnapshot {
+    return {
+        driver: 'claude',
+        workingDirectory: '/repo/project',
+        liveConfig: {
+            model: 'sonnet',
+            modelReasoningEffort: 'high',
+            permissionMode: 'default',
+            collaborationMode: 'default'
+        },
+        attachments: [],
+        history: [
+            {
+                id: 'message-1',
+                seq: 1,
+                createdAt: 1,
+                role: 'user',
+                text: 'Please keep the same transcript after switching drivers.'
+            },
+            {
+                id: 'message-2',
+                seq: 2,
+                createdAt: 2,
+                role: 'assistant',
+                text: 'Continuity should be injected on the next real user turn only.'
+            }
+        ]
+    }
+}
+
 describe('runCodex live session config', () => {
     beforeEach(() => {
         harness.onUserMessage = null
         harness.rpcHandlers.clear()
         harness.queueModes = []
+        harness.queuedUserMessages = []
         harness.disposeAppServerClientCalls = 0
         harness.sessionState.permissionMode = 'default'
         harness.sessionState.model = null
@@ -228,5 +272,42 @@ describe('runCodex live session config', () => {
         expect(harness.queueModes[0]?.developerInstructions).toContain('debugger-root-cause')
         expect(harness.queueModes[0]?.developerInstructions).toContain('Root Cause Debugger')
         expect(harness.queueModes[0]?.developerInstructions).toContain('reproduce the failing path')
+    })
+
+    it('injects driver switch continuity exactly once into the first Codex turn payload', async () => {
+        harness.queuedUserMessages = [
+            { text: 'Continue from Claude on this same session.', attachments: [] },
+            { text: 'Do not replay the handoff here.', attachments: [] }
+        ]
+
+        await runCodex({
+            startedBy: 'runner',
+            model: 'gpt-5.4-mini',
+            driverSwitchHandoff: createDriverSwitchHandoff()
+        })
+
+        expect(harness.queueModes).toHaveLength(2)
+        expect(harness.queueModes[0]).toMatchObject({
+            permissionMode: 'default',
+            model: 'gpt-5.4',
+            modelReasoningEffort: 'high',
+            collaborationMode: 'default'
+        })
+        expect(harness.queueModes[0]?.developerInstructions).toContain('Private continuity handoff for a driver switch inside the same Viby session.')
+        expect(harness.queueModes[0]?.developerInstructions).toContain('"previousDriver": "claude"')
+        expect(harness.queueModes[0]?.developerInstructions).toContain('Please keep the same transcript after switching drivers.')
+        expect(harness.queueModes[1]?.developerInstructions).toBeUndefined()
+    })
+
+    it('rejects an empty first Codex turn after a driver switch instead of replaying stale continuity', async () => {
+        harness.queuedUserMessages = [
+            { text: '   ', attachments: [] }
+        ]
+
+        await expect(runCodex({
+            startedBy: 'runner',
+            model: 'gpt-5.4-mini',
+            driverSwitchHandoff: createDriverSwitchHandoff()
+        })).rejects.toThrow('Cannot inject driver switch continuity into an empty first user turn')
     })
 })

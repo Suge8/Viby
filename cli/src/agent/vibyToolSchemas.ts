@@ -90,7 +90,7 @@ export const UPDATE_MEMBER_INPUT_SCHEMA = z.discriminatedUnion('action', [
     z.object({
         action: z.literal('replace'),
         memberId: z.string().min(1).describe('The member id to supersede with a fresh revision'),
-        providerFlavor: z.enum(['claude', 'codex', 'cursor', 'gemini', 'opencode']).nullable().optional()
+        providerFlavor: TeamProviderFlavorSchema.nullish()
             .describe('Optional provider override for the new revision'),
         model: z.string().trim().min(1).nullable().optional()
             .describe('Optional model override for the new revision'),

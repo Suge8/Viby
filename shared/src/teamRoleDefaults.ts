@@ -1,3 +1,5 @@
+import type { AgentFlavor } from './modes'
+
 export const TEAM_MEMBER_ROLE_PROTOTYPES = [
     'planner',
     'architect',
@@ -15,7 +17,7 @@ export const TEAM_PRESET_SCHEMA_VERSION = 1 as const
 
 type TeamBuiltInRoleDefault = {
     name: string
-    providerFlavor: 'claude' | 'codex' | 'cursor' | 'gemini' | 'opencode'
+    providerFlavor: AgentFlavor
     isolationMode: 'simple' | 'worktree'
 }
 

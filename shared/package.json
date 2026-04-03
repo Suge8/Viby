@@ -11,7 +11,9 @@
         "./messages": "./src/messages.ts",
         "./runtimeDefaults": "./src/runtimeDefaults.ts",
         "./modes": "./src/modes.ts",
+        "./agentLaunchConfig": "./src/agentLaunchConfig.ts",
         "./runtimeStatus": "./src/runtimeStatus.ts",
+        "./utils": "./src/utils.ts",
         "./schemas": "./src/schemas.ts",
         "./types": "./src/types.ts"
     },

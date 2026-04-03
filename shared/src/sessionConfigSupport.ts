@@ -1,9 +1,10 @@
 import {
-    getPermissionModesForFlavor,
-    supportsLiveModelReasoningEffortForFlavor,
-    supportsLiveModelSelectionForFlavor
+    getPermissionModesForDriver,
+    supportsLiveModelReasoningEffortForDriver,
+    supportsLiveModelSelectionForDriver
 } from './modes'
 import type { Session } from './schemas'
+import { resolveSessionDriver } from './sessionDriver'
 
 export type LiveSessionConfigSource = Pick<Session, 'active' | 'agentState' | 'metadata'>
 
@@ -16,12 +17,12 @@ export type LiveSessionConfigSupport = {
 }
 
 export function getLiveSessionConfigSupport(session: LiveSessionConfigSource): LiveSessionConfigSupport {
-    const flavor = session.metadata?.flavor ?? 'claude'
+    const driver = resolveSessionDriver(session.metadata)
     const isRemoteManaged = session.active && session.agentState?.controlledByUser !== true
-    const hasPermissionModes = getPermissionModesForFlavor(flavor).length > 0
-    const hasLiveModelSelection = supportsLiveModelSelectionForFlavor(flavor)
-    const hasLiveModelReasoningEffort = supportsLiveModelReasoningEffortForFlavor(flavor)
-    const isRemoteCodexSession = isRemoteManaged && flavor === 'codex'
+    const hasPermissionModes = driver ? getPermissionModesForDriver(driver).length > 0 : false
+    const hasLiveModelSelection = driver ? supportsLiveModelSelectionForDriver(driver) : false
+    const hasLiveModelReasoningEffort = driver ? supportsLiveModelReasoningEffortForDriver(driver) : false
+    const isRemoteCodexSession = isRemoteManaged && driver === 'codex'
 
     return {
         isRemoteManaged,

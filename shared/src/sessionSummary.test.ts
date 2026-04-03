@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import type { SessionSummary } from './sessionSummary'
-import { compareSessionSummaries, getSessionSummarySortTimestamp } from './sessionSummary'
+import { compareSessionSummaries, getSessionSummarySortTimestamp, toSessionSummary } from './sessionSummary'
 
 function createSessionSummary(
     overrides: Partial<SessionSummary> & Pick<SessionSummary, 'id'>
@@ -71,5 +71,76 @@ describe('sessionSummary ordering', () => {
             'closed-newer',
             'closed-older'
         ])
+    })
+})
+
+describe('toSessionSummary', () => {
+    it('projects the resolved driver without leaking runtime handles', () => {
+        const summary = toSessionSummary({
+            id: 'session-1',
+            seq: 1,
+            createdAt: 1,
+            updatedAt: 10,
+            active: true,
+            activeAt: 10,
+            metadata: {
+                path: '/tmp/project',
+                host: 'machine',
+                driver: 'codex',
+                runtimeHandles: {
+                    codex: { sessionId: 'codex-session' }
+                }
+            },
+            metadataVersion: 1,
+            agentState: null,
+            agentStateVersion: 0,
+            thinking: false,
+            thinkingAt: 0,
+            model: 'gpt-5',
+            modelReasoningEffort: 'medium',
+            permissionMode: 'default',
+            collaborationMode: 'plan'
+        } as never)
+
+        expect(summary.metadata).toMatchObject({
+            path: '/tmp/project',
+            driver: 'codex'
+        })
+        expect(summary.resumeAvailable).toBe(true)
+        expect(summary.metadata && 'runtimeHandles' in summary.metadata).toBe(false)
+    })
+
+    it('keeps malformed runtime handles non-resumable without inventing a fallback driver', () => {
+        const summary = toSessionSummary({
+            id: 'session-2',
+            seq: 1,
+            createdAt: 1,
+            updatedAt: 10,
+            active: false,
+            activeAt: 10,
+            metadata: {
+                path: '/tmp/project',
+                host: 'machine',
+                driver: 'cursor',
+                lifecycleState: 'archived',
+                runtimeHandles: {
+                    cursor: { sessionId: 42 }
+                }
+            },
+            metadataVersion: 1,
+            agentState: null,
+            agentStateVersion: 0,
+            thinking: false,
+            thinkingAt: 0,
+            model: null,
+            modelReasoningEffort: null
+        } as never)
+
+        expect(summary.metadata).toMatchObject({
+            path: '/tmp/project',
+            driver: 'cursor'
+        })
+        expect(summary.lifecycleState).toBe('archived')
+        expect(summary.resumeAvailable).toBe(false)
     })
 })

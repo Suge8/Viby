@@ -10,7 +10,13 @@ import {
     TodosSchema
 } from '@viby/protocol/schemas'
 import { MACHINE_CAPABILITIES, SessionRecoveryPageSchema } from '@viby/protocol'
-import type { ClaudeReasoningEffort, CodexCollaborationMode, CodexReasoningEffort, ModelReasoningEffort, PermissionMode } from '@viby/protocol/types'
+import type {
+    ClaudeReasoningEffort,
+    CodexCollaborationMode,
+    CodexReasoningEffort,
+    ModelReasoningEffort,
+    PermissionMode
+} from '@viby/protocol/types'
 import { z } from 'zod'
 import { UsageSchema } from '@/claude/types'
 
@@ -28,6 +34,7 @@ export type {
     MessageSentFrom,
     Metadata,
     ModelReasoningEffort,
+    PiPermissionMode,
     Session,
     TeamSessionSpawnRole
 } from '@viby/protocol/types'

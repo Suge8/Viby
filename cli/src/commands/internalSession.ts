@@ -1,11 +1,5 @@
-import { authAndSetupMachineIfNeeded } from '@/ui/auth'
-import { initializeToken } from '@/ui/tokenInit'
-import { runClaude } from '@/claude/runClaude'
-import { runCodex } from '@/codex/runCodex'
-import { runCursor } from '@/cursor/runCursor'
-import { runGemini } from '@/gemini/runGemini'
-import { runOpencode } from '@/opencode/runOpencode'
-import { isPermissionModeAllowedForFlavor } from '@viby/protocol'
+import type { SessionHandoffSnapshot } from '@viby/protocol/types'
+import { isPermissionModeAllowedForDriver } from '@viby/protocol'
 import {
     ClaudeReasoningEffortSchema,
     CodexCollaborationModeSchema,
@@ -25,13 +19,30 @@ import type {
     CodexPermissionMode,
     CursorPermissionMode,
     GeminiPermissionMode,
-    OpencodePermissionMode
+    OpencodePermissionMode,
+    PiPermissionMode
 } from '@viby/protocol/types'
+import { runClaude } from '@/claude/runClaude'
+import { runCodex } from '@/codex/runCodex'
+import { runCursor } from '@/cursor/runCursor'
+import { runGemini } from '@/gemini/runGemini'
+import { runOpencode } from '@/opencode/runOpencode'
+import { authAndSetupMachineIfNeeded } from '@/ui/auth'
+import { initializeToken } from '@/ui/tokenInit'
 import type { CommandDefinition } from './types'
+import {
+    loadDriverSwitchHandoff,
+    parseDriverSwitchTarget,
+    type DriverSwitchTarget,
+} from '@/runner/driverSwitchHandoff'
+import { INTERNAL_SESSION_COMMAND } from './internalSessionContract'
 
-export const INTERNAL_SESSION_COMMAND = '__internal_spawn_session'
+type InternalAgentFlavor = 'claude' | 'codex' | 'cursor' | 'gemini' | 'opencode' | 'pi'
 
-type InternalAgentFlavor = 'claude' | 'codex' | 'cursor' | 'gemini' | 'opencode'
+type DriverSwitchBootstrap = {
+    targetDriver: DriverSwitchTarget
+    handoffSnapshot: SessionHandoffSnapshot
+}
 
 type InternalSessionOptions = {
     agent: InternalAgentFlavor
@@ -44,9 +55,15 @@ type InternalSessionOptions = {
     permissionMode?: SessionPermissionMode
     sessionRole?: TeamSessionSpawnRole
     collaborationMode?: SessionCollaborationMode
+    driverSwitch?: DriverSwitchBootstrap
 }
 
-function parseInternalSessionArgs(args: string[]): InternalSessionOptions {
+type ParsedInternalSessionArgs = Omit<InternalSessionOptions, 'driverSwitch'> & {
+    driverSwitchTarget?: DriverSwitchTarget
+    driverSwitchHandoffFile?: string
+}
+
+export function parseInternalSessionArgs(args: string[]): ParsedInternalSessionArgs {
     let agent: InternalAgentFlavor | null = null
     let startedBy: 'runner' | 'terminal' = 'runner'
     let startingMode: 'local' | 'remote' | undefined
@@ -57,6 +74,8 @@ function parseInternalSessionArgs(args: string[]): InternalSessionOptions {
     let permissionMode: SessionPermissionMode | undefined
     let sessionRole: TeamSessionSpawnRole | undefined
     let collaborationMode: SessionCollaborationMode | undefined
+    let driverSwitchTarget: DriverSwitchTarget | undefined
+    let driverSwitchHandoffFile: string | undefined
 
     for (let index = 0; index < args.length; index += 1) {
         const arg = args[index]
@@ -69,6 +88,7 @@ function parseInternalSessionArgs(args: string[]): InternalSessionOptions {
                 && value !== 'cursor'
                 && value !== 'gemini'
                 && value !== 'opencode'
+                && value !== 'pi'
             ) {
                 throw new Error('Missing or invalid --agent value')
             }
@@ -183,6 +203,26 @@ function parseInternalSessionArgs(args: string[]): InternalSessionOptions {
             continue
         }
 
+        if (arg === '--driver-switch-target') {
+            const value = args[index + 1]
+            if (!value) {
+                throw new Error('Missing --driver-switch-target value')
+            }
+            driverSwitchTarget = parseDriverSwitchTarget(value)
+            index += 1
+            continue
+        }
+
+        if (arg === '--driver-switch-handoff-file') {
+            const value = args[index + 1]
+            if (!value) {
+                throw new Error('Missing --driver-switch-handoff-file value')
+            }
+            driverSwitchHandoffFile = value
+            index += 1
+            continue
+        }
+
         throw new Error(`Unknown internal session argument: ${arg}`)
     }
 
@@ -200,13 +240,60 @@ function parseInternalSessionArgs(args: string[]): InternalSessionOptions {
         modelReasoningEffort,
         permissionMode,
         sessionRole,
-        collaborationMode
+        collaborationMode,
+        driverSwitchTarget,
+        driverSwitchHandoffFile
+    }
+}
+
+export async function resolveInternalSessionOptions(args: string[]): Promise<InternalSessionOptions> {
+    const parsed = parseInternalSessionArgs(args)
+    const driverSwitch = await resolveDriverSwitchBootstrap(parsed)
+
+    return {
+        agent: parsed.agent,
+        startedBy: parsed.startedBy,
+        startingMode: parsed.startingMode,
+        vibySessionId: parsed.vibySessionId,
+        resumeSessionId: parsed.resumeSessionId,
+        model: parsed.model,
+        modelReasoningEffort: parsed.modelReasoningEffort,
+        permissionMode: parsed.permissionMode,
+        sessionRole: parsed.sessionRole,
+        collaborationMode: parsed.collaborationMode,
+        driverSwitch
     }
 }
 
 async function prepareInternalSessionStart(): Promise<void> {
     await initializeToken()
     await authAndSetupMachineIfNeeded()
+}
+
+async function resolveDriverSwitchBootstrap(
+    options: ParsedInternalSessionArgs
+): Promise<DriverSwitchBootstrap | undefined> {
+    const {
+        agent,
+        driverSwitchTarget,
+        driverSwitchHandoffFile
+    } = options
+
+    if (driverSwitchTarget === undefined && driverSwitchHandoffFile === undefined) {
+        return undefined
+    }
+    if (driverSwitchTarget === undefined) {
+        throw new Error('Missing --driver-switch-target value')
+    }
+    if (driverSwitchHandoffFile === undefined) {
+        throw new Error('Missing --driver-switch-handoff-file value')
+    }
+
+    return await loadDriverSwitchHandoff({
+        targetDriver: driverSwitchTarget,
+        handoffFilePath: driverSwitchHandoffFile,
+        expectedAgent: agent
+    })
 }
 
 function resolvePermissionModeForAgent(
@@ -216,7 +303,7 @@ function resolvePermissionModeForAgent(
     if (!permissionMode) {
         return undefined
     }
-    if (!isPermissionModeAllowedForFlavor(permissionMode, agent)) {
+    if (!isPermissionModeAllowedForDriver(permissionMode, agent)) {
         throw new Error(`Invalid permission mode for ${agent}`)
     }
     return permissionMode
@@ -257,6 +344,13 @@ function resolveOpencodePermissionMode(
     return resolved as OpencodePermissionMode | undefined
 }
 
+function resolvePiPermissionMode(
+    permissionMode: SessionPermissionMode | undefined
+): PiPermissionMode | undefined {
+    const resolved = resolvePermissionModeForAgent('pi', permissionMode)
+    return resolved as PiPermissionMode | undefined
+}
+
 function resolveCodexCollaborationMode(
     agent: InternalAgentFlavor,
     collaborationMode: SessionCollaborationMode | undefined
@@ -268,6 +362,32 @@ function resolveCodexCollaborationMode(
         throw new Error('Collaboration mode is only supported for Codex')
     }
     return collaborationMode
+}
+
+async function runInternalPi(options: InternalSessionOptions): Promise<void> {
+    const piModule = await import('@/pi/runPi') as {
+        runPi: (opts: {
+            startedBy?: 'runner' | 'terminal'
+            vibySessionId?: string
+            sessionRole?: TeamSessionSpawnRole
+            permissionMode?: PiPermissionMode
+            model?: string
+            modelReasoningEffort?: SessionModelReasoningEffort
+        }) => Promise<void>
+    }
+
+    if (options.resumeSessionId) {
+        throw new Error('Pi does not support provider resume session ids; Viby transcript recovery is the only supported continuity path')
+    }
+
+    await piModule.runPi({
+        startedBy: options.startedBy,
+        vibySessionId: options.vibySessionId,
+        sessionRole: options.sessionRole,
+        permissionMode: resolvePiPermissionMode(options.permissionMode),
+        model: options.model,
+        modelReasoningEffort: options.modelReasoningEffort
+    })
 }
 
 async function runInternalClaude(options: InternalSessionOptions): Promise<void> {
@@ -293,7 +413,8 @@ async function runInternalClaude(options: InternalSessionOptions): Promise<void>
         permissionMode,
         model: options.model,
         modelReasoningEffort,
-        claudeArgs
+        claudeArgs,
+        driverSwitchHandoff: options.driverSwitch?.handoffSnapshot
     })
 }
 
@@ -318,7 +439,8 @@ async function runInternalCodex(options: InternalSessionOptions): Promise<void> 
         resumeSessionId: options.resumeSessionId,
         model: options.model,
         modelReasoningEffort,
-        collaborationMode
+        collaborationMode,
+        driverSwitchHandoff: options.driverSwitch?.handoffSnapshot
     })
 }
 
@@ -360,7 +482,7 @@ export const internalSessionCommand: CommandDefinition = {
     name: INTERNAL_SESSION_COMMAND,
     requiresRuntimeAssets: true,
     run: async ({ commandArgs }) => {
-        const options = parseInternalSessionArgs(commandArgs)
+        const options = await resolveInternalSessionOptions(commandArgs)
 
         await prepareInternalSessionStart()
 
@@ -379,6 +501,9 @@ export const internalSessionCommand: CommandDefinition = {
                 return
             case 'opencode':
                 await runInternalOpencode(options)
+                return
+            case 'pi':
+                await runInternalPi(options)
                 return
         }
     }

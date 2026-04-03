@@ -102,31 +102,51 @@ export class AgentSessionBase<Mode> {
         return JSON.stringify(currentMetadata) !== JSON.stringify(nextMetadata)
     }
 
-    private bindSessionId = (sessionId: string): boolean => {
+    private normalizeSessionId(sessionId: string | null | undefined): string | null {
+        if (typeof sessionId !== 'string') {
+            return null
+        }
+
+        const trimmedSessionId = sessionId.trim()
+        return trimmedSessionId.length > 0 ? trimmedSessionId : null
+    }
+
+    private bindSessionId = (sessionId: string | null | undefined): boolean => {
+        const normalizedSessionId = this.normalizeSessionId(sessionId)
+        if (!normalizedSessionId) {
+            logger.debug(`[${this.sessionLabel}] Ignored malformed ${this.sessionIdLabel} session ID update`, sessionId)
+            return false
+        }
+
         const previousSessionId = this.sessionId;
-        const sessionIdChanged = previousSessionId !== sessionId;
-        const shouldSyncMetadata = sessionIdChanged || this.shouldSyncSessionIdMetadata(sessionId);
+        const sessionIdChanged = previousSessionId !== normalizedSessionId;
+        const shouldSyncMetadata = sessionIdChanged || this.shouldSyncSessionIdMetadata(normalizedSessionId);
 
         if (!shouldSyncMetadata) {
             return false;
         }
 
-        this.sessionId = sessionId;
-        this.client.updateMetadata((metadata) => this.applySessionIdToMetadata(metadata, sessionId), {
+        this.sessionId = normalizedSessionId;
+        this.client.updateMetadata((metadata) => this.applySessionIdToMetadata(metadata, normalizedSessionId), {
             touchUpdatedAt: false
         });
         const transitionLabel = sessionIdChanged && previousSessionId
-            ? `${previousSessionId} -> ${sessionId}`
-            : sessionId;
+            ? `${previousSessionId} -> ${normalizedSessionId}`
+            : normalizedSessionId;
         logger.debug(`[${this.sessionLabel}] ${this.sessionIdLabel} session ID synced to metadata: ${transitionLabel}`);
         return sessionIdChanged;
     };
 
-    onSessionFound = (sessionId: string) => {
-        this.bindSessionId(sessionId);
+    onSessionFound = (sessionId: string | null | undefined) => {
+        const normalizedSessionId = this.normalizeSessionId(sessionId)
+        if (!normalizedSessionId) {
+            return
+        }
+
+        this.bindSessionId(normalizedSessionId);
 
         for (const callback of this.sessionFoundCallbacks) {
-            callback(sessionId);
+            callback(normalizedSessionId);
         }
     };
 

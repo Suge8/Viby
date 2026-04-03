@@ -15,7 +15,6 @@ import { configuration } from '@/configuration';
 import packageJson from '../../package.json';
 import { getEnvironmentInfo } from '@/ui/doctor';
 import { spawnVibyCLI } from '@/utils/spawnVibyCLI';
-import { INTERNAL_SESSION_COMMAND } from '@/commands/internalSession';
 import { writeRunnerState, RunnerLocallyPersistedState, readRunnerState, acquireRunnerLock, releaseRunnerLock } from '@/persistence';
 import { isProcessAlive, isWindows } from '@/utils/process';
 import { withRetry } from '@/utils/time';
@@ -30,6 +29,9 @@ import { hashRunnerCliApiToken } from './runnerIdentity';
 import { stopRunnerManagedSessions, stopTrackedSessionProcess } from './managedSessionLifecycle';
 import { getInstalledCliMtimeMs } from './cliInstallStamp';
 import { startRunnerHeartbeat } from './runnerHeartbeat';
+import { writeDriverSwitchHandoffTransport, type DriverSwitchHandoffTransport } from './driverSwitchHandoff';
+import { buildInternalSessionArgs } from './runArgs';
+import { removeTrackedSession, requestTrackedSessionStop } from './trackedSessionRegistry';
 
 export async function startRunner(): Promise<void> {
   // We don't have cleanup function at the time of server construction
@@ -134,6 +136,7 @@ export async function startRunner(): Promise<void> {
 
     // Setup state - key by PID
     const pidToTrackedSession = new Map<number, TrackedSession>();
+    const stopRequestedSessionPids = new Set<number>();
 
     // Session spawning awaiter system
     const pidToAwaiter = new Map<number, (session: TrackedSession) => void>();
@@ -311,6 +314,17 @@ export async function startRunner(): Promise<void> {
         await cleanupWorktree();
       };
 
+      let driverSwitchTransport: DriverSwitchHandoffTransport | null = null;
+      const cleanupDriverSwitchTransport = async () => {
+        if (!driverSwitchTransport) {
+          return;
+        }
+
+        const transport = driverSwitchTransport;
+        driverSwitchTransport = null;
+        await transport.cleanup();
+      };
+
       try {
 
         // Resolve authentication token if provided
@@ -346,36 +360,36 @@ export async function startRunner(): Promise<void> {
           };
         }
 
-        const args = [
-          INTERNAL_SESSION_COMMAND,
-          '--agent',
-          agent,
-          '--starting-mode',
-          'remote',
-          '--started-by',
-          RUNNER_MANAGED_STARTED_BY
-        ];
-        if (options.resumeSessionId) {
-          args.push('--resume-session-id', options.resumeSessionId);
+        if (options.driverSwitch) {
+          try {
+            driverSwitchTransport = await writeDriverSwitchHandoffTransport(options.driverSwitch);
+          } catch (error) {
+            const errorMessage = `Driver switch transport failed: ${formatSpawnError(error)}`;
+            logger.debug('[RUNNER RUN] Failed to materialize driver switch handoff transport', error);
+            reportSpawnOutcomeToHub?.({
+              type: 'error',
+              details: {
+                message: errorMessage
+              }
+            });
+            await maybeCleanupWorktree('driver-switch-transport-error');
+            return {
+              type: 'error',
+              errorMessage
+            };
+          }
         }
-        if (sessionId) {
-          args.push('--viby-session-id', sessionId);
-        }
-        if (options.permissionMode) {
-          args.push('--permission-mode', options.permissionMode);
-        }
-        if (options.sessionRole) {
-          args.push('--session-role', options.sessionRole);
-        }
-        if (options.model && agent !== 'opencode') {
-          args.push('--model', options.model);
-        }
-        if (options.modelReasoningEffort && (agent === 'codex' || agent === 'claude')) {
-          args.push('--model-reasoning-effort', options.modelReasoningEffort);
-        }
-        if (options.collaborationMode && agent === 'codex') {
-          args.push('--collaboration-mode', options.collaborationMode);
-        }
+
+        const args = buildInternalSessionArgs(agent, {
+          resumeSessionId: options.resumeSessionId,
+          sessionId,
+          permissionMode: options.permissionMode,
+          sessionRole: options.sessionRole,
+          model: options.model,
+          modelReasoningEffort: options.modelReasoningEffort,
+          collaborationMode: options.collaborationMode,
+          driverSwitchTransport
+        });
 
         const MAX_TAIL_CHARS = 4000;
         let stderrTail = '';
@@ -430,6 +444,11 @@ export async function startRunner(): Promise<void> {
               message: errorMessage
             }
           });
+          try {
+            await cleanupDriverSwitchTransport();
+          } catch (cleanupError) {
+            logger.debug('[RUNNER RUN] Failed to cleanup driver switch handoff after no-pid spawn failure', cleanupError);
+          }
           await maybeCleanupWorktree('no-pid');
           return {
             type: 'error',
@@ -557,10 +576,41 @@ export async function startRunner(): Promise<void> {
         } else {
           reportSpawnOutcomeToHub?.({ type: 'success' });
         }
+
+        try {
+          await cleanupDriverSwitchTransport();
+        } catch (error) {
+          const cleanupErrorMessage = `Driver switch transport cleanup failed: ${formatSpawnError(error)}`;
+          logger.debug('[RUNNER RUN] Failed to cleanup driver switch handoff transport', error);
+          if (spawnResult.type === 'success') {
+            await stopTrackedSessionProcess(trackedSession);
+            pidToTrackedSession.delete(pid);
+          }
+          reportSpawnOutcomeToHub?.({
+            type: 'error',
+            details: {
+              message: cleanupErrorMessage,
+              pid,
+              exitCode: observedExitCode,
+              signal: observedExitSignal
+            }
+          });
+          await maybeCleanupWorktree('driver-switch-cleanup-error');
+          return {
+            type: 'error',
+            errorMessage: cleanupErrorMessage
+          };
+        }
+
         return spawnResult;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.debug('[RUNNER RUN] Failed to spawn session:', error);
+        try {
+          await cleanupDriverSwitchTransport();
+        } catch (cleanupError) {
+          logger.debug('[RUNNER RUN] Failed to cleanup driver switch handoff after spawn exception', cleanupError);
+        }
         await maybeCleanupWorktree('exception');
         reportSpawnOutcomeToHub?.({
           type: 'error',
@@ -584,6 +634,11 @@ export async function startRunner(): Promise<void> {
         if (session.vibySessionId === sessionId ||
           (sessionId.startsWith('PID-') && pid === parseInt(sessionId.replace('PID-', '')))) {
 
+          if (!requestTrackedSessionStop(stopRequestedSessionPids, pid)) {
+            logger.debug(`[RUNNER RUN] Stop already requested for session ${sessionId}`);
+            return true;
+          }
+
           void stopTrackedSessionProcess(session)
             .then((stopped) => {
               const runnerManaged = session.startedBy === RUNNER_MANAGED_STARTED_BY;
@@ -596,6 +651,7 @@ export async function startRunner(): Promise<void> {
                 return;
               }
 
+              stopRequestedSessionPids.delete(pid);
               logger.debug(
                 runnerManaged
                   ? `[RUNNER RUN] Failed to kill session ${sessionId}`
@@ -603,6 +659,7 @@ export async function startRunner(): Promise<void> {
               );
             })
             .catch((error) => {
+              stopRequestedSessionPids.delete(pid);
               const runnerManaged = session.startedBy === RUNNER_MANAGED_STARTED_BY;
               logger.debug(
                 runnerManaged
@@ -612,8 +669,7 @@ export async function startRunner(): Promise<void> {
               );
             });
 
-          pidToTrackedSession.delete(pid);
-          logger.debug(`[RUNNER RUN] Removed session ${sessionId} from tracking`);
+          logger.debug(`[RUNNER RUN] Stop requested for session ${sessionId}; keeping tracking until exit`);
           return true;
         }
       }
@@ -625,7 +681,7 @@ export async function startRunner(): Promise<void> {
     // Handle child process exit
     const onChildExited = (pid: number) => {
       logger.debug(`[RUNNER RUN] Removing exited process PID ${pid} from tracking`);
-      pidToTrackedSession.delete(pid);
+      removeTrackedSession(pidToTrackedSession, stopRequestedSessionPids, pid);
       pidToAwaiter.delete(pid);
       pidToErrorAwaiter.delete(pid);
     };
@@ -753,7 +809,7 @@ export async function startRunner(): Promise<void> {
       startedWithCliMtimeMs,
       getTrackedSessionPids: () => pidToTrackedSession.keys(),
       removeTrackedSession: (pid) => {
-        pidToTrackedSession.delete(pid);
+        removeTrackedSession(pidToTrackedSession, stopRequestedSessionPids, pid);
       },
       requestShutdown: (source, errorMessage) => {
         requestShutdown(source, errorMessage);
@@ -781,7 +837,7 @@ export async function startRunner(): Promise<void> {
 
       const managedSessionStopResult = await stopRunnerManagedSessions(pidToTrackedSession.values());
       for (const pid of managedSessionStopResult.stoppedPids) {
-        pidToTrackedSession.delete(pid);
+        removeTrackedSession(pidToTrackedSession, stopRequestedSessionPids, pid);
       }
       if (managedSessionStopResult.stoppedPids.length > 0) {
         logger.debug(

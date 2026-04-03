@@ -1,16 +1,18 @@
 import type { CodexCollaborationMode, ModelReasoningEffort, PermissionMode } from './modes'
-import type { Session, WorktreeMetadata } from './schemas'
+import type { Session, SessionDriver, WorktreeMetadata } from './schemas'
 import type { SessionSummaryTeam, SessionTeamContext } from './teamSchemas'
 import {
     createEmptySessionMessageActivity,
     type SessionActivityKind,
     type SessionMessageActivity
 } from './sessionActivity'
+import { getPendingRequestsCount } from './sessionTurnState'
 import {
     getSessionLifecycleState,
     getSessionResumeToken,
     type SessionLifecycleState
 } from './sessionLifecycle'
+import { resolveSessionDriver } from './sessionDriver'
 
 export type SessionSummaryMetadata = {
     name?: string
@@ -20,7 +22,7 @@ export type SessionSummaryMetadata = {
         text: string
         updatedAt: number
     }
-    flavor?: string | null
+    driver?: SessionDriver | null
     worktree?: WorktreeMetadata
 }
 
@@ -89,7 +91,7 @@ export function compareSessionSummaries(
 }
 
 export function toSessionSummary(session: Session, messageActivity?: SessionMessageActivity): SessionSummary {
-    const pendingRequestsCount = session.agentState?.requests ? Object.keys(session.agentState.requests).length : 0
+    const pendingRequestsCount = getPendingRequestsCount(session.agentState)
     const normalizedMessageActivity = messageActivity ?? createEmptySessionMessageActivity()
     // Session ordering must only follow stable session lifecycle timestamps and
     // completed reply activity. Auto title/summary metadata can change mid-turn
@@ -102,6 +104,7 @@ export function toSessionSummary(session: Session, messageActivity?: SessionMess
         latestCompletedReplyAt
     )
     const updatedAt = resolveSessionSummaryUpdatedAt(session.updatedAt, latestCompletedReplyAt)
+    const resolvedDriver = resolveSessionDriver(session.metadata)
 
     const metadata: SessionSummaryMetadata | null = session.metadata ? {
         name: session.metadata.name,
@@ -111,7 +114,7 @@ export function toSessionSummary(session: Session, messageActivity?: SessionMess
             text: session.metadata.summary.text,
             updatedAt: session.metadata.summary.updatedAt
         } : undefined,
-        flavor: session.metadata.flavor ?? null,
+        driver: resolvedDriver,
         worktree: session.metadata.worktree
     } : null
 

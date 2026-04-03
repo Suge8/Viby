@@ -27,24 +27,53 @@ export function unwrapRoleWrappedRecordEnvelope(value: unknown): RoleWrappedReco
     return null
 }
 
-export function extractCodexMessageItemId(value: unknown): string | null {
-    const record = unwrapRoleWrappedRecordEnvelope(value)
-    if (!record || record.role !== 'agent') {
-        return null
-    }
+function readNonEmptyString(value: unknown): string | null {
+    return typeof value === 'string' && value.length > 0 ? value : null
+}
 
-    if (!isObject(record.content) || record.content.type !== 'codex') {
-        return null
-    }
-
-    const data = record.content.data
+function extractCodexAssistantMessageStreamId(content: Record<string, unknown>): string | null {
+    const data = content.data
     if (!isObject(data) || data.type !== 'message') {
         return null
     }
 
-    return typeof data.itemId === 'string' && data.itemId.length > 0
-        ? data.itemId
+    return readNonEmptyString(data.itemId)
+}
+
+function extractPiAssistantMessageStreamId(content: Record<string, unknown>): string | null {
+    const data = content.data
+    if (!isObject(data) || data.type !== 'assistant' || !isObject(data.message)) {
+        return null
+    }
+
+    return buildPiAssistantStreamId(data.message.responseId, data.message.timestamp)
+}
+
+export function buildPiAssistantStreamId(responseId: unknown, timestamp: unknown): string | null {
+    const explicitResponseId = readNonEmptyString(responseId)
+    if (explicitResponseId) {
+        return explicitResponseId
+    }
+
+    return typeof timestamp === 'number' && Number.isFinite(timestamp)
+        ? `pi-assistant-${timestamp}`
         : null
+}
+
+export function extractAssistantMessageStreamId(value: unknown): string | null {
+    const record = unwrapRoleWrappedRecordEnvelope(value)
+    if (!record || record.role !== 'agent' || !isObject(record.content)) {
+        return null
+    }
+
+    switch (record.content.type) {
+        case 'codex':
+            return extractCodexAssistantMessageStreamId(record.content)
+        case 'output':
+            return extractPiAssistantMessageStreamId(record.content)
+        default:
+            return null
+    }
 }
 
 export type { RoleWrappedRecord }

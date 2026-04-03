@@ -8,13 +8,14 @@ import type { CodexSession } from './session';
 import { parseCodexCliOverrides } from './utils/codexCliOverrides';
 import { bootstrapSession } from '@/agent/sessionFactory';
 import { createModeChangeHandler, createRunnerLifecycle, setControlledByUser } from '@/agent/runnerLifecycle';
-import { assertSessionConfigPayload, resolvePermissionModeForFlavor } from '@/agent/providerConfig';
-import { isPermissionModeAllowedForFlavor } from '@viby/protocol';
+import { assertSessionConfigPayload, resolvePermissionModeForDriver } from '@/agent/providerConfig';
+import { isPermissionModeAllowedForDriver, type SessionHandoffSnapshot } from '@viby/protocol';
 import type { CodexReasoningEffort } from '@viby/protocol/types';
 import { CodexCollaborationModeSchema, CodexReasoningEffortSchema } from '@viby/protocol/schemas';
 import { formatMessageWithAttachments } from '@/utils/attachmentFormatter';
 import { getInvokedCwd } from '@/utils/invokedCwd';
-import { resolveTeamRolePromptContract } from '@/agent/teamPromptContract';
+import { mergePromptSegments, resolveTeamRolePromptContract } from '@/agent/teamPromptContract';
+import { createPendingDriverSwitchHandoffState } from '@/agent/driverSwitchHandoffState';
 
 export { emitReadyIfIdle } from '@/agent/emitReadyIfIdle';
 
@@ -28,17 +29,21 @@ export async function runCodex(opts: {
     model?: string;
     modelReasoningEffort?: CodexReasoningEffort | null;
     collaborationMode?: EnhancedMode['collaborationMode'];
+    driverSwitchHandoff?: SessionHandoffSnapshot;
 }): Promise<void> {
     const workingDirectory = getInvokedCwd();
     const startedBy = opts.startedBy ?? 'terminal';
 
     logger.debug(`[codex] Starting with options: startedBy=${startedBy}`);
+    if (opts.driverSwitchHandoff) {
+        logger.debug('[codex] Loaded driver switch handoff for Codex bootstrap')
+    }
 
     let state: AgentState = {
         controlledByUser: false
     };
     const { api, session } = await bootstrapSession({
-        flavor: 'codex',
+        driver: 'codex',
         sessionId: opts.vibySessionId,
         startedBy,
         workingDirectory,
@@ -60,6 +65,7 @@ export async function runCodex(opts: {
         collaborationMode: mode.collaborationMode,
         developerInstructions: mode.developerInstructions
     }));
+    const pendingDriverSwitchHandoff = createPendingDriverSwitchHandoffState(opts.driverSwitchHandoff);
 
     const codexCliOverrides = parseCodexCliOverrides(opts.codexArgs);
     const sessionWrapperRef: { current: CodexSession | null } = { current: null };
@@ -99,7 +105,7 @@ export async function runCodex(opts: {
 
     session.onUserMessage((message) => {
         const sessionPermissionMode = sessionWrapperRef.current?.getPermissionMode();
-        if (sessionPermissionMode && isPermissionModeAllowedForFlavor(sessionPermissionMode, 'codex')) {
+        if (sessionPermissionMode && isPermissionModeAllowedForDriver(sessionPermissionMode, 'codex')) {
             currentPermissionMode = sessionPermissionMode as PermissionMode;
         }
         const sessionModel = sessionWrapperRef.current?.getModel();
@@ -122,14 +128,21 @@ export async function runCodex(opts: {
             `collaborationMode: ${currentCollaborationMode}`
         );
 
+        const formattedText = formatMessageWithAttachments(message.content.text, message.content.attachments);
+        const driverSwitchInstructions = pendingDriverSwitchHandoff.consumeForUserMessage(formattedText);
+        if (driverSwitchInstructions) {
+            logger.debug('[Codex] Consuming pending driver switch handoff on the first real user turn');
+        }
         const enhancedMode: EnhancedMode = {
             permissionMode: messagePermissionMode ?? 'default',
             model: currentModel,
             modelReasoningEffort: currentModelReasoningEffort,
             collaborationMode: currentCollaborationMode,
-            developerInstructions: resolveTeamRolePromptContract(session.getTeamContextSnapshot())
+            developerInstructions: mergePromptSegments(
+                resolveTeamRolePromptContract(session.getTeamContextSnapshot()),
+                driverSwitchInstructions
+            )
         };
-        const formattedText = formatMessageWithAttachments(message.content.text, message.content.attachments);
         messageQueue.push(formattedText, enhancedMode);
     });
 
@@ -186,7 +199,7 @@ export async function runCodex(opts: {
         };
 
         if (config.permissionMode !== undefined) {
-            currentPermissionMode = resolvePermissionModeForFlavor(config.permissionMode, 'codex') as PermissionMode;
+            currentPermissionMode = resolvePermissionModeForDriver(config.permissionMode, 'codex') as PermissionMode;
         }
 
         if (config.model !== undefined) {
@@ -212,6 +225,7 @@ export async function runCodex(opts: {
         };
     });
 
+    let loopError: unknown = null;
     try {
         await loop({
             path: workingDirectory,
@@ -234,13 +248,20 @@ export async function runCodex(opts: {
             }
         });
     } catch (error) {
+        loopError = error;
         lifecycle.markCrash(error);
         logger.debug('[codex] Loop error:', error);
-    } finally {
-        const localFailure = sessionWrapperRef.current?.localLaunchFailure;
-        if (localFailure?.exitReason === 'exit') {
-            lifecycle.setExitCode(1);
-        }
-        await lifecycle.cleanupAndExit();
     }
+
+    const localFailure = sessionWrapperRef.current?.localLaunchFailure;
+    if (localFailure?.exitReason === 'exit') {
+        lifecycle.setExitCode(1);
+    }
+
+    if (loopError) {
+        await lifecycle.cleanup();
+        throw loopError;
+    }
+
+    await lifecycle.cleanupAndExit();
 }

@@ -7,7 +7,7 @@ import type { AgentState, TeamSessionSpawnRole } from '@/api/types';
 import type { CursorSession } from './session';
 import { bootstrapSession } from '@/agent/sessionFactory';
 import { createModeChangeHandler, createRunnerLifecycle, setControlledByUser } from '@/agent/runnerLifecycle';
-import { assertSessionConfigPayload, resolvePermissionModeForFlavor } from '@/agent/providerConfig';
+import { assertSessionConfigPayload, resolvePermissionModeForDriver } from '@/agent/providerConfig';
 import { formatMessageWithAttachments } from '@/utils/attachmentFormatter';
 import { getInvokedCwd } from '@/utils/invokedCwd';
 
@@ -37,7 +37,7 @@ export async function runCursor(opts: {
         controlledByUser: false
     };
     const { api, session } = await bootstrapSession({
-        flavor: 'cursor',
+        driver: 'cursor',
         sessionId: opts.vibySessionId,
         startedBy,
         workingDirectory,
@@ -97,7 +97,7 @@ export async function runCursor(opts: {
         const config = assertSessionConfigPayload(payload) as { permissionMode?: unknown };
 
         if (config.permissionMode !== undefined) {
-            currentPermissionMode = resolvePermissionModeForFlavor(config.permissionMode, 'cursor') as PermissionMode;
+            currentPermissionMode = resolvePermissionModeForDriver(config.permissionMode, 'cursor') as PermissionMode;
         }
 
         syncSessionMode();

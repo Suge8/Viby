@@ -110,6 +110,65 @@ beforeEach(() => {
 })
 
 describe('ApiMachineClient', () => {
+    it('forwards driver-switch spawn payloads through the machine RPC bridge', async () => {
+        const spawnSession = vi.fn(async () => ({
+            type: 'success' as const,
+            sessionId: 'session-switched'
+        }))
+        const client = new ApiMachineClient('token', createMachine())
+        client.setRPCHandlers({
+            spawnSession,
+            stopSession: vi.fn(() => true),
+            requestShutdown: vi.fn()
+        })
+
+        client.connect()
+        const socket = sockets[0]
+        expect(socket).toBeDefined()
+
+        const response = await new Promise<string>((resolve) => {
+            socket.emit('rpc-request', {
+                method: 'machine-test:spawn-viby-session',
+                params: JSON.stringify({
+                    directory: '/tmp/project',
+                    sessionId: 'session-1',
+                    agent: 'codex',
+                    driverSwitch: {
+                        targetDriver: 'codex',
+                        handoffSnapshot: {
+                            driver: 'claude',
+                            workingDirectory: '/tmp/project',
+                            liveConfig: {
+                                model: 'claude-sonnet',
+                                modelReasoningEffort: 'high',
+                                permissionMode: 'default'
+                            },
+                            history: [],
+                            attachments: []
+                        }
+                    }
+                })
+            }, resolve)
+        })
+
+        expect(spawnSession).toHaveBeenCalledWith(expect.objectContaining({
+            directory: '/tmp/project',
+            sessionId: 'session-1',
+            agent: 'codex',
+            driverSwitch: {
+                targetDriver: 'codex',
+                handoffSnapshot: expect.objectContaining({
+                    driver: 'claude',
+                    workingDirectory: '/tmp/project'
+                })
+            }
+        }))
+        expect(JSON.parse(response)).toEqual({
+            type: 'success',
+            sessionId: 'session-switched'
+        })
+    })
+
     it('keeps runner alive across transient hub disconnects', () => {
         const client = new ApiMachineClient('token', createMachine())
         const requestShutdown = vi.fn()

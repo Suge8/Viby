@@ -1,13 +1,14 @@
-import { isPermissionModeAllowedForFlavor } from '@viby/protocol';
+import { isPermissionModeAllowedForDriver } from '@viby/protocol';
 import { PermissionModeSchema } from '@viby/protocol/schemas';
-import type { AgentFlavor, SessionPermissionMode } from '@/api/types';
+import type { SessionDriver } from '@viby/protocol';
+import type { SessionPermissionMode } from '@/api/types';
 
-export function resolvePermissionModeForFlavor(
+export function resolvePermissionModeForDriver(
   value: unknown,
-  flavor: AgentFlavor
+  driver: SessionDriver
 ): SessionPermissionMode {
   const parsed = PermissionModeSchema.safeParse(value);
-  if (!parsed.success || !isPermissionModeAllowedForFlavor(parsed.data, flavor)) {
+  if (!parsed.success || !isPermissionModeAllowedForDriver(parsed.data, driver)) {
     throw new Error('Invalid permission mode');
   }
 

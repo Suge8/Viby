@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { emitReadyIfIdle } from '../runCodex';
 
 describe('emitReadyIfIdle', () => {
-    it('emits ready and notification when queue is idle', async () => {
+    it('emits ready only after the turn is idle', async () => {
         const sendReady = vi.fn();
         const notify = vi.fn();
 
@@ -58,7 +58,7 @@ describe('emitReadyIfIdle', () => {
         expect(sendReady).not.toHaveBeenCalled();
     });
 
-    it('rechecks idleness after state flush completes', async () => {
+    it('rechecks turn idleness after the pre-ready state flush completes', async () => {
         const sendReady = vi.fn();
         let hasPending = false;
 

@@ -1,4 +1,5 @@
 import { ApiClient, ApiSessionClient } from '@/lib';
+import { setSessionDriverRuntimeHandle } from '@viby/protocol';
 import { MessageQueue2 } from '@/utils/MessageQueue2';
 import { logger } from '@/ui/logger';
 import { AgentSessionBase } from '@/agent/sessionBase';
@@ -55,7 +56,7 @@ export class Session extends AgentSessionBase<EnhancedMode> {
             sessionIdLabel: 'Claude Code',
             applySessionIdToMetadata: (metadata, sessionId) => ({
                 ...metadata,
-                claudeSessionId: sessionId
+                ...setSessionDriverRuntimeHandle(metadata, 'claude', { sessionId })
             }),
             permissionMode: opts.permissionMode,
             model: opts.model,

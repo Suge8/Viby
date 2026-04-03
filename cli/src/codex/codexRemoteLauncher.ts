@@ -845,17 +845,21 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
                     logIfMissing: !this.currentThreadId
                 });
 
+                const turnMode = {
+                    ...message.mode,
+                    model: session.getModel() ?? message.mode.model,
+                    modelReasoningEffort: session.getModelReasoningEffort() ?? message.mode.modelReasoningEffort
+                };
+                if (turnMode.developerInstructions) {
+                    logger.debug('[Codex] Starting turn with developer instructions');
+                }
                 const turnParams = buildTurnStartParams({
                     threadId: this.currentThreadId,
                     message: message.message,
                     cwd: session.path,
-                    mode: {
-                        ...message.mode,
-                        model: session.getModel() ?? message.mode.model,
-                        modelReasoningEffort: session.getModelReasoningEffort() ?? message.mode.modelReasoningEffort
-                    },
+                    mode: turnMode,
                     cliOverrides: session.codexCliOverrides,
-                    developerInstructions: message.mode.developerInstructions
+                    developerInstructions: turnMode.developerInstructions
                 });
                 turnInFlight = true;
                 allowAnonymousTerminalEvent = false;
