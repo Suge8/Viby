@@ -46,9 +46,12 @@ localdocs/
 execplan/
 .ace-tool/
 .codex-tasks/
+.bg-shell/
 .viby-devremote/
 .viby-dev-remote.lock.json
 **/AGENTS.md
+docs/
+.taskmaster/
 
 # Generated npm bundle output (local)
 cli/npm/main/
@@ -60,3 +63,35 @@ desktop/src-tauri/binaries/viby-sidecar-*
 desktop/src-tauri/icons/
 desktop/src-tauri/gen/schemas/
 desktop/src-tauri/permissions/
+
+# ── GSD baseline (auto-generated) ──
+.gsd
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+*.code-workspace
+.env
+.env.*
+!.env.example
+node_modules/
+.next/
+dist/
+build/
+__pycache__/
+*.pyc
+.venv/
+venv/
+target/
+vendor/
+*.log
+.cache/
+tmp/
+.mux/
+.crush/
+.claude/
+.agents/
+.gsd.lock/
+.artifacts/
+.tmp/
