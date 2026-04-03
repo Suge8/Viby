@@ -556,8 +556,12 @@ function getTableNames(db: Database): string[] {
     ).all() as Array<{ name: string }>).map((row) => row.name)
 }
 
+function hasFlavorField(value: unknown): boolean {
+    return typeof value === 'object' && value !== null && 'flavor' in value
+}
+
 describe('store schema migration', () => {
-    it('migrates a v7 sessions table to v11 without losing session config state', async () => {
+    it('migrates a v7 sessions table to v12 without losing session config state', async () => {
         const dbPath = await createTempDbPath()
         createLegacySchemaV7(dbPath)
 
@@ -567,7 +571,7 @@ describe('store schema migration', () => {
             const userVersion = db.prepare('PRAGMA user_version').get() as { user_version: number }
             const sessionColumns = db.prepare('PRAGMA table_info(sessions)').all() as Array<{ name: string }>
 
-            expect(userVersion.user_version).toBe(11)
+            expect(userVersion.user_version).toBe(12)
             expect(sessionColumns.map((column) => column.name)).toEqual(
                 expect.arrayContaining(['permission_mode', 'collaboration_mode', 'next_message_seq'])
             )
@@ -587,6 +591,11 @@ describe('store schema migration', () => {
                 permissionMode: null,
                 collaborationMode: null
             })
+            expect(legacySession?.metadata).toMatchObject({
+                path: '/tmp/project',
+                driver: 'codex'
+            })
+            expect(hasFlavorField(legacySession?.metadata)).toBe(false)
 
             expect(store.sessions.setSessionPermissionMode('legacy-session', 'yolo')).toBe(true)
             expect(store.sessions.setSessionCollaborationMode('legacy-session', 'plan')).toBe(true)
@@ -602,7 +611,7 @@ describe('store schema migration', () => {
         }
     })
 
-    it('migrates a v8 sessions table to v11 and backfills next_message_seq', async () => {
+    it('migrates a v8 sessions table to v12, migrates metadata.driver, and backfills next_message_seq', async () => {
         const dbPath = await createTempDbPath()
         createLegacySchemaV8(dbPath)
 
@@ -612,7 +621,7 @@ describe('store schema migration', () => {
             const userVersion = db.prepare('PRAGMA user_version').get() as { user_version: number }
             const sessionColumns = db.prepare('PRAGMA table_info(sessions)').all() as Array<{ name: string }>
 
-            expect(userVersion.user_version).toBe(11)
+            expect(userVersion.user_version).toBe(12)
             expect(sessionColumns.map((column) => column.name)).toContain('next_message_seq')
             expect(getTableNames(db)).toEqual(expect.arrayContaining([
                 'team_projects',
@@ -621,6 +630,11 @@ describe('store schema migration', () => {
                 'team_tasks',
                 'team_events'
             ]))
+            expect(store.sessions.getSession('legacy-session-v8')?.metadata).toMatchObject({
+                path: '/tmp/project',
+                driver: 'claude'
+            })
+            expect(hasFlavorField(store.sessions.getSession('legacy-session-v8')?.metadata)).toBe(false)
 
             const message = store.messages.addMessage('legacy-session-v8', { role: 'user', content: [] })
             expect(message.seq).toBe(8)
@@ -629,7 +643,7 @@ describe('store schema migration', () => {
         }
     })
 
-    it('migrates a v9 store by adding manager teams tables without rebuilding session rows', async () => {
+    it('migrates a v9 store to v12 by adding manager teams tables without rebuilding session rows', async () => {
         const dbPath = await createTempDbPath()
         createLegacySchemaV9(dbPath)
 
@@ -638,7 +652,7 @@ describe('store schema migration', () => {
         try {
             const userVersion = db.prepare('PRAGMA user_version').get() as { user_version: number }
 
-            expect(userVersion.user_version).toBe(11)
+            expect(userVersion.user_version).toBe(12)
             expect(getTableNames(db)).toEqual(expect.arrayContaining([
                 'team_projects',
                 'team_roles',
@@ -651,7 +665,7 @@ describe('store schema migration', () => {
         }
     })
 
-    it('migrates a v10 store by backfilling role_id and seeding built-in role catalog', async () => {
+    it('migrates a v10 store to v12 by backfilling role_id, seeding built-in roles, and normalizing metadata.driver', async () => {
         const dbPath = await createTempDbPath()
         createLegacySchemaV10(dbPath)
 
@@ -661,12 +675,22 @@ describe('store schema migration', () => {
             const userVersion = db.prepare('PRAGMA user_version').get() as { user_version: number }
             const memberColumns = db.prepare('PRAGMA table_info(team_members)').all() as Array<{ name: string }>
 
-            expect(userVersion.user_version).toBe(11)
+            expect(userVersion.user_version).toBe(12)
             expect(memberColumns.map((column) => column.name)).toContain('role_id')
             expect(store.teams.getMember('member-1')).toMatchObject({
                 role: 'implementer',
                 roleId: 'implementer'
             })
+            expect(store.sessions.getSession('manager-session')?.metadata).toMatchObject({
+                path: '/tmp/project',
+                driver: 'codex'
+            })
+            expect(store.sessions.getSession('member-session')?.metadata).toMatchObject({
+                path: '/tmp/project',
+                driver: 'codex'
+            })
+            expect(hasFlavorField(store.sessions.getSession('manager-session')?.metadata)).toBe(false)
+            expect(hasFlavorField(store.sessions.getSession('member-session')?.metadata)).toBe(false)
             expect(store.teams.listProjectRoles('project-1')).toEqual(expect.arrayContaining([
                 expect.objectContaining({
                     id: 'implementer',
@@ -684,14 +708,14 @@ describe('store schema migration', () => {
         }
     })
 
-    it('still rejects unsupported schema versions outside the v7 to v8 migration path', async () => {
+    it('still rejects unsupported schema versions outside the supported auto-migration path', async () => {
         const dbPath = await createTempDbPath()
         const db = new Database(dbPath, { create: true, readwrite: true, strict: true })
         db.exec('PRAGMA user_version = 6')
         db.close()
 
         expect(() => new Store(dbPath)).toThrow(
-            'This build only runs the 7 -> 11, 8 -> 11, 9 -> 11, and 10 -> 11 migrations automatically.'
+            'This build only runs the 7 -> 12, 8 -> 12, 9 -> 12, 10 -> 12, and 11 -> 12 migrations automatically.'
         )
     })
 })

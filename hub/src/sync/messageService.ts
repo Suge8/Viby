@@ -1,11 +1,34 @@
 import {
     getSessionActivityKind,
-    shouldMessageAdvanceSessionUpdatedAt
+    shouldMessageAdvanceSessionUpdatedAt,
+    type SessionDriver
 } from '@viby/protocol'
 import type { AttachmentMetadata, DecryptedMessage, MessageMeta, SessionMessageActivity } from '@viby/protocol/types'
 import type { Server } from 'socket.io'
 import type { Store } from '../store'
 import { EventPublisher } from './eventPublisher'
+
+type DriverSwitchedEvent = {
+    type: 'driver-switched'
+    previousDriver: SessionDriver
+    targetDriver: SessionDriver
+}
+
+function createDriverSwitchedMessageContent(event: DriverSwitchedEvent): {
+    role: 'agent'
+    content: {
+        type: 'event'
+        data: DriverSwitchedEvent
+    }
+} {
+    return {
+        role: 'agent',
+        content: {
+            type: 'event',
+            data: event
+        }
+    }
+}
 
 export class MessageService {
     constructor(
@@ -113,6 +136,13 @@ export class MessageService {
                 sentFrom: payload.sentFrom ?? 'webapp'
             }
         })
+    }
+
+    async appendDriverSwitchedEvent(
+        sessionId: string,
+        event: DriverSwitchedEvent
+    ): Promise<void> {
+        await this.appendMessage(sessionId, createDriverSwitchedMessageContent(event))
     }
 
     private async appendMessage(sessionId: string, content: unknown, localId?: string): Promise<void> {

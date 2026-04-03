@@ -15,6 +15,11 @@ import { TeamCoordinatorService } from './teamCoordinatorService'
 const TEAM_ARCHIVED_BY = 'team'
 const TEAM_MEMBER_ARCHIVE_REASON = 'Archived by manager teams'
 const TEAM_PROJECT_ARCHIVE_REASON = 'Manager project archived'
+const TEAM_MEMBER_DELETE_UNAVAILABLE_CODE = 'team_member_delete_unavailable'
+const TEAM_MEMBER_DELETE_UNAVAILABLE_MESSAGE = 'Manager-controlled member sessions can only be deleted by deleting the manager session'
+const TEAM_MEMBER_RESTORE_UNAVAILABLE_CODE = 'team_member_restore_unavailable'
+const TEAM_PROJECT_DELETE_REQUIRES_INACTIVE_CODE = 'team_project_delete_requires_inactive_sessions'
+const TEAM_PROJECT_DELETE_REQUIRES_INACTIVE_MESSAGE = 'Archive the manager project before deleting it so all team sessions are inactive'
 const TEAM_LIFECYCLE_HISTORY_LIMIT = 200
 
 export type TeamLifecycleActor = {
@@ -56,8 +61,17 @@ export class TeamLifecycleService {
         return this.teamCoordinatorService.getProjectHistory(projectId, TEAM_LIFECYCLE_HISTORY_LIMIT)
     }
 
-    async archiveSession(sessionId: string): Promise<Session> { return await this.archiveSessionWithActor(sessionId, DEFAULT_LIFECYCLE_ACTOR) }
-    async unarchiveSession(sessionId: string): Promise<Session> { return await this.unarchiveSessionWithActor(sessionId, DEFAULT_LIFECYCLE_ACTOR) }
+    async archiveSession(sessionId: string): Promise<Session> {
+        return await this.archiveSessionWithActor(sessionId, DEFAULT_LIFECYCLE_ACTOR)
+    }
+
+    async unarchiveSession(sessionId: string): Promise<Session> {
+        return await this.unarchiveSessionWithActor(sessionId, DEFAULT_LIFECYCLE_ACTOR)
+    }
+
+    async deleteSession(sessionId: string): Promise<void> {
+        return await this.deleteSessionWithActor(sessionId, DEFAULT_LIFECYCLE_ACTOR)
+    }
 
     async archiveSessionWithActor(sessionId: string, actor: TeamLifecycleActor): Promise<Session> {
         const target = this.resolveSessionTarget(sessionId)
@@ -88,6 +102,24 @@ export class TeamLifecycleService {
         }
 
         return await this.restoreMember(target.member, actor)
+    }
+
+    async deleteSessionWithActor(sessionId: string, _actor: TeamLifecycleActor): Promise<void> {
+        const target = this.resolveSessionTarget(sessionId)
+        if (!target) {
+            await this.sessionCache.deleteSession(sessionId)
+            return
+        }
+
+        if (target.kind === 'member') {
+            throw new TeamLifecycleError(
+                TEAM_MEMBER_DELETE_UNAVAILABLE_MESSAGE,
+                TEAM_MEMBER_DELETE_UNAVAILABLE_CODE,
+                409
+            )
+        }
+
+        await this.deleteProjectSessions(target.projectId)
     }
 
     private resolveSessionTarget(sessionId: string): TeamSessionTarget | null {
@@ -217,7 +249,7 @@ export class TeamLifecycleService {
         if (member.membershipState === 'removed' || member.membershipState === 'superseded') {
             throw new TeamLifecycleError(
                 'Historical members can only return through an explicit revision, not session restore',
-                'team_member_restore_unavailable',
+                TEAM_MEMBER_RESTORE_UNAVAILABLE_CODE,
                 409
             )
         }
@@ -255,6 +287,37 @@ export class TeamLifecycleService {
         }
 
         return this.requireSession(member.sessionId)
+    }
+
+    private async deleteProjectSessions(projectId: string): Promise<void> {
+        const snapshot = this.requireProjectSnapshot(projectId)
+        this.assertProjectSessionsInactive(snapshot)
+        this.store.teams.deleteProject(projectId)
+
+        for (const member of snapshot.members) {
+            await this.sessionCache.deleteSession(member.sessionId)
+        }
+
+        await this.sessionCache.deleteSession(snapshot.project.managerSessionId)
+    }
+
+    private assertProjectSessionsInactive(snapshot: TeamProjectSnapshot): void {
+        if (this.requireSession(snapshot.project.managerSessionId).active) {
+            this.raiseProjectDeleteRequiresInactiveError()
+        }
+
+        const hasActiveMember = snapshot.members.some((member) => this.requireSession(member.sessionId).active)
+        if (hasActiveMember) {
+            this.raiseProjectDeleteRequiresInactiveError()
+        }
+    }
+
+    private raiseProjectDeleteRequiresInactiveError(): never {
+        throw new TeamLifecycleError(
+            TEAM_PROJECT_DELETE_REQUIRES_INACTIVE_MESSAGE,
+            TEAM_PROJECT_DELETE_REQUIRES_INACTIVE_CODE,
+            409
+        )
     }
 
     private async ensureSessionArchived(sessionId: string, archiveReason: string): Promise<void> {

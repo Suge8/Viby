@@ -1,5 +1,6 @@
 import type { Database } from 'bun:sqlite'
 import { randomUUID } from 'node:crypto'
+import { AGENT_FLAVORS } from '@viby/protocol'
 import type {
     CodexCollaborationMode,
     ModelReasoningEffort,
@@ -33,6 +34,27 @@ type DbSessionRow = {
 }
 
 const TEAM_MEMBER_PLACEHOLDER_TAG_PREFIX = 'team-member-'
+const LEGACY_METADATA_DRIVER_SET = new Set<string>(AGENT_FLAVORS)
+
+function normalizeSessionMetadata(metadata: unknown): unknown {
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+        return metadata
+    }
+
+    const record = metadata as Record<string, unknown>
+    if (typeof record.driver === 'string' || typeof record.flavor !== 'string') {
+        return metadata
+    }
+    if (!LEGACY_METADATA_DRIVER_SET.has(record.flavor)) {
+        return metadata
+    }
+
+    const { flavor: _flavor, ...rest } = record
+    return {
+        ...rest,
+        driver: record.flavor
+    }
+}
 
 function getSessionRow(db: Database, id: string): DbSessionRow | null {
     return db.query('SELECT * FROM sessions WHERE id = ?').get(id) as DbSessionRow | undefined ?? null
@@ -73,7 +95,8 @@ function hydratePlaceholderSession(
     existing: DbSessionRow,
     input: CreateStoredSessionInput
 ): StoredSession {
-    const metadataJson = JSON.stringify(input.metadata)
+    const normalizedMetadata = normalizeSessionMetadata(input.metadata)
+    const metadataJson = JSON.stringify(normalizedMetadata)
     const agentStateJson = input.agentState === null || input.agentState === undefined
         ? null
         : JSON.stringify(input.agentState)
@@ -134,6 +157,7 @@ export function getOrCreateSession(
         collaborationMode,
         sessionId
     } = input
+    const normalizedMetadata = normalizeSessionMetadata(metadata)
 
     if (sessionId) {
         const existingById = getSessionRow(db, sessionId)
@@ -154,7 +178,7 @@ export function getOrCreateSession(
 
     const now = Date.now()
     const id = sessionId ?? randomUUID()
-    const metadataJson = JSON.stringify(metadata)
+    const metadataJson = JSON.stringify(normalizedMetadata)
     const agentStateJson = agentState === null || agentState === undefined ? null : JSON.stringify(agentState)
 
     db.query(`
@@ -218,9 +242,9 @@ export function updateSessionMetadata(
         field: 'metadata',
         versionField: 'metadata_version',
         expectedVersion,
-        value: metadata,
+        value: normalizeSessionMetadata(metadata),
         encode: (value) => {
-            const json = JSON.stringify(value)
+            const json = JSON.stringify(normalizeSessionMetadata(value))
             return json === undefined ? null : json
         },
         decode: safeJsonParse,

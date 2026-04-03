@@ -27,7 +27,7 @@ function createSession(id: string): Session {
         metadata: {
             path: '/tmp/project',
             host: 'localhost',
-            flavor: 'codex'
+            driver: 'codex'
         },
         metadataVersion: 1,
         agentState: null,

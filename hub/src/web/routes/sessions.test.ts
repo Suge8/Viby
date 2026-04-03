@@ -3,13 +3,16 @@ import type { SessionMessageActivity } from '@viby/protocol/types'
 import { Hono } from 'hono'
 import type { Session, SyncEngine } from '../../sync/syncEngine'
 import type { WebAppEnv } from '../middleware/auth'
+import { createPermissionsRoutes } from './permissions'
 import { createSessionsRoutes } from './sessions'
+
+const DEFAULT_PERMISSION_REQUEST_ID = 'request-1'
 
 function createSession(overrides?: Partial<Session>): Session {
     const baseMetadata = {
         path: '/tmp/project',
         host: 'localhost',
-        flavor: 'codex' as const
+        driver: 'codex' as const
     }
     const base: Session = {
         id: 'session-1',
@@ -53,17 +56,31 @@ function createApp(
     session: Session,
     options?: {
         abortSessionResult?: Session
+        deleteSessionError?: Error & { status?: number }
         resumeResult?: Awaited<ReturnType<SyncEngine['resumeSession']>>
+        switchDriverResult?: Awaited<ReturnType<SyncEngine['switchSessionDriver']>>
         dropSessionSnapshotAfterConfig?: boolean
+        slashCommandsResult?: Awaited<ReturnType<SyncEngine['listSlashCommands']>>
     }
 ) {
     const abortSessionCalls: string[] = []
     const applySessionConfigCalls: Array<[string, Record<string, unknown>]> = []
+    const approvePermissionCalls: Array<[
+        string,
+        string,
+        unknown,
+        string[] | undefined,
+        string | undefined,
+        Record<string, string[]> | Record<string, { answers: string[] }> | undefined
+    ]> = []
     const archiveSessionCalls: string[] = []
     const closeSessionCalls: string[] = []
+    const deleteSessionCalls: string[] = []
+    const denyPermissionCalls: Array<[string, string, string | undefined]> = []
+    const listSlashCommandsCalls: Array<[string, string]> = []
     const recoveryCalls: Array<[string, { afterSeq: number; limit: number }]> = []
     const resumeSessionCalls: string[] = []
-    const switchSessionCalls: Array<[string, 'remote' | 'local']> = []
+    const switchDriverCalls: Array<[string, 'claude' | 'codex']> = []
     let currentSession = session
     let sessionSnapshotAvailable = true
     const renameSessionCalls: Array<[string, string]> = []
@@ -100,6 +117,16 @@ function createApp(
             return currentSession
         },
         applySessionConfig,
+        approvePermission: async (
+            sessionId: string,
+            requestId: string,
+            mode?: unknown,
+            allowTools?: string[],
+            decision?: 'approved' | 'approved_for_session' | 'denied' | 'abort',
+            answers?: Record<string, string[]> | Record<string, { answers: string[] }>
+        ) => {
+            approvePermissionCalls.push([sessionId, requestId, mode, allowTools, decision, answers])
+        },
         archiveSession: async (sessionId: string) => {
             archiveSessionCalls.push(sessionId)
             currentSession = {
@@ -130,6 +157,19 @@ function createApp(
             }
             return currentSession
         },
+        deleteSession: async (sessionId: string) => {
+            deleteSessionCalls.push(sessionId)
+            if (options?.deleteSessionError) {
+                throw options.deleteSessionError
+            }
+        },
+        denyPermission: async (
+            sessionId: string,
+            requestId: string,
+            decision?: 'approved' | 'approved_for_session' | 'denied' | 'abort'
+        ) => {
+            denyPermissionCalls.push([sessionId, requestId, decision])
+        },
         getSessionRecoveryPage: (sessionId: string, options: { afterSeq: number; limit: number }) => {
             recoveryCalls.push([sessionId, options])
             return {
@@ -141,6 +181,13 @@ function createApp(
                     limit: options.limit,
                     hasMore: false
                 }
+            }
+        },
+        listSlashCommands: async (sessionId: string, agent: string) => {
+            listSlashCommandsCalls.push([sessionId, agent])
+            return options?.slashCommandsResult ?? {
+                success: true,
+                commands: []
             }
         },
         renameSession: async (sessionId: string, name: string) => {
@@ -177,17 +224,26 @@ function createApp(
             }
             return result
         },
-        switchSession: async (sessionId: string, to: 'remote' | 'local') => {
-            switchSessionCalls.push([sessionId, to])
-            currentSession = {
-                ...currentSession,
-                agentState: {
-                    ...(currentSession.agentState ?? {}),
-                    controlledByUser: to === 'local'
-                },
-                agentStateVersion: currentSession.agentStateVersion + 1
+        switchSessionDriver: async (sessionId: string, targetDriver: 'claude' | 'codex') => {
+            switchDriverCalls.push([sessionId, targetDriver])
+            const result = options?.switchDriverResult ?? {
+                type: 'success' as const,
+                targetDriver,
+                session: {
+                    ...currentSession,
+                    metadata: currentSession.metadata
+                        ? {
+                            ...currentSession.metadata,
+                            driver: targetDriver
+                        }
+                        : null,
+                    updatedAt: currentSession.updatedAt + 1
+                }
             }
-            return currentSession
+            if (result.type === 'success') {
+                currentSession = result.session
+            }
+            return result
         },
         unarchiveSession: async (sessionId: string) => {
             unarchiveSessionCalls.push(sessionId)
@@ -208,16 +264,21 @@ function createApp(
 
     const app = new Hono<WebAppEnv>()
     app.route('/api', createSessionsRoutes(() => engine as SyncEngine))
+    app.route('/api', createPermissionsRoutes(() => engine as SyncEngine))
 
     return {
         app,
         abortSessionCalls,
         applySessionConfigCalls,
+        approvePermissionCalls,
         archiveSessionCalls,
         closeSessionCalls,
+        deleteSessionCalls,
+        denyPermissionCalls,
+        listSlashCommandsCalls,
         recoveryCalls,
         resumeSessionCalls,
-        switchSessionCalls,
+        switchDriverCalls,
         renameSessionCalls,
         unarchiveSessionCalls
     }
@@ -256,7 +317,7 @@ describe('sessions routes', () => {
             metadata: {
                 path: '/tmp/project',
                 host: 'localhost',
-                flavor: 'codex',
+                driver: 'codex',
                 lifecycleState: 'running',
                 lifecycleStateSince: 1
             }
@@ -284,31 +345,192 @@ describe('sessions routes', () => {
         expect(abortSessionCalls).toEqual(['session-1'])
     })
 
-    it('returns the authoritative session snapshot when switching to remote succeeds', async () => {
+    it('returns the authoritative session snapshot when driver switching succeeds', async () => {
         const session = createSession({
-            agentState: {
-                controlledByUser: true,
-                requests: {},
-                completedRequests: {}
+            metadata: {
+                path: '/tmp/project',
+                host: 'localhost',
+                driver: 'codex'
             }
         })
-        const { app, switchSessionCalls } = createApp(session)
+        const { app, switchDriverCalls } = createApp(session)
 
-        const response = await app.request('/api/sessions/session-1/switch', {
-            method: 'POST'
+        const response = await app.request('/api/sessions/session-1/driver-switch', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ targetDriver: 'claude' })
         })
 
         expect(response.status).toBe(200)
         expect(await response.json()).toMatchObject({
             ok: true,
+            targetDriver: 'claude',
             session: {
                 id: 'session-1',
-                agentState: {
-                    controlledByUser: false
+                metadata: {
+                    driver: 'claude'
                 }
             }
         })
-        expect(switchSessionCalls).toEqual([['session-1', 'remote']])
+        expect(switchDriverCalls).toEqual([['session-1', 'claude']])
+    })
+
+    it('returns typed stageful failures when driver switching is rejected by the Hub contract', async () => {
+        const session = createSession({
+            active: true,
+            thinking: true,
+            metadata: {
+                path: '/tmp/project',
+                host: 'localhost',
+                driver: 'codex'
+            }
+        })
+        const { app, switchDriverCalls } = createApp(session, {
+            switchDriverResult: {
+                type: 'error',
+                message: 'Driver switching requires an idle active session',
+                code: 'session_not_idle',
+                stage: 'idle_gate',
+                status: 409,
+                targetDriver: 'claude',
+                rollbackResult: 'not_started',
+                session
+            }
+        })
+
+        const response = await app.request('/api/sessions/session-1/driver-switch', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ targetDriver: 'claude' })
+        })
+
+        expect(response.status).toBe(409)
+        expect(await response.json()).toEqual({
+            error: 'Driver switching requires an idle active session',
+            code: 'session_not_idle',
+            stage: 'idle_gate',
+            targetDriver: 'claude',
+            rollbackResult: 'not_started',
+            session
+        })
+        expect(switchDriverCalls).toEqual([['session-1', 'claude']])
+    })
+
+    it('rejects invalid driver-switch bodies before reaching the Hub contract', async () => {
+        const { app, switchDriverCalls } = createApp(createSession())
+
+        const response = await app.request('/api/sessions/session-1/driver-switch', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ targetDriver: 'gemini' })
+        })
+
+        expect(response.status).toBe(400)
+        expect(await response.json()).toEqual({ error: 'Invalid body' })
+        expect(switchDriverCalls).toEqual([])
+    })
+
+    it('validates permission mode changes against the authoritative driver', async () => {
+        const session = createSession({
+            metadata: {
+                path: '/tmp/project',
+                host: 'localhost',
+                driver: 'cursor'
+            }
+        })
+        const { app, applySessionConfigCalls } = createApp(session)
+
+        const response = await app.request('/api/sessions/session-1/permission-mode', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ mode: 'read-only' })
+        })
+
+        expect(response.status).toBe(400)
+        expect(await response.json()).toEqual({
+            error: 'Invalid permission mode for session driver'
+        })
+        expect(applySessionConfigCalls).toEqual([])
+    })
+
+    it('validates permission approvals against the authoritative driver', async () => {
+        const session = createSession({
+            metadata: {
+                path: '/tmp/project',
+                host: 'localhost',
+                driver: 'cursor'
+            },
+            agentState: {
+                controlledByUser: false,
+                requests: {
+                    [DEFAULT_PERMISSION_REQUEST_ID]: {
+                        tool: 'shell',
+                        arguments: {},
+                        createdAt: 1
+                    }
+                },
+                completedRequests: {}
+            }
+        })
+        const { app, approvePermissionCalls } = createApp(session)
+
+        const response = await app.request(`/api/sessions/session-1/permissions/${DEFAULT_PERMISSION_REQUEST_ID}/approve`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ mode: 'read-only' })
+        })
+
+        expect(response.status).toBe(400)
+        expect(await response.json()).toEqual({
+            error: 'Invalid permission mode for session driver'
+        })
+        expect(approvePermissionCalls).toEqual([])
+    })
+
+    it('lists slash commands using the authoritative driver', async () => {
+        const session = createSession({
+            metadata: {
+                path: '/tmp/project',
+                host: 'localhost',
+                driver: 'cursor'
+            }
+        })
+        const slashCommandsResult = {
+            success: true,
+            commands: [{ name: '/cursor-only', source: 'project' as const }]
+        }
+        const { app, listSlashCommandsCalls } = createApp(session, {
+            slashCommandsResult
+        })
+
+        const response = await app.request('/api/sessions/session-1/slash-commands')
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toEqual(slashCommandsResult)
+        expect(listSlashCommandsCalls).toEqual([['session-1', 'cursor']])
+    })
+
+    it('rejects collaboration mode changes when the resolved driver is not codex', async () => {
+        const session = createSession({
+            metadata: {
+                path: '/tmp/project',
+                host: 'localhost',
+                driver: 'claude'
+            }
+        })
+        const { app, applySessionConfigCalls } = createApp(session)
+
+        const response = await app.request('/api/sessions/session-1/collaboration-mode', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ mode: 'plan' })
+        })
+
+        expect(response.status).toBe(400)
+        expect(await response.json()).toEqual({
+            error: 'Collaboration mode is only supported for Codex sessions'
+        })
+        expect(applySessionConfigCalls).toEqual([])
     })
 
     it('rejects collaboration mode changes for local Codex sessions', async () => {
@@ -329,7 +551,7 @@ describe('sessions routes', () => {
 
         expect(response.status).toBe(409)
         expect(await response.json()).toEqual({
-            error: 'Collaboration mode can only be changed for remote Codex sessions'
+            error: 'Collaboration mode can only be changed for Viby-managed Codex sessions'
         })
         expect(applySessionConfigCalls).toEqual([])
     })
@@ -339,7 +561,7 @@ describe('sessions routes', () => {
             metadata: {
                 path: '/tmp/project',
                 host: 'localhost',
-                flavor: 'claude'
+                driver: 'claude'
             }
         })
         const { app, applySessionConfigCalls } = createApp(session)
@@ -357,7 +579,7 @@ describe('sessions routes', () => {
         expect(applySessionConfigCalls).toEqual([])
     })
 
-    it('applies collaboration mode changes for remote Codex sessions', async () => {
+    it('applies collaboration mode changes for Viby-managed Codex sessions', async () => {
         const { app, applySessionConfigCalls } = createApp(createSession())
 
         const response = await app.request('/api/sessions/session-1/collaboration-mode', {
@@ -486,7 +708,7 @@ describe('sessions routes', () => {
                 metadata: {
                     path: '/tmp/project',
                     host: 'localhost',
-                    flavor: 'codex',
+                    driver: 'codex',
                     lifecycleState: 'running',
                     lifecycleStateSince: 2
                 }
@@ -559,6 +781,52 @@ describe('sessions routes', () => {
         expect(renameSessionCalls).toEqual([['session-1', 'Renamed session']])
     })
 
+    it('deletes inactive sessions through the delete route', async () => {
+        const { app, deleteSessionCalls } = createApp(createSession({ active: false }))
+
+        const response = await app.request('/api/sessions/session-1', {
+            method: 'DELETE'
+        })
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toEqual({ ok: true })
+        expect(deleteSessionCalls).toEqual(['session-1'])
+    })
+
+    it('rejects deleting active sessions before reaching the engine', async () => {
+        const { app, deleteSessionCalls } = createApp(createSession({ active: true }))
+
+        const response = await app.request('/api/sessions/session-1', {
+            method: 'DELETE'
+        })
+
+        expect(response.status).toBe(409)
+        expect(await response.json()).toEqual({
+            error: 'Cannot delete active session. Archive it first.'
+        })
+        expect(deleteSessionCalls).toEqual([])
+    })
+
+    it('returns lifecycle conflicts from deleteSession as 409 instead of 500', async () => {
+        const deleteSessionError = Object.assign(
+            new Error('Manager-controlled member sessions can only be deleted by deleting the manager session'),
+            { status: 409 }
+        )
+        const { app, deleteSessionCalls } = createApp(createSession({ active: false }), {
+            deleteSessionError
+        })
+
+        const response = await app.request('/api/sessions/session-1', {
+            method: 'DELETE'
+        })
+
+        expect(response.status).toBe(409)
+        expect(await response.json()).toEqual({
+            error: 'Manager-controlled member sessions can only be deleted by deleting the manager session'
+        })
+        expect(deleteSessionCalls).toEqual(['session-1'])
+    })
+
     it('returns store-backed recovery pages with explicit afterSeq paging', async () => {
         const { app, recoveryCalls } = createApp(createSession())
 
@@ -609,7 +877,7 @@ describe('sessions routes', () => {
             metadata: {
                 path: '/tmp/project',
                 host: 'localhost',
-                flavor: 'claude',
+                driver: 'claude',
                 summary: {
                     text: 'Streaming title',
                     updatedAt: 1_000
@@ -651,7 +919,7 @@ describe('sessions routes', () => {
             metadata: {
                 path: '/tmp/project',
                 host: 'localhost',
-                flavor: 'codex',
+                driver: 'codex',
                 lifecycleState: 'running',
                 lifecycleStateSince: 100
             },
@@ -674,7 +942,7 @@ describe('sessions routes', () => {
             metadata: {
                 path: '/tmp/project',
                 host: 'localhost',
-                flavor: 'codex',
+                driver: 'codex',
                 lifecycleState: 'running',
                 lifecycleStateSince: 200
             }
@@ -729,7 +997,7 @@ describe('sessions routes', () => {
         })
     })
 
-    it('applies model changes for remote Codex sessions', async () => {
+    it('applies model changes for Viby-managed Codex sessions', async () => {
         const { app, applySessionConfigCalls } = createApp(createSession())
 
         const response = await app.request('/api/sessions/session-1/model', {
@@ -769,17 +1037,17 @@ describe('sessions routes', () => {
 
         expect(response.status).toBe(409)
         expect(await response.json()).toEqual({
-            error: 'Model selection can only be changed for remote Claude, Codex, and Gemini sessions'
+            error: 'Model selection can only be changed for Viby-managed Claude, Codex, Gemini, and Pi sessions'
         })
         expect(applySessionConfigCalls).toEqual([])
     })
 
-    it('applies model changes for remote Claude sessions', async () => {
+    it('applies model changes for Viby-managed Claude sessions', async () => {
         const session = createSession({
             metadata: {
                 path: '/tmp/project',
                 host: 'localhost',
-                flavor: 'claude'
+                driver: 'claude'
             }
         })
         const { app, applySessionConfigCalls } = createApp(session)
@@ -803,12 +1071,12 @@ describe('sessions routes', () => {
         ])
     })
 
-    it('applies model changes for remote Gemini sessions', async () => {
+    it('applies model changes for Viby-managed Gemini sessions', async () => {
         const session = createSession({
             metadata: {
                 path: '/tmp/project',
                 host: 'localhost',
-                flavor: 'gemini'
+                driver: 'gemini'
             },
             model: null
         })
@@ -833,7 +1101,7 @@ describe('sessions routes', () => {
         ])
     })
 
-    it('applies model reasoning effort changes for remote Codex sessions', async () => {
+    it('applies model reasoning effort changes for Viby-managed Codex sessions', async () => {
         const { app, applySessionConfigCalls } = createApp(createSession())
 
         const response = await app.request('/api/sessions/session-1/model-reasoning-effort', {
@@ -860,7 +1128,7 @@ describe('sessions routes', () => {
             metadata: {
                 path: '/tmp/project',
                 host: 'localhost',
-                flavor: 'cursor'
+                driver: 'cursor'
             }
         })
         const { app, applySessionConfigCalls } = createApp(session)
@@ -873,17 +1141,17 @@ describe('sessions routes', () => {
 
         expect(response.status).toBe(400)
         expect(await response.json()).toEqual({
-            error: 'Live model reasoning effort is only supported for Claude and Codex sessions'
+            error: 'Live model reasoning effort is only supported for Claude, Codex, and Pi sessions'
         })
         expect(applySessionConfigCalls).toEqual([])
     })
 
-    it('applies model reasoning effort changes for remote Claude sessions', async () => {
+    it('applies model reasoning effort changes for Viby-managed Claude sessions', async () => {
         const session = createSession({
             metadata: {
                 path: '/tmp/project',
                 host: 'localhost',
-                flavor: 'claude'
+                driver: 'claude'
             }
         })
         const { app, applySessionConfigCalls } = createApp(session)
@@ -912,7 +1180,7 @@ describe('sessions routes', () => {
             metadata: {
                 path: '/tmp/project',
                 host: 'localhost',
-                flavor: 'claude'
+                driver: 'claude'
             }
         })
         const { app, applySessionConfigCalls } = createApp(session)
@@ -925,7 +1193,7 @@ describe('sessions routes', () => {
 
         expect(response.status).toBe(400)
         expect(await response.json()).toEqual({
-            error: 'Invalid model reasoning effort for session flavor'
+            error: 'Invalid model reasoning effort for session driver'
         })
         expect(applySessionConfigCalls).toEqual([])
     })

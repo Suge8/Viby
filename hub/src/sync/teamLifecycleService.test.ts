@@ -144,6 +144,33 @@ describe('TeamLifecycleService', () => {
         expect(getSessionLifecycleState(harness.engine.getSession(harness.memberSession.id)!)).toBe('archived')
     })
 
+    it('deletes manager sessions by removing the whole team project and every member session', async () => {
+        const harness = createHarness()
+
+        await harness.engine.archiveSession(harness.managerSession.id)
+        await harness.engine.deleteSession(harness.managerSession.id)
+
+        expect(harness.store.teams.getProject(harness.managerSession.id)).toBeNull()
+        expect(harness.store.teams.getMember('member-1')).toBeNull()
+        expect(harness.engine.getSession(harness.managerSession.id)).toBeUndefined()
+        expect(harness.engine.getSession(harness.memberSession.id)).toBeUndefined()
+    })
+
+    it('rejects deleting member sessions directly and forces manager-owned project deletion', async () => {
+        const harness = createHarness()
+
+        await harness.engine.archiveSession(harness.memberSession.id)
+
+        await expect(harness.engine.deleteSession(harness.memberSession.id)).rejects.toMatchObject({
+            code: 'team_member_delete_unavailable',
+            status: 409
+        })
+        expect(harness.engine.getSession(harness.memberSession.id)).toBeDefined()
+        expect(harness.store.teams.getMember('member-1')).toMatchObject({
+            membershipState: 'archived'
+        })
+    })
+
     it('rejects restoring removed members through generic session unarchive and forces revision semantics', async () => {
         const harness = createHarness()
         const existingMember = harness.store.teams.getMember('member-1')!

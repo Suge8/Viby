@@ -142,7 +142,7 @@ describe('messages routes', () => {
         expect(getMessagesPageCalls).toEqual([])
     })
 
-    it('treats send as a single Hub-owned command and returns the authoritative session snapshot', async () => {
+    it('trims non-empty text and treats send as a single Hub-owned command', async () => {
         const { app, sendMessageCalls } = createApp({
             getSession: () => ({ id: 'session-1', active: false }) as never
         })
@@ -150,7 +150,7 @@ describe('messages routes', () => {
         const response = await app.request('/api/sessions/session-1/messages', {
             method: 'POST',
             body: JSON.stringify({
-                text: 'hello after close',
+                text: '  hello after close  ',
                 localId: 'local-1'
             })
         })
@@ -175,6 +175,55 @@ describe('messages routes', () => {
                     text: 'hello after close',
                     localId: 'local-1',
                     attachments: undefined,
+                    sentFrom: 'webapp'
+                }
+            }
+        ])
+    })
+
+    it('rejects whitespace-only text when no attachments are present', async () => {
+        const { app, sendMessageCalls } = createApp()
+
+        const response = await app.request('/api/sessions/session-1/messages', {
+            method: 'POST',
+            body: JSON.stringify({
+                text: '   '
+            })
+        })
+
+        expect(response.status).toBe(400)
+        expect(await response.json()).toEqual({
+            error: 'Message requires text or attachments'
+        })
+        expect(sendMessageCalls).toEqual([])
+    })
+
+    it('preserves attachment-only sends after trimming blank text', async () => {
+        const { app, sendMessageCalls } = createApp()
+        const attachment = {
+            id: 'attachment-1',
+            filename: 'spec.txt',
+            mimeType: 'text/plain',
+            size: 42,
+            path: '/tmp/spec.txt'
+        }
+
+        const response = await app.request('/api/sessions/session-1/messages', {
+            method: 'POST',
+            body: JSON.stringify({
+                text: '   ',
+                attachments: [attachment]
+            })
+        })
+
+        expect(response.status).toBe(200)
+        expect(sendMessageCalls).toEqual([
+            {
+                sessionId: 'session-1',
+                payload: {
+                    text: '',
+                    localId: undefined,
+                    attachments: [attachment],
                     sentFrom: 'webapp'
                 }
             }

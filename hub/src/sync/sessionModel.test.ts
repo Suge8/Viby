@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { getSessionLifecycleState, toSessionSummary } from '@viby/protocol'
+import { getSessionLifecycleState, getSessionResumeToken, toSessionSummary } from '@viby/protocol'
 import type { Session, SyncEvent, TeamSessionSpawnRole } from '@viby/protocol/types'
 import type { Server } from 'socket.io'
 import { Store } from '../store'
@@ -669,7 +669,7 @@ describe('session model', () => {
         }
     })
 
-    it('waits for the remote switch owner contract before resolving the switched session snapshot', async () => {
+    it('switches an idle session to a new driver on the same hub session id', async () => {
         const store = new Store(':memory:')
         const engine = new SyncEngine(
             store,
@@ -680,49 +680,300 @@ describe('session model', () => {
 
         try {
             const session = createEngineSession(engine, {
-                tag: 'session-switch-remote',
+                tag: 'session-driver-switch-success',
                 metadata: {
                     path: '/tmp/project',
                     host: 'localhost',
                     machineId: 'machine-1',
-                    flavor: 'codex'
+                    flavor: 'codex',
+                    driver: 'codex'
                 },
-                agentState: {
-                    controlledByUser: true,
-                    requests: {},
-                    completedRequests: {}
+                model: 'gpt-5.4',
+                modelReasoningEffort: 'xhigh',
+                permissionMode: 'default',
+                collaborationMode: 'plan'
+            })
+            engine.getOrCreateMachine(
+                'machine-1',
+                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+                null
+            )
+            engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
+            engine.handleSessionAlive({ sid: session.id, time: Date.now(), thinking: false })
+
+            let handoffBuilds = 0
+            const originalBuildSessionHandoff = engine.buildSessionHandoff.bind(engine)
+            ;(engine as any).buildSessionHandoff = (sessionId: string) => {
+                handoffBuilds += 1
+                return originalBuildSessionHandoff(sessionId)
+            }
+
+            const spawnCalls: Array<Record<string, unknown>> = []
+            ;(engine as any).rpcGateway.killSession = async () => {
+                engine.handleSessionEnd({ sid: session.id, time: Date.now() })
+            }
+            ;(engine as any).rpcGateway.spawnSession = async (options: Record<string, unknown>) => {
+                spawnCalls.push(options)
+                engine.handleSessionAlive({ sid: session.id, time: Date.now(), thinking: false })
+                return { type: 'success', sessionId: session.id }
+            }
+
+            const result = await engine.switchSessionDriver(session.id, 'claude')
+
+            expect(result).toMatchObject({
+                type: 'success',
+                targetDriver: 'claude',
+                session: {
+                    id: session.id,
+                    active: true,
+                    metadata: {
+                        driver: 'claude'
+                    }
+                }
+            })
+            const recoveryPage = engine.getSessionRecoveryPage(session.id, { afterSeq: 0, limit: 10 })
+            expect(recoveryPage.messages).toHaveLength(1)
+            expect(recoveryPage.messages[0]?.content).toEqual({
+                role: 'agent',
+                content: {
+                    type: 'event',
+                    data: {
+                        type: 'driver-switched',
+                        previousDriver: 'codex',
+                        targetDriver: 'claude'
+                    }
+                }
+            })
+            expect(handoffBuilds).toBe(1)
+            expect(spawnCalls).toHaveLength(1)
+            expect(spawnCalls[0]?.sessionId).toBe(session.id)
+            expect(spawnCalls[0]?.machineId).toBe('machine-1')
+            expect(spawnCalls[0]?.directory).toBe('/tmp/project')
+            expect(spawnCalls[0]?.agent).toBe('claude')
+            expect(spawnCalls[0]?.model).toBeUndefined()
+            expect(spawnCalls[0]?.modelReasoningEffort).toBeUndefined()
+            expect(spawnCalls[0]?.permissionMode).toBe('default')
+            expect(spawnCalls[0]?.collaborationMode).toBeUndefined()
+            expect(spawnCalls[0]?.driverSwitch).toMatchObject({
+                targetDriver: 'claude',
+                handoffSnapshot: expect.objectContaining({
+                    driver: 'codex',
+                    workingDirectory: '/tmp/project'
+                })
+            })
+        } finally {
+            engine.stop()
+        }
+    })
+
+    it('rejects driver switching for thinking sessions before shutdown starts', async () => {
+        const store = new Store(':memory:')
+        const engine = new SyncEngine(
+            store,
+            createIoStub(),
+            new RpcRegistry(),
+            { broadcast() {} } as never
+        )
+
+        try {
+            const session = createEngineSession(engine, {
+                tag: 'session-driver-switch-thinking',
+                metadata: {
+                    path: '/tmp/project',
+                    host: 'localhost',
+                    machineId: 'machine-1',
+                    flavor: 'codex',
+                    driver: 'codex'
                 },
                 model: 'gpt-5.4'
             })
-            engine.handleSessionAlive({
-                sid: session.id,
-                time: Date.now(),
-                mode: 'local'
-            })
+            engine.handleSessionAlive({ sid: session.id, time: Date.now(), thinking: true })
 
-            ;(engine as any).rpcGateway.switchSession = async () => {
-                setTimeout(() => {
-                    const storedSession = store.sessions.getSession(session.id)
-                    if (!storedSession) {
-                        throw new Error('Expected stored session to exist during switch test')
-                    }
-                    store.sessions.updateSessionAgentState(
-                        session.id,
-                        {
-                            controlledByUser: false,
-                            requests: {},
-                            completedRequests: {}
-                        },
-                        storedSession.agentStateVersion
-                    )
-                    ;((engine as any).sessionCache as { refreshSession: (sessionId: string) => void }).refreshSession(session.id)
-                }, 20)
+            let killCalls = 0
+            let spawnCalls = 0
+            ;(engine as any).rpcGateway.killSession = async () => {
+                killCalls += 1
+            }
+            ;(engine as any).rpcGateway.spawnSession = async () => {
+                spawnCalls += 1
+                return { type: 'success', sessionId: session.id }
             }
 
-            const switchedSession = await engine.switchSession(session.id, 'remote')
+            const result = await engine.switchSessionDriver(session.id, 'claude')
 
-            expect(switchedSession.agentState?.controlledByUser).toBe(false)
-            expect(switchedSession.active).toBe(true)
+            expect(result).toEqual({
+                type: 'error',
+                message: 'Driver switching requires an idle active session',
+                code: 'session_not_idle',
+                stage: 'idle_gate',
+                status: 409,
+                targetDriver: 'claude',
+                rollbackResult: 'not_started',
+                session: expect.objectContaining({
+                    id: session.id,
+                    active: true,
+                    thinking: true
+                })
+            })
+            expect(killCalls).toBe(0)
+            expect(spawnCalls).toBe(0)
+        } finally {
+            engine.stop()
+        }
+    })
+
+    it('surfaces driver-switch marker append failures instead of reporting a clean switch', async () => {
+        const store = new Store(':memory:')
+        const engine = new SyncEngine(
+            store,
+            createIoStub(),
+            new RpcRegistry(),
+            { broadcast() {} } as never
+        )
+
+        try {
+            const session = createEngineSession(engine, {
+                tag: 'session-driver-switch-marker-failure',
+                metadata: {
+                    path: '/tmp/project',
+                    host: 'localhost',
+                    machineId: 'machine-1',
+                    flavor: 'codex',
+                    driver: 'codex'
+                },
+                model: 'gpt-5.4'
+            })
+            engine.getOrCreateMachine(
+                'machine-1',
+                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+                null
+            )
+            engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
+            engine.handleSessionAlive({ sid: session.id, time: Date.now(), thinking: false })
+
+            ;(engine as any).rpcGateway.killSession = async () => {
+                engine.handleSessionEnd({ sid: session.id, time: Date.now() })
+            }
+            ;(engine as any).rpcGateway.spawnSession = async () => {
+                engine.handleSessionAlive({ sid: session.id, time: Date.now(), thinking: false })
+                return { type: 'success', sessionId: session.id }
+            }
+
+            const originalAppendDriverSwitchedEvent = (engine as any).messageService.appendDriverSwitchedEvent.bind((engine as any).messageService)
+            ;(engine as any).messageService.appendDriverSwitchedEvent = async (...args: unknown[]) => {
+                void args
+                throw new Error('marker append failed')
+            }
+
+            const result = await engine.switchSessionDriver(session.id, 'claude')
+            const recoveryPage = engine.getSessionRecoveryPage(session.id, { afterSeq: 0, limit: 10 })
+
+            expect(result).toEqual({
+                type: 'error',
+                message: 'marker append failed',
+                code: 'marker_append_failed',
+                stage: 'marker_append',
+                status: 500,
+                targetDriver: 'claude',
+                rollbackResult: 'not_needed',
+                session: expect.objectContaining({
+                    id: session.id,
+                    metadata: expect.objectContaining({ driver: 'claude' })
+                })
+            })
+            expect(recoveryPage.messages).toHaveLength(0)
+            ;(engine as any).messageService.appendDriverSwitchedEvent = originalAppendDriverSwitchedEvent
+        } finally {
+            engine.stop()
+        }
+    })
+
+    it('keeps the previous driver when driver-switch spawn fails', async () => {
+        const store = new Store(':memory:')
+        const engine = new SyncEngine(
+            store,
+            createIoStub(),
+            new RpcRegistry(),
+            { broadcast() {} } as never
+        )
+
+        try {
+            const session = createEngineSession(engine, {
+                tag: 'session-driver-switch-spawn-failure',
+                metadata: {
+                    path: '/tmp/project',
+                    host: 'localhost',
+                    machineId: 'machine-1',
+                    flavor: 'codex',
+                    driver: 'codex'
+                },
+                model: 'gpt-5.4',
+                modelReasoningEffort: 'xhigh',
+                permissionMode: 'default',
+                collaborationMode: 'plan'
+            })
+            engine.getOrCreateMachine(
+                'machine-1',
+                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+                null
+            )
+            engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
+            engine.handleSessionAlive({ sid: session.id, time: Date.now(), thinking: false })
+
+            let capturedSpawnOptions: Record<string, unknown> | null = null
+            ;(engine as any).rpcGateway.killSession = async () => {
+                engine.handleSessionEnd({ sid: session.id, time: Date.now() })
+            }
+            ;(engine as any).rpcGateway.spawnSession = async (options: Record<string, unknown>) => {
+                capturedSpawnOptions = options
+                return {
+                    type: 'error',
+                    message: 'spawn failed'
+                }
+            }
+
+            const result = await engine.switchSessionDriver(session.id, 'claude')
+            const switchedSnapshot = engine.getSession(session.id)
+
+            expect(capturedSpawnOptions).toMatchObject({
+                sessionId: session.id,
+                agent: 'claude',
+                permissionMode: 'default'
+            })
+            expect(capturedSpawnOptions).not.toBeNull()
+            const spawnOptions = (capturedSpawnOptions ?? {}) as {
+                model?: unknown
+                modelReasoningEffort?: unknown
+                collaborationMode?: unknown
+            }
+            expect(spawnOptions.model).toBeUndefined()
+            expect(spawnOptions.modelReasoningEffort).toBeUndefined()
+            expect(spawnOptions.collaborationMode).toBeUndefined()
+            expect(result).toEqual({
+                type: 'error',
+                message: 'spawn failed',
+                code: 'spawn_failed',
+                stage: 'spawn',
+                status: 500,
+                targetDriver: 'claude',
+                rollbackResult: 'not_needed',
+                session: expect.objectContaining({
+                    id: session.id,
+                    active: false,
+                    model: 'gpt-5.4',
+                    modelReasoningEffort: 'xhigh',
+                    permissionMode: 'default',
+                    collaborationMode: 'plan',
+                    metadata: expect.objectContaining({ driver: 'codex' })
+                })
+            })
+            expect(switchedSnapshot).toMatchObject({
+                model: 'gpt-5.4',
+                modelReasoningEffort: 'xhigh',
+                permissionMode: 'default',
+                collaborationMode: 'plan',
+                metadata: { driver: 'codex' }
+            })
         } finally {
             engine.stop()
         }
@@ -1057,6 +1308,101 @@ describe('session model', () => {
         expect(store.sessions.getSession(session.id)?.modelReasoningEffort).toBeNull()
     })
 
+    it('uses the resolved driver and runtime handle when respawning a resumed session', async () => {
+        const store = new Store(':memory:')
+        const engine = new SyncEngine(
+            store,
+            {} as never,
+            new RpcRegistry(),
+            { broadcast() {} } as never
+        )
+
+        try {
+            const session = createEngineSession(engine, {
+                tag: 'session-driver-resume',
+                metadata: {
+                    path: '/tmp/project',
+                    host: 'localhost',
+                    machineId: 'machine-1',
+                    driver: 'gemini',
+                    flavor: 'codex',
+                    runtimeHandles: {
+                        gemini: { sessionId: 'gemini-thread-1' }
+                    },
+                    codexSessionId: 'codex-thread-legacy'
+                },
+                model: 'gemini-2.5-pro'
+            })
+            engine.getOrCreateMachine(
+                'machine-1',
+                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+                null
+            )
+            engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
+
+            let capturedAgent: string | undefined
+            let capturedResumeSessionId: string | undefined
+            ;(engine as any).rpcGateway.spawnSession = async (options: {
+                agent?: string
+                resumeSessionId?: string
+            }) => {
+                capturedAgent = options.agent
+                capturedResumeSessionId = options.resumeSessionId
+                return { type: 'success', sessionId: session.id }
+            }
+            ;(engine as any).waitForResumedSessionContract = async () => 'ready'
+
+            const result = await engine.resumeSession(session.id)
+
+            expect(result).toEqual({ type: 'success', sessionId: session.id })
+            expect(capturedAgent).toBe('gemini')
+            expect(capturedResumeSessionId).toBe('gemini-thread-1')
+        } finally {
+            engine.stop()
+        }
+    })
+
+    it('returns resume_unavailable when the resolved driver has no runtime handle', async () => {
+        const store = new Store(':memory:')
+        const engine = new SyncEngine(
+            store,
+            {} as never,
+            new RpcRegistry(),
+            { broadcast() {} } as never
+        )
+
+        try {
+            const session = createEngineSession(engine, {
+                tag: 'session-driver-missing-handle',
+                metadata: {
+                    path: '/tmp/project',
+                    host: 'localhost',
+                    machineId: 'machine-1',
+                    driver: 'gemini',
+                    flavor: 'codex',
+                    codexSessionId: 'codex-thread-legacy'
+                },
+                model: 'gemini-2.5-pro'
+            })
+            engine.getOrCreateMachine(
+                'machine-1',
+                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+                null
+            )
+            engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
+
+            const result = await engine.resumeSession(session.id)
+
+            expect(result).toEqual({
+                type: 'error',
+                message: 'Resume session ID unavailable',
+                code: 'resume_unavailable'
+            })
+        } finally {
+            engine.stop()
+        }
+    })
+
     it('passes the stored model when respawning a resumed session', async () => {
         const store = new Store(':memory:')
         const engine = new SyncEngine(
@@ -1344,7 +1690,7 @@ describe('session model', () => {
                 throw new Error('Expected original session to remain after failed resume cleanup')
             }
             expect(originalStoredSession.id).toBe(original.id)
-            expect((originalStoredSession.metadata as { codexSessionId?: string }).codexSessionId).toBe('codex-thread-old')
+            expect(getSessionResumeToken(originalStoredSession.metadata as Session['metadata'])).toBe('codex-thread-old')
         } finally {
             engine.stop()
         }
@@ -1400,7 +1746,7 @@ describe('session model', () => {
             }
             const killedSessionIdValue: string = killedSessionId
             expect(killedSessionIdValue).toBe(original.id)
-            expect((store.sessions.getSession(original.id)?.metadata as { codexSessionId?: string }).codexSessionId).toBe('codex-thread-old')
+            expect(getSessionResumeToken(store.sessions.getSession(original.id)?.metadata as Session['metadata'] | undefined)).toBe('codex-thread-old')
         } finally {
             engine.stop()
         }

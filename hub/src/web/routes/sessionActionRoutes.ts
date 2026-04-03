@@ -1,4 +1,4 @@
-import { SESSION_RECOVERY_PAGE_SIZE } from '@viby/protocol'
+import { SESSION_RECOVERY_PAGE_SIZE, resolveSessionDriver } from '@viby/protocol'
 import type { Context, Hono } from 'hono'
 import { z } from 'zod'
 import {
@@ -8,10 +8,10 @@ import {
 import type { WebAppEnv } from '../middleware/auth'
 import {
     getErrorMessage,
+    getErrorStatus,
     type GetSyncEngine,
     parseJsonBody,
-    resolveSessionRouteContext,
-    resolveSyncEngine
+    resolveSessionRouteContext
 } from './sessionRouteSupport'
 
 const uploadSchema = z.object({
@@ -27,6 +27,10 @@ const uploadDeleteSchema = z.object({
 const recoveryQuerySchema = z.object({
     afterSeq: z.coerce.number().int().min(0),
     limit: z.coerce.number().int().min(1).max(SESSION_RECOVERY_PAGE_SIZE).optional()
+})
+
+const driverSwitchSchema = z.object({
+    targetDriver: z.enum(['claude', 'codex'])
 })
 
 type SessionLifecycleAction = 'archiveSession' | 'closeSession' | 'unarchiveSession'
@@ -135,7 +139,7 @@ export function registerSessionActionRoutes(
     })
 
     app.post('/sessions/:id/upload', async (c) => {
-        const sessionContext = resolveSessionRouteContext(c, getSyncEngine, { requireActive: true })
+        const sessionContext = resolveSessionRouteContext(c, getSyncEngine)
         if (sessionContext instanceof Response) {
             return sessionContext
         }
@@ -146,7 +150,7 @@ export function registerSessionActionRoutes(
         }
 
         if (estimateBase64Bytes(parsedBody.data.content) > MAX_UPLOAD_BYTES) {
-            return c.json({ success: false, error: 'File too large (max 50MB)' }, 413)
+            return Response.json({ success: false, error: 'File too large (max 50MB)' }, { status: 413 })
         }
 
         try {
@@ -157,15 +161,15 @@ export function registerSessionActionRoutes(
                 parsedBody.data.mimeType
             ))
         } catch (error) {
-            return c.json({
+            return Response.json({
                 success: false,
                 error: getErrorMessage(error, 'Failed to upload file')
-            }, 500)
+            }, { status: getErrorStatus(error) ?? 500 })
         }
     })
 
     app.post('/sessions/:id/upload/delete', async (c) => {
-        const sessionContext = resolveSessionRouteContext(c, getSyncEngine, { requireActive: true })
+        const sessionContext = resolveSessionRouteContext(c, getSyncEngine)
         if (sessionContext instanceof Response) {
             return sessionContext
         }
@@ -181,10 +185,10 @@ export function registerSessionActionRoutes(
                 parsedBody.data.path
             ))
         } catch (error) {
-            return c.json({
+            return Response.json({
                 success: false,
                 error: getErrorMessage(error, 'Failed to delete upload')
-            }, 500)
+            }, { status: getErrorStatus(error) ?? 500 })
         }
     })
 
@@ -202,14 +206,37 @@ export function registerSessionActionRoutes(
     app.post('/sessions/:id/close', async (c) => await handleSessionLifecycleAction(c, getSyncEngine, 'closeSession'))
     app.post('/sessions/:id/unarchive', async (c) => await handleSessionLifecycleAction(c, getSyncEngine, 'unarchiveSession'))
 
-    app.post('/sessions/:id/switch', async (c) => {
-        const sessionContext = resolveSessionRouteContext(c, getSyncEngine, { requireActive: true })
+    app.post('/sessions/:id/driver-switch', async (c) => {
+        const sessionContext = resolveSessionRouteContext(c, getSyncEngine)
         if (sessionContext instanceof Response) {
             return sessionContext
         }
 
-        const session = await sessionContext.engine.switchSession(sessionContext.sessionId, 'remote')
-        return c.json({ ok: true, session })
+        const parsedBody = await parseJsonBody(c, driverSwitchSchema)
+        if (!parsedBody.ok) {
+            return parsedBody.response
+        }
+
+        const result = await sessionContext.engine.switchSessionDriver(
+            sessionContext.sessionId,
+            parsedBody.data.targetDriver
+        )
+        if (result.type === 'error') {
+            return c.json({
+                error: result.message,
+                code: result.code,
+                stage: result.stage,
+                targetDriver: result.targetDriver,
+                rollbackResult: result.rollbackResult,
+                session: result.session
+            }, result.status)
+        }
+
+        return c.json({
+            ok: true,
+            targetDriver: result.targetDriver,
+            session: result.session
+        })
     })
 
     app.get('/sessions/:id/slash-commands', async (c) => {
@@ -219,7 +246,7 @@ export function registerSessionActionRoutes(
         }
 
         try {
-            const agent = sessionContext.session.metadata?.flavor ?? 'claude'
+            const agent = resolveSessionDriver(sessionContext.session.metadata) ?? 'claude'
             return c.json(await sessionContext.engine.listSlashCommands(sessionContext.sessionId, agent))
         } catch (error) {
             return c.json({

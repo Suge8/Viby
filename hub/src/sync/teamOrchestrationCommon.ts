@@ -1,4 +1,5 @@
 import {
+    type AgentFlavor,
     isTerminalTeamTaskStatus,
     type CodexCollaborationMode,
     type MessageMeta,
@@ -33,7 +34,7 @@ export type SpawnSession = (options: {
     sessionId?: string
     machineId: string
     directory: string
-    agent?: 'claude' | 'codex' | 'cursor' | 'gemini' | 'opencode'
+    agent?: AgentFlavor
     model?: string
     modelReasoningEffort?: TeamReasoningEffort | null
     permissionMode?: PermissionMode

@@ -1,8 +1,16 @@
-import { getSessionLifecycleState, getSessionResumeToken } from '@viby/protocol'
+import {
+    getSessionLifecycleState,
+    getSessionResumeToken,
+    resolveSessionDriver,
+    setSessionDriverRuntimeHandle,
+    type SessionDriver,
+    type SessionHandoffSnapshot,
+} from '@viby/protocol'
 import type { Session } from '@viby/protocol/types'
 import { MachineCache } from './machineCache'
 import { RpcGateway } from './rpcGateway'
 import { SessionCache } from './sessionCache'
+import { normalizeDriverSwitchSpawnConfig } from './sessionSwitchConfig'
 
 export type ResumeSessionResult =
     | { type: 'success'; sessionId: string }
@@ -31,11 +39,55 @@ type ResumeSessionHooks = {
     writeSessionResumeToken: (sessionId: string, token: string | undefined) => Promise<void>
 }
 
+export type DriverSwitchStage = 'idle_gate' | 'handoff_build' | 'stop' | 'spawn' | 'attach' | 'marker_append'
+export type DriverSwitchErrorCode =
+    | 'session_not_found'
+    | 'unsupported_target_driver'
+    | 'session_not_idle'
+    | 'handoff_build_failed'
+    | 'stop_failed'
+    | 'stop_timeout'
+    | 'spawn_failed'
+    | 'spawn_session_mismatch'
+    | 'attach_timeout'
+    | 'attach_failed'
+    | 'marker_append_failed'
+export type DriverSwitchRollbackResult = 'not_started' | 'not_needed' | 'session_metadata_restored' | 'session_metadata_restore_failed'
+export type DriverSwitchResult =
+    | { type: 'success'; session: Session; targetDriver: SessionDriver }
+    | {
+        type: 'error'
+        message: string
+        code: DriverSwitchErrorCode
+        stage: DriverSwitchStage
+        status: 404 | 409 | 500
+        targetDriver: SessionDriver
+        rollbackResult: DriverSwitchRollbackResult
+        session: Session | null
+    }
+
+type DriverSwitchHooks = {
+    buildSessionHandoff: (sessionId: string) => SessionHandoffSnapshot
+}
+
+type DriverSwitchValidation = {
+    session: Session
+    previousDriver: SessionDriver | null
+}
+
+type DriverSwitchSpawnContext = DriverSwitchValidation & {
+    handoffSnapshot: SessionHandoffSnapshot
+}
+
+type DriverSwitchAttachState = 'attached' | 'timeout'
+
 const SESSION_NOT_FOUND_ERROR = 'Session not found'
 const ARCHIVED_BY_WEB = 'web'
 const ARCHIVED_BY_USER_REASON = 'Archived by user'
+const DEFAULT_SESSION_DRIVER: SessionDriver = 'claude'
 const RESUME_CONTRACT_TIMEOUT_MS = 15_000
-const RESUME_CONTRACT_POLL_INTERVAL_MS = 250
+const DRIVER_SWITCH_CONTRACT_TIMEOUT_MS = 15_000
+const SUPPORTED_DRIVER_SWITCH_TARGETS = new Set<SessionDriver>(['claude', 'codex'])
 
 function withSessionResumeToken(
     metadata: Session['metadata'],
@@ -45,21 +97,12 @@ function withSessionResumeToken(
         return metadata
     }
 
-    switch (metadata.flavor) {
-        case 'codex':
-            return { ...metadata, codexSessionId: token }
-        case 'gemini':
-            return { ...metadata, geminiSessionId: token }
-        case 'opencode':
-            return { ...metadata, opencodeSessionId: token }
-        case 'cursor':
-            return { ...metadata, cursorSessionId: token }
-        case 'claude':
-        case null:
-        case undefined:
-        default:
-            return { ...metadata, claudeSessionId: token }
-    }
+    const driver = resolveSessionDriver(metadata) ?? DEFAULT_SESSION_DRIVER
+    return setSessionDriverRuntimeHandle(
+        metadata,
+        driver,
+        token ? { sessionId: token } : undefined
+    ) as Session['metadata']
 }
 
 function isMissingKillSessionHandler(error: unknown, sessionId: string): boolean {
@@ -97,13 +140,42 @@ function createResumeError(
     }
 }
 
-function resolveSessionFlavor(metadata: Session['metadata']): NonNullable<SessionSpawnOptions['agent']> {
-    return metadata?.flavor === 'codex'
-        || metadata?.flavor === 'gemini'
-        || metadata?.flavor === 'opencode'
-        || metadata?.flavor === 'cursor'
-        ? metadata.flavor
-        : 'claude'
+function getDriverSwitchStatus(code: DriverSwitchErrorCode): 404 | 409 | 500 {
+    switch (code) {
+        case 'session_not_found':
+            return 404
+        case 'unsupported_target_driver':
+        case 'session_not_idle':
+            return 409
+        default:
+            return 500
+    }
+}
+
+function createDriverSwitchError(
+    message: string,
+    options: {
+        code: DriverSwitchErrorCode
+        stage: DriverSwitchStage
+        targetDriver: SessionDriver
+        rollbackResult?: DriverSwitchRollbackResult
+        session?: Session | null
+    }
+): Extract<DriverSwitchResult, { type: 'error' }> {
+    return {
+        type: 'error',
+        message,
+        code: options.code,
+        stage: options.stage,
+        status: getDriverSwitchStatus(options.code),
+        targetDriver: options.targetDriver,
+        rollbackResult: options.rollbackResult ?? 'not_started',
+        session: options.session ?? null
+    }
+}
+
+function resolveSessionSpawnDriver(metadata: Session['metadata']): NonNullable<SessionSpawnOptions['agent']> {
+    return resolveSessionDriver(metadata) ?? DEFAULT_SESSION_DRIVER
 }
 
 export class SessionLifecycleService {
@@ -279,6 +351,211 @@ export class SessionLifecycleService {
         return { type: 'success', sessionId: spawnResult.sessionId }
     }
 
+    async switchSessionDriver(
+        sessionId: string,
+        targetDriver: SessionDriver,
+        hooks: DriverSwitchHooks
+    ): Promise<DriverSwitchResult> {
+        const validation = this.validateDriverSwitchRequest(sessionId, targetDriver)
+        if ('type' in validation) {
+            return validation
+        }
+
+        const handoffResult = this.buildDriverSwitchHandoff(sessionId, targetDriver, validation.session, hooks)
+        if ('type' in handoffResult) {
+            return handoffResult
+        }
+
+        const stopError = await this.stopDriverSwitchSourceSession(validation.session, targetDriver)
+        if (stopError) {
+            return stopError
+        }
+
+        const spawnError = await this.spawnDriverSwitchTargetSession({
+            ...validation,
+            handoffSnapshot: handoffResult
+        }, targetDriver)
+        if (spawnError) {
+            return spawnError
+        }
+
+        return await this.finalizeDriverSwitch(validation, targetDriver)
+    }
+
+    private validateDriverSwitchRequest(
+        sessionId: string,
+        targetDriver: SessionDriver
+    ): DriverSwitchValidation | Extract<DriverSwitchResult, { type: 'error' }> {
+        const session = this.getSession(sessionId)
+        if (!session) {
+            return createDriverSwitchError('Session not found', {
+                code: 'session_not_found',
+                stage: 'idle_gate',
+                targetDriver
+            })
+        }
+        if (!SUPPORTED_DRIVER_SWITCH_TARGETS.has(targetDriver)) {
+            return createDriverSwitchError('Unsupported target driver', {
+                code: 'unsupported_target_driver',
+                stage: 'idle_gate',
+                targetDriver,
+                session
+            })
+        }
+        if (!session.active || session.thinking) {
+            return createDriverSwitchError('Driver switching requires an idle active session', {
+                code: 'session_not_idle',
+                stage: 'idle_gate',
+                targetDriver,
+                session
+            })
+        }
+
+        return {
+            session,
+            previousDriver: resolveSessionDriver(session.metadata)
+        }
+    }
+
+    private buildDriverSwitchHandoff(
+        sessionId: string,
+        targetDriver: SessionDriver,
+        session: Session,
+        hooks: DriverSwitchHooks
+    ): SessionHandoffSnapshot | Extract<DriverSwitchResult, { type: 'error' }> {
+        try {
+            return hooks.buildSessionHandoff(sessionId)
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to build session handoff'
+            return createDriverSwitchError(message, {
+                code: 'handoff_build_failed',
+                stage: 'handoff_build',
+                targetDriver,
+                session
+            })
+        }
+    }
+
+    private async stopDriverSwitchSourceSession(
+        session: Session,
+        targetDriver: SessionDriver
+    ): Promise<Extract<DriverSwitchResult, { type: 'error' }> | null> {
+        try {
+            await this.rpcGateway.killSession(session.id)
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to stop session before driver switch'
+            return createDriverSwitchError(message, {
+                code: 'stop_failed',
+                stage: 'stop',
+                targetDriver,
+                session: this.getSession(session.id) ?? session
+            })
+        }
+
+        const stopState = await this.waitForDriverSwitchStop(session.id)
+        if (stopState === 'stopped') {
+            return null
+        }
+
+        return createDriverSwitchError('Session stop timed out before driver switch spawn', {
+            code: 'stop_timeout',
+            stage: 'stop',
+            targetDriver,
+            session: this.getSession(session.id) ?? session
+        })
+    }
+
+    private async spawnDriverSwitchTargetSession(
+        context: DriverSwitchSpawnContext,
+        targetDriver: SessionDriver
+    ): Promise<Extract<DriverSwitchResult, { type: 'error' }> | null> {
+        const targetMachine = this.resolveResumeTargetMachine(context.session)
+        if (!targetMachine) {
+            return createDriverSwitchError('No machine online', {
+                code: 'spawn_failed',
+                stage: 'spawn',
+                targetDriver,
+                session: this.getSession(context.session.id) ?? context.session,
+                rollbackResult: 'not_needed'
+            })
+        }
+
+        const normalizedSwitchConfig = normalizeDriverSwitchSpawnConfig(context.session, targetDriver)
+        const spawnResult = await this.rpcGateway.spawnSession({
+            ...this.buildSessionSpawnOptions(context.session, targetMachine.id, context.handoffSnapshot.workingDirectory),
+            ...normalizedSwitchConfig,
+            agent: targetDriver,
+            driverSwitch: {
+                targetDriver,
+                handoffSnapshot: context.handoffSnapshot
+            }
+        })
+        if (spawnResult.type !== 'success') {
+            const rollback = await this.rollbackDriverSwitchMetadata(context.session.id, context.previousDriver)
+            return createDriverSwitchError(spawnResult.message, {
+                code: 'spawn_failed',
+                stage: 'spawn',
+                targetDriver,
+                rollbackResult: rollback,
+                session: this.getSession(context.session.id)
+            })
+        }
+        if (spawnResult.sessionId === context.session.id) {
+            return null
+        }
+
+        await this.cleanupUnexpectedSwitchSpawn(context.session.id, spawnResult.sessionId)
+        const rollback = await this.rollbackDriverSwitchMetadata(context.session.id, context.previousDriver)
+        return createDriverSwitchError('Session failed to switch into the original hub session', {
+            code: 'spawn_session_mismatch',
+            stage: 'spawn',
+            targetDriver,
+            rollbackResult: rollback,
+            session: this.getSession(context.session.id)
+        })
+    }
+
+    private async finalizeDriverSwitch(
+        context: DriverSwitchValidation,
+        targetDriver: SessionDriver
+    ): Promise<DriverSwitchResult> {
+        const attachState = await this.waitForDriverSwitchAttach(context.session.id)
+        if (attachState !== 'attached') {
+            const rollback = await this.rollbackDriverSwitchMetadata(context.session.id, context.previousDriver)
+            return createDriverSwitchError('Session attach timed out after driver switch spawn', {
+                code: 'attach_timeout',
+                stage: 'attach',
+                targetDriver,
+                rollbackResult: rollback,
+                session: this.getSession(context.session.id)
+            })
+        }
+
+        try {
+            const switchedSession = await this.sessionCache.mutateSessionMetadata(context.session.id, (currentMetadata) => ({
+                ...currentMetadata,
+                driver: targetDriver
+            }), {
+                touchUpdatedAt: false
+            })
+            return {
+                type: 'success',
+                session: switchedSession,
+                targetDriver
+            }
+        } catch (error) {
+            const rollback = await this.rollbackDriverSwitchMetadata(context.session.id, context.previousDriver)
+            const message = error instanceof Error ? error.message : 'Failed to commit target driver after switch attach'
+            return createDriverSwitchError(message, {
+                code: 'attach_failed',
+                stage: 'attach',
+                targetDriver,
+                rollbackResult: rollback,
+                session: this.getSession(context.session.id)
+            })
+        }
+    }
+
     async defaultCleanupFailedResumeSpawn(
         originalSessionId: string,
         spawnedSessionId: string,
@@ -371,6 +648,98 @@ export class SessionLifecycleService {
         })
     }
 
+    private async waitForDriverSwitchStop(
+        sessionId: string,
+        timeoutMs: number = DRIVER_SWITCH_CONTRACT_TIMEOUT_MS
+    ): Promise<'stopped' | 'timeout'> {
+        const session = this.getSession(sessionId)
+        if (!session?.active) {
+            return 'stopped'
+        }
+
+        return await this.sessionCache.waitForSessionCondition(sessionId, {
+            timeoutMs,
+            resolveValue: (currentSession) => currentSession?.active ? null : 'stopped',
+            onTimeout: () => 'timeout',
+            isRelevantEvent: (event) =>
+                event.type === 'session-added'
+                || event.type === 'session-updated'
+                || event.type === 'session-removed'
+        })
+    }
+
+    private async waitForDriverSwitchAttach(
+        sessionId: string,
+        timeoutMs: number = DRIVER_SWITCH_CONTRACT_TIMEOUT_MS
+    ): Promise<DriverSwitchAttachState> {
+        const session = this.getSession(sessionId)
+        if (session?.active) {
+            return 'attached'
+        }
+
+        return await this.sessionCache.waitForSessionCondition(sessionId, {
+            timeoutMs,
+            resolveValue: (currentSession) => currentSession?.active ? 'attached' : null,
+            onTimeout: () => 'timeout',
+            isRelevantEvent: (event) =>
+                event.type === 'session-added'
+                || event.type === 'session-updated'
+                || event.type === 'session-removed'
+        })
+    }
+
+    private async rollbackDriverSwitchMetadata(
+        sessionId: string,
+        previousDriver: SessionDriver | null
+    ): Promise<DriverSwitchRollbackResult> {
+        const session = this.getSession(sessionId)
+        if ((resolveSessionDriver(session?.metadata) ?? null) === previousDriver) {
+            return 'not_needed'
+        }
+
+        try {
+            await this.sessionCache.mutateSessionMetadata(sessionId, (currentMetadata) => {
+                if (!previousDriver) {
+                    return {
+                        ...currentMetadata,
+                        driver: undefined
+                    }
+                }
+
+                return {
+                    ...currentMetadata,
+                    driver: previousDriver
+                }
+            }, {
+                touchUpdatedAt: false
+            })
+            return 'session_metadata_restored'
+        } catch {
+            return 'session_metadata_restore_failed'
+        }
+    }
+
+    private async cleanupUnexpectedSwitchSpawn(
+        originalSessionId: string,
+        spawnedSessionId: string
+    ): Promise<void> {
+        try {
+            await this.rpcGateway.killSession(spawnedSessionId)
+        } catch {
+            // Best effort cleanup; the caller reports the authoritative switch failure.
+        }
+
+        this.sessionCache.handleSessionEnd({ sid: spawnedSessionId, time: Date.now() })
+
+        if (spawnedSessionId !== originalSessionId) {
+            try {
+                await this.sessionCache.deleteSession(spawnedSessionId)
+            } catch {
+                // If the unexpected session never persisted, there is nothing left to clean up.
+            }
+        }
+    }
+
     private getSession(sessionId: string): Session | undefined {
         return this.sessionCache.getSession(sessionId) ?? this.sessionCache.refreshSession(sessionId) ?? undefined
     }
@@ -432,7 +801,7 @@ export class SessionLifecycleService {
             sessionId: session.id,
             machineId,
             directory,
-            agent: resolveSessionFlavor(session.metadata),
+            agent: resolveSessionSpawnDriver(session.metadata),
             model: session.model ?? undefined,
             modelReasoningEffort: session.modelReasoningEffort ?? undefined,
             permissionMode: session.permissionMode,

@@ -23,6 +23,7 @@ type SessionHandlersHarness = {
     handlers: RegisteredSessionHandlers
     emittedUpdates: MockSocket['emittedUpdates']
     onWebappEvents: SyncEvent[]
+    sessionStreamManager: SessionStreamManager
 }
 
 type UpdateMetadataResponse = Parameters<ClientToServerEvents['update-metadata']>[1] extends (
@@ -73,9 +74,11 @@ function createSessionHandlersHarness(): SessionHandlersHarness {
     const onWebappEvents: SyncEvent[] = []
     const { socket, handlers, emittedUpdates } = createMockSocket()
 
+    const sessionStreamManager = new SessionStreamManager()
+
     registerSessionHandlers(socket, {
         store,
-        sessionStreamManager: new SessionStreamManager(),
+        sessionStreamManager,
         resolveSessionAccess(sessionId) {
             const storedSession = store.sessions.getSession(sessionId)
             if (!storedSession) {
@@ -96,7 +99,8 @@ function createSessionHandlersHarness(): SessionHandlersHarness {
         session,
         handlers,
         emittedUpdates,
-        onWebappEvents
+        onWebappEvents,
+        sessionStreamManager
     }
 }
 
@@ -197,6 +201,60 @@ describe('mergeSessionMetadataPreservingLifecycle', () => {
             path: '/tmp/project',
             host: 'localhost'
         })
+    })
+})
+
+describe('registerSessionHandlers message', () => {
+    it('drops matching Pi assistant streams when the durable assistant message arrives', () => {
+        const harness = createSessionHandlersHarness()
+        const messageHandler = harness.handlers.message
+        expect(messageHandler).toBeDefined()
+
+        harness.sessionStreamManager.applyUpdate(harness.session.id, {
+            kind: 'append',
+            streamId: 'pi-assistant-1000',
+            delta: 'Hello from Pi'
+        })
+
+        messageHandler?.({
+            sid: harness.session.id,
+            message: {
+                role: 'agent',
+                content: {
+                    type: 'output',
+                    data: {
+                        type: 'assistant',
+                        message: {
+                            role: 'assistant',
+                            api: 'pi',
+                            provider: 'openai',
+                            model: 'gpt-5.4-mini',
+                            usage: {
+                                input: 1,
+                                output: 1,
+                                cacheRead: 0,
+                                cacheWrite: 0,
+                                totalTokens: 2,
+                                cost: {
+                                    input: 0,
+                                    output: 0,
+                                    cacheRead: 0,
+                                    cacheWrite: 0,
+                                    total: 0
+                                }
+                            },
+                            stopReason: 'stop',
+                            timestamp: 1_000,
+                            content: [
+                                { type: 'text', text: 'Hello from Pi' }
+                            ]
+                        }
+                    }
+                }
+            }
+        })
+
+        expect(harness.sessionStreamManager.getStream(harness.session.id)).toBeNull()
     })
 })
 

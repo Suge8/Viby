@@ -15,6 +15,7 @@ import {
 } from './teamRecordMappers'
 
 export {
+    deleteTeamProject,
     deleteTeamRole,
     getTeamProject,
     getTeamProjectByManagerSessionId,

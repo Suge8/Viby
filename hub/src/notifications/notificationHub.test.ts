@@ -1,3 +1,4 @@
+import { createEmptySessionMessageActivity, mergeSessionMessageActivity, type SessionMessageActivity } from '@viby/protocol'
 import { describe, expect, it } from 'bun:test'
 import type { Session, SyncEvent, SyncEventListener, SyncEngine } from '../sync/syncEngine'
 import type { NotificationChannel } from './notificationTypes'
@@ -8,6 +9,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 class FakeSyncEngine {
     private readonly listeners: Set<SyncEventListener> = new Set()
     private readonly sessions: Map<string, Session> = new Map()
+    private readonly messageActivities: Map<string, SessionMessageActivity> = new Map()
 
     subscribe(listener: SyncEventListener): () => void {
         this.listeners.add(listener)
@@ -22,7 +24,19 @@ class FakeSyncEngine {
         this.sessions.set(session.id, session)
     }
 
+    getSessionMessageActivities(sessionIds: string[]): Record<string, SessionMessageActivity> {
+        return Object.fromEntries(sessionIds.map((sessionId) => [
+            sessionId,
+            this.messageActivities.get(sessionId) ?? createEmptySessionMessageActivity()
+        ]))
+    }
+
     emit(event: SyncEvent): void {
+        if (event.type === 'message-received' && event.sessionId) {
+            const current = this.messageActivities.get(event.sessionId) ?? createEmptySessionMessageActivity()
+            this.messageActivities.set(event.sessionId, mergeSessionMessageActivity(current, event.message))
+        }
+
         for (const listener of this.listeners) {
             listener(event)
         }
@@ -108,7 +122,7 @@ describe('NotificationHub', () => {
         hub.stop()
     })
 
-    it('throttles ready notifications per session', async () => {
+    it('sends ready notifications only after the session reaches the shared ready-for-input state', async () => {
         const engine = new FakeSyncEngine()
         const channel = new StubChannel()
         const hub = new NotificationHub(engine as unknown as SyncEngine, [channel], {
@@ -116,7 +130,7 @@ describe('NotificationHub', () => {
             readyCooldownMs: 20
         })
 
-        const session = createSession()
+        const session = createSession({ thinking: true })
         engine.setSession(session)
 
         const readyEvent: SyncEvent = {
@@ -126,7 +140,7 @@ describe('NotificationHub', () => {
                 id: 'message-1',
                 seq: 1,
                 localId: null,
-                createdAt: 0,
+                createdAt: 1,
                 content: {
                     role: 'agent',
                     content: {
@@ -139,16 +153,24 @@ describe('NotificationHub', () => {
         }
 
         engine.emit(readyEvent)
-        await sleep(5)
+        await sleep(25)
+        expect(channel.readySessions).toHaveLength(0)
+
+        engine.setSession({ ...session, thinking: false })
+        engine.emit({ type: 'session-updated', sessionId: session.id })
+        await sleep(25)
         expect(channel.readySessions).toHaveLength(1)
 
-        engine.emit(readyEvent)
-        await sleep(5)
+        engine.emit({ type: 'session-updated', sessionId: session.id })
+        await sleep(25)
         expect(channel.readySessions).toHaveLength(1)
 
         await sleep(30)
-        engine.emit(readyEvent)
-        await sleep(5)
+        engine.setSession({ ...session, thinking: true })
+        engine.emit({ type: 'session-updated', sessionId: session.id })
+        engine.setSession({ ...session, thinking: false })
+        engine.emit({ type: 'session-updated', sessionId: session.id })
+        await sleep(25)
         expect(channel.readySessions).toHaveLength(2)
 
         hub.stop()

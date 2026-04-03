@@ -77,14 +77,16 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null): Ho
             return c.json({ error: 'Invalid body' }, 400)
         }
 
-        // Require text or attachments
-        if (!parsed.data.text && (!parsed.data.attachments || parsed.data.attachments.length === 0)) {
+        const trimmedText = parsed.data.text.trim()
+        const hasAttachments = Boolean(parsed.data.attachments && parsed.data.attachments.length > 0)
+
+        if (!trimmedText && !hasAttachments) {
             return c.json({ error: 'Message requires text or attachments' }, 400)
         }
 
         try {
             const session = await engine.sendMessage(sessionId, {
-                text: parsed.data.text,
+                text: trimmedText,
                 localId: parsed.data.localId,
                 attachments: parsed.data.attachments,
                 sentFrom: 'webapp'

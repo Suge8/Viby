@@ -1,4 +1,4 @@
-import { isPermissionModeAllowedForFlavor } from '@viby/protocol'
+import { isPermissionModeAllowedForDriver, resolveSessionDriver } from '@viby/protocol'
 import { PermissionModeSchema } from '@viby/protocol/schemas'
 import { Hono } from 'hono'
 import { z } from 'zod'
@@ -56,9 +56,9 @@ export function createPermissionsRoutes(getSyncEngine: () => SyncEngine | null):
 
         const mode = parsed.data.mode
         if (mode !== undefined) {
-            const flavor = session.metadata?.flavor ?? 'claude'
-            if (!isPermissionModeAllowedForFlavor(mode, flavor)) {
-                return c.json({ error: 'Invalid permission mode for session flavor' }, 400)
+            const driver = resolveSessionDriver(session.metadata)
+            if (!driver || !isPermissionModeAllowedForDriver(mode, driver)) {
+                return c.json({ error: 'Invalid permission mode for session driver' }, 400)
             }
         }
         const allowTools = parsed.data.allowTools

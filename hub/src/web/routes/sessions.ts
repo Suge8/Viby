@@ -9,7 +9,7 @@ import type { WebAppEnv } from '../middleware/auth'
 import { requireSessionFromParam, requireSyncEngine } from './guards'
 import { registerSessionActionRoutes } from './sessionActionRoutes'
 import { registerSessionConfigRoutes } from './sessionConfigRoutes'
-import { getErrorMessage } from './sessionRouteSupport'
+import { getErrorMessage, getErrorStatus } from './sessionRouteSupport'
 
 const renameSessionSchema = z.object({
     name: z.string().min(1).max(255)
@@ -97,9 +97,13 @@ export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Ho
             return c.json({ ok: true })
         } catch (error) {
             const message = getErrorMessage(error, 'Failed to delete session')
-            // Map "active session" error to 409 conflict (race condition: session became active)
+            // Map active/team lifecycle conflicts to 409 and preserve not-found semantics.
             if (message.includes('active')) {
                 return c.json({ error: message }, 409)
+            }
+            const status = getErrorStatus(error)
+            if (status === 404 || status === 409) {
+                return c.json({ error: message }, status)
             }
             return c.json({ error: message }, 500)
         }

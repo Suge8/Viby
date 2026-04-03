@@ -148,6 +148,13 @@ export function upsertTeamRole(db: Database, role: TeamRoleDefinition): TeamRole
     return getTeamRole(db, role.projectId, role.id) ?? role
 }
 
+export function deleteTeamProject(db: Database, projectId: string): void {
+    db.query(`
+        DELETE FROM team_projects
+        WHERE id = ?
+    `).run(projectId)
+}
+
 export function deleteTeamRole(db: Database, projectId: string, roleId: string): void {
     db.query(`
         DELETE FROM team_roles

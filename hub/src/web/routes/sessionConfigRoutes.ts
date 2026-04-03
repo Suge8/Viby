@@ -1,10 +1,12 @@
 import {
     getLiveSessionConfigSupport,
-    isModelReasoningEffortAllowedForFlavor,
-    getPermissionModesForFlavor,
-    isPermissionModeAllowedForFlavor,
-    supportsLiveModelReasoningEffortForFlavor,
-    supportsLiveModelSelectionForFlavor
+    isModelReasoningEffortAllowedForDriver,
+    getPermissionModesForDriver,
+    isPermissionModeAllowedForDriver,
+    resolveSessionDriver,
+    supportsLiveModelReasoningEffortForDriver,
+    supportsLiveModelSelectionForDriver,
+    type SessionDriver
 } from '@viby/protocol'
 import { CodexCollaborationModeSchema, ModelReasoningEffortSchema, PermissionModeSchema } from '@viby/protocol/schemas'
 import type { Hono } from 'hono'
@@ -38,10 +40,10 @@ type SessionConfigSnapshotError = Error & {
     code: 'session_not_found'
 }
 
-function getSessionFlavor(
+function getSessionDriver(
     session: Parameters<typeof getLiveSessionConfigSupport>[0]
-): string {
-    return session.metadata?.flavor ?? 'claude'
+): SessionDriver | null {
+    return resolveSessionDriver(session.metadata)
 }
 
 function createSessionConfigSnapshotError(): SessionConfigSnapshotError {
@@ -82,10 +84,10 @@ export function registerSessionConfigRoutes(
             return sessionContext
         }
 
-        const flavor = getSessionFlavor(sessionContext.session)
+        const driver = getSessionDriver(sessionContext.session)
         const liveConfigSupport = getLiveSessionConfigSupport(sessionContext.session)
         if (!liveConfigSupport.canChangePermissionMode) {
-            return c.json({ error: 'Permission mode can only be changed for remote-managed active sessions' }, 409)
+            return c.json({ error: 'Permission mode can only be changed for Viby-managed active sessions' }, 409)
         }
 
         const parsedBody = await parseJsonBody(c, permissionModeSchema)
@@ -93,13 +95,13 @@ export function registerSessionConfigRoutes(
             return parsedBody.response
         }
 
-        const allowedModes = getPermissionModesForFlavor(flavor)
+        const allowedModes = driver ? getPermissionModesForDriver(driver) : []
         if (allowedModes.length === 0) {
-            return c.json({ error: 'Permission mode not supported for session flavor' }, 400)
+            return c.json({ error: 'Permission mode not supported for session driver' }, 400)
         }
 
-        if (!isPermissionModeAllowedForFlavor(parsedBody.data.mode, flavor)) {
-            return c.json({ error: 'Invalid permission mode for session flavor' }, 400)
+        if (!isPermissionModeAllowedForDriver(parsedBody.data.mode, driver)) {
+            return c.json({ error: 'Invalid permission mode for session driver' }, 400)
         }
 
         try {
@@ -121,11 +123,11 @@ export function registerSessionConfigRoutes(
             return sessionContext
         }
 
-        if (getSessionFlavor(sessionContext.session) !== 'codex') {
+        if (getSessionDriver(sessionContext.session) !== 'codex') {
             return c.json({ error: 'Collaboration mode is only supported for Codex sessions' }, 400)
         }
         if (!getLiveSessionConfigSupport(sessionContext.session).canChangeCollaborationMode) {
-            return c.json({ error: 'Collaboration mode can only be changed for remote Codex sessions' }, 409)
+            return c.json({ error: 'Collaboration mode can only be changed for Viby-managed Codex sessions' }, 409)
         }
 
         const parsedBody = await parseJsonBody(c, collaborationModeSchema)
@@ -157,13 +159,13 @@ export function registerSessionConfigRoutes(
             return parsedBody.response
         }
 
-        const flavor = getSessionFlavor(sessionContext.session)
+        const driver = getSessionDriver(sessionContext.session)
         const liveConfigSupport = getLiveSessionConfigSupport(sessionContext.session)
-        if (!supportsLiveModelSelectionForFlavor(flavor)) {
-            return c.json({ error: 'Live model selection is only supported for Claude, Codex, and Gemini sessions' }, 400)
+        if (!driver || !supportsLiveModelSelectionForDriver(driver)) {
+            return c.json({ error: 'Live model selection is only supported for Claude, Codex, Gemini, and Pi sessions' }, 400)
         }
         if (!liveConfigSupport.canChangeModel) {
-            return c.json({ error: 'Model selection can only be changed for remote Claude, Codex, and Gemini sessions' }, 409)
+            return c.json({ error: 'Model selection can only be changed for Viby-managed Claude, Codex, Gemini, and Pi sessions' }, 409)
         }
 
         try {
@@ -185,13 +187,13 @@ export function registerSessionConfigRoutes(
             return sessionContext
         }
 
-        const flavor = getSessionFlavor(sessionContext.session)
+        const driver = getSessionDriver(sessionContext.session)
         const liveConfigSupport = getLiveSessionConfigSupport(sessionContext.session)
-        if (!supportsLiveModelReasoningEffortForFlavor(flavor)) {
-            return c.json({ error: 'Live model reasoning effort is only supported for Claude and Codex sessions' }, 400)
+        if (!driver || !supportsLiveModelReasoningEffortForDriver(driver)) {
+            return c.json({ error: 'Live model reasoning effort is only supported for Claude, Codex, and Pi sessions' }, 400)
         }
         if (!liveConfigSupport.canChangeModelReasoningEffort) {
-            return c.json({ error: 'Model reasoning effort can only be changed for remote Claude and Codex sessions' }, 409)
+            return c.json({ error: 'Model reasoning effort can only be changed for Viby-managed Claude, Codex, and Pi sessions' }, 409)
         }
 
         const parsedBody = await parseJsonBody(c, modelReasoningEffortSchema)
@@ -201,9 +203,9 @@ export function registerSessionConfigRoutes(
 
         if (
             parsedBody.data.modelReasoningEffort !== null
-            && !isModelReasoningEffortAllowedForFlavor(parsedBody.data.modelReasoningEffort, flavor)
+            && !isModelReasoningEffortAllowedForDriver(parsedBody.data.modelReasoningEffort, driver)
         ) {
-            return c.json({ error: 'Invalid model reasoning effort for session flavor' }, 400)
+            return c.json({ error: 'Invalid model reasoning effort for session driver' }, 400)
         }
 
         try {

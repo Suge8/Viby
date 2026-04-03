@@ -32,8 +32,8 @@ export { SessionStore } from './sessionStore'
 export { TeamStore } from './teamStore'
 
 const IN_MEMORY_DATABASE_PREFIX = 'file::memory:'
-const SCHEMA_VERSION = 11
-const AUTO_MIGRATABLE_SCHEMA_VERSIONS = [7, 8, 9, 10] as const
+const SCHEMA_VERSION = 12
+const AUTO_MIGRATABLE_SCHEMA_VERSIONS = [7, 8, 9, 10, 11] as const
 const LEGACY_REQUIRED_TABLES = [
     'sessions',
     'machines',
@@ -319,7 +319,7 @@ export class Store {
     }
 
     private migrateSchema(currentVersion: number): void {
-        if (!AUTO_MIGRATABLE_SCHEMA_VERSIONS.includes(currentVersion as 7 | 8 | 9 | 10)) {
+        if (!AUTO_MIGRATABLE_SCHEMA_VERSIONS.includes(currentVersion as 7 | 8 | 9 | 10 | 11)) {
             throw this.buildSchemaMismatchError(currentVersion)
         }
 
@@ -332,6 +332,9 @@ export class Store {
                 this.backfillSessionMessageSeqCounters()
             }
             this.createSchema()
+            if (currentVersion < 12) {
+                this.backfillSessionMetadataDrivers()
+            }
             const missingTeamMemberColumns = this.addMissingTeamMemberColumns()
             if (missingTeamMemberColumns.includes('role_id')) {
                 this.backfillTeamMemberRoleIds()
@@ -395,6 +398,24 @@ export class Store {
                 ),
                 1
             )
+        `)
+    }
+
+    private backfillSessionMetadataDrivers(): void {
+        this.db.exec(`
+            UPDATE sessions
+            SET metadata = json_remove(
+                    CASE
+                        WHEN json_type(metadata, '$.driver') IS NULL
+                            THEN json_set(metadata, '$.driver', json_extract(metadata, '$.flavor'))
+                        ELSE metadata
+                    END,
+                    '$.flavor'
+                ),
+                metadata_version = metadata_version + 1
+            WHERE metadata IS NOT NULL
+              AND json_valid(metadata)
+              AND json_type(metadata, '$.flavor') = 'text'
         `)
     }
 
@@ -490,7 +511,7 @@ export class Store {
         return new Error(
             `SQLite schema version mismatch for ${location}. ` +
             `Expected ${SCHEMA_VERSION}, found ${currentVersion}. ` +
-            `This build only runs the 7 -> ${SCHEMA_VERSION}, 8 -> ${SCHEMA_VERSION}, 9 -> ${SCHEMA_VERSION}, and 10 -> ${SCHEMA_VERSION} migrations automatically. ` +
+            `This build only runs the 7 -> ${SCHEMA_VERSION}, 8 -> ${SCHEMA_VERSION}, 9 -> ${SCHEMA_VERSION}, 10 -> ${SCHEMA_VERSION}, and 11 -> ${SCHEMA_VERSION} migrations automatically. ` +
             SCHEMA_REBUILD_GUIDANCE
         )
     }

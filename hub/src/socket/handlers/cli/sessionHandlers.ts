@@ -1,6 +1,6 @@
 import type { ClientToServerEvents } from '@viby/protocol'
 import {
-    extractCodexMessageItemId,
+    extractAssistantMessageStreamId,
     getSessionActivityKind,
     SessionStreamUpdatePayloadSchema,
     shouldMessageAdvanceSessionUpdatedAt
@@ -142,7 +142,8 @@ export function registerSessionHandlers(socket: CliSocketWithData, deps: Session
             return
         }
 
-        sessionStreamManager.drop(sid, extractCodexMessageItemId(content) ?? undefined)
+        const assistantStreamId = extractAssistantMessageStreamId(content)
+        sessionStreamManager.drop(sid, assistantStreamId ?? undefined)
 
         const msg = store.messages.addMessage(sid, content, localId)
         const activityKind = getSessionActivityKind(msg.content)

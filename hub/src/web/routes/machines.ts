@@ -1,10 +1,14 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { isPermissionModeAllowedForFlavor } from '@viby/protocol'
+import {
+    isPermissionModeAllowedForDriver,
+    ResolveAgentLaunchConfigRequestSchema,
+} from '@viby/protocol'
 import {
     CodexCollaborationModeSchema,
     ModelReasoningEffortSchema,
     PermissionModeSchema,
+    SessionDriverSchema,
     TeamSessionSpawnRoleSchema
 } from '@viby/protocol/schemas'
 import type { SyncEngine } from '../../sync/syncEngine'
@@ -13,7 +17,7 @@ import { requireMachine } from './guards'
 
 const spawnBodySchema = z.object({
     directory: z.string().min(1),
-    agent: z.enum(['claude', 'codex', 'cursor', 'gemini', 'opencode']).optional(),
+    agent: SessionDriverSchema.optional(),
     model: z.string().optional(),
     modelReasoningEffort: ModelReasoningEffortSchema.optional(),
     permissionMode: PermissionModeSchema.optional(),
@@ -63,8 +67,8 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null): Ho
         }
 
         const agent = parsed.data.agent ?? 'claude'
-        if (parsed.data.permissionMode && !isPermissionModeAllowedForFlavor(parsed.data.permissionMode, agent)) {
-            return c.json({ error: 'Invalid permission mode for agent flavor' }, 400)
+        if (parsed.data.permissionMode && !isPermissionModeAllowedForDriver(parsed.data.permissionMode, agent)) {
+            return c.json({ error: 'Invalid permission mode for session driver' }, 400)
         }
         if (parsed.data.collaborationMode && agent !== 'codex') {
             return c.json({ error: 'Collaboration mode is only supported for Codex sessions' }, 400)
@@ -86,7 +90,9 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null): Ho
             return c.json(result)
         }
 
-        const session = engine.getSession(result.sessionId)
+        const session = await engine.ensureSessionDriver(result.sessionId, agent, {
+            model: parsed.data.model ?? null
+        })
         if (!session) {
             return c.json({
                 error: 'Session snapshot unavailable after spawn',
@@ -94,10 +100,7 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null): Ho
             }, 500)
         }
 
-        return c.json({
-            type: 'success',
-            session
-        })
+        return c.json({ type: 'success', session })
     })
 
     app.post('/machines/:id/paths/exists', async (c) => {
@@ -129,6 +132,27 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null): Ho
         } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : 'Failed to check paths' }, 500)
         }
+    })
+
+    app.post('/machines/:id/agent-launch-config', async (c) => {
+        const engine = getSyncEngine()
+        if (!engine) {
+            return c.json({ error: 'Not connected' }, 503)
+        }
+
+        const machineId = c.req.param('id')
+        const machine = requireMachine(c, engine, machineId)
+        if (machine instanceof Response) {
+            return machine
+        }
+
+        const body = await c.req.json().catch(() => null)
+        const parsed = ResolveAgentLaunchConfigRequestSchema.safeParse(body)
+        if (!parsed.success) {
+            return c.json({ error: 'Invalid body' }, 400)
+        }
+
+        return c.json(await engine.resolveAgentLaunchConfig(machineId, parsed.data))
     })
 
     app.get('/machines/:id/directory', async (c) => {

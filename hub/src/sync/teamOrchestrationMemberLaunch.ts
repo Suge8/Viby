@@ -148,7 +148,7 @@ async function spawnNewMember(
             path: options.config.directory,
             host: 'localhost',
             machineId: runtime.contextReader.resolveProjectMachineId(options.project),
-            flavor: options.config.providerFlavor,
+            driver: options.config.providerFlavor,
         },
         agentState: null,
         model: options.config.model ?? undefined,

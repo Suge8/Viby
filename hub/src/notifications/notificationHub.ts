@@ -1,6 +1,16 @@
+import { getPendingRequestsCount, isSessionReadyForInput } from '@viby/protocol'
 import type { Session, SyncEngine, SyncEvent } from '../sync/syncEngine'
 import type { NotificationChannel, NotificationHubOptions } from './notificationTypes'
-import { extractMessageEventType } from './eventParsing'
+
+const DEFAULT_READY_COOLDOWN_MS = 5_000
+const DEFAULT_PERMISSION_DEBOUNCE_MS = 500
+
+type ReadyStateSnapshot = {
+    active: boolean
+    thinking: boolean
+    pendingRequestsCount: number
+    latestActivityKind: ReturnType<SyncEngine['getSessionMessageActivities']>[string]['latestActivityKind']
+}
 
 export class NotificationHub {
     private readonly channels: NotificationChannel[]
@@ -9,6 +19,7 @@ export class NotificationHub {
     private readonly lastKnownRequests: Map<string, Set<string>> = new Map()
     private readonly notificationDebounce: Map<string, NodeJS.Timeout> = new Map()
     private readonly lastReadyNotificationAt: Map<string, number> = new Map()
+    private readonly lastReadyState: Map<string, boolean> = new Map()
     private unsubscribeSyncEvents: (() => void) | null = null
 
     constructor(
@@ -17,8 +28,8 @@ export class NotificationHub {
         options?: NotificationHubOptions
     ) {
         this.channels = channels
-        this.readyCooldownMs = options?.readyCooldownMs ?? 5000
-        this.permissionDebounceMs = options?.permissionDebounceMs ?? 500
+        this.readyCooldownMs = options?.readyCooldownMs ?? DEFAULT_READY_COOLDOWN_MS
+        this.permissionDebounceMs = options?.permissionDebounceMs ?? DEFAULT_PERMISSION_DEBOUNCE_MS
         this.unsubscribeSyncEvents = this.syncEngine.subscribe((event) => {
             this.handleSyncEvent(event)
         })
@@ -36,6 +47,7 @@ export class NotificationHub {
         this.notificationDebounce.clear()
         this.lastKnownRequests.clear()
         this.lastReadyNotificationAt.clear()
+        this.lastReadyState.clear()
     }
 
     private handleSyncEvent(event: SyncEvent): void {
@@ -46,6 +58,7 @@ export class NotificationHub {
                 return
             }
             this.checkForPermissionNotification(session)
+            this.syncReadyNotification(session.id)
             return
         }
 
@@ -55,12 +68,7 @@ export class NotificationHub {
         }
 
         if (event.type === 'message-received' && event.sessionId) {
-            const eventType = extractMessageEventType(event)
-            if (eventType === 'ready') {
-                this.sendReadyNotification(event.sessionId).catch((error) => {
-                    console.error('[NotificationHub] Failed to send ready notification:', error)
-                })
-            }
+            this.syncReadyNotification(event.sessionId)
         }
     }
 
@@ -72,6 +80,7 @@ export class NotificationHub {
         }
         this.lastKnownRequests.delete(sessionId)
         this.lastReadyNotificationAt.delete(sessionId)
+        this.lastReadyState.delete(sessionId)
     }
 
     private getNotifiableSession(sessionId: string): Session | null {
@@ -84,8 +93,7 @@ export class NotificationHub {
 
     private checkForPermissionNotification(session: Session): void {
         const requests = session.agentState?.requests
-
-        if (requests == null) {
+        if (!requests) {
             return
         }
 
@@ -128,6 +136,36 @@ export class NotificationHub {
         }
 
         await this.notifyPermission(session)
+    }
+
+    private syncReadyNotification(sessionId: string): void {
+        const session = this.getNotifiableSession(sessionId)
+        if (!session) {
+            this.clearSessionState(sessionId)
+            return
+        }
+
+        const nextReadyState = isSessionReadyForInput(this.getReadyStateOptions(sessionId, session))
+        const previousReadyState = this.lastReadyState.get(sessionId) ?? false
+        this.lastReadyState.set(sessionId, nextReadyState)
+
+        if (!nextReadyState || previousReadyState) {
+            return
+        }
+
+        void this.sendReadyNotification(sessionId).catch((error) => {
+            console.error('[NotificationHub] Failed to send ready notification:', error)
+        })
+    }
+
+    private getReadyStateOptions(sessionId: string, session: Session): ReadyStateSnapshot {
+        const activity = this.syncEngine.getSessionMessageActivities([sessionId])[sessionId]
+        return {
+            active: session.active,
+            thinking: session.thinking,
+            pendingRequestsCount: getPendingRequestsCount(session.agentState),
+            latestActivityKind: activity?.latestActivityKind ?? null
+        }
     }
 
     private async sendReadyNotification(sessionId: string): Promise<void> {

@@ -8,11 +8,16 @@
  */
 
 import {
+    findNextRecoveryCursor,
     getSessionLifecycleState,
     getSessionActivityKind,
-    shouldMessageAdvanceSessionUpdatedAt
+    resolveSessionDriver,
+    shouldMessageAdvanceSessionUpdatedAt,
+    type SessionDriver,
+    type SessionHandoffSnapshot,
 } from '@viby/protocol'
 import type {
+    AgentFlavor,
     CodexCollaborationMode,
     DecryptedMessage,
     MessageMeta,
@@ -24,7 +29,9 @@ import type {
     TeamTaskRecord,
     SessionRecoveryPage,
     SessionMessageActivity,
-    SyncEvent
+    SyncEvent,
+    ResolveAgentLaunchConfigRequest,
+    ResolveAgentLaunchConfigResponse
 } from '@viby/protocol/types'
 import type { Server } from 'socket.io'
 import type { Store } from '../store'
@@ -32,6 +39,7 @@ import type { RpcRegistry } from '../socket/rpcRegistry'
 import { EventPublisher, type SyncEventBroadcaster, type SyncEventListener } from './eventPublisher'
 import { MachineCache, type Machine } from './machineCache'
 import { MessageService } from './messageService'
+import { SessionHandoffService } from './sessionHandoffService'
 import {
     RpcGateway,
     type RpcCommandResponse,
@@ -45,6 +53,7 @@ import {
 import { SessionCache } from './sessionCache'
 import {
     SessionLifecycleService,
+    type DriverSwitchResult,
     type ResumeContractState,
     type ResumeSessionResult
 } from './sessionLifecycleService'
@@ -93,6 +102,7 @@ import {
 export type { Session, SyncEvent } from '@viby/protocol/types'
 export type { Machine } from './machineCache'
 export type { SyncEventListener } from './eventPublisher'
+export type { DriverSwitchResult } from './sessionLifecycleService'
 export type {
     RpcCommandResponse,
     RpcDeleteUploadResponse,
@@ -115,6 +125,7 @@ export type {
     SubmitTaskVerificationResultInput
 } from './teamAcceptanceService'
 export { TeamAcceptanceError } from './teamAcceptanceService'
+export { SessionHandoffBuildError } from './sessionHandoffService'
 export { TeamLifecycleError } from './teamLifecycleService'
 export type {
     CloseTeamProjectInput,
@@ -190,6 +201,7 @@ export class SyncEngine {
     private readonly sessionCache: SessionCache
     private readonly machineCache: MachineCache
     private readonly messageService: MessageService
+    private readonly sessionHandoffService: SessionHandoffService
     private readonly rpcGateway: RpcGateway
     private readonly sessionLifecycleService: SessionLifecycleService
     private readonly teamMemberSessionService: TeamMemberSessionService
@@ -210,6 +222,10 @@ export class SyncEngine {
         this.sessionCache = new SessionCache(store, this.eventPublisher)
         this.machineCache = new MachineCache(store, this.eventPublisher)
         this.messageService = new MessageService(store, io, this.eventPublisher)
+        this.sessionHandoffService = new SessionHandoffService({
+            getSession: (sessionId) => this.getSession(sessionId),
+            getMessagesAfter: (sessionId, options) => this.messageService.getMessagesAfter(sessionId, options),
+        })
         this.rpcGateway = new RpcGateway(io, rpcRegistry)
         this.teamMemberSessionService = new TeamMemberSessionService(store)
         this.teamCoordinatorService = new TeamCoordinatorService(store, (event) => {
@@ -320,12 +336,7 @@ export class SyncEngine {
         }
 
         const messages = this.messageService.getMessagesAfter(sessionId, options)
-        const nextAfterSeq = messages.reduce((cursor, message) => {
-            if (typeof message.seq === 'number' && message.seq > cursor) {
-                return message.seq
-            }
-            return cursor
-        }, options.afterSeq)
+        const nextAfterSeq = findNextRecoveryCursor(messages, options.afterSeq)
 
         return {
             session,
@@ -337,6 +348,10 @@ export class SyncEngine {
                 hasMore: messages.length >= options.limit
             }
         }
+    }
+
+    buildSessionHandoff(sessionId: string): SessionHandoffSnapshot {
+        return this.sessionHandoffService.buildSessionHandoff(sessionId)
     }
 
     getSessionMessageActivities(sessionIds: string[]): Record<string, SessionMessageActivity> {
@@ -834,32 +849,38 @@ export class SyncEngine {
         return await this.teamLifecycleService.unarchiveSession(sessionId)
     }
 
-    private async waitForSwitchedSession(sessionId: string, to: 'remote' | 'local'): Promise<Session> {
-        const expectsControlledByUser = to === 'local'
-        const current = this.getSession(sessionId)
-        if (current?.active && current.agentState?.controlledByUser === expectsControlledByUser) {
-            return current
+    async switchSessionDriver(sessionId: string, targetDriver: SessionDriver): Promise<DriverSwitchResult> {
+        const previousDriver = resolveSessionDriver(this.getSession(sessionId)?.metadata)
+        const result = await this.sessionLifecycleService.switchSessionDriver(sessionId, targetDriver, {
+            buildSessionHandoff: (targetSessionId) => this.buildSessionHandoff(targetSessionId)
+        })
+        if (result.type !== 'success') {
+            return result
         }
 
-        return await this.sessionCache.waitForSessionCondition(sessionId, {
-            timeoutMs: SyncEngine.SWITCH_CONTRACT_TIMEOUT_MS,
-            resolveValue: () => {
-                const session = this.getSession(sessionId)
-                if (!session?.active || session.agentState?.controlledByUser !== expectsControlledByUser) {
-                    return null
-                }
-                return session
-            },
-            onTimeout: () => {
-                throw new Error(`Session switch did not reach ${to} mode`)
-            },
-            isRelevantEvent: (event) => event.type === 'session-added' || event.type === 'session-updated'
-        })
-    }
+        if (!previousDriver || previousDriver === result.targetDriver) {
+            return result
+        }
 
-    async switchSession(sessionId: string, to: 'remote' | 'local'): Promise<Session> {
-        await this.rpcGateway.switchSession(sessionId, to)
-        return await this.waitForSwitchedSession(sessionId, to)
+        try {
+            await this.messageService.appendDriverSwitchedEvent(sessionId, {
+                type: 'driver-switched',
+                previousDriver,
+                targetDriver: result.targetDriver
+            })
+            return result
+        } catch (error) {
+            return {
+                type: 'error',
+                message: error instanceof Error ? error.message : 'Failed to append driver switch marker',
+                code: 'marker_append_failed',
+                stage: 'marker_append',
+                status: 500,
+                targetDriver: result.targetDriver,
+                rollbackResult: 'not_needed',
+                session: this.getSession(sessionId) ?? result.session
+            }
+        }
     }
 
     async renameSession(sessionId: string, name: string): Promise<Session> {
@@ -867,7 +888,7 @@ export class SyncEngine {
     }
 
     async deleteSession(sessionId: string): Promise<void> {
-        await this.sessionCache.deleteSession(sessionId)
+        await this.teamLifecycleService.deleteSession(sessionId)
     }
 
     async applySessionConfig(
@@ -917,7 +938,7 @@ export class SyncEngine {
         sessionId?: string
         machineId: string
         directory: string
-        agent?: 'claude' | 'codex' | 'cursor' | 'gemini' | 'opencode'
+        agent?: AgentFlavor
         model?: string
         modelReasoningEffort?: Session['modelReasoningEffort']
         permissionMode?: PermissionMode
@@ -926,6 +947,10 @@ export class SyncEngine {
         worktreeName?: string
         resumeSessionId?: string
         collaborationMode?: CodexCollaborationMode
+        driverSwitch?: {
+            targetDriver: SessionDriver
+            handoffSnapshot: SessionHandoffSnapshot
+        }
     }): Promise<{ type: 'success'; sessionId: string } | { type: 'error'; message: string }> {
         return await this.rpcGateway.spawnSession(options)
     }
@@ -1134,6 +1159,13 @@ export class SyncEngine {
         return await this.rpcGateway.browseMachineDirectory(machineId, path)
     }
 
+    async resolveAgentLaunchConfig(
+        machineId: string,
+        request: ResolveAgentLaunchConfigRequest
+    ): Promise<ResolveAgentLaunchConfigResponse> {
+        return await this.rpcGateway.resolveAgentLaunchConfig(machineId, request)
+    }
+
     async getGitStatus(sessionId: string, cwd?: string): Promise<RpcCommandResponse> {
         return await this.rpcGateway.getGitStatus(sessionId, cwd)
     }
@@ -1154,11 +1186,18 @@ export class SyncEngine {
         return await this.rpcGateway.listDirectory(sessionId, path)
     }
 
+    private async ensureSessionReadyForAttachmentMutation(sessionId: string): Promise<void> {
+        this.ensureGenericSendAllowed(sessionId)
+        await this.ensureSessionReadyForSend(sessionId)
+    }
+
     async uploadFile(sessionId: string, filename: string, content: string, mimeType: string): Promise<RpcUploadFileResponse> {
+        await this.ensureSessionReadyForAttachmentMutation(sessionId)
         return await this.rpcGateway.uploadFile(sessionId, filename, content, mimeType)
     }
 
     async deleteUploadFile(sessionId: string, path: string): Promise<RpcDeleteUploadResponse> {
+        await this.ensureSessionReadyForAttachmentMutation(sessionId)
         return await this.rpcGateway.deleteUploadFile(sessionId, path)
     }
 
@@ -1180,5 +1219,51 @@ export class SyncEngine {
         error?: string
     }> {
         return await this.rpcGateway.listSkills(sessionId)
+    }
+
+    /**
+     * Single control point: ensures session driver and model are set atomically after spawn.
+     * Returns null only if session doesn't exist.
+     * Throws on metadata mutation failure to enforce proper error handling upstream.
+     */
+    async ensureSessionDriver(
+        sessionId: string,
+        driver: AgentFlavor,
+        options?: { model?: string | null }
+    ): Promise<Session | null> {
+        const session = this.getSession(sessionId)
+        if (!session) {
+            return null
+        }
+
+        const hasDriver = session.metadata?.driver != null
+        const hasModel = options?.model !== undefined && session.model !== options.model
+
+        if (hasDriver && !hasModel) {
+            return session
+        }
+
+        if (!hasDriver) {
+            const fallbackMetadata = session.metadata ?? { path: '', host: '' }
+            const updatedSession = await this.sessionCache.mutateSessionMetadata(
+                sessionId,
+                () => ({ ...fallbackMetadata, driver }),
+                { touchUpdatedAt: false }
+            )
+
+            if (hasModel && options?.model !== undefined) {
+                this.sessionCache.applySessionConfig(sessionId, { model: options.model })
+                return this.getSession(sessionId) ?? updatedSession
+            }
+
+            return updatedSession
+        }
+
+        if (hasModel && options?.model !== undefined) {
+            this.sessionCache.applySessionConfig(sessionId, { model: options.model })
+            return this.getSession(sessionId) ?? session
+        }
+
+        return session
     }
 }

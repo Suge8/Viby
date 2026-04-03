@@ -15,6 +15,7 @@ import {
     getTeamProjectByManagerSessionId,
     getTeamRole,
     getTeamTask,
+    deleteTeamProject,
     deleteTeamRole,
     listTeamAcceptanceEventsByProjectId,
     insertTeamEvent,
@@ -55,6 +56,10 @@ export class TeamStore {
 
     upsertProject(project: TeamProject): TeamProject {
         return upsertTeamProject(this.db, project)
+    }
+
+    deleteProject(projectId: string): void {
+        deleteTeamProject(this.db, projectId)
     }
 
     getRole(projectId: string, roleId: string): TeamRoleDefinition | null {

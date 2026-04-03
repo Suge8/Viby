@@ -1,11 +1,16 @@
 import type {
+    AgentFlavor,
     CodexCollaborationMode,
     MachineDirectoryEntry,
     MachineDirectoryResponse,
     MachineDirectoryRoot,
     ModelReasoningEffort,
     PermissionMode,
-    TeamSessionSpawnRole
+    ResolveAgentLaunchConfigRequest,
+    ResolveAgentLaunchConfigResponse,
+    SessionHandoffSnapshot,
+    TeamSessionSpawnRole,
+    SessionDriver,
 } from '@viby/protocol/types'
 import type { Server } from 'socket.io'
 import type { RpcRegistry } from '../socket/rpcRegistry'
@@ -105,10 +110,6 @@ export class RpcGateway {
         await this.sessionRpc(sessionId, 'abort', { reason: 'User aborted via hub' })
     }
 
-    async switchSession(sessionId: string, to: 'remote' | 'local'): Promise<void> {
-        await this.sessionRpc(sessionId, 'switch', { to })
-    }
-
     async requestSessionConfig(
         sessionId: string,
         config: {
@@ -129,7 +130,7 @@ export class RpcGateway {
         sessionId?: string
         machineId: string
         directory: string
-        agent?: 'claude' | 'codex' | 'cursor' | 'gemini' | 'opencode'
+        agent?: AgentFlavor
         model?: string
         modelReasoningEffort?: ModelReasoningEffort | null
         permissionMode?: PermissionMode
@@ -138,6 +139,10 @@ export class RpcGateway {
         worktreeName?: string
         resumeSessionId?: string
         collaborationMode?: CodexCollaborationMode
+        driverSwitch?: {
+            targetDriver: SessionDriver
+            handoffSnapshot: SessionHandoffSnapshot
+        }
     }): Promise<{ type: 'success'; sessionId: string } | { type: 'error'; message: string }> {
         try {
             const result = await this.machineRpc(
@@ -155,7 +160,8 @@ export class RpcGateway {
                     sessionType: options.sessionType,
                     worktreeName: options.worktreeName,
                     resumeSessionId: options.resumeSessionId,
-                    collaborationMode: options.collaborationMode
+                    collaborationMode: options.collaborationMode,
+                    driverSwitch: options.driverSwitch
                 }
             )
             if (result && typeof result === 'object') {
@@ -237,6 +243,26 @@ export class RpcGateway {
             roots: Array.isArray(response.roots) ? response.roots : [],
             error: typeof response.error === 'string' ? response.error : undefined
         }
+    }
+
+    async resolveAgentLaunchConfig(
+        machineId: string,
+        request: ResolveAgentLaunchConfigRequest
+    ): Promise<ResolveAgentLaunchConfigResponse> {
+        const result = await this.machineRpc(machineId, 'resolve-agent-launch-config', request) as ResolveAgentLaunchConfigResponse | unknown
+        if (!result || typeof result !== 'object') {
+            throw new Error('Unexpected resolve-agent-launch-config result')
+        }
+
+        if ((result as ResolveAgentLaunchConfigResponse).type === 'success') {
+            return result as ResolveAgentLaunchConfigResponse
+        }
+
+        if ((result as ResolveAgentLaunchConfigResponse).type === 'error') {
+            return result as ResolveAgentLaunchConfigResponse
+        }
+
+        throw new Error('Unexpected resolve-agent-launch-config result')
     }
 
     async getGitStatus(sessionId: string, cwd?: string): Promise<RpcCommandResponse> {
