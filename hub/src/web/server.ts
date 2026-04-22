@@ -1,27 +1,28 @@
-import { Hono, type Context, type Next } from 'hono'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
+import type { Server as SocketEngine, WebSocketData } from '@socket.io/bun-engine'
+import { PROTOCOL_VERSION } from '@viby/protocol'
+import type { SessionStreamState } from '@viby/protocol/types'
+import type { Server as BunServer } from 'bun'
+import { type Context, Hono, type Next } from 'hono'
+import { serveStatic } from 'hono/bun'
 import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
-import { join } from 'node:path'
-import { existsSync } from 'node:fs'
-import { serveStatic } from 'hono/bun'
-import { PROTOCOL_VERSION } from '@viby/protocol'
+import { createPairingBrokerClient } from '../pairing/client'
+import type { Store } from '../store'
 import type { SyncEngine } from '../sync/syncEngine'
+import { isBunCompiled } from '../utils/bunCompiled'
+import { type EmbeddedWebAsset, loadEmbeddedAssetMap } from './embeddedAssets'
 import { createAuthMiddleware, type WebAppEnv } from './middleware/auth'
 import { createAuthRoutes } from './routes/auth'
-import { createSessionsRoutes } from './routes/sessions'
-import { createMessagesRoutes } from './routes/messages'
-import { createPermissionsRoutes } from './routes/permissions'
-import { createMachinesRoutes } from './routes/machines'
-import { createGitRoutes } from './routes/git'
 import { createCliRoutes } from './routes/cli'
+import { createGitRoutes } from './routes/git'
+import { createMessagesRoutes } from './routes/messages'
+import { createPairingRoutes } from './routes/pairing'
+import { createPermissionsRoutes } from './routes/permissions'
 import { createPushRoutes } from './routes/push'
-import { createTeamsRoutes } from './routes/teams'
-import type { Server as BunServer } from 'bun'
-import type { Server as SocketEngine } from '@socket.io/bun-engine'
-import type { WebSocketData } from '@socket.io/bun-engine'
-import { loadEmbeddedAssetMap, type EmbeddedWebAsset } from './embeddedAssets'
-import { isBunCompiled } from '../utils/bunCompiled'
-import type { Store } from '../store'
+import { createRuntimeRoutes } from './routes/runtime'
+import { createSessionsRoutes } from './routes/sessions'
 
 export const API_CORS_ALLOW_METHODS = ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'] as const
 const API_CORS_ALLOW_HEADERS = ['authorization', 'content-type'] as const
@@ -30,7 +31,7 @@ function findWebappDistDir(): { distDir: string; indexHtmlPath: string } {
     const candidates = [
         join(process.cwd(), '..', 'web', 'dist'),
         join(import.meta.dir, '..', '..', '..', 'web', 'dist'),
-        join(process.cwd(), 'web', 'dist')
+        join(process.cwd(), 'web', 'dist'),
     ]
 
     for (const distDir of candidates) {
@@ -49,15 +50,20 @@ function serveEmbeddedAsset(asset: EmbeddedWebAsset): Response {
     return new Response(Bun.file(asset.sourcePath), {
         headers: {
             'Content-Type': asset.mimeType,
-            'Cache-Control': cacheControl
-        }
+            'Cache-Control': cacheControl,
+        },
     })
 }
 
 function getWebAssetCacheControl(path: string): string {
     const normalizedPath = path.startsWith('/') ? path : `/${path}`
 
-    if (normalizedPath === '/' || normalizedPath === '/sw.js' || normalizedPath === '/manifest.webmanifest' || normalizedPath.endsWith('.html')) {
+    if (
+        normalizedPath === '/' ||
+        normalizedPath === '/sw.js' ||
+        normalizedPath === '/manifest.webmanifest' ||
+        normalizedPath.endsWith('.html')
+    ) {
         return 'no-cache, no-store, must-revalidate'
     }
 
@@ -86,19 +92,18 @@ export function createApiCorsMiddleware(corsOrigins: readonly string[]): ReturnT
     return cors({
         origin: corsOriginOption,
         allowMethods: [...API_CORS_ALLOW_METHODS],
-        allowHeaders: [...API_CORS_ALLOW_HEADERS]
+        allowHeaders: [...API_CORS_ALLOW_HEADERS],
     })
 }
 
 function createWebApp(options: {
     getSyncEngine: () => SyncEngine | null
+    getSessionStream?: (sessionId: string) => SessionStreamState | null
     jwtSecret: Uint8Array
     store: Store
     vapidPublicKey: string
     corsOrigins?: string[]
     embeddedAssetMap: Map<string, EmbeddedWebAsset> | null
-    relayMode?: boolean
-    officialWebUrl?: string
 }): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
@@ -116,38 +121,13 @@ function createWebApp(options: {
     app.route('/api', createAuthRoutes(options.jwtSecret))
 
     app.use('/api/*', createAuthMiddleware(options.jwtSecret))
-    app.route('/api', createSessionsRoutes(options.getSyncEngine))
+    app.route('/api', createSessionsRoutes(options.getSyncEngine, options.getSessionStream))
     app.route('/api', createMessagesRoutes(options.getSyncEngine))
     app.route('/api', createPermissionsRoutes(options.getSyncEngine))
-    app.route('/api', createMachinesRoutes(options.getSyncEngine))
+    app.route('/api', createRuntimeRoutes(options.getSyncEngine))
     app.route('/api', createGitRoutes(options.getSyncEngine))
-    app.route('/api', createTeamsRoutes(options.getSyncEngine))
+    app.route('/api', createPairingRoutes(createPairingBrokerClient(), options.getSyncEngine))
     app.route('/api', createPushRoutes(options.store, options.vapidPublicKey))
-
-    // Skip static serving in relay mode, show helpful message on root
-    if (options.relayMode) {
-        const officialUrl = options.officialWebUrl || 'https://app.viby.run'
-        app.get('/', (c) => {
-            return c.html(`<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>Viby Hub</title></head>
-<body style="font-family: system-ui; padding: 2rem; max-width: 600px;">
-<h1>Viby Hub</h1>
-<p>This hub is running in relay mode. Please use the official Viby web app:</p>
-<p><a href="${officialUrl}">${officialUrl}</a></p>
-<details>
-<summary>Why am I seeing this?</summary>
-<p style="margin-top: 0.5rem; color: #666;">
-When relay mode is enabled, all traffic flows through our relay infrastructure with end-to-end encryption.
-To reduce bandwidth and improve performance, the frontend is served separately
-from GitHub Pages instead of through the relay tunnel.
-</p>
-</details>
-</body>
-</html>`)
-        })
-        return app
-    }
 
     if (options.embeddedAssetMap) {
         const embeddedAssetMap = options.embeddedAssetMap
@@ -196,10 +176,7 @@ from GitHub Pages instead of through the relay tunnel.
 
     if (!existsSync(indexHtmlPath)) {
         app.get('/', (c) => {
-            return c.text(
-                'Web app is not built.\n\nRun:\n  cd web\n  bun install\n  bun run build\n',
-                503
-            )
+            return c.text('Web app is not built.\n\nRun:\n  cd web\n  bun install\n  bun run build\n', 503)
         })
         return app
     }
@@ -231,6 +208,7 @@ from GitHub Pages instead of through the relay tunnel.
 
 export type StartWebServerOptions = {
     getSyncEngine: () => SyncEngine | null
+    getSessionStream?: (sessionId: string) => SessionStreamState | null
     jwtSecret: Uint8Array
     store: Store
     vapidPublicKey: string
@@ -239,8 +217,6 @@ export type StartWebServerOptions = {
     listenPort: number
     publicUrl: string
     corsOrigins?: string[]
-    relayMode?: boolean
-    officialWebUrl?: string
 }
 
 export async function createWebServerFetch(
@@ -250,13 +226,12 @@ export async function createWebServerFetch(
     const embeddedAssetMap = isCompiled ? await loadEmbeddedAssetMap() : null
     const app = createWebApp({
         getSyncEngine: options.getSyncEngine,
+        getSessionStream: options.getSessionStream,
         jwtSecret: options.jwtSecret,
         store: options.store,
         vapidPublicKey: options.vapidPublicKey,
         corsOrigins: options.corsOrigins,
         embeddedAssetMap,
-        relayMode: options.relayMode,
-        officialWebUrl: options.officialWebUrl
     })
 
     const socketHandler = options.socketEngine.handler()
@@ -279,7 +254,7 @@ export async function startWebServer(options: StartWebServerOptions): Promise<Bu
         idleTimeout: Math.max(30, socketHandler.idleTimeout),
         maxRequestBodySize: socketHandler.maxRequestBodySize,
         websocket: socketHandler.websocket,
-        fetch
+        fetch,
     })
 
     console.log(`[Web] hub listening on ${options.listenHost}:${server.port}`)

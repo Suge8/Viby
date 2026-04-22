@@ -1,5 +1,5 @@
 import type { Context } from 'hono'
-import type { Machine, Session, SyncEngine } from '../../sync/syncEngine'
+import type { Session, SyncEngine } from '../../sync/syncEngine'
 import type { WebAppEnv } from '../middleware/auth'
 
 export function requireSyncEngine(
@@ -41,16 +41,4 @@ export function requireSessionFromParam(
         return result
     }
     return result
-}
-
-export function requireMachine(
-    c: Context<WebAppEnv>,
-    engine: SyncEngine,
-    machineId: string
-): Machine | Response {
-    const machine = engine.getMachine(machineId)
-    if (!machine) {
-        return c.json({ error: 'Machine not found' }, 404)
-    }
-    return machine
 }

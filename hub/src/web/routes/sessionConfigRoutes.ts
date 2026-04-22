@@ -1,48 +1,47 @@
 import {
     getLiveSessionConfigSupport,
-    isModelReasoningEffortAllowedForDriver,
     getPermissionModesForDriver,
+    isModelReasoningEffortAllowedForDriver,
     isPermissionModeAllowedForDriver,
     resolveSessionDriver,
+    type SessionDriver,
     supportsLiveModelReasoningEffortForDriver,
     supportsLiveModelSelectionForDriver,
-    type SessionDriver
 } from '@viby/protocol'
 import { CodexCollaborationModeSchema, ModelReasoningEffortSchema, PermissionModeSchema } from '@viby/protocol/schemas'
 import type { Hono } from 'hono'
 import { z } from 'zod'
 import type { WebAppEnv } from '../middleware/auth'
 import {
-    getErrorMessage,
+    createJsonBodyValidator,
     type GetSyncEngine,
-    parseJsonBody,
+    getErrorMessage,
+    presentSessionSnapshot,
+    resolveSessionRouteContext,
     type SessionRouteContext,
-    resolveSessionRouteContext
 } from './sessionRouteSupport'
 
 const permissionModeSchema = z.object({
-    mode: PermissionModeSchema
+    mode: PermissionModeSchema,
 })
 
 const collaborationModeSchema = z.object({
-    mode: CodexCollaborationModeSchema
+    mode: CodexCollaborationModeSchema,
 })
 
 const modelSchema = z.object({
-    model: z.string().trim().min(1).nullable()
+    model: z.string().trim().min(1).nullable(),
 })
 
 const modelReasoningEffortSchema = z.object({
-    modelReasoningEffort: ModelReasoningEffortSchema.nullable()
+    modelReasoningEffort: ModelReasoningEffortSchema.nullable(),
 })
 
 type SessionConfigSnapshotError = Error & {
     code: 'session_not_found'
 }
 
-function getSessionDriver(
-    session: Parameters<typeof getLiveSessionConfigSupport>[0]
-): SessionDriver | null {
+function getSessionDriver(session: Parameters<typeof getLiveSessionConfigSupport>[0]): SessionDriver | null {
     return resolveSessionDriver(session.metadata)
 }
 
@@ -52,9 +51,7 @@ function createSessionConfigSnapshotError(): SessionConfigSnapshotError {
     return error
 }
 
-function getSessionConfigSnapshot(
-    sessionContext: SessionRouteContext
-): SessionRouteContext['session'] {
+function getSessionConfigSnapshot(sessionContext: SessionRouteContext): SessionRouteContext['session'] {
     const session = sessionContext.engine.getSession(sessionContext.sessionId)
     if (!session) {
         throw createSessionConfigSnapshotError()
@@ -74,11 +71,8 @@ function isSessionConfigSnapshotError(error: unknown): error is SessionConfigSna
     return error instanceof Error && 'code' in error && error.code === 'session_not_found'
 }
 
-export function registerSessionConfigRoutes(
-    app: Hono<WebAppEnv>,
-    getSyncEngine: GetSyncEngine
-): void {
-    app.post('/sessions/:id/permission-mode', async (c) => {
+export function registerSessionConfigRoutes(app: Hono<WebAppEnv>, getSyncEngine: GetSyncEngine): void {
+    app.post('/sessions/:id/permission-mode', createJsonBodyValidator(permissionModeSchema), async (c) => {
         const sessionContext = resolveSessionRouteContext(c, getSyncEngine, { requireActive: true })
         if (sessionContext instanceof Response) {
             return sessionContext
@@ -90,25 +84,22 @@ export function registerSessionConfigRoutes(
             return c.json({ error: 'Permission mode can only be changed for Viby-managed active sessions' }, 409)
         }
 
-        const parsedBody = await parseJsonBody(c, permissionModeSchema)
-        if (!parsedBody.ok) {
-            return parsedBody.response
-        }
+        const body = c.req.valid('json')
 
         const allowedModes = driver ? getPermissionModesForDriver(driver) : []
         if (allowedModes.length === 0) {
             return c.json({ error: 'Permission mode not supported for session driver' }, 400)
         }
 
-        if (!isPermissionModeAllowedForDriver(parsedBody.data.mode, driver)) {
+        if (!isPermissionModeAllowedForDriver(body.mode, driver)) {
             return c.json({ error: 'Invalid permission mode for session driver' }, 400)
         }
 
         try {
             const session = await applySessionConfigAndReturnSnapshot(sessionContext, {
-                permissionMode: parsedBody.data.mode
+                permissionMode: body.mode,
             })
-            return c.json({ ok: true, session })
+            return c.json({ ok: true, session: presentSessionSnapshot(session) })
         } catch (error) {
             if (isSessionConfigSnapshotError(error)) {
                 return c.json({ error: error.message, code: error.code }, 500)
@@ -117,7 +108,7 @@ export function registerSessionConfigRoutes(
         }
     })
 
-    app.post('/sessions/:id/collaboration-mode', async (c) => {
+    app.post('/sessions/:id/collaboration-mode', createJsonBodyValidator(collaborationModeSchema), async (c) => {
         const sessionContext = resolveSessionRouteContext(c, getSyncEngine, { requireActive: true })
         if (sessionContext instanceof Response) {
             return sessionContext
@@ -130,16 +121,11 @@ export function registerSessionConfigRoutes(
             return c.json({ error: 'Collaboration mode can only be changed for Viby-managed Codex sessions' }, 409)
         }
 
-        const parsedBody = await parseJsonBody(c, collaborationModeSchema)
-        if (!parsedBody.ok) {
-            return parsedBody.response
-        }
-
         try {
             const session = await applySessionConfigAndReturnSnapshot(sessionContext, {
-                collaborationMode: parsedBody.data.mode
+                collaborationMode: c.req.valid('json').mode,
             })
-            return c.json({ ok: true, session })
+            return c.json({ ok: true, session: presentSessionSnapshot(session) })
         } catch (error) {
             if (isSessionConfigSnapshotError(error)) {
                 return c.json({ error: error.message, code: error.code }, 500)
@@ -148,31 +134,35 @@ export function registerSessionConfigRoutes(
         }
     })
 
-    app.post('/sessions/:id/model', async (c) => {
+    app.post('/sessions/:id/model', createJsonBodyValidator(modelSchema), async (c) => {
         const sessionContext = resolveSessionRouteContext(c, getSyncEngine, { requireActive: true })
         if (sessionContext instanceof Response) {
             return sessionContext
         }
-
-        const parsedBody = await parseJsonBody(c, modelSchema)
-        if (!parsedBody.ok) {
-            return parsedBody.response
-        }
+        const body = c.req.valid('json')
 
         const driver = getSessionDriver(sessionContext.session)
         const liveConfigSupport = getLiveSessionConfigSupport(sessionContext.session)
         if (!driver || !supportsLiveModelSelectionForDriver(driver)) {
-            return c.json({ error: 'Live model selection is only supported for Claude, Codex, Gemini, and Pi sessions' }, 400)
+            return c.json(
+                { error: 'Live model selection is only supported for Claude, Codex, Gemini, and Pi sessions' },
+                400
+            )
         }
         if (!liveConfigSupport.canChangeModel) {
-            return c.json({ error: 'Model selection can only be changed for Viby-managed Claude, Codex, Gemini, and Pi sessions' }, 409)
+            return c.json(
+                {
+                    error: 'Model selection can only be changed for Viby-managed Claude, Codex, Gemini, and Pi sessions',
+                },
+                409
+            )
         }
 
         try {
             const session = await applySessionConfigAndReturnSnapshot(sessionContext, {
-                model: parsedBody.data.model
+                model: body.model,
             })
-            return c.json({ ok: true, session })
+            return c.json({ ok: true, session: presentSessionSnapshot(session) })
         } catch (error) {
             if (isSessionConfigSnapshotError(error)) {
                 return c.json({ error: error.message, code: error.code }, 500)
@@ -181,7 +171,7 @@ export function registerSessionConfigRoutes(
         }
     })
 
-    app.post('/sessions/:id/model-reasoning-effort', async (c) => {
+    app.post('/sessions/:id/model-reasoning-effort', createJsonBodyValidator(modelReasoningEffortSchema), async (c) => {
         const sessionContext = resolveSessionRouteContext(c, getSyncEngine, { requireActive: true })
         if (sessionContext instanceof Response) {
             return sessionContext
@@ -190,29 +180,32 @@ export function registerSessionConfigRoutes(
         const driver = getSessionDriver(sessionContext.session)
         const liveConfigSupport = getLiveSessionConfigSupport(sessionContext.session)
         if (!driver || !supportsLiveModelReasoningEffortForDriver(driver)) {
-            return c.json({ error: 'Live model reasoning effort is only supported for Claude, Codex, and Pi sessions' }, 400)
+            return c.json(
+                { error: 'Live model reasoning effort is only supported for Claude, Codex, and Pi sessions' },
+                400
+            )
         }
         if (!liveConfigSupport.canChangeModelReasoningEffort) {
-            return c.json({ error: 'Model reasoning effort can only be changed for Viby-managed Claude, Codex, and Pi sessions' }, 409)
+            return c.json(
+                { error: 'Model reasoning effort can only be changed for Viby-managed Claude, Codex, and Pi sessions' },
+                409
+            )
         }
 
-        const parsedBody = await parseJsonBody(c, modelReasoningEffortSchema)
-        if (!parsedBody.ok) {
-            return parsedBody.response
-        }
+        const body = c.req.valid('json')
 
         if (
-            parsedBody.data.modelReasoningEffort !== null
-            && !isModelReasoningEffortAllowedForDriver(parsedBody.data.modelReasoningEffort, driver)
+            body.modelReasoningEffort !== null &&
+            !isModelReasoningEffortAllowedForDriver(body.modelReasoningEffort, driver)
         ) {
             return c.json({ error: 'Invalid model reasoning effort for session driver' }, 400)
         }
 
         try {
             const session = await applySessionConfigAndReturnSnapshot(sessionContext, {
-                modelReasoningEffort: parsedBody.data.modelReasoningEffort
+                modelReasoningEffort: body.modelReasoningEffort,
             })
-            return c.json({ ok: true, session })
+            return c.json({ ok: true, session: presentSessionSnapshot(session) })
         } catch (error) {
             if (isSessionConfigSnapshotError(error)) {
                 return c.json({ error: error.message, code: error.code }, 500)

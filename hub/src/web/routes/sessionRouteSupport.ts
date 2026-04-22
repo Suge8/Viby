@@ -1,11 +1,11 @@
+import { resolveSessionInteractivity } from '@viby/protocol'
 import type { Context, Hono } from 'hono'
+import { validator } from 'hono/validator'
 import type { Session, SyncEngine } from '../../sync/syncEngine'
 import type { WebAppEnv } from '../middleware/auth'
 import { requireSessionFromParam, requireSyncEngine } from './guards'
 
-type SafeParseResult<T> =
-    | { success: true; data: T }
-    | { success: false }
+type SafeParseResult<T> = { success: true; data: T } | { success: false }
 
 type SafeParseSchema<T> = {
     safeParse: (value: unknown) => SafeParseResult<T>
@@ -19,10 +19,7 @@ export type SessionRouteContext = {
 
 export type GetSyncEngine = () => SyncEngine | null
 
-export function resolveSyncEngine(
-    c: Context<WebAppEnv>,
-    getSyncEngine: GetSyncEngine
-): SyncEngine | Response {
+export function resolveSyncEngine(c: Context<WebAppEnv>, getSyncEngine: GetSyncEngine): SyncEngine | Response {
     return requireSyncEngine(c, getSyncEngine)
 }
 
@@ -44,28 +41,53 @@ export function resolveSessionRouteContext(
     return {
         engine,
         sessionId: sessionResult.sessionId,
-        session: sessionResult.session
+        session: sessionResult.session,
     }
 }
 
 export async function parseJsonBody<T>(
-    c: Context<WebAppEnv>,
+    c: Context,
     schema: SafeParseSchema<T>,
-    errorMessage: string = 'Invalid body'
+    errorMessage: string = 'Invalid body',
+    fallbackBody: unknown = null
 ): Promise<{ ok: true; data: T } | { ok: false; response: Response }> {
-    const body = await c.req.json().catch(() => null)
-    const parsed = schema.safeParse(body)
+    const parsed = schema.safeParse(await readJsonBodyOrNull(c, fallbackBody))
     if (!parsed.success) {
         return {
             ok: false,
-            response: c.json({ error: errorMessage }, 400)
+            response: c.json({ error: errorMessage }, 400),
         }
     }
 
     return {
         ok: true,
-        data: parsed.data
+        data: parsed.data,
     }
+}
+
+async function readJsonBodyOrNull(
+    c: { req: { json: () => Promise<unknown> } },
+    fallbackBody: unknown
+): Promise<unknown> {
+    try {
+        return await c.req.json()
+    } catch {
+        return fallbackBody
+    }
+}
+
+export function createJsonBodyValidator<T>(
+    schema: SafeParseSchema<T>,
+    errorMessage: string = 'Invalid body',
+    fallbackBody: unknown = null
+) {
+    return validator('json', async (_value, c) => {
+        const parsed = await parseJsonBody(c, schema, errorMessage, fallbackBody)
+        if (!parsed.ok) {
+            return parsed.response
+        }
+        return parsed.data
+    })
 }
 
 export function getErrorMessage(error: unknown, fallback: string): string {
@@ -81,9 +103,17 @@ export function getErrorStatus(error: unknown): number | null {
     return typeof status === 'number' ? status : null
 }
 
-export function registerSessionRoutes(
-    app: Hono<WebAppEnv>,
-    register: (app: Hono<WebAppEnv>) => void
-): void {
+export function presentSessionSnapshot<TSession extends Session>(
+    session: TSession
+): TSession & {
+    resumeAvailable: boolean
+} {
+    return {
+        ...session,
+        resumeAvailable: resolveSessionInteractivity(session).resumeAvailable,
+    }
+}
+
+export function registerSessionRoutes(app: Hono<WebAppEnv>, register: (app: Hono<WebAppEnv>) => void): void {
     register(app)
 }
