@@ -20,10 +20,12 @@ function formatHttpOrigin(host: string, port: number): string {
 }
 
 function getStartupConfig(snapshot: HubSnapshot | null): HubStartupConfig {
-    return snapshot?.startupConfig ?? {
-        listenHost: LOCAL_LISTEN_HOST,
-        listenPort: DEFAULT_PREVIEW_LISTEN_PORT
-    }
+    return (
+        snapshot?.startupConfig ?? {
+            listenHost: LOCAL_LISTEN_HOST,
+            listenPort: DEFAULT_PREVIEW_LISTEN_PORT,
+        }
+    )
 }
 
 export function deriveEntryModeFromListenHost(listenHost: string | undefined): DesktopEntryMode {
@@ -38,7 +40,10 @@ export function deriveInitialEntryMode(snapshot: HubSnapshot | null): DesktopEnt
     return deriveEntryModeFromListenHost(getStartupConfig(snapshot).listenHost)
 }
 
-export function buildEntryPreviewModel(snapshot: HubSnapshot | null, selectedMode: DesktopEntryMode): EntryPreviewModel {
+export function buildEntryPreviewModel(
+    snapshot: HubSnapshot | null,
+    selectedMode: DesktopEntryMode
+): EntryPreviewModel {
     const status = snapshot?.status
     if (status && snapshot?.running) {
         const runtimeMode = deriveEntryModeFromListenHost(status.listenHost)
@@ -53,7 +58,7 @@ export function buildEntryPreviewModel(snapshot: HubSnapshot | null, selectedMod
             displayValue,
             copyValue: displayValue,
             openUrl: status.preferredBrowserUrl,
-            isPreview: false
+            isPreview: false,
         }
     }
 
@@ -66,6 +71,6 @@ export function buildEntryPreviewModel(snapshot: HubSnapshot | null, selectedMod
         displayLabel: PREVIEW_ADDRESS_LABEL,
         displayValue,
         copyValue: displayValue,
-        isPreview: true
+        isPreview: true,
     }
 }

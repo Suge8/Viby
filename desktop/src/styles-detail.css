@@ -1,0 +1,73 @@
+@layer components {
+    .desktop-metrics {
+        @apply mt-4 grid gap-4 lg:grid-cols-3;
+    }
+
+    .desktop-metric-card {
+        @apply p-5;
+    }
+
+    .desktop-metric-head {
+        @apply text-xs uppercase tracking-[0.18em] text-text-secondary;
+    }
+
+    .desktop-metric-action {
+        @apply text-[11px] font-semibold tracking-[0.16em] text-white hover:text-emerald-200;
+    }
+
+    .desktop-metric-value {
+        @apply mt-4 text-lg font-semibold tracking-[-0.03em] text-white;
+    }
+
+    .desktop-metric-value.is-mono {
+        font-family:
+            ui-monospace,
+            SFMono-Regular,
+            Menlo,
+            Monaco,
+            Consolas,
+            Liberation Mono,
+            monospace;
+    }
+
+    .desktop-pairing-card {
+        @apply mt-4 space-y-5 p-6;
+    }
+
+    .desktop-pairing-grid {
+        @apply grid gap-4 lg:grid-cols-[0.9fr_1.1fr];
+    }
+
+    .desktop-pairing-qr,
+    .desktop-pairing-meta-card {
+        @apply rounded-[24px] border border-white/10 bg-black/20 p-4;
+    }
+
+    .desktop-pairing-image {
+        @apply mx-auto h-56 w-56 rounded-[20px] bg-white p-3;
+    }
+
+    .desktop-pairing-placeholder {
+        @apply flex h-56 items-center justify-center text-sm text-text-secondary;
+    }
+
+    .desktop-pairing-meta {
+        @apply grid gap-4 sm:grid-cols-2;
+    }
+
+    .desktop-pairing-meta-card span {
+        @apply text-xs uppercase tracking-[0.18em] text-text-secondary;
+    }
+
+    .desktop-pairing-meta-card strong {
+        @apply mt-3 block break-all text-base font-semibold text-white;
+    }
+
+    .desktop-footer {
+        @apply mt-4 px-5 py-4;
+    }
+
+    .desktop-footer.is-error {
+        @apply text-rose-300;
+    }
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
-import { buildEntryPreviewModel, deriveInitialEntryMode } from './entryMode'
 import type { HubSnapshot } from '../types'
+import { buildEntryPreviewModel, deriveInitialEntryMode } from './entryMode'
 
 function makeSnapshot(overrides: Partial<HubSnapshot> = {}): HubSnapshot {
     return {
@@ -9,9 +9,9 @@ function makeSnapshot(overrides: Partial<HubSnapshot> = {}): HubSnapshot {
         logPath: '/tmp/desktop.log',
         startupConfig: {
             listenHost: '127.0.0.1',
-            listenPort: 37173
+            listenPort: 37173,
         },
-        ...overrides
+        ...overrides,
     }
 }
 
@@ -20,8 +20,8 @@ describe('entryMode', () => {
         const snapshot = makeSnapshot({
             startupConfig: {
                 listenHost: '0.0.0.0',
-                listenPort: 4123
-            }
+                listenPort: 4123,
+            },
         })
 
         expect(deriveInitialEntryMode(snapshot)).toBe('lan')
@@ -31,7 +31,7 @@ describe('entryMode', () => {
         const snapshot = makeSnapshot({
             startupConfig: {
                 listenHost: '127.0.0.1',
-                listenPort: 37173
+                listenPort: 37173,
             },
             status: {
                 phase: 'stopped',
@@ -44,8 +44,8 @@ describe('entryMode', () => {
                 settingsFile: '/tmp/settings.toml',
                 dataDir: '/tmp',
                 startedAt: '2026-03-21T00:00:00.000Z',
-                updatedAt: '2026-03-21T00:00:00.000Z'
-            }
+                updatedAt: '2026-03-21T00:00:00.000Z',
+            },
         })
 
         expect(deriveInitialEntryMode(snapshot)).toBe('local')
@@ -72,8 +72,8 @@ describe('entryMode', () => {
                 settingsFile: '/tmp/settings.toml',
                 dataDir: '/tmp',
                 startedAt: '2026-03-21T00:00:00.000Z',
-                updatedAt: '2026-03-21T00:00:00.000Z'
-            }
+                updatedAt: '2026-03-21T00:00:00.000Z',
+            },
         })
 
         const model = buildEntryPreviewModel(snapshot, 'local')

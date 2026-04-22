@@ -1,22 +1,3 @@
-import type { HubRuntimePhase } from '@/types'
-
-export function formatPhaseLabel(phase: HubRuntimePhase | undefined, running: boolean): string {
-    if (!phase) {
-        return running ? '运行中' : '未启动'
-    }
-
-    switch (phase) {
-        case 'starting':
-            return '启动中'
-        case 'ready':
-            return '运行中'
-        case 'stopped':
-            return '已停止'
-        case 'error':
-            return '异常'
-    }
-}
-
 export function formatRelativeTime(isoValue: string | undefined): string {
     if (!isoValue) {
         return '暂无'
@@ -39,4 +20,14 @@ export function formatRelativeTime(isoValue: string | undefined): string {
 
     const diffHours = Math.floor(diffMinutes / 60)
     return `${diffHours} 小时前`
+}
+
+export function formatTimestamp(unixMs: number | undefined): string {
+    if (!unixMs) {
+        return '暂无'
+    }
+
+    return new Date(unixMs).toLocaleString('zh-CN', {
+        hour12: false,
+    })
 }

@@ -1,12 +1,13 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import type { DesktopEntryMode, HubSnapshot } from '@/types'
+import type { DesktopEntryMode, DesktopPairingSession, HubSnapshot } from '@/types'
 
 interface StartHubOptions {
     entryMode: DesktopEntryMode
 }
 
-const DESKTOP_RUNTIME_UNAVAILABLE_MESSAGE = '当前运行在浏览器预览环境，Tauri runtime 不可用。请使用 bun run dev:desktop 启动桌面壳。'
+const DESKTOP_RUNTIME_UNAVAILABLE_MESSAGE =
+    '当前运行在浏览器预览环境，Tauri runtime 不可用。请使用 bun run dev:desktop 启动桌面壳。'
 const HUB_SNAPSHOT_EVENT = 'desktop://hub-snapshot'
 
 type TauriInternals = {
@@ -57,9 +58,19 @@ export async function copyText(text: string): Promise<void> {
     await invokeDesktopCommand('copy_text', { text })
 }
 
-export async function listenHubSnapshot(
-    onSnapshot: (snapshot: HubSnapshot) => void,
-): Promise<UnlistenFn> {
+export async function createPairingSession(): Promise<DesktopPairingSession> {
+    return await invokeDesktopCommand<DesktopPairingSession>('create_pairing_session')
+}
+
+export async function approvePairingSession(pairing: DesktopPairingSession): Promise<DesktopPairingSession> {
+    return await invokeDesktopCommand<DesktopPairingSession>('approve_pairing_session', { pairing })
+}
+
+export async function deletePairingSession(pairing: DesktopPairingSession): Promise<void> {
+    await invokeDesktopCommand('delete_pairing_session', { pairing })
+}
+
+export async function listenHubSnapshot(onSnapshot: (snapshot: HubSnapshot) => void): Promise<UnlistenFn> {
     ensureTauriRuntime()
     return await listen<HubSnapshot>(HUB_SNAPSHOT_EVENT, (event) => {
         onSnapshot(event.payload)

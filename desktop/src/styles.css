@@ -1,14 +1,64 @@
 @import "tailwindcss";
 @config "../tailwind.config.ts";
+@import "./styles-shell.css";
+@import "./styles-detail.css";
 
 @layer base {
-  body {
-    @apply bg-background text-text-primary font-sans;
-    min-height: 100vh;
-    margin: 0;
-  }
+    :root {
+        color-scheme: dark;
+    }
 
-  #root {
-    min-height: 100vh;
-  }
+    * {
+        box-sizing: border-box;
+    }
+
+    body {
+        @apply bg-background text-text-primary font-sans;
+        min-height: 100vh;
+        margin: 0;
+        overflow: hidden;
+    }
+
+    button {
+        font: inherit;
+    }
+
+    #root {
+        min-height: 100vh;
+    }
+}
+
+@layer utilities {
+    @keyframes desktop-spin {
+        from {
+            transform: rotate(0deg);
+        }
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    @keyframes desktop-float {
+        0%,
+        100% {
+            transform: translate(-50%, -50%) scale(0.96);
+        }
+        50% {
+            transform: translate(-50%, -50%) scale(1.05);
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .desktop-aura,
+        .desktop-orbit-ring {
+            animation: none;
+        }
+
+        .desktop-primary-button,
+        .desktop-control-pill,
+        .desktop-mode-option,
+        .desktop-metric-action {
+            transition: none;
+        }
+    }
 }

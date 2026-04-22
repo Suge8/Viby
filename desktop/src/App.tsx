@@ -1,69 +1,80 @@
-import { useState, type JSX } from 'react'
-import { ActionButton } from '@/components/ActionButton'
-import { InfoField } from '@/components/InfoField'
-import { SegmentedControl } from '@/components/SegmentedControl'
-import { StatusBadge } from '@/components/StatusBadge'
+import type { JSX } from 'react'
+import { ControlPill } from '@/components/ControlPill'
+import { EntryModeSwitch } from '@/components/EntryModeSwitch'
+import { MetricCard } from '@/components/MetricCard'
+import { PairingCard, type PairingCardActions } from '@/components/PairingCard'
 import { useHubController } from '@/hooks/useHubController'
+import { usePairingBridge } from '@/hooks/usePairingBridge'
 import { buildEntryPreviewModel } from '@/lib/entryMode'
 import { deriveHubViewState } from '@/lib/hubSnapshot'
 import {
     buildDetailFields,
     buildFooterMessage,
-    buildOwnershipHint,
     buildOverviewFields,
     buildPrimaryActionLabel,
     buildStatusCopy,
-    getEmptyKeyMessage
+    getEmptyKeyMessage,
 } from '@/lib/panelContent'
-import type { DesktopEntryMode } from '@/types'
 
-type DesktopTab = 'overview' | 'details'
+function getPrimaryCaption(ready: boolean, managed: boolean): string {
+    if (ready) {
+        return '入口已就绪'
+    }
 
-const TAB_OPTIONS = [
-    { value: 'overview', label: '概览' },
-    { value: 'details', label: '详情' }
-] as const
+    if (managed) {
+        return '正在接管当前会话'
+    }
 
-const ENTRY_OPTIONS = [
-    { value: 'local', label: '仅本机' },
-    { value: 'lan', label: '局域网' }
-] as const
+    return '轻触即可进入'
+}
 
-const APP_SHELL_CLASS_NAME =
-    'bg-background text-text-primary flex min-h-screen items-center justify-center p-4'
-const PANEL_CLASS_NAME = 'w-full max-w-2xl rounded-lg border border-border bg-surface-raised'
-const CHIP_CLASS_NAME =
-    'rounded-full bg-surface-item border border-border px-2 py-1 text-xs font-medium text-text-secondary'
-const CONTROL_PANEL_CLASS_NAME =
-    'flex flex-wrap items-center justify-between gap-4 rounded-md border border-border bg-background p-3'
-const ACTION_PANEL_CLASS_NAME =
-    'flex flex-wrap items-center gap-4 rounded-md border border-border bg-background p-3'
+function getAuraClassName(ready: boolean, managed: boolean): string {
+    if (ready) {
+        return 'desktop-aura desktop-aura-ready'
+    }
+
+    if (managed) {
+        return 'desktop-aura desktop-aura-booting'
+    }
+
+    return 'desktop-aura'
+}
 
 export function App(): JSX.Element {
-    const [activeTab, setActiveTab] = useState<DesktopTab>('overview')
     const {
         snapshot,
         busy,
         entryMode,
         actionError,
+        pairing,
         setEntryMode,
         start,
         stop,
         openPreferred,
-        copyValue
+        copyValue,
+        createPairing,
+        approvePairing,
+        recreatePairing,
+        clearPairing,
     } = useHubController()
 
     const status = snapshot?.status
+    const pairingBridge = usePairingBridge({ pairing, status })
     const viewState = deriveHubViewState(snapshot)
-    const entryPreview = buildEntryPreviewModel(snapshot, entryMode)
     const statusCopy = buildStatusCopy(viewState)
+    const entryPreview = buildEntryPreviewModel(snapshot, entryMode)
     const footerMessage = buildFooterMessage(actionError, snapshot, viewState, entryPreview)
-    const ownershipHint = buildOwnershipHint(viewState)
     const overviewFields = buildOverviewFields({ entryPreview, status, copyValue })
     const detailFields = buildDetailFields({ snapshot, status, copyValue })
-
-    const primaryActionTone: 'primary' | 'secondary' = viewState.managed ? 'secondary' : 'primary'
     const primaryActionLabel = buildPrimaryActionLabel(viewState, busy)
+    const primaryActionTone = viewState.managed ? 'secondary' : 'primary'
+
+    const primaryMetric = overviewFields[0]
+    const tokenMetric = overviewFields[1]
+    const lastUpdatedMetric = detailFields[3]
+    const canOpen = Boolean(viewState.ready && status?.preferredBrowserUrl)
+    const canCopyToken = Boolean(status?.cliApiToken)
+    const canPair = Boolean(viewState.ready)
 
     const handlePrimaryAction = (): void => {
         if (viewState.managed) {
@@ -76,103 +87,131 @@ export function App(): JSX.Element {
         }
     }
 
-    const footerClassName = actionError || snapshot?.lastError
-        ? 'text-red-400'
-        : 'text-text-secondary'
+    const pairingActions: PairingCardActions | null = pairing
+        ? {
+              onApprove: () => void approvePairing(),
+              onClear: () => void clearPairing(),
+              onCopyLink: () => void copyValue(pairing.pairingUrl, '当前没有可复制的配对链接。'),
+              onRefresh: () => void recreatePairing(),
+              onRejectAndRefresh: () => void recreatePairing(),
+          }
+        : null
 
     return (
-        <main className={APP_SHELL_CLASS_NAME}>
-            <div className={PANEL_CLASS_NAME}>
-                <section className="p-6 sm:p-8 flex flex-col gap-6">
-                    <header className="flex justify-between items-start">
-                        <div className="flex-grow">
-                            <span className="text-sm font-medium text-accent-primary">Viby Desktop</span>
-                            <div className="flex items-center gap-3 mt-1">
-                                <h1 className="text-2xl font-bold text-text-primary">{statusCopy.title}</h1>
-                                <StatusBadge phase={viewState.displayedPhase} running={viewState.running} />
-                            </div>
-                            <p className="text-text-secondary mt-1">{statusCopy.subtitle}</p>
-                        </div>
-                        <span className={CHIP_CLASS_NAME}>{statusCopy.chip}</span>
-                    </header>
-
-                    <div className={CONTROL_PANEL_CLASS_NAME}>
-                        <SegmentedControl
-                            onChange={(value) => setActiveTab(value as DesktopTab)}
-                            options={TAB_OPTIONS}
-                            value={activeTab}
-                        />
-                        <SegmentedControl
-                            disabled={busy || viewState.running}
-                            onChange={(nextValue) => setEntryMode(nextValue as DesktopEntryMode)}
-                            options={ENTRY_OPTIONS}
-                            value={entryMode}
-                        />
-                    </div>
-
-                    {activeTab === 'overview' ? (
-                        <section className="flex flex-col gap-6">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                {overviewFields.map((item) => (
-                                    <InfoField
-                                        actionLabel={item.actionLabel}
-                                        key={item.label}
-                                        label={item.label}
-                                        mono={item.mono}
-                                        onAction={item.onAction}
-                                        value={item.value}
-                                    />
-                                ))}
+        <main className="desktop-shell">
+            <div className={getAuraClassName(viewState.ready, viewState.managed)} aria-hidden="true" />
+            <section className="desktop-stage">
+                <div className="desktop-panel">
+                    <div className="desktop-panel-grid">
+                        <section className="desktop-hero">
+                            <div className="desktop-status-row">
+                                <span className="desktop-brand-mark">Viby Desktop</span>
+                                <span className={`desktop-phase-chip ${viewState.ready ? 'is-ready' : ''}`}>
+                                    <span className="desktop-phase-dot" />
+                                    {statusCopy.chip}
+                                </span>
                             </div>
 
-                            <div className={ACTION_PANEL_CLASS_NAME}>
-                                <ActionButton
+                            <div className="desktop-hero-copy">
+                                <p className="desktop-eyebrow">{statusCopy.title}</p>
+                                <h1 className="desktop-title">
+                                    机器在你身边。
+                                    <br />
+                                    Hub 也该如此。
+                                </h1>
+                                <p className="desktop-summary">{statusCopy.subtitle}</p>
+                            </div>
+
+                            <div className="desktop-primary-zone">
+                                <button
+                                    className={`desktop-primary-button ${primaryActionTone === 'primary' ? 'is-primary' : ''}`}
                                     disabled={busy}
-                                    label={primaryActionLabel}
                                     onClick={handlePrimaryAction}
-                                    tone={primaryActionTone}
+                                    type="button"
+                                >
+                                    <span className="desktop-primary-label">{primaryActionLabel}</span>
+                                    <span className="desktop-primary-caption">
+                                        {busy ? '处理中' : getPrimaryCaption(viewState.ready, viewState.managed)}
+                                    </span>
+                                </button>
+                                <EntryModeSwitch
+                                    disabled={busy || viewState.running}
+                                    onChange={setEntryMode}
+                                    value={entryMode}
                                 />
-                                <ActionButton
-                                    disabled={busy || !viewState.ready || !status?.preferredBrowserUrl}
+                            </div>
+
+                            <div className="desktop-dock">
+                                <ControlPill
+                                    disabled={busy || !canOpen}
                                     label="打开入口"
                                     onClick={() => void openPreferred()}
                                 />
-                                <ActionButton
-                                    disabled={busy || !status?.cliApiToken}
+                                <ControlPill
+                                    disabled={busy || !canCopyToken}
                                     label="复制密钥"
                                     onClick={() => void copyValue(status?.cliApiToken, getEmptyKeyMessage())}
                                 />
-                            </div>
-
-                            <div className="text-center">
-                                <span className="text-sm font-medium text-text-secondary">{ownershipHint.title}</span>
-                                <p className="text-xs text-text-secondary/70 mt-1">{ownershipHint.body}</p>
-                            </div>
-                        </section>
-                    ) : (
-                        <section>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                {detailFields.map((item) => (
-                                    <InfoField
-                                        actionLabel={item.actionLabel}
-                                        key={item.label}
-                                        label={item.label}
-                                        mono={item.mono}
-                                        onAction={item.onAction}
-                                        value={item.value}
-                                    />
-                                ))}
+                                <ControlPill
+                                    disabled={busy || !canPair}
+                                    label={pairing ? '刷新配对码' : '生成配对码'}
+                                    onClick={() => void (pairing ? recreatePairing() : createPairing())}
+                                />
                             </div>
                         </section>
-                    )}
-                </section>
 
-                <footer className="px-6 sm:px-8 py-4 border-t border-border">
-                    <span className={`text-xs transition-colors duration-200 ${footerClassName}`}>
-                        {footerMessage}
-                    </span>
-                </footer>
-            </div>
+                        <section className="desktop-ambient-panel">
+                            <div className="desktop-orbit">
+                                <div className={`desktop-orbit-core ${viewState.ready ? 'is-ready' : ''}`} />
+                                <div className="desktop-orbit-ring desktop-orbit-ring-one" />
+                                <div className="desktop-orbit-ring desktop-orbit-ring-two" />
+                            </div>
+                            <div className="desktop-ambient-copy">
+                                <p>单一控制</p>
+                                <strong>
+                                    {viewState.managed ? '这扇窗在托管当前 Hub。' : '还没启动时只有一个动作。'}
+                                </strong>
+                                <span>
+                                    {viewState.ready
+                                        ? '入口、密钥、配对都从同一份 snapshot 生长出来。'
+                                        : '没有多余导航，没有学习成本，只有状态变化。'}
+                                </span>
+                            </div>
+                        </section>
+                    </div>
+
+                    <section className="desktop-metrics" aria-label="核心信息">
+                        <MetricCard
+                            actionLabel={primaryMetric.actionLabel}
+                            label={primaryMetric.label}
+                            mono={primaryMetric.mono}
+                            onAction={primaryMetric.onAction}
+                            value={primaryMetric.value}
+                        />
+                        <MetricCard
+                            actionLabel={tokenMetric.actionLabel}
+                            label={tokenMetric.label}
+                            mono={tokenMetric.mono}
+                            onAction={tokenMetric.onAction}
+                            value={tokenMetric.value}
+                        />
+                        <MetricCard label="最近更新" value={lastUpdatedMetric?.value ?? '刚刚'} />
+                    </section>
+
+                    {pairing && pairingActions ? (
+                        <PairingCard
+                            actions={pairingActions}
+                            busy={busy}
+                            bridgeState={pairingBridge}
+                            pairing={pairing}
+                        />
+                    ) : null}
+
+                    <footer className={`desktop-footer ${actionError || snapshot?.lastError ? 'is-error' : ''}`}>
+                        <span>{footerMessage}</span>
+                    </footer>
+                </div>
+            </section>
         </main>
     )
 }

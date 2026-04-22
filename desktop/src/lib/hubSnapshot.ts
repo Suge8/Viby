@@ -20,8 +20,7 @@ export function deriveHubViewState(snapshot: HubSnapshot | null): HubViewState {
         running,
         ready,
         booting,
-        displayedPhase: running || phase === 'error' || phase === 'stopped'
-            ? (booting ? 'starting' : phase)
-            : undefined
+        displayedPhase:
+            running || phase === 'error' || phase === 'stopped' ? (booting ? 'starting' : phase) : undefined,
     }
 }

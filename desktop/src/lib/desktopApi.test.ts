@@ -1,16 +1,16 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test'
-import type { HubSnapshot } from '@/types'
+import type { DesktopPairingSession, HubSnapshot } from '@/types'
 
 const invokeMock = mock(async () => undefined)
 const listenMock = mock(async () => () => {})
 const PREVIEW_MESSAGE = '当前运行在浏览器预览环境，Tauri runtime 不可用。请使用 bun run dev:desktop 启动桌面壳。'
 
 mock.module('@tauri-apps/api/core', () => ({
-    invoke: invokeMock
+    invoke: invokeMock,
 }))
 
 mock.module('@tauri-apps/api/event', () => ({
-    listen: listenMock
+    listen: listenMock,
 }))
 
 const desktopApi = await import('./desktopApi')
@@ -21,7 +21,7 @@ const snapshotFixture: HubSnapshot = {
     logPath: '/tmp/desktop.log',
     startupConfig: {
         listenHost: '127.0.0.1',
-        listenPort: 37173
+        listenPort: 37173,
     },
     status: {
         phase: 'ready',
@@ -35,8 +35,30 @@ const snapshotFixture: HubSnapshot = {
         settingsFile: '/tmp/settings.toml',
         dataDir: '/tmp',
         startedAt: '2026-03-24T00:00:00.000Z',
-        updatedAt: '2026-03-24T00:00:00.000Z'
-    }
+        updatedAt: '2026-03-24T00:00:00.000Z',
+    },
+}
+
+const pairingFixture: DesktopPairingSession = {
+    pairing: {
+        id: 'pairing-1',
+        state: 'waiting',
+        createdAt: 1,
+        updatedAt: 1,
+        expiresAt: 2,
+        ticketExpiresAt: 2,
+        shortCode: null,
+        approvalStatus: null,
+        host: {
+            tokenHint: 'abcdef',
+            label: 'Viby Desktop',
+        },
+        guest: null,
+    },
+    hostToken: 'host-token',
+    pairingUrl: 'https://pair.example.com/p/pairing-1#ticket=secret',
+    wsUrl: 'wss://pair.example.com/pairings/pairing-1/ws?token=host-token',
+    iceServers: [],
 }
 
 beforeEach(() => {
@@ -46,8 +68,8 @@ beforeEach(() => {
     listenMock.mockImplementation(async () => () => {})
     ;(globalThis as typeof globalThis & { window?: unknown }).window = {
         __TAURI_INTERNALS__: {
-            invoke: () => undefined
-        }
+            invoke: () => undefined,
+        },
     }
 })
 
@@ -62,6 +84,36 @@ describe('desktopApi', () => {
         await desktopApi.openPreferredUrl()
 
         expect(invokeMock).toHaveBeenCalledWith('open_preferred_url', undefined)
+    })
+
+    it('requests a pairing session through the dedicated desktop command', async () => {
+        invokeMock.mockResolvedValueOnce(pairingFixture)
+
+        await expect(desktopApi.createPairingSession()).resolves.toEqual(pairingFixture)
+        expect(invokeMock).toHaveBeenCalledWith('create_pairing_session', undefined)
+    })
+
+    it('approves a pairing session through the dedicated desktop command', async () => {
+        invokeMock.mockResolvedValueOnce({
+            ...pairingFixture,
+            pairing: {
+                ...pairingFixture.pairing,
+                approvalStatus: 'approved',
+            },
+        })
+
+        await expect(desktopApi.approvePairingSession(pairingFixture)).resolves.toMatchObject({
+            pairing: {
+                approvalStatus: 'approved',
+            },
+        })
+        expect(invokeMock).toHaveBeenCalledWith('approve_pairing_session', { pairing: pairingFixture })
+    })
+
+    it('deletes a pairing session through the dedicated desktop command', async () => {
+        await desktopApi.deletePairingSession(pairingFixture)
+
+        expect(invokeMock).toHaveBeenCalledWith('delete_pairing_session', { pairing: pairingFixture })
     })
 
     it('forwards hub snapshot events to the caller callback', async () => {

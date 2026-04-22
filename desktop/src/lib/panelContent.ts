@@ -1,6 +1,6 @@
+import type { EntryPreviewModel } from '@/lib/entryMode'
 import { formatRelativeTime } from '@/lib/format'
 import type { HubViewState } from '@/lib/hubSnapshot'
-import type { EntryPreviewModel } from '@/lib/entryMode'
 import type { HubRuntimeStatus, HubSnapshot } from '@/types'
 
 export interface FieldModel {
@@ -15,12 +15,6 @@ export interface StatusCopy {
     title: string
     subtitle: string
     chip: string
-    chipTone: 'managed' | 'idle'
-}
-
-export interface OwnershipHint {
-    title: string
-    body: string
 }
 
 type CopyValueHandler = (value: string | undefined, emptyMessage: string) => Promise<void>
@@ -42,15 +36,14 @@ const KEY_PLACEHOLDER = '启动后会在这里给出访问密钥。'
 const VALUE_PLACEHOLDER = '未提供'
 const EMPTY_ENTRY_MESSAGE = '当前还没有可复制的入口地址。'
 const EMPTY_KEY_MESSAGE = '当前还没有访问密钥。'
-const EMPTY_PUBLIC_MESSAGE = '当前还没有公网地址。'
-const EMPTY_DIRECT_MESSAGE = '当前还没有直达链接。'
 const EMPTY_LOG_MESSAGE = '当前还没有日志文件路径。'
 const EMPTY_CONFIG_MESSAGE = '当前还没有配置文件路径。'
-const OWNERSHIP_HINT_TITLE = '关闭窗口会进入状态栏'
-const MANAGED_HINT_BODY = '从 Dock 或状态栏点一下就能把窗口叫回来。'
 const STARTING_PRIMARY_ACTION_LABEL = '正在开启'
 const MANAGED_PRIMARY_ACTION_LABEL = '停止中枢'
 const IDLE_PRIMARY_ACTION_LABEL = '开启中枢'
+const TOKEN_LABEL = '访问密钥'
+const COPY_ACTION_LABEL = '复制'
+const LAST_UPDATED_LABEL = '最近更新'
 
 function compactPreview(value: string | undefined, placeholder: string = VALUE_PLACEHOLDER): string {
     if (!value) {
@@ -81,14 +74,14 @@ function buildCopyField(
     value: string | undefined,
     copyValue: CopyValueHandler,
     emptyMessage: string,
-    placeholder?: string,
+    placeholder?: string
 ): FieldModel {
     return {
         label,
         value: compactPreview(value, placeholder),
-        actionLabel: value ? '复制' : undefined,
+        actionLabel: value ? COPY_ACTION_LABEL : undefined,
         onAction: value ? () => void copyValue(value, emptyMessage) : undefined,
-        mono: true
+        mono: true,
     }
 }
 
@@ -98,7 +91,6 @@ export function buildStatusCopy(viewState: HubViewState): StatusCopy {
             title: '运行中',
             subtitle: '入口已经准备好，关上窗口只会隐藏到状态栏。',
             chip: '本窗口托管',
-            chipTone: 'managed'
         }
     }
 
@@ -107,7 +99,6 @@ export function buildStatusCopy(viewState: HubViewState): StatusCopy {
             title: '正在启动',
             subtitle: '正在把这台机器接入中枢，入口很快就会出现。',
             chip: '本窗口托管',
-            chipTone: 'managed'
         }
     }
 
@@ -115,7 +106,6 @@ export function buildStatusCopy(viewState: HubViewState): StatusCopy {
         title: '尚未启动',
         subtitle: '点一下就能在这台机器上开启中枢，随后直接打开入口。',
         chip: '等待启动',
-        chipTone: 'idle'
     }
 }
 
@@ -123,7 +113,7 @@ export function buildFooterMessage(
     actionError: string | null,
     snapshot: HubSnapshot | null,
     viewState: HubViewState,
-    entryPreview: EntryPreviewModel,
+    entryPreview: EntryPreviewModel
 ): string {
     if (actionError) {
         return actionError
@@ -159,25 +149,18 @@ export function buildOverviewFields(options: BuildOverviewFieldsOptions): FieldM
             options.entryPreview.copyValue,
             options.copyValue,
             EMPTY_ENTRY_MESSAGE,
-            options.entryPreview.displayValue || ENTRY_PLACEHOLDER,
+            options.entryPreview.displayValue || ENTRY_PLACEHOLDER
         ),
         {
-            label: '访问密钥',
+            label: TOKEN_LABEL,
             value: compactTokenPreview(options.status?.cliApiToken),
-            actionLabel: options.status?.cliApiToken ? '复制' : undefined,
+            actionLabel: options.status?.cliApiToken ? COPY_ACTION_LABEL : undefined,
             onAction: options.status?.cliApiToken
                 ? () => void options.copyValue(options.status?.cliApiToken, EMPTY_KEY_MESSAGE)
                 : undefined,
-            mono: true
-        }
+            mono: true,
+        },
     ]
-}
-
-export function buildOwnershipHint(_viewState: HubViewState): OwnershipHint {
-    return {
-        title: OWNERSHIP_HINT_TITLE,
-        body: MANAGED_HINT_BODY
-    }
 }
 
 export function buildPrimaryActionLabel(viewState: HubViewState, busy: boolean): string {
@@ -195,14 +178,12 @@ export function buildPrimaryActionLabel(viewState: HubViewState, busy: boolean):
 export function buildDetailFields(options: BuildDetailFieldsOptions): FieldModel[] {
     return [
         buildCopyField('本机地址', options.status?.localHubUrl, options.copyValue, EMPTY_ENTRY_MESSAGE),
-        buildCopyField('公网地址', options.status?.publicHubUrl, options.copyValue, EMPTY_PUBLIC_MESSAGE),
-        buildCopyField('直达链接', options.status?.directAccessUrl, options.copyValue, EMPTY_DIRECT_MESSAGE),
         buildCopyField('日志文件', options.snapshot?.logPath, options.copyValue, EMPTY_LOG_MESSAGE),
         buildCopyField('配置文件', options.status?.settingsFile, options.copyValue, EMPTY_CONFIG_MESSAGE),
         {
-            label: '最近更新',
-            value: formatRelativeTime(options.status?.updatedAt)
-        }
+            label: LAST_UPDATED_LABEL,
+            value: formatRelativeTime(options.status?.updatedAt),
+        },
     ]
 }
 

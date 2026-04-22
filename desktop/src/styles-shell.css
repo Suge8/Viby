@@ -1,0 +1,214 @@
+@layer components {
+    .desktop-shell {
+        @apply relative min-h-screen overflow-hidden bg-background text-text-primary;
+        background-image:
+            radial-gradient(circle at top left, rgba(94, 106, 210, 0.24), transparent 28%),
+            radial-gradient(circle at 80% 20%, rgba(114, 219, 190, 0.14), transparent 24%),
+            linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0));
+    }
+
+    .desktop-stage {
+        @apply relative flex min-h-screen items-center justify-center p-5;
+    }
+
+    .desktop-aura {
+        position: absolute;
+        inset: 50% auto auto 50%;
+        height: 34rem;
+        width: 34rem;
+        transform: translate(-50%, -50%);
+        border-radius: 9999px;
+        background: radial-gradient(circle, rgba(94, 106, 210, 0.34) 0%, rgba(94, 106, 210, 0.12) 28%, transparent 70%);
+        filter: blur(24px);
+        opacity: 0.75;
+        animation: desktop-float 12s ease-in-out infinite;
+        pointer-events: none;
+    }
+
+    .desktop-aura-ready {
+        background: radial-gradient(
+            circle,
+            rgba(114, 219, 190, 0.26) 0%,
+            rgba(94, 106, 210, 0.14) 32%,
+            transparent 74%
+        );
+    }
+
+    .desktop-aura-booting {
+        animation-duration: 6s;
+    }
+
+    .desktop-panel {
+        @apply relative z-10 w-full max-w-6xl rounded-[32px] border border-white/10 bg-white/[0.05] p-4 shadow-[0_24px_120px_rgba(0,0,0,0.45)] backdrop-blur-2xl sm:p-6;
+    }
+
+    .desktop-panel-grid {
+        @apply grid gap-4 lg:grid-cols-[1.35fr_0.85fr];
+    }
+
+    .desktop-hero,
+    .desktop-ambient-panel,
+    .desktop-metric-card,
+    .desktop-pairing-card,
+    .desktop-footer {
+        @apply rounded-[28px] border border-white/10 bg-white/[0.04];
+    }
+
+    .desktop-hero {
+        @apply flex min-h-[33rem] flex-col justify-between p-6 sm:p-8;
+    }
+
+    .desktop-ambient-panel {
+        @apply flex min-h-[33rem] flex-col justify-between overflow-hidden p-6 sm:p-8;
+        background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+            radial-gradient(circle at top, rgba(114, 219, 190, 0.08), transparent 48%);
+    }
+
+    .desktop-status-row,
+    .desktop-metric-head {
+        @apply flex items-center justify-between gap-3;
+    }
+
+    .desktop-brand-mark,
+    .desktop-eyebrow,
+    .desktop-ambient-copy p {
+        @apply text-xs font-semibold uppercase tracking-[0.24em] text-text-secondary;
+    }
+
+    .desktop-phase-chip {
+        @apply inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-text-secondary;
+    }
+
+    .desktop-phase-chip.is-ready {
+        @apply text-emerald-200;
+    }
+
+    .desktop-phase-dot {
+        @apply h-2 w-2 rounded-full bg-white/45;
+        box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.04);
+    }
+
+    .desktop-phase-chip.is-ready .desktop-phase-dot {
+        @apply bg-emerald-300;
+        box-shadow: 0 0 18px rgba(114, 219, 190, 0.65);
+    }
+
+    .desktop-hero-copy {
+        @apply max-w-2xl space-y-4;
+    }
+
+    .desktop-title {
+        @apply text-4xl font-semibold leading-[0.96] tracking-[-0.04em] text-white sm:text-6xl;
+    }
+
+    .desktop-summary,
+    .desktop-ambient-copy span,
+    .desktop-pairing-copy p,
+    .desktop-footer {
+        @apply max-w-xl text-sm leading-6 text-text-secondary sm:text-[15px];
+    }
+
+    .desktop-primary-zone {
+        @apply space-y-4;
+    }
+
+    .desktop-primary-button {
+        @apply flex w-full items-center justify-between rounded-[28px] border border-white/10 bg-black/20 px-6 py-5 text-left transition duration-200 ease-out hover:-translate-y-0.5 hover:border-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40 disabled:cursor-not-allowed disabled:opacity-45;
+    }
+
+    .desktop-primary-button.is-primary {
+        background: linear-gradient(135deg, rgba(94, 106, 210, 0.82), rgba(94, 106, 210, 0.42)), rgba(0, 0, 0, 0.24);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.14),
+            0 16px 40px rgba(94, 106, 210, 0.26);
+    }
+
+    .desktop-primary-label {
+        @apply text-2xl font-semibold tracking-[-0.03em] text-white;
+    }
+
+    .desktop-primary-caption {
+        @apply text-sm text-text-secondary;
+    }
+
+    .desktop-mode-switch,
+    .desktop-dock {
+        @apply flex flex-wrap gap-3;
+    }
+
+    .desktop-mode-switch {
+        @apply rounded-full border border-white/10 bg-black/20 p-1;
+    }
+
+    .desktop-mode-switch.is-disabled {
+        @apply opacity-50;
+    }
+
+    .desktop-mode-option,
+    .desktop-control-pill,
+    .desktop-metric-action {
+        @apply transition duration-200 ease-out;
+    }
+
+    .desktop-mode-option {
+        @apply rounded-full px-4 py-2 text-sm text-text-secondary focus:outline-none disabled:cursor-not-allowed;
+    }
+
+    .desktop-mode-option.is-active {
+        @apply bg-white text-background;
+    }
+
+    .desktop-control-pill {
+        @apply rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-text-primary hover:border-white/20 hover:bg-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 disabled:cursor-not-allowed disabled:opacity-40;
+    }
+
+    .desktop-orbit {
+        @apply relative mx-auto mt-2 flex h-72 w-72 items-center justify-center;
+    }
+
+    .desktop-orbit-core {
+        @apply relative h-28 w-28 rounded-full border border-white/15 bg-white/[0.08];
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.22),
+            0 0 80px rgba(94, 106, 210, 0.24);
+    }
+
+    .desktop-orbit-core::after {
+        content: "";
+        position: absolute;
+        inset: 18px;
+        border-radius: 9999px;
+        background: radial-gradient(circle, rgba(255, 255, 255, 0.8), rgba(94, 106, 210, 0.35));
+    }
+
+    .desktop-orbit-core.is-ready::after {
+        background: radial-gradient(circle, rgba(216, 255, 241, 0.9), rgba(114, 219, 190, 0.34));
+    }
+
+    .desktop-orbit-ring {
+        position: absolute;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 9999px;
+        animation: desktop-spin 18s linear infinite;
+    }
+
+    .desktop-orbit-ring-one {
+        inset: 18px;
+    }
+
+    .desktop-orbit-ring-two {
+        inset: -12px;
+        animation-direction: reverse;
+        animation-duration: 24s;
+    }
+
+    .desktop-ambient-copy {
+        @apply space-y-3;
+    }
+
+    .desktop-ambient-copy strong,
+    .desktop-pairing-copy h2 {
+        @apply block text-2xl font-semibold tracking-[-0.03em] text-white;
+    }
+}
