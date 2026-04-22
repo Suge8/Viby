@@ -9,7 +9,6 @@ ${chalk.bold('viby')} - hub-first AI coding agent control
 
 ${chalk.bold('Usage:')}
   viby hub               Start the hub
-  viby hub --relay       Start the hub with public relay
   viby auth status       Show current auth configuration
   viby auth login        Save CLI_API_TOKEN locally
   viby auth logout       Clear saved credentials
@@ -53,5 +52,5 @@ export const rootCommand: CommandDefinition = {
         }
 
         printRootHelp()
-    }
+    },
 }

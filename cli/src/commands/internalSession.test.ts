@@ -12,46 +12,54 @@ const harness = vi.hoisted(() => ({
     runCursor: vi.fn(async () => {}),
     runGemini: vi.fn(async () => {}),
     runOpencode: vi.fn(async () => {}),
+    runCopilot: vi.fn(async () => {}),
     runPi: vi.fn(async () => {}),
+    loggerDebug: vi.fn(),
 }))
 
 vi.mock('@/ui/tokenInit', () => ({
-    initializeToken: harness.initializeToken
+    initializeToken: harness.initializeToken,
 }))
 
 vi.mock('@/ui/auth', () => ({
-    authAndSetupMachineIfNeeded: harness.authAndSetupMachineIfNeeded
+    authAndSetupMachineIfNeeded: harness.authAndSetupMachineIfNeeded,
 }))
 
 vi.mock('@/claude/runClaude', () => ({
-    runClaude: harness.runClaude
+    runClaude: harness.runClaude,
 }))
 
 vi.mock('@/codex/runCodex', () => ({
-    runCodex: harness.runCodex
+    runCodex: harness.runCodex,
 }))
 
 vi.mock('@/cursor/runCursor', () => ({
-    runCursor: harness.runCursor
+    runCursor: harness.runCursor,
 }))
 
 vi.mock('@/gemini/runGemini', () => ({
-    runGemini: harness.runGemini
+    runGemini: harness.runGemini,
 }))
 
 vi.mock('@/opencode/runOpencode', () => ({
-    runOpencode: harness.runOpencode
+    runOpencode: harness.runOpencode,
+}))
+
+vi.mock('@/copilot/runCopilot', () => ({
+    runCopilot: harness.runCopilot,
 }))
 
 vi.mock('@/pi/runPi', () => ({
-    runPi: harness.runPi
+    runPi: harness.runPi,
 }))
 
-import {
-    internalSessionCommand,
-    parseInternalSessionArgs,
-    resolveInternalSessionOptions,
-} from './internalSession'
+vi.mock('@/ui/logger', () => ({
+    logger: {
+        debug: harness.loggerDebug,
+    },
+}))
+
+import { internalSessionCommand, parseInternalSessionArgs, resolveInternalSessionOptions } from './internalSession'
 
 const cleanupPaths = new Set<string>()
 
@@ -70,10 +78,10 @@ function createValidHandoffPayload(): string {
         liveConfig: {
             model: 'claude-sonnet',
             modelReasoningEffort: 'high',
-            permissionMode: 'default'
+            permissionMode: 'default',
         },
         history: [],
-        attachments: []
+        attachments: [],
     })
 }
 
@@ -85,53 +93,70 @@ beforeEach(() => {
     harness.runCursor.mockClear()
     harness.runGemini.mockClear()
     harness.runOpencode.mockClear()
+    harness.runCopilot.mockClear()
     harness.runPi.mockClear()
+    harness.loggerDebug.mockClear()
 })
 
 afterEach(async () => {
-    await Promise.all(Array.from(cleanupPaths, async (path) => {
-        cleanupPaths.delete(path)
-        await fs.rm(path, { recursive: true, force: true })
-    }))
+    await Promise.all(
+        Array.from(cleanupPaths, async (path) => {
+            cleanupPaths.delete(path)
+            await fs.rm(path, { recursive: true, force: true })
+        })
+    )
 })
 
 describe('internalSession', () => {
     it('parses driver-switch argv without requiring a resume token', () => {
-        expect(parseInternalSessionArgs([
-            '--agent', 'codex',
-            '--started-by', 'runner',
-            '--driver-switch-target', 'codex',
-            '--driver-switch-handoff-file', '/tmp/handoff.json'
-        ])).toEqual(expect.objectContaining({
-            agent: 'codex',
-            startedBy: 'runner',
-            resumeSessionId: undefined,
-            driverSwitchTarget: 'codex',
-            driverSwitchHandoffFile: '/tmp/handoff.json'
-        }))
+        expect(
+            parseInternalSessionArgs([
+                '--agent',
+                'codex',
+                '--started-by',
+                'runner',
+                '--driver-switch-target',
+                'codex',
+                '--driver-switch-handoff-file',
+                '/tmp/handoff.json',
+            ])
+        ).toEqual(
+            expect.objectContaining({
+                agent: 'codex',
+                startedBy: 'runner',
+                resumeSessionId: undefined,
+                driverSwitchTarget: 'codex',
+                driverSwitchHandoffFile: '/tmp/handoff.json',
+            })
+        )
     })
 
     it('accepts pi as an internal agent flavor', () => {
-        expect(parseInternalSessionArgs([
-            '--agent', 'pi',
-            '--started-by', 'runner',
-            '--viby-session-id', 'session-pi'
-        ])).toEqual(expect.objectContaining({
-            agent: 'pi',
-            startedBy: 'runner',
-            vibySessionId: 'session-pi'
-        }))
+        expect(
+            parseInternalSessionArgs(['--agent', 'pi', '--started-by', 'runner', '--viby-session-id', 'session-pi'])
+        ).toEqual(
+            expect.objectContaining({
+                agent: 'pi',
+                startedBy: 'runner',
+                vibySessionId: 'session-pi',
+            })
+        )
     })
 
     it('loads a valid driver-switch handoff and forwards it to Codex bootstrap', async () => {
         const handoffFilePath = await createHandoffFile(createValidHandoffPayload())
 
         const options = await resolveInternalSessionOptions([
-            '--agent', 'codex',
-            '--started-by', 'runner',
-            '--viby-session-id', 'session-1',
-            '--driver-switch-target', 'codex',
-            '--driver-switch-handoff-file', handoffFilePath
+            '--agent',
+            'codex',
+            '--started-by',
+            'runner',
+            '--viby-session-id',
+            'session-1',
+            '--driver-switch-target',
+            'codex',
+            '--driver-switch-handoff-file',
+            handoffFilePath,
         ])
 
         expect(options.driverSwitch).toEqual({
@@ -142,97 +167,199 @@ describe('internalSession', () => {
                 liveConfig: {
                     model: 'claude-sonnet',
                     modelReasoningEffort: 'high',
-                    permissionMode: 'default'
+                    permissionMode: 'default',
                 },
                 history: [],
-                attachments: []
-            }
+                attachments: [],
+            },
         })
 
         await internalSessionCommand.run({
             args: [],
             commandArgs: [
-                '--agent', 'codex',
-                '--started-by', 'runner',
-                '--viby-session-id', 'session-1',
-                '--driver-switch-target', 'codex',
-                '--driver-switch-handoff-file', handoffFilePath
-            ]
+                '--agent',
+                'codex',
+                '--started-by',
+                'runner',
+                '--viby-session-id',
+                'session-1',
+                '--driver-switch-target',
+                'codex',
+                '--driver-switch-handoff-file',
+                handoffFilePath,
+            ],
         })
 
-        expect(harness.initializeToken).toHaveBeenCalledTimes(1)
-        expect(harness.authAndSetupMachineIfNeeded).toHaveBeenCalledTimes(1)
-        expect(harness.runCodex).toHaveBeenCalledWith(expect.objectContaining({
-            vibySessionId: 'session-1',
-            resumeSessionId: undefined,
-            driverSwitchHandoff: expect.objectContaining({
-                driver: 'claude',
-                workingDirectory: '/tmp/project'
+        expect(harness.initializeToken).not.toHaveBeenCalled()
+        expect(harness.authAndSetupMachineIfNeeded).not.toHaveBeenCalled()
+        expect(harness.runCodex).toHaveBeenCalledWith(
+            expect.objectContaining({
+                driverSwitchBootstrap: true,
+                vibySessionId: 'session-1',
+                resumeSessionId: undefined,
+                sessionContinuityHandoff: expect.objectContaining({
+                    driver: 'claude',
+                    workingDirectory: '/tmp/project',
+                }),
             })
-        }))
+        )
+        expect(harness.loggerDebug).toHaveBeenCalledWith(
+            expect.stringContaining('[internal-session] codex load-runner')
+        )
+        expect(harness.loggerDebug).toHaveBeenCalledWith(expect.stringContaining('[internal-session] codex run-runner'))
+    })
+
+    it('forwards continuity handoff into Gemini bootstrap for runner-managed resume fallback', async () => {
+        const handoffFilePath = await createHandoffFile(createValidHandoffPayload())
+
+        await internalSessionCommand.run({
+            args: [],
+            commandArgs: [
+                '--agent',
+                'gemini',
+                '--started-by',
+                'runner',
+                '--viby-session-id',
+                'session-gemini',
+                '--driver-switch-target',
+                'gemini',
+                '--driver-switch-handoff-file',
+                handoffFilePath,
+            ],
+        })
+
+        expect(harness.runGemini).toHaveBeenCalledWith(
+            expect.objectContaining({
+                driverSwitchBootstrap: true,
+                vibySessionId: 'session-gemini',
+                sessionContinuityHandoff: expect.objectContaining({
+                    driver: 'claude',
+                    workingDirectory: '/tmp/project',
+                }),
+            })
+        )
     })
 
     it('rejects malformed switch bootstrap inputs explicitly', async () => {
-        await expect(resolveInternalSessionOptions([
-            '--agent', 'codex',
-            '--driver-switch-target', 'codex'
-        ])).rejects.toThrow('Missing --driver-switch-handoff-file value')
+        await expect(
+            resolveInternalSessionOptions(['--agent', 'codex', '--driver-switch-target', 'codex'])
+        ).rejects.toThrow('Missing --driver-switch-handoff-file value')
 
-        await expect(resolveInternalSessionOptions([
-            '--agent', 'codex',
-            '--driver-switch-target', 'gemini',
-            '--driver-switch-handoff-file', '/tmp/handoff.json'
-        ])).rejects.toThrow('Unsupported driver switch target: gemini')
+        await expect(
+            resolveInternalSessionOptions([
+                '--agent',
+                'codex',
+                '--driver-switch-target',
+                'unknown',
+                '--driver-switch-handoff-file',
+                '/tmp/handoff.json',
+            ])
+        ).rejects.toThrow('Unsupported driver switch target: unknown')
 
         const invalidJsonPath = await createHandoffFile('{bad json')
-        await expect(resolveInternalSessionOptions([
-            '--agent', 'codex',
-            '--driver-switch-target', 'codex',
-            '--driver-switch-handoff-file', invalidJsonPath
-        ])).rejects.toThrow('Invalid driver switch handoff JSON')
+        await expect(
+            resolveInternalSessionOptions([
+                '--agent',
+                'codex',
+                '--driver-switch-target',
+                'codex',
+                '--driver-switch-handoff-file',
+                invalidJsonPath,
+            ])
+        ).rejects.toThrow('Invalid driver switch handoff JSON')
     })
 
     it('rejects a switch bootstrap whose target driver does not match the spawned agent', async () => {
         const handoffFilePath = await createHandoffFile(createValidHandoffPayload())
 
-        await expect(resolveInternalSessionOptions([
-            '--agent', 'claude',
-            '--driver-switch-target', 'codex',
-            '--driver-switch-handoff-file', handoffFilePath
-        ])).rejects.toThrow('does not match agent claude')
+        await expect(
+            resolveInternalSessionOptions([
+                '--agent',
+                'claude',
+                '--driver-switch-target',
+                'codex',
+                '--driver-switch-handoff-file',
+                handoffFilePath,
+            ])
+        ).rejects.toThrow('does not match agent claude')
     })
 
     it('forwards Pi config through the internal spawn entrypoint', async () => {
         await internalSessionCommand.run({
             args: [],
             commandArgs: [
-                '--agent', 'pi',
-                '--started-by', 'runner',
-                '--viby-session-id', 'session-pi',
-                '--permission-mode', 'safe-yolo',
-                '--model', 'openai/gpt-5.4-mini',
-                '--model-reasoning-effort', 'high'
-            ]
+                '--agent',
+                'pi',
+                '--started-by',
+                'runner',
+                '--viby-session-id',
+                'session-pi',
+                '--permission-mode',
+                'safe-yolo',
+                '--model',
+                'openai/gpt-5.4-mini',
+                '--model-reasoning-effort',
+                'high',
+            ],
         })
 
         expect(harness.runPi).toHaveBeenCalledWith({
             startedBy: 'runner',
             vibySessionId: 'session-pi',
-            sessionRole: undefined,
             permissionMode: 'safe-yolo',
             model: 'openai/gpt-5.4-mini',
-            modelReasoningEffort: 'high'
+            modelReasoningEffort: 'high',
         })
     })
 
-    it('rejects provider resume tokens for Pi sessions', async () => {
-        await expect(internalSessionCommand.run({
+    it('forwards Copilot config through the internal spawn entrypoint', async () => {
+        await internalSessionCommand.run({
             args: [],
             commandArgs: [
-                '--agent', 'pi',
-                '--started-by', 'runner',
-                '--resume-session-id', 'pi-provider-session'
-            ]
-        })).rejects.toThrow('Pi does not support provider resume session ids')
+                '--agent',
+                'copilot',
+                '--started-by',
+                'runner',
+                '--viby-session-id',
+                'session-copilot',
+                '--permission-mode',
+                'bypassPermissions',
+                '--model',
+                'gpt-5.4',
+            ],
+        })
+
+        expect(harness.runCopilot).toHaveBeenCalledWith({
+            startedBy: 'runner',
+            vibySessionId: 'session-copilot',
+            permissionMode: 'bypassPermissions',
+            resumeSessionId: undefined,
+            model: 'gpt-5.4',
+            sessionContinuityHandoff: undefined,
+        })
+    })
+
+    it('keeps terminal-started internal sessions on the explicit auth/setup path', async () => {
+        await internalSessionCommand.run({
+            args: [],
+            commandArgs: ['--agent', 'claude', '--started-by', 'terminal'],
+        })
+
+        expect(harness.initializeToken).toHaveBeenCalledTimes(1)
+        expect(harness.authAndSetupMachineIfNeeded).toHaveBeenCalledTimes(1)
+        expect(harness.runClaude).toHaveBeenCalledWith(
+            expect.objectContaining({
+                startedBy: 'terminal',
+            })
+        )
+    })
+
+    it('rejects provider resume tokens for Pi sessions', async () => {
+        await expect(
+            internalSessionCommand.run({
+                args: [],
+                commandArgs: ['--agent', 'pi', '--started-by', 'runner', '--resume-session-id', 'pi-provider-session'],
+            })
+        ).rejects.toThrow('Pi does not support provider resume session ids')
     })
 })
