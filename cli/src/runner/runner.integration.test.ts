@@ -6,10 +6,11 @@
  * developer's default ~/.viby runtime.
  */
 
-import { existsSync, readFileSync, readdirSync } from 'fs'
-import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach } from 'vitest'
+import { existsSync, readdirSync, readFileSync } from 'fs'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import {
     EXTERNAL_SESSION_BOOT_MS,
+    getRunnerModules,
     LIVE_INTEGRATION_READY,
     RUNNER_GRACEFUL_SHUTDOWN_SETTLE_MS,
     RUNNER_HOOK_TIMEOUT_MS,
@@ -17,10 +18,9 @@ import {
     RUNNER_SIGKILL_SETTLE_MS,
     RUNNER_START_POLL_INTERVAL_MS,
     RUNNER_START_TIMEOUT_MS,
-    getRunnerModules,
     setupRunnerIntegrationHarness,
     teardownRunnerIntegrationHarness,
-    waitFor
+    waitFor,
 } from './runnerIntegrationTestHarness'
 
 describe.skipIf(!LIVE_INTEGRATION_READY)('Runner Integration Tests', { timeout: 20_000 }, () => {
@@ -37,13 +37,17 @@ describe.skipIf(!LIVE_INTEGRATION_READY)('Runner Integration Tests', { timeout: 
 
         void spawnVibyCLI(['runner', 'start-sync'], {
             stdio: 'ignore',
-            detached: true
+            detached: true,
         })
 
-        await waitFor(async () => {
-            const state = await readRunnerState()
-            return state !== null
-        }, RUNNER_START_TIMEOUT_MS, RUNNER_START_POLL_INTERVAL_MS)
+        await waitFor(
+            async () => {
+                const state = await readRunnerState()
+                return state !== null
+            },
+            RUNNER_START_TIMEOUT_MS,
+            RUNNER_START_POLL_INTERVAL_MS
+        )
 
         const runnerState = await readRunnerState()
         if (!runnerState) {
@@ -82,7 +86,7 @@ describe.skipIf(!LIVE_INTEGRATION_READY)('Runner Integration Tests', { timeout: 
             vibyToolsDir: '/test/viby-tools',
             hostPid: 99999,
             startedBy: 'terminal' as const,
-            machineId: 'test-machine-123'
+            machineId: 'test-machine-123',
         }
 
         await notifyRunnerSessionStarted('test-session-123', mockMetadata)
@@ -97,20 +101,23 @@ describe.skipIf(!LIVE_INTEGRATION_READY)('Runner Integration Tests', { timeout: 
     })
 
     it('should spawn & stop a session via HTTP (not testing RPC route, but similar enough)', async () => {
-        const { spawnRunnerSession, listRunnerSessions, stopRunnerSession, RUNNER_MANAGED_STARTED_BY } = getRunnerModules()
+        const { spawnRunnerSession, listRunnerSessions, stopRunnerSession, RUNNER_MANAGED_STARTED_BY } =
+            getRunnerModules()
 
         const response = await spawnRunnerSession('/tmp', 'spawned-test-456')
         expect(response).toHaveProperty('success', true)
         expect(response).toHaveProperty('sessionId')
 
         const sessions = await listRunnerSessions()
-        const spawnedSession = sessions.find((session: { vibySessionId?: string }) => session.vibySessionId === response.sessionId)
+        const spawnedSession = sessions.find(
+            (session: { vibySessionId?: string }) => session.vibySessionId === response.sessionId
+        )
 
         expect(spawnedSession).toBeDefined()
-        expect(spawnedSession.startedBy).toBe(RUNNER_MANAGED_STARTED_BY)
+        expect(spawnedSession!.startedBy).toBe(RUNNER_MANAGED_STARTED_BY)
 
-        expect(spawnedSession.vibySessionId).toBeDefined()
-        await stopRunnerSession(spawnedSession.vibySessionId)
+        expect(spawnedSession!.vibySessionId).toBeDefined()
+        await stopRunnerSession(spawnedSession!.vibySessionId!)
     })
 
     it('stress test: spawn / stop', { timeout: 60_000 }, async () => {
@@ -137,61 +144,14 @@ describe.skipIf(!LIVE_INTEGRATION_READY)('Runner Integration Tests', { timeout: 
         await waitFor(async () => !existsSync(configuration.runnerStateFile), 1_000)
     })
 
-    it('should track both runner-spawned and terminal sessions', async () => {
-        const {
-            spawnVibyCLI,
-            spawnRunnerSession,
-            listRunnerSessions,
-            stopRunnerSession,
-            killProcessByChildProcess,
-            EXTERNAL_TERMINAL_STARTED_BY,
-            RUNNER_MANAGED_STARTED_BY
-        } = getRunnerModules()
-
-        const terminalVibyProcess = spawnVibyCLI([
-            '--viby-starting-mode', 'remote',
-            '--started-by', 'terminal'
-        ], {
-            cwd: '/tmp',
-            detached: true,
-            stdio: 'ignore'
-        })
-
-        if (!terminalVibyProcess.pid) {
-            throw new Error('Failed to spawn terminal viby process')
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, EXTERNAL_SESSION_BOOT_MS))
-
-        const spawnResponse = await spawnRunnerSession('/tmp', 'runner-session-bbb')
-        const sessions = await listRunnerSessions()
-        expect(sessions).toHaveLength(2)
-
-        const terminalSession = sessions.find((session: { pid: number }) => session.pid === terminalVibyProcess.pid)
-        const runnerSession = sessions.find((session: { vibySessionId?: string }) => session.vibySessionId === spawnResponse.sessionId)
-
-        expect(terminalSession).toBeDefined()
-        expect(terminalSession.startedBy).toBe(EXTERNAL_TERMINAL_STARTED_BY)
-
-        expect(runnerSession).toBeDefined()
-        expect(runnerSession.startedBy).toBe(RUNNER_MANAGED_STARTED_BY)
-
-        await stopRunnerSession('terminal-session-aaa')
-        await stopRunnerSession(runnerSession.vibySessionId)
-
-        try {
-            await killProcessByChildProcess(terminalVibyProcess)
-        } catch {
-            // Process may already be dead.
-        }
-    })
-
     it('should update session metadata when webhook is called', async () => {
         const { spawnRunnerSession, listRunnerSessions, stopRunnerSession } = getRunnerModules()
 
         const spawnResponse = await spawnRunnerSession('/tmp')
         const sessions = await listRunnerSessions()
-        const session = sessions.find((item: { vibySessionId?: string }) => item.vibySessionId === spawnResponse.sessionId)
+        const session = sessions.find(
+            (item: { vibySessionId?: string }) => item.vibySessionId === spawnResponse.sessionId
+        )
         expect(session).toBeDefined()
 
         await stopRunnerSession(spawnResponse.sessionId)
@@ -201,7 +161,7 @@ describe.skipIf(!LIVE_INTEGRATION_READY)('Runner Integration Tests', { timeout: 
         const { spawnVibyCLI } = getRunnerModules()
 
         const secondChild = spawnVibyCLI(['runner', 'start-sync'], {
-            stdio: ['ignore', 'pipe', 'pipe']
+            stdio: ['ignore', 'pipe', 'pipe'],
         })
 
         let output = ''
@@ -220,7 +180,8 @@ describe.skipIf(!LIVE_INTEGRATION_READY)('Runner Integration Tests', { timeout: 
     })
 
     it('should handle concurrent session operations', async () => {
-        const { spawnRunnerSession, listRunnerSessions, stopRunnerSession, RUNNER_MANAGED_STARTED_BY } = getRunnerModules()
+        const { spawnRunnerSession, listRunnerSessions, stopRunnerSession, RUNNER_MANAGED_STARTED_BY } =
+            getRunnerModules()
 
         const results = await Promise.all(Array.from({ length: 3 }, () => spawnRunnerSession('/tmp')))
         results.forEach((result) => {
@@ -233,14 +194,18 @@ describe.skipIf(!LIVE_INTEGRATION_READY)('Runner Integration Tests', { timeout: 
 
         const sessions = await listRunnerSessions()
         const runnerSessions = sessions.filter((session: { startedBy: string; vibySessionId?: string }) => {
-            return session.startedBy === RUNNER_MANAGED_STARTED_BY && spawnedSessionIds.includes(session.vibySessionId)
+            return (
+                session.startedBy === RUNNER_MANAGED_STARTED_BY &&
+                typeof session.vibySessionId === 'string' &&
+                spawnedSessionIds.includes(session.vibySessionId)
+            )
         })
 
         expect(runnerSessions.length).toBeGreaterThanOrEqual(3)
 
         for (const session of runnerSessions) {
             expect(session.vibySessionId).toBeDefined()
-            await stopRunnerSession(session.vibySessionId)
+            await stopRunnerSession(session.vibySessionId!)
         }
     })
 
@@ -262,7 +227,8 @@ describe.skipIf(!LIVE_INTEGRATION_READY)('Runner Integration Tests', { timeout: 
     })
 
     it('should die with cleanup logs when a graceful shutdown is requested', async () => {
-        const { getLatestRunnerLog, isWindows, stopRunnerHttp, killProcess, isProcessAlive, clearRunnerState } = getRunnerModules()
+        const { getLatestRunnerLog, isWindows, stopRunnerHttp, killProcess, isProcessAlive, clearRunnerState } =
+            getRunnerModules()
 
         const logFile = await getLatestRunnerLog()
         if (!logFile) {

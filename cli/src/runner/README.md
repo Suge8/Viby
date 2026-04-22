@@ -26,7 +26,9 @@ owner 边界：
 
 - `hub/src/runtime/managedRunner.ts` 是 runner 生命周期 owner，统一决定
   `startup / reuse / restart / stop`
-- `cli/src/runner/run.ts` 只负责 runner 进程内主循环
+- `cli/src/runner/run.ts` 只负责 runner 进程内主循环与编排
+- `cli/src/runner/runnerSessionSpawner.ts` 是 spawn/worktree/driver-switch transport owner
+- `cli/src/runner/runnerShutdown.ts` 是 signal -> graceful shutdown owner
 - `cli/src/runner/runnerHeartbeat.ts` 是 runner 周期维护 owner，统一处理
   stale session pruning、CLI install drift 提示和本地状态心跳
 
@@ -66,6 +68,8 @@ runner 在创建会话时会：
 - 检查目录是否存在
 - 必要时创建目录
 - 显式透传 `permission mode`、`collaboration mode`、model 和 reasoning effort 这组 session config
+- 显式把已解析的 `apiUrl / CLI_API_TOKEN / machineId` 注入 runner-managed child，避免子进程重复走本地配置初始化
+- internal session dispatch 只 lazy-load 当前 agent 对应的 provider 启动器，避免 child 冷启动先装载整套无关 provider runtime
 - 注入代理所需环境变量
 - 启动新的 `viby` 子进程，并把其生命周期绑定到当前 runner
 - 等待新会话回报 `session-started`
@@ -119,7 +123,9 @@ settings 全部写进隔离目录，不再允许默认命中真实 `~/.viby`。
 
 ## 关键实现文件
 
-- `src/runner/run.ts`：runner 主循环
+- `src/runner/run.ts`：runner 启动与主循环编排
+- `src/runner/runnerSessionSpawner.ts`：spawn session / worktree / transport 收口
+- `src/runner/runnerShutdown.ts`：signal / exception shutdown 协调
 - `src/runner/runnerHeartbeat.ts`：runner 心跳、自维护与本地 state ownership
 - `src/runner/controlServer.ts`：本地 HTTP 控制服务
 - `src/runner/controlClient.ts`：CLI / hub 侧控制客户端

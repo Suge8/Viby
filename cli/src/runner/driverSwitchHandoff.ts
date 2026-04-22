@@ -3,17 +3,16 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import { join } from 'node:path'
 
-import { parseSessionHandoffSnapshot } from '@viby/protocol'
-import type { SessionDriver, SessionHandoffSnapshot } from '@viby/protocol/types'
+import { parseSessionHandoffSnapshot, SAME_SESSION_SWITCH_TARGET_DRIVERS } from '@viby/protocol'
+import type { SameSessionSwitchTargetDriver, SessionDriver, SessionHandoffSnapshot } from '@viby/protocol/types'
 
-const SUPPORTED_DRIVER_SWITCH_TARGETS = ['claude', 'codex'] as const
 const DRIVER_SWITCH_HANDOFF_DIR_PREFIX = 'viby-driver-switch-'
 const DRIVER_SWITCH_HANDOFF_FILE_NAME = 'handoff.json'
 
 export const MAX_DRIVER_SWITCH_HANDOFF_BYTES = 2 * 1024 * 1024
 export const DRIVER_SWITCH_HANDOFF_IO_TIMEOUT_MS = 5_000
 
-export type DriverSwitchTarget = (typeof SUPPORTED_DRIVER_SWITCH_TARGETS)[number]
+export type DriverSwitchTarget = SameSessionSwitchTargetDriver
 
 export type DriverSwitchHandoffTransport = {
     targetDriver: DriverSwitchTarget
@@ -22,8 +21,8 @@ export type DriverSwitchHandoffTransport = {
 }
 
 export function parseDriverSwitchTarget(targetDriver: SessionDriver | string): DriverSwitchTarget {
-    if (targetDriver === 'claude' || targetDriver === 'codex') {
-        return targetDriver
+    if (SAME_SESSION_SWITCH_TARGET_DRIVERS.includes(targetDriver as DriverSwitchTarget)) {
+        return targetDriver as DriverSwitchTarget
     }
 
     throw new Error(`Unsupported driver switch target: ${targetDriver}`)
@@ -50,7 +49,7 @@ export async function writeDriverSwitchHandoffTransport(options: {
     try {
         await fs.writeFile(handoffFilePath, payload, {
             encoding: 'utf8',
-            signal: AbortSignal.timeout(DRIVER_SWITCH_HANDOFF_IO_TIMEOUT_MS)
+            signal: AbortSignal.timeout(DRIVER_SWITCH_HANDOFF_IO_TIMEOUT_MS),
         })
     } catch (error) {
         await cleanupDriverSwitchHandoffDirectory(handoffDirectory)
@@ -62,7 +61,7 @@ export async function writeDriverSwitchHandoffTransport(options: {
         handoffFilePath,
         cleanup: async () => {
             await cleanupDriverSwitchHandoffDirectory(handoffDirectory)
-        }
+        },
     }
 }
 
@@ -102,7 +101,7 @@ export async function loadDriverSwitchHandoff(options: {
 
     return {
         targetDriver,
-        handoffSnapshot: parseSessionHandoffSnapshot(parsedPayload)
+        handoffSnapshot: parseSessionHandoffSnapshot(parsedPayload),
     }
 }
 
@@ -110,7 +109,7 @@ async function cleanupDriverSwitchHandoffDirectory(handoffDirectory: string): Pr
     await fs.rm(handoffDirectory, {
         recursive: true,
         force: true,
-        maxRetries: 0
+        maxRetries: 0,
     })
 }
 
@@ -118,7 +117,9 @@ async function readDriverSwitchHandoffStats(handoffFilePath: string): Promise<St
     try {
         return await fs.stat(handoffFilePath)
     } catch (error) {
-        throw new Error(`Driver switch handoff file not found: ${handoffFilePath} (${formatDriverSwitchHandoffError(error)})`)
+        throw new Error(
+            `Driver switch handoff file not found: ${handoffFilePath} (${formatDriverSwitchHandoffError(error)})`
+        )
     }
 }
 
@@ -126,7 +127,7 @@ async function readDriverSwitchHandoffFile(handoffFilePath: string): Promise<str
     try {
         return await fs.readFile(handoffFilePath, {
             encoding: 'utf8',
-            signal: AbortSignal.timeout(DRIVER_SWITCH_HANDOFF_IO_TIMEOUT_MS)
+            signal: AbortSignal.timeout(DRIVER_SWITCH_HANDOFF_IO_TIMEOUT_MS),
         })
     } catch (error) {
         throw new Error(`Failed to read driver switch handoff file: ${formatDriverSwitchHandoffError(error)}`)

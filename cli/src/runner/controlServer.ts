@@ -3,218 +3,240 @@
  * Provides endpoints for listing sessions, stopping sessions, and runner shutdown
  */
 
-import fastify, { FastifyInstance } from 'fastify';
-import { z } from 'zod';
-import { serializerCompiler, validatorCompiler, ZodTypeProvider } from 'fastify-type-provider-zod';
-import { logger } from '@/ui/logger';
-import { Metadata, TeamSessionSpawnRole } from '@/api/types';
-import { TrackedSession } from './types';
-import { SpawnSessionOptions, SpawnSessionResult } from '@/modules/common/rpcTypes';
+import fastify, { FastifyInstance } from 'fastify'
+import { serializerCompiler, validatorCompiler, ZodTypeProvider } from 'fastify-type-provider-zod'
+import { z } from 'zod'
+import { Metadata, MetadataSchema } from '@/api/types'
+import { SpawnSessionOptions, SpawnSessionResult } from '@/modules/common/rpcTypes'
+import { logger } from '@/ui/logger'
+import { TrackedSession } from './types'
 
 export function startRunnerControlServer({
-  getChildren,
-  stopSession,
-  spawnSession,
-  requestShutdown,
-  onVibySessionWebhook
+    getChildren,
+    stopSession,
+    spawnSession,
+    requestShutdown,
+    onVibySessionWebhook,
 }: {
-  getChildren: () => TrackedSession[];
-  stopSession: (sessionId: string) => boolean;
-  spawnSession: (options: SpawnSessionOptions) => Promise<SpawnSessionResult>;
-  requestShutdown: () => void;
-  onVibySessionWebhook: (sessionId: string, metadata: Metadata) => void;
+    getChildren: () => TrackedSession[]
+    stopSession: (sessionId: string) => boolean
+    spawnSession: (options: SpawnSessionOptions) => Promise<SpawnSessionResult>
+    requestShutdown: () => void
+    onVibySessionWebhook: (sessionId: string, metadata: Metadata) => void
 }): Promise<{ port: number; stop: () => Promise<void> }> {
-  return new Promise((resolve) => {
-    const app = fastify({
-      logger: false // We use our own logger
-    });
+    return new Promise((resolve) => {
+        const app = fastify({
+            logger: false, // We use our own logger
+        })
 
-    // Set up Zod type provider
-    app.setValidatorCompiler(validatorCompiler);
-    app.setSerializerCompiler(serializerCompiler);
-    const typed = app.withTypeProvider<ZodTypeProvider>();
+        // Set up Zod type provider
+        app.setValidatorCompiler(validatorCompiler)
+        app.setSerializerCompiler(serializerCompiler)
+        const typed = app.withTypeProvider<ZodTypeProvider>()
 
-    // Session reports itself after creation
-    typed.post('/session-started', {
-      schema: {
-        body: z.object({
-          sessionId: z.string(),
-          metadata: z.any() // Metadata type from API
-        }),
-        response: {
-          200: z.object({
-            status: z.literal('ok')
-          })
-        }
-      }
-    }, async (request) => {
-      const { sessionId, metadata } = request.body;
+        // Session reports itself after creation
+        typed.post(
+            '/session-started',
+            {
+                schema: {
+                    body: z.object({
+                        sessionId: z.string(),
+                        metadata: MetadataSchema,
+                    }),
+                    response: {
+                        200: z.object({
+                            status: z.literal('ok'),
+                        }),
+                    },
+                },
+            },
+            async (request) => {
+                const { sessionId, metadata } = request.body
 
-      logger.debug(`[CONTROL SERVER] Session started: ${sessionId}`);
-      onVibySessionWebhook(sessionId, metadata);
+                logger.debug(`[CONTROL SERVER] Session started: ${sessionId}`)
+                onVibySessionWebhook(sessionId, metadata)
 
-      return { status: 'ok' as const };
-    });
+                return { status: 'ok' as const }
+            }
+        )
 
-    // List all tracked sessions
-    typed.post('/list', {
-      schema: {
-        response: {
-          200: z.object({
-            children: z.array(z.object({
-              startedBy: z.string(),
-              vibySessionId: z.string(),
-              pid: z.number()
-            }))
-          })
-        }
-      }
-    }, async () => {
-      const children = getChildren();
-      logger.debug(`[CONTROL SERVER] Listing ${children.length} sessions`);
-      return { 
-        children: children
-          .filter(child => child.vibySessionId !== undefined)
-          .map(child => ({
-            startedBy: child.startedBy,
-            vibySessionId: child.vibySessionId!,
-            pid: child.pid
-          }))
-      }
-    });
+        // List all tracked sessions
+        typed.post(
+            '/list',
+            {
+                schema: {
+                    response: {
+                        200: z.object({
+                            children: z.array(
+                                z.object({
+                                    startedBy: z.string(),
+                                    vibySessionId: z.string(),
+                                    pid: z.number(),
+                                })
+                            ),
+                        }),
+                    },
+                },
+            },
+            async () => {
+                const children = getChildren()
+                logger.debug(`[CONTROL SERVER] Listing ${children.length} sessions`)
+                return {
+                    children: children
+                        .filter((child) => child.vibySessionId !== undefined)
+                        .map((child) => ({
+                            startedBy: child.startedBy,
+                            vibySessionId: child.vibySessionId!,
+                            pid: child.pid,
+                        })),
+                }
+            }
+        )
 
-    // Stop specific session
-    typed.post('/stop-session', {
-      schema: {
-        body: z.object({
-          sessionId: z.string()
-        }),
-        response: {
-          200: z.object({
-            success: z.boolean()
-          })
-        }
-      }
-    }, async (request) => {
-      const { sessionId } = request.body;
+        // Stop specific session
+        typed.post(
+            '/stop-session',
+            {
+                schema: {
+                    body: z.object({
+                        sessionId: z.string(),
+                    }),
+                    response: {
+                        200: z.object({
+                            success: z.boolean(),
+                        }),
+                    },
+                },
+            },
+            async (request) => {
+                const { sessionId } = request.body
 
-      logger.debug(`[CONTROL SERVER] Stop session request: ${sessionId}`);
-      const success = stopSession(sessionId);
-      return { success };
-    });
+                logger.debug(`[CONTROL SERVER] Stop session request: ${sessionId}`)
+                const success = stopSession(sessionId)
+                return { success }
+            }
+        )
 
-    // Spawn new session
-    typed.post('/spawn-session', {
-      schema: {
-        body: z.object({
-          directory: z.string(),
-          sessionId: z.string().optional(),
-          sessionRole: z.enum(['normal', 'manager']).optional(),
-          sessionType: z.enum(['simple', 'worktree']).optional(),
-          worktreeName: z.string().optional()
-        }),
-        response: {
-          200: z.object({
-            success: z.boolean(),
-            sessionId: z.string().optional(),
-            approvedNewDirectoryCreation: z.boolean().optional()
-          }),
-          409: z.object({
-            success: z.boolean(),
-            requiresUserApproval: z.boolean().optional(),
-            actionRequired: z.string().optional(),
-            directory: z.string().optional()
-          }),
-          500: z.object({
-            success: z.boolean(),
-            error: z.string().optional()
-          })
-        }
-      }
-    }, async (request, reply) => {
-      const { directory, sessionId, sessionRole, sessionType, worktreeName } = request.body;
+        // Spawn new session
+        typed.post(
+            '/spawn-session',
+            {
+                schema: {
+                    body: z.object({
+                        directory: z.string(),
+                        sessionId: z.string().optional(),
+                        sessionType: z.enum(['simple', 'worktree']).optional(),
+                        worktreeName: z.string().optional(),
+                    }),
+                    response: {
+                        200: z.object({
+                            success: z.boolean(),
+                            sessionId: z.string().optional(),
+                            approvedNewDirectoryCreation: z.boolean().optional(),
+                        }),
+                        409: z.object({
+                            success: z.boolean(),
+                            requiresUserApproval: z.boolean().optional(),
+                            actionRequired: z.string().optional(),
+                            directory: z.string().optional(),
+                        }),
+                        500: z.object({
+                            success: z.boolean(),
+                            error: z.string().optional(),
+                        }),
+                    },
+                },
+            },
+            async (request, reply) => {
+                const { directory, sessionId, sessionType, worktreeName } = request.body
 
-      logger.debug(`[CONTROL SERVER] Spawn session request: dir=${directory}, sessionId=${sessionId || 'new'}`);
-      const result = await spawnSession({
-        directory,
-        sessionId,
-        sessionRole: sessionRole as TeamSessionSpawnRole | undefined,
-        sessionType,
-        worktreeName
-      });
+                logger.debug(
+                    `[CONTROL SERVER] Spawn session request: dir=${directory}, sessionId=${sessionId || 'new'}`
+                )
+                const result = await spawnSession({
+                    directory,
+                    sessionId,
+                    sessionType,
+                    worktreeName,
+                })
 
-      switch (result.type) {
-        case 'success':
-          // Check if sessionId exists, if not return error
-          if (!result.sessionId) {
-            reply.code(500);
-            return {
-              success: false,
-              error: 'Failed to spawn session: no session ID returned'
-            };
-          }
-          return {
-            success: true,
-            sessionId: result.sessionId,
-            approvedNewDirectoryCreation: true
-          };
-        
-        case 'requestToApproveDirectoryCreation':
-          reply.code(409); // Conflict - user input needed
-          return { 
-            success: false,
-            requiresUserApproval: true,
-            actionRequired: 'CREATE_DIRECTORY',
-            directory: result.directory
-          };
-        
-        case 'error':
-          reply.code(500);
-          return { 
-            success: false,
-            error: result.errorMessage
-          };
-      }
-    });
+                switch (result.type) {
+                    case 'success':
+                        // Check if sessionId exists, if not return error
+                        if (!result.sessionId) {
+                            reply.code(500)
+                            return {
+                                success: false,
+                                error: 'Failed to spawn session: no session ID returned',
+                            }
+                        }
+                        return {
+                            success: true,
+                            sessionId: result.sessionId,
+                            approvedNewDirectoryCreation: true,
+                        }
 
-    // Stop runner
-    typed.post('/stop', {
-      schema: {
-        response: {
-          200: z.object({
-            status: z.string()
-          })
-        }
-      }
-    }, async () => {
-      logger.debug('[CONTROL SERVER] Stop runner request received');
+                    case 'requestToApproveDirectoryCreation':
+                        reply.code(409) // Conflict - user input needed
+                        return {
+                            success: false,
+                            requiresUserApproval: true,
+                            actionRequired: 'CREATE_DIRECTORY',
+                            directory: result.directory,
+                        }
 
-      // Give time for response to arrive
-      setTimeout(() => {
-        logger.debug('[CONTROL SERVER] Triggering runner shutdown');
-        requestShutdown();
-      }, 50);
+                    case 'error':
+                        reply.code(500)
+                        return {
+                            success: false,
+                            error: result.errorMessage,
+                        }
+                }
+            }
+        )
 
-      return { status: 'stopping' };
-    });
+        // Stop runner
+        typed.post(
+            '/stop',
+            {
+                schema: {
+                    response: {
+                        200: z.object({
+                            status: z.string(),
+                        }),
+                    },
+                },
+            },
+            async () => {
+                logger.debug('[CONTROL SERVER] Stop runner request received')
 
-    app.listen({ port: 0, host: '127.0.0.1' }, (err, address) => {
-      if (err) {
-        logger.debug('[CONTROL SERVER] Failed to start:', err);
-        throw err;
-      }
+                // Give time for response to arrive
+                setTimeout(() => {
+                    logger.debug('[CONTROL SERVER] Triggering runner shutdown')
+                    requestShutdown()
+                }, 50)
 
-      const port = parseInt(address.split(':').pop()!);
-      logger.debug(`[CONTROL SERVER] Started on port ${port}`);
+                return { status: 'stopping' }
+            }
+        )
 
-      resolve({
-        port,
-        stop: async () => {
-          logger.debug('[CONTROL SERVER] Stopping server');
-          await app.close();
-          logger.debug('[CONTROL SERVER] Server stopped');
-        }
-      });
-    });
-  });
+        app.listen({ port: 0, host: '127.0.0.1' }, (err, address) => {
+            if (err) {
+                logger.debug('[CONTROL SERVER] Failed to start:', err)
+                throw err
+            }
+
+            const port = parseInt(address.split(':').pop()!)
+            logger.debug(`[CONTROL SERVER] Started on port ${port}`)
+
+            resolve({
+                port,
+                stop: async () => {
+                    logger.debug('[CONTROL SERVER] Stopping server')
+                    await app.close()
+                    logger.debug('[CONTROL SERVER] Server stopped')
+                },
+            })
+        })
+    })
 }

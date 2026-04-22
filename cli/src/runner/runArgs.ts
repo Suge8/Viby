@@ -1,17 +1,11 @@
 import { INTERNAL_SESSION_COMMAND } from '@/commands/internalSessionContract'
 import type { SpawnSessionOptions } from '@/modules/common/rpcTypes'
-
-import { RUNNER_MANAGED_STARTED_BY } from './types'
 import type { DriverSwitchHandoffTransport } from './driverSwitchHandoff'
+import { RUNNER_MANAGED_STARTED_BY } from './types'
 
 type InternalSessionArgBuilderOptions = Pick<
     SpawnSessionOptions,
-    'resumeSessionId'
-    | 'permissionMode'
-    | 'sessionRole'
-    | 'model'
-    | 'modelReasoningEffort'
-    | 'collaborationMode'
+    'resumeSessionId' | 'permissionMode' | 'model' | 'modelReasoningEffort' | 'collaborationMode'
 > & {
     sessionId?: string
     driverSwitchTransport?: DriverSwitchHandoffTransport | null
@@ -22,15 +16,7 @@ export function buildInternalSessionArgs(
     options: InternalSessionArgBuilderOptions
 ): string[] {
     const resolvedAgent = agent ?? 'claude'
-    const args = [
-        INTERNAL_SESSION_COMMAND,
-        '--agent',
-        resolvedAgent,
-        '--starting-mode',
-        'remote',
-        '--started-by',
-        RUNNER_MANAGED_STARTED_BY
-    ]
+    const args = [INTERNAL_SESSION_COMMAND, '--agent', resolvedAgent, '--started-by', RUNNER_MANAGED_STARTED_BY]
 
     if (options.resumeSessionId) {
         args.push('--resume-session-id', options.resumeSessionId)
@@ -41,13 +27,13 @@ export function buildInternalSessionArgs(
     if (options.permissionMode) {
         args.push('--permission-mode', options.permissionMode)
     }
-    if (options.sessionRole) {
-        args.push('--session-role', options.sessionRole)
-    }
     if (options.model && resolvedAgent !== 'opencode') {
         args.push('--model', options.model)
     }
-    if (options.modelReasoningEffort && (resolvedAgent === 'codex' || resolvedAgent === 'claude' || resolvedAgent === 'pi')) {
+    if (
+        options.modelReasoningEffort &&
+        (resolvedAgent === 'codex' || resolvedAgent === 'claude' || resolvedAgent === 'pi')
+    ) {
         args.push('--model-reasoning-effort', options.modelReasoningEffort)
     }
     if (options.collaborationMode && resolvedAgent === 'codex') {
