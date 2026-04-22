@@ -1,8 +1,25 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { I18nProvider } from '@/lib/i18n-context'
-import type { SessionSummary } from '@/types/api'
 import { SessionList } from '@/components/SessionList'
+import { I18nProvider } from '@/lib/i18n-context'
+import { TEST_PROJECT_PATH } from '@/test/sessionFactories'
+import type { SessionSummary } from '@/types/api'
+
+if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
+    Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        value: vi.fn().mockImplementation(() => ({
+            matches: false,
+            media: '(min-width: 1024px)',
+            onchange: null,
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+            addListener: vi.fn(),
+            removeListener: vi.fn(),
+            dispatchEvent: vi.fn(),
+        })),
+    })
+}
 
 vi.mock('@/hooks/useLongPress', () => ({
     useLongPress: (options: { onClick?: () => void; onLongPress?: (point: { x: number; y: number }) => void }) => ({
@@ -15,45 +32,40 @@ vi.mock('@/hooks/useLongPress', () => ({
         onContextMenu: (event: { clientX?: number; clientY?: number }) => {
             options.onLongPress?.({
                 x: event.clientX ?? 0,
-                y: event.clientY ?? 0
+                y: event.clientY ?? 0,
             })
-        }
-    })
+        },
+    }),
 }))
 
 vi.mock('@/hooks/usePlatform', () => ({
     usePlatform: () => ({
         haptic: {
             impact: vi.fn(),
-            notification: vi.fn()
-        }
-    })
+            notification: vi.fn(),
+        },
+    }),
 }))
 
-const archiveSessionMock = vi.fn(async () => {})
+const stopSessionMock = vi.fn(async () => {})
+const deleteSessionMock = vi.fn(async () => {})
 
 vi.mock('@/hooks/mutations/useSessionActions', () => ({
     useSessionActions: () => ({
-        archiveSession: archiveSessionMock,
-        closeSession: vi.fn(),
+        stopSession: stopSessionMock,
         renameSession: vi.fn(),
-        deleteSession: vi.fn(),
-        resumeSession: vi.fn(async () => 'session-closed'),
-        unarchiveSession: vi.fn(),
-        isPending: false
-    })
+        deleteSession: deleteSessionMock,
+        isPending: false,
+    }),
 }))
 
 vi.mock('@/components/SessionActionMenu', () => ({
     SessionActionMenu: ({
         overlay,
-        actions
+        onActionSelect,
     }: {
         overlay: { isOpen: boolean }
-        actions: {
-            onRename: () => void
-            onArchive: () => void
-        }
+        onActionSelect: (actionId: 'rename' | 'stop' | 'delete') => void
     }) => {
         if (!overlay.isOpen) {
             return null
@@ -61,15 +73,18 @@ vi.mock('@/components/SessionActionMenu', () => ({
 
         return (
             <>
-                <button type="button" onClick={actions.onRename}>
+                <button type="button" onClick={() => onActionSelect('rename')}>
                     rename-action
                 </button>
-                <button type="button" onClick={actions.onArchive}>
-                    archive-action
+                <button type="button" onClick={() => onActionSelect('stop')}>
+                    stop-action
+                </button>
+                <button type="button" onClick={() => onActionSelect('delete')}>
+                    delete-action
                 </button>
             </>
         )
-    }
+    },
 }))
 
 vi.mock('@/components/RenameSessionDialog', () => ({
@@ -79,21 +94,17 @@ vi.mock('@/components/RenameSessionDialog', () => ({
         }
 
         return <div>rename-dialog-open</div>
-    }
+    },
 }))
 
 vi.mock('@/components/ui/ConfirmDialog', () => ({
-    ConfirmDialog: ({
-        dialog
-    }: {
-        dialog: { isOpen: boolean }
-    }) => {
+    ConfirmDialog: ({ dialog }: { dialog: { isOpen: boolean } }) => {
         if (!dialog.isOpen) {
             return null
         }
 
         return <div>confirm-dialog-open</div>
-    }
+    },
 }))
 
 function createSessionSummary(): SessionSummary {
@@ -111,19 +122,20 @@ function createSessionSummary(): SessionSummary {
         lifecycleState: 'closed',
         lifecycleStateSince: now,
         metadata: {
-            path: '/Users/sugeh/Project/Viby',
+            path: TEST_PROJECT_PATH,
             driver: 'codex',
-            summary: { text: 'Needs review', updatedAt: now }
+            summary: { text: 'Needs review', updatedAt: now },
         },
         todoProgress: null,
         pendingRequestsCount: 0,
         resumeAvailable: false,
+        resumeStrategy: 'none',
         model: null,
-        modelReasoningEffort: null
+        modelReasoningEffort: null,
     }
 }
 
-function renderSessionList(): void {
+function renderSessionList(onSelect: (sessionId: string) => void = vi.fn()): void {
     render(
         <I18nProvider>
             <SessionList
@@ -131,8 +143,8 @@ function renderSessionList(): void {
                 api={null}
                 selectedSessionId={null}
                 actions={{
-                    onSelect: vi.fn(),
-                    onNewSession: vi.fn()
+                    onSelect,
+                    onNewSession: vi.fn(),
                 }}
             />
         </I18nProvider>
@@ -142,21 +154,22 @@ function renderSessionList(): void {
 describe('SessionList action flow', () => {
     afterEach(() => {
         cleanup()
-        archiveSessionMock.mockClear()
+        stopSessionMock.mockClear()
+        deleteSessionMock.mockClear()
     })
 
-    it('keeps the action controller mounted long enough to open the archive confirm dialog', async () => {
+    it('keeps the action controller mounted long enough to open the stop confirm dialog', async () => {
         renderSessionList()
 
         fireEvent.contextMenu(screen.getByRole('button', { name: /needs review/i }), {
             clientX: 24,
-            clientY: 36
+            clientY: 36,
         })
 
-        fireEvent.click(await screen.findByRole('button', { name: 'archive-action' }))
+        fireEvent.click(await screen.findByRole('button', { name: 'stop-action' }))
 
         expect(screen.getByText('confirm-dialog-open')).toBeInTheDocument()
-        expect(archiveSessionMock).not.toHaveBeenCalled()
+        expect(stopSessionMock).not.toHaveBeenCalled()
     })
 
     it('keeps the action controller mounted long enough to open the rename dialog on the first click', async () => {
@@ -164,12 +177,26 @@ describe('SessionList action flow', () => {
 
         fireEvent.contextMenu(screen.getByRole('button', { name: /needs review/i }), {
             clientX: 24,
-            clientY: 36
+            clientY: 36,
         })
 
         fireEvent.click(await screen.findByRole('button', { name: 'rename-action' }))
 
         expect(screen.getByText('rename-dialog-open')).toBeInTheDocument()
-        expect(archiveSessionMock).not.toHaveBeenCalled()
+        expect(stopSessionMock).not.toHaveBeenCalled()
+    })
+
+    it('keeps the action controller mounted long enough to open the delete confirm dialog', async () => {
+        renderSessionList()
+
+        fireEvent.contextMenu(screen.getByRole('button', { name: /needs review/i }), {
+            clientX: 24,
+            clientY: 36,
+        })
+
+        fireEvent.click(await screen.findByRole('button', { name: 'delete-action' }))
+
+        expect(screen.getByText('confirm-dialog-open')).toBeInTheDocument()
+        expect(deleteSessionMock).not.toHaveBeenCalled()
     })
 })

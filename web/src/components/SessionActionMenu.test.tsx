@@ -2,11 +2,12 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SessionActionMenu } from '@/components/SessionActionMenu'
 import { I18nProvider } from '@/lib/i18n-context'
+import type { SessionLifecycleState } from '@/types/api'
 
 vi.mock('@/components/ui/FloatingActionMenu', () => ({
     FloatingActionMenu: ({
         isOpen,
-        content
+        content,
     }: {
         isOpen: boolean
         content: {
@@ -26,7 +27,7 @@ vi.mock('@/components/ui/FloatingActionMenu', () => ({
                 ))}
             </div>
         )
-    }
+    },
 }))
 
 vi.mock('@/lib/use-translation', () => ({
@@ -35,12 +36,8 @@ vi.mock('@/lib/use-translation', () => ({
             switch (key) {
                 case 'session.action.rename':
                     return 'Rename'
-                case 'session.action.resume':
-                    return 'Continue'
-                case 'session.action.archive':
-                    return 'Archive'
-                case 'session.action.unarchive':
-                    return 'Restore'
+                case 'session.action.stop':
+                    return 'Stop'
                 case 'session.action.delete':
                     return 'Delete'
                 case 'session.more':
@@ -48,31 +45,21 @@ vi.mock('@/lib/use-translation', () => ({
                 default:
                     return key
             }
-        }
-    })
+        },
+    }),
 }))
 
-function renderMenu(options: {
-    lifecycleState: 'running' | 'closed' | 'archived'
-    resumeAvailable: boolean
-}) {
+function renderMenu(options: { lifecycleState: SessionLifecycleState }) {
     render(
         <I18nProvider>
             <SessionActionMenu
                 overlay={{
                     isOpen: true,
                     onClose: vi.fn(),
-                    anchorPoint: { x: 0, y: 0 }
+                    anchorPoint: { x: 0, y: 0 },
                 }}
                 session={options}
-                actions={{
-                    onRename: vi.fn(),
-                    onResume: vi.fn(),
-                    onCloseSession: vi.fn(),
-                    onArchive: vi.fn(),
-                    onUnarchive: vi.fn(),
-                    onDelete: vi.fn()
-                }}
+                onActionSelect={vi.fn()}
             />
         </I18nProvider>
     )
@@ -83,36 +70,55 @@ describe('SessionActionMenu', () => {
         cleanup()
     })
 
-    it('hides resume for closed sessions without a durable resume marker', () => {
+    it('keeps history actions minimal when a closed session has no durable resume marker', () => {
         renderMenu({
             lifecycleState: 'closed',
-            resumeAvailable: false
-        })
-
-        expect(screen.queryByText('Continue')).not.toBeInTheDocument()
-        expect(screen.getByText('Archive')).toBeInTheDocument()
-        expect(screen.getByText('Delete')).toBeInTheDocument()
-    })
-
-    it('shows resume only when the closed session is actually resumable', () => {
-        renderMenu({
-            lifecycleState: 'closed',
-            resumeAvailable: true
-        })
-
-        expect(screen.getByText('Continue')).toBeInTheDocument()
-    })
-
-    it('shows only unarchive and delete for archived sessions', () => {
-        renderMenu({
-            lifecycleState: 'archived',
-            resumeAvailable: true
         })
 
         expect(screen.getByText('Rename')).toBeInTheDocument()
-        expect(screen.getByText('Restore')).toBeInTheDocument()
         expect(screen.getByText('Delete')).toBeInTheDocument()
-        expect(screen.queryByText('Archive')).not.toBeInTheDocument()
-        expect(screen.queryByText('Continue')).not.toBeInTheDocument()
+    })
+
+    it('keeps resumable history sessions on the same minimal menu', () => {
+        renderMenu({
+            lifecycleState: 'closed',
+        })
+
+        expect(screen.queryByText('Start')).not.toBeInTheDocument()
+        expect(screen.getByText('Rename')).toBeInTheDocument()
+        expect(screen.getByText('Delete')).toBeInTheDocument()
+        expect(screen.queryByText('Stop')).not.toBeInTheDocument()
+    })
+
+    it('uses the same history menu for archived sessions', () => {
+        renderMenu({
+            lifecycleState: 'archived',
+        })
+
+        expect(screen.getByText('Rename')).toBeInTheDocument()
+        expect(screen.queryByText('Start')).not.toBeInTheDocument()
+        expect(screen.getByText('Delete')).toBeInTheDocument()
+        expect(screen.queryByText('Stop')).not.toBeInTheDocument()
+    })
+
+    it('shows stop for running sessions', () => {
+        renderMenu({
+            lifecycleState: 'running',
+        })
+
+        expect(screen.getByText('Stop')).toBeInTheDocument()
+        expect(screen.getByText('Rename')).toBeInTheDocument()
+        expect(screen.queryByText('Delete')).not.toBeInTheDocument()
+        expect(screen.queryByText('Start')).not.toBeInTheDocument()
+    })
+
+    it('keeps explicitly open sessions on the stop path instead of routing them through history start', () => {
+        renderMenu({
+            lifecycleState: 'open',
+        })
+
+        expect(screen.getByText('Stop')).toBeInTheDocument()
+        expect(screen.getByText('Rename')).toBeInTheDocument()
+        expect(screen.queryByText('Start')).not.toBeInTheDocument()
     })
 })

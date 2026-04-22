@@ -1,16 +1,20 @@
 import type { JSX } from 'react'
-import { SettingsIcon, BrandMarkIcon } from '@/components/icons'
+import { BrandMarkIcon, SettingsIcon } from '@/components/icons'
+import { MotionReveal } from '@/components/motion/motionPrimitives'
 import { Button } from '@/components/ui/button'
+import { ICON_ONLY_BUTTON_NEUTRAL_SURFACE_CLASS_NAME } from '@/components/ui/iconButtonStyles'
+import { SESSIONS_SHELL_SETTINGS_BUTTON_TEST_ID } from '@/lib/sessionUiContracts'
 import { cn } from '@/lib/utils'
 
-const HEADER_ACTION_BUTTON_CLASS_NAME = 'h-11 w-11 text-[var(--app-hint)] hover:text-[var(--app-fg)]'
-const BRAND_TITLE_FRAME_CLASS_NAME = 'pointer-events-none absolute inset-0 flex items-center justify-center px-[4.75rem]'
-const BRAND_TITLE_CLASS_NAME = 'inline-flex items-center justify-center text-center text-[1.72rem] leading-none font-[800] tracking-[-0.018em] [font-family:var(--ds-font-brand)] text-[color:color-mix(in_srgb,var(--ds-text-primary)_96%,white_4%)]'
+const HEADER_ACTION_BUTTON_CLASS_NAME = `ds-sessions-shell-action-button ${ICON_ONLY_BUTTON_NEUTRAL_SURFACE_CLASS_NAME} backdrop-blur-xl`
+const BRAND_TITLE_FRAME_CLASS_NAME = 'ds-sessions-shell-header-frame'
+const BRAND_TITLE_CLASS_NAME = 'ds-sessions-shell-header-title'
 
 type SessionsHeaderActionButtonProps = {
     title: string
     onClick: () => void
     className?: string
+    testId?: string
     children: JSX.Element
 }
 
@@ -23,11 +27,13 @@ function SessionsHeaderActionButton(props: SessionsHeaderActionButtonProps): JSX
     return (
         <Button
             type="button"
-            size="icon"
+            size="iconXs"
             variant="secondary"
             onClick={props.onClick}
             className={cn(HEADER_ACTION_BUTTON_CLASS_NAME, props.className)}
+            data-testid={props.testId}
             title={props.title}
+            aria-label={props.title}
         >
             {props.children}
         </Button>
@@ -36,25 +42,24 @@ function SessionsHeaderActionButton(props: SessionsHeaderActionButtonProps): JSX
 
 export function SessionsShellHeader(props: SessionsShellHeaderProps): JSX.Element {
     return (
-        <div className="bg-[var(--app-bg)] pt-[env(safe-area-inset-top)]">
+        <MotionReveal className="ds-sessions-shell-header" duration={0.36} y={18}>
             <div className="mx-auto w-full max-w-content px-3 pb-3 pt-4">
-                <div className="relative min-h-[3rem]">
+                <div className="ds-sessions-shell-header-row relative">
                     <div className={BRAND_TITLE_FRAME_CLASS_NAME}>
-                        <span className={BRAND_TITLE_CLASS_NAME}>
-                            Viby
-                        </span>
+                        <span className={BRAND_TITLE_CLASS_NAME}>Viby</span>
                     </div>
-                    <div className="relative z-10 flex min-h-[3rem] items-center justify-between gap-3">
-                        <BrandMarkIcon className="h-11 w-11 text-[color:color-mix(in_srgb,var(--ds-text-primary)_94%,white_6%)]" />
+                    <div className="ds-sessions-shell-header-row relative z-10 flex items-center justify-between gap-3">
+                        <BrandMarkIcon className="ds-sessions-shell-brand-mark h-11 w-11" />
                         <SessionsHeaderActionButton
                             title={props.settingsTitle}
                             onClick={props.onOpenSettings}
+                            testId={SESSIONS_SHELL_SETTINGS_BUTTON_TEST_ID}
                         >
-                            <SettingsIcon className="h-5 w-5 text-[var(--ds-accent-coral)]" />
+                            <SettingsIcon className="ds-sessions-shell-action-icon h-4.5 w-4.5" />
                         </SessionsHeaderActionButton>
                     </div>
                 </div>
             </div>
-        </div>
+        </MotionReveal>
     )
 }

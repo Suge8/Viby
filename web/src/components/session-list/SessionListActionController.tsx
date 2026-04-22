@@ -1,18 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
-import { resolveSessionDriver } from '@viby/protocol'
 import type { ApiClient } from '@/api/client'
-import type { SessionSummary } from '@/types/api'
-import { SessionActionMenu } from '@/components/SessionActionMenu'
 import { RenameSessionDialog } from '@/components/RenameSessionDialog'
+import { SessionActionMenu } from '@/components/SessionActionMenu'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import type { FloatingActionMenuAnchorPoint } from '@/components/ui/FloatingActionMenu.contract'
 import { useSessionActions } from '@/hooks/mutations/useSessionActions'
 import { getSessionTitle } from '@/lib/sessionPresentation'
 import { useTranslation } from '@/lib/use-translation'
-import {
-    getSessionActionDialogConfig,
-    type SessionActionDialogKind
-} from './sessionActionDialogPresentation'
+import type { SessionSummary } from '@/types/api'
+import { isConfirmableSessionActionId, type SessionActionId } from './sessionActionAvailability'
+import { getSessionActionDialogConfig, type SessionActionDialogKind } from './sessionActionDialogPresentation'
 
 type SessionActionSurface =
     | { kind: 'menu' }
@@ -25,79 +22,48 @@ type SessionListActionControllerProps = {
     anchorPoint: FloatingActionMenuAnchorPoint
     callbacks: {
         onDismiss: () => void
-        onSelectSession: (sessionId: string) => void
-        onArchiveSelectedSession?: (sessionId: string) => void
     }
 }
 
-export function SessionListActionController(
-    props: SessionListActionControllerProps
-): React.JSX.Element {
+export function SessionListActionController(props: SessionListActionControllerProps): React.JSX.Element {
     const { t } = useTranslation()
     const { api, session, anchorPoint, callbacks } = props
-    const { onArchiveSelectedSession, onDismiss, onSelectSession } = callbacks
+    const { onDismiss } = callbacks
     const [surface, setSurface] = useState<SessionActionSurface>({ kind: 'menu' })
     const sessionId = session.id
-    const sessionDriver = resolveSessionDriver(session.metadata)
     const title = getSessionTitle(session)
     const dialogKind: SessionActionDialogKind = surface.kind === 'confirm' ? surface.dialogKind : null
     const dialogConfig = getSessionActionDialogConfig(dialogKind, title, t)
 
-    const {
-        archiveSession,
-        closeSession,
-        deleteSession,
-        isPending,
-        renameSession,
-        resumeSession,
-        unarchiveSession
-    } = useSessionActions(api, sessionId, sessionDriver)
+    const { deleteSession, isPending, renameSession, stopSession } = useSessionActions(api, session)
 
     useEffect(() => {
         setSurface({ kind: 'menu' })
     }, [sessionId])
 
-    const openRenameDialog = useCallback(() => {
-        setSurface({ kind: 'rename' })
-    }, [])
+    const handleMenuActionSelect = useCallback((actionId: SessionActionId) => {
+        if (actionId === 'rename') {
+            setSurface({ kind: 'rename' })
+            return
+        }
 
-    const openConfirmDialog = useCallback((nextDialogKind: Exclude<SessionActionDialogKind, null>) => {
-        setSurface({ kind: 'confirm', dialogKind: nextDialogKind })
+        if (isConfirmableSessionActionId(actionId)) {
+            setSurface({ kind: 'confirm', dialogKind: actionId })
+        }
     }, [])
-
-    const handleResume = useCallback(async () => {
-        onDismiss()
-        const resumedSession = await resumeSession()
-        onSelectSession(resumedSession.id)
-    }, [onDismiss, onSelectSession, resumeSession])
 
     const handleConfirm = useCallback(async () => {
         switch (dialogKind) {
-            case 'archive':
-                await archiveSession()
-                onArchiveSelectedSession?.(sessionId)
-                return
-            case 'close':
-                await closeSession()
+            case 'stop':
+                await stopSession()
                 return
             case 'delete':
                 await deleteSession()
                 return
-            case 'unarchive':
-                await unarchiveSession()
-                return
             default:
                 return
         }
-    }, [
-        archiveSession,
-        closeSession,
-        deleteSession,
-        dialogKind,
-        onArchiveSelectedSession,
-        sessionId,
-        unarchiveSession
-    ])
+    }, [deleteSession, dialogKind, stopSession])
 
     return (
         <>
@@ -105,20 +71,12 @@ export function SessionListActionController(
                 overlay={{
                     isOpen: surface.kind === 'menu',
                     onClose: onDismiss,
-                    anchorPoint
+                    anchorPoint,
                 }}
                 session={{
                     lifecycleState: session.lifecycleState,
-                    resumeAvailable: session.resumeAvailable
                 }}
-                actions={{
-                    onRename: openRenameDialog,
-                    onResume: () => void handleResume(),
-                    onCloseSession: () => openConfirmDialog('close'),
-                    onArchive: () => openConfirmDialog('archive'),
-                    onUnarchive: () => openConfirmDialog('unarchive'),
-                    onDelete: () => openConfirmDialog('delete')
-                }}
+                onActionSelect={handleMenuActionSelect}
             />
 
             <RenameSessionDialog
@@ -137,7 +95,7 @@ export function SessionListActionController(
                     description: dialogConfig?.description ?? '',
                     confirmLabel: dialogConfig?.confirmLabel ?? '',
                     confirmingLabel: dialogConfig?.confirmingLabel ?? '',
-                    destructive: dialogKind === 'archive' || dialogKind === 'delete'
+                    destructive: dialogKind === 'delete',
                 }}
                 onConfirm={handleConfirm}
                 isPending={isPending}

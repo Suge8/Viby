@@ -1,8 +1,8 @@
-import { useEffect, useRef } from 'react'
 import { useNavigate, useParams } from '@tanstack/react-router'
-import { SessionChat } from '@/components/SessionChat'
+import { useEffect, useRef } from 'react'
 import { RouteLoadingFallback } from '@/components/loading/RouteLoadingFallback'
-import { shouldShowSessionChatPendingShell } from '@/components/sessionChatLoadingContract'
+import { SessionChatPendingState } from '@/components/loading/SessionChatPendingState'
+import { SessionChat } from '@/components/SessionChat'
 import { useSession } from '@/hooks/queries/useSession'
 import { useFinalizeBootShell } from '@/hooks/useFinalizeBootShell'
 import { useAppContext } from '@/lib/app-context'
@@ -10,32 +10,12 @@ import { useNoticeCenter } from '@/lib/notice-center'
 import { getNoticePreset } from '@/lib/noticePresets'
 import { appendRealtimeTrace } from '@/lib/realtimeTrace'
 import { useTranslation } from '@/lib/use-translation'
-import { useSessionEntryRevalidate } from '@/routes/sessions/useSessionEntryRevalidate'
+import {
+    createSelectedSessionChatViewModel,
+    type RetainedSessionChatSnapshot,
+    shouldPersistRetainedSessionChatSnapshot,
+} from '@/routes/sessions/selectedSessionChatViewModel'
 import { useSessionChatRouteModel } from '@/routes/sessions/useSessionChatRouteModel'
-
-type RetainedSessionChatSnapshot = {
-    routeSessionId: string
-    sessionChatProps: React.ComponentProps<typeof SessionChat>
-}
-
-function getMemberLifecycleState(
-    session: React.ComponentProps<typeof SessionChat>['session']
-): string | null {
-    return session.teamContext?.sessionRole === 'member'
-        ? (session.teamContext.membershipState ?? 'active')
-        : null
-}
-
-function isSessionChatSurfaceReady(
-    sessionChatProps: React.ComponentProps<typeof SessionChat>
-): boolean {
-    return !shouldShowSessionChatPendingShell({
-        messagesCount: sessionChatProps.messages.length,
-        isDetailPending: sessionChatProps.isDetailPending,
-        hasLoadedLatestMessages: sessionChatProps.hasLoadedLatestMessages,
-        hasWarmSessionSnapshot: sessionChatProps.hasWarmSessionSnapshot
-    })
-}
 
 export default function SessionChatRoute(): React.JSX.Element {
     const { api } = useAppContext()
@@ -49,16 +29,10 @@ export default function SessionChatRoute(): React.JSX.Element {
         appendRealtimeTrace({
             at: Date.now(),
             type: 'chat_opened',
-            details: { sessionId: routeSessionId }
+            details: { sessionId: routeSessionId },
         })
     }, [routeSessionId])
-    const {
-        session,
-        error: sessionError,
-        refetch: refetchSession,
-        isPlaceholderData,
-        hasWarmSnapshot
-    } = useSession(api, routeSessionId)
+    const { session, error: sessionError } = useSession(api, routeSessionId)
 
     const navigate = useNavigate()
 
@@ -71,12 +45,12 @@ export default function SessionChatRoute(): React.JSX.Element {
             title: errorPreset.title,
             description: sessionError,
             tone: 'danger',
-            href: '/sessions'
+            href: '/sessions',
         })
 
         void navigate({
             to: '/sessions',
-            replace: true
+            replace: true,
         })
     }, [addToast, errorPreset.title, navigate, sessionError])
 
@@ -96,9 +70,6 @@ export default function SessionChatRoute(): React.JSX.Element {
     return (
         <ResolvedSessionChatRoute
             api={api}
-            hasWarmSessionSnapshot={hasWarmSnapshot}
-            isDetailPending={isPlaceholderData}
-            refetchSession={refetchSession}
             session={session}
             sessionId={routeSessionId}
             onRetainedSnapshotReady={(snapshot) => {
@@ -111,69 +82,54 @@ export default function SessionChatRoute(): React.JSX.Element {
 
 type ResolvedSessionChatRouteProps = {
     api: ReturnType<typeof useAppContext>['api']
-    hasWarmSessionSnapshot: boolean
-    isDetailPending: boolean
     onRetainedSnapshotReady: (snapshot: RetainedSessionChatSnapshot) => void
-    refetchSession: ReturnType<typeof useSession>['refetch']
     retainedSnapshot: RetainedSessionChatSnapshot | null
     session: NonNullable<ReturnType<typeof useSession>['session']>
     sessionId: string
 }
 
 function ResolvedSessionChatRoute(props: ResolvedSessionChatRouteProps): React.JSX.Element {
-    const navigate = useNavigate()
-    const sessionChatProps = useSessionChatRouteModel(props)
-    const surfaceReady = isSessionChatSurfaceReady(sessionChatProps)
-    const previousRouteSessionIdRef = useRef(props.sessionId)
-    const previousMemberLifecycleRef = useRef<string | null>(getMemberLifecycleState(sessionChatProps.session))
-
-    useFinalizeBootShell(surfaceReady)
-
-    useSessionEntryRevalidate({
-        sessionId: props.sessionId,
-        onRevalidate: sessionChatProps.onRefresh
+    const { isSessionDetailReady, sessionChatProps } = useSessionChatRouteModel(props)
+    const viewModel = createSelectedSessionChatViewModel({
+        isSessionDetailReady,
+        retainedSnapshot: props.retainedSnapshot,
+        routeSessionId: props.sessionId,
+        sessionChatProps,
+        sessionError: null,
     })
 
-    useEffect(() => {
-        if (previousRouteSessionIdRef.current !== props.sessionId) {
-            previousRouteSessionIdRef.current = props.sessionId
-            previousMemberLifecycleRef.current = getMemberLifecycleState(sessionChatProps.session)
-            return
-        }
-
-        const currentState = getMemberLifecycleState(sessionChatProps.session)
-        const previousState = previousMemberLifecycleRef.current
-        previousMemberLifecycleRef.current = currentState
-
-        if (previousState === 'active' && currentState && currentState !== 'active') {
-            void navigate({
-                to: '/sessions',
-                replace: true
-            })
-        }
-    }, [navigate, props.sessionId, sessionChatProps.session])
+    useFinalizeBootShell(viewModel.surface === 'ready')
 
     useEffect(() => {
-        if (!surfaceReady) {
+        if (!shouldPersistRetainedSessionChatSnapshot(viewModel.surface)) {
             return
         }
 
         props.onRetainedSnapshotReady({
             routeSessionId: props.sessionId,
-            sessionChatProps
+            sessionChatProps,
         })
-    }, [props.onRetainedSnapshotReady, props.sessionId, sessionChatProps, surfaceReady])
+    }, [props.onRetainedSnapshotReady, props.sessionId, sessionChatProps, viewModel.surface])
 
-    if (!surfaceReady && props.retainedSnapshot && props.retainedSnapshot.routeSessionId !== props.sessionId) {
-        return <RetainedSessionChatSurface snapshot={props.retainedSnapshot} />
+    if (viewModel.surface === 'retained') {
+        if (!viewModel.sessionChatProps) {
+            return <SessionChatPendingState testId="session-chat-detail-pending" />
+        }
+        return (
+            <RetainedSessionChatSurface
+                snapshot={{ routeSessionId: props.sessionId, sessionChatProps: viewModel.sessionChatProps }}
+            />
+        )
+    }
+
+    if (viewModel.surface === 'pending') {
+        return <SessionChatPendingState testId="session-chat-detail-pending" />
     }
 
     return <SessionChat {...sessionChatProps} />
 }
 
-function RetainedSessionChatSurface(props: {
-    snapshot: RetainedSessionChatSnapshot
-}): React.JSX.Element {
+function RetainedSessionChatSurface(props: { snapshot: RetainedSessionChatSnapshot }): React.JSX.Element {
     useFinalizeBootShell()
 
     return (
@@ -184,7 +140,10 @@ function RetainedSessionChatSurface(props: {
         >
             <SessionChat
                 {...props.snapshot.sessionChatProps}
-                persistComposerDraft={false}
+                workspace={{
+                    ...props.snapshot.sessionChatProps.workspace,
+                    persistComposerDraft: false,
+                }}
             />
         </div>
     )

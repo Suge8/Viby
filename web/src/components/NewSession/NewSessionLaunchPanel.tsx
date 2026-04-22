@@ -1,27 +1,18 @@
-import {
-    AlertIcon,
-    BrandMarkIcon,
-} from '@/components/icons'
-import { SessionAgentBrandIcon } from '@/components/session-list/sessionAgentPresentation'
+import type { AgentAvailability } from '@viby/protocol'
+import { memo } from 'react'
+import { FeatureBulbIcon as BulbIcon, FeatureRocketIcon as RocketIcon } from '@/components/featureIcons'
 import { InlineNotice } from '@/components/InlineNotice'
-import {
-    FeatureBulbIcon as BulbIcon,
-    FeatureRocketIcon as RocketIcon,
-} from '@/components/featureIcons'
-import {
-    PressableSurface,
-    PressableSurfaceSelectionIndicator
-} from '@/components/ui/pressable-surface'
-import { cn } from '@/lib/utils'
+import { AlertIcon, BrandMarkIcon } from '@/components/icons'
+import { Switch } from '@/components/ui/switch'
 import { useTranslation } from '@/lib/use-translation'
+import { NewSessionAgentPicker } from './NewSessionAgentPicker'
+import { NewSessionChoiceField } from './NewSessionChoiceField'
 import { NewSessionSectionCard } from './NewSessionSectionCard'
-import type { AgentType, ModelReasoningEffortSelection, SessionRole } from './types'
-import { SessionRolePicker } from './SessionRolePicker'
+import type { AgentType, ModelReasoningEffortSelection } from './types'
 
 type LaunchPanelProps = {
     form: {
         agent: AgentType
-        sessionRole: SessionRole
         model: string
         modelReasoningEffort: ModelReasoningEffortSelection
         yoloMode: boolean
@@ -30,14 +21,20 @@ type LaunchPanelProps = {
         modelOptions: Array<{ value: string; label: string; labelKey?: string }>
         reasoningOptions: Array<{ value: ModelReasoningEffortSelection; label: string; labelKey?: string }>
         isDisabled: boolean
+        agentAvailability: readonly AgentAvailability[]
+        agentAvailabilityLoading: boolean
+        agentAvailabilityError?: string | null
+        savedAgent: AgentType
+        savedAgentAvailability?: AgentAvailability | null
+        hasAgentFallback: boolean
         piLaunchConfigError?: string | null
     }
     handlers: {
         onAgentChange: (agent: AgentType) => void
-        onSessionRoleChange: (sessionRole: SessionRole) => void
         onModelChange: (model: string) => void
         onReasoningEffortChange: (value: ModelReasoningEffortSelection) => void
         onYoloModeChange: (checked: boolean) => void
+        onRefreshAgentAvailability: () => void
     }
 }
 
@@ -46,55 +43,20 @@ type LaunchSectionHeadingProps = {
     title: string
 }
 
-const AGENT_OPTIONS: Array<{ value: AgentType; icon: React.JSX.Element; accentClassName: string }> = [
-    {
-        value: 'claude',
-        icon: <SessionAgentBrandIcon driver="claude" className="h-5.5 w-5.5" />,
-        accentClassName: 'text-[var(--ds-accent-coral)]'
-    },
-    {
-        value: 'codex',
-        icon: <SessionAgentBrandIcon driver="codex" className="h-5.5 w-5.5" />,
-        accentClassName: 'text-[var(--ds-accent-lime)]'
-    },
-    {
-        value: 'cursor',
-        icon: <SessionAgentBrandIcon driver="cursor" className="h-5.5 w-5.5" />,
-        accentClassName: 'text-[var(--ds-accent-violet)]'
-    },
-    {
-        value: 'gemini',
-        icon: <SessionAgentBrandIcon driver="gemini" className="h-5.5 w-5.5" />,
-        accentClassName: 'text-[var(--ds-accent-gold)]'
-    },
-    {
-        value: 'opencode',
-        icon: <SessionAgentBrandIcon driver="opencode" className="h-5.5 w-5.5" />,
-        accentClassName: 'text-[var(--ds-text-primary)]'
-    },
-    {
-        value: 'pi',
-        icon: <SessionAgentBrandIcon driver="pi" className="h-5.5 w-5.5" />,
-        accentClassName: 'text-[var(--ds-accent-gold)]'
-    },
-]
-
 function LaunchSectionHeading(props: LaunchSectionHeadingProps): React.JSX.Element {
     return (
-        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--ds-text-muted)]">
-            <span className="flex h-5 w-5 items-center justify-center">
-                {props.icon}
-            </span>
+        <div className="ds-launch-section-heading">
+            <span className="flex h-5 w-5 items-center justify-center">{props.icon}</span>
             <span>{props.title}</span>
         </div>
     )
 }
 
 function LaunchSelectField<T extends string>(props: {
+    ariaLabel: string
     heading: React.JSX.Element
     value: T
     isDisabled: boolean
-    accentClassName: string
     options: Array<{ value: T; label: string; labelKey?: string }>
     onChange: (value: T) => void
 }): React.JSX.Element | null {
@@ -106,79 +68,23 @@ function LaunchSelectField<T extends string>(props: {
 
     return (
         <div>
-            <div className="mb-2">
-                {props.heading}
-            </div>
-            <select
+            <div className="mb-2">{props.heading}</div>
+            <NewSessionChoiceField
+                ariaLabel={props.ariaLabel}
                 value={props.value}
-                onChange={(event) => props.onChange(event.target.value as T)}
                 disabled={props.isDisabled}
-                className={cn(
-                    'min-h-[50px] w-full rounded-[18px] border border-[var(--ds-border-default)] bg-[color:color-mix(in_srgb,var(--ds-panel-strong)_96%,transparent)] px-4 py-3 text-sm font-medium text-[var(--ds-text-primary)] outline-none transition-[border-color,box-shadow] focus:border-[var(--ds-border-strong)] disabled:opacity-50',
-                    props.accentClassName
-                )}
-            >
-                {props.options.map((option) => (
-                    <option key={option.value} value={option.value}>
-                        {option.labelKey ? t(option.labelKey) : option.label}
-                    </option>
-                ))}
-            </select>
+                triggerClassName="ds-field-control-elevated ds-launch-select-control disabled:opacity-50"
+                options={props.options.map((option) => ({
+                    value: option.value,
+                    label: option.labelKey ? t(option.labelKey) : option.label,
+                }))}
+                onChange={props.onChange}
+            />
         </div>
     )
 }
 
-function AgentPicker(props: {
-    agent: AgentType
-    isDisabled: boolean
-    onAgentChange: (agent: AgentType) => void
-}): React.JSX.Element {
-    const { t } = useTranslation()
-
-    return (
-        <div>
-            <div className="mb-2">
-                <LaunchSectionHeading
-                    icon={<RocketIcon className="h-3.5 w-3.5 text-[var(--ds-accent-lime)]" />}
-                    title={t('newSession.agent')}
-                />
-            </div>
-            <div role="radiogroup" aria-label={t('newSession.agent')} className="grid grid-cols-2 gap-2">
-                {AGENT_OPTIONS.map((option) => {
-                    const checked = props.agent === option.value
-                    return (
-                        <PressableSurface
-                            key={option.value}
-                            type="button"
-                            role="radio"
-                            aria-checked={checked}
-                            selected={checked}
-                            density="compact"
-                            disabled={props.isDisabled}
-                            className={cn(
-                                'gap-3',
-                                checked ? 'ring-1 ring-[color:color-mix(in_srgb,var(--ds-brand)_10%,transparent)]' : ''
-                            )}
-                            onClick={() => props.onAgentChange(option.value)}
-                        >
-                            <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-[var(--ds-border-default)] bg-[var(--app-subtle-bg)]', option.accentClassName)}>
-                                {option.icon}
-                            </span>
-                            <span className="flex min-w-0 flex-1 items-center gap-2">
-                                <span className="truncate text-sm font-semibold capitalize text-[var(--ds-text-primary)]">
-                                    {option.value}
-                                </span>
-                                <PressableSurfaceSelectionIndicator selected={checked} />
-                            </span>
-                        </PressableSurface>
-                    )
-                })}
-            </div>
-        </div>
-    )
-}
-
-export function NewSessionLaunchPanel(props: LaunchPanelProps): React.JSX.Element {
+function NewSessionLaunchPanelComponent(props: LaunchPanelProps): React.JSX.Element {
     const { t } = useTranslation()
 
     return (
@@ -188,42 +94,43 @@ export function NewSessionLaunchPanel(props: LaunchPanelProps): React.JSX.Elemen
             accent="lime"
         >
             <div className="space-y-4">
-                <SessionRolePicker
-                    sessionRole={props.form.sessionRole}
-                    isDisabled={props.options.isDisabled}
-                    onSessionRoleChange={props.handlers.onSessionRoleChange}
-                />
-
-                <AgentPicker
+                <NewSessionAgentPicker
                     agent={props.form.agent}
+                    savedAgent={props.options.savedAgent}
+                    savedAgentAvailability={props.options.savedAgentAvailability}
+                    hasAgentFallback={props.options.hasAgentFallback}
                     isDisabled={props.options.isDisabled}
+                    availability={props.options.agentAvailability}
+                    availabilityLoading={props.options.agentAvailabilityLoading}
+                    availabilityError={props.options.agentAvailabilityError}
                     onAgentChange={props.handlers.onAgentChange}
+                    onRefresh={props.handlers.onRefreshAgentAvailability}
                 />
 
                 <LaunchSelectField
-                    heading={(
+                    ariaLabel={t('newSession.model')}
+                    heading={
                         <LaunchSectionHeading
                             icon={<BulbIcon className="h-3.5 w-3.5 text-[var(--ds-accent-gold)]" />}
                             title={t('newSession.model')}
                         />
-                    )}
+                    }
                     value={props.form.model}
                     isDisabled={props.options.isDisabled}
-                    accentClassName="focus:ring-2 focus:ring-[color:color-mix(in_srgb,var(--ds-accent-gold)_18%,transparent)]"
                     options={props.options.modelOptions}
                     onChange={props.handlers.onModelChange}
                 />
 
                 <LaunchSelectField<ModelReasoningEffortSelection>
-                    heading={(
+                    ariaLabel={t('newSession.reasoningEffort')}
+                    heading={
                         <LaunchSectionHeading
                             icon={<RocketIcon className="h-3.5 w-3.5 text-[var(--ds-accent-violet)]" />}
                             title={t('newSession.reasoningEffort')}
                         />
-                    )}
+                    }
                     value={props.form.modelReasoningEffort}
                     isDisabled={props.options.isDisabled}
-                    accentClassName="focus:ring-2 focus:ring-[color:color-mix(in_srgb,var(--ds-accent-violet)_18%,transparent)]"
                     options={props.options.reasoningOptions}
                     onChange={props.handlers.onReasoningEffortChange}
                 />
@@ -237,28 +144,27 @@ export function NewSessionLaunchPanel(props: LaunchPanelProps): React.JSX.Elemen
                     />
                 ) : null}
 
-                <div className="rounded-[20px] border border-[var(--ds-border-default)] bg-[color:color-mix(in_srgb,var(--ds-panel-strong)_96%,transparent)] px-4 py-3">
-                    <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0">
-                            <LaunchSectionHeading
-                                icon={<AlertIcon className="h-3.5 w-3.5 text-[var(--ds-danger)]" />}
-                                title={t('newSession.yolo')}
-                            />
-                        </div>
-                        <label className="relative inline-flex h-6 w-11 shrink-0 items-center">
-                            <input
-                                type="checkbox"
-                                checked={props.form.yoloMode}
-                                onChange={(event) => props.handlers.onYoloModeChange(event.target.checked)}
-                                disabled={props.options.isDisabled}
-                                className="peer sr-only"
-                            />
-                            <span className="absolute inset-0 rounded-full bg-[var(--ds-border-default)] transition-colors peer-checked:bg-[var(--ds-danger)] peer-disabled:opacity-50" />
-                            <span className="absolute left-0.5 h-5 w-5 rounded-full bg-[var(--ds-panel-strong)] transition-transform peer-checked:translate-x-5 peer-disabled:opacity-50" />
-                        </label>
+                <label className="ds-launch-yolo-surface flex cursor-pointer items-start justify-between gap-4 rounded-3xl border border-[var(--ds-border-default)] bg-[color:color-mix(in_srgb,var(--ds-panel-strong)_94%,transparent)] p-4">
+                    <div className="min-w-0">
+                        <LaunchSectionHeading
+                            icon={<AlertIcon className="h-3.5 w-3.5 text-[var(--ds-danger)]" />}
+                            title={t('newSession.yolo')}
+                        />
+                        <p className="mt-1.5 text-xs leading-5 text-[var(--ds-text-secondary)]">
+                            {t('newSession.yolo.helper')}
+                        </p>
                     </div>
-                </div>
+                    <Switch
+                        checked={props.form.yoloMode}
+                        onChange={(event) => props.handlers.onYoloModeChange(event.target.checked)}
+                        disabled={props.options.isDisabled}
+                        className="mt-0.5"
+                        trackClassName="peer-checked:bg-[var(--ds-danger)]"
+                    />
+                </label>
             </div>
         </NewSessionSectionCard>
     )
 }
+
+export const NewSessionLaunchPanel = memo(NewSessionLaunchPanelComponent)

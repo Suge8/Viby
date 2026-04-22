@@ -5,6 +5,8 @@ import {
     FeatureSearchIcon as SearchIcon,
 } from '@/components/featureIcons'
 import { Button } from '@/components/ui/button'
+import { ICON_ONLY_BUTTON_NEUTRAL_SURFACE_CLASS_NAME } from '@/components/ui/iconButtonStyles'
+import { Input } from '@/components/ui/input'
 
 type FilesActionButtonProps = {
     onClick: () => void
@@ -15,10 +17,10 @@ export function FilesActionButton(props: FilesActionButtonProps): ReactNode {
     return (
         <Button
             type="button"
-            variant="plain"
-            size="iconSm"
+            variant="secondary"
+            size="iconXs"
             onClick={props.onClick}
-            className="h-8 w-8 rounded-full text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]"
+            className={ICON_ONLY_BUTTON_NEUTRAL_SURFACE_CLASS_NAME}
             title={props.title}
         >
             <RefreshIcon />
@@ -38,11 +40,11 @@ export function FilesSearchBar(props: FilesSearchBarProps): ReactNode {
             <div className="mx-auto w-full ds-stage-shell border-b border-[var(--app-border)] p-3">
                 <div className="flex items-center gap-2 rounded-md bg-[var(--app-subtle-bg)] px-3 py-2">
                     <SearchIcon className="text-[var(--app-hint)]" />
-                    <input
+                    <Input
                         value={props.value}
                         onChange={(event) => props.onChange(event.target.value)}
                         placeholder={props.placeholder}
-                        className="w-full bg-transparent text-sm text-[var(--app-fg)] placeholder:text-[var(--app-hint)] focus:outline-none"
+                        className="min-h-0 border-0 bg-transparent px-0 py-0 shadow-none focus:border-transparent focus:ring-0"
                         autoCapitalize="none"
                         autoCorrect="off"
                     />

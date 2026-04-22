@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { SESSION_CHAT_HEADER_STAGE_TEST_ID } from '@/lib/sessionUiContracts'
 import { renderWithI18n } from '@/test/i18n'
 import { SessionHeader } from './SessionHeader'
 
@@ -15,22 +16,24 @@ function getMoreButton(): HTMLElement {
 async function renderHeader(options?: SessionHeaderRenderOptions) {
     return renderWithI18n(
         <SessionHeader
-            session={{
-                id: 'session-1',
-                active: true,
-                thinking: false,
-                permissionMode: 'default',
-                collaborationMode: 'default',
-                model: 'gpt-5.4',
-                modelReasoningEffort: null,
-                metadata: {
-                    driver: 'codex'
-                }
-            } as never}
+            session={
+                {
+                    id: 'session-1',
+                    active: true,
+                    thinking: false,
+                    permissionMode: 'default',
+                    collaborationMode: 'default',
+                    model: 'gpt-5.4',
+                    modelReasoningEffort: null,
+                    metadata: {
+                        driver: 'codex',
+                    },
+                } as never
+            }
             navigation={{
                 onBack: vi.fn(),
                 onViewFiles: options?.onViewFiles,
-                onViewTerminal: options?.onViewTerminal
+                onViewTerminal: options?.onViewTerminal,
             }}
         />
     )
@@ -60,6 +63,7 @@ describe('SessionHeader', () => {
         await renderHeader()
 
         expect(screen.getAllByText('session-')[0]).toHaveClass('text-center')
+        expect(screen.getByTestId(SESSION_CHAT_HEADER_STAGE_TEST_ID)).toBeInTheDocument()
     })
 
     it('shows the friendly agent brand label instead of the raw flavor', async () => {
@@ -69,24 +73,25 @@ describe('SessionHeader', () => {
         expect(screen.queryByText('codex')).not.toBeInTheDocument()
     })
 
-
     it('uses the explicit driver label when rendering the session header', async () => {
         await renderWithI18n(
             <SessionHeader
-                session={{
-                    id: 'session-legacy',
-                    active: true,
-                    thinking: false,
-                    permissionMode: 'default',
-                    collaborationMode: 'default',
-                    model: 'gpt-5.4',
-                    modelReasoningEffort: null,
-                    metadata: {
-                        driver: 'codex'
-                    }
-                } as never}
+                session={
+                    {
+                        id: 'session-legacy',
+                        active: true,
+                        thinking: false,
+                        permissionMode: 'default',
+                        collaborationMode: 'default',
+                        model: 'gpt-5.4',
+                        modelReasoningEffort: null,
+                        metadata: {
+                            driver: 'codex',
+                        },
+                    } as never
+                }
                 navigation={{
-                    onBack: vi.fn()
+                    onBack: vi.fn(),
                 }}
             />
         )
@@ -97,20 +102,22 @@ describe('SessionHeader', () => {
     it('renders Pi agent with correct label', async () => {
         await renderWithI18n(
             <SessionHeader
-                session={{
-                    id: 'session-pi',
-                    active: true,
-                    thinking: false,
-                    permissionMode: 'default',
-                    collaborationMode: 'default',
-                    model: 'openai/gpt-5.4',
-                    modelReasoningEffort: null,
-                    metadata: {
-                        driver: 'pi'
-                    }
-                } as never}
+                session={
+                    {
+                        id: 'session-pi',
+                        active: true,
+                        thinking: false,
+                        permissionMode: 'default',
+                        collaborationMode: 'default',
+                        model: 'openai/gpt-5.4',
+                        modelReasoningEffort: null,
+                        metadata: {
+                            driver: 'pi',
+                        },
+                    } as never
+                }
                 navigation={{
-                    onBack: vi.fn()
+                    onBack: vi.fn(),
                 }}
             />
         )
@@ -121,20 +128,22 @@ describe('SessionHeader', () => {
     it('renders unknown agent gracefully', async () => {
         await renderWithI18n(
             <SessionHeader
-                session={{
-                    id: 'session-unknown',
-                    active: true,
-                    thinking: false,
-                    permissionMode: 'default',
-                    collaborationMode: 'default',
-                    model: 'gpt-5.4',
-                    modelReasoningEffort: null,
-                    metadata: {
-                        driver: 'unknown-flavor'
-                    }
-                } as never}
+                session={
+                    {
+                        id: 'session-unknown',
+                        active: true,
+                        thinking: false,
+                        permissionMode: 'default',
+                        collaborationMode: 'default',
+                        model: 'gpt-5.4',
+                        modelReasoningEffort: null,
+                        metadata: {
+                            driver: 'unknown-flavor',
+                        },
+                    } as never
+                }
                 navigation={{
-                    onBack: vi.fn()
+                    onBack: vi.fn(),
                 }}
             />
         )

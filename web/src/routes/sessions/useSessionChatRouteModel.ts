@@ -1,61 +1,82 @@
-import { useCallback, useEffect, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { resolveSessionDriver } from '@viby/protocol'
+import { useNavigate } from '@tanstack/react-router'
+import { getLiveSessionConfigSupport, resolveSessionInteractivity } from '@viby/protocol'
+import { useCallback, useMemo } from 'react'
 import type { ApiClient } from '@/api/client'
 import { SessionChat } from '@/components/SessionChat'
-import { useAppGoBack } from '@/hooks/useAppGoBack'
-import { useSendMessage } from '@/hooks/mutations/useSendMessage'
+import type {
+    SessionChatWorkspaceActionHandlers,
+    SessionChatWorkspaceMessageState,
+    SessionChatWorkspaceRuntimeOptions,
+} from '@/components/sessionChatWorkspaceTypes'
 import { useMessages } from '@/hooks/queries/useMessages'
 import { useSession } from '@/hooks/queries/useSession'
-import { appendRealtimeTrace } from '@/lib/realtimeTrace'
-import { formatSessionRecoveryErrorMessage } from '@/lib/sessionRecoveryError'
-import { useNoticeCenter } from '@/lib/notice-center'
-import { useTranslation } from '@/lib/use-translation'
-import { createSessionAutocompleteSuggestions } from '@/routes/sessions/sessionAutocomplete'
+import type { Suggestion } from '@/hooks/useActiveSuggestions'
+import { useAppGoBack } from '@/hooks/useAppGoBack'
+import { resolveCommandSuggestionNavigation } from '@/lib/commandSuggestionActions'
+import { runPreloadedNavigation } from '@/lib/navigationTransition'
+import { useSessionChatTracing } from '@/routes/sessions/sessionChatRouteRuntime'
 import {
-    type AcceptedSend,
-    handleAcceptedSend,
-    syncResolvedPostSwitchWarning
-} from '@/routes/sessions/postSwitchSendRecovery'
-import {
-    useSessionChatTracing,
-    useSessionResumeController
-} from '@/routes/sessions/sessionChatRouteRuntime'
+    useRefreshSelectedSession,
+    useSessionAutocompleteSuggestions,
+    useSessionChatSendActions,
+} from '@/routes/sessions/sessionChatRouteSupport'
+import { useResolvedPostSwitchWarningSync } from '@/routes/sessions/sessionChatWarningSync'
+import { buildSessionFilesPath, buildSessionTerminalPath } from '@/routes/sessions/sessionRoutePaths'
+import { loadSessionFilesRouteModule, preloadSessionTerminalExperience } from '@/routes/sessions/sessionRoutePreload'
 
-type SessionChatRouteModelOptions = {
+const SESSION_WORKSPACE_FILES_ROUTE = 'files',
+    SESSION_WORKSPACE_TERMINAL_ROUTE = 'terminal'
+type SessionWorkspaceRoute = typeof SESSION_WORKSPACE_FILES_ROUTE | typeof SESSION_WORKSPACE_TERMINAL_ROUTE
+
+export type SessionChatRouteModelOptions = {
     api: ApiClient
-    hasWarmSessionSnapshot: boolean
-    isDetailPending: boolean
-    refetchSession: ReturnType<typeof useSession>['refetch']
     session: NonNullable<ReturnType<typeof useSession>['session']>
     sessionId: string
 }
 
-export function useSessionChatRouteModel(
-    options: SessionChatRouteModelOptions
-): React.ComponentProps<typeof SessionChat> {
-    const { t } = useTranslation()
+export type SessionChatRouteViewModel = {
+    isSessionDetailReady: boolean
+    sessionChatProps: React.ComponentProps<typeof SessionChat>
+}
+
+function getSessionWorkspaceNavigationTarget(
+    route: SessionWorkspaceRoute,
+    sessionId: string
+): {
+    preload: Promise<unknown>
+    recoveryHref: string
+    to: '/sessions/$sessionId/files' | '/sessions/$sessionId/terminal'
+} {
+    if (route === SESSION_WORKSPACE_FILES_ROUTE) {
+        return {
+            preload: loadSessionFilesRouteModule(),
+            recoveryHref: buildSessionFilesPath(sessionId),
+            to: '/sessions/$sessionId/files',
+        }
+    }
+
+    return {
+        preload: preloadSessionTerminalExperience(),
+        recoveryHref: buildSessionTerminalPath(sessionId),
+        to: '/sessions/$sessionId/terminal',
+    }
+}
+
+export function useSessionChatRouteModel(options: SessionChatRouteModelOptions): SessionChatRouteViewModel {
     const goBack = useAppGoBack()
+    const navigate = useNavigate()
     const queryClient = useQueryClient()
-    const { addToast } = useNoticeCenter()
-    const {
-        api,
-        hasWarmSessionSnapshot,
-        isDetailPending,
-        refetchSession,
-        session,
-        sessionId
-    } = options
+    const { api, session, sessionId } = options
     const {
         messages,
         warning: messagesWarning,
         isLoading: messagesLoading,
         isLoadingMore: messagesLoadingMore,
         hasMore: messagesHasMore,
-        loadMore: loadMoreMessages,
         loadHistoryUntilPreviousUser,
-        refetch: refetchMessages,
         pendingCount,
+        atBottom,
         hasLoadedLatest,
         messagesVersion,
         pendingReply,
@@ -64,119 +85,156 @@ export function useSessionChatRouteModel(
         flushPending,
         setAtBottom,
     } = useMessages(api, sessionId)
-    const {
-        ensureSessionReady,
-        warmSession,
-        isResumingSession
-    } = useSessionResumeController({
-        api,
-        queryClient,
-        session
-    })
-
     useSessionChatTracing({
         sessionId,
         thinking: session.thinking,
         pendingReply,
-        stream
+        stream,
     })
 
-    useEffect(() => {
-        syncResolvedPostSwitchWarning({
-            sessionId,
-            messages,
-            warning: messagesWarning,
-            streamText: stream?.text ?? ''
-        })
-    }, [messages, messagesWarning, sessionId, stream?.text])
-
-    const handleSendBlocked = useCallback((reason: 'no-api' | 'no-session' | 'pending') => {
-        if (reason !== 'no-api') {
-            return
-        }
-
-        addToast({
-            title: t('send.blocked.title'),
-            description: t('send.blocked.noConnection'),
-            tone: 'warning',
-            href: `/sessions/${sessionId}`
-        })
-    }, [addToast, sessionId, t])
-
-    const handleAfterServerAccepted = useCallback(async (acceptedSend: AcceptedSend) => {
-        await handleAcceptedSend({
-            acceptedSend,
-            api,
-            queryClient
-        })
-    }, [api, queryClient])
-
-    const { sendMessage, retryMessage, isSending } = useSendMessage(api, sessionId, {
-        onBlocked: handleSendBlocked,
-        onSendStart: ({ sessionId: sendingSessionId, localId, createdAt, attachmentsCount }) => {
-            appendRealtimeTrace({
-                at: Date.now(),
-                type: 'message_send_start',
-                details: {
-                    sessionId: sendingSessionId,
-                    localId,
-                    createdAt,
-                    attachmentsCount
-                }
-            })
-        },
-        afterServerAccepted: handleAfterServerAccepted,
-        onSendError: ({ sessionId: failedSessionId, error }) => {
-            addToast({
-                title: t('chat.resumeFailed.title'),
-                description: formatSessionRecoveryErrorMessage(error, t),
-                tone: 'danger',
-                href: `/sessions/${failedSessionId}`
-            })
-        }
-    })
-
-    const sessionDriver = resolveSessionDriver(session.metadata)
-    const autocompleteSuggestions = useMemo(() => createSessionAutocompleteSuggestions({
-        driver: sessionDriver,
-        api,
-        queryClient,
-        sessionId
-    }), [api, queryClient, sessionDriver, sessionId])
-
-    const refreshSelectedSession = useCallback(() => {
-        void refetchSession()
-        void refetchMessages()
-    }, [refetchMessages, refetchSession])
-
-    return {
-        api,
-        hasWarmSessionSnapshot,
-        session,
-        isDetailPending,
+    const { retryAvailable } = resolveSessionInteractivity(session)
+    useResolvedPostSwitchWarningSync({
+        sessionId,
         messages,
         messagesWarning,
-        hasMoreMessages: messagesHasMore,
-        isLoadingMessages: messagesLoading,
-        isLoadingMoreMessages: messagesLoadingMore,
-        isSending,
-        isResumingSession,
-        pendingCount,
-        hasLoadedLatestMessages: hasLoadedLatest,
-        messagesVersion,
-        pendingReply,
-        stream,
-        streamVersion,
-        onBack: goBack,
-        onRefresh: refreshSelectedSession,
-        onLoadMore: loadMoreMessages,
-        onLoadHistoryUntilPreviousUser: loadHistoryUntilPreviousUser,
-        onSend: sendMessage,
-        onFlushPending: flushPending,
-        onAtBottomChange: setAtBottom,
-        onRetryMessage: retryMessage,
-        ensureSessionReady,
-        warmSession,
-        autocompleteSuggestions
+        streamText: stream?.text ?? '',
+    })
+    const { sendMessage, retryMessage, isSending } = useSessionChatSendActions({
+        api,
+        queryClient,
+        sessionId,
+    })
+    const { autocompleteRefreshKey, getSuggestions: autocompleteSuggestions } = useSessionAutocompleteSuggestions({
+        api,
+        queryClient,
+        session,
+        sessionId,
+    })
+    const refreshSelectedSession = useRefreshSelectedSession({
+        api,
+        queryClient,
+        sessionId,
+    })
+    const messageState = useMemo<SessionChatWorkspaceMessageState>(
+        () => ({
+            messages,
+            warning: messagesWarning,
+            hasMore: messagesHasMore,
+            isLoading: messagesLoading,
+            isLoadingMore: messagesLoadingMore,
+            isSending,
+            pendingCount,
+            atBottom,
+            messagesVersion,
+            pendingReply,
+            stream,
+            streamVersion,
+        }),
+        [
+            atBottom,
+            isSending,
+            messages,
+            messagesHasMore,
+            messagesLoading,
+            messagesLoadingMore,
+            messagesVersion,
+            messagesWarning,
+            pendingCount,
+            pendingReply,
+            stream,
+            streamVersion,
+        ]
+    )
+    const runtimeOptions = useMemo<SessionChatWorkspaceRuntimeOptions>(
+        () => ({
+            liveConfigSupport: getLiveSessionConfigSupport(session),
+            autocompleteSuggestions,
+            autocompleteRefreshKey,
+        }),
+        [autocompleteRefreshKey, autocompleteSuggestions, session]
+    )
+    const actions = useMemo<
+        Pick<
+            SessionChatWorkspaceActionHandlers,
+            | 'onAtBottomChange'
+            | 'onFlushPending'
+            | 'onLoadHistoryUntilPreviousUser'
+            | 'onRefresh'
+            | 'onRetryMessage'
+            | 'onSend'
+        >
+    >(
+        () => ({
+            onRefresh: refreshSelectedSession,
+            onLoadHistoryUntilPreviousUser: loadHistoryUntilPreviousUser,
+            onSend: sendMessage,
+            onFlushPending: flushPending,
+            onAtBottomChange: setAtBottom,
+            onRetryMessage: retryAvailable ? retryMessage : undefined,
+        }),
+        [
+            flushPending,
+            loadHistoryUntilPreviousUser,
+            refreshSelectedSession,
+            retryAvailable,
+            retryMessage,
+            sendMessage,
+            setAtBottom,
+        ]
+    )
+
+    const workspace = useMemo(
+        () => ({
+            api,
+            session,
+            messageState,
+            runtimeOptions,
+        }),
+        [api, messageState, runtimeOptions, session]
+    )
+    const navigateToSessionWorkspaceRoute = useCallback(
+        (route: SessionWorkspaceRoute) => {
+            const target = getSessionWorkspaceNavigationTarget(route, sessionId)
+
+            runPreloadedNavigation(
+                target.preload,
+                () => {
+                    void navigate({
+                        to: target.to,
+                        params: { sessionId },
+                    })
+                },
+                target.recoveryHref
+            )
+        },
+        [navigate, sessionId]
+    )
+    const handleViewFiles = useCallback(() => {
+        navigateToSessionWorkspaceRoute(SESSION_WORKSPACE_FILES_ROUTE)
+    }, [navigateToSessionWorkspaceRoute])
+    const handleViewTerminal = useCallback(() => {
+        navigateToSessionWorkspaceRoute(SESSION_WORKSPACE_TERMINAL_ROUTE)
+    }, [navigateToSessionWorkspaceRoute])
+    const handleSuggestionAction = useCallback(
+        (suggestion: Suggestion) => {
+            const target = resolveCommandSuggestionNavigation(suggestion)
+            if (!target) {
+                return
+            }
+            void navigate(target)
+        },
+        [navigate]
+    )
+
+    return {
+        isSessionDetailReady: hasLoadedLatest,
+        sessionChatProps: {
+            workspace,
+            actions,
+            onBack: goBack,
+            onSuggestionAction: handleSuggestionAction,
+            onViewFiles: session.metadata?.path ? handleViewFiles : undefined,
+            onViewTerminal: session.active ? handleViewTerminal : undefined,
+        },
     }
 }

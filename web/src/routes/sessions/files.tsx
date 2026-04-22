@@ -1,14 +1,16 @@
-import { lazy, Suspense, useCallback, useMemo, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router'
-import { useAppContext } from '@/lib/app-context'
-import { useAppGoBack } from '@/hooks/useAppGoBack'
-import { useFinalizeBootShell } from '@/hooks/useFinalizeBootShell'
+import { lazy, type ReactNode, Suspense, useCallback, useMemo, useState } from 'react'
+import { MotionReveal } from '@/components/motion/motionPrimitives'
 import { useGitStatusFiles } from '@/hooks/queries/useGitStatusFiles'
 import { useSession } from '@/hooks/queries/useSession'
 import { useSessionFileSearch } from '@/hooks/queries/useSessionFileSearch'
+import { useAppGoBack } from '@/hooks/useAppGoBack'
+import { useFinalizeBootShell } from '@/hooks/useFinalizeBootShell'
+import { useAppContext } from '@/lib/app-context'
 import {
     runNavigationTransition,
+    runPreloadedNavigation,
     VIEW_TRANSITION_NAVIGATION_OPTIONS,
 } from '@/lib/navigationTransition'
 import { getNoticePreset } from '@/lib/noticePresets'
@@ -16,10 +18,13 @@ import { queryKeys } from '@/lib/query-keys'
 import { useTranslation } from '@/lib/use-translation'
 import { SessionRouteBanner } from '@/routes/sessions/components/SessionRouteBanner'
 import { SessionRouteHeader } from '@/routes/sessions/components/SessionRouteHeader'
+import { SessionRoutePageSurface } from '@/routes/sessions/components/SessionRoutePageSurface'
 import { SessionRouteTabs } from '@/routes/sessions/components/SessionRouteTabs'
 import { FilesActionButton, FilesSearchBar, GitSummary } from '@/routes/sessions/filesPageChrome'
+import { createFileRouteSearch, type FilesTab, getRootLabel } from '@/routes/sessions/filesPageUtils'
 import { FileListSectionHeader, FileListSkeleton, GitFileRow, SearchResultRow } from '@/routes/sessions/filesPageViews'
-import { createFileRouteSearch, getRootLabel, type FilesTab } from '@/routes/sessions/filesPageUtils'
+import { buildSessionFileRecoveryHref } from '@/routes/sessions/sessionRoutePaths'
+import { loadSessionFileRouteModule } from '@/routes/sessions/sessionRoutePreload'
 
 const FILE_TABS: FilesTab[] = ['changes', 'directories']
 const LazyDirectoryTree = lazy(async () => {
@@ -57,15 +62,28 @@ export default function FilesPage(): ReactNode {
         enabled: shouldSearch,
     })
 
-    const handleOpenFile = useCallback((path: string, staged?: boolean) => {
-        runNavigationTransition(() => {
-            void navigate({
-                to: '/sessions/$sessionId/file',
-                params: { sessionId },
-                search: createFileRouteSearch(path, activeTab, staged),
-            })
-        }, VIEW_TRANSITION_NAVIGATION_OPTIONS)
-    }, [activeTab, navigate, sessionId])
+    const handleOpenFile = useCallback(
+        (path: string, staged?: boolean) => {
+            const search = createFileRouteSearch(path, activeTab, staged)
+            const encodedPath = typeof search.path === 'string' ? search.path : ''
+            const recoveryHref = buildSessionFileRecoveryHref(sessionId, encodedPath)
+
+            runPreloadedNavigation(
+                loadSessionFileRouteModule(),
+                () => {
+                    runNavigationTransition(() => {
+                        void navigate({
+                            to: '/sessions/$sessionId/file',
+                            params: { sessionId },
+                            search,
+                        })
+                    }, VIEW_TRANSITION_NAVIGATION_OPTIONS)
+                },
+                recoveryHref
+            )
+        },
+        [activeTab, navigate, sessionId]
+    )
 
     const handleRefresh = useCallback(() => {
         if (shouldSearch) {
@@ -85,18 +103,21 @@ export default function FilesPage(): ReactNode {
         void refetchGit()
     }, [activeTab, queryClient, refetchGit, searchQuery, sessionId, shouldSearch])
 
-    const handleTabChange = useCallback((nextTabId: string) => {
-        const nextTab: FilesTab = nextTabId === 'directories' ? 'directories' : 'changes'
+    const handleTabChange = useCallback(
+        (nextTabId: string) => {
+            const nextTab: FilesTab = nextTabId === 'directories' ? 'directories' : 'changes'
 
-        runNavigationTransition(() => {
-            void navigate({
-                to: '/sessions/$sessionId/files',
-                params: { sessionId },
-                search: nextTab === 'changes' ? {} : { tab: nextTab },
-                replace: true,
-            })
-        }, VIEW_TRANSITION_NAVIGATION_OPTIONS)
-    }, [navigate, sessionId])
+            runNavigationTransition(() => {
+                void navigate({
+                    to: '/sessions/$sessionId/files',
+                    params: { sessionId },
+                    search: nextTab === 'changes' ? {} : { tab: nextTab },
+                    replace: true,
+                })
+            }, VIEW_TRANSITION_NAVIGATION_OPTIONS)
+        },
+        [navigate, sessionId]
+    )
 
     const branchLabel = gitStatus?.branch ?? t('files.branch.detached')
     const branchSummary = t('files.branch.summary', {
@@ -105,24 +126,15 @@ export default function FilesPage(): ReactNode {
     })
 
     return (
-        <div className="flex h-full flex-col">
+        <SessionRoutePageSurface>
             <SessionRouteHeader
                 title={t('files.title')}
                 subtitle={subtitle}
                 onBack={goBack}
-                actions={
-                    <FilesActionButton
-                        onClick={handleRefresh}
-                        title={t('files.refresh')}
-                    />
-                }
+                actions={<FilesActionButton onClick={handleRefresh} title={t('files.refresh')} />}
             />
 
-            <FilesSearchBar
-                value={searchQuery}
-                onChange={setSearchQuery}
-                placeholder={t('files.search.placeholder')}
-            />
+            <FilesSearchBar value={searchQuery} onChange={setSearchQuery} placeholder={t('files.search.placeholder')} />
 
             <SessionRouteTabs
                 activeId={activeTab}
@@ -134,14 +146,11 @@ export default function FilesPage(): ReactNode {
             />
 
             {!gitLoading && gitStatus && !shouldSearch && activeTab === 'changes' ? (
-                <GitSummary
-                    branchLabel={branchLabel}
-                    summaryText={branchSummary}
-                />
+                <GitSummary branchLabel={branchLabel} summaryText={branchSummary} />
             ) : null}
 
             <div className="flex-1 overflow-y-auto">
-                <div className="mx-auto w-full ds-stage-shell">
+                <MotionReveal className="mx-auto w-full ds-stage-shell" duration={0.34} delay={0.04} y={18}>
                     {gitError && activeTab === 'changes' ? (
                         <SessionRouteBanner
                             tone={warningPreset.tone === 'warning' ? 'warning' : 'neutral'}
@@ -200,7 +209,10 @@ export default function FilesPage(): ReactNode {
                                             file={file}
                                             onOpen={() => handleOpenFile(file.fullPath, file.isStaged)}
                                             rootLabel={t('files.projectRoot')}
-                                            showDivider={index < gitStatus.stagedFiles.length - 1 || gitStatus.unstagedFiles.length > 0}
+                                            showDivider={
+                                                index < gitStatus.stagedFiles.length - 1 ||
+                                                gitStatus.unstagedFiles.length > 0
+                                            }
                                         />
                                     ))}
                                 </div>
@@ -232,8 +244,8 @@ export default function FilesPage(): ReactNode {
                     ) : (
                         <div className="p-6 text-sm text-[var(--app-hint)]">{t('files.empty.gitUnavailable')}</div>
                     )}
-                </div>
+                </MotionReveal>
             </div>
-        </div>
+        </SessionRoutePageSurface>
     )
 }

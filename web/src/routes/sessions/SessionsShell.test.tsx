@@ -1,16 +1,18 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { writeLastOpenedSessionId } from '@/lib/sessionEntryPreference'
+import { SESSION_LIST_CREATE_BUTTON_TEST_ID } from '@/lib/sessionUiContracts'
 import { SessionsShell } from './SessionsShell'
 
 const navigateMock = vi.fn()
 const useLocationMock = vi.fn()
 const useMatchRouteMock = vi.fn()
+const useSearchMock = vi.fn()
 const useSessionsMock = vi.fn()
 const preloadSessionDetailCriticalRouteMock = vi.fn()
 const preloadSessionDetailRouteMock = vi.fn()
 const preloadSessionDetailIntentMock = vi.fn()
-const warmSessionDetailRouteDataMock = vi.fn()
+const warmSessionDetailAncillaryRouteDataMock = vi.fn()
 const disposeSessionViewRuntimeMock = vi.fn()
 const loadNewSessionRouteModuleMock = vi.fn(async () => undefined)
 const loadSettingsRouteModuleMock = vi.fn(async () => undefined)
@@ -31,7 +33,7 @@ function createDeferred(): {
     })
     return {
         promise,
-        resolve: () => resolve(undefined)
+        resolve: () => resolve(undefined),
     }
 }
 
@@ -42,92 +44,87 @@ vi.mock('@tanstack/react-router', () => ({
         return options?.select ? options.select(location) : location
     },
     useMatchRoute: () => useMatchRouteMock,
-    useNavigate: () => navigateMock
+    useNavigate: () => navigateMock,
+    useSearch: () => useSearchMock(),
 }))
 
 vi.mock('@tanstack/react-query', () => ({
-    useQueryClient: () => queryClientMock
+    useQueryClient: () => queryClientMock,
 }))
 
 vi.mock('@/components/SessionList', () => ({
     SessionList: (props: {
         actions: {
             onSelect: (sessionId: string) => void
-            onPreloadSession?: (sessionId: string) => void
+            onSessionIntent?: (sessionId: string, source: 'focus' | 'hover' | 'press') => void
             onNewSession: () => void
-            onArchiveSelectedSession?: (sessionId: string) => void
         }
+        onActiveSectionChange?: (sectionId: 'running' | 'history') => void
     }) => (
         <div data-testid="session-list">
-            <button type="button" onClick={() => props.actions.onPreloadSession?.('session-1')}>
+            <button type="button" onClick={() => props.actions.onSessionIntent?.('session-1', 'hover')}>
                 preload-session
             </button>
             <button type="button" onClick={() => props.actions.onSelect('session-1')}>
                 open-session
             </button>
-            <button type="button" onClick={() => props.actions.onArchiveSelectedSession?.('session-1')}>
-                archive-selected-session
+            <button type="button" onClick={() => props.onActiveSectionChange?.('history')}>
+                show-history
             </button>
             <button type="button" title="sessions.new" onClick={() => props.actions.onNewSession()}>
                 new-session
             </button>
         </div>
-    )
+    ),
 }))
 
 vi.mock('@/components/SessionsEmptyState', () => ({
-    SessionsEmptyState: () => <div data-testid="sessions-empty-state" />
+    SessionsEmptyState: () => <div data-testid="sessions-empty-state" />,
 }))
 
 vi.mock('@/routes/sessions/sessionRoutePreload', () => ({
-    SESSIONS_IDLE_PRELOADERS: [
-        () => loadNewSessionRouteModuleMock(),
-        () => loadSettingsRouteModuleMock()
-    ],
+    SESSIONS_IDLE_PRELOADERS: [() => loadNewSessionRouteModuleMock(), () => loadSettingsRouteModuleMock()],
     loadNewSessionRouteModule: () => loadNewSessionRouteModuleMock(),
-    loadSettingsRouteModule: () => loadSettingsRouteModuleMock()
+    loadSettingsRouteModule: () => loadSettingsRouteModuleMock(),
 }))
 
 vi.mock('@/routes/sessions/sessionDetailRoutePreload', () => ({
     preloadSessionDetailCriticalRoute: (...args: unknown[]) => preloadSessionDetailCriticalRouteMock(...args),
     preloadSessionDetailRoute: (...args: unknown[]) => preloadSessionDetailRouteMock(...args),
     preloadSessionDetailIntent: (...args: unknown[]) => preloadSessionDetailIntentMock(...args),
-    warmSessionDetailRouteData: (...args: unknown[]) => warmSessionDetailRouteDataMock(...args),
+    warmSessionDetailAncillaryRouteData: (...args: unknown[]) => warmSessionDetailAncillaryRouteDataMock(...args),
 }))
 
 vi.mock('@/hooks/queries/sessionViewRuntime', () => ({
-    disposeSessionViewRuntime: (...args: unknown[]) => disposeSessionViewRuntimeMock(...args)
+    disposeSessionViewRuntime: (...args: unknown[]) => disposeSessionViewRuntimeMock(...args),
 }))
 
 vi.mock('@/hooks/queries/useSessions', () => ({
-    useSessions: (...args: unknown[]) => useSessionsMock(...args)
+    useSessions: (...args: unknown[]) => useSessionsMock(...args),
 }))
 
 vi.mock('@/hooks/useFinalizeBootShell', () => ({
-    useFinalizeBootShell: (when?: boolean) => useFinalizeBootShellMock(when)
+    useFinalizeBootShell: (when?: boolean) => useFinalizeBootShellMock(when),
 }))
 
 vi.mock('@/lib/app-context', () => ({
     useAppContext: () => ({
-        api: null
-    })
+        api: null,
+    }),
 }))
 
 vi.mock('@/lib/networkPreloadPolicy', () => ({
     SESSIONS_IDLE_PRELOAD_DELAY_MS: 50,
     getNetworkInformation: () => getNetworkInformationMock(),
-    shouldPreloadIdleSessionRoutes: (connection?: unknown) => shouldPreloadIdleSessionRoutesMock(connection)
+    shouldPreloadIdleSessionRoutes: (connection?: unknown) => shouldPreloadIdleSessionRoutesMock(connection),
 }))
 
 vi.mock('@/lib/navigationTransition', () => ({
     createNavigationTransitionOptions: (recoveryHref?: string) => ({
         enableViewTransition: true,
-        recoveryHref
+        recoveryHref,
     }),
-    runNavigationTransition: (
-        commit: () => void,
-        options?: { recoveryHref?: string }
-    ) => {
+    runNavigationTransition: (commit: () => void, options?: { recoveryHref?: string }) => {
         runNavigationTransitionMock(commit, options)
         commit()
     },
@@ -139,26 +136,25 @@ vi.mock('@/lib/navigationTransition', () => ({
         runPreloadedNavigationMock(preload, commit, recoveryHref)
         try {
             await (typeof preload === 'function' ? preload() : preload)
-        } catch {
-        }
+        } catch {}
         commit()
     },
 }))
 
 vi.mock('@/lib/noticePresets', () => ({
     getNoticePreset: () => ({
-        title: 'Something went wrong'
-    })
+        title: 'Something went wrong',
+    }),
 }))
 
 vi.mock('@/lib/use-translation', () => ({
     useTranslation: () => ({
-        t: (key: string) => key
-    })
+        t: (key: string) => key,
+    }),
 }))
 
 vi.mock('@/routes/sessions/components/SessionRouteBanner', () => ({
-    SessionRouteBanner: () => <div data-testid="session-route-banner" />
+    SessionRouteBanner: () => <div data-testid="session-route-banner" />,
 }))
 
 describe('SessionsShell', () => {
@@ -167,12 +163,25 @@ describe('SessionsShell', () => {
     })
 
     beforeEach(() => {
+        Object.defineProperty(window, 'matchMedia', {
+            configurable: true,
+            value: vi.fn().mockImplementation(() => ({
+                matches: false,
+                media: '(min-width: 1024px)',
+                onchange: null,
+                addEventListener: vi.fn(),
+                removeEventListener: vi.fn(),
+                addListener: vi.fn(),
+                removeListener: vi.fn(),
+                dispatchEvent: vi.fn(),
+            })),
+        })
         window.localStorage.clear()
         navigateMock.mockReset()
         preloadSessionDetailCriticalRouteMock.mockReset()
         preloadSessionDetailRouteMock.mockReset()
         preloadSessionDetailIntentMock.mockReset()
-        warmSessionDetailRouteDataMock.mockReset()
+        warmSessionDetailAncillaryRouteDataMock.mockReset()
         disposeSessionViewRuntimeMock.mockReset()
         loadNewSessionRouteModuleMock.mockClear()
         loadSettingsRouteModuleMock.mockClear()
@@ -186,9 +195,10 @@ describe('SessionsShell', () => {
         shouldPreloadIdleSessionRoutesMock.mockReturnValue(false)
         useLocationMock.mockReturnValue('/sessions/session-1')
         useMatchRouteMock.mockReturnValue({ sessionId: 'session-1' })
+        useSearchMock.mockReturnValue({ section: undefined })
         useSessionsMock.mockReturnValue({
             sessions: [],
-            error: null
+            error: null,
         })
         preloadSessionDetailCriticalRouteMock.mockResolvedValue(undefined)
         preloadSessionDetailRouteMock.mockResolvedValue(undefined)
@@ -210,15 +220,27 @@ describe('SessionsShell', () => {
     it('releases the boot shell when the sessions index is the active route', () => {
         useLocationMock.mockReturnValue('/sessions')
         useMatchRouteMock.mockReturnValue(false)
+        useSearchMock.mockReturnValue({ section: undefined })
 
         render(<SessionsShell />)
 
         expect(useFinalizeBootShellMock).toHaveBeenCalledWith(true)
     })
 
+    it('renders a single semantic new-session button on the mobile sessions index', () => {
+        useLocationMock.mockReturnValue('/sessions')
+        useMatchRouteMock.mockReturnValue(false)
+        useSearchMock.mockReturnValue({ section: undefined })
+
+        render(<SessionsShell />)
+
+        expect(screen.getAllByTestId(SESSION_LIST_CREATE_BUTTON_TEST_ID)).toHaveLength(1)
+    })
+
     it('preloads session detail data and modules on selection intent', () => {
         useLocationMock.mockReturnValue('/sessions')
         useMatchRouteMock.mockReturnValue(false)
+        useSearchMock.mockReturnValue({ section: undefined })
 
         render(<SessionsShell />)
 
@@ -228,14 +250,15 @@ describe('SessionsShell', () => {
             api: null,
             queryClient: queryClientMock,
             sessionId: 'session-1',
-            recoveryHref: '/sessions/session-1'
+            recoveryHref: '/sessions/session-1',
         })
     })
 
-    it('commits session navigation immediately while keeping critical preload in the background', () => {
+    it('waits for the critical session preload before committing navigation', async () => {
         const deferred = createDeferred()
         useLocationMock.mockReturnValue('/sessions')
         useMatchRouteMock.mockReturnValue(false)
+        useSearchMock.mockReturnValue({ section: undefined })
         preloadSessionDetailCriticalRouteMock.mockReturnValue(deferred.promise)
 
         render(<SessionsShell />)
@@ -245,27 +268,30 @@ describe('SessionsShell', () => {
         expect(preloadSessionDetailCriticalRouteMock).toHaveBeenCalledWith({
             api: null,
             queryClient: queryClientMock,
-            sessionId: 'session-1'
+            sessionId: 'session-1',
+            includeWorkspaceRuntime: true,
         })
-        expect(warmSessionDetailRouteDataMock).toHaveBeenCalledWith({
+        expect(warmSessionDetailAncillaryRouteDataMock).toHaveBeenCalledWith({
             api: null,
             queryClient: queryClientMock,
             sessionId: 'session-1',
-            includeLatestMessages: true,
-            recoveryHref: '/sessions/session-1'
+            includeWorkspaceRuntime: true,
         })
-        expect(runNavigationTransitionMock).toHaveBeenCalledWith(
+        expect(runPreloadedNavigationMock).toHaveBeenCalledWith(
             expect.any(Function),
-            expect.objectContaining({
-                recoveryHref: '/sessions/session-1'
-            })
+            expect.any(Function),
+            '/sessions/session-1'
         )
-        expect(navigateMock).toHaveBeenCalledWith({
-            to: '/sessions/$sessionId',
-            params: { sessionId: 'session-1' },
-        })
+        expect(navigateMock).not.toHaveBeenCalled()
 
         deferred.resolve()
+
+        await waitFor(() => {
+            expect(navigateMock).toHaveBeenCalledWith({
+                to: '/sessions/$sessionId',
+                params: { sessionId: 'session-1' },
+            })
+        })
     })
 
     it('does not re-preload the currently selected session on list intent', () => {
@@ -276,135 +302,45 @@ describe('SessionsShell', () => {
         expect(preloadSessionDetailIntentMock).not.toHaveBeenCalled()
     })
 
-    it('returns to /sessions when the currently selected session is archived', () => {
-        render(<SessionsShell />)
-
-        fireEvent.click(screen.getByText('archive-selected-session'))
-
-        expect(navigateMock).toHaveBeenCalledWith({
-            to: '/sessions',
-            replace: true
-        })
-    })
-
-    it('does not navigate away when an archived session is not the current route selection', () => {
-        useLocationMock.mockReturnValue('/sessions/session-2')
-        useMatchRouteMock.mockReturnValue({ sessionId: 'session-2' })
-
-        render(<SessionsShell />)
-
-        fireEvent.click(screen.getByText('archive-selected-session'))
-
-        expect(navigateMock).not.toHaveBeenCalled()
-    })
-
-    it('warms the most likely next session during idle time on fast networks', async () => {
+    it('warms lightweight static routes during idle time on fast networks', async () => {
         shouldPreloadIdleSessionRoutesMock.mockReturnValue(true)
         useLocationMock.mockReturnValue('/sessions')
         useMatchRouteMock.mockReturnValue(false)
-        writeLastOpenedSessionId('session-1')
-        useSessionsMock.mockReturnValue({
-            sessions: [
-                {
-                    id: 'session-2',
-                    active: true,
-                    thinking: false,
-                    activeAt: 2_000,
-                    updatedAt: 2_000,
-                    latestActivityAt: 2_000,
-                    latestActivityKind: 'ready',
-                    latestCompletedReplyAt: 2_000,
-                    lifecycleState: 'running',
-                    lifecycleStateSince: 2_000,
-                    metadata: null,
-                    todoProgress: null,
-                    pendingRequestsCount: 0,
-                    resumeAvailable: true,
-                    model: 'gpt-5.4',
-                    modelReasoningEffort: 'high'
-                },
-                {
-                    id: 'session-1',
-                    active: true,
-                    thinking: false,
-                    activeAt: 1_000,
-                    updatedAt: 1_000,
-                    latestActivityAt: 1_000,
-                    latestActivityKind: 'ready',
-                    latestCompletedReplyAt: 1_000,
-                    lifecycleState: 'running',
-                    lifecycleStateSince: 1_000,
-                    metadata: null,
-                    todoProgress: null,
-                    pendingRequestsCount: 0,
-                    resumeAvailable: true,
-                    model: 'gpt-5.4',
-                    modelReasoningEffort: 'medium'
-                }
-            ],
-            error: null
-        })
+        useSearchMock.mockReturnValue({ section: undefined })
 
         Object.defineProperty(window, 'requestIdleCallback', {
             configurable: true,
             value: vi.fn((callback: IdleRequestCallback) => {
                 callback({ didTimeout: false, timeRemaining: () => 50 } as IdleDeadline)
                 return 1
-            })
+            }),
         })
         Object.defineProperty(window, 'cancelIdleCallback', {
             configurable: true,
-            value: vi.fn()
+            value: vi.fn(),
         })
 
         render(<SessionsShell />)
 
         await waitFor(() => {
-            expect(preloadSessionDetailRouteMock).toHaveBeenCalledWith({
-                api: null,
-                queryClient: queryClientMock,
-                sessionId: 'session-1',
-                includeLatestMessages: false
-            })
+            expect(loadNewSessionRouteModuleMock).toHaveBeenCalledTimes(1)
+            expect(loadSettingsRouteModuleMock).toHaveBeenCalledTimes(1)
         })
     })
 
-    it('does not idle-warm another session while a session detail route is already selected', () => {
-        shouldPreloadIdleSessionRoutesMock.mockReturnValue(true)
-        useSessionsMock.mockReturnValue({
-            sessions: [
-                {
-                    id: 'session-2',
-                    active: true,
-                    thinking: false,
-                    activeAt: 2_000,
-                    updatedAt: 2_000,
-                    latestActivityAt: 2_000,
-                    latestActivityKind: 'ready',
-                    latestCompletedReplyAt: 2_000,
-                    lifecycleState: 'running',
-                    lifecycleStateSince: 2_000,
-                    metadata: null,
-                    todoProgress: null,
-                    pendingRequestsCount: 0,
-                    resumeAvailable: true,
-                    model: 'gpt-5.4',
-                    modelReasoningEffort: 'high'
-                }
-            ],
-            error: null
-        })
-
+    it('does not run idle route warmup on constrained networks', () => {
         render(<SessionsShell />)
 
-        expect(preloadSessionDetailRouteMock).not.toHaveBeenCalled()
+        expect(loadNewSessionRouteModuleMock).not.toHaveBeenCalled()
+        expect(loadSettingsRouteModuleMock).not.toHaveBeenCalled()
     })
 
-    it('commits session navigation without waiting for the critical route preload to finish', async () => {
+    it('keeps explicit session navigation on the preloaded path', async () => {
         const deferred = createDeferred()
         preloadSessionDetailCriticalRouteMock.mockReturnValueOnce(deferred.promise)
         useLocationMock.mockReturnValue('/sessions')
         useMatchRouteMock.mockReturnValue(false)
+        useSearchMock.mockReturnValue({ section: undefined })
 
         render(<SessionsShell />)
 
@@ -413,30 +349,29 @@ describe('SessionsShell', () => {
         expect(preloadSessionDetailCriticalRouteMock).toHaveBeenCalledWith({
             api: null,
             queryClient: queryClientMock,
-            sessionId: 'session-1'
+            sessionId: 'session-1',
+            includeWorkspaceRuntime: true,
         })
-        expect(warmSessionDetailRouteDataMock).toHaveBeenCalledWith({
+        expect(warmSessionDetailAncillaryRouteDataMock).toHaveBeenCalledWith({
             api: null,
             queryClient: queryClientMock,
             sessionId: 'session-1',
-            includeLatestMessages: true,
-            recoveryHref: '/sessions/session-1'
+            includeWorkspaceRuntime: true,
         })
-        expect(navigateMock).toHaveBeenCalledWith({
-            to: '/sessions/$sessionId',
-            params: { sessionId: 'session-1' }
-        })
-        expect(runNavigationTransitionMock).toHaveBeenCalledWith(
+        expect(runPreloadedNavigationMock).toHaveBeenCalledWith(
             expect.any(Function),
-            expect.objectContaining({
-                recoveryHref: '/sessions/session-1'
-            })
+            expect.any(Function),
+            '/sessions/session-1'
         )
+        expect(navigateMock).not.toHaveBeenCalled()
 
         deferred.resolve()
 
         await waitFor(() => {
-            expect(preloadSessionDetailCriticalRouteMock).toHaveBeenCalledTimes(1)
+            expect(navigateMock).toHaveBeenCalledWith({
+                to: '/sessions/$sessionId',
+                params: { sessionId: 'session-1' },
+            })
         })
     })
 
@@ -446,7 +381,8 @@ describe('SessionsShell', () => {
         fireEvent.click(screen.getByText('open-session'))
 
         expect(preloadSessionDetailCriticalRouteMock).not.toHaveBeenCalled()
-        expect(warmSessionDetailRouteDataMock).not.toHaveBeenCalled()
+        expect(preloadSessionDetailRouteMock).not.toHaveBeenCalled()
+        expect(warmSessionDetailAncillaryRouteDataMock).not.toHaveBeenCalled()
         expect(runPreloadedNavigationMock).not.toHaveBeenCalled()
         expect(navigateMock).not.toHaveBeenCalled()
     })
@@ -456,13 +392,177 @@ describe('SessionsShell', () => {
 
         useLocationMock.mockReturnValue('/sessions')
         useMatchRouteMock.mockReturnValue(false)
+        useSearchMock.mockReturnValue({ section: undefined })
 
         rerender(<SessionsShell />)
 
-        expect(disposeSessionViewRuntimeMock).toHaveBeenCalledWith(
-            queryClientMock,
-            'session-1'
+        expect(disposeSessionViewRuntimeMock).toHaveBeenCalledWith(queryClientMock, 'session-1')
+    })
+
+    it('does not dispose the currently selected session during StrictMode remounts', () => {
+        render(
+            <StrictMode>
+                <SessionsShell />
+            </StrictMode>
         )
+
+        expect(disposeSessionViewRuntimeMock).not.toHaveBeenCalled()
+    })
+
+    it('clears the selected detail when the current running session moves into history', async () => {
+        const now = Date.now()
+        useSessionsMock.mockReturnValue({
+            sessions: [
+                {
+                    id: 'session-1',
+                    active: true,
+                    thinking: false,
+                    activeAt: now,
+                    updatedAt: now,
+                    latestActivityAt: now,
+                    latestActivityKind: 'ready',
+                    latestCompletedReplyAt: now,
+                    lifecycleState: 'running',
+                    lifecycleStateSince: now,
+                    metadata: null,
+                    todoProgress: null,
+                    pendingRequestsCount: 0,
+                    resumeAvailable: true,
+                    model: 'gpt-5.4',
+                    modelReasoningEffort: 'medium',
+                },
+            ],
+            error: null,
+        })
+
+        const { rerender } = render(<SessionsShell />)
+
+        useSessionsMock.mockReturnValue({
+            sessions: [
+                {
+                    id: 'session-1',
+                    active: false,
+                    thinking: false,
+                    activeAt: now,
+                    updatedAt: now + 1,
+                    latestActivityAt: now + 1,
+                    latestActivityKind: 'ready',
+                    latestCompletedReplyAt: now + 1,
+                    lifecycleState: 'closed',
+                    lifecycleStateSince: now + 1,
+                    metadata: null,
+                    todoProgress: null,
+                    pendingRequestsCount: 0,
+                    resumeAvailable: true,
+                    model: 'gpt-5.4',
+                    modelReasoningEffort: 'medium',
+                },
+            ],
+            error: null,
+        })
+
+        rerender(<SessionsShell />)
+
+        await waitFor(() => {
+            expect(navigateMock).toHaveBeenCalledWith({ to: '/sessions', replace: true })
+        })
+    })
+
+    it('clears the selected detail when the selected session disappears from the authoritative list', async () => {
+        const now = Date.now()
+        useSessionsMock.mockReturnValue({
+            sessions: [
+                {
+                    id: 'session-1',
+                    active: true,
+                    thinking: false,
+                    activeAt: now,
+                    updatedAt: now,
+                    latestActivityAt: now,
+                    latestActivityKind: 'ready',
+                    latestCompletedReplyAt: now,
+                    lifecycleState: 'running',
+                    lifecycleStateSince: now,
+                    metadata: null,
+                    todoProgress: null,
+                    pendingRequestsCount: 0,
+                    resumeAvailable: true,
+                    model: 'gpt-5.4',
+                    modelReasoningEffort: 'medium',
+                },
+            ],
+            error: null,
+        })
+
+        const { rerender } = render(<SessionsShell />)
+
+        useSessionsMock.mockReturnValue({
+            sessions: [],
+            error: null,
+        })
+
+        rerender(<SessionsShell />)
+
+        await waitFor(() => {
+            expect(navigateMock).toHaveBeenCalledWith({ to: '/sessions', replace: true })
+        })
+    })
+
+    it('clears the selected detail into the matching empty state when the user switches tabs away from it', async () => {
+        const now = Date.now()
+        useSessionsMock.mockReturnValue({
+            sessions: [
+                {
+                    id: 'session-1',
+                    active: true,
+                    thinking: false,
+                    activeAt: now,
+                    updatedAt: now,
+                    latestActivityAt: now,
+                    latestActivityKind: 'ready',
+                    latestCompletedReplyAt: now,
+                    lifecycleState: 'running',
+                    lifecycleStateSince: now,
+                    metadata: null,
+                    todoProgress: null,
+                    pendingRequestsCount: 0,
+                    resumeAvailable: true,
+                    model: 'gpt-5.4',
+                    modelReasoningEffort: 'medium',
+                },
+                {
+                    id: 'session-2',
+                    active: false,
+                    thinking: false,
+                    activeAt: now - 1,
+                    updatedAt: now - 1,
+                    latestActivityAt: now - 1,
+                    latestActivityKind: 'ready',
+                    latestCompletedReplyAt: now - 1,
+                    lifecycleState: 'closed',
+                    lifecycleStateSince: now - 1,
+                    metadata: null,
+                    todoProgress: null,
+                    pendingRequestsCount: 0,
+                    resumeAvailable: false,
+                    model: 'gpt-5.4',
+                    modelReasoningEffort: 'medium',
+                },
+            ],
+            error: null,
+        })
+
+        render(<SessionsShell />)
+
+        fireEvent.click(screen.getByText('show-history'))
+
+        await waitFor(() => {
+            expect(navigateMock).toHaveBeenCalledWith({
+                to: '/sessions',
+                replace: true,
+                search: { section: 'history' },
+            })
+        })
     })
 
     it('waits for the settings route preload before navigating there', async () => {
@@ -479,12 +579,12 @@ describe('SessionsShell', () => {
         deferred.resolve()
 
         await waitFor(() => {
-            expect(navigateMock).toHaveBeenCalledWith({ to: '/settings' })
+            expect(navigateMock).toHaveBeenCalledWith({ to: '/sessions/settings' })
         })
         expect(runPreloadedNavigationMock).toHaveBeenLastCalledWith(
             expect.any(Promise),
             expect.any(Function),
-            '/settings'
+            '/sessions/settings'
         )
     })
 
@@ -515,6 +615,7 @@ describe('SessionsShell', () => {
         preloadSessionDetailCriticalRouteMock.mockRejectedValueOnce(new Error('preload failed'))
         useLocationMock.mockReturnValue('/sessions')
         useMatchRouteMock.mockReturnValue(false)
+        useSearchMock.mockReturnValue({ section: undefined })
 
         render(<SessionsShell />)
 
@@ -523,8 +624,15 @@ describe('SessionsShell', () => {
         await waitFor(() => {
             expect(navigateMock).toHaveBeenCalledWith({
                 to: '/sessions/$sessionId',
-                params: { sessionId: 'session-1' }
+                params: { sessionId: 'session-1' },
             })
+        })
+
+        expect(warmSessionDetailAncillaryRouteDataMock).toHaveBeenCalledWith({
+            api: null,
+            queryClient: queryClientMock,
+            sessionId: 'session-1',
+            includeWorkspaceRuntime: true,
         })
     })
 
@@ -536,7 +644,7 @@ describe('SessionsShell', () => {
         fireEvent.click(screen.getByTitle('settings.title'))
 
         await waitFor(() => {
-            expect(navigateMock).toHaveBeenCalledWith({ to: '/settings' })
+            expect(navigateMock).toHaveBeenCalledWith({ to: '/sessions/settings' })
         })
     })
 
@@ -559,7 +667,7 @@ describe('SessionsShell', () => {
 
         await waitFor(() => {
             expect(loadSettingsRouteModuleMock).toHaveBeenCalledTimes(1)
-            expect(navigateMock).toHaveBeenCalledWith({ to: '/settings' })
+            expect(navigateMock).toHaveBeenCalledWith({ to: '/sessions/settings' })
         })
     })
 

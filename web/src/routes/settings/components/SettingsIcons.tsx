@@ -1,10 +1,6 @@
-import type { CSSProperties } from 'react'
-import {
-    copyText,
-    gemRing,
-    tabText,
-} from '@lucide/lab'
+import { copyText, gemRing, tabText } from '@lucide/lab'
 import { BellRing, Icon } from 'lucide-react'
+import type { CSSProperties } from 'react'
 import { cn } from '@/lib/utils'
 
 type LabIconNode = ReadonlyArray<readonly [string, Record<string, string>]>
@@ -27,7 +23,11 @@ function SettingsIcon(props: {
             className={cn('inline-flex items-center justify-center', props.className)}
             style={TONE_STYLES[props.tone]}
         >
-            <Icon iconNode={props.iconNode as never} className={cn('h-[18px] w-[18px]', props.iconClassName)} strokeWidth={2.1} />
+            <Icon
+                iconNode={props.iconNode as never}
+                className={cn('ds-settings-icon-glyph', props.iconClassName)}
+                strokeWidth={2.1}
+            />
         </span>
     )
 }
@@ -45,5 +45,11 @@ export function AppVersionSettingsIcon(props: { className?: string }): React.JSX
 }
 
 export function NotificationSettingsIcon(props: { className?: string }): React.JSX.Element {
-    return <BellRing className={cn('h-[18px] w-[18px]', props.className)} style={TONE_STYLES.gold} strokeWidth={2.1} />
+    return (
+        <BellRing
+            className={cn('ds-settings-icon-glyph', props.className)}
+            style={TONE_STYLES.gold}
+            strokeWidth={2.1}
+        />
+    )
 }

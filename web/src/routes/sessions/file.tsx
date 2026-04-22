@@ -1,24 +1,23 @@
-import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { useParams, useSearch } from '@tanstack/react-router'
+import { lazy, type ReactNode, Suspense, useEffect, useMemo, useState } from 'react'
+import { CopyActionButton } from '@/components/CopyActionButton'
 import { FileIcon } from '@/components/FileIcon'
-import {
-    FeatureCheckIcon as CheckIcon,
-    FeatureCopyIcon as CopyIcon,
-} from '@/components/featureIcons'
-import { Button } from '@/components/ui/button'
-import { useAppContext } from '@/lib/app-context'
+import { useSessionFileContent } from '@/hooks/queries/useSessionFileContent'
+import { useSessionFileDiff } from '@/hooks/queries/useSessionFileDiff'
 import { useAppGoBack } from '@/hooks/useAppGoBack'
-import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
+import { useCopyAction } from '@/hooks/useCopyAction'
 import { useFinalizeBootShell } from '@/hooks/useFinalizeBootShell'
-import { queryKeys } from '@/lib/query-keys'
+import { useAppContext } from '@/lib/app-context'
+import { useTranslation } from '@/lib/use-translation'
 import { formatOptionalUserFacingErrorMessage } from '@/lib/userFacingError'
+import { decodeBase64 } from '@/lib/utils'
 import { SessionRouteHeader } from '@/routes/sessions/components/SessionRouteHeader'
+import { SessionRoutePageSurface } from '@/routes/sessions/components/SessionRoutePageSurface'
 import { SessionRouteTabs } from '@/routes/sessions/components/SessionRouteTabs'
-import { FileContentSkeleton, PlainFileContent } from '@/routes/sessions/filesPageViews'
 import {
     decodeFilePath,
     extractCommandError,
+    type FileDisplayMode,
     getPreferredFileDisplayMode,
     getUtf8ByteLength,
     isBinaryContent,
@@ -26,10 +25,8 @@ import {
     resolveActiveFileDisplayMode,
     resolveFileLanguage,
     shouldLoadFileContent,
-    type FileDisplayMode,
 } from '@/routes/sessions/filePageUtils'
-import { useTranslation } from '@/lib/use-translation'
-import { decodeBase64 } from '@/lib/utils'
+import { FileContentSkeleton, PlainFileContent } from '@/routes/sessions/filesPageViews'
 
 const LazyFileContentView = lazy(async () => import('@/routes/sessions/fileContentView'))
 
@@ -39,7 +36,6 @@ export default function FilePage(): ReactNode {
     const { t } = useTranslation()
     useFinalizeBootShell()
     const { api } = useAppContext()
-    const { copied: pathCopied, copy: copyPath } = useCopyToClipboard()
     const goBack = useAppGoBack()
     const { sessionId } = useParams({ from: '/sessions/$sessionId/file' })
     const search = useSearch({ from: '/sessions/$sessionId/file' })
@@ -51,19 +47,9 @@ export default function FilePage(): ReactNode {
     const preferredDisplayMode = getPreferredFileDisplayMode(search.tab)
     const [displayMode, setDisplayMode] = useState<FileDisplayMode>(preferredDisplayMode)
 
-    const diffQuery = useQuery({
-        queryKey: queryKeys.gitFileDiff(sessionId, filePath, staged),
-        queryFn: async () => {
-            if (!api || !sessionId || !filePath) {
-                throw new Error('Missing session or path')
-            }
+    const diffQuery = useSessionFileDiff(api, sessionId, filePath, staged)
 
-            return await api.getGitDiffFile(sessionId, filePath, staged)
-        },
-        enabled: Boolean(api && sessionId && filePath),
-    })
-
-    const diffContent = diffQuery.data?.success ? diffQuery.data.stdout ?? '' : ''
+    const diffContent = diffQuery.data?.success ? (diffQuery.data.stdout ?? '') : ''
     const hasDiffContent = diffContent.length > 0
     let diffResolution: 'error' | 'ready' | 'pending' = 'pending'
     if (diffQuery.isError) {
@@ -78,43 +64,36 @@ export default function FilePage(): ReactNode {
         hasDiffContent,
     })
 
-    const fileQuery = useQuery({
-        queryKey: queryKeys.sessionFile(sessionId, filePath),
-        queryFn: async () => {
-            if (!api || !sessionId || !filePath) {
-                throw new Error('Missing session or path')
-            }
-
-            return await api.readSessionFile(sessionId, filePath)
-        },
-        enabled: Boolean(api && sessionId && filePath) && shouldRequestFileContent,
+    const fileQuery = useSessionFileContent(api, sessionId, filePath, {
+        enabled: shouldRequestFileContent,
     })
 
     const diffError = extractCommandError(diffQuery.data)
     const fileContentResult = fileQuery.data
-    const decodedContentResult = fileContentResult?.success && fileContentResult.content
-        ? decodeBase64(fileContentResult.content)
-        : { ok: true, text: '' }
+    const decodedContentResult =
+        fileContentResult?.success && fileContentResult.content
+            ? decodeBase64(fileContentResult.content)
+            : { ok: true, text: '' }
     const decodedContent = decodedContentResult.text
-    const binaryFile = fileContentResult?.success
-        ? !decodedContentResult.ok || isBinaryContent(decodedContent)
-        : false
+    const binaryFile = fileContentResult?.success ? !decodedContentResult.ok || isBinaryContent(decodedContent) : false
     const language = useMemo(() => resolveFileLanguage(filePath), [filePath])
     const contentSizeBytes = useMemo(() => getUtf8ByteLength(decodedContent), [decodedContent])
-    const canCopyContent = fileContentResult?.success === true
-        && !binaryFile
-        && decodedContent.length > 0
-        && contentSizeBytes <= MAX_COPYABLE_FILE_BYTES
+    const canCopyContent =
+        fileContentResult?.success === true &&
+        !binaryFile &&
+        decodedContent.length > 0 &&
+        contentSizeBytes <= MAX_COPYABLE_FILE_BYTES
     const loading = diffQuery.isLoading || (shouldRequestFileContent && fileQuery.isLoading)
-    const fileError = fileContentResult?.success === false
-        ? formatOptionalUserFacingErrorMessage(fileContentResult.error, {
-            t,
-            fallbackKey: 'file.error.read'
-        })
-        : null
+    const fileError =
+        fileContentResult?.success === false
+            ? formatOptionalUserFacingErrorMessage(fileContentResult.error, {
+                  t,
+                  fallbackKey: 'file.error.read',
+              })
+            : null
     const diffUnavailableMessage = formatOptionalUserFacingErrorMessage(diffError, {
         t,
-        fallbackKey: 'file.error.diffUnavailable'
+        fallbackKey: 'file.error.diffUnavailable',
     })
 
     useEffect(() => {
@@ -127,29 +106,25 @@ export default function FilePage(): ReactNode {
     })
     const showModeTabs = hasDiffContent
     const visibleContent = activeMode === 'diff' && hasDiffContent ? diffContent : decodedContent
+    const { copied: pathCopied, handleCopyClick: handlePathCopyClick } = useCopyAction({
+        text: filePath,
+        enabled: filePath.length > 0,
+    })
 
     return (
-        <div className="flex h-full flex-col">
-            <SessionRouteHeader
-                title={fileName}
-                subtitle={filePath || t('file.error.unknownPath')}
-                onBack={goBack}
-            />
+        <SessionRoutePageSurface>
+            <SessionRouteHeader title={fileName} subtitle={filePath || t('file.error.unknownPath')} onBack={goBack} />
 
             <div className="bg-[var(--app-bg)]">
                 <div className="mx-auto flex w-full ds-stage-shell items-center gap-2 border-b border-[var(--app-divider)] px-3 py-2">
                     <FileIcon fileName={fileName} size={20} />
                     <span className="min-w-0 flex-1 truncate text-xs text-[var(--app-hint)]">{filePath}</span>
-                    <Button
-                        type="button"
-                        variant="plain"
-                        size="iconSm"
-                        onClick={() => copyPath(filePath)}
-                        className="h-8 w-8 shrink-0 rounded-md p-1 text-[var(--app-hint)] hover:bg-[var(--app-subtle-bg)] hover:text-[var(--app-fg)]"
-                        title={t('file.copyPath')}
-                    >
-                        {pathCopied ? <CheckIcon className="h-3.5 w-3.5" /> : <CopyIcon className="h-3.5 w-3.5" />}
-                    </Button>
+                    <CopyActionButton
+                        label={t('file.copyPath')}
+                        copied={pathCopied}
+                        onCopy={(event) => void handlePathCopyClick(event)}
+                        className="shrink-0"
+                    />
                 </div>
             </div>
 
@@ -205,6 +180,6 @@ export default function FilePage(): ReactNode {
                     )}
                 </div>
             </div>
-        </div>
+        </SessionRoutePageSurface>
     )
 }

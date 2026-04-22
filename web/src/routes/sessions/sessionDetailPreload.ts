@@ -1,50 +1,41 @@
+import { loadSessionViewRuntime } from '@/hooks/queries/sessionViewRuntime'
+import { prefetchCommandCapabilitiesResponse } from './SessionAutocompleteCapabilities'
 import type { PreloadSessionDetailRouteOptions } from './sessionDetailRoutePreload'
-import { preloadSessionChatExperience } from './sessionRoutePreload'
-import { createSessionDetailQueryOptions } from '@/hooks/queries/sessionDetailQueryOptions'
+import { preloadSessionChatCriticalExperience, preloadSessionChatRouteModuleOnly } from './sessionRoutePreload'
 
-export async function preloadSessionDetailCriticalRoute(
-    options: PreloadSessionDetailRouteOptions
-): Promise<void> {
-    void options
-    await preloadSessionChatExperience()
-}
+export async function preloadSessionDetailCriticalRoute(options: PreloadSessionDetailRouteOptions): Promise<void> {
+    const tasks: Promise<unknown>[] = [
+        preloadSessionChatCriticalExperience({
+            includeWorkspace: options.includeWorkspaceRuntime === true,
+        }),
+    ]
 
-export async function warmSessionDetailData(
-    options: PreloadSessionDetailRouteOptions
-): Promise<void> {
-    const api = options.api
-    const tasks: Promise<unknown>[] = []
-    const includeLatestMessages = options.includeLatestMessages !== false
-
-    if (!api) {
-        return
-    }
-
-    tasks.push(preloadSessionChatExperience({
-        includeWorkspace: true
-    }).catch(() => {
-        // UI runtime warmup stays best-effort and must never block navigation.
-    }))
-    tasks.push(options.queryClient.prefetchQuery(
-        createSessionDetailQueryOptions(api, options.sessionId)
-    ).catch(() => {
-        // Data warmup must never block or fork navigation.
-    }))
-    if (includeLatestMessages) {
-        tasks.push(import('@/lib/message-window-store').then(({ ensureLatestMessagesLoaded }) => {
-            return ensureLatestMessagesLoaded(api, options.sessionId)
-        }).catch(() => {
-            // Message warmup is best-effort. The route will reconcile honestly
-            // after navigation if this background fetch misses.
-        }))
+    if (options.api) {
+        tasks.push(
+            loadSessionViewRuntime({
+                api: options.api,
+                queryClient: options.queryClient,
+                sessionId: options.sessionId,
+            })
+        )
     }
 
     await Promise.all(tasks)
 }
 
-export async function preloadSessionDetailRoute(
-    options: PreloadSessionDetailRouteOptions
-): Promise<void> {
+export async function preloadSessionDetailIntentRoute(_options: PreloadSessionDetailRouteOptions): Promise<void> {
+    await preloadSessionChatRouteModuleOnly()
+}
+
+export async function warmSessionDetailAncillaryData(options: PreloadSessionDetailRouteOptions): Promise<void> {
+    await prefetchCommandCapabilitiesResponse({
+        api: options.api,
+        queryClient: options.queryClient,
+        sessionId: options.sessionId,
+    })
+}
+
+export async function preloadSessionDetailRoute(options: PreloadSessionDetailRouteOptions): Promise<void> {
     await preloadSessionDetailCriticalRoute(options)
-    await warmSessionDetailData(options)
+    await warmSessionDetailAncillaryData(options)
 }

@@ -1,12 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle
-} from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
 import { InlineNotice } from '@/components/InlineNotice'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import { getNoticePreset } from '@/lib/noticePresets'
 import { formatRenameErrorMessage } from '@/lib/sessionRenameError'
 import { useTranslation } from '@/lib/use-translation'
@@ -64,23 +60,18 @@ export function RenameSessionDialog(props: RenameSessionDialogProps) {
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent
-                className="max-w-sm"
-                onOpenAutoFocus={handleOpenAutoFocus}
-                aria-describedby={undefined}
-            >
+            <DialogContent className="max-w-sm" onOpenAutoFocus={handleOpenAutoFocus} aria-describedby={undefined}>
                 <DialogHeader>
                     <DialogTitle>{t('dialog.rename.title')}</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-4">
-                    <input
+                    <Input
                         ref={inputRef}
                         type="text"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         onKeyDown={handleKeyDown}
                         placeholder={t('dialog.rename.placeholder')}
-                        className="w-full px-3 py-2.5 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] placeholder:text-[var(--app-hint)] focus:outline-none focus:ring-2 focus:ring-[var(--app-button)] focus:border-transparent"
                         disabled={isPending}
                         maxLength={255}
                     />
@@ -94,18 +85,10 @@ export function RenameSessionDialog(props: RenameSessionDialogProps) {
                     ) : null}
 
                     <div className="flex gap-2 justify-end">
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            onClick={onClose}
-                            disabled={isPending}
-                        >
+                        <Button type="button" variant="secondary" onClick={onClose} disabled={isPending}>
                             {t('button.cancel')}
                         </Button>
-                        <Button
-                            type="submit"
-                            disabled={isPending || !name.trim()}
-                        >
+                        <Button type="submit" disabled={isPending || !name.trim()}>
                             {isPending ? t('dialog.rename.saving') : t('button.save')}
                         </Button>
                     </div>

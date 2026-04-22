@@ -1,24 +1,30 @@
-import { Suspense, lazy, useCallback, useMemo, useState, type ReactNode } from 'react'
 import { useParams } from '@tanstack/react-router'
+import { lazy, type ReactNode, Suspense, useCallback, useMemo, useState } from 'react'
 import { LoadingState } from '@/components/LoadingState'
+import { MotionReveal } from '@/components/motion/motionPrimitives'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { useAppContext } from '@/lib/app-context'
+import { Textarea } from '@/components/ui/textarea'
+import { useSession } from '@/hooks/queries/useSession'
 import { useAppGoBack } from '@/hooks/useAppGoBack'
 import { useFinalizeBootShell } from '@/hooks/useFinalizeBootShell'
-import { useSession } from '@/hooks/queries/useSession'
+import { useAppContext } from '@/lib/app-context'
 import { getNoticePreset } from '@/lib/noticePresets'
+import { TERMINAL_SURFACE_INTERACTIVE_TEST_ID } from '@/lib/sessionUiContracts'
 import { useTranslation } from '@/lib/use-translation'
 import { SessionRouteBanner } from '@/routes/sessions/components/SessionRouteBanner'
 import { SessionRouteHeader } from '@/routes/sessions/components/SessionRouteHeader'
-import { ConnectionIndicator, TerminalQuickInputBar } from '@/routes/sessions/terminalQuickInput'
+import { SessionRoutePageSurface } from '@/routes/sessions/components/SessionRoutePageSurface'
 import { loadSessionTerminalViewModule } from '@/routes/sessions/sessionRoutePreload'
+import { ConnectionIndicator, TerminalQuickInputBar } from '@/routes/sessions/terminalQuickInput'
 import { useTerminalPageController } from '@/routes/sessions/useTerminalPageController'
 
 const TerminalView = lazy(async () => {
     const module = await loadSessionTerminalViewModule()
     return { default: module.TerminalView }
 })
+
+type TerminalSurfaceState = 'interactive' | 'pending'
 
 export default function TerminalPage(): ReactNode {
     const { t } = useTranslation()
@@ -42,6 +48,7 @@ export default function TerminalPage(): ReactNode {
         handleResize,
         handleTerminalMount,
         quickInputDisabled,
+        terminalContentReady,
         terminalState,
         writePlainInput,
     } = useTerminalPageController({
@@ -107,9 +114,14 @@ export default function TerminalPage(): ReactNode {
     }
 
     const subtitle = session.metadata?.path ?? sessionId
+    const terminalSurfaceState = resolveTerminalSurfaceState({
+        sessionActive: session.active,
+        terminalContentReady,
+        terminalStatus: terminalState.status,
+    })
 
     return (
-        <div className="flex h-full flex-col">
+        <SessionRoutePageSurface>
             <SessionRouteHeader
                 title={t('terminal.title')}
                 subtitle={subtitle}
@@ -118,19 +130,11 @@ export default function TerminalPage(): ReactNode {
             />
 
             {!session.active ? (
-                <SessionRouteBanner
-                    tone="warning"
-                    title={warningPreset.title}
-                    description={t('terminal.inactive')}
-                />
+                <SessionRouteBanner tone="warning" title={warningPreset.title} description={t('terminal.inactive')} />
             ) : null}
 
             {terminalState.status === 'error' && terminalState.error ? (
-                <SessionRouteBanner
-                    tone="error"
-                    title={errorPreset.title}
-                    description={terminalState.error}
-                />
+                <SessionRouteBanner tone="error" title={errorPreset.title} description={terminalState.error} />
             ) : null}
 
             {exitInfo ? (
@@ -144,16 +148,20 @@ export default function TerminalPage(): ReactNode {
                 />
             ) : null}
 
-            <div className="flex-1 overflow-hidden bg-[var(--app-bg)]">
-                <div className="mx-auto h-full w-full ds-stage-shell p-3">
+            <div className="relative flex-1 overflow-hidden bg-[var(--app-bg)]">
+                <MotionReveal className="mx-auto h-full w-full ds-stage-shell p-3" duration={0.34} delay={0.04} y={18}>
                     <Suspense fallback={<TerminalViewLoadingState />}>
-                        <TerminalView
-                            onMount={handleTerminalMount}
-                            onResize={handleResize}
-                            className="h-full w-full"
-                        />
+                        <TerminalView onMount={handleTerminalMount} onResize={handleResize} className="h-full w-full" />
                     </Suspense>
-                </div>
+                </MotionReveal>
+                {terminalSurfaceState === 'pending' ? (
+                    <TerminalPendingOverlay
+                        description={t('terminal.pendingDescription')}
+                        title={t('terminal.pendingTitle')}
+                    />
+                ) : (
+                    <div data-testid={TERMINAL_SURFACE_INTERACTIVE_TEST_ID} className="sr-only" aria-hidden="true" />
+                )}
             </div>
 
             <TerminalQuickInputBar
@@ -182,11 +190,11 @@ export default function TerminalPage(): ReactNode {
                         <DialogTitle>{t('terminal.paste.fallbackTitle')}</DialogTitle>
                         <DialogDescription>{t('terminal.paste.fallbackDescription')}</DialogDescription>
                     </DialogHeader>
-                    <textarea
+                    <Textarea
                         value={manualPasteText}
                         onChange={(event) => setManualPasteText(event.target.value)}
                         placeholder={t('terminal.paste.placeholder')}
-                        className="mt-2 min-h-32 w-full resize-y rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--app-link)]"
+                        className="mt-2 min-h-32 rounded-md bg-[var(--app-bg)] p-2"
                         autoCapitalize="none"
                         autoCorrect="off"
                     />
@@ -201,17 +209,13 @@ export default function TerminalPage(): ReactNode {
                         >
                             {t('button.cancel')}
                         </Button>
-                        <Button
-                            type="button"
-                            onClick={handleManualPasteSubmit}
-                            disabled={!manualPasteText.trim()}
-                        >
+                        <Button type="button" onClick={handleManualPasteSubmit} disabled={!manualPasteText.trim()}>
                             {t('button.paste')}
                         </Button>
                     </div>
                 </DialogContent>
             </Dialog>
-        </div>
+        </SessionRoutePageSurface>
     )
 }
 
@@ -223,4 +227,30 @@ function TerminalViewLoadingState(): React.JSX.Element {
             <LoadingState label={t('loading.session')} className="text-sm" />
         </div>
     )
+}
+
+function TerminalPendingOverlay(props: { description: string; title: string }): React.JSX.Element {
+    return (
+        <div
+            data-testid="terminal-surface-pending"
+            className="absolute inset-0 flex items-center justify-center bg-[var(--app-bg)]"
+        >
+            <div className="mx-auto flex max-w-sm flex-col items-center gap-2 px-6 text-center">
+                <LoadingState label={props.title} className="text-sm" />
+                <p className="text-sm leading-6 text-[var(--app-hint)]">{props.description}</p>
+            </div>
+        </div>
+    )
+}
+
+function resolveTerminalSurfaceState(options: {
+    sessionActive: boolean
+    terminalContentReady: boolean
+    terminalStatus: 'idle' | 'connecting' | 'connected' | 'error'
+}): TerminalSurfaceState {
+    if (!options.sessionActive || options.terminalStatus === 'error' || options.terminalContentReady) {
+        return 'interactive'
+    }
+
+    return 'pending'
 }

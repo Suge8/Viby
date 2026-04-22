@@ -1,11 +1,11 @@
 import { memo, type ReactNode } from 'react'
-import { PlainCodeContent } from '@/components/code-block/PlainCodeContent'
 import { CodeSurface } from '@/components/code-block/CodeSurface'
-import type { FileSearchItem, GitFileStatus } from '@/types/api'
+import { PlainCodeContent } from '@/components/code-block/PlainCodeContent'
 import { FileIcon } from '@/components/FileIcon'
 import { FeatureFolderIcon as FolderIcon } from '@/components/featureIcons'
-import { SkeletonList, SkeletonRows, type SkeletonRow } from '@/components/loading/LoadingSkeleton'
+import { SkeletonList, type SkeletonRow, SkeletonRows } from '@/components/loading/LoadingSkeleton'
 import { Button } from '@/components/ui/button'
+import type { FileSearchItem, GitFileStatus } from '@/types/api'
 
 const FILE_LIST_SKELETON_ROWS = [
     { titleWidthClassName: 'w-1/3', subtitleWidthClassName: 'w-1/2' },
@@ -53,7 +53,7 @@ function StatusBadge(props: { status: GitFileStatus['status'] }): ReactNode {
 
     return (
         <span
-            className="inline-flex items-center justify-center rounded border px-1.5 py-0.5 text-[10px] font-semibold"
+            className="ds-file-status-badge inline-flex items-center justify-center rounded border px-1.5 py-0.5 font-semibold"
             style={{ color, borderColor: color }}
         >
             {label}
@@ -67,7 +67,7 @@ function LineChanges(props: { added: number; removed: number }): ReactNode {
     }
 
     return (
-        <span className="flex items-center gap-1 text-[11px] font-mono">
+        <span className="ds-file-line-changes flex items-center gap-1 font-mono">
             {props.added ? <span className="text-[var(--app-diff-added-text)]">+{props.added}</span> : null}
             {props.removed ? <span className="text-[var(--app-diff-removed-text)]">-{props.removed}</span> : null}
         </span>
@@ -135,9 +135,12 @@ type SearchResultRowProps = {
 }
 
 export const SearchResultRow = memo(function SearchResultRow(props: SearchResultRowProps): ReactNode {
-    const icon = props.file.fileType === 'file'
-        ? <FileIcon fileName={props.file.fileName} size={22} />
-        : <FolderIcon className="h-[22px] w-[22px] text-[var(--ds-accent-coral)]" />
+    const icon =
+        props.file.fileType === 'file' ? (
+            <FileIcon fileName={props.file.fileName} size={22} />
+        ) : (
+            <FolderIcon className="ds-file-search-folder-icon text-[var(--ds-accent-coral)]" />
+        )
 
     return (
         <FileListRow
@@ -158,7 +161,9 @@ type FileListSectionHeaderProps = {
 
 export function FileListSectionHeader(props: FileListSectionHeaderProps): ReactNode {
     return (
-        <div className={`border-b border-[var(--app-divider)] bg-[var(--app-bg)] px-3 py-2 text-xs font-semibold ${props.toneClassName}`}>
+        <div
+            className={`border-b border-[var(--app-divider)] bg-[var(--app-bg)] px-3 py-2 text-xs font-semibold ${props.toneClassName}`}
+        >
             {props.label} ({props.count})
         </div>
     )
@@ -174,9 +179,7 @@ export function FileListSkeleton(props: FileListSkeletonProps): ReactNode {
         return FILE_LIST_SKELETON_ROWS[index % FILE_LIST_SKELETON_ROWS.length]
     })
 
-    return (
-        <SkeletonList label={props.label} rows={rows} />
-    )
+    return <SkeletonList label={props.label} rows={rows} />
 }
 
 type FileContentSkeletonProps = {

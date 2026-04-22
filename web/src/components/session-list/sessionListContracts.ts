@@ -1,19 +1,14 @@
-import type { SessionSummary } from '@/types/api'
 import type { FloatingActionMenuAnchorPoint } from '@/components/ui/FloatingActionMenu.contract'
+import type { SessionSummary } from '@/types/api'
 
 export type SessionListSelection = {
+    onIntent?: (sessionId: string, source: 'focus' | 'hover' | 'press') => void
     onSelect: (sessionId: string) => void
-    onPreload?: (sessionId: string) => void
-    selectedSessionId?: string | null
+    selectedSessionId: string | null
 }
 
 export type SessionListRenderContext = {
     selection: SessionListSelection
     hasUnseenReply: (session: SessionSummary) => boolean
     onOpenActionMenu: (sessionId: string, anchorPoint: FloatingActionMenuAnchorPoint) => void
-}
-
-export type SessionListManagerGroupState = {
-    expandedManagerGroups: Readonly<Record<string, boolean>>
-    onToggleManagerGroup: (managerSessionId: string) => void
 }

@@ -20,19 +20,15 @@ type SettingsActionCardProps = {
 
 export function SettingsActionCard(props: SettingsActionCardProps): React.JSX.Element {
     return (
-        <section className="relative mx-3 my-3 overflow-hidden rounded-[20px] border border-[var(--ds-border-default)] bg-[color:color-mix(in_srgb,var(--ds-panel-strong)_96%,transparent)] shadow-[var(--ds-shadow-soft)] sm:mx-4">
+        <section className="relative mx-3 my-3 overflow-hidden rounded-[var(--ds-radius-lg)] border border-[var(--ds-border-default)] bg-[color:color-mix(in_srgb,var(--ds-panel-strong)_96%,transparent)] shadow-[var(--ds-shadow-soft)] sm:mx-4">
             <div className="flex items-start justify-between gap-4 px-4 py-4 sm:px-5">
                 <div className="min-w-0 flex-1">
-                    <p className="text-base font-semibold text-[var(--ds-text-primary)]">
-                        {props.summary.title}
-                    </p>
+                    <p className="text-base font-semibold text-[var(--ds-text-primary)]">{props.summary.title}</p>
                     <p className="mt-1.5 text-sm leading-6 text-[var(--ds-text-secondary)]">
                         {props.summary.description}
                     </p>
                     {props.summary.detail ? (
-                        <p className="mt-2 text-xs leading-5 text-[var(--ds-text-muted)]">
-                            {props.summary.detail}
-                        </p>
+                        <p className="mt-2 text-xs leading-5 text-[var(--ds-text-muted)]">{props.summary.detail}</p>
                     ) : null}
                 </div>
 

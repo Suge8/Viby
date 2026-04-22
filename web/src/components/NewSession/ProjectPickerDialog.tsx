@@ -1,27 +1,24 @@
 import { memo, useMemo } from 'react'
 import type { ApiClient } from '@/api/client'
-import type { MachineDirectoryRootKind } from '@/types/api'
-import { Spinner } from '@/components/Spinner'
-import {
-    BackIcon,
-    FolderOpenIcon,
-} from '@/components/icons'
 import {
     FeatureFolderIcon as FolderIcon,
     FeatureProjectIcon as ProjectIcon,
     FeatureRefreshIcon as RefreshIcon,
 } from '@/components/featureIcons'
 import { InlineNotice } from '@/components/InlineNotice'
+import { BackIcon, FolderOpenIcon } from '@/components/icons'
+import { Spinner } from '@/components/Spinner'
+import { BlurFade } from '@/components/ui/blur-fade'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { BlurFade } from '@/components/ui/blur-fade'
-import { useMachineDirectoryBrowser } from '@/hooks/queries/useMachineDirectoryBrowser'
-import { cn } from '@/lib/utils'
+import { useRuntimeDirectoryBrowser } from '@/hooks/queries/useRuntimeDirectoryBrowser'
 import { useTranslation } from '@/lib/use-translation'
+import { cn } from '@/lib/utils'
+import type { RuntimeDirectoryRootKind } from '@/types/api'
+import { ProjectPickerControlButton } from './ProjectPickerControlButton'
 
 type ProjectPickerDialogProps = {
     api: ApiClient
-    machineId: string | null
     isSupported: boolean
     open: boolean
     selectedPath: string
@@ -48,16 +45,14 @@ const QUICK_PICK_LIMIT = 8
 const MAX_ITEM_ANIMATION_DELAY = 0.12
 const PATH_ITEM_DELAY_STEP = 0.03
 const DIRECTORY_ITEM_DELAY_STEP = 0.02
-const CONTROL_BUTTON_CLASS_NAME = 'h-9 w-9 rounded-full text-[var(--ds-text-secondary)] hover:border-[var(--ds-border-strong)] hover:text-[var(--ds-text-primary)] disabled:opacity-40'
+const CONTROL_BUTTON_CLASS_NAME =
+    'h-9 w-9 rounded-full text-[var(--ds-text-secondary)] hover:border-[var(--ds-border-strong)] hover:text-[var(--ds-text-primary)] disabled:opacity-40'
 
 function getItemDelay(index: number, step: number): number {
     return Math.min(index * step, MAX_ITEM_ANIMATION_DELAY)
 }
 
-function getRootLabel(
-    kind: MachineDirectoryRootKind,
-    t: (key: string) => string
-): string {
+function getRootLabel(kind: RuntimeDirectoryRootKind, t: (key: string) => string): string {
     return t(`newSession.projectPicker.root.${kind}`)
 }
 
@@ -69,19 +64,14 @@ function PickerPathList(props: PickerListProps): React.JSX.Element | null {
     return (
         <div className="grid gap-2 sm:grid-cols-2">
             {props.paths.map((path, index) => (
-                <BlurFade
-                    key={path}
-                    delay={getItemDelay(index, PATH_ITEM_DELAY_STEP)}
-                    duration={0.18}
-                    offset={8}
-                >
+                <BlurFade key={path} delay={getItemDelay(index, PATH_ITEM_DELAY_STEP)} duration={0.18} offset={8}>
                     <Button
                         type="button"
                         variant="secondary"
                         size="sm"
                         onClick={() => props.onSelect(path)}
                         disabled={props.isDisabled}
-                        className="flex min-w-0 items-center gap-2 rounded-[18px] px-3 py-3 text-left shadow-[var(--ds-shadow-soft)] disabled:opacity-50 [&>[data-button-content]]:w-full [&>[data-button-content]]:justify-start"
+                        className="flex min-w-0 items-center gap-2 rounded-xl px-3 py-3 text-left shadow-[var(--ds-shadow-soft)] disabled:opacity-50 [&>[data-button-content]]:w-full [&>[data-button-content]]:justify-start"
                         title={path}
                     >
                         <ProjectIcon className="h-4 w-4 shrink-0 text-[var(--ds-accent-lime)]" />
@@ -113,38 +103,19 @@ function PickerDirectoryList(props: DirectoryEntryListProps): React.JSX.Element 
                         size="sm"
                         onClick={() => props.onSelect(entry.path)}
                         disabled={props.isDisabled}
-                        className="w-full rounded-[18px] px-3 py-3 text-left shadow-[var(--ds-shadow-soft)] disabled:opacity-50 [&>[data-button-content]]:w-full [&>[data-button-content]]:justify-between"
+                        className="w-full rounded-xl px-3 py-3 text-left shadow-[var(--ds-shadow-soft)] disabled:opacity-50 [&>[data-button-content]]:w-full [&>[data-button-content]]:justify-between"
                     >
                         <span className="flex min-w-0 items-center gap-2.5">
                             <FolderIcon className="h-4 w-4 shrink-0 text-[var(--ds-accent-gold)]" />
-                            <span className="truncate text-sm font-medium text-[var(--ds-text-primary)]">{entry.name}</span>
+                            <span className="truncate text-sm font-medium text-[var(--ds-text-primary)]">
+                                {entry.name}
+                            </span>
                         </span>
                         <FolderOpenIcon className="h-4 w-4 shrink-0 text-[var(--ds-text-muted)]" />
                     </Button>
                 </BlurFade>
             ))}
         </div>
-    )
-}
-
-function PickerControlButton(props: {
-    icon: React.JSX.Element
-    label: string
-    isDisabled?: boolean
-    onClick: () => void
-}): React.JSX.Element {
-    return (
-        <Button
-            type="button"
-            size="iconSm"
-            variant="secondary"
-            onClick={props.onClick}
-            disabled={props.isDisabled}
-            className={CONTROL_BUTTON_CLASS_NAME}
-            aria-label={props.label}
-        >
-            {props.icon}
-        </Button>
     )
 }
 
@@ -165,11 +136,10 @@ export const ProjectPickerDialog = memo(function ProjectPickerDialog(
         }
         return [...uniquePaths]
     }, [props.projectPaths, props.recentPaths])
-    const browser = useMachineDirectoryBrowser({
+    const browser = useRuntimeDirectoryBrowser({
         api: props.api,
-        machineId: props.machineId,
         initialPath: props.selectedPath,
-        enabled: props.open && props.isSupported
+        enabled: props.open && props.isSupported,
     })
 
     function handleSelect(path: string): void {
@@ -178,37 +148,40 @@ export const ProjectPickerDialog = memo(function ProjectPickerDialog(
     }
 
     const canOpenCurrentFolder = browser.hasCurrentDirectory
-    const rootButtons = browser.roots.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
-            {browser.roots.map((root) => (
-                <Button
-                    key={root.path}
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => browser.browseTo(root.path)}
-                    disabled={props.isDisabled}
-                    className="rounded-full px-3 py-1.5 text-xs font-medium text-[var(--ds-text-secondary)] hover:border-[var(--ds-border-strong)] hover:text-[var(--ds-text-primary)] disabled:opacity-50"
-                >
-                    {getRootLabel(root.kind, t)}
-                </Button>
-            ))}
-        </div>
-    ) : null
+    const rootButtons =
+        browser.roots.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+                {browser.roots.map((root) => (
+                    <Button
+                        key={root.path}
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => browser.browseTo(root.path)}
+                        disabled={props.isDisabled}
+                        className="rounded-full px-3 py-1.5 text-xs font-medium text-[var(--ds-text-secondary)] hover:border-[var(--ds-border-strong)] hover:text-[var(--ds-text-primary)] disabled:opacity-50"
+                    >
+                        {getRootLabel(root.kind, t)}
+                    </Button>
+                ))}
+            </div>
+        ) : null
 
     const browserAction = (
         <div className="flex items-center gap-2">
-            <PickerControlButton
+            <ProjectPickerControlButton
                 icon={<BackIcon className="h-4 w-4" />}
                 label={t('newSession.projectPicker.up')}
                 isDisabled={!browser.parentPath || props.isDisabled}
                 onClick={() => browser.browseTo(browser.parentPath)}
+                className={CONTROL_BUTTON_CLASS_NAME}
             />
-            <PickerControlButton
+            <ProjectPickerControlButton
                 icon={<RefreshIcon className={cn('h-4 w-4', browser.isRefreshing ? 'animate-spin' : '')} />}
                 label={t('newSession.projectPicker.refresh')}
                 isDisabled={props.isDisabled}
                 onClick={() => void browser.refresh()}
+                className={CONTROL_BUTTON_CLASS_NAME}
             />
         </div>
     )
@@ -216,7 +189,7 @@ export const ProjectPickerDialog = memo(function ProjectPickerDialog(
     return (
         <Dialog open={props.open} onOpenChange={props.onOpenChange}>
             <DialogContent className="max-w-2xl overflow-hidden p-0">
-                <div className="flex max-h-[min(78vh,720px)] flex-col">
+                <div className="ds-project-picker-dialog-body flex flex-col">
                     <div className="border-b border-[var(--ds-border-subtle)] px-5 py-4">
                         <DialogHeader className="gap-2 text-left">
                             <DialogTitle className="flex items-center gap-2 text-base font-semibold">
@@ -237,10 +210,14 @@ export const ProjectPickerDialog = memo(function ProjectPickerDialog(
                             <BlurFade delay={0.03}>
                                 {quickPaths.length > 0 ? (
                                     <section className="space-y-2.5">
-                                        <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--ds-text-muted)]">
+                                        <h3 className="ds-metric-label font-semibold text-[var(--ds-text-muted)]">
                                             {t('newSession.projectPicker.quick')}
                                         </h3>
-                                        <PickerPathList paths={quickPaths} isDisabled={props.isDisabled} onSelect={handleSelect} />
+                                        <PickerPathList
+                                            paths={quickPaths}
+                                            isDisabled={props.isDisabled}
+                                            onSelect={handleSelect}
+                                        />
                                     </section>
                                 ) : null}
                             </BlurFade>
@@ -248,7 +225,7 @@ export const ProjectPickerDialog = memo(function ProjectPickerDialog(
                             <BlurFade delay={0.06}>
                                 <section className="space-y-3">
                                     <div className="flex items-center justify-between gap-3">
-                                        <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--ds-text-muted)]">
+                                        <h3 className="ds-metric-label font-semibold text-[var(--ds-text-muted)]">
                                             {t('newSession.projectPicker.folders')}
                                         </h3>
                                         {props.isSupported ? browserAction : null}
@@ -279,10 +256,17 @@ export const ProjectPickerDialog = memo(function ProjectPickerDialog(
                                     ) : null}
 
                                     {props.isSupported && !browser.isLoading && browser.entries.length > 0 ? (
-                                        <PickerDirectoryList entries={browser.entries} isDisabled={props.isDisabled} onSelect={browser.browseTo} />
+                                        <PickerDirectoryList
+                                            entries={browser.entries}
+                                            isDisabled={props.isDisabled}
+                                            onSelect={browser.browseTo}
+                                        />
                                     ) : null}
 
-                                    {props.isSupported && !browser.isLoading && browser.entries.length === 0 && !browser.error ? (
+                                    {props.isSupported &&
+                                    !browser.isLoading &&
+                                    browser.entries.length === 0 &&
+                                    !browser.error ? (
                                         <p className="px-1 text-sm text-[var(--ds-text-muted)]">
                                             {t('newSession.projectPicker.empty')}
                                         </p>

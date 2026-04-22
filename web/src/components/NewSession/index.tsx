@@ -1,68 +1,68 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useState } from 'react'
 import type { ApiClient } from '@/api/client'
-import type { Machine } from '@/types/api'
 import { InlineNotice } from '@/components/InlineNotice'
-import { BlurFade } from '@/components/ui/blur-fade'
-import { usePlatform } from '@/hooks/usePlatform'
+import { MotionStaggerGroup, MotionStaggerItem } from '@/components/motion/motionPrimitives'
 import { useSpawnSession } from '@/hooks/mutations/useSpawnSession'
 import { useSessions } from '@/hooks/queries/useSessions'
+import { usePlatform } from '@/hooks/usePlatform'
 import { useRecentPaths } from '@/hooks/useRecentPaths'
 import { getNoticePreset } from '@/lib/noticePresets'
-import { formatUserFacingErrorMessage } from '@/lib/userFacingError'
 import { useTranslation } from '@/lib/use-translation'
-import type { AgentType, ModelReasoningEffortSelection, SessionRole, SessionType } from './types'
+import { formatUserFacingErrorMessage } from '@/lib/userFacingError'
+import type { LocalRuntime } from '@/types/api'
 import { ActionButtons } from './ActionButtons'
 import { DirectorySection } from './DirectorySection'
-import { MachineSelector } from './MachineSelector'
 import { NewSessionLaunchPanel } from './NewSessionLaunchPanel'
-import {
-    getDefaultAgentLaunchPreferences,
-    loadNewSessionPreferences,
-    saveNewSessionPreferences,
-} from './preferences'
+import { NewSessionModeToggle } from './NewSessionModeToggle'
+import { isEffectiveAgentReady } from './newSessionAvailability'
+import { type NewSessionMode } from './newSessionModes'
+import { RecoverLocalPanel } from './RecoverLocalPanel'
 import { SessionTypeSelector } from './SessionTypeSelector'
-import { resolveLaunchPermissionMode } from './launchConfig'
+import { useEffectiveNewSessionLaunchState } from './useEffectiveNewSessionLaunchState'
+import { useNewSessionCreateAction } from './useNewSessionCreateAction'
 import { useNewSessionDirectoryState } from './useNewSessionDirectoryState'
+import { useNewSessionLaunchForm } from './useNewSessionLaunchForm'
 import { usePiLaunchConfig } from './usePiLaunchConfig'
 import { usePiLaunchOptions } from './usePiLaunchOptions'
-import { formatRunnerSpawnError } from '../../utils/formatRunnerSpawnError'
+import { useRecoverLocalState } from './useRecoverLocalState'
 
 export function NewSession(props: {
     api: ApiClient
-    machines: Machine[]
-    isLoading?: boolean
+    runtime: LocalRuntime
+    initialMode?: NewSessionMode
     onSuccess: (sessionId: string) => void
     onCancel: () => void
-}) {
+}): React.JSX.Element {
     const { haptic } = usePlatform()
     const { t } = useTranslation()
-    const runnerErrorPreset = getNoticePreset('newSessionRunnerError', t)
     const createErrorPreset = getNoticePreset('newSessionCreateError', t)
     const { spawnSession, isPending, error: spawnError } = useSpawnSession(props.api)
     const { sessions } = useSessions(props.api)
-    const isFormDisabled = Boolean(isPending || props.isLoading)
-    const { getRecentPaths, addRecentPath, getLastUsedMachineId, setLastUsedMachineId } = useRecentPaths()
-    const initialPreferencesRef = useRef(loadNewSessionPreferences())
-    const initialPreferences = initialPreferencesRef.current
-    const initialAgentPreferences = initialPreferences.agentSettings[initialPreferences.agent]
-        ?? getDefaultAgentLaunchPreferences(initialPreferences.agent)
-
-    const [agentSettings, setAgentSettings] = useState(initialPreferences.agentSettings)
-    const [agent, setAgent] = useState<AgentType>(initialPreferences.agent)
-    const [sessionRole, setSessionRole] = useState<SessionRole>(initialPreferences.sessionRole)
-    const [model, setModel] = useState(initialAgentPreferences.model)
-    const [modelReasoningEffort, setModelReasoningEffort] = useState<ModelReasoningEffortSelection>(initialAgentPreferences.modelReasoningEffort)
-    const [yoloMode, setYoloMode] = useState(initialPreferences.yoloMode)
-    const [sessionType, setSessionType] = useState<SessionType>(initialPreferences.sessionType)
-    const [worktreeName, setWorktreeName] = useState('')
+    const isFormDisabled = isPending
+    const { getRecentPaths, addRecentPath } = useRecentPaths()
     const [error, setError] = useState<string | null>(null)
-    const worktreeInputRef = useRef<HTMLInputElement>(null)
-
-    useEffect(() => {
-        if (sessionType === 'worktree') {
-            worktreeInputRef.current?.focus()
-        }
-    }, [sessionType])
+    const {
+        agent,
+        model,
+        modelReasoningEffort,
+        yoloMode,
+        sessionType,
+        worktreeName,
+        worktreeInputRef,
+        buildPreferenceSnapshotFor,
+        updateAgentSetting,
+        getAgentLaunchPreferences,
+        setModel,
+        setModelReasoningEffort,
+        setAgentModel,
+        setAgentModelReasoningEffort,
+        setYoloMode,
+        setSessionType,
+        setWorktreeName,
+        handleAgentChange,
+        handleModelChange,
+        handleReasoningEffortChange,
+    } = useNewSessionLaunchForm()
 
     const {
         createLabel,
@@ -70,227 +70,210 @@ export function NewSession(props: {
         checkPathsExists,
         confirmDirectoryCreation,
         directoryCreationConfirmed,
-        handleMachineChange,
         missingWorktreeDirectory,
-        selectedMachine,
-        selectedMachineId,
         trimmedDirectory,
     } = useNewSessionDirectoryState({
         api: props.api,
-        machines: props.machines,
+        runtime: props.runtime,
         sessions,
         isDisabled: isFormDisabled,
         sessionType,
         t,
         getRecentPaths,
-        getLastUsedMachineId
     })
-    const runnerSpawnError = useMemo(() => formatRunnerSpawnError(selectedMachine), [selectedMachine])
 
     const { config: piLaunchConfig, error: piLaunchConfigError } = usePiLaunchConfig({
         api: props.api,
         agent,
-        machineId: selectedMachineId,
         directory: trimmedDirectory,
-        t
+        t,
     })
-
-    const updateAgentSetting = useCallback((targetAgent: AgentType, nextValues: Partial<{
-        model: string
-        modelReasoningEffort: ModelReasoningEffortSelection
-    }>) => {
-        setAgentSettings((previousSettings) => ({
-            ...previousSettings,
-            [targetAgent]: {
-                ...(previousSettings[targetAgent] ?? getDefaultAgentLaunchPreferences(targetAgent)),
-                ...nextValues,
-            }
-        }))
-    }, [])
-
-    const handleAgentChange = useCallback((nextAgent: AgentType) => {
-        const nextAgentPreferences = agentSettings[nextAgent] ?? getDefaultAgentLaunchPreferences(nextAgent)
-        setAgent(nextAgent)
-        setModel(nextAgentPreferences.model)
-        setModelReasoningEffort(nextAgentPreferences.modelReasoningEffort)
-    }, [agentSettings])
-
-    const handleModelChange = useCallback((nextModel: string) => {
-        setModel(nextModel)
-        updateAgentSetting(agent, { model: nextModel })
-    }, [agent, updateAgentSetting])
-
-    const handleReasoningEffortChange = useCallback((nextValue: ModelReasoningEffortSelection) => {
-        setModelReasoningEffort(nextValue)
-        updateAgentSetting(agent, { modelReasoningEffort: nextValue })
-    }, [agent, updateAgentSetting])
-
-    async function handleCreate() {
-        if (!selectedMachineId || !trimmedDirectory) return
-
-        setError(null)
-        try {
-            const existsResult = await checkPathsExists([trimmedDirectory])
-            const directoryExists = existsResult[trimmedDirectory]
-
-            if (sessionType === 'worktree' && directoryExists === false) {
-                haptic.notification('error')
-                setError(t('session.directoryMissingWorktree'))
-                return
-            }
-
-            if (sessionType === 'simple' && directoryExists === false && !directoryCreationConfirmed) {
-                confirmDirectoryCreation()
-                return
-            }
-
-            const resolvedModel = model !== 'auto' && agent !== 'opencode' ? model : undefined
-            const resolvedModelReasoningEffort = modelReasoningEffort !== 'default'
-                ? modelReasoningEffort
-                : undefined
-            const resolvedPermissionMode = resolveLaunchPermissionMode(agent, yoloMode)
-            const result = await spawnSession({
-                machineId: selectedMachineId,
-                directory: trimmedDirectory,
-                agent,
-                sessionRole,
-                model: resolvedModel,
-                modelReasoningEffort: resolvedModelReasoningEffort,
-                permissionMode: resolvedPermissionMode,
-                sessionType,
-                worktreeName: sessionType === 'worktree' ? (worktreeName.trim() || undefined) : undefined
-            })
-
-            if (result.type === 'success') {
-                haptic.notification('success')
-                setLastUsedMachineId(selectedMachineId)
-                addRecentPath(selectedMachineId, trimmedDirectory)
-                saveNewSessionPreferences({
-                    agent,
-                    sessionRole,
-                    sessionType,
-                    yoloMode,
-                    agentSettings: {
-                        ...agentSettings,
-                        [agent]: {
-                            model,
-                            modelReasoningEffort,
-                        }
-                    }
-                })
-                props.onSuccess(result.session.id)
-                return
-            }
-
-            haptic.notification('error')
-            setError(formatUserFacingErrorMessage(result.message, {
-                t,
-                fallbackKey: 'error.session.create'
-            }))
-        } catch (e) {
-            haptic.notification('error')
-            setError(formatUserFacingErrorMessage(e, {
-                t,
-                fallbackKey: 'error.session.create'
-            }))
-        }
-    }
 
     const { modelOptions, reasoningOptions } = usePiLaunchOptions({
         agent,
         model,
         modelReasoningEffort,
-        machineId: selectedMachineId,
         directory: trimmedDirectory,
         piLaunchConfig,
         updateAgentSetting,
         setModel,
-        setModelReasoningEffort
+        setModelReasoningEffort,
     })
 
-    const canCreate = Boolean(selectedMachineId && trimmedDirectory && !isFormDisabled && !missingWorktreeDirectory)
+    const {
+        agentAvailability,
+        isAgentAvailabilityLoading,
+        agentAvailabilityError,
+        refetchAgentAvailability,
+        effectiveAgentSelection,
+        effectiveModel,
+        effectiveReasoningEffort,
+        handleLaunchModelChange,
+        handleLaunchReasoningEffortChange,
+    } = useEffectiveNewSessionLaunchState({
+        api: props.api,
+        directory: trimmedDirectory,
+        agent,
+        model,
+        modelReasoningEffort,
+        getAgentLaunchPreferences,
+        setAgentModel,
+        setAgentModelReasoningEffort,
+        handleModelChange,
+        handleReasoningEffortChange,
+    })
+
+    const formatRecoverError = useCallback(
+        (nextError: unknown) =>
+            formatUserFacingErrorMessage(nextError, {
+                t,
+                fallbackKey: 'chat.resumeFailed.generic',
+            }),
+        [t]
+    )
+
+    const recoverLocal = useRecoverLocalState({
+        api: props.api,
+        initialMode: props.initialMode,
+        isFormDisabled,
+        directory: trimmedDirectory,
+        haptic,
+        onSuccess: props.onSuccess,
+        clearError: () => setError(null),
+        setError,
+        formatError: formatRecoverError,
+        t,
+    })
+
+    const formatCreateError = useCallback(
+        (nextError: unknown) =>
+            formatUserFacingErrorMessage(nextError, {
+                t,
+                fallbackKey: 'error.session.create',
+            }),
+        [t]
+    )
+    const { canCreate: hasCreateDirectory, handleCreate } = useNewSessionCreateAction({
+        trimmedDirectory,
+        sessionType,
+        worktreeName,
+        yoloMode,
+        directoryCreationConfirmed,
+        effectiveAgent: effectiveAgentSelection.effectiveAgent,
+        effectiveModel,
+        effectiveReasoningEffort,
+        checkPathsExists,
+        confirmDirectoryCreation,
+        spawnSession,
+        buildPreferenceSnapshotFor,
+        addRecentPath,
+        onSuccess: props.onSuccess,
+        notifySuccess: () => haptic.notification('success'),
+        notifyError: () => haptic.notification('error'),
+        setError,
+        t,
+        formatError: formatCreateError,
+    })
+    const canCreate =
+        hasCreateDirectory &&
+        !isFormDisabled &&
+        !missingWorktreeDirectory &&
+        !isAgentAvailabilityLoading &&
+        isEffectiveAgentReady(effectiveAgentSelection.effectiveAgentAvailability)
+    const submitLabel = recoverLocal.mode === 'recover-local' ? recoverLocal.recoverActionLabel : createLabel
+    const handleRefreshAgentAvailability = useCallback((): void => {
+        void refetchAgentAvailability()
+    }, [refetchAgentAvailability])
+
     return (
-        <div className="flex flex-col gap-4 pb-8 pt-4">
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
-                <div className="space-y-4">
-                    <BlurFade delay={0.02}>
-                        <MachineSelector
-                            machines={props.machines}
-                            machineId={selectedMachineId}
-                            isLoading={props.isLoading}
-                            isDisabled={isFormDisabled}
-                            onChange={handleMachineChange}
-                        />
-                    </BlurFade>
+        <MotionStaggerGroup className="flex flex-col gap-4 pb-8 pt-4" delay={0.03} stagger={0.09}>
+            <MotionStaggerItem y={18}>
+                <NewSessionModeToggle
+                    mode={recoverLocal.mode}
+                    isDisabled={isFormDisabled}
+                    onModeChange={recoverLocal.setMode}
+                />
+            </MotionStaggerItem>
 
-                    {runnerSpawnError ? (
-                        <InlineNotice
-                            tone={runnerErrorPreset.tone}
-                            title={runnerErrorPreset.title}
-                            description={t('newSession.machine.lastError', { error: runnerSpawnError })}
-                            className="shadow-none"
-                        />
+            <MotionStaggerItem y={20}>
+                <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
+                    <MotionStaggerGroup className="space-y-4" delay={0.02} stagger={0.08}>
+                        <MotionStaggerItem x={20} y={12}>
+                            <DirectorySection {...directorySectionProps} />
+                        </MotionStaggerItem>
+
+                        {recoverLocal.mode === 'start' ? (
+                            <MotionStaggerItem x={-18} y={12}>
+                                <SessionTypeSelector
+                                    sessionType={sessionType}
+                                    worktreeName={worktreeName}
+                                    worktreeInputRef={worktreeInputRef}
+                                    isDisabled={isFormDisabled}
+                                    onSessionTypeChange={setSessionType}
+                                    onWorktreeNameChange={setWorktreeName}
+                                />
+                            </MotionStaggerItem>
+                        ) : (
+                            <MotionStaggerItem x={-18} y={12}>
+                                <RecoverLocalPanel {...recoverLocal.panelProps} />
+                            </MotionStaggerItem>
+                        )}
+                    </MotionStaggerGroup>
+
+                    {recoverLocal.mode === 'start' ? (
+                        <MotionStaggerItem className="xl:sticky xl:top-5 xl:self-start" x={26} y={14} duration={0.42}>
+                            <NewSessionLaunchPanel
+                                form={{
+                                    agent: effectiveAgentSelection.effectiveAgent,
+                                    model: effectiveModel,
+                                    modelReasoningEffort: effectiveReasoningEffort,
+                                    yoloMode,
+                                }}
+                                options={{
+                                    modelOptions,
+                                    reasoningOptions,
+                                    isDisabled: isFormDisabled,
+                                    agentAvailability,
+                                    agentAvailabilityLoading: isAgentAvailabilityLoading,
+                                    agentAvailabilityError,
+                                    savedAgent: agent,
+                                    savedAgentAvailability: effectiveAgentSelection.rawAgentAvailability,
+                                    hasAgentFallback: effectiveAgentSelection.hasFallback,
+                                    piLaunchConfigError,
+                                }}
+                                handlers={{
+                                    onAgentChange: handleAgentChange,
+                                    onModelChange: handleLaunchModelChange,
+                                    onReasoningEffortChange: handleLaunchReasoningEffortChange,
+                                    onYoloModeChange: setYoloMode,
+                                    onRefreshAgentAvailability: handleRefreshAgentAvailability,
+                                }}
+                            />
+                        </MotionStaggerItem>
                     ) : null}
-
-                    <BlurFade delay={0.08}>
-                        <DirectorySection {...directorySectionProps} />
-                    </BlurFade>
-
-                    <BlurFade delay={0.14}>
-                        <SessionTypeSelector
-                            sessionType={sessionType}
-                            worktreeName={worktreeName}
-                            worktreeInputRef={worktreeInputRef}
-                            isDisabled={isFormDisabled}
-                            onSessionTypeChange={setSessionType}
-                            onWorktreeNameChange={setWorktreeName}
-                        />
-                    </BlurFade>
                 </div>
-
-                <BlurFade delay={0.06} className="xl:sticky xl:top-5 xl:self-start">
-                    <NewSessionLaunchPanel
-                        form={{
-                            agent,
-                            sessionRole,
-                            model,
-                            modelReasoningEffort,
-                            yoloMode
-                        }}
-                        options={{
-                            modelOptions,
-                            reasoningOptions,
-                            isDisabled: isFormDisabled,
-                            piLaunchConfigError
-                        }}
-                        handlers={{
-                            onAgentChange: handleAgentChange,
-                            onSessionRoleChange: setSessionRole,
-                            onModelChange: handleModelChange,
-                            onReasoningEffortChange: handleReasoningEffortChange,
-                            onYoloModeChange: setYoloMode
-                        }}
-                    />
-                </BlurFade>
-            </div>
+            </MotionStaggerItem>
 
             {(error ?? spawnError) ? (
-                <InlineNotice
-                    tone={createErrorPreset.tone}
-                    title={createErrorPreset.title}
-                    description={error ?? spawnError}
-                    className="shadow-none"
-                />
+                <MotionStaggerItem y={12}>
+                    <InlineNotice
+                        tone={createErrorPreset.tone}
+                        title={createErrorPreset.title}
+                        description={error ?? spawnError ?? null}
+                    />
+                </MotionStaggerItem>
             ) : null}
 
-            <ActionButtons
-                isPending={isPending}
-                canCreate={canCreate}
-                isDisabled={isFormDisabled}
-                createLabel={createLabel}
-                onCancel={props.onCancel}
-                onCreate={handleCreate}
-            />
-        </div>
+            <MotionStaggerItem y={14}>
+                <ActionButtons
+                    canCreate={recoverLocal.mode === 'recover-local' ? recoverLocal.canRecover : canCreate}
+                    isDisabled={isFormDisabled || recoverLocal.isRecovering}
+                    isPending={isPending || recoverLocal.isRecovering}
+                    createLabel={submitLabel}
+                    onCreate={recoverLocal.mode === 'recover-local' ? recoverLocal.handleRecover : handleCreate}
+                    onCancel={props.onCancel}
+                />
+            </MotionStaggerItem>
+        </MotionStaggerGroup>
     )
 }

@@ -10,21 +10,14 @@ type FileContentViewProps = {
 
 export default function FileContentView(props: FileContentViewProps): React.JSX.Element {
     if (props.mode === 'diff') {
-        return (
-            <CodeBlock
-                code={props.content}
-                language="diff"
-                highlight="always"
-                showCopyButton={false}
-            />
-        )
+        return <CodeBlock code={props.content} language="diff" highlight="auto" showCopyButton={false} />
     }
 
     return (
         <CodeBlock
             code={props.content}
             language={props.language}
-            highlight="always"
+            highlight="auto"
             showCopyButton={props.showCopyButton}
         />
     )

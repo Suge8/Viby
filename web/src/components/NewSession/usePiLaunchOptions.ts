@@ -1,34 +1,56 @@
 import { useEffect, useMemo } from 'react'
-import type { AgentLaunchConfig } from '@/types/api'
 import {
-    findPiModelCapability,
     getPiLaunchModelOptions,
     getPiLaunchReasoningEffortOptions,
     MODEL_OPTIONS,
     REASONING_EFFORT_OPTIONS,
 } from '@/lib/sessionConfigOptions'
-import type { AgentType, ModelReasoningEffortSelection } from './types'
+import { findPiModelCapability } from '@/lib/sessionConfigPiSupport'
+import type { AgentLaunchConfig } from '@/types/api'
 import { getDefaultAgentLaunchPreferences } from './preferences'
+import type { AgentType, ModelReasoningEffortSelection } from './types'
 
 type PiAgentLaunchConfig = AgentLaunchConfig & { agent: 'pi' }
+type LaunchOption<T extends string> = { value: T; label: string; labelKey?: string }
 
 type UsePiLaunchOptionsOptions = {
     agent: AgentType
     model: string
     modelReasoningEffort: ModelReasoningEffortSelection
-    machineId: string | null
     directory: string
     piLaunchConfig: PiAgentLaunchConfig | null
-    updateAgentSetting: (targetAgent: AgentType, nextValues: Partial<{
-        model: string
-        modelReasoningEffort: ModelReasoningEffortSelection
-    }>) => void
+    updateAgentSetting: (
+        targetAgent: AgentType,
+        nextValues: Partial<{
+            model: string
+            modelReasoningEffort: ModelReasoningEffortSelection
+        }>
+    ) => void
     setModel: (value: string) => void
     setModelReasoningEffort: (value: ModelReasoningEffortSelection) => void
 }
 
 function canNormalizePiOptions(options: UsePiLaunchOptionsOptions): boolean {
-    return !(options.agent === 'pi' && options.machineId && options.directory && !options.piLaunchConfig)
+    return !(options.agent === 'pi' && options.directory && !options.piLaunchConfig)
+}
+
+export function withCurrentLaunchOption<T extends string>(
+    options: ReadonlyArray<LaunchOption<T>>,
+    currentValue: T,
+    defaultValue: T
+): Array<LaunchOption<T>> {
+    const trimmedValue = currentValue.trim() as T
+    if (!trimmedValue || trimmedValue === defaultValue || options.some((option) => option.value === trimmedValue)) {
+        return [...options]
+    }
+
+    const currentOption = { value: trimmedValue, label: trimmedValue }
+    if (options.length === 0) {
+        return [currentOption]
+    }
+
+    const [firstOption, ...restOptions] = options
+    return [firstOption, currentOption, ...restOptions]
 }
 
 export function usePiLaunchOptions(options: UsePiLaunchOptionsOptions): {
@@ -40,43 +62,30 @@ export function usePiLaunchOptions(options: UsePiLaunchOptionsOptions): {
             return null
         }
 
-        const activeModel = options.model !== 'auto'
-            ? options.model
-            : (options.piLaunchConfig?.defaultModel ?? null)
+        const activeModel = options.model !== 'auto' ? options.model : (options.piLaunchConfig?.defaultModel ?? null)
         return findPiModelCapability(activeModel, options.piLaunchConfig?.availableModels)
     }, [options.agent, options.model, options.piLaunchConfig])
 
     const modelOptions = useMemo(() => {
         if (options.agent !== 'pi') {
-            return MODEL_OPTIONS[options.agent]
+            return withCurrentLaunchOption(MODEL_OPTIONS[options.agent], options.model, 'auto')
         }
 
         const nextOptions = getPiLaunchModelOptions(options.piLaunchConfig?.availableModels)
-        if (options.model === 'auto' || nextOptions.some((option) => option.value === options.model)) {
-            return nextOptions
-        }
-
-        return [nextOptions[0], { value: options.model, label: options.model }, ...nextOptions.slice(1)]
+        return withCurrentLaunchOption(nextOptions, options.model, 'auto')
     }, [options.agent, options.model, options.piLaunchConfig])
 
     const reasoningOptions = useMemo(() => {
         if (options.agent !== 'pi') {
-            return REASONING_EFFORT_OPTIONS[options.agent]
+            return withCurrentLaunchOption(
+                REASONING_EFFORT_OPTIONS[options.agent],
+                options.modelReasoningEffort,
+                'default'
+            )
         }
 
         const nextOptions = getPiLaunchReasoningEffortOptions(activePiCapability?.supportedThinkingLevels ?? null)
-        if (
-            options.modelReasoningEffort === 'default'
-            || nextOptions.some((option) => option.value === options.modelReasoningEffort)
-        ) {
-            return nextOptions
-        }
-
-        return [
-            nextOptions[0],
-            { value: options.modelReasoningEffort, label: options.modelReasoningEffort },
-            ...nextOptions.slice(1)
-        ]
+        return withCurrentLaunchOption(nextOptions, options.modelReasoningEffort, 'default')
     }, [activePiCapability, options.agent, options.modelReasoningEffort])
 
     useEffect(() => {
@@ -95,11 +104,10 @@ export function usePiLaunchOptions(options: UsePiLaunchOptionsOptions): {
         modelOptions,
         options.agent,
         options.directory,
-        options.machineId,
         options.model,
         options.piLaunchConfig,
         options.setModel,
-        options.updateAgentSetting
+        options.updateAgentSetting,
     ])
 
     useEffect(() => {
@@ -111,22 +119,22 @@ export function usePiLaunchOptions(options: UsePiLaunchOptionsOptions): {
             return
         }
 
-        const fallbackEffort = reasoningOptions[0]?.value ?? getDefaultAgentLaunchPreferences(options.agent).modelReasoningEffort
+        const fallbackEffort =
+            reasoningOptions[0]?.value ?? getDefaultAgentLaunchPreferences(options.agent).modelReasoningEffort
         options.setModelReasoningEffort(fallbackEffort)
         options.updateAgentSetting(options.agent, { modelReasoningEffort: fallbackEffort })
     }, [
         options.agent,
         options.directory,
-        options.machineId,
         options.modelReasoningEffort,
         options.piLaunchConfig,
         options.setModelReasoningEffort,
         options.updateAgentSetting,
-        reasoningOptions
+        reasoningOptions,
     ])
 
     return {
         modelOptions,
-        reasoningOptions
+        reasoningOptions,
     }
 }

@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { PROTOCOL_VERSION } from '@viby/protocol'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nContext, I18nProvider } from '@/lib/i18n-context'
 import { en } from '@/lib/locales'
-import { PROTOCOL_VERSION } from '@viby/protocol'
 import SettingsPage from './index'
 
 const usePushNotificationsMock = vi.fn()
@@ -11,7 +11,7 @@ const usePushNotificationsMock = vi.fn()
 vi.mock('@tanstack/react-router', () => ({
     useNavigate: () => vi.fn(),
     useRouter: () => ({ history: { back: vi.fn() } }),
-    useLocation: () => '/settings',
+    useLocation: () => '/sessions/settings',
 }))
 
 // Mock useFontScale hook
@@ -35,39 +35,35 @@ vi.mock('@/hooks/useTheme', () => ({
 }))
 
 vi.mock('@/components/ui/blur-fade', () => ({
-    BlurFade: (props: { children: React.ReactNode }) => <div>{props.children}</div>
+    BlurFade: (props: { children: React.ReactNode }) => <div>{props.children}</div>,
 }))
 
 vi.mock('@/lib/app-context', () => ({
     useAppContext: () => ({
         api: {} as object,
         token: 'session-token',
-        baseUrl: 'https://app.viby.run'
-    })
+        baseUrl: 'https://app.viby.run',
+    }),
 }))
 
 vi.mock('@/hooks/usePushNotifications', () => ({
-    usePushNotifications: () => usePushNotificationsMock()
+    usePushNotifications: () => usePushNotificationsMock(),
 }))
 
 vi.mock('@/hooks/useStandaloneDisplayMode', () => ({
-    useStandaloneDisplayMode: () => true
+    useStandaloneDisplayMode: () => true,
 }))
 
 vi.mock('@/hooks/usePWAInstall', () => ({
-    isIOSSafariBrowser: () => false
+    isIOSSafariBrowser: () => false,
 }))
 
 vi.mock('@/lib/runtimeAssetPolicy', () => ({
-    shouldRegisterServiceWorkerForOrigin: () => true
+    shouldRegisterServiceWorkerForOrigin: () => true,
 }))
 
 function renderWithProviders(ui: React.ReactElement) {
-    return render(
-        <I18nProvider>
-            {ui}
-        </I18nProvider>
-    )
+    return render(<I18nProvider>{ui}</I18nProvider>)
 }
 
 function renderWithSpyT(ui: React.ReactElement) {
@@ -141,14 +137,17 @@ describe('SettingsPage', () => {
 
     it('uses the stage shell layout for full-width settings content', () => {
         const { container } = renderWithProviders(<SettingsPage />)
-        expect(container.firstElementChild).toHaveClass('h-full', 'overflow-y-auto')
+        expect(container.firstElementChild).toHaveAttribute('data-testid', 'session-route-page-surface')
+        expect(container.firstElementChild).toHaveClass('overflow-y-auto')
         expect(container.firstElementChild?.firstElementChild).toHaveClass('ds-stage-shell')
         expect(container.firstElementChild?.firstElementChild).not.toHaveClass('ds-page-shell')
     })
 
     it('does not render the old settings subtitle hero copy', () => {
         renderWithProviders(<SettingsPage />)
-        expect(screen.queryByText('Personalize Viby for your screen, theme, and reading comfort.')).not.toBeInTheDocument()
+        expect(
+            screen.queryByText('Personalize Viby for your screen, theme, and reading comfort.')
+        ).not.toBeInTheDocument()
     })
 
     it('renders the notifications section with an explicit enable action', async () => {

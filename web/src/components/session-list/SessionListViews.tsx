@@ -1,68 +1,54 @@
+import { MotionStaggerGroup, MotionStaggerItem } from '@/components/motion/motionPrimitives'
 import { SessionListAnimatedItem } from '@/components/session-list/SessionListAnimatedItem'
-import type {
-    SessionListManagerGroupState,
-    SessionListRenderContext
-} from '@/components/session-list/sessionListContracts'
-import { SessionListManagerGroup } from '@/components/session-list/SessionListManagerGroup'
 import { SessionListSectionHeader } from '@/components/session-list/SessionListSectionHeader'
-import type {
-    SessionListRow,
-    SessionListSection
-} from '@/components/session-list/sessionListUtils'
+import type { SessionListRenderContext } from '@/components/session-list/sessionListContracts'
+import type { SessionListSection } from '@/components/session-list/sessionListUtils'
 
 const SESSION_LIST_SECTION_STACK_CLASS_NAME = 'flex flex-col gap-4 px-3 pb-4 pt-1'
-const SESSION_LIST_ARCHIVE_STACK_CLASS_NAME = 'flex flex-col gap-2 px-3 pb-4 pt-1'
 const SESSION_LIST_SECTION_CARD_STACK_CLASS_NAME = 'flex flex-col gap-2'
 
-type SessionMainViewProps = {
-    sections: readonly SessionListSection[]
-    managerGroups: SessionListManagerGroupState
+type SessionListViewProps = {
+    activeSection: SessionListSection | null
     renderContext: SessionListRenderContext
     emptyLabel: string
     t: (key: string, params?: Record<string, string | number>) => string
 }
 
-type SessionArchiveViewProps = {
-    rows: readonly SessionListRow[]
-    managerGroups: SessionListManagerGroupState
-    renderContext: SessionListRenderContext
-    emptyLabel: string
-}
-
-export function SessionMainView(props: SessionMainViewProps): React.JSX.Element {
-    if (props.sections.length === 0) {
+export function SessionListView(props: SessionListViewProps): React.JSX.Element {
+    if (!props.activeSection) {
         return (
             <div className={SESSION_LIST_SECTION_STACK_CLASS_NAME}>
-                <SessionListEmptyState label={props.emptyLabel} />
+                <MotionStaggerGroup stagger={0.05}>
+                    <MotionStaggerItem y={16}>
+                        <SessionListEmptyState label={props.emptyLabel} />
+                    </MotionStaggerItem>
+                </MotionStaggerGroup>
             </div>
         )
     }
 
     return (
         <div className={SESSION_LIST_SECTION_STACK_CLASS_NAME}>
-            {props.sections.map((section) => (
-                <section key={section.id} className="flex flex-col gap-2">
+            <MotionStaggerGroup className="flex flex-col gap-2" delay={0.01} stagger={0.055}>
+                <MotionStaggerItem y={12}>
                     <SessionListSectionHeader
-                        count={section.count}
-                        label={props.t(section.titleKey)}
+                        count={props.activeSection.count}
+                        label={props.t(props.activeSection.titleKey)}
                     />
-                    <div className={SESSION_LIST_SECTION_CARD_STACK_CLASS_NAME}>
-                        {section.rows.map((row) => renderSessionListRow(row, props.renderContext, props.managerGroups))}
-                    </div>
-                </section>
-            ))}
-        </div>
-    )
-}
-
-export function SessionArchiveView(props: SessionArchiveViewProps): React.JSX.Element {
-    return (
-        <div className={SESSION_LIST_ARCHIVE_STACK_CLASS_NAME}>
-            {props.rows.length === 0 ? (
-                <SessionListEmptyState label={props.emptyLabel} />
-            ) : (
-                props.rows.map((row) => renderSessionListRow(row, props.renderContext, props.managerGroups))
-            )}
+                </MotionStaggerItem>
+                <div className={SESSION_LIST_SECTION_CARD_STACK_CLASS_NAME}>
+                    {props.activeSection.rows.map((row, rowIndex) => (
+                        <MotionStaggerItem key={row.id} x={rowIndex % 2 === 0 ? -18 : 18} y={8} scaleFrom={0.992}>
+                            <SessionListAnimatedItem
+                                session={row.session}
+                                hasUnseenReply={props.renderContext.hasUnseenReply(row.session)}
+                                selection={props.renderContext.selection}
+                                onOpenActionMenu={props.renderContext.onOpenActionMenu}
+                            />
+                        </MotionStaggerItem>
+                    ))}
+                </div>
+            </MotionStaggerGroup>
         </div>
     )
 }
@@ -72,32 +58,5 @@ function SessionListEmptyState(props: { label: string }): React.JSX.Element {
         <div className="rounded-[var(--ds-radius-lg)] border border-dashed border-[var(--app-divider)] px-4 py-6 text-sm text-[var(--app-hint)]">
             {props.label}
         </div>
-    )
-}
-
-function renderSessionListRow(
-    row: SessionListRow,
-    renderContext: SessionListRenderContext,
-    managerGroups: SessionListManagerGroupState
-): React.JSX.Element {
-    if (row.kind === 'manager-group') {
-        return (
-            <SessionListManagerGroup
-                key={row.id}
-                group={row}
-                renderContext={renderContext}
-                managerGroups={managerGroups}
-            />
-        )
-    }
-
-    return (
-        <SessionListAnimatedItem
-            key={row.id}
-            session={row.session}
-            hasUnseenReply={renderContext.hasUnseenReply(row.session)}
-            selection={renderContext.selection}
-            onOpenActionMenu={renderContext.onOpenActionMenu}
-        />
     )
 }

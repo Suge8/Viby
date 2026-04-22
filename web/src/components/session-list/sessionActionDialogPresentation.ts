@@ -1,4 +1,6 @@
-type SessionActionDialogKind = 'archive' | 'close' | 'delete' | 'unarchive' | null
+import type { ConfirmableSessionActionId } from './sessionActionAvailability'
+
+type SessionActionDialogKind = ConfirmableSessionActionId | null
 
 export type { SessionActionDialogKind }
 
@@ -15,33 +17,19 @@ export function getSessionActionDialogConfig(
     t: (key: string, params?: Record<string, string | number>) => string
 ): SessionActionDialogConfig | null {
     switch (dialogKind) {
-        case 'archive':
+        case 'stop':
             return {
-                title: t('dialog.archive.title'),
-                description: t('dialog.archive.description', { name: sessionTitle }),
-                confirmLabel: t('dialog.archive.confirm'),
-                confirmingLabel: t('dialog.archive.confirming')
-            }
-        case 'close':
-            return {
-                title: t('dialog.close.title'),
-                description: t('dialog.close.description', { name: sessionTitle }),
-                confirmLabel: t('dialog.close.confirm'),
-                confirmingLabel: t('dialog.close.confirming')
+                title: t('dialog.stop.title'),
+                description: t('dialog.stop.description', { name: sessionTitle }),
+                confirmLabel: t('dialog.stop.confirm'),
+                confirmingLabel: t('dialog.stop.confirming'),
             }
         case 'delete':
             return {
                 title: t('dialog.delete.title'),
                 description: t('dialog.delete.description', { name: sessionTitle }),
                 confirmLabel: t('dialog.delete.confirm'),
-                confirmingLabel: t('dialog.delete.confirming')
-            }
-        case 'unarchive':
-            return {
-                title: t('dialog.unarchive.title'),
-                description: t('dialog.unarchive.description', { name: sessionTitle }),
-                confirmLabel: t('dialog.unarchive.confirm'),
-                confirmingLabel: t('dialog.unarchive.confirming')
+                confirmingLabel: t('dialog.delete.confirming'),
             }
         default:
             return null

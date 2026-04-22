@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Terminal } from '@xterm/xterm'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTerminalSocket } from '@/hooks/useTerminalSocket'
 import { createRandomId } from '@/lib/id'
 import { applyModifierState, type ModifierState, shouldResetModifiers } from '@/routes/sessions/terminalQuickInput'
@@ -25,6 +25,7 @@ type UseTerminalPageControllerResult = {
     handleResize: (cols: number, rows: number) => void
     handleTerminalMount: (terminal: Terminal) => void
     quickInputDisabled: boolean
+    terminalContentReady: boolean
     terminalState: ReturnType<typeof useTerminalSocket>['state']
     writePlainInput: (text: string) => boolean
 }
@@ -38,6 +39,7 @@ export function useTerminalPageController(options: UseTerminalPageControllerOpti
     const lastSizeRef = useRef<{ cols: number; rows: number } | null>(null)
     const modifierStateRef = useRef<ModifierState>({ ctrl: false, alt: false })
     const [exitInfo, setExitInfo] = useState<ExitInfo | null>(null)
+    const [terminalContentReady, setTerminalContentReady] = useState(false)
     const [ctrlActive, setCtrlActive] = useState(false)
     const [altActive, setAltActive] = useState(false)
 
@@ -58,15 +60,18 @@ export function useTerminalPageController(options: UseTerminalPageControllerOpti
 
     useEffect(() => {
         onOutput((data) => {
+            if (data.length > 0) {
+                setTerminalContentReady(true)
+            }
             terminalRef.current?.write(data)
         })
     }, [onOutput])
 
     useEffect(() => {
         onExit((code, signal) => {
+            setTerminalContentReady(true)
             setExitInfo({ code, signal })
             terminalRef.current?.write(`\r\n[process exited${code !== null ? ` with code ${code}` : ''}]`)
-            connectOnceRef.current = false
         })
     }, [onExit])
 
@@ -79,37 +84,46 @@ export function useTerminalPageController(options: UseTerminalPageControllerOpti
         setAltActive(false)
     }, [])
 
-    const dispatchSequence = useCallback((sequence: string, modifierState: ModifierState) => {
-        write(applyModifierState(sequence, modifierState))
+    const dispatchSequence = useCallback(
+        (sequence: string, modifierState: ModifierState) => {
+            write(applyModifierState(sequence, modifierState))
 
-        if (shouldResetModifiers(sequence, modifierState)) {
-            resetModifiers()
-        }
-    }, [resetModifiers, write])
+            if (shouldResetModifiers(sequence, modifierState)) {
+                resetModifiers()
+            }
+        },
+        [resetModifiers, write]
+    )
 
-    const handleTerminalMount = useCallback((terminal: Terminal) => {
-        terminalRef.current = terminal
-        inputDisposableRef.current?.dispose()
-        inputDisposableRef.current = terminal.onData((data) => {
-            dispatchSequence(data, modifierStateRef.current)
-        })
-    }, [dispatchSequence])
+    const handleTerminalMount = useCallback(
+        (terminal: Terminal) => {
+            terminalRef.current = terminal
+            inputDisposableRef.current?.dispose()
+            inputDisposableRef.current = terminal.onData((data) => {
+                dispatchSequence(data, modifierStateRef.current)
+            })
+        },
+        [dispatchSequence]
+    )
 
-    const handleResize = useCallback((cols: number, rows: number) => {
-        lastSizeRef.current = { cols, rows }
+    const handleResize = useCallback(
+        (cols: number, rows: number) => {
+            lastSizeRef.current = { cols, rows }
 
-        if (!sessionActive) {
-            return
-        }
+            if (!sessionActive) {
+                return
+            }
 
-        if (!connectOnceRef.current) {
-            connectOnceRef.current = true
-            connect(cols, rows)
-            return
-        }
+            if (!connectOnceRef.current) {
+                connectOnceRef.current = true
+                connect(cols, rows)
+                return
+            }
 
-        resize(cols, rows)
-    }, [connect, resize, sessionActive])
+            resize(cols, rows)
+        },
+        [connect, resize, sessionActive]
+    )
 
     useEffect(() => {
         if (!sessionActive || connectOnceRef.current || !lastSizeRef.current) {
@@ -123,6 +137,7 @@ export function useTerminalPageController(options: UseTerminalPageControllerOpti
     useEffect(() => {
         connectOnceRef.current = false
         setExitInfo(null)
+        setTerminalContentReady(false)
         disconnect()
     }, [disconnect, sessionId])
 
@@ -142,11 +157,6 @@ export function useTerminalPageController(options: UseTerminalPageControllerOpti
     }, [disconnect, sessionActive])
 
     useEffect(() => {
-        if (terminalState.status === 'error') {
-            connectOnceRef.current = false
-            return
-        }
-
         if (terminalState.status === 'connecting' || terminalState.status === 'connected') {
             setExitInfo(null)
         }
@@ -154,41 +164,50 @@ export function useTerminalPageController(options: UseTerminalPageControllerOpti
 
     const quickInputDisabled = !sessionActive || terminalState.status !== 'connected'
 
-    const writePlainInput = useCallback((text: string) => {
-        if (!text || quickInputDisabled) {
-            return false
-        }
+    const writePlainInput = useCallback(
+        (text: string) => {
+            if (!text || quickInputDisabled) {
+                return false
+            }
 
-        write(text)
-        resetModifiers()
-        terminalRef.current?.focus()
-        return true
-    }, [quickInputDisabled, resetModifiers, write])
+            write(text)
+            resetModifiers()
+            terminalRef.current?.focus()
+            return true
+        },
+        [quickInputDisabled, resetModifiers, write]
+    )
 
-    const handleQuickInput = useCallback((sequence: string) => {
-        if (quickInputDisabled) {
-            return
-        }
+    const handleQuickInput = useCallback(
+        (sequence: string) => {
+            if (quickInputDisabled) {
+                return
+            }
 
-        dispatchSequence(sequence, { ctrl: ctrlActive, alt: altActive })
-        terminalRef.current?.focus()
-    }, [altActive, ctrlActive, dispatchSequence, quickInputDisabled])
+            dispatchSequence(sequence, { ctrl: ctrlActive, alt: altActive })
+            terminalRef.current?.focus()
+        },
+        [altActive, ctrlActive, dispatchSequence, quickInputDisabled]
+    )
 
-    const handleModifierToggle = useCallback((modifier: 'ctrl' | 'alt') => {
-        if (quickInputDisabled) {
-            return
-        }
+    const handleModifierToggle = useCallback(
+        (modifier: 'ctrl' | 'alt') => {
+            if (quickInputDisabled) {
+                return
+            }
 
-        if (modifier === 'ctrl') {
-            setCtrlActive((value) => !value)
-            setAltActive(false)
-        } else {
-            setAltActive((value) => !value)
-            setCtrlActive(false)
-        }
+            if (modifier === 'ctrl') {
+                setCtrlActive((value) => !value)
+                setAltActive(false)
+            } else {
+                setAltActive((value) => !value)
+                setCtrlActive(false)
+            }
 
-        terminalRef.current?.focus()
-    }, [quickInputDisabled])
+            terminalRef.current?.focus()
+        },
+        [quickInputDisabled]
+    )
 
     return {
         altActive,
@@ -199,6 +218,7 @@ export function useTerminalPageController(options: UseTerminalPageControllerOpti
         handleResize,
         handleTerminalMount,
         quickInputDisabled,
+        terminalContentReady,
         terminalState,
         writePlainInput,
     }

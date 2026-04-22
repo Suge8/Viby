@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
-import { InlineNotice } from '@/components/InlineNotice'
 import type { AppNoticeTone } from '@/components/AppNotice'
+import { InlineNotice } from '@/components/InlineNotice'
+import { MotionReveal } from '@/components/motion/motionPrimitives'
 
 type SessionRouteBannerTone = 'neutral' | 'info' | 'warning' | 'error'
 
@@ -30,12 +31,8 @@ export function SessionRouteBanner(props: SessionRouteBannerProps): ReactNode {
     const description = props.description
 
     return (
-        <div className="mx-auto w-full ds-stage-shell px-3 pt-3">
-            <InlineNotice
-                tone={getNoticeTone(tone)}
-                title={title}
-                description={description}
-            />
-        </div>
+        <MotionReveal className="mx-auto w-full ds-stage-shell px-3 pt-3" duration={0.3} y={12}>
+            <InlineNotice tone={getNoticeTone(tone)} title={title} description={description} />
+        </MotionReveal>
     )
 }

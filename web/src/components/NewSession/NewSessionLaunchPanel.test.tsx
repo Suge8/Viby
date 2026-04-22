@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/lib/i18n-context'
 import { NewSessionLaunchPanel } from './NewSessionLaunchPanel'
 
@@ -11,16 +11,38 @@ vi.mock('@/lib/use-translation', () => ({
                     return 'Launch settings'
                 case 'newSession.agent':
                     return 'Agent'
-                case 'newSession.role':
-                    return 'Role'
-                case 'newSession.role.normal':
-                    return 'Normal'
-                case 'newSession.role.normal.desc':
-                    return 'Normal session'
-                case 'newSession.role.manager':
-                    return 'Manager'
-                case 'newSession.role.manager.desc':
-                    return 'Manager session'
+                case 'newSession.agentAvailability.helper':
+                    return 'Agent availability helper'
+                case 'newSession.agentAvailability.errorTitle':
+                    return 'Could not check availability'
+                case 'newSession.agentAvailability.selectedUnavailableTitle':
+                    return 'Unavailable selected agent'
+                case 'newSession.agentAvailability.selectedUnavailableDescription':
+                    return 'Saved {agent} is {status}.'
+                case 'newSession.agentAvailability.fallbackDescription':
+                    return 'Saved {agent} is {status}. Using the first ready agent below.'
+                case 'newSession.agentAvailability.refresh':
+                    return 'Check again'
+                case 'newSession.agentAvailability.refreshing':
+                    return 'Checking…'
+                case 'newSession.agentAvailability.status.ready':
+                    return 'Ready'
+                case 'newSession.agentAvailability.status.not_installed':
+                    return 'Not installed'
+                case 'newSession.agentAvailability.status.setup_required':
+                    return 'Needs setup'
+                case 'newSession.agentAvailability.status.unsupported_platform':
+                    return 'Unsupported here'
+                case 'newSession.agentAvailability.status.unavailable':
+                    return 'Unavailable'
+                case 'newSession.agentAvailability.status.unknown':
+                    return 'Checking…'
+                case 'newSession.agentAvailability.action.install':
+                    return 'Install'
+                case 'newSession.agentAvailability.action.configure':
+                    return 'Set up'
+                case 'newSession.agentAvailability.action.learn_more':
+                    return 'Learn more'
                 case 'newSession.model':
                     return 'Model'
                 case 'newSession.reasoningEffort':
@@ -29,105 +51,153 @@ vi.mock('@/lib/use-translation', () => ({
                     return 'Yolo'
                 case 'newSession.piLaunchConfig.errorTitle':
                     return 'Pi config unavailable'
-                case 'model.terminalDefault':
-                    return 'Terminal default model'
-                case 'reasoningEffort.terminalDefault':
-                    return 'Terminal default reasoning effort'
                 default:
                     return key
             }
-        }
-    })
+        },
+    }),
 }))
 
-describe('NewSessionLaunchPanel', () => {
-    it('shows pi in the agent picker', () => {
-        render(
-            <I18nProvider>
-                <NewSessionLaunchPanel
-                    form={{
-                        agent: 'claude',
-                        sessionRole: 'normal',
-                        model: 'auto',
-                        modelReasoningEffort: 'default',
-                        yoloMode: false
-                    }}
-                    options={{
-                        modelOptions: [{ value: 'auto', label: 'Terminal default model' }],
-                        reasoningOptions: [{ value: 'default', label: 'Terminal default reasoning effort' }],
-                        isDisabled: false
-                    }}
-                    handlers={{
-                        onAgentChange: vi.fn(),
-                        onSessionRoleChange: vi.fn(),
-                        onModelChange: vi.fn(),
-                        onReasoningEffortChange: vi.fn(),
-                        onYoloModeChange: vi.fn()
-                    }}
-                />
-            </I18nProvider>
-        )
+afterEach(() => {
+    cleanup()
+})
 
-        expect(screen.getByRole('radio', { name: /pi/i })).toBeInTheDocument()
+type LaunchPanelProps = Parameters<typeof NewSessionLaunchPanel>[0]
+
+function renderPanel(overrides?: {
+    form?: Partial<LaunchPanelProps['form']>
+    options?: Partial<LaunchPanelProps['options']>
+    handlers?: Partial<LaunchPanelProps['handlers']>
+}) {
+    const onAgentChange = vi.fn()
+    render(
+        <I18nProvider>
+            <NewSessionLaunchPanel
+                form={{
+                    agent: 'claude',
+                    model: 'auto',
+                    modelReasoningEffort: 'default',
+                    yoloMode: false,
+                    ...overrides?.form,
+                }}
+                options={{
+                    modelOptions: [{ value: 'auto', label: 'Terminal default model' }],
+                    reasoningOptions: [{ value: 'default', label: 'Terminal default reasoning effort' }],
+                    isDisabled: false,
+                    agentAvailability: [
+                        { driver: 'claude', status: 'ready', resolution: 'none', code: 'ready', detectedAt: 1 },
+                        { driver: 'codex', status: 'ready', resolution: 'none', code: 'ready', detectedAt: 1 },
+                        { driver: 'copilot', status: 'ready', resolution: 'none', code: 'ready', detectedAt: 1 },
+                        { driver: 'cursor', status: 'ready', resolution: 'none', code: 'ready', detectedAt: 1 },
+                        { driver: 'gemini', status: 'ready', resolution: 'none', code: 'ready', detectedAt: 1 },
+                        { driver: 'opencode', status: 'ready', resolution: 'none', code: 'ready', detectedAt: 1 },
+                        { driver: 'pi', status: 'ready', resolution: 'none', code: 'ready', detectedAt: 1 },
+                    ],
+                    agentAvailabilityLoading: false,
+                    savedAgent: 'claude',
+                    savedAgentAvailability: {
+                        driver: 'claude',
+                        status: 'ready',
+                        resolution: 'none',
+                        code: 'ready',
+                        detectedAt: 1,
+                    },
+                    hasAgentFallback: false,
+                    ...overrides?.options,
+                }}
+                handlers={{
+                    onAgentChange,
+                    onModelChange: vi.fn(),
+                    onReasoningEffortChange: vi.fn(),
+                    onYoloModeChange: vi.fn(),
+                    onRefreshAgentAvailability: vi.fn(),
+                    ...overrides?.handlers,
+                }}
+            />
+        </I18nProvider>
+    )
+
+    return { onAgentChange }
+}
+
+describe('NewSessionLaunchPanel', () => {
+    it('shows pi and copilot in the agent picker', () => {
+        renderPanel()
+
+        expect(screen.getAllByRole('radio')).toHaveLength(7)
+        expect(screen.getByText('Pi')).toBeInTheDocument()
+        expect(screen.getByText('Copilot')).toBeInTheDocument()
     })
 
-    it('does not render a Pi model select when the hot path stays terminal-default only', () => {
-        render(
-            <I18nProvider>
-                <NewSessionLaunchPanel
-                    form={{
-                        agent: 'pi',
-                        sessionRole: 'normal',
-                        model: 'auto',
-                        modelReasoningEffort: 'default',
-                        yoloMode: false
-                    }}
-                    options={{
-                        modelOptions: [],
-                        reasoningOptions: [{ value: 'default', label: 'Terminal default reasoning effort' }],
-                        isDisabled: false
-                    }}
-                    handlers={{
-                        onAgentChange: vi.fn(),
-                        onSessionRoleChange: vi.fn(),
-                        onModelChange: vi.fn(),
-                        onReasoningEffortChange: vi.fn(),
-                        onYoloModeChange: vi.fn()
-                    }}
-                />
-            </I18nProvider>
-        )
+    it('renders unavailable agents as disabled cards with install CTA', () => {
+        renderPanel({
+            form: { agent: 'gemini' },
+            options: {
+                agentAvailability: [
+                    { driver: 'claude', status: 'ready', resolution: 'none', code: 'ready', detectedAt: 1 },
+                    { driver: 'codex', status: 'ready', resolution: 'none', code: 'ready', detectedAt: 1 },
+                    { driver: 'copilot', status: 'ready', resolution: 'none', code: 'ready', detectedAt: 1 },
+                    { driver: 'cursor', status: 'ready', resolution: 'none', code: 'ready', detectedAt: 1 },
+                    {
+                        driver: 'gemini',
+                        status: 'not_installed',
+                        resolution: 'install',
+                        code: 'command_missing',
+                        detectedAt: 1,
+                    },
+                    { driver: 'opencode', status: 'ready', resolution: 'none', code: 'ready', detectedAt: 1 },
+                    { driver: 'pi', status: 'ready', resolution: 'none', code: 'ready', detectedAt: 1 },
+                ],
+                savedAgent: 'gemini',
+                savedAgentAvailability: {
+                    driver: 'gemini',
+                    status: 'not_installed',
+                    resolution: 'install',
+                    code: 'command_missing',
+                    detectedAt: 1,
+                },
+                hasAgentFallback: true,
+            },
+        })
 
-        expect(screen.queryByRole('combobox', { name: /model/i })).not.toBeInTheDocument()
+        expect(screen.getByText('Unavailable selected agent')).toBeInTheDocument()
+        expect(screen.getByRole('link', { name: 'Install' })).toBeInTheDocument()
+        expect(screen.getAllByText('Not installed').length).toBeGreaterThan(0)
+    })
+
+    it('does not change the agent when clicking an unavailable card CTA', () => {
+        const { onAgentChange } = renderPanel({
+            options: {
+                agentAvailability: [
+                    { driver: 'claude', status: 'ready', resolution: 'none', code: 'ready', detectedAt: 1 },
+                    { driver: 'codex', status: 'ready', resolution: 'none', code: 'ready', detectedAt: 1 },
+                    { driver: 'copilot', status: 'ready', resolution: 'none', code: 'ready', detectedAt: 1 },
+                    { driver: 'cursor', status: 'ready', resolution: 'none', code: 'ready', detectedAt: 1 },
+                    { driver: 'gemini', status: 'ready', resolution: 'none', code: 'ready', detectedAt: 1 },
+                    { driver: 'opencode', status: 'ready', resolution: 'none', code: 'ready', detectedAt: 1 },
+                    {
+                        driver: 'pi',
+                        status: 'setup_required',
+                        resolution: 'configure',
+                        code: 'auth_missing',
+                        detectedAt: 1,
+                    },
+                ],
+            },
+        })
+
+        fireEvent.click(screen.getByRole('link', { name: 'Set up' }))
+
+        expect(onAgentChange).not.toHaveBeenCalled()
     })
 
     it('shows a Pi launch config warning when config loading fails', () => {
-        render(
-            <I18nProvider>
-                <NewSessionLaunchPanel
-                    form={{
-                        agent: 'pi',
-                        sessionRole: 'normal',
-                        model: 'auto',
-                        modelReasoningEffort: 'default',
-                        yoloMode: false
-                    }}
-                    options={{
-                        modelOptions: [{ value: 'auto', label: 'Terminal default model' }],
-                        reasoningOptions: [{ value: 'default', label: 'Terminal default reasoning effort' }],
-                        isDisabled: false,
-                        piLaunchConfigError: 'Pi auth missing'
-                    }}
-                    handlers={{
-                        onAgentChange: vi.fn(),
-                        onSessionRoleChange: vi.fn(),
-                        onModelChange: vi.fn(),
-                        onReasoningEffortChange: vi.fn(),
-                        onYoloModeChange: vi.fn()
-                    }}
-                />
-            </I18nProvider>
-        )
+        renderPanel({
+            form: { agent: 'pi' },
+            options: {
+                piLaunchConfigError: 'Pi auth missing',
+            },
+        })
 
         expect(screen.getByText('Pi config unavailable')).toBeInTheDocument()
         expect(screen.getByText('Pi auth missing')).toBeInTheDocument()

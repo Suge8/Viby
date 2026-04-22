@@ -1,9 +1,12 @@
 import { memo } from 'react'
-import type { SessionSummary } from '@/types/api'
 import { SessionListItem } from '@/components/session-list/SessionListItem'
 import type { SessionListSelection } from '@/components/session-list/sessionListContracts'
-import { areSessionListRowsEquivalent } from '@/components/session-list/sessionListRenderHelpers'
+import {
+    areSessionListRowsEquivalent,
+    areSessionListSelectionsEquivalent,
+} from '@/components/session-list/sessionListRenderHelpers'
 import type { FloatingActionMenuAnchorPoint } from '@/components/ui/FloatingActionMenu.contract'
+import type { SessionSummary } from '@/types/api'
 
 type SessionListAnimatedItemProps = {
     session: SessionSummary
@@ -30,10 +33,10 @@ function areSessionListAnimatedItemPropsEqual(
     previous: SessionListAnimatedItemProps,
     next: SessionListAnimatedItemProps
 ): boolean {
-    return previous.onOpenActionMenu === next.onOpenActionMenu
-        && previous.hasUnseenReply === next.hasUnseenReply
-        && previous.selection.selectedSessionId === next.selection.selectedSessionId
-        && previous.selection.onSelect === next.selection.onSelect
-        && previous.selection.onPreload === next.selection.onPreload
-        && areSessionListRowsEquivalent(previous.session, next.session)
+    return (
+        previous.onOpenActionMenu === next.onOpenActionMenu &&
+        previous.hasUnseenReply === next.hasUnseenReply &&
+        areSessionListSelectionsEquivalent(previous.selection, next.selection) &&
+        areSessionListRowsEquivalent(previous.session, next.session)
+    )
 }

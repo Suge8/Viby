@@ -1,24 +1,23 @@
 import type { QueryClient } from '@tanstack/react-query'
 import type { ApiClient } from '@/api/client'
-import type { DecryptedMessage, Session } from '@/types/api'
+import { fetchLatestMessages } from '@/lib/message-window-store'
+import { isUserMessage } from '@/lib/messages'
 import {
     clearMessageWindowWarning,
     clearPendingReply,
     getMessageWindowState,
-    setMessageWindowWarning
+    setMessageWindowWarning,
+    subscribeMessageWindow,
 } from '@/lib/messageWindowStoreCore'
-import { isUserMessage } from '@/lib/messages'
 import {
     isPostSwitchMessageWindowWarningKey,
-    MESSAGE_WINDOW_POST_SWITCH_NO_REPLY_WARNING_KEY,
     MESSAGE_WINDOW_POST_SWITCH_SEND_FAILED_WARNING_KEY,
-    type MessageWindowWarningKey
+    type MessageWindowWarningKey,
 } from '@/lib/messageWindowWarnings'
-import { loadMessageWindowStoreAsyncModule } from '@/lib/messageWindowStoreModule'
-import { queryKeys } from '@/lib/query-keys'
 import { appendRealtimeTrace } from '@/lib/realtimeTrace'
 import { findFirstAgentReplyAfter, runSendCatchup, shouldRunPostSwitchCatchup } from '@/lib/sendCatchup'
 import { writeSessionToQueryCache } from '@/lib/sessionQueryCache'
+import type { DecryptedMessage, Session } from '@/types/api'
 
 export type AcceptedSend = {
     sessionId: string
@@ -71,8 +70,8 @@ export async function handleAcceptedSend(options: HandleAcceptedSendOptions): Pr
         type: 'server_accepted',
         details: {
             sessionId,
-            waitMs: acceptedAt - createdAt
-        }
+            waitMs: acceptedAt - createdAt,
+        },
     })
 
     clearCurrentPostSwitchWarning(sessionId)
@@ -86,19 +85,13 @@ export async function handleAcceptedSend(options: HandleAcceptedSendOptions): Pr
     try {
         const outcome = await runSendCatchup({
             createdAt,
+            readSnapshot: () => ({
+                messages: getMessageWindowState(sessionId).messages,
+            }),
             syncOnce: async () => {
-                await queryClient.fetchQuery({
-                    queryKey: queryKeys.session(sessionId),
-                    queryFn: () => api.getSession(sessionId),
-                })
-
-                const { fetchLatestMessages } = await loadMessageWindowStoreAsyncModule()
                 await fetchLatestMessages(api, sessionId)
-
-                return {
-                    messages: getMessageWindowState(sessionId).messages
-                }
-            }
+            },
+            subscribe: (listener) => subscribeMessageWindow(sessionId, listener),
         })
 
         if (outcome.type === 'reply-detected') {
@@ -111,14 +104,14 @@ export async function handleAcceptedSend(options: HandleAcceptedSendOptions): Pr
                     replyId: outcome.reply.id,
                     replyCreatedAt: outcome.reply.createdAt,
                     attempt: outcome.attempt,
-                    waitMs: Date.now() - createdAt
-                }
+                    waitMs: Date.now() - createdAt,
+                },
             })
             return
         }
 
-        clearPendingReply(sessionId)
         if (outcome.type === 'driver-switch-send-failed') {
+            clearPendingReply(sessionId)
             setMessageWindowWarning(sessionId, MESSAGE_WINDOW_POST_SWITCH_SEND_FAILED_WARNING_KEY)
             appendRealtimeTrace({
                 at: Date.now(),
@@ -127,33 +120,19 @@ export async function handleAcceptedSend(options: HandleAcceptedSendOptions): Pr
                     sessionId,
                     attempt: outcome.attempt,
                     code: outcome.event.code ?? 'unknown',
-                    stage: outcome.event.stage ?? 'unknown'
-                }
+                    stage: outcome.event.stage ?? 'unknown',
+                },
             })
             return
         }
-
-        setMessageWindowWarning(sessionId, MESSAGE_WINDOW_POST_SWITCH_NO_REPLY_WARNING_KEY)
-        appendRealtimeTrace({
-            at: Date.now(),
-            type: 'post_switch_no_reply',
-            details: {
-                sessionId,
-                attemptCount: outcome.attemptCount,
-                waitMs: Date.now() - createdAt
-            }
-        })
     } catch (error) {
-        clearPendingReply(sessionId)
-        setMessageWindowWarning(sessionId, MESSAGE_WINDOW_POST_SWITCH_SEND_FAILED_WARNING_KEY)
         appendRealtimeTrace({
             at: Date.now(),
-            type: 'post_switch_send_failed',
+            type: 'post_switch_catchup_error',
             details: {
                 sessionId,
-                stage: 'catchup_error',
-                message: error instanceof Error ? error.message : 'unknown'
-            }
+                message: error instanceof Error ? error.message : 'unknown',
+            },
         })
     }
 }

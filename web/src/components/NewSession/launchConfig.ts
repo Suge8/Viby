@@ -6,7 +6,7 @@ export function resolveLaunchPermissionMode(agent: AgentType, yoloMode: boolean)
         return 'default'
     }
 
-    if (agent === 'claude') {
+    if (agent === 'claude' || agent === 'copilot') {
         return 'bypassPermissions'
     }
 

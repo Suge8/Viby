@@ -1,12 +1,13 @@
-import { useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import type { Suggestion } from '@/hooks/useActiveSuggestions'
+import { type KeyboardEvent as ReactKeyboardEvent, useState } from 'react'
 import type { ApiClient } from '@/api/client'
 import { Autocomplete } from '@/components/ChatInput/Autocomplete'
 import { FloatingOverlay } from '@/components/ChatInput/FloatingOverlay'
-import { FolderOpenIcon } from '@/components/icons'
 import { FeatureProjectIcon as ProjectIcon } from '@/components/featureIcons'
 import { InlineNotice } from '@/components/InlineNotice'
+import { FolderOpenIcon } from '@/components/icons'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import type { Suggestion } from '@/hooks/useActiveSuggestions'
 import { useTranslation } from '@/lib/use-translation'
 import { NewSessionSectionCard } from './NewSessionSectionCard'
 import { ProjectPickerDialog } from './ProjectPickerDialog'
@@ -25,12 +26,12 @@ type DirectoryInputProps = {
 
 type DirectoryPickerProps = {
     api: ApiClient
-    machineId: string | null
     supportsBrowser: boolean
     selectedPath: string
     recentPaths: string[]
     projectPaths: string[]
     isDisabled: boolean
+    onOpen: () => void
     onPathSelect: (path: string) => void
 }
 
@@ -57,7 +58,7 @@ export function DirectorySection(props: DirectorySectionProps) {
         >
             <div className="flex flex-col gap-2.5 sm:flex-row">
                 <div className="relative min-w-0 flex-1">
-                    <input
+                    <Input
                         type="text"
                         placeholder={t('newSession.placeholder')}
                         value={props.input.directory}
@@ -66,7 +67,7 @@ export function DirectorySection(props: DirectorySectionProps) {
                         onFocus={props.input.onDirectoryFocus}
                         onBlur={props.input.onDirectoryBlur}
                         disabled={props.input.isDisabled}
-                        className="min-h-[50px] w-full rounded-[18px] border border-[var(--ds-border-default)] bg-[color:color-mix(in_srgb,var(--ds-panel-strong)_96%,transparent)] px-4 py-3 text-sm font-medium text-[var(--ds-text-primary)] outline-none transition-[border-color,box-shadow] focus:border-[var(--ds-border-strong)] focus:ring-2 focus:ring-[color:color-mix(in_srgb,var(--ds-accent-gold)_18%,transparent)] disabled:opacity-50"
+                        className="ds-field-control-elevated ds-field-control-elevated-gold disabled:opacity-50"
                     />
                     {props.input.suggestions.length > 0 && (
                         <div className="absolute top-full left-0 right-0 z-10 mt-1">
@@ -85,9 +86,12 @@ export function DirectorySection(props: DirectorySectionProps) {
                     type="button"
                     size="sm"
                     variant="secondary"
-                    disabled={props.picker.isDisabled || !props.picker.machineId}
-                    onClick={() => setIsPickerOpen(true)}
-                    className="sm:min-w-[124px]"
+                    disabled={props.picker.isDisabled}
+                    onClick={() => {
+                        props.picker.onOpen()
+                        setIsPickerOpen(true)
+                    }}
+                    className="ds-directory-picker-button"
                 >
                     <ProjectIcon className="mr-2 h-4 w-4" />
                     {t('newSession.projectPicker.open')}
@@ -96,7 +100,7 @@ export function DirectorySection(props: DirectorySectionProps) {
 
             {props.picker.recentPaths.length > 0 && (
                 <div className="mt-3.5 flex flex-col gap-2">
-                    <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--ds-text-muted)]">
+                    <span className="ds-directory-recent-label text-xs font-semibold uppercase text-[var(--ds-text-muted)]">
                         {t('newSession.recent')}
                     </span>
                     <div className="flex flex-wrap gap-2">
@@ -108,7 +112,7 @@ export function DirectorySection(props: DirectorySectionProps) {
                                 variant="secondary"
                                 onClick={() => props.picker.onPathSelect(path)}
                                 disabled={props.picker.isDisabled}
-                                className="max-w-[240px] truncate rounded-full px-3 py-1.5 text-[11px] font-medium text-[var(--ds-text-secondary)] hover:border-[var(--ds-border-strong)] hover:text-[var(--ds-text-primary)] disabled:opacity-50"
+                                className="ds-recent-path-chip truncate disabled:opacity-50"
                                 title={path}
                             >
                                 {path}
@@ -130,7 +134,6 @@ export function DirectorySection(props: DirectorySectionProps) {
 
             <ProjectPickerDialog
                 api={props.picker.api}
-                machineId={props.picker.machineId}
                 isSupported={props.picker.supportsBrowser}
                 open={isPickerOpen}
                 selectedPath={props.picker.selectedPath}
