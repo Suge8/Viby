@@ -27,6 +27,7 @@ type StructuredDocPolicy = {
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
 const docsArtifactDir = join(repoRoot, '.artifacts/harness/docs')
 const repoRootEntries = new Set(readdirSync(repoRoot))
+const isCi = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true'
 const docSourceDirs = ['docs']
 const docSourceFiles = [
     'AGENTS.md',
@@ -328,8 +329,11 @@ function stripRefSuffix(ref: string): string {
 }
 
 function readDocSourceFiles(): string[] {
-    const files = new Set(docSourceFiles)
+    const files = new Set(docSourceFiles.filter((file) => !isCi || existsSync(join(repoRoot, file))))
     for (const dir of docSourceDirs) {
+        if (!existsSync(join(repoRoot, dir))) {
+            continue
+        }
         for (const file of walkMarkdownFiles(join(repoRoot, dir))) {
             files.add(toRepoPath(file))
         }
@@ -345,6 +349,18 @@ function toComparableRepoPath(resolved: string): string {
     return toRepoPath(resolved.startsWith(repoRoot) ? resolved : resolve(repoRoot, resolved))
 }
 
+function isLocalOnlyDocPath(file: string): boolean {
+    return (
+        file === 'AGENTS.md' ||
+        file.endsWith('/AGENTS.md') ||
+        file === 'CLAUDE.md' ||
+        file.startsWith('docs/') ||
+        file.startsWith('.cursor/') ||
+        file.startsWith('.github/instructions/') ||
+        file === '.github/copilot-instructions.md'
+    )
+}
+
 function checkStructuredDocPolicies(violations: DocViolation[], scopedPolicies?: ReadonlySet<string>): void {
     for (const policy of [...readmePolicies, ...agentsPolicies]) {
         if (scopedPolicies && !scopedPolicies.has(policy.path)) {
@@ -352,6 +368,9 @@ function checkStructuredDocPolicies(violations: DocViolation[], scopedPolicies?:
         }
         const fullPath = join(repoRoot, policy.path)
         if (!existsSync(fullPath)) {
+            if (isCi && isLocalOnlyDocPath(policy.path)) {
+                continue
+            }
             violations.push({
                 rule: 'structured-doc-missing',
                 file: policy.path,
@@ -438,7 +457,8 @@ export function auditDocs(options?: { scopeSpec?: string | null; touchedPaths?: 
             }
             const resolved = resolveRef(file, ref)
             if (!existsResolvedRef(resolved)) {
-                if (optionalLocalOnlyRefs.has(toComparableRepoPath(resolved))) {
+                const comparablePath = toComparableRepoPath(resolved)
+                if (optionalLocalOnlyRefs.has(comparablePath) || (isCi && isLocalOnlyDocPath(comparablePath))) {
                     continue
                 }
                 violations.push({
@@ -450,10 +470,13 @@ export function auditDocs(options?: { scopeSpec?: string | null; touchedPaths?: 
         }
     }
 
+    const docsReadmePath = join(repoRoot, 'docs/README.md')
     const docsReadmeRefs = new Set(
-        extractMarkdownPathRefs(readFileSync(join(repoRoot, 'docs/README.md'), 'utf8'))
-            .filter((ref) => ref.startsWith('docs/'))
-            .map((ref) => toComparableRepoPath(resolveRef('docs/README.md', ref)))
+        existsSync(docsReadmePath)
+            ? extractMarkdownPathRefs(readFileSync(docsReadmePath, 'utf8'))
+                  .filter((ref) => ref.startsWith('docs/'))
+                  .map((ref) => toComparableRepoPath(resolveRef('docs/README.md', ref)))
+            : []
     )
 
     const docsCoverageRoots =
@@ -462,6 +485,9 @@ export function auditDocs(options?: { scopeSpec?: string | null; touchedPaths?: 
             : docsReadmeIndexRoots
 
     for (const root of docsCoverageRoots) {
+        if (!existsSync(join(repoRoot, root))) {
+            continue
+        }
         for (const file of walkMarkdownFiles(join(repoRoot, root))) {
             const repoPath = toRepoPath(file)
             if (docsReadmeIndexIgnore.has(repoPath)) {

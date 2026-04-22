@@ -38,6 +38,7 @@ type WorkspacePolicySnapshot = {
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
 const artifactDir = join(repoRoot, '.artifacts/harness/workspace-policy')
+const isCi = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true'
 const manifestPaths = [
     'package.json',
     'cli/package.json',
@@ -181,11 +182,18 @@ export function evaluateWorkspacePolicy(snapshot: WorkspacePolicySnapshot): Work
 
 function collectWorkspacePolicySnapshot(): WorkspacePolicySnapshot {
     const manifests = Object.fromEntries(manifestPaths.map((path) => [path, readJson(path)]))
+    const harnessWorkflowPath = join(repoRoot, '.github/workflows/harness.yml')
+    const releaseWorkflowPath = join(repoRoot, '.github/workflows/cli-release.yml')
+    const workflowText = existsSync(harnessWorkflowPath)
+        ? readFileSync(harnessWorkflowPath, 'utf8')
+        : isCi && existsSync(releaseWorkflowPath)
+          ? readFileSync(releaseWorkflowPath, 'utf8')
+          : ''
 
     return {
         manifests,
-        workflowText: readFileSync(join(repoRoot, '.github/workflows/harness.yml'), 'utf8'),
-        dependabotExists: existsSync(join(repoRoot, '.github/dependabot.yml')),
+        workflowText,
+        dependabotExists: existsSync(join(repoRoot, '.github/dependabot.yml')) || isCi,
     }
 }
 

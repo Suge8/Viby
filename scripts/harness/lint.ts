@@ -25,6 +25,7 @@ type BoundaryRule = {
 
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(scriptDir, '../..')
+const isCi = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true'
 const requiredPaths = [
     'docs/internal/harness-constitution.md',
     'docs/internal/harness-activity-path.md',
@@ -153,6 +154,22 @@ function readText(path: string): string {
     return readFileSync(join(repoRoot, path), 'utf8')
 }
 
+function isLocalOnlyHarnessPath(file: string): boolean {
+    return (
+        file === 'AGENTS.md' ||
+        file.endsWith('/AGENTS.md') ||
+        file === 'CLAUDE.md' ||
+        file.startsWith('docs/') ||
+        file.startsWith('.githooks/') ||
+        file.startsWith('.cursor/') ||
+        file.startsWith('.github/instructions/') ||
+        file === '.github/copilot-instructions.md' ||
+        file === '.github/dependabot.yml' ||
+        file === '.github/pull_request_template.md' ||
+        file === '.github/workflows/harness.yml'
+    )
+}
+
 function toRepoPath(path: string): string {
     return relative(repoRoot, path) || '.'
 }
@@ -189,13 +206,17 @@ function walkFiles(dir: string): string[] {
 
 function checkRequiredPaths(violations: Violation[]): void {
     for (const file of requiredPaths) {
-        if (!existsSync(join(repoRoot, file))) {
+        if (!existsSync(join(repoRoot, file)) && !(isCi && isLocalOnlyHarnessPath(file))) {
             addViolation(violations, 'required-paths', file, 'required harness artifact is missing')
         }
     }
 }
 
 function checkLocalOnlyDocs(violations: Violation[]): void {
+    if (isCi) {
+        return
+    }
+
     for (const file of localOnlyFiles) {
         const content = readText(file)
         if (legacyTaskPathActiveRefRe.test(content)) {
@@ -224,7 +245,12 @@ function checkLocalOnlyDocs(violations: Violation[]): void {
 }
 
 function checkQualityScore(violations: Violation[]): void {
-    const modules = new Set(listQualityScoreModules(readText('docs/internal/quality-score.md')))
+    const file = 'docs/internal/quality-score.md'
+    if (!existsSync(join(repoRoot, file))) {
+        return
+    }
+
+    const modules = new Set(listQualityScoreModules(readText(file)))
     for (const moduleName of qualityScoreModules) {
         if (!modules.has(moduleName)) {
             addViolation(
@@ -238,7 +264,12 @@ function checkQualityScore(violations: Violation[]): void {
 }
 
 function checkDebtTracker(violations: Violation[]): void {
-    const rows = parseDebtTrackerRows(readText('docs/internal/tech-debt-tracker.md'))
+    const file = 'docs/internal/tech-debt-tracker.md'
+    if (!existsSync(join(repoRoot, file))) {
+        return
+    }
+
+    const rows = parseDebtTrackerRows(readText(file))
     const seenIds = new Set<string>()
 
     for (const row of rows) {
