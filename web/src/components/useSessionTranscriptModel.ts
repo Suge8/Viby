@@ -1,36 +1,33 @@
 import { useEffect, useMemo, useRef } from 'react'
-import type { DecryptedMessage, Session, SessionStreamState } from '@/types/api'
-import type { ChatBlock, NormalizedMessage } from '@/chat/types'
 import { normalizeDecryptedMessage } from '@/chat/normalize'
+import { reconcileChatBlocks } from '@/chat/reconcile'
 import { reduceChatBlocks } from '@/chat/reducer'
 import { resolveTextRenderMode } from '@/chat/textRenderMode'
-import { reconcileChatBlocks } from '@/chat/reconcile'
-import {
-    collectThreadMessageIds,
-    collectThreadMessageOwnerById,
-    getThreadMessageId,
-    isThreadHistoryJumpTarget
-} from '@/components/AssistantChat/threadMessageIdentity'
+import { createTranscriptModel } from '@/chat/transcriptRows'
+import type { ChatBlock, NormalizedMessage } from '@/chat/types'
+import type { DecryptedMessage, Session, SessionStreamState } from '@/types/api'
 
 function buildSessionStreamBlock(stream: SessionStreamState): ChatBlock {
     return {
         kind: 'agent-text',
-        id: `stream:${stream.streamId}`,
+        id: `stream:${stream.assistantTurnId}`,
         localId: null,
         createdAt: stream.startedAt,
         text: stream.text,
-        renderMode: resolveTextRenderMode(stream.text)
+        renderMode: resolveTextRenderMode(stream.text),
     }
 }
 
-export function useSessionChatBlocks(options: {
+export function useSessionTranscriptModel(options: {
     sessionId: string
     messages: DecryptedMessage[]
     agentState: Session['agentState']
     stream: SessionStreamState | null
 }) {
     const { sessionId, messages, agentState, stream } = options
-    const normalizedCacheRef = useRef<Map<string, { source: DecryptedMessage; normalized: NormalizedMessage | null }>>(new Map())
+    const normalizedCacheRef = useRef<Map<string, { source: DecryptedMessage; normalized: NormalizedMessage | null }>>(
+        new Map()
+    )
     const blocksByIdRef = useRef<Map<string, ChatBlock>>(new Map())
     const cachedSessionIdRef = useRef<string | null>(null)
 
@@ -71,10 +68,7 @@ export function useSessionChatBlocks(options: {
         return normalized
     }, [messages, sessionId])
 
-    const reduced = useMemo(
-        () => reduceChatBlocks(normalizedMessages, agentState),
-        [agentState, normalizedMessages]
-    )
+    const reduced = useMemo(() => reduceChatBlocks(normalizedMessages, agentState), [agentState, normalizedMessages])
 
     const sessionStreamBlock = useMemo(() => {
         if (!stream || stream.text.length === 0) {
@@ -92,40 +86,22 @@ export function useSessionChatBlocks(options: {
         return [...reduced.blocks, sessionStreamBlock]
     }, [reduced.blocks, sessionStreamBlock])
 
-    const reconciled = useMemo(
-        () => reconcileChatBlocks(blocksWithStream, blocksByIdRef.current),
-        [blocksWithStream]
-    )
+    const reconciled = useMemo(() => reconcileChatBlocks(blocksWithStream, blocksByIdRef.current), [blocksWithStream])
 
     useEffect(() => {
         blocksByIdRef.current = reconciled.byId
     }, [reconciled.byId])
 
-    const threadMessageIds = useMemo(
-        () => collectThreadMessageIds(reconciled.blocks),
-        [reconciled.blocks]
-    )
-    const conversationMessageIds = useMemo(
-        () => reconciled.blocks.map(getThreadMessageId),
-        [reconciled.blocks]
-    )
-    const threadMessageOwnerById = useMemo(
-        () => collectThreadMessageOwnerById(reconciled.blocks),
-        [reconciled.blocks]
-    )
-    const historyJumpTargetMessageIds = useMemo(() => {
-        return normalizedMessages
-            .filter(isThreadHistoryJumpTarget)
-            .map((message) => `user:${message.id}`)
-    }, [normalizedMessages])
+    const transcript = useMemo(() => createTranscriptModel(reconciled.blocks), [reconciled.blocks])
 
     return {
-        blocks: reconciled.blocks,
+        rows: transcript.rows,
+        renderRows: transcript.renderRows,
+        conversationIds: transcript.conversationIds,
+        rowStartIndexByConversationId: transcript.rowStartIndexByConversationId,
+        historyJumpTargetConversationIds: transcript.historyJumpTargetConversationIds,
         rawMessagesCount: messages.length,
         normalizedMessagesCount: normalizedMessages.length,
-        threadMessageIds,
-        conversationMessageIds,
-        threadMessageOwnerById,
-        historyJumpTargetMessageIds
+        blocks: reconciled.blocks,
     }
 }

@@ -2,7 +2,7 @@ import type { ComponentPropsWithoutRef, CSSProperties, ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
 const COLLAPSIBLE_PANEL_OPEN_TRANSLATE_Y = '0px'
-const COLLAPSIBLE_PANEL_CLOSED_TRANSLATE_Y = '-6px'
+const COLLAPSIBLE_PANEL_CLOSED_TRANSLATE_Y = '-3px'
 
 type CollapsiblePanelProps = Omit<ComponentPropsWithoutRef<'div'>, 'children'> & {
     children: ReactNode
@@ -11,14 +11,7 @@ type CollapsiblePanelProps = Omit<ComponentPropsWithoutRef<'div'>, 'children'> &
 }
 
 export function CollapsiblePanel(props: CollapsiblePanelProps): React.JSX.Element {
-    const {
-        children,
-        className,
-        innerClassName,
-        open,
-        style,
-        ...restProps
-    } = props
+    const { children, className, innerClassName, open, style, ...restProps } = props
     const collapsibleStyle = {
         '--ds-collapsible-opacity': open ? 1 : 0,
         '--ds-collapsible-translate-y': open
@@ -36,9 +29,7 @@ export function CollapsiblePanel(props: CollapsiblePanelProps): React.JSX.Elemen
             style={collapsibleStyle}
             {...restProps}
         >
-            <div className={cn('ds-collapsible-panel-inner', innerClassName)}>
-                {children}
-            </div>
+            <div className={cn('ds-collapsible-panel-inner', innerClassName)}>{children}</div>
         </div>
     )
 }

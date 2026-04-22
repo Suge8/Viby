@@ -1,6 +1,7 @@
 import type * as React from 'react'
 import { FeatureCheckIcon as CheckIcon } from '@/components/featureIcons'
 import { Button, type ButtonProps } from '@/components/ui/button'
+import { getInteractiveCardClassName } from '@/components/ui/interactiveCardStyles'
 import { cn } from '@/lib/utils'
 
 type PressableSurfaceProps = Omit<ButtonProps, 'variant'> & {
@@ -8,12 +9,11 @@ type PressableSurfaceProps = Omit<ButtonProps, 'variant'> & {
     density?: 'default' | 'compact'
 }
 
-const PRESSABLE_SURFACE_BASE_CLASS_NAME =
-    'w-full rounded-[18px] border text-left text-[var(--ds-text-primary)] shadow-[var(--ds-shadow-soft)] [&>[data-button-content]]:w-full [&>[data-button-content]]:items-start [&>[data-button-content]]:justify-start'
+const PRESSABLE_SURFACE_BASE_CLASS_NAME = `ds-pressable-surface border text-[var(--ds-text-primary)] shadow-[var(--ds-shadow-soft)] ${getInteractiveCardClassName('full-card')}`
 
 const PRESSABLE_SURFACE_DENSITY_CLASS_NAME: Record<NonNullable<PressableSurfaceProps['density']>, string> = {
     default: 'px-3.5 py-3',
-    compact: 'px-3 py-2.5'
+    compact: 'px-3 py-2.5',
 }
 
 const PRESSABLE_SURFACE_SELECTED_CLASS_NAME =
@@ -23,13 +23,7 @@ const PRESSABLE_SURFACE_IDLE_CLASS_NAME =
     'border-[var(--ds-border-default)] bg-[color:color-mix(in_srgb,var(--ds-panel-strong)_96%,transparent)] hover:border-[var(--ds-border-strong)] hover:bg-[color:color-mix(in_srgb,var(--ds-panel-strong)_90%,var(--app-subtle-bg))]'
 
 export function PressableSurface(props: PressableSurfaceProps): React.JSX.Element {
-    const {
-        className,
-        density = 'default',
-        selected = false,
-        children,
-        ...buttonProps
-    } = props
+    const { className, density = 'default', selected = false, children, ...buttonProps } = props
 
     return (
         <Button

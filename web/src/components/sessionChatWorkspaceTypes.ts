@@ -1,15 +1,10 @@
-import type { LiveSessionConfigSupport } from '@viby/protocol'
+import type { LiveSessionConfigSupport, SameSessionSwitchTargetDriver } from '@viby/protocol'
+import type { ReactNode } from 'react'
 import type { ApiClient } from '@/api/client'
-import type { PendingReplyState } from '@/lib/message-window-store'
-import type { MessageWindowWarningKey } from '@/lib/messageWindowWarnings'
-import type {
-    AttachmentMetadata,
-    DecryptedMessage,
-    Session,
-    SessionStreamState
-} from '@/types/api'
 import type { Suggestion } from '@/hooks/useActiveSuggestions'
-import type { LoadMoreMessagesResult } from '@/lib/message-window-store'
+import type { LoadMoreMessagesResult, PendingReplyState } from '@/lib/message-window-store'
+import type { MessageWindowWarningKey } from '@/lib/messageWindowWarnings'
+import type { AttachmentMetadata, DecryptedMessage, Session, SessionStreamState } from '@/types/api'
 
 export type SessionChatWorkspaceMessageState = {
     messages: DecryptedMessage[]
@@ -19,6 +14,7 @@ export type SessionChatWorkspaceMessageState = {
     isLoadingMore: boolean
     isSending: boolean
     pendingCount: number
+    atBottom: boolean
     messagesVersion: number
     pendingReply: PendingReplyState | null
     stream: SessionStreamState | null
@@ -27,24 +23,24 @@ export type SessionChatWorkspaceMessageState = {
 
 export type SessionChatWorkspaceActionHandlers = {
     onRefresh: () => void
-    onLoadMore: () => Promise<LoadMoreMessagesResult>
     onLoadHistoryUntilPreviousUser: () => Promise<LoadMoreMessagesResult>
     onSend: (text: string, attachments?: AttachmentMetadata[]) => void
     onFlushPending: () => void
     onAtBottomChange: (atBottom: boolean) => void
     onRetryMessage?: (localId: string) => void
     onAbort: () => Promise<void>
-    onUnarchiveSession: () => Promise<void>
-    onSwitchSessionDriver: () => Promise<void>
+    onSwitchSessionDriver: (targetDriver: SameSessionSwitchTargetDriver) => Promise<void>
     isSwitchingSessionDriver: boolean
 }
 
 export type SessionChatWorkspaceRuntimeOptions = {
     liveConfigSupport: LiveSessionConfigSupport
-    ensureSessionReady?: () => Promise<void>
-    warmSession?: () => void
-    isResumingSession?: boolean
+    autocompleteLayout?: {
+        visibleViewportBottomPx: number
+    }
     autocompleteSuggestions?: (query: string) => Promise<Suggestion[]>
+    autocompleteRefreshKey?: number
+    onSuggestionAction?: (suggestion: Suggestion) => void
 }
 
 export type SessionChatWorkspaceProps = {
@@ -54,4 +50,43 @@ export type SessionChatWorkspaceProps = {
     actions: SessionChatWorkspaceActionHandlers
     runtimeOptions: SessionChatWorkspaceRuntimeOptions
     persistComposerDraft?: boolean
+}
+
+export type SessionChatComposerSurfaceModel = {
+    api: ApiClient
+    session: Session
+    runtimeOptions: SessionChatWorkspaceRuntimeOptions
+    isSending: boolean
+    pendingReply: PendingReplyState | null
+    onSwitchSessionDriver: (targetDriver: SameSessionSwitchTargetDriver) => Promise<void>
+    isSwitchingSessionDriver: boolean
+    allowSendWhenInactive: boolean
+    attachmentsSupported: boolean
+    disabled: boolean
+}
+
+export type SessionChatComposerSurfaceProps = {
+    model: SessionChatComposerSurfaceModel
+}
+
+export type SessionChatRuntimeSurfaceModel = {
+    api: ApiClient
+    session: Session
+    composerAnchorTop: number
+    composerHeight: number
+    messageState: SessionChatWorkspaceMessageState
+    onAbort: () => Promise<void>
+    onAtBottomChange: (atBottom: boolean) => void
+    onFlushPending: () => void
+    onLoadHistoryUntilPreviousUser: () => Promise<LoadMoreMessagesResult>
+    onRefresh: () => void
+    onRetryMessage?: (localId: string) => void
+    onSend: (text: string, attachments?: AttachmentMetadata[]) => void
+    allowSendWhenInactive: boolean
+}
+
+export type SessionChatRuntimeSurfaceProps = {
+    model: SessionChatRuntimeSurfaceModel
+    persistComposerDraft?: boolean
+    children?: ReactNode
 }

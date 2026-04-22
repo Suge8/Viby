@@ -1,22 +1,16 @@
-export function loadSessionChatRuntimeSurfaceModule(): Promise<{
-    default: typeof import('@/components/SessionChatRuntimeSurface').SessionChatRuntimeSurface
-}> {
-    return import('@/components/SessionChatRuntimeSurface').then((module) => ({
-        default: module.SessionChatRuntimeSurface
-    }))
+let toolCardViewsModulePromise: Promise<typeof import('@/components/ToolCard/views/_all')> | null = null
+let toolCardResultViewsModulePromise: Promise<typeof import('@/components/ToolCard/views/_results')> | null = null
+
+function loadToolCardViewsModule(): Promise<typeof import('@/components/ToolCard/views/_all')> {
+    toolCardViewsModulePromise ??= import('@/components/ToolCard/views/_all')
+    return toolCardViewsModulePromise
 }
 
-export function loadSessionChatComposerSurfaceModule(): Promise<{
-    default: typeof import('@/components/SessionChatComposerSurface').SessionChatComposerSurface
-}> {
-    return import('@/components/SessionChatComposerSurface').then((module) => ({
-        default: module.SessionChatComposerSurface
-    }))
+function loadToolCardResultViewsModule(): Promise<typeof import('@/components/ToolCard/views/_results')> {
+    toolCardResultViewsModulePromise ??= import('@/components/ToolCard/views/_results')
+    return toolCardResultViewsModulePromise
 }
 
 export async function preloadSessionChatWorkspaceSurfaces(): Promise<void> {
-    await Promise.all([
-        loadSessionChatRuntimeSurfaceModule(),
-        loadSessionChatComposerSurfaceModule()
-    ])
+    await Promise.all([loadToolCardViewsModule(), loadToolCardResultViewsModule()])
 }

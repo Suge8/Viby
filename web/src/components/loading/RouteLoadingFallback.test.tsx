@@ -25,7 +25,20 @@ describe('RouteLoadingFallback', () => {
         )
 
         await waitFor(() => {
-            expect(container.querySelector('[data-testid="loading-state-hero"]')).toHaveTextContent('Preparing your workspace…')
+            expect(container.querySelector('[data-testid="loading-state-hero"]')).toHaveTextContent(
+                'Preparing your workspace…'
+            )
         })
+    })
+
+    it('supports inline route fallback for nested detail transitions', () => {
+        const { container } = render(
+            <I18nProvider>
+                <RouteLoadingFallback kind="terminal" variant="inline" />
+            </I18nProvider>
+        )
+
+        expect(screen.getByText('Loading terminal…')).toBeInTheDocument()
+        expect(container.querySelector('[data-testid="loading-state-hero"]')).toBeNull()
     })
 })

@@ -1,10 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import {
-    FeatureCheckIcon as CheckIcon,
-    FeatureTranslateIcon as TranslateIcon,
-} from '@/components/featureIcons'
+import { FeatureCheckIcon as CheckIcon, FeatureTranslateIcon as TranslateIcon } from '@/components/featureIcons'
 import { Button } from '@/components/ui/button'
-import { useTranslation, type Locale } from '@/lib/use-translation'
+import { type Locale, useTranslation } from '@/lib/use-translation'
 
 const LOCALE_OPTIONS: ReadonlyArray<{ value: Locale; labelKey: 'language.english' | 'language.chinese' }> = [
     { value: 'en', labelKey: 'language.english' },
@@ -66,7 +63,7 @@ export function LanguageSwitcher() {
 
             {isOpen ? (
                 <div
-                    className="ds-dialog-surface absolute right-0 top-full z-50 mt-2 min-w-[160px] overflow-hidden rounded-[var(--ds-radius-lg)] p-1"
+                    className="ds-dialog-surface ds-language-switcher-menu absolute right-0 top-full z-50 mt-2 overflow-hidden rounded-[var(--ds-radius-lg)] p-1"
                     role="listbox"
                     aria-label={t('language.title')}
                 >
@@ -89,9 +86,7 @@ export function LanguageSwitcher() {
                                 }`}
                             >
                                 <span>{t(option.labelKey)}</span>
-                                {isSelected ? (
-                                    <CheckIcon className="h-4 w-4 text-[var(--ds-accent-lime)]" />
-                                ) : null}
+                                {isSelected ? <CheckIcon className="h-4 w-4 text-[var(--ds-accent-lime)]" /> : null}
                             </Button>
                         )
                     })}

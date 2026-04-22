@@ -30,15 +30,8 @@ function DirectorySkeleton(props: { depth: number; rows?: number }) {
 function DirectoryErrorRow(props: { depth: number; message: string }) {
     const indent = 12 + props.depth * 14
     return (
-        <div
-            className="px-3 py-2"
-            style={{ paddingLeft: indent }}
-        >
-            <InlineNotice
-                tone="warning"
-                title={props.message}
-                className="px-2.5 py-2 text-xs shadow-none"
-            />
+        <div className="px-3 py-2" style={{ paddingLeft: indent }}>
+            <InlineNotice tone="warning" title={props.message} className="px-2.5 py-2 text-xs shadow-none" />
         </div>
     )
 }
@@ -56,7 +49,7 @@ function DirectoryNode(props: {
 }) {
     const isExpanded = props.expanded.has(props.path)
     const { entries, error, isLoading } = useSessionDirectory(props.api, props.sessionId, props.path, {
-        enabled: isExpanded
+        enabled: isExpanded,
     })
 
     const directories = useMemo(() => entries.filter((entry) => entry.type === 'directory'), [entries])
@@ -77,7 +70,10 @@ function DirectoryNode(props: {
                 style={{ paddingLeft: indent }}
             >
                 <ChevronIcon collapsed={!isExpanded} className="h-4 w-4 text-[var(--app-hint)]" />
-                <FolderOpenIcon className="h-[22px] w-[22px] text-[var(--ds-accent-gold)]" strokeWidth={1.8} />
+                <FolderOpenIcon
+                    className="ds-directory-tree-folder-icon text-[var(--ds-accent-gold)]"
+                    strokeWidth={1.8}
+                />
                 <div className="min-w-0 flex-1">
                     <div className="truncate font-medium">{props.label}</div>
                 </div>

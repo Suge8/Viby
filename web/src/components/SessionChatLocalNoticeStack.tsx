@@ -1,6 +1,7 @@
 import { memo } from 'react'
 import type { AppNoticeTone } from '@/components/AppNotice'
 import { InlineNotice } from '@/components/InlineNotice'
+import { MotionStaggerGroup, MotionStaggerItem } from '@/components/motion/motionPrimitives'
 import { Button } from '@/components/ui/button'
 
 export type SessionChatLocalNoticeAction = {
@@ -31,9 +32,18 @@ export const SessionChatLocalNoticeStack = memo(function SessionChatLocalNoticeS
 
     return (
         <div className="session-chat-local-notice-stack shrink-0 px-3 pb-2">
-            <div className="mx-auto flex w-full ds-stage-shell flex-col gap-2">
-                {props.notices.map((notice) => (
-                    <div key={notice.id} className="flex items-start gap-2">
+            <MotionStaggerGroup
+                className="mx-auto flex w-full ds-stage-shell flex-col gap-2"
+                delay={0.04}
+                stagger={0.07}
+            >
+                {props.notices.map((notice, index) => (
+                    <MotionStaggerItem
+                        key={notice.id}
+                        className="flex items-start gap-2"
+                        x={index % 2 === 0 ? -18 : 18}
+                        y={0}
+                    >
                         <InlineNotice
                             tone={notice.tone ?? 'warning'}
                             title={notice.title}
@@ -53,9 +63,9 @@ export const SessionChatLocalNoticeStack = memo(function SessionChatLocalNoticeS
                                 {notice.action.pending ? notice.action.pendingLabel : notice.action.label}
                             </Button>
                         ) : null}
-                    </div>
+                    </MotionStaggerItem>
                 ))}
-            </div>
+            </MotionStaggerGroup>
         </div>
     )
 })

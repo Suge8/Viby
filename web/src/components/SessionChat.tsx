@@ -1,297 +1,108 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo } from 'react'
-import { useNavigate } from '@tanstack/react-router'
-import { getLiveSessionConfigSupport, resolveSessionDriver } from '@viby/protocol'
-import type { ApiClient } from '@/api/client'
-import type {
-    AttachmentMetadata,
-    DecryptedMessage,
-    Session,
-    SessionStreamState
-} from '@/types/api'
-import type { Suggestion } from '@/hooks/useActiveSuggestions'
-import type { PendingReplyState } from '@/lib/message-window-store'
-import type { LoadMoreMessagesResult } from '@/lib/message-window-store'
-import type { MessageWindowWarningKey } from '@/lib/messageWindowWarnings'
+import type { SameSessionSwitchTargetDriver } from '@viby/protocol'
+import { useCallback, useMemo, useRef } from 'react'
+import { MotionStaggerGroup, MotionStaggerItem } from '@/components/motion/motionPrimitives'
+import SessionChatWorkspace from '@/components/SessionChatWorkspace'
 import { SessionHeader } from '@/components/SessionHeader'
+import { buildSessionChatPageStyle } from '@/components/sessionChatLayoutStyle'
+import type { SessionChatWorkspaceProps } from '@/components/sessionChatWorkspaceTypes'
 import { useSessionActions } from '@/hooks/mutations/useSessionActions'
-import { runPreloadedNavigation } from '@/lib/navigationTransition'
-import { SessionChatPendingState } from '@/components/loading/SessionChatPendingState'
-import { assertSameSessionSwitchTargetDriver, getOtherSameSessionSwitchTargetDriver } from '@/lib/sameSessionDriverSwitch'
-import {
-    shouldPreloadSessionChatWorkspace,
-    shouldShowSessionChatPendingShell
-} from '@/components/sessionChatLoadingContract'
-import {
-    loadSessionChatWorkspaceModule,
-    loadSessionFilesRouteModule,
-    preloadSessionTerminalExperience
-} from '@/routes/sessions/sessionRoutePreload'
-import { preloadSessionChatWorkspaceSurfaces } from '@/components/sessionChatWorkspaceModules'
+import type { Suggestion } from '@/hooks/useActiveSuggestions'
+import { useElementHeight } from '@/hooks/useElementHeight'
+import { SESSION_CHAT_PAGE_TEST_ID } from '@/lib/sessionUiContracts'
 
-const SessionChatWorkspace = lazy(loadSessionChatWorkspaceModule)
-const SessionChatTeamSurface = lazy(async () => {
-    const module = await import('@/components/session-chat/SessionChatTeamSurface')
-    return { default: module.SessionChatTeamSurface }
-})
-const SESSION_CHAT_ENTER_SURFACE_CLASS_NAME = 'session-chat-enter-surface'
-const SESSION_CHAT_ENTER_BODY_CLASS_NAME = 'session-chat-enter-body'
-const SESSION_WORKSPACE_FILES_ROUTE = 'files'
-const SESSION_WORKSPACE_TERMINAL_ROUTE = 'terminal'
+type SessionChatRouteWorkspace = Pick<
+    SessionChatWorkspaceProps,
+    'api' | 'session' | 'messageState' | 'runtimeOptions' | 'persistComposerDraft'
+>
 
-type SessionWorkspaceRoute = typeof SESSION_WORKSPACE_FILES_ROUTE | typeof SESSION_WORKSPACE_TERMINAL_ROUTE
+type SessionChatRouteActions = Pick<
+    SessionChatWorkspaceProps['actions'],
+    'onAtBottomChange' | 'onFlushPending' | 'onLoadHistoryUntilPreviousUser' | 'onRefresh' | 'onRetryMessage' | 'onSend'
+>
 
 type SessionChatProps = {
-    api: ApiClient
-    session: Session
-    isDetailPending?: boolean
-    hasWarmSessionSnapshot?: boolean
-    messages: DecryptedMessage[]
-    messagesWarning: MessageWindowWarningKey | null
-    hasMoreMessages: boolean
-    isLoadingMessages: boolean
-    isLoadingMoreMessages: boolean
-    isSending: boolean
-    isResumingSession: boolean
-    pendingCount: number
-    hasLoadedLatestMessages: boolean
-    messagesVersion: number
-    pendingReply: PendingReplyState | null
-    stream: SessionStreamState | null
-    streamVersion: number
+    workspace: SessionChatRouteWorkspace
+    actions: SessionChatRouteActions
     onBack: () => void
-    onRefresh: () => void
-    onLoadMore: () => Promise<LoadMoreMessagesResult>
-    onLoadHistoryUntilPreviousUser: () => Promise<LoadMoreMessagesResult>
-    onSend: (text: string, attachments?: AttachmentMetadata[]) => void
-    onFlushPending: () => void
-    onAtBottomChange: (atBottom: boolean) => void
-    onRetryMessage?: (localId: string) => void
-    ensureSessionReady?: () => Promise<void>
-    warmSession?: () => void
-    autocompleteSuggestions?: (query: string) => Promise<Suggestion[]>
-    persistComposerDraft?: boolean
+    onSuggestionAction: (suggestion: Suggestion) => void
+    onViewFiles?: () => void
+    onViewTerminal?: () => void
 }
 
 export function SessionChat(props: SessionChatProps): React.JSX.Element {
-    const navigate = useNavigate()
-    const {
-        api,
-        autocompleteSuggestions,
-        hasMoreMessages,
-        hasWarmSessionSnapshot,
-        isDetailPending,
-        isLoadingMessages,
-        isLoadingMoreMessages,
-        isSending,
-        isResumingSession,
-        messages,
-        messagesVersion,
-        messagesWarning,
-        onAtBottomChange,
-        onBack,
-        onFlushPending,
-        onLoadHistoryUntilPreviousUser,
-        onLoadMore,
-        onRefresh,
-        onRetryMessage,
-        onSend,
-        pendingCount,
-        hasLoadedLatestMessages,
-        ensureSessionReady,
-        warmSession,
-        session,
-        pendingReply,
-        stream,
-        streamVersion
-    } = props
-    const sessionId = session.id
-    const sessionDriver = resolveSessionDriver(session.metadata)
-    const liveConfigSupport = getLiveSessionConfigSupport(session)
-    const {
-        abortSession,
-        unarchiveSession,
-        switchSessionDriver,
-        isSwitchingSessionDriver
-    } = useSessionActions(api, sessionId, sessionDriver, {
-        liveConfigSupport
+    const { actions, onBack, onSuggestionAction, onViewFiles, onViewTerminal, workspace } = props
+    const { api, messageState, runtimeOptions, session } = workspace
+    const headerStageRef = useRef<HTMLDivElement | null>(null)
+    const headerHeight = useElementHeight(headerStageRef)
+    const { abortSession, switchSessionDriver, isSwitchingSessionDriver } = useSessionActions(api, session, {
+        liveConfigSupport: runtimeOptions.liveConfigSupport,
     })
 
     const handleAbort = useCallback(async () => {
         await abortSession()
     }, [abortSession])
 
-    const handleSwitchSessionDriver = useCallback(async () => {
-        const targetDriver = assertSameSessionSwitchTargetDriver(
-            getOtherSameSessionSwitchTargetDriver(sessionDriver)
-        )
-        await switchSessionDriver(targetDriver)
-    }, [sessionDriver, switchSessionDriver])
+    const handleSwitchSessionDriver = useCallback(
+        async (targetDriver: SameSessionSwitchTargetDriver) => {
+            await switchSessionDriver(targetDriver)
+        },
+        [switchSessionDriver]
+    )
 
-    const navigateToSessionWorkspaceRoute = useCallback((route: SessionWorkspaceRoute) => {
-        const recoveryHref = `/sessions/${sessionId}/${route}`
-        const preload = route === SESSION_WORKSPACE_FILES_ROUTE
-            ? loadSessionFilesRouteModule()
-            : preloadSessionTerminalExperience()
+    const headerNavigation = useMemo(
+        () => ({
+            onBack,
+            onViewFiles: session.metadata?.path ? onViewFiles : undefined,
+            onViewTerminal: session.active ? onViewTerminal : undefined,
+        }),
+        [onBack, onViewFiles, onViewTerminal, session.active, session.metadata?.path]
+    )
 
-        runPreloadedNavigation(
-            preload,
-            () => {
-                if (route === SESSION_WORKSPACE_FILES_ROUTE) {
-                    void navigate({
-                        to: '/sessions/$sessionId/files',
-                        params: { sessionId }
-                    })
-                    return
-                }
+    const workspaceActions = useMemo(
+        () => ({
+            ...actions,
+            onAbort: handleAbort,
+            onSwitchSessionDriver: handleSwitchSessionDriver,
+            isSwitchingSessionDriver,
+        }),
+        [actions, handleAbort, handleSwitchSessionDriver, isSwitchingSessionDriver]
+    )
 
-                void navigate({
-                    to: '/sessions/$sessionId/terminal',
-                    params: { sessionId }
-                })
-            },
-            recoveryHref
-        )
-    }, [navigate, sessionId])
-
-    const handleViewFiles = useCallback(() => {
-        navigateToSessionWorkspaceRoute(SESSION_WORKSPACE_FILES_ROUTE)
-    }, [navigateToSessionWorkspaceRoute])
-
-    const handleViewTerminal = useCallback(() => {
-        navigateToSessionWorkspaceRoute(SESSION_WORKSPACE_TERMINAL_ROUTE)
-    }, [navigateToSessionWorkspaceRoute])
-
-    const headerNavigation = useMemo(() => ({
-        onBack,
-        onViewFiles: session.metadata?.path ? handleViewFiles : undefined,
-        onViewTerminal: session.active ? handleViewTerminal : undefined
-    }), [
-        handleViewFiles,
-        handleViewTerminal,
-        onBack,
-        session.active,
-        session.metadata?.path
-    ])
-
-    const showDetailPendingShell = shouldShowSessionChatPendingShell({
-        messagesCount: messages.length,
-        isDetailPending,
-        hasLoadedLatestMessages,
-        hasWarmSessionSnapshot
-    })
-    const shouldPreloadWorkspace = shouldPreloadSessionChatWorkspace({
-        messagesCount: messages.length,
-        isDetailPending,
-        hasLoadedLatestMessages,
-        hasWarmSessionSnapshot
-    })
-
-    useEffect(() => {
-        if (!shouldPreloadWorkspace) {
-            return
-        }
-
-        void Promise.all([
-            loadSessionChatWorkspaceModule(),
-            preloadSessionChatWorkspaceSurfaces()
-        ])
-    }, [shouldPreloadWorkspace])
-
-    const workspaceMessageState = useMemo(() => ({
-        messages,
-        warning: messagesWarning,
-        hasMore: hasMoreMessages,
-        isLoading: isLoadingMessages,
-        isLoadingMore: isLoadingMoreMessages,
-        isSending,
-        pendingCount,
-        messagesVersion,
-        pendingReply,
-        stream,
-        streamVersion
-    }), [
-        hasMoreMessages,
-        isLoadingMessages,
-        isLoadingMoreMessages,
-        isSending,
-        messages,
-        messagesVersion,
-        messagesWarning,
-        pendingCount,
-        pendingReply,
-        stream,
-        streamVersion
-    ])
-    const workspaceActions = useMemo(() => ({
-        onRefresh,
-        onLoadMore,
-        onLoadHistoryUntilPreviousUser,
-        onSend,
-        onFlushPending,
-        onAtBottomChange,
-        onRetryMessage,
-        onAbort: handleAbort,
-        onUnarchiveSession: unarchiveSession,
-        onSwitchSessionDriver: handleSwitchSessionDriver,
-        isSwitchingSessionDriver
-    }), [
-        handleAbort,
-        handleSwitchSessionDriver,
-        isSwitchingSessionDriver,
-        onAtBottomChange,
-        onFlushPending,
-        onLoadHistoryUntilPreviousUser,
-        onLoadMore,
-        onRefresh,
-        onRetryMessage,
-        onSend,
-        unarchiveSession
-    ])
-    const workspaceRuntimeOptions = useMemo(() => ({
-        liveConfigSupport,
-        ensureSessionReady,
-        warmSession,
-        isResumingSession,
-        autocompleteSuggestions
-    }), [autocompleteSuggestions, ensureSessionReady, isResumingSession, liveConfigSupport, warmSession])
+    const workspaceRuntimeOptions = useMemo(
+        () => ({
+            ...runtimeOptions,
+            onSuggestionAction,
+        }),
+        [onSuggestionAction, runtimeOptions]
+    )
+    const pageStyle = useMemo(() => buildSessionChatPageStyle({ headerHeight }), [headerHeight])
 
     return (
-        <div className={`session-chat-page ${SESSION_CHAT_ENTER_SURFACE_CLASS_NAME} flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden`}>
-            <SessionHeader
-                session={session}
-                navigation={headerNavigation}
-            />
+        <MotionStaggerGroup
+            key={session.id}
+            testId={SESSION_CHAT_PAGE_TEST_ID}
+            className="session-chat-page relative flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden bg-[var(--app-bg)]"
+            style={pageStyle}
+            delay={0.02}
+            stagger={0.09}
+        >
+            <MotionStaggerItem
+                className="pointer-events-none absolute inset-x-0 top-0 z-[var(--ds-session-chat-header-layer)]"
+                y={-18}
+            >
+                <SessionHeader session={session} navigation={headerNavigation} stageRef={headerStageRef} />
+            </MotionStaggerItem>
 
-            {session.teamContext ? (
-                <Suspense fallback={null}>
-                    <SessionChatTeamSurface api={api} session={session} />
-                </Suspense>
-            ) : null}
-
-            <div className={`session-chat-page-body ${SESSION_CHAT_ENTER_BODY_CLASS_NAME} min-h-0 flex-1 overflow-hidden`}>
-                {showDetailPendingShell ? (
-                    <SessionChatLoadingShell />
-                ) : (
-                    <Suspense fallback={<SessionChatWorkspaceFallback />}>
-                        <SessionChatWorkspace
-                            api={api}
-                            session={session}
-                            messageState={workspaceMessageState}
-                            actions={workspaceActions}
-                            runtimeOptions={workspaceRuntimeOptions}
-                            persistComposerDraft={props.persistComposerDraft}
-                        />
-                    </Suspense>
-                )}
+            <div className="session-chat-page-body min-h-0 flex-1 overflow-hidden">
+                <SessionChatWorkspace
+                    api={api}
+                    session={session}
+                    messageState={messageState}
+                    actions={workspaceActions}
+                    runtimeOptions={workspaceRuntimeOptions}
+                    persistComposerDraft={workspace.persistComposerDraft}
+                />
             </div>
-        </div>
+        </MotionStaggerGroup>
     )
-}
-
-function SessionChatLoadingShell(): React.JSX.Element {
-    return <SessionChatPendingState testId="session-chat-detail-pending" />
-}
-
-function SessionChatWorkspaceFallback(): React.JSX.Element {
-    return <SessionChatPendingState testId="session-chat-workspace-pending" />
 }

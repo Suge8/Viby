@@ -5,15 +5,19 @@ import { FloatingNoticeViewport } from '@/components/FloatingNoticeViewport'
 import { NoticeProvider, usePersistentNotices } from '@/lib/notice-center'
 
 vi.mock('@/components/ui/animated-list', () => ({
-    AnimatedList: (props: { children: ReactNode; className?: string }) => <div className={props.className}>{props.children}</div>
+    AnimatedList: (props: { children: ReactNode; className?: string }) => (
+        <div className={props.className}>{props.children}</div>
+    ),
 }))
 
 vi.mock('@/components/ui/blur-fade', () => ({
-    BlurFade: (props: { children: ReactNode; className?: string }) => <div className={props.className}>{props.children}</div>
+    BlurFade: (props: { children: ReactNode; className?: string }) => (
+        <div className={props.className}>{props.children}</div>
+    ),
 }))
 
 vi.mock('@tanstack/react-router', () => ({
-    useNavigate: () => vi.fn()
+    useNavigate: () => vi.fn(),
 }))
 
 function PersistentNoticeHost(): null {
@@ -22,8 +26,8 @@ function PersistentNoticeHost(): null {
             id: 'app:runtime',
             tone: 'info',
             title: 'Recovered',
-            description: 'Syncing the latest state.'
-        }
+            description: 'Syncing the latest state.',
+        },
     ])
     return null
 }
@@ -53,8 +57,8 @@ describe('FloatingNoticeViewport', () => {
                     id: 'app:offline',
                     tone: 'warning',
                     title: 'Offline',
-                    compact: true
-                }
+                    compact: true,
+                },
             ])
             return null
         }
@@ -69,5 +73,6 @@ describe('FloatingNoticeViewport', () => {
         const viewport = container.firstElementChild as HTMLElement
         expect(viewport.className).toContain('w-[min(calc(100vw-4.25rem),14rem)]')
         expect(viewport.className).toContain('sm:w-[min(calc(100vw-2rem),16rem)]')
+        expect(container.querySelector('.space-y-2\\.5')).not.toBeNull()
     })
 })

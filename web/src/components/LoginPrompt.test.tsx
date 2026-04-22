@@ -1,81 +1,56 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, fireEvent, within } from '@testing-library/react'
-import { I18nProvider } from '@/lib/i18n-context'
-import { LoginPrompt } from './LoginPrompt'
+import { render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+import { I18nContext } from '@/lib/i18n-context'
+import zhCN from '@/lib/locales/zh-CN'
+import { LoginPrompt, type LoginPromptServerConfig } from './LoginPrompt'
 
-const loginServer = {
-    baseUrl: 'https://app.example.com',
-    serverUrl: null,
-    setServerUrl: vi.fn((value: string) => ({ ok: true as const, value })),
-    clearServerUrl: vi.fn()
+vi.mock('@/hooks/useFinalizeBootShell', () => ({
+    useFinalizeBootShell: vi.fn(),
+}))
+
+vi.mock('@/api/authClient', () => ({
+    authenticateWithAccessToken: vi.fn(),
+}))
+
+function createServerConfig(): LoginPromptServerConfig {
+    return {
+        baseUrl: 'https://viby.example.com',
+        serverUrl: null,
+        requireServerUrl: false,
+        setServerUrl: () => ({ ok: true, value: 'https://viby.example.com' }),
+        clearServerUrl: vi.fn(),
+    }
 }
 
-function renderWithProviders(ui: React.ReactElement) {
+function renderPrompt() {
+    const translations = zhCN as Record<string, string>
     return render(
-        <I18nProvider>
-            {ui}
-        </I18nProvider>
+        <I18nContext.Provider
+            value={{
+                locale: 'zh-CN',
+                localePreference: 'zh-CN',
+                setLocale: vi.fn(),
+                t: (key: string) => translations[key] ?? key,
+            }}
+        >
+            <LoginPrompt server={createServerConfig()} onLogin={vi.fn()} />
+        </I18nContext.Provider>
     )
 }
 
 describe('LoginPrompt', () => {
-    beforeEach(() => {
-        vi.clearAllMocks()
-        window.localStorage.clear()
-        window.localStorage.setItem('viby-lang', 'en')
-        loginServer.serverUrl = null
-    })
+    it('renders the product-style landing shell around the sign-in form', () => {
+        renderPrompt()
 
-    afterEach(() => {
-        window.localStorage.clear()
-    })
-
-    it('does not clear first hub URL edit when hub URL required', async () => {
-        const { container } = renderWithProviders(
-            <LoginPrompt
-                server={{
-                    ...loginServer,
-                    requireServerUrl: true
-                }}
-                onLogin={vi.fn()}
-            />
+        expect(screen.getByTestId('login-marketing-shell')).toBeInTheDocument()
+        expect(screen.getByText('Agent 留在你的机器上。')).toBeInTheDocument()
+        expect(screen.getAllByText('把访问令牌贴进来，直接接上你电脑上正在运行的会话。').length).toBeGreaterThanOrEqual(
+            1
         )
-
-        const tokenInput = container.querySelector<HTMLInputElement>('input[name="accessToken"]')
-        const submitButton = container.querySelector<HTMLButtonElement>('button[type="submit"]')
-
-        expect(tokenInput).not.toBeNull()
-        expect(submitButton).not.toBeNull()
-
-        fireEvent.change(tokenInput!, { target: { value: 'token' } })
-        fireEvent.click(submitButton!)
-
-        const dialog = await screen.findByRole('dialog')
-        const hubInput = within(dialog).getByRole('textbox')
-
-        fireEvent.change(hubInput, { target: { value: 'https://hub.example.com' } })
-
-        expect(hubInput).toHaveValue('https://hub.example.com')
-    })
-
-    it('marks the access token field as a non-autofill secret input', () => {
-        const { container } = renderWithProviders(
-            <LoginPrompt
-                server={loginServer}
-                onLogin={vi.fn()}
-            />
+        expect(screen.getByRole('link', { name: '查看 GitHub 项目' })).toHaveAttribute(
+            'href',
+            'https://github.com/Suge8/Viby'
         )
-
-        const tokenInput = container.querySelector<HTMLInputElement>('input[name="accessToken"]')
-        expect(tokenInput).not.toBeNull()
-
-        expect(tokenInput).toHaveAttribute('name', 'accessToken')
-        expect(tokenInput).toHaveAttribute('autocomplete', 'new-password')
-        expect(tokenInput).toHaveAttribute('autocapitalize', 'none')
-        expect(tokenInput).toHaveAttribute('autocorrect', 'off')
-        expect(tokenInput).toHaveAttribute('spellcheck', 'false')
-        expect(tokenInput).toHaveAttribute('inputmode', 'text')
-        expect(tokenInput).toHaveAttribute('data-1p-ignore', 'true')
-        expect(tokenInput).toHaveAttribute('data-lpignore', 'true')
+        expect(screen.getByRole('button', { name: '登录' })).toBeInTheDocument()
     })
 })

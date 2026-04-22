@@ -34,21 +34,14 @@ type SkeletonRowsProps = {
 
 export function SkeletonRows(props: SkeletonRowsProps): React.JSX.Element {
     return (
-        <div
-            className={joinClassNames('space-y-3', props.className)}
-            role="status"
-            aria-live="polite"
-            aria-busy="true"
-        >
+        <div className={joinClassNames('space-y-3', props.className)} role="status" aria-live="polite" aria-busy="true">
             {props.label ? <span className="sr-only">{props.label}</span> : null}
             {props.rows.map((row, index) => (
                 <div
                     key={`skeleton-row-${index}`}
                     className={row.align === 'end' ? 'flex justify-end' : 'flex justify-start'}
                 >
-                    <SkeletonBlock
-                        className={joinClassNames(row.heightClassName, row.widthClassName, row.className)}
-                    />
+                    <SkeletonBlock className={joinClassNames(row.heightClassName, row.widthClassName, row.className)} />
                 </div>
             ))}
         </div>
@@ -96,7 +89,7 @@ export function SkeletonList(props: SkeletonListProps): React.JSX.Element {
             <span className="sr-only">{props.label}</span>
             {props.rows.map((row, index) => (
                 <div key={`skeleton-list-row-${index}`} className="flex items-center gap-3">
-                    <SkeletonBlock className={joinClassNames('h-6 w-6 rounded-[8px]', props.iconClassName)} />
+                    <SkeletonBlock className={joinClassNames('ds-loading-list-icon h-6 w-6', props.iconClassName)} />
                     <div className="flex-1 space-y-2">
                         <SkeletonBlock className={joinClassNames('h-3', row.titleWidthClassName)} />
                         <SkeletonBlock className={joinClassNames('h-2', row.subtitleWidthClassName)} />

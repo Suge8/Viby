@@ -1,151 +1,128 @@
-import { AssistantRuntimeProvider } from '@assistant-ui/react'
-import { Suspense, lazy, memo, useEffect, useMemo, useState } from 'react'
 import type { AttachmentAdapter } from '@assistant-ui/react'
-import { VibyThread } from '@/components/AssistantChat/VibyThread'
-import { useSessionChatBlocks } from '@/components/useSessionChatBlocks'
-import { useVibyRuntime } from '@/lib/assistant-runtime'
-import type {
-    SessionChatWorkspaceActionHandlers,
-    SessionChatWorkspaceMessageState
-} from '@/components/sessionChatWorkspaceTypes'
+import { AssistantRuntimeProvider } from '@assistant-ui/react'
+import { isSessionInteractionDisabled } from '@viby/protocol'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import type { ApiClient } from '@/api/client'
-import type { Session } from '@/types/api'
+import { ComposerDraftController } from '@/components/AssistantChat/ComposerDraftController'
+import { VibyThread } from '@/components/AssistantChat/VibyThread'
+import { ActiveInteractiveRequestOwner } from '@/components/interactive-request/ActiveInteractiveRequestOwner'
+import type { SessionChatRuntimeSurfaceProps } from '@/components/sessionChatWorkspaceTypes'
+import { useVibyRuntime } from '@/lib/assistant-runtime'
+import type { AttachmentAdapterModule } from '@/lib/attachmentAdapter'
+import { enterControllerSurface } from '@/lib/controllerOwnershipProbe'
 
-let composerDraftControllerModulePromise: Promise<{ default: typeof import('@/components/AssistantChat/ComposerDraftController').ComposerDraftController }> | null = null
+let attachmentAdapterModule: AttachmentAdapterModule | null = null
+let attachmentAdapterModulePromise: Promise<AttachmentAdapterModule> | null = null
 
-function loadComposerDraftControllerModule() {
-    composerDraftControllerModulePromise ??= import('@/components/AssistantChat/ComposerDraftController').then((module) => ({
-        default: module.ComposerDraftController
-    }))
-    return composerDraftControllerModulePromise
-}
-
-const LazyComposerDraftController = lazy(loadComposerDraftControllerModule)
-
-type SessionChatRuntimeSurfaceProps = {
-    workspace: Pick<{
-        api: ApiClient
-        session: Session
-        messageState: SessionChatWorkspaceMessageState
-    }, 'api' | 'session' | 'messageState'>
-    runtime: {
-        actions: Pick<
-            SessionChatWorkspaceActionHandlers,
-            | 'onAbort'
-            | 'onAtBottomChange'
-            | 'onFlushPending'
-            | 'onLoadHistoryUntilPreviousUser'
-            | 'onLoadMore'
-            | 'onRefresh'
-            | 'onRetryMessage'
-            | 'onSend'
-        >
-        allowSendWhenInactive: boolean
-        forceScrollToken: number
+function loadAttachmentAdapterModule(): Promise<AttachmentAdapterModule> {
+    if (attachmentAdapterModule) {
+        return Promise.resolve(attachmentAdapterModule)
     }
-    persistComposerDraft?: boolean
-    children?: React.ReactNode
+
+    attachmentAdapterModulePromise ??= import('@/lib/attachmentAdapter').then((module) => {
+        attachmentAdapterModule = module
+        return module
+    })
+    return attachmentAdapterModulePromise
 }
 
 function SessionChatRuntimeSurfaceInner(props: SessionChatRuntimeSurfaceProps): React.JSX.Element {
     const {
-        workspace: { api, session, messageState },
-        runtime: { actions, allowSendWhenInactive, forceScrollToken },
+        model: {
+            api,
+            session,
+            composerAnchorTop,
+            composerHeight,
+            messageState,
+            onAbort,
+            onAtBottomChange,
+            onFlushPending,
+            onLoadHistoryUntilPreviousUser,
+            onRefresh,
+            onRetryMessage,
+            onSend,
+            allowSendWhenInactive,
+        },
         persistComposerDraft = true,
-        children
+        children,
     } = props
+    const surfaceRef = useRef<HTMLDivElement | null>(null)
+    const interactionDisabled = isSessionInteractionDisabled({
+        active: session.active,
+        allowSendWhenInactive,
+    })
     const attachmentAdapter = useLazyAttachmentAdapter({
         api,
         sessionId: session.id,
-        enabled: session.active || allowSendWhenInactive
+        enabled: !interactionDisabled,
     })
-
-    const chatBlocks = useSessionChatBlocks({
-        sessionId: session.id,
-        messages: messageState.messages,
-        agentState: session.agentState,
-        stream: messageState.stream
-    })
-
+    useEffect(() => {
+        const leaveSurface = enterControllerSurface(
+            `session-chat-runtime:${session.id}`,
+            'session-chat-runtime-surface'
+        )
+        return () => {
+            leaveSurface()
+        }
+    }, [session.id])
     const assistantRuntime = useVibyRuntime({
         session,
-        blocks: chatBlocks.blocks,
         isSending: messageState.isSending,
-        onSendMessage: actions.onSend,
-        onAbort: actions.onAbort,
+        onSendMessage: onSend,
+        onAbort,
         attachmentAdapter,
-        allowSendWhenInactive
+        allowSendWhenInactive,
     })
 
-    const threadSession = useMemo(() => ({
-        api,
-        sessionId: session.id,
-        metadata: session.metadata,
-        disabled: !session.active
-    }), [api, session.active, session.id, session.metadata])
+    const threadSession = useMemo(
+        () => ({
+            api,
+            sessionId: session.id,
+            metadata: session.metadata,
+            agentState: session.agentState,
+            disabled: interactionDisabled,
+        }),
+        [api, interactionDisabled, session.agentState, session.id, session.metadata]
+    )
 
-    const threadHandlers = useMemo(() => ({
-        onRefresh: actions.onRefresh,
-        onRetryMessage: actions.onRetryMessage,
-        onFlushPending: actions.onFlushPending,
-        onAtBottomChange: actions.onAtBottomChange,
-        isLoadingMessages: messageState.isLoading,
-        onLoadHistoryUntilPreviousUser: actions.onLoadHistoryUntilPreviousUser,
-        onLoadMore: actions.onLoadMore,
-    }), [
-        actions.onAtBottomChange,
-        actions.onFlushPending,
-        actions.onLoadHistoryUntilPreviousUser,
-        actions.onLoadMore,
-        actions.onRefresh,
-        actions.onRetryMessage,
-        messageState.isLoading
-    ])
-
-    const threadState = useMemo(() => ({
-        hasMoreMessages: messageState.hasMore,
-        isLoadingMoreMessages: messageState.isLoadingMore,
-        // Chat entry should always land on the latest message, even for inactive sessions.
-        pinToBottomOnSessionEntry: true,
-        pendingCount: messageState.pendingCount,
-        rawMessagesCount: chatBlocks.rawMessagesCount,
-        normalizedMessagesCount: chatBlocks.normalizedMessagesCount,
-        messagesVersion: messageState.messagesVersion,
-        streamVersion: messageState.streamVersion,
-        threadMessageIds: chatBlocks.threadMessageIds,
-        conversationMessageIds: chatBlocks.conversationMessageIds,
-        threadMessageOwnerById: chatBlocks.threadMessageOwnerById,
-        historyJumpTargetMessageIds: chatBlocks.historyJumpTargetMessageIds,
-        forceScrollToken,
-    }), [
-        chatBlocks.conversationMessageIds,
-        chatBlocks.historyJumpTargetMessageIds,
-        chatBlocks.normalizedMessagesCount,
-        chatBlocks.rawMessagesCount,
-        chatBlocks.threadMessageIds,
-        chatBlocks.threadMessageOwnerById,
-        forceScrollToken,
-        messageState.hasMore,
-        messageState.isLoadingMore,
-        messageState.messagesVersion,
-        messageState.pendingCount,
-        messageState.streamVersion,
-    ])
+    const threadHandlers = useMemo(
+        () => ({
+            onRefresh,
+            onRetryMessage,
+            onFlushPending,
+            onAtBottomChange,
+            onLoadHistoryUntilPreviousUser,
+        }),
+        [onAtBottomChange, onFlushPending, onLoadHistoryUntilPreviousUser, onRefresh, onRetryMessage]
+    )
+    const interactiveRequestModel = useMemo(
+        () => ({
+            api,
+            composerHeight,
+            session,
+            messages: messageState.messages,
+            isReplying: session.thinking || messageState.pendingReply !== null || messageState.stream !== null,
+            onSend,
+        }),
+        [api, composerHeight, messageState.messages, messageState.pendingReply, messageState.stream, onSend, session]
+    )
 
     return (
-        <AssistantRuntimeProvider runtime={assistantRuntime}>
-            {persistComposerDraft ? (
-                <Suspense fallback={null}>
-                    <LazyComposerDraftController sessionId={session.id} />
-                </Suspense>
-            ) : null}
-            <VibyThread
-                key={session.id}
-                session={threadSession}
-                handlers={threadHandlers}
-                state={threadState}
-            />
-            {children}
+        <AssistantRuntimeProvider key={session.id} runtime={assistantRuntime}>
+            <div ref={surfaceRef} className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+                {persistComposerDraft ? <ComposerDraftController sessionId={session.id} /> : null}
+                <ActiveInteractiveRequestOwner model={interactiveRequestModel} surfaceRef={surfaceRef} />
+                <div className="flex min-h-0 flex-1">
+                    <VibyThread
+                        key={session.id}
+                        session={threadSession}
+                        messageState={messageState}
+                        handlers={threadHandlers}
+                        composerAnchorTop={composerAnchorTop}
+                    />
+                </div>
+                {children}
+            </div>
         </AssistantRuntimeProvider>
     )
 }
@@ -158,27 +135,30 @@ function useLazyAttachmentAdapter(options: {
     enabled: boolean
 }): AttachmentAdapter | undefined {
     const { api, sessionId, enabled } = options
-    const [attachmentAdapter, setAttachmentAdapter] = useState<AttachmentAdapter>()
+    const [module, setModule] = useState<AttachmentAdapterModule | null>(() => attachmentAdapterModule)
 
     useEffect(() => {
-        if (!enabled) {
-            setAttachmentAdapter(undefined)
+        if (!enabled || module) {
             return
         }
 
         let cancelled = false
-        void import('@/lib/attachmentAdapter').then((module) => {
-            if (cancelled) {
-                return
+        void loadAttachmentAdapterModule().then((loadedModule) => {
+            if (!cancelled) {
+                setModule(loadedModule)
             }
-
-            setAttachmentAdapter(module.createAttachmentAdapter(api, sessionId))
         })
 
         return () => {
             cancelled = true
         }
-    }, [api, enabled, sessionId])
+    }, [enabled, module])
 
-    return attachmentAdapter
+    return useMemo(() => {
+        if (!enabled || !module) {
+            return undefined
+        }
+
+        return module.getCachedAttachmentAdapter(api, sessionId)
+    }, [api, enabled, module, sessionId])
 }

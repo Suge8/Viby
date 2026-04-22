@@ -1,19 +1,11 @@
-import {
-    useCallback,
-    useEffect,
-    useId,
-    useLayoutEffect,
-    useRef,
-    useState,
-    type CSSProperties,
-} from 'react'
+import { type CSSProperties, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Button } from '@/components/ui/button'
 import type {
     FloatingActionMenuAnchorPoint,
     FloatingActionMenuContent,
     FloatingActionMenuItem,
-    FloatingActionMenuItemTone
+    FloatingActionMenuItemTone,
 } from '@/components/ui/FloatingActionMenu.contract'
 
 type FloatingActionMenuProps = {
@@ -42,7 +34,7 @@ function buildMenuStyle(menuPosition: MenuPosition | null): CSSProperties | unde
     return {
         top: menuPosition.top,
         left: menuPosition.left,
-        transformOrigin: menuPosition.transformOrigin
+        transformOrigin: menuPosition.transformOrigin,
     }
 }
 
@@ -55,15 +47,12 @@ function getMenuItemClassName(tone: FloatingActionMenuItemTone | undefined, base
 }
 
 export function FloatingActionMenu(props: FloatingActionMenuProps): React.JSX.Element | null {
-    const {
-        isOpen,
-        onClose,
-        anchorPoint,
-        content
-    } = props
+    const { isOpen, onClose, anchorPoint, content } = props
     const { heading, items, menuId } = content
     const menuRef = useRef<HTMLDivElement | null>(null)
     const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null)
+    const menuPositionRef = useRef<MenuPosition | null>(null)
+    const frameRef = useRef<number | null>(null)
     const internalId = useId()
     const resolvedMenuId = menuId ?? `floating-action-menu-${internalId}`
     const headingId = `${resolvedMenuId}-heading`
@@ -79,12 +68,9 @@ export function FloatingActionMenu(props: FloatingActionMenuProps): React.JSX.El
         const viewportHeight = window.innerHeight
         const spaceBelow = viewportHeight - anchorPoint.y
         const spaceAbove = anchorPoint.y
-        const openAbove =
-            spaceBelow < menuRect.height + MENU_ANCHOR_GAP_PX && spaceAbove > spaceBelow
+        const openAbove = spaceBelow < menuRect.height + MENU_ANCHOR_GAP_PX && spaceAbove > spaceBelow
 
-        let top = openAbove
-            ? anchorPoint.y - menuRect.height - MENU_ANCHOR_GAP_PX
-            : anchorPoint.y + MENU_ANCHOR_GAP_PX
+        let top = openAbove ? anchorPoint.y - menuRect.height - MENU_ANCHOR_GAP_PX : anchorPoint.y + MENU_ANCHOR_GAP_PX
         let left = anchorPoint.x - menuRect.width / 2
 
         top = Math.min(
@@ -96,23 +82,46 @@ export function FloatingActionMenu(props: FloatingActionMenuProps): React.JSX.El
             viewportWidth - menuRect.width - MENU_VIEWPORT_PADDING_PX
         )
 
-        setMenuPosition({
+        const nextPosition = {
             top,
             left,
-            transformOrigin: openAbove ? 'bottom center' : 'top center'
-        })
+            transformOrigin: openAbove ? 'bottom center' : 'top center',
+        }
+
+        if (
+            menuPositionRef.current?.top === nextPosition.top &&
+            menuPositionRef.current?.left === nextPosition.left &&
+            menuPositionRef.current?.transformOrigin === nextPosition.transformOrigin
+        ) {
+            return
+        }
+
+        menuPositionRef.current = nextPosition
+        setMenuPosition(nextPosition)
     }, [anchorPoint])
+
+    const schedulePositionUpdate = useCallback(() => {
+        if (frameRef.current !== null) {
+            return
+        }
+
+        frameRef.current = window.requestAnimationFrame(() => {
+            frameRef.current = null
+            updatePosition()
+        })
+    }, [updatePosition])
 
     useLayoutEffect(() => {
         if (!isOpen) {
             return
         }
 
-        updatePosition()
-    }, [isOpen, updatePosition])
+        schedulePositionUpdate()
+    }, [isOpen, schedulePositionUpdate])
 
     useEffect(() => {
         if (!isOpen) {
+            menuPositionRef.current = null
             setMenuPosition(null)
             return
         }
@@ -132,22 +141,22 @@ export function FloatingActionMenu(props: FloatingActionMenuProps): React.JSX.El
             }
         }
 
-        function handleReflow(): void {
-            updatePosition()
-        }
-
         document.addEventListener('pointerdown', handlePointerDown)
         document.addEventListener('keydown', handleKeyDown)
-        window.addEventListener('resize', handleReflow)
-        window.addEventListener('scroll', handleReflow, true)
+        window.addEventListener('resize', schedulePositionUpdate)
+        window.addEventListener('scroll', schedulePositionUpdate, true)
 
         return () => {
             document.removeEventListener('pointerdown', handlePointerDown)
             document.removeEventListener('keydown', handleKeyDown)
-            window.removeEventListener('resize', handleReflow)
-            window.removeEventListener('scroll', handleReflow, true)
+            window.removeEventListener('resize', schedulePositionUpdate)
+            window.removeEventListener('scroll', schedulePositionUpdate, true)
+            if (frameRef.current !== null) {
+                window.cancelAnimationFrame(frameRef.current)
+                frameRef.current = null
+            }
         }
-    }, [isOpen, onClose, updatePosition])
+    }, [isOpen, onClose, schedulePositionUpdate])
 
     useEffect(() => {
         if (!isOpen) {
@@ -169,21 +178,16 @@ export function FloatingActionMenu(props: FloatingActionMenuProps): React.JSX.El
     return createPortal(
         <div
             ref={menuRef}
-            className="ds-dialog-surface fixed z-50 min-w-[220px] rounded-[var(--ds-radius-lg)] p-2 animate-menu-pop"
+            className="ds-dialog-surface ds-floating-action-menu fixed z-50 rounded-[var(--ds-radius-lg)] p-2 animate-menu-pop"
             style={buildMenuStyle(menuPosition)}
         >
             <div
                 id={headingId}
-                className="px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--app-hint)]"
+                className="ds-floating-action-menu-heading px-3 py-2 font-semibold uppercase text-[var(--app-hint)]"
             >
                 {heading}
             </div>
-            <div
-                id={resolvedMenuId}
-                role="menu"
-                aria-labelledby={headingId}
-                className="flex flex-col gap-1"
-            >
+            <div id={resolvedMenuId} role="menu" aria-labelledby={headingId} className="flex flex-col gap-1">
                 {items.map((item) => (
                     <Button
                         key={item.id}

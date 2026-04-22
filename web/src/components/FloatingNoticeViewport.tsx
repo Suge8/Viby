@@ -1,17 +1,20 @@
-import { memo, useEffect, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
+import { memo, useEffect, useRef, useState } from 'react'
 import { AppNotice } from '@/components/AppNotice'
 import { getNoticeToneIcon } from '@/components/InlineNotice'
 import { AnimatedList } from '@/components/ui/animated-list'
-import { Button } from '@/components/ui/button'
 import { BlurFade } from '@/components/ui/blur-fade'
-import { useNoticeCenter, type Notice } from '@/lib/notice-center'
+import { Button } from '@/components/ui/button'
+import { type Notice, useNoticeCenter } from '@/lib/notice-center'
+import { reportWebRuntimeError } from '@/lib/runtimeDiagnostics'
 
 const NOTICE_STACK_DELAY_MS = 120
-const VIEWPORT_BASE_CLASS_NAME = 'pointer-events-none fixed left-1/2 top-[calc(env(safe-area-inset-top)+0.75rem)] z-50 -translate-x-1/2 sm:left-auto sm:right-3 sm:translate-x-0 md:right-4'
+const VIEWPORT_BASE_CLASS_NAME =
+    'pointer-events-none fixed left-1/2 top-[calc(env(safe-area-inset-top)+0.75rem)] z-50 -translate-x-1/2 sm:left-auto sm:right-3 sm:translate-x-0 md:right-4'
 const DEFAULT_VIEWPORT_WIDTH_CLASS_NAME = 'w-[min(calc(100vw-2.5rem),20rem)] sm:w-[min(calc(100vw-1.5rem),24rem)]'
 const COMPACT_VIEWPORT_WIDTH_CLASS_NAME = 'w-[min(calc(100vw-4.25rem),14rem)] sm:w-[min(calc(100vw-2rem),16rem)]'
-const NOTICE_BUTTON_CLASS_NAME = 'pointer-events-auto block w-full border-transparent bg-transparent px-0 py-0 text-left outline-none shadow-none [&>[data-button-content]]:w-full'
+const NOTICE_BUTTON_CLASS_NAME =
+    'pointer-events-auto block w-full border-transparent bg-transparent px-0 py-0 text-left outline-none shadow-none [&>[data-button-content]]:w-full'
 
 type FloatingNoticeCardProps = {
     notice: Notice
@@ -22,7 +25,7 @@ type FloatingNoticeCardProps = {
 function getViewportClassName(hasOnlyCompactNotices: boolean): string {
     return [
         VIEWPORT_BASE_CLASS_NAME,
-        hasOnlyCompactNotices ? COMPACT_VIEWPORT_WIDTH_CLASS_NAME : DEFAULT_VIEWPORT_WIDTH_CLASS_NAME
+        hasOnlyCompactNotices ? COMPACT_VIEWPORT_WIDTH_CLASS_NAME : DEFAULT_VIEWPORT_WIDTH_CLASS_NAME,
     ].join(' ')
 }
 
@@ -102,34 +105,36 @@ export function FloatingNoticeViewport() {
     }
 
     const hasOnlyCompactNotices = notices.every((notice) => notice.compact === true)
+    const cards = notices.map((notice) => (
+        <FloatingNoticeCard
+            key={notice.id}
+            notice={notice}
+            onNavigate={(href, id) => {
+                dismissNotice(id)
+                void navigate({ to: href })
+            }}
+            onPress={async (handler, id) => {
+                try {
+                    await handler()
+                    dismissNotice(id)
+                } catch (error) {
+                    reportWebRuntimeError('Failed to handle floating notice action.', error)
+                }
+            }}
+        />
+    ))
 
     return (
-        <div
-            className={getViewportClassName(hasOnlyCompactNotices)}
-            aria-live="polite"
-        >
-            <BlurFade offset={14} blur="12px" duration={0.28} className="w-full">
-                <AnimatedList className="w-full items-stretch gap-2.5" delay={NOTICE_STACK_DELAY_MS}>
-                    {notices.map((notice) => (
-                        <FloatingNoticeCard
-                            key={notice.id}
-                            notice={notice}
-                            onNavigate={(href, id) => {
-                                dismissNotice(id)
-                                void navigate({ to: href })
-                            }}
-                            onPress={async (handler, id) => {
-                                try {
-                                    await handler()
-                                    dismissNotice(id)
-                                } catch (error) {
-                                    console.error('Failed to handle floating notice action:', error)
-                                }
-                            }}
-                        />
-                    ))}
-                </AnimatedList>
-            </BlurFade>
+        <div className={getViewportClassName(hasOnlyCompactNotices)} aria-live="polite">
+            {hasOnlyCompactNotices ? (
+                <div className="w-full space-y-2.5">{cards}</div>
+            ) : (
+                <BlurFade offset={14} duration={0.28} className="w-full">
+                    <AnimatedList className="w-full items-stretch gap-2.5" delay={NOTICE_STACK_DELAY_MS}>
+                        {cards}
+                    </AnimatedList>
+                </BlurFade>
+            )}
         </div>
     )
 }
