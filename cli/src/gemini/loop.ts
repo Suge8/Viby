@@ -1,60 +1,38 @@
-import { MessageQueue2 } from '@/utils/MessageQueue2';
-import { logger } from '@/ui/logger';
-import { runLocalRemoteSession } from '@/agent/loopBase';
-import { GeminiSession } from './session';
-import { geminiLocalLauncher } from './geminiLocalLauncher';
-import { geminiRemoteLauncher } from './geminiRemoteLauncher';
-import { ApiClient, ApiSessionClient } from '@/lib';
-import type { GeminiMode, PermissionMode } from './types';
+import { ApiClient, ApiSessionClient } from '@/lib'
+import { logger } from '@/ui/logger'
+import { MessageQueue2 } from '@/utils/MessageQueue2'
+import { geminiRemoteLauncher } from './geminiRemoteLauncher'
+import { GeminiSession } from './session'
+import type { GeminiMode, PermissionMode } from './types'
 
 interface GeminiLoopOptions {
-    path: string;
-    startingMode?: 'local' | 'remote';
-    startedBy?: 'runner' | 'terminal';
-    onModeChange: (mode: 'local' | 'remote') => void;
-    messageQueue: MessageQueue2<GeminiMode>;
-    session: ApiSessionClient;
-    api: ApiClient;
-    permissionMode?: PermissionMode;
-    resumeSessionId?: string;
-    model?: string;
-    hookSettingsPath?: string;
-    allowedTools?: string[];
-    onSessionReady?: (session: GeminiSession) => void;
+    path: string
+    startedBy?: 'runner' | 'terminal'
+    messageQueue: MessageQueue2<GeminiMode>
+    session: ApiSessionClient
+    api: ApiClient
+    permissionMode?: PermissionMode
+    resumeSessionId?: string
+    model?: string
+    hookSettingsPath?: string
+    onSessionReady?: (session: GeminiSession) => void
 }
 
 export async function geminiLoop(opts: GeminiLoopOptions): Promise<void> {
-    const logPath = logger.getLogPath();
-    const startedBy = opts.startedBy ?? 'terminal';
-    const startingMode = opts.startingMode ?? 'local';
-
     const session = new GeminiSession({
         api: opts.api,
         client: opts.session,
         path: opts.path,
         sessionId: opts.resumeSessionId ?? null,
-        logPath,
+        logPath: logger.getLogPath(),
         messageQueue: opts.messageQueue,
-        onModeChange: opts.onModeChange,
-        mode: startingMode,
-        startedBy,
-        startingMode,
-        permissionMode: opts.permissionMode ?? 'default'
-    });
+        startedBy: opts.startedBy ?? 'terminal',
+        permissionMode: opts.permissionMode ?? 'default',
+    })
 
-    await runLocalRemoteSession({
-        session,
-        startingMode: opts.startingMode,
-        logTag: 'gemini-loop',
-        runLocal: (instance) => geminiLocalLauncher(instance, {
-            model: instance.getModel() ?? opts.model,
-            allowedTools: opts.allowedTools,
-            hookSettingsPath: opts.hookSettingsPath
-        }),
-        runRemote: (instance) => geminiRemoteLauncher(instance, {
-            model: instance.getModel() ?? opts.model,
-            hookSettingsPath: opts.hookSettingsPath
-        }),
-        onSessionReady: opts.onSessionReady
-    });
+    opts.onSessionReady?.(session)
+    await geminiRemoteLauncher(session, {
+        model: session.getModel() ?? opts.model,
+        hookSettingsPath: opts.hookSettingsPath,
+    })
 }

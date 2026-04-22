@@ -1,4 +1,4 @@
-import { buildPiAssistantStreamId, unwrapRoleWrappedRecordEnvelope } from '@viby/protocol/messages'
+import { buildPiAssistantTurnId, unwrapRoleWrappedRecordEnvelope } from '@viby/protocol/messages'
 import type { CliSessionRecoveryResponse, SessionModelReasoningEffort } from '@/api/types'
 import { formatMessageWithAttachments } from '@/utils/attachmentFormatter'
 
@@ -82,13 +82,15 @@ export type PiToolResultMessage = {
 
 export type PiMessage = PiUserMessage | PiAssistantMessage | PiToolResultMessage
 
-type PiTranscriptPayload = {
-    type: 'assistant'
-    message: PiAssistantMessage
-} | {
-    type: 'user'
-    toolUseResult: PiToolResultMessage
-}
+type PiTranscriptPayload =
+    | {
+          type: 'assistant'
+          message: PiAssistantMessage
+      }
+    | {
+          type: 'user'
+          toolUseResult: PiToolResultMessage
+      }
 
 export function formatPiModel(model: PiModelLike | null | undefined): string | null {
     if (!model) {
@@ -98,9 +100,7 @@ export function formatPiModel(model: PiModelLike | null | undefined): string | n
     return `${model.provider}/${model.id}`
 }
 
-export function toPiThinkingLevel(
-    value: SessionModelReasoningEffort | null | undefined
-): PiThinkingLevel | undefined {
+export function toPiThinkingLevel(value: SessionModelReasoningEffort | null | undefined): PiThinkingLevel | undefined {
     if (value === undefined || value === null) {
         return undefined
     }
@@ -168,10 +168,10 @@ export function rehydratePiMessages(messages: CliSessionRecoveryResponse['messag
                 content: formatMessageWithAttachments(
                     record.content.text,
                     Array.isArray(record.content.attachments)
-                        ? record.content.attachments as Parameters<typeof formatMessageWithAttachments>[1]
+                        ? (record.content.attachments as Parameters<typeof formatMessageWithAttachments>[1])
                         : undefined
                 ),
-                timestamp: message.createdAt
+                timestamp: message.createdAt,
             })
             continue
         }
@@ -195,22 +195,22 @@ export function rehydratePiMessages(messages: CliSessionRecoveryResponse['messag
     return recovered
 }
 
-export function getPiAssistantStreamId(message: Pick<PiAssistantMessage, 'responseId' | 'timestamp'>): string {
-    const streamId = buildPiAssistantStreamId(message.responseId, message.timestamp)
-    if (!streamId) {
-        throw new Error('Pi assistant message is missing a stable stream id')
+export function getPiAssistantTurnId(message: Pick<PiAssistantMessage, 'responseId' | 'timestamp'>): string {
+    const assistantTurnId = buildPiAssistantTurnId(message.responseId, message.timestamp)
+    if (!assistantTurnId) {
+        throw new Error('Pi assistant message is missing a canonical assistant turn id')
     }
 
-    return streamId
+    return assistantTurnId
 }
 
 export function buildPiAssistantOutputRecord(message: PiAssistantMessage): Record<string, unknown> {
     return {
         type: 'assistant',
-        uuid: getPiAssistantStreamId(message),
+        uuid: getPiAssistantTurnId(message),
         parentUuid: null,
         isSidechain: false,
-        message
+        message,
     }
 }
 
@@ -227,10 +227,10 @@ export function buildPiToolResultOutputRecord(result: PiToolResultMessage): Reco
                     type: 'tool_result',
                     tool_use_id: result.toolCallId,
                     content: result.content,
-                    is_error: result.isError
-                }
-            ]
-        }
+                    is_error: result.isError,
+                },
+            ],
+        },
     }
 }
 
@@ -238,27 +238,29 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function isUserTextRecord(
-    value: unknown
-): value is { type: 'text'; text: string; attachments?: unknown } {
+function isUserTextRecord(value: unknown): value is { type: 'text'; text: string; attachments?: unknown } {
     return isRecord(value) && value.type === 'text' && typeof value.text === 'string'
 }
 
 function isPiAssistantMessage(value: unknown): value is PiAssistantMessage {
-    return isRecord(value)
-        && value.role === 'assistant'
-        && Array.isArray(value.content)
-        && typeof value.provider === 'string'
-        && typeof value.model === 'string'
+    return (
+        isRecord(value) &&
+        value.role === 'assistant' &&
+        Array.isArray(value.content) &&
+        typeof value.provider === 'string' &&
+        typeof value.model === 'string'
+    )
 }
 
 function isPiToolResultMessage(value: unknown): value is PiToolResultMessage {
-    return isRecord(value)
-        && value.role === 'toolResult'
-        && typeof value.toolCallId === 'string'
-        && typeof value.toolName === 'string'
-        && Array.isArray(value.content)
-        && typeof value.isError === 'boolean'
+    return (
+        isRecord(value) &&
+        value.role === 'toolResult' &&
+        typeof value.toolCallId === 'string' &&
+        typeof value.toolName === 'string' &&
+        Array.isArray(value.content) &&
+        typeof value.isError === 'boolean'
+    )
 }
 
 function readPiTranscriptPayload(content: Record<string, unknown>): PiTranscriptPayload | null {
@@ -274,14 +276,14 @@ function readPiTranscriptPayload(content: Record<string, unknown>): PiTranscript
     if (data.type === 'assistant' && isPiAssistantMessage(data.message)) {
         return {
             type: 'assistant',
-            message: data.message
+            message: data.message,
         }
     }
 
     if (data.type === 'user' && isPiToolResultMessage(data.toolUseResult)) {
         return {
             type: 'user',
-            toolUseResult: data.toolUseResult
+            toolUseResult: data.toolUseResult,
         }
     }
 

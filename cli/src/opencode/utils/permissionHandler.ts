@@ -1,92 +1,99 @@
-import type { ApiSessionClient } from '@/api/apiSession';
-import type { AgentBackend, PermissionRequest, PermissionResponse } from '@/agent/types';
-import type { OpencodePermissionMode } from '@viby/protocol/types';
-import { deriveToolName } from '@/agent/utils';
-import { logger } from '@/ui/logger';
+import type { OpencodePermissionMode } from '@viby/protocol/types'
+import type { AgentBackend, PermissionRequest, PermissionResponse } from '@/agent/types'
+import { deriveToolName } from '@/agent/utils'
+import type { ApiSessionClient } from '@/api/apiSession'
 import {
-    BasePermissionHandler,
     type AutoApprovalDecision,
+    BasePermissionHandler,
     type PendingPermissionRequest,
-    type PermissionCompletion
-} from '@/modules/common/permission/BasePermissionHandler';
+    type PermissionCompletion,
+} from '@/modules/common/permission/BasePermissionHandler'
+import { logger } from '@/ui/logger'
+import { runDetachedTask } from '@/utils/runDetachedTask'
 
 interface PermissionResponseMessage {
-    id: string;
-    approved: boolean;
-    decision?: 'approved' | 'approved_for_session' | 'denied' | 'abort';
-    reason?: string;
+    id: string
+    approved: boolean
+    decision?: 'approved' | 'approved_for_session' | 'denied' | 'abort'
+    reason?: string
 }
 
 function deriveToolInput(request: PermissionRequest): unknown {
     if (request.rawInput !== undefined) {
-        return request.rawInput;
+        return request.rawInput
     }
-    return request.rawOutput;
+    return request.rawOutput
 }
 
 function pickOptionId(request: PermissionRequest, preferredKinds: string[]): string | null {
     for (const kind of preferredKinds) {
-        const match = request.options.find((option) => option.kind === kind);
+        const match = request.options.find((option) => option.kind === kind)
         if (match) {
-            return match.optionId;
+            return match.optionId
         }
     }
-    return request.options.length > 0 ? request.options[0].optionId : null;
+    return request.options.length > 0 ? request.options[0].optionId : null
 }
 
-function mapDecisionToOutcome(request: PermissionRequest, decision: PermissionResponseMessage['decision']): PermissionResponse {
+function mapDecisionToOutcome(
+    request: PermissionRequest,
+    decision: PermissionResponseMessage['decision']
+): PermissionResponse {
     if (decision === 'abort') {
-        return { outcome: 'cancelled' };
+        return { outcome: 'cancelled' }
     }
 
     if (decision === 'approved_for_session') {
-        const optionId = pickOptionId(request, ['allow_always', 'allow_once']);
-        return optionId ? { outcome: 'selected', optionId } : { outcome: 'cancelled' };
+        const optionId = pickOptionId(request, ['allow_always', 'allow_once'])
+        return optionId ? { outcome: 'selected', optionId } : { outcome: 'cancelled' }
     }
 
     if (decision === 'approved') {
-        const optionId = pickOptionId(request, ['allow_once', 'allow_always']);
-        return optionId ? { outcome: 'selected', optionId } : { outcome: 'cancelled' };
+        const optionId = pickOptionId(request, ['allow_once', 'allow_always'])
+        return optionId ? { outcome: 'selected', optionId } : { outcome: 'cancelled' }
     }
 
-    const optionId = pickOptionId(request, ['reject_once', 'reject_always']);
-    return optionId ? { outcome: 'selected', optionId } : { outcome: 'cancelled' };
+    const optionId = pickOptionId(request, ['reject_once', 'reject_always'])
+    return optionId ? { outcome: 'selected', optionId } : { outcome: 'cancelled' }
 }
 
 export class OpencodePermissionHandler extends BasePermissionHandler<PermissionResponseMessage, void> {
-    private readonly pendingBackendRequests = new Map<string, PermissionRequest>();
+    private readonly pendingBackendRequests = new Map<string, PermissionRequest>()
 
     constructor(
         session: ApiSessionClient,
         private readonly backend: AgentBackend,
         private readonly getPermissionMode: () => OpencodePermissionMode | undefined
     ) {
-        super(session);
-        this.backend.onPermissionRequest((request) => this.handlePermissionRequest(request));
+        super(session)
+        this.backend.onPermissionRequest((request) => this.handlePermissionRequest(request))
     }
 
     private handlePermissionRequest(request: PermissionRequest): void {
         const toolName = deriveToolName({
             title: request.title,
             kind: request.kind,
-            rawInput: request.rawInput
-        });
-        const toolInput = deriveToolInput(request);
-        const mode = this.getPermissionMode() ?? 'default';
+            rawInput: request.rawInput,
+        })
+        const toolInput = deriveToolInput(request)
+        const mode = this.getPermissionMode() ?? 'default'
 
-        const autoDecision = this.resolveAutoApprovalDecision(mode, toolName, request.toolCallId);
+        const autoDecision = this.resolveAutoApprovalDecision(mode, toolName, request.toolCallId)
         if (autoDecision) {
-            void this.autoApprove(request, toolName, toolInput, autoDecision);
-            return;
+            runDetachedTask(
+                () => this.autoApprove(request, toolName, toolInput, autoDecision),
+                '[Opencode] Auto-approve failed'
+            )
+            return
         }
 
-        this.pendingBackendRequests.set(request.id, request);
+        this.pendingBackendRequests.set(request.id, request)
         this.addPendingRequest(request.id, toolName, toolInput, {
             resolve: () => {},
-            reject: () => {}
-        });
+            reject: () => {},
+        })
 
-        logger.debug(`[Opencode] Permission request queued for ${toolName} (${request.id})`);
+        logger.debug(`[Opencode] Permission request queued for ${toolName} (${request.id})`)
     }
 
     private async autoApprove(
@@ -95,8 +102,8 @@ export class OpencodePermissionHandler extends BasePermissionHandler<PermissionR
         toolInput: unknown,
         decision: AutoApprovalDecision
     ): Promise<void> {
-        const outcome = mapDecisionToOutcome(request, decision);
-        await this.backend.respondToPermission(request.sessionId, request, outcome);
+        const outcome = mapDecisionToOutcome(request, decision)
+        await this.backend.respondToPermission(request.sessionId, request, outcome)
 
         this.client.updateAgentState((currentState) => ({
             ...currentState,
@@ -108,63 +115,63 @@ export class OpencodePermissionHandler extends BasePermissionHandler<PermissionR
                     createdAt: Date.now(),
                     completedAt: Date.now(),
                     status: 'approved',
-                    decision
-                }
-            }
-        }));
+                    decision,
+                },
+            },
+        }))
 
-        logger.debug(`[Opencode] Auto-approved ${toolName} (${request.id}) mode=${decision}`);
+        logger.debug(`[Opencode] Auto-approved ${toolName} (${request.id}) mode=${decision}`)
     }
 
     protected async handlePermissionResponse(
         response: PermissionResponseMessage,
         pending: PendingPermissionRequest<void>
     ): Promise<PermissionCompletion> {
-        const pendingRequest = this.pendingBackendRequests.get(response.id);
+        const pendingRequest = this.pendingBackendRequests.get(response.id)
         if (pendingRequest) {
-            this.pendingBackendRequests.delete(response.id);
+            this.pendingBackendRequests.delete(response.id)
         } else {
-            logger.debug('[Opencode] Permission response missing backend request', response.id);
+            logger.debug('[Opencode] Permission response missing backend request', response.id)
         }
 
-        const decision = response.decision ?? (response.approved ? 'approved' : 'denied');
+        const decision = response.decision ?? (response.approved ? 'approved' : 'denied')
 
         if (decision === 'abort' && pendingRequest) {
-            await this.backend.cancelPrompt(pendingRequest.sessionId);
+            await this.backend.cancelPrompt(pendingRequest.sessionId)
         }
 
         if (pendingRequest) {
-            const outcome = mapDecisionToOutcome(pendingRequest, decision);
-            await this.backend.respondToPermission(pendingRequest.sessionId, pendingRequest, outcome);
+            const outcome = mapDecisionToOutcome(pendingRequest, decision)
+            await this.backend.respondToPermission(pendingRequest.sessionId, pendingRequest, outcome)
         }
 
-        pending.resolve();
+        pending.resolve()
 
-        logger.debug(`[Opencode] Permission ${response.approved ? 'approved' : 'denied'} for ${pending.toolName}`);
+        logger.debug(`[Opencode] Permission ${response.approved ? 'approved' : 'denied'} for ${pending.toolName}`)
 
         return {
             status: response.approved ? 'approved' : 'denied',
             decision,
-            reason: response.reason
-        };
+            reason: response.reason,
+        }
     }
 
     protected handleMissingPendingResponse(response: PermissionResponseMessage): void {
-        logger.debug('[Opencode] Permission response received for unknown request', response.id);
+        logger.debug('[Opencode] Permission response received for unknown request', response.id)
     }
 
     async cancelAll(reason: string): Promise<void> {
-        const pending = Array.from(this.pendingBackendRequests.values());
-        this.pendingBackendRequests.clear();
+        const pending = Array.from(this.pendingBackendRequests.values())
+        this.pendingBackendRequests.clear()
 
         for (const request of pending) {
-            await this.backend.respondToPermission(request.sessionId, request, { outcome: 'cancelled' });
+            await this.backend.respondToPermission(request.sessionId, request, { outcome: 'cancelled' })
         }
 
         this.cancelPendingRequests({
             completedReason: reason,
             rejectMessage: reason,
-            decision: 'abort'
-        });
+            decision: 'abort',
+        })
     }
 }

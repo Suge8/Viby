@@ -22,9 +22,9 @@ const harness = vi.hoisted(() => ({
         harness.remoteBridgeCalls += 1
         return {
             server: {
-                stop: vi.fn()
+                stop: vi.fn(),
             },
-            mcpServers: {}
+            mcpServers: {},
         }
     },
     buildBackendInstance() {
@@ -36,45 +36,37 @@ const harness = vi.hoisted(() => ({
             prompt: vi.fn(async () => {}),
             disconnect: vi.fn(async () => {}),
             cancelPrompt: vi.fn(async () => {}),
-            onStderrError: vi.fn()
+            onStderrError: vi.fn(),
         }
         harness.backendInstances.push(backend)
         return backend
-    }
+    },
 }))
 
 vi.mock('react', () => ({
     default: {
-        createElement: vi.fn(() => null)
-    }
+        createElement: vi.fn(() => null),
+    },
 }))
 
 vi.mock('@/ui/logger', () => ({
     logger: {
         debug: vi.fn(),
-        warn: vi.fn()
-    }
+        warn: vi.fn(),
+    },
 }))
 
 vi.mock('@/codex/utils/buildVibyMcpBridge', () => ({
-    buildVibyMcpBridge: vi.fn(async () => harness.buildRemoteBridge())
+    buildVibyMcpBridge: vi.fn(async () => harness.buildRemoteBridge()),
 }))
 
 vi.mock('@/agent/acpAgentInterop', () => ({
     forwardAcpAgentMessage: vi.fn(),
-    toAcpMcpServers: vi.fn(() => [])
+    toAcpMcpServers: vi.fn(() => []),
 }))
 
-vi.mock('@/agent/teamPromptContract', async () => {
-    const actual = await vi.importActual<typeof import('@/agent/teamPromptContract')>('@/agent/teamPromptContract')
-    return {
-        ...actual,
-        resolveTeamRolePromptContract: vi.fn(() => 'Manager team contract')
-    }
-})
-
 vi.mock('./utils/opencodeBackend', () => ({
-    createOpencodeBackend: vi.fn(() => harness.buildBackendInstance())
+    createOpencodeBackend: vi.fn(() => harness.buildBackendInstance()),
 }))
 
 vi.mock('./utils/permissionHandler', () => ({
@@ -82,14 +74,14 @@ vi.mock('./utils/permissionHandler', () => ({
         async cancelAll(reason: string) {
             harness.permissionCancelReasons.push(reason)
         }
-    }
+    },
 }))
 
 vi.mock('@/modules/common/remote/RemoteLauncherBase', () => ({
     RemoteLauncherBase: class {
         protected readonly messageBuffer = {
             addMessage() {},
-            clear() {}
+            clear() {},
         }
         protected readonly hasTTY = false
         protected readonly logPath?: string
@@ -108,17 +100,14 @@ vi.mock('@/modules/common/remote/RemoteLauncherBase', () => ({
             rpcHandlerManager.registerHandler('switch', handlers.onSwitch)
         }
 
-        protected clearAbortHandlers(
-            rpcHandlerManager: { registerHandler: (method: string, handler: (params: unknown) => unknown) => void }
-        ): void {
+        protected clearAbortHandlers(rpcHandlerManager: {
+            registerHandler: (method: string, handler: (params: unknown) => unknown) => void
+        }): void {
             rpcHandlerManager.registerHandler('abort', async () => {})
             rpcHandlerManager.registerHandler('switch', async () => {})
         }
 
-        protected async requestExit(
-            reason: 'switch' | 'exit',
-            handler: () => Promise<void> | void
-        ): Promise<void> {
+        protected async requestExit(reason: 'switch' | 'exit', handler: () => Promise<void> | void): Promise<void> {
             if (!this.exitReason) {
                 this.exitReason = reason
             }
@@ -134,21 +123,21 @@ vi.mock('@/modules/common/remote/RemoteLauncherBase', () => ({
             }
             return this.exitReason ?? 'exit'
         }
-    }
+    },
 }))
 
 import { opencodeRemoteLauncher } from './opencodeRemoteLauncher'
 
 function createMode(): OpencodeMode {
     return {
-        permissionMode: 'default'
+        permissionMode: 'default',
     }
 }
 
-function createSessionStub(messageCount: number = 1) {
+function createSessionStub(modes: OpencodeMode[] = [createMode()]) {
     const queue = new MessageQueue2<OpencodeMode>((mode) => JSON.stringify(mode))
-    for (let index = 0; index < messageCount; index += 1) {
-        queue.push(`hello ${index + 1}`, createMode())
+    for (let index = 0; index < modes.length; index += 1) {
+        queue.push(`hello ${index + 1}`, modes[index] ?? createMode())
     }
     queue.close()
     let remoteBridge: { server: { stop: ReturnType<typeof vi.fn> }; mcpServers: unknown } | null = null
@@ -160,19 +149,11 @@ function createSessionStub(messageCount: number = 1) {
         sessionId: null as string | null,
         queue,
         client: {
-            getTeamContextSnapshot() {
-                return {
-                    projectId: 'project-1',
-                    sessionRole: 'manager',
-                    managerSessionId: 'manager-session-1',
-                    projectStatus: 'active'
-                }
-            },
             rpcHandlerManager: {
                 registerHandler(method: string, handler: (params: unknown) => unknown) {
                     harness.rpcHandlers.set(method, handler)
-                }
-            }
+                },
+            },
         },
         getPermissionMode() {
             return 'default' as const
@@ -181,6 +162,7 @@ function createSessionStub(messageCount: number = 1) {
             session.sessionId = id
             harness.foundSessionIds.push(id)
         },
+        setRuntimeStopHandler() {},
         async ensureRemoteBridge() {
             if (!remoteBridge) {
                 remoteBridge = harness.buildRemoteBridge()
@@ -200,7 +182,7 @@ function createSessionStub(messageCount: number = 1) {
             harness.sessionEvents.push(event)
         },
         sendCodexMessage() {},
-        onThinkingChange() {}
+        onThinkingChange() {},
     }
 
     return session
@@ -232,15 +214,71 @@ describe('opencodeRemoteLauncher', () => {
         expect(harness.backendInstances[0]?.loadSession).toHaveBeenCalledWith({
             sessionId: 'opencode-session-1',
             cwd: '/tmp/viby-opencode',
-            mcpServers: []
+            mcpServers: [],
         })
         expect(harness.backendInstances[0]?.prompt).toHaveBeenCalledWith(
             'opencode-session-1',
-            [{
-                type: 'text',
-                text: expect.stringContaining('Manager team contract')
-            }],
+            [
+                {
+                    type: 'text',
+                    text: 'hello 1',
+                },
+            ],
             expect.any(Function)
         )
+    })
+
+    it('injects session continuity only into the first OpenCode remote prompt', async () => {
+        const session = createSessionStub([
+            {
+                permissionMode: 'default',
+                developerInstructions: [
+                    'Private continuity handoff for resuming the same Viby session.',
+                    '{"previousDriver":"gemini"}',
+                ].join('\n\n'),
+            },
+            createMode(),
+        ])
+
+        await opencodeRemoteLauncher(session as never)
+
+        expect(harness.backendInstances[0]?.prompt).toHaveBeenNthCalledWith(
+            1,
+            'opencode-session-1',
+            [
+                {
+                    type: 'text',
+                    text: expect.stringContaining('Private continuity handoff for resuming the same Viby session.'),
+                },
+            ],
+            expect.any(Function)
+        )
+        expect(harness.backendInstances[0]?.prompt).toHaveBeenNthCalledWith(
+            2,
+            'opencode-session-1',
+            [
+                {
+                    type: 'text',
+                    text: expect.not.stringContaining('Private continuity handoff for resuming the same Viby session.'),
+                },
+            ],
+            expect.any(Function)
+        )
+    })
+
+    it('surfaces the concrete OpenCode failure and still emits ready after the turn settles', async () => {
+        const session = createSessionStub()
+        const backend = session.ensureRemoteBackend()
+        backend.prompt.mockRejectedValueOnce(new Error('provider unavailable'))
+
+        await opencodeRemoteLauncher(session as never)
+
+        expect(harness.sessionEvents).toContainEqual({
+            type: 'message',
+            message: 'OpenCode prompt failed: provider unavailable',
+        })
+        expect(harness.sessionEvents).toContainEqual({
+            type: 'ready',
+        })
     })
 })

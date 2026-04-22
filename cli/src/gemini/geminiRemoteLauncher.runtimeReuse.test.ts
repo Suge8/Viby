@@ -17,9 +17,6 @@ const harness = vi.hoisted(() => ({
         cancelPrompt: ReturnType<typeof vi.fn>
         onStderrError: ReturnType<typeof vi.fn>
     }>,
-    permissionCancelReasons: [] as string[],
-    sessionEvents: [] as Array<Record<string, unknown>>,
-    thinkingChanges: [] as boolean[],
     foundSessionIds: [] as string[],
     rpcHandlers: new Map<string, (params: unknown) => unknown>(),
     buildRemoteBridge() {
@@ -45,7 +42,7 @@ const harness = vi.hoisted(() => ({
                 return sessionId
             }),
             setSessionModel: vi.fn(async () => {}),
-            prompt: vi.fn(async (_sessionId: string, _content: unknown, _onUpdate: (message: unknown) => void) => {}),
+            prompt: vi.fn(async () => {}),
             disconnect: vi.fn(async () => {}),
             cancelPrompt: vi.fn(async () => {}),
             onStderrError: vi.fn(),
@@ -77,11 +74,13 @@ vi.mock('@/agent/acpAgentInterop', () => ({
     toAcpMcpServers: vi.fn(() => []),
 }))
 
+vi.mock('./utils/geminiBackend', () => ({
+    createGeminiBackend: vi.fn((opts: Record<string, unknown>) => harness.buildBackendInstance(opts)),
+}))
+
 vi.mock('./utils/permissionHandler', () => ({
     GeminiPermissionHandler: class {
-        async cancelAll(reason: string) {
-            harness.permissionCancelReasons.push(reason)
-        }
+        async cancelAll() {}
     },
 }))
 
@@ -102,40 +101,20 @@ vi.mock('@/modules/common/remote/RemoteLauncherBase', () => ({
 
         protected setupAbortHandlers(
             rpcHandlerManager: { registerHandler: (method: string, handler: (params: unknown) => unknown) => void },
-            handlers: { onAbort: () => Promise<void> | void; onSwitch: () => Promise<void> | void }
+            handlers: { onAbort: () => Promise<void> | void; onSwitch?: () => Promise<void> | void }
         ): void {
             rpcHandlerManager.registerHandler('abort', handlers.onAbort)
-            rpcHandlerManager.registerHandler('switch', handlers.onSwitch)
-        }
-
-        protected clearAbortHandlers(rpcHandlerManager: {
-            registerHandler: (method: string, handler: (params: unknown) => unknown) => void
-        }): void {
-            rpcHandlerManager.registerHandler('abort', async () => {})
             rpcHandlerManager.registerHandler('switch', async () => {})
         }
 
-        protected async requestExit(reason: 'switch' | 'exit', handler: () => Promise<void> | void): Promise<void> {
-            if (!this.exitReason) {
-                this.exitReason = reason
-            }
-            this.shouldExit = true
-            await handler()
-        }
+        protected clearAbortHandlers() {}
 
         protected async start(): Promise<'switch' | 'exit'> {
-            try {
-                await (this as unknown as { runMainLoop: () => Promise<void> }).runMainLoop()
-            } finally {
-                await (this as unknown as { cleanup: () => Promise<void> }).cleanup()
-            }
+            await (this as unknown as { runMainLoop: () => Promise<void> }).runMainLoop()
+            await (this as unknown as { cleanup: () => Promise<void> }).cleanup()
             return this.exitReason ?? 'exit'
         }
     },
-}))
-
-vi.mock('./utils/geminiBackend', () => ({
-    createGeminiBackend: vi.fn((opts: Record<string, unknown>) => harness.buildBackendInstance(opts)),
 }))
 
 import { geminiRemoteLauncher } from './geminiRemoteLauncher'
@@ -212,36 +191,68 @@ function createSessionStub(modes: GeminiMode[]) {
             remoteBackendKey = nextKey
             return remoteBackend
         },
-        getRemoteBackend() {
-            return remoteBackend
-        },
-        sendSessionEvent(event: Record<string, unknown>) {
-            harness.sessionEvents.push(event)
-        },
+        sendSessionEvent() {},
         sendCodexMessage() {},
-        onThinkingChange(nextThinking: boolean) {
-            harness.thinkingChanges.push(nextThinking)
-        },
+        onThinkingChange() {},
     }
 
     return session
 }
 
-describe('geminiRemoteLauncher', () => {
+describe('geminiRemoteLauncher runtime reuse', () => {
     afterEach(() => {
         harness.backendFactoryCalls = []
         harness.remoteBridgeCalls = 0
         harness.nextSessionIds = []
         harness.loadSessionFailuresRemaining = 0
         harness.backendInstances = []
-        harness.permissionCancelReasons = []
-        harness.sessionEvents = []
-        harness.thinkingChanges = []
         harness.foundSessionIds = []
         harness.rpcHandlers.clear()
     })
 
-    it('reconfigures the backend on the next turn when Gemini model changes and resumes the existing ACP session', async () => {
+    it('reuses the session-owned bridge and backend across remote launcher restarts', async () => {
+        const session = createSessionStub([createMode({ model: 'gemini-2.5-pro' })])
+
+        await geminiRemoteLauncher(session as never, {
+            model: 'gemini-2.5-pro',
+        })
+        session.queue = new MessageQueue2<GeminiMode>((mode) => JSON.stringify(mode))
+        session.queue.push('hello again', createMode({ model: 'gemini-2.5-pro' }))
+        session.queue.close()
+        await geminiRemoteLauncher(session as never, {
+            model: 'gemini-2.5-pro',
+        })
+
+        expect(harness.remoteBridgeCalls).toBe(1)
+        expect(harness.backendFactoryCalls).toHaveLength(1)
+        expect(harness.backendInstances[0]?.loadSession).toHaveBeenCalledWith({
+            sessionId: 'acp-session-1',
+            cwd: '/tmp/viby-gemini',
+            mcpServers: [],
+        })
+    })
+
+    it('resets a resumed ACP session back to Gemini auto mode when the live model is cleared', async () => {
+        const session = createSessionStub([createMode({ model: 'gemini-2.5-pro' }), createMode()])
+
+        const exitReason = await geminiRemoteLauncher(session as never, {
+            model: 'gemini-2.5-pro',
+        })
+
+        expect(exitReason).toBe('exit')
+        expect(harness.backendFactoryCalls).toHaveLength(2)
+        expect(harness.backendInstances[1]?.loadSession).toHaveBeenCalledWith({
+            sessionId: 'acp-session-1',
+            cwd: '/tmp/viby-gemini',
+            mcpServers: [],
+        })
+        expect(harness.backendInstances[1]?.setSessionModel).toHaveBeenCalledWith('acp-session-1', 'auto')
+    })
+
+    it('keeps prompting after backend reconfiguration falls back to a fresh ACP session', async () => {
+        harness.nextSessionIds = ['acp-session-1', 'acp-session-2']
+        harness.loadSessionFailuresRemaining = 1
+
         const session = createSessionStub([
             createMode({ model: 'gemini-2.5-pro' }),
             createMode({ model: 'gemini-2.5-flash-lite' }),
@@ -252,95 +263,26 @@ describe('geminiRemoteLauncher', () => {
         })
 
         expect(exitReason).toBe('exit')
-        expect(harness.backendFactoryCalls).toHaveLength(2)
-        expect(harness.backendFactoryCalls[0]).toMatchObject({
-            model: 'gemini-2.5-pro',
-            resumeSessionId: null,
-        })
-        expect(harness.backendFactoryCalls[1]).toMatchObject({
-            model: 'gemini-2.5-flash-lite',
-            resumeSessionId: 'acp-session-1',
-        })
-        expect(harness.backendInstances[0]?.newSession).toHaveBeenCalledTimes(1)
-        expect(harness.backendInstances[1]?.loadSession).toHaveBeenCalledWith({
-            sessionId: 'acp-session-1',
-            cwd: '/tmp/viby-gemini',
-            mcpServers: [],
-        })
-        expect(harness.backendInstances[1]?.setSessionModel).toHaveBeenCalledWith(
-            'acp-session-1',
-            'gemini-2.5-flash-lite'
-        )
-        expect(harness.backendInstances[0]?.disconnect).toHaveBeenCalledTimes(1)
-        expect(harness.foundSessionIds).toEqual(['acp-session-1', 'acp-session-1'])
-    })
-
-    it('reuses the same backend when consecutive turns keep the same Gemini mode', async () => {
-        const session = createSessionStub([
-            createMode({ model: 'gemini-2.5-pro' }),
-            createMode({ model: 'gemini-2.5-pro' }),
-        ])
-
-        const exitReason = await geminiRemoteLauncher(session as never, {
-            model: 'gemini-2.5-pro',
-        })
-
-        expect(exitReason).toBe('exit')
-        expect(harness.backendFactoryCalls).toHaveLength(1)
-        expect(harness.backendInstances[0]?.newSession).toHaveBeenCalledTimes(1)
-        expect(harness.backendInstances[0]?.loadSession).not.toHaveBeenCalled()
-        expect(harness.backendInstances[0]?.setSessionModel).not.toHaveBeenCalled()
-        expect(harness.backendInstances[0]?.prompt).toHaveBeenCalledTimes(1)
         expect(harness.backendInstances[0]?.prompt).toHaveBeenCalledWith(
             'acp-session-1',
             [
                 {
                     type: 'text',
-                    text: 'hello 1\nhello 2',
+                    text: 'hello 1',
                 },
             ],
             expect.any(Function)
         )
-    })
-
-    it('injects session continuity only into the first Gemini remote prompt', async () => {
-        const session = createSessionStub([
-            createMode({
-                model: 'gemini-2.5-pro',
-                developerInstructions: [
-                    'Private continuity handoff for resuming the same Viby session.',
-                    '{"previousDriver":"claude"}',
-                ].join('\n\n'),
-            }),
-            createMode({ model: 'gemini-2.5-pro' }),
-        ])
-
-        const exitReason = await geminiRemoteLauncher(session as never, {
-            model: 'gemini-2.5-pro',
-        })
-
-        expect(exitReason).toBe('exit')
-        expect(harness.backendInstances[0]?.prompt).toHaveBeenNthCalledWith(
-            1,
-            'acp-session-1',
+        expect(harness.backendInstances[1]?.prompt).toHaveBeenCalledWith(
+            'acp-session-2',
             [
                 {
                     type: 'text',
-                    text: expect.stringContaining('Private continuity handoff for resuming the same Viby session.'),
+                    text: 'hello 2',
                 },
             ],
             expect.any(Function)
         )
-        expect(harness.backendInstances[0]?.prompt).toHaveBeenNthCalledWith(
-            2,
-            'acp-session-1',
-            [
-                {
-                    type: 'text',
-                    text: expect.not.stringContaining('Private continuity handoff for resuming the same Viby session.'),
-                },
-            ],
-            expect.any(Function)
-        )
+        expect(harness.foundSessionIds).toEqual(['acp-session-1', 'acp-session-2'])
     })
 })

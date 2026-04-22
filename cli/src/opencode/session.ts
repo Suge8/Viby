@@ -1,39 +1,29 @@
-import { ApiClient, ApiSessionClient } from '@/lib';
-import { MessageQueue2 } from '@/utils/MessageQueue2';
-import { AgentSessionBase } from '@/agent/sessionBase';
-import type { OpencodeHookEvent, OpencodeMode, PermissionMode } from './types';
-import type { LocalLaunchExitReason } from '@/agent/localLaunchPolicy';
-import { buildVibyMcpBridge, type VibyMcpBridge } from '@/codex/utils/buildVibyMcpBridge';
-import { createOpencodeBackend } from './utils/opencodeBackend';
+import { setSessionDriverRuntimeHandle } from '@viby/protocol'
+import { AgentSessionBase } from '@/agent/sessionBase'
+import { buildVibyMcpBridge, type VibyMcpBridge } from '@/codex/utils/buildVibyMcpBridge'
+import { ApiClient, ApiSessionClient } from '@/lib'
+import { MessageQueue2 } from '@/utils/MessageQueue2'
+import type { OpencodeHookEvent, OpencodeMode, PermissionMode } from './types'
+import { createOpencodeBackend } from './utils/opencodeBackend'
 
-type LocalLaunchFailure = {
-    message: string;
-    exitReason: LocalLaunchExitReason;
-};
-
-type OpencodeBackend = ReturnType<typeof createOpencodeBackend>;
+type OpencodeBackend = ReturnType<typeof createOpencodeBackend>
 
 export class OpencodeSession extends AgentSessionBase<OpencodeMode> {
-    readonly startedBy: 'runner' | 'terminal';
-    readonly startingMode: 'local' | 'remote';
-    localLaunchFailure: LocalLaunchFailure | null = null;
+    readonly startedBy: 'runner' | 'terminal'
 
-    private hookEventHandlers: Array<(event: OpencodeHookEvent) => void> = [];
-    private remoteBridge: VibyMcpBridge | null = null;
-    private remoteBackend: OpencodeBackend | null = null;
+    private hookEventHandlers: Array<(event: OpencodeHookEvent) => void> = []
+    private remoteBridge: VibyMcpBridge | null = null
+    private remoteBackend: OpencodeBackend | null = null
 
     constructor(opts: {
-        api: ApiClient;
-        client: ApiSessionClient;
-        path: string;
-        logPath: string;
-        sessionId: string | null;
-        messageQueue: MessageQueue2<OpencodeMode>;
-        onModeChange: (mode: 'local' | 'remote') => void;
-        mode?: 'local' | 'remote';
-        startedBy: 'runner' | 'terminal';
-        startingMode: 'local' | 'remote';
-        permissionMode?: PermissionMode;
+        api: ApiClient
+        client: ApiSessionClient
+        path: string
+        logPath: string
+        sessionId: string | null
+        messageQueue: MessageQueue2<OpencodeMode>
+        startedBy: 'runner' | 'terminal'
+        permissionMode?: PermissionMode
     }) {
         super({
             api: opts.api,
@@ -42,74 +32,67 @@ export class OpencodeSession extends AgentSessionBase<OpencodeMode> {
             logPath: opts.logPath,
             sessionId: opts.sessionId,
             messageQueue: opts.messageQueue,
-            onModeChange: opts.onModeChange,
-            mode: opts.mode,
             sessionLabel: 'OpencodeSession',
             sessionIdLabel: 'OpenCode',
             applySessionIdToMetadata: (metadata, sessionId) => ({
                 ...metadata,
-                opencodeSessionId: sessionId
+                ...setSessionDriverRuntimeHandle(metadata, 'opencode', { sessionId }),
             }),
-            permissionMode: opts.permissionMode
-        });
+            permissionMode: opts.permissionMode,
+        })
 
-        this.startedBy = opts.startedBy;
-        this.startingMode = opts.startingMode;
-        this.permissionMode = opts.permissionMode;
+        this.startedBy = opts.startedBy
+        this.permissionMode = opts.permissionMode
     }
 
     addHookEventHandler(cb: (event: OpencodeHookEvent) => void): void {
-        this.hookEventHandlers.push(cb);
+        this.hookEventHandlers.push(cb)
     }
 
     removeHookEventHandler(cb: (event: OpencodeHookEvent) => void): void {
-        const index = this.hookEventHandlers.indexOf(cb);
+        const index = this.hookEventHandlers.indexOf(cb)
         if (index !== -1) {
-            this.hookEventHandlers.splice(index, 1);
+            this.hookEventHandlers.splice(index, 1)
         }
     }
 
     emitHookEvent(event: OpencodeHookEvent): void {
         for (const handler of this.hookEventHandlers) {
-            handler(event);
+            handler(event)
         }
     }
 
     setPermissionMode = (mode: PermissionMode): void => {
-        this.permissionMode = mode;
-        this.notifyKeepAliveRuntimeChanged();
-    };
-
-    recordLocalLaunchFailure = (message: string, exitReason: LocalLaunchExitReason): void => {
-        this.localLaunchFailure = { message, exitReason };
-    };
+        this.permissionMode = mode
+        this.notifyKeepAliveRuntimeChanged()
+    }
 
     sendCodexMessage = (message: unknown): void => {
-        this.client.sendCodexMessage(message);
-    };
+        this.client.sendCodexMessage(message)
+    }
 
     sendUserMessage = (text: string): void => {
-        this.client.sendUserMessage(text);
-    };
+        this.client.sendUserMessage(text)
+    }
 
     sendSessionEvent = (event: Parameters<ApiSessionClient['sendSessionEvent']>[0]): void => {
-        this.client.sendSessionEvent(event);
-    };
+        this.client.sendSessionEvent(event)
+    }
 
     async ensureRemoteBridge(): Promise<VibyMcpBridge> {
         if (!this.remoteBridge) {
-            this.remoteBridge = await buildVibyMcpBridge(this.client);
+            this.remoteBridge = await buildVibyMcpBridge(this.client)
         }
-        return this.remoteBridge;
+        return this.remoteBridge
     }
 
     ensureRemoteBackend(): OpencodeBackend {
         if (!this.remoteBackend) {
             this.remoteBackend = createOpencodeBackend({
-                cwd: this.path
-            });
+                cwd: this.path,
+            })
         }
-        return this.remoteBackend;
+        return this.remoteBackend
     }
 
     getRemoteBackend(): OpencodeBackend | null {
@@ -118,15 +101,15 @@ export class OpencodeSession extends AgentSessionBase<OpencodeMode> {
 
     disposeRemoteRuntime = async (): Promise<void> => {
         if (this.remoteBackend) {
-            const backend = this.remoteBackend;
-            this.remoteBackend = null;
-            await backend.disconnect();
+            const backend = this.remoteBackend
+            this.remoteBackend = null
+            await backend.disconnect()
         }
 
         if (this.remoteBridge) {
-            const bridge = this.remoteBridge;
-            this.remoteBridge = null;
-            bridge.server.stop();
+            const bridge = this.remoteBridge
+            this.remoteBridge = null
+            bridge.server?.stop()
         }
-    };
+    }
 }

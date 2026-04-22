@@ -1,41 +1,31 @@
-import { ApiClient, ApiSessionClient } from '@/lib';
-import { MessageQueue2 } from '@/utils/MessageQueue2';
-import { AgentSessionBase } from '@/agent/sessionBase';
-import type { GeminiMode, PermissionMode } from './types';
-import type { LocalLaunchExitReason } from '@/agent/localLaunchPolicy';
-import { buildVibyMcpBridge, type VibyMcpBridge } from '@/codex/utils/buildVibyMcpBridge';
-import { createGeminiBackend } from './utils/geminiBackend';
+import { setSessionDriverRuntimeHandle } from '@viby/protocol'
+import { AgentSessionBase } from '@/agent/sessionBase'
+import { buildVibyMcpBridge, type VibyMcpBridge } from '@/codex/utils/buildVibyMcpBridge'
+import { ApiClient, ApiSessionClient } from '@/lib'
+import { MessageQueue2 } from '@/utils/MessageQueue2'
+import type { GeminiMode, PermissionMode } from './types'
+import { createGeminiBackend } from './utils/geminiBackend'
 
-type LocalLaunchFailure = {
-    message: string;
-    exitReason: LocalLaunchExitReason;
-};
-
-type GeminiBackend = ReturnType<typeof createGeminiBackend>;
+type GeminiBackend = ReturnType<typeof createGeminiBackend>
 
 export class GeminiSession extends AgentSessionBase<GeminiMode> {
-    transcriptPath: string | null = null;
-    readonly startedBy: 'runner' | 'terminal';
-    readonly startingMode: 'local' | 'remote';
-    localLaunchFailure: LocalLaunchFailure | null = null;
+    transcriptPath: string | null = null
+    readonly startedBy: 'runner' | 'terminal'
 
-    private transcriptPathCallbacks: Array<(path: string) => void> = [];
-    private remoteBridge: VibyMcpBridge | null = null;
-    private remoteBackend: GeminiBackend | null = null;
-    private remoteBackendKey: string | null = null;
+    private transcriptPathCallbacks: Array<(path: string) => void> = []
+    private remoteBridge: VibyMcpBridge | null = null
+    private remoteBackend: GeminiBackend | null = null
+    private remoteBackendKey: string | null = null
 
     constructor(opts: {
-        api: ApiClient;
-        client: ApiSessionClient;
-        path: string;
-        logPath: string;
-        sessionId: string | null;
-        messageQueue: MessageQueue2<GeminiMode>;
-        onModeChange: (mode: 'local' | 'remote') => void;
-        mode?: 'local' | 'remote';
-        startedBy: 'runner' | 'terminal';
-        startingMode: 'local' | 'remote';
-        permissionMode?: PermissionMode;
+        api: ApiClient
+        client: ApiSessionClient
+        path: string
+        logPath: string
+        sessionId: string | null
+        messageQueue: MessageQueue2<GeminiMode>
+        startedBy: 'runner' | 'terminal'
+        permissionMode?: PermissionMode
     }) {
         super({
             api: opts.api,
@@ -44,74 +34,67 @@ export class GeminiSession extends AgentSessionBase<GeminiMode> {
             logPath: opts.logPath,
             sessionId: opts.sessionId,
             messageQueue: opts.messageQueue,
-            onModeChange: opts.onModeChange,
-            mode: opts.mode,
             sessionLabel: 'GeminiSession',
             sessionIdLabel: 'Gemini',
             applySessionIdToMetadata: (metadata, sessionId) => ({
                 ...metadata,
-                geminiSessionId: sessionId
+                ...setSessionDriverRuntimeHandle(metadata, 'gemini', { sessionId }),
             }),
-            permissionMode: opts.permissionMode
-        });
+            permissionMode: opts.permissionMode,
+        })
 
-        this.startedBy = opts.startedBy;
-        this.startingMode = opts.startingMode;
-        this.permissionMode = opts.permissionMode;
+        this.startedBy = opts.startedBy
+        this.permissionMode = opts.permissionMode
     }
 
     onTranscriptPathFound(path: string): void {
         if (this.transcriptPath === path) {
-            return;
+            return
         }
-        this.transcriptPath = path;
+        this.transcriptPath = path
         for (const callback of this.transcriptPathCallbacks) {
-            callback(path);
+            callback(path)
         }
     }
 
     addTranscriptPathCallback(cb: (path: string) => void): void {
-        this.transcriptPathCallbacks.push(cb);
+        this.transcriptPathCallbacks.push(cb)
     }
 
     removeTranscriptPathCallback(cb: (path: string) => void): void {
-        const index = this.transcriptPathCallbacks.indexOf(cb);
+        const index = this.transcriptPathCallbacks.indexOf(cb)
         if (index !== -1) {
-            this.transcriptPathCallbacks.splice(index, 1);
+            this.transcriptPathCallbacks.splice(index, 1)
         }
     }
 
     setPermissionMode = (mode: PermissionMode): void => {
-        this.permissionMode = mode;
-        this.notifyKeepAliveRuntimeChanged();
-    };
+        this.permissionMode = mode
+        this.notifyKeepAliveRuntimeChanged()
+    }
 
     setModel = (model: string | null): void => {
-        this.model = model;
-        this.notifyKeepAliveRuntimeChanged();
-    };
-
-    recordLocalLaunchFailure = (message: string, exitReason: LocalLaunchExitReason): void => {
-        this.localLaunchFailure = { message, exitReason };
-    };
+        this.model = model
+        this.notifyKeepAliveRuntimeChanged()
+    }
 
     sendCodexMessage = (message: unknown): void => {
-        this.client.sendCodexMessage(message);
-    };
+        this.client.sendCodexMessage(message)
+    }
 
     sendUserMessage = (text: string): void => {
-        this.client.sendUserMessage(text);
-    };
+        this.client.sendUserMessage(text)
+    }
 
     sendSessionEvent = (event: Parameters<ApiSessionClient['sendSessionEvent']>[0]): void => {
-        this.client.sendSessionEvent(event);
-    };
+        this.client.sendSessionEvent(event)
+    }
 
     async ensureRemoteBridge(): Promise<VibyMcpBridge> {
         if (!this.remoteBridge) {
-            this.remoteBridge = await buildVibyMcpBridge(this.client);
+            this.remoteBridge = await buildVibyMcpBridge(this.client)
         }
-        return this.remoteBridge;
+        return this.remoteBridge
     }
 
     async ensureRemoteBackend(config: {
@@ -122,17 +105,17 @@ export class GeminiSession extends AgentSessionBase<GeminiMode> {
         const nextBackendKey = JSON.stringify({
             model: config.model ?? null,
             hookSettingsPath: config.hookSettingsPath ?? null,
-            permissionMode: config.permissionMode ?? null
-        });
+            permissionMode: config.permissionMode ?? null,
+        })
 
         if (this.remoteBackend && this.remoteBackendKey === nextBackendKey) {
-            return this.remoteBackend;
+            return this.remoteBackend
         }
 
         if (this.remoteBackend) {
-            await this.remoteBackend.disconnect();
-            this.remoteBackend = null;
-            this.remoteBackendKey = null;
+            await this.remoteBackend.disconnect()
+            this.remoteBackend = null
+            this.remoteBackendKey = null
         }
 
         this.remoteBackend = createGeminiBackend({
@@ -140,10 +123,10 @@ export class GeminiSession extends AgentSessionBase<GeminiMode> {
             resumeSessionId: this.sessionId,
             hookSettingsPath: config.hookSettingsPath,
             cwd: this.path,
-            permissionMode: config.permissionMode
-        });
-        this.remoteBackendKey = nextBackendKey;
-        return this.remoteBackend;
+            permissionMode: config.permissionMode,
+        })
+        this.remoteBackendKey = nextBackendKey
+        return this.remoteBackend
     }
 
     getRemoteBackend(): GeminiBackend | null {
@@ -152,16 +135,16 @@ export class GeminiSession extends AgentSessionBase<GeminiMode> {
 
     disposeRemoteRuntime = async (): Promise<void> => {
         if (this.remoteBackend) {
-            const backend = this.remoteBackend;
-            this.remoteBackend = null;
-            this.remoteBackendKey = null;
-            await backend.disconnect();
+            const backend = this.remoteBackend
+            this.remoteBackend = null
+            this.remoteBackendKey = null
+            await backend.disconnect()
         }
 
         if (this.remoteBridge) {
-            const bridge = this.remoteBridge;
-            this.remoteBridge = null;
-            bridge.server.stop();
+            const bridge = this.remoteBridge
+            this.remoteBridge = null
+            bridge.server?.stop()
         }
-    };
+    }
 }

@@ -1,29 +1,32 @@
 /**
  * OpenCode configuration file generator.
  *
- * Generates opencode.json with MCP server configuration and instructions
- * for the viby change_title tool.
+ * Generates opencode.json with VIBY MCP bridge configuration and optional
+ * session-scoped instructions.
  */
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 
-const CONFIG_FILENAME = 'opencode.json';
-const INSTRUCTIONS_FILENAME = 'viby-instructions.md';
+const CONFIG_FILENAME = 'opencode.json'
+const INSTRUCTIONS_FILENAME = 'viby-instructions.md'
 
 interface McpServerEntry {
-    command: string;
-    args: string[];
+    command: string
+    args: string[]
 }
 
 interface OpencodeConfig {
-    $schema: string;
-    mcp: Record<string, {
-        type: string;
-        command: string[];
-        enabled: boolean;
-    }>;
-    instructions: string[];
+    $schema: string
+    mcp: Record<
+        string,
+        {
+            type: string
+            command: string[]
+            enabled: boolean
+        }
+    >
+    instructions: string[]
 }
 
 /**
@@ -38,11 +41,11 @@ export function ensureOpencodeConfig(
     mcpServer: McpServerEntry,
     instructions: string
 ): { configPath: string; instructionsPath: string } {
-    mkdirSync(rootPath, { recursive: true });
+    mkdirSync(rootPath, { recursive: true })
 
     // Write instructions file
-    const instructionsPath = join(rootPath, INSTRUCTIONS_FILENAME);
-    writeFileSafe(instructionsPath, instructions);
+    const instructionsPath = join(rootPath, INSTRUCTIONS_FILENAME)
+    writeFileSafe(instructionsPath, instructions)
 
     // Build opencode.json config
     // Use absolute path for instructions since OpenCode resolves paths relative to project root
@@ -52,17 +55,17 @@ export function ensureOpencodeConfig(
             viby: {
                 type: 'local',
                 command: [mcpServer.command, ...mcpServer.args],
-                enabled: true
-            }
+                enabled: true,
+            },
         },
-        instructions: [instructionsPath]
-    };
+        instructions: [instructionsPath],
+    }
 
-    const configPath = join(rootPath, CONFIG_FILENAME);
-    const configJson = JSON.stringify(config, null, 2);
-    writeFileSafe(configPath, configJson);
+    const configPath = join(rootPath, CONFIG_FILENAME)
+    const configJson = JSON.stringify(config, null, 2)
+    writeFileSafe(configPath, configJson)
 
-    return { configPath, instructionsPath };
+    return { configPath, instructionsPath }
 }
 
 /**
@@ -70,12 +73,12 @@ export function ensureOpencodeConfig(
  */
 function writeFileSafe(filePath: string, content: string): void {
     try {
-        const current = readFileSync(filePath, 'utf-8');
+        const current = readFileSync(filePath, 'utf-8')
         if (current === content) {
-            return;
+            return
         }
     } catch {
         // Ignore missing or unreadable file
     }
-    writeFileSync(filePath, content, 'utf-8');
+    writeFileSync(filePath, content, 'utf-8')
 }

@@ -1,37 +1,27 @@
-import { ApiClient, ApiSessionClient } from '@/lib';
-import { MessageQueue2 } from '@/utils/MessageQueue2';
-import { AgentSessionBase } from '@/agent/sessionBase';
-import type { EnhancedMode, PermissionMode } from './loop';
-import type { LocalLaunchExitReason } from '@/agent/localLaunchPolicy';
-import { buildVibyMcpBridge, type VibyMcpBridge } from '@/codex/utils/buildVibyMcpBridge';
-
-type LocalLaunchFailure = {
-    message: string;
-    exitReason: LocalLaunchExitReason;
-};
+import { setSessionDriverRuntimeHandle } from '@viby/protocol'
+import { AgentSessionBase } from '@/agent/sessionBase'
+import { buildVibyMcpBridge, type VibyMcpBridge } from '@/codex/utils/buildVibyMcpBridge'
+import { ApiClient, ApiSessionClient } from '@/lib'
+import { MessageQueue2 } from '@/utils/MessageQueue2'
+import type { EnhancedMode, PermissionMode } from './loop'
 
 export class CursorSession extends AgentSessionBase<EnhancedMode> {
-    readonly cursorArgs?: string[];
-    readonly model?: string;
-    readonly startedBy: 'runner' | 'terminal';
-    readonly startingMode: 'local' | 'remote';
-    localLaunchFailure: LocalLaunchFailure | null = null;
-    private remoteBridge: VibyMcpBridge | null = null;
+    readonly cursorArgs?: string[]
+    readonly model?: string
+    readonly startedBy: 'runner' | 'terminal'
+    private remoteBridge: VibyMcpBridge | null = null
 
     constructor(opts: {
-        api: ApiClient;
-        client: ApiSessionClient;
-        path: string;
-        logPath: string;
-        sessionId: string | null;
-        messageQueue: MessageQueue2<EnhancedMode>;
-        onModeChange: (mode: 'local' | 'remote') => void;
-        mode?: 'local' | 'remote';
-        startedBy: 'runner' | 'terminal';
-        startingMode: 'local' | 'remote';
-        cursorArgs?: string[];
-        model?: string;
-        permissionMode?: PermissionMode;
+        api: ApiClient
+        client: ApiSessionClient
+        path: string
+        logPath: string
+        sessionId: string | null
+        messageQueue: MessageQueue2<EnhancedMode>
+        startedBy: 'runner' | 'terminal'
+        cursorArgs?: string[]
+        model?: string
+        permissionMode?: PermissionMode
     }) {
         super({
             api: opts.api,
@@ -40,59 +30,52 @@ export class CursorSession extends AgentSessionBase<EnhancedMode> {
             logPath: opts.logPath,
             sessionId: opts.sessionId,
             messageQueue: opts.messageQueue,
-            onModeChange: opts.onModeChange,
-            mode: opts.mode,
             sessionLabel: 'CursorSession',
             sessionIdLabel: 'Cursor',
             applySessionIdToMetadata: (metadata, sessionId) => ({
                 ...metadata,
-                cursorSessionId: sessionId
+                ...setSessionDriverRuntimeHandle(metadata, 'cursor', { sessionId }),
             }),
-            permissionMode: opts.permissionMode
-        });
+            permissionMode: opts.permissionMode,
+        })
 
-        this.cursorArgs = opts.cursorArgs;
-        this.model = opts.model;
-        this.startedBy = opts.startedBy;
-        this.startingMode = opts.startingMode;
-        this.permissionMode = opts.permissionMode;
+        this.cursorArgs = opts.cursorArgs
+        this.model = opts.model
+        this.startedBy = opts.startedBy
+        this.permissionMode = opts.permissionMode
     }
 
     setPermissionMode = (mode: PermissionMode): void => {
-        this.permissionMode = mode;
-        this.notifyKeepAliveRuntimeChanged();
-    };
-
-    recordLocalLaunchFailure = (message: string, exitReason: LocalLaunchExitReason): void => {
-        this.localLaunchFailure = { message, exitReason };
-    };
+        this.permissionMode = mode
+        this.notifyKeepAliveRuntimeChanged()
+    }
 
     sendCodexMessage = (message: unknown): void => {
-        this.client.sendCodexMessage(message);
-    };
+        this.client.sendCodexMessage(message)
+    }
 
     sendUserMessage = (text: string): void => {
-        this.client.sendUserMessage(text);
-    };
+        this.client.sendUserMessage(text)
+    }
 
     sendSessionEvent = (event: Parameters<ApiSessionClient['sendSessionEvent']>[0]): void => {
-        this.client.sendSessionEvent(event);
-    };
+        this.client.sendSessionEvent(event)
+    }
 
     async ensureRemoteBridge(): Promise<VibyMcpBridge> {
         if (!this.remoteBridge) {
-            this.remoteBridge = await buildVibyMcpBridge(this.client);
+            this.remoteBridge = await buildVibyMcpBridge(this.client)
         }
-        return this.remoteBridge;
+        return this.remoteBridge
     }
 
     disposeRemoteRuntime = async (): Promise<void> => {
         if (!this.remoteBridge) {
-            return;
+            return
         }
 
-        const bridge = this.remoteBridge;
-        this.remoteBridge = null;
-        bridge.server.stop();
-    };
+        const bridge = this.remoteBridge
+        this.remoteBridge = null
+        bridge.server?.stop()
+    }
 }

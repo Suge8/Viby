@@ -1,119 +1,132 @@
-import { logger } from '@/ui/logger';
-import { opencodeLoop } from './loop';
-import { MessageQueue2 } from '@/utils/MessageQueue2';
-import { hashObject } from '@/utils/deterministicJson';
-import { registerKillSessionHandler } from '@/claude/registerKillSessionHandler';
-import type { AgentState, TeamSessionSpawnRole } from '@/api/types';
-import type { OpencodeSession } from './session';
-import type { OpencodeMode, PermissionMode } from './types';
-import { bootstrapSession } from '@/agent/sessionFactory';
-import { createModeChangeHandler, createRunnerLifecycle, setControlledByUser } from '@/agent/runnerLifecycle';
-import { assertSessionConfigPayload, resolvePermissionModeForDriver } from '@/agent/providerConfig';
-import { startOpencodeHookServer } from './utils/startOpencodeHookServer';
-import { formatMessageWithAttachments } from '@/utils/attachmentFormatter';
-import { getInvokedCwd } from '@/utils/invokedCwd';
+import type { SessionHandoffSnapshot } from '@viby/protocol/types'
+import { createPendingSessionContinuityHandoffState } from '@/agent/driverSwitchHandoffState'
+import { assertSessionConfigPayload, resolvePermissionModeForDriver } from '@/agent/providerConfig'
+import { createRunnerLifecycle, createRuntimeStopRequestHandler, setControlledByUser } from '@/agent/runnerLifecycle'
+import { bootstrapSession } from '@/agent/sessionFactory'
+import type { AgentState } from '@/api/types'
+import { registerKillSessionHandler } from '@/claude/registerKillSessionHandler'
+import { logger } from '@/ui/logger'
+import { formatMessageWithAttachments } from '@/utils/attachmentFormatter'
+import { hashObject } from '@/utils/deterministicJson'
+import { getInvokedCwd } from '@/utils/invokedCwd'
+import { MessageQueue2 } from '@/utils/MessageQueue2'
+import { opencodeLoop } from './loop'
+import type { OpencodeSession } from './session'
+import type { OpencodeMode, PermissionMode } from './types'
+import { startOpencodeHookServer } from './utils/startOpencodeHookServer'
 
-export async function runOpencode(opts: {
-    startedBy?: 'runner' | 'terminal';
-    vibySessionId?: string;
-    sessionRole?: TeamSessionSpawnRole;
-    startingMode?: 'local' | 'remote';
-    permissionMode?: PermissionMode;
-    resumeSessionId?: string;
-} = {}): Promise<void> {
-    const workingDirectory = getInvokedCwd();
-    const startedBy = opts.startedBy ?? 'terminal';
+export async function runOpencode(
+    opts: {
+        startedBy?: 'runner' | 'terminal'
+        vibySessionId?: string
+        driverSwitchBootstrap?: boolean
+        permissionMode?: PermissionMode
+        resumeSessionId?: string
+        sessionContinuityHandoff?: SessionHandoffSnapshot
+    } = {}
+): Promise<void> {
+    const workingDirectory = getInvokedCwd()
+    const startedBy = opts.startedBy ?? 'terminal'
 
-    logger.debug(`[opencode] Starting with options: startedBy=${startedBy}, startingMode=${opts.startingMode}`);
-
-    if (startedBy === 'runner' && opts.startingMode === 'local') {
-        logger.debug('[opencode] Runner spawn requested with local mode; forcing remote mode');
-        opts.startingMode = 'remote';
+    logger.debug(`[opencode] Starting with options: startedBy=${startedBy}`)
+    if (opts.sessionContinuityHandoff) {
+        logger.debug('[opencode] Loaded session continuity handoff for OpenCode bootstrap')
     }
 
     const initialState: AgentState = {
-        controlledByUser: false
-    };
+        controlledByUser: false,
+    }
 
     const { api, session } = await bootstrapSession({
         driver: 'opencode',
         sessionId: opts.vibySessionId,
         startedBy,
+        driverSwitchBootstrap: opts.driverSwitchBootstrap,
         workingDirectory,
         agentState: initialState,
-        sessionRole: opts.sessionRole,
-        permissionMode: opts.permissionMode ?? 'default'
-    });
+        permissionMode: opts.permissionMode ?? 'default',
+    })
 
-    const startingMode: 'local' | 'remote' = opts.startingMode
-        ?? (startedBy === 'runner' ? 'remote' : 'local');
+    setControlledByUser(session, false)
 
-    setControlledByUser(session, startingMode);
+    const messageQueue = new MessageQueue2<OpencodeMode>((mode) =>
+        hashObject({
+            permissionMode: mode.permissionMode,
+            developerInstructions: mode.developerInstructions,
+        })
+    )
 
-    const messageQueue = new MessageQueue2<OpencodeMode>((mode) => hashObject({
-        permissionMode: mode.permissionMode
-    }));
-
-    const sessionWrapperRef: { current: OpencodeSession | null } = { current: null };
-    let currentPermissionMode: PermissionMode = opts.permissionMode ?? 'default';
+    const sessionWrapperRef: { current: OpencodeSession | null } = { current: null }
+    let currentPermissionMode: PermissionMode = opts.permissionMode ?? 'default'
+    const pendingSessionContinuityHandoff = createPendingSessionContinuityHandoffState(opts.sessionContinuityHandoff)
     const hookServer = await startOpencodeHookServer({
         onEvent: (event) => {
-            const currentSession = sessionWrapperRef.current;
+            const currentSession = sessionWrapperRef.current
             if (!currentSession) {
-                return;
+                return
             }
-            currentSession.emitHookEvent(event);
-        }
-    });
-    const hookUrl = `http://127.0.0.1:${hookServer.port}/hook/opencode`;
+            currentSession.emitHookEvent(event)
+        },
+    })
+    const hookUrl = `http://127.0.0.1:${hookServer.port}/hook/opencode`
 
-    const lifecycle = createRunnerLifecycle({
+    let lifecycle!: ReturnType<typeof createRunnerLifecycle>
+    const requestRuntimeStopOrExit = createRuntimeStopRequestHandler({
+        getOwner: () => sessionWrapperRef.current,
+        cleanupAndExit: () => lifecycle.cleanupAndExit(),
+    })
+    lifecycle = createRunnerLifecycle({
         session,
         logTag: 'opencode',
         stopKeepAlive: () => sessionWrapperRef.current?.stopKeepAlive(),
+        requestShutdown: requestRuntimeStopOrExit,
         onBeforeClose: async () => {
-            await sessionWrapperRef.current?.disposeRemoteRuntime();
+            await sessionWrapperRef.current?.disposeRemoteRuntime()
         },
         onAfterClose: () => {
-            hookServer.stop();
-        }
-    });
+            hookServer.stop()
+        },
+    })
 
-    lifecycle.registerProcessHandlers();
-    registerKillSessionHandler(session.rpcHandlerManager, lifecycle.cleanupAndExit);
+    lifecycle.registerProcessHandlers()
+    registerKillSessionHandler(session.rpcHandlerManager, requestRuntimeStopOrExit)
 
     const syncSessionMode = () => {
-        const sessionInstance = sessionWrapperRef.current;
+        const sessionInstance = sessionWrapperRef.current
         if (!sessionInstance) {
-            return;
+            return
         }
-        sessionInstance.setPermissionMode(currentPermissionMode);
-        logger.debug(`[opencode] Synced session permission mode for keepalive: ${currentPermissionMode}`);
-    };
+        sessionInstance.setPermissionMode(currentPermissionMode)
+        logger.debug(`[opencode] Synced session permission mode for keepalive: ${currentPermissionMode}`)
+    }
 
     session.onUserMessage((message) => {
-        const formattedText = formatMessageWithAttachments(message.content.text, message.content.attachments);
+        const formattedText = formatMessageWithAttachments(message.content.text, message.content.attachments)
+        const continuityInstructions = pendingSessionContinuityHandoff.consumeForUserMessage(formattedText)
+        if (continuityInstructions) {
+            logger.debug('[opencode] Consuming pending session continuity handoff on the first real user turn')
+        }
         const mode: OpencodeMode = {
-            permissionMode: currentPermissionMode
-        };
-        messageQueue.push(formattedText, mode);
-    });
+            permissionMode: currentPermissionMode,
+            developerInstructions: continuityInstructions,
+        }
+        messageQueue.push(formattedText, mode)
+    })
 
     session.rpcHandlerManager.registerHandler('set-session-config', async (payload: unknown) => {
-        const config = assertSessionConfigPayload(payload) as { permissionMode?: unknown };
+        const config = assertSessionConfigPayload(payload) as { permissionMode?: unknown }
 
         if (config.permissionMode !== undefined) {
-            currentPermissionMode = resolvePermissionModeForDriver(config.permissionMode, 'opencode') as PermissionMode;
+            currentPermissionMode = resolvePermissionModeForDriver(config.permissionMode, 'opencode') as PermissionMode
         }
 
-        syncSessionMode();
-        return { applied: { permissionMode: currentPermissionMode } };
-    });
+        syncSessionMode()
+        return { applied: { permissionMode: currentPermissionMode } }
+    })
 
     try {
         await opencodeLoop({
             path: workingDirectory,
-            startingMode,
             startedBy,
             messageQueue,
             session,
@@ -122,20 +135,15 @@ export async function runOpencode(opts: {
             resumeSessionId: opts.resumeSessionId,
             hookServer,
             hookUrl,
-            onModeChange: createModeChangeHandler(session),
             onSessionReady: (instance) => {
-                sessionWrapperRef.current = instance;
-                syncSessionMode();
-            }
-        });
+                sessionWrapperRef.current = instance
+                syncSessionMode()
+            },
+        })
     } catch (error) {
-        lifecycle.markCrash(error);
-        logger.debug('[opencode] Loop error:', error);
+        lifecycle.markCrash(error)
+        logger.debug('[opencode] Loop error:', error)
     } finally {
-        const localFailure = sessionWrapperRef.current?.localLaunchFailure;
-        if (localFailure?.exitReason === 'exit') {
-            lifecycle.setExitCode(1);
-        }
-        await lifecycle.cleanupAndExit();
+        await lifecycle.cleanupAndExit()
     }
 }

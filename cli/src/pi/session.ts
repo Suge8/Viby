@@ -1,7 +1,7 @@
-import type { PiPermissionMode, SessionModel, SessionModelReasoningEffort } from '@/api/types'
-import type { ApiClient, ApiSessionClient } from '@/lib'
 import { setSessionDriverRuntimeHandle } from '@viby/protocol'
 import { AgentSessionBase } from '@/agent/sessionBase'
+import type { PiPermissionMode, SessionModel, SessionModelReasoningEffort } from '@/api/types'
+import type { ApiClient, ApiSessionClient } from '@/lib'
 import { MessageQueue2 } from '@/utils/MessageQueue2'
 import type { PiMode } from './types'
 
@@ -24,14 +24,12 @@ export class PiSession extends AgentSessionBase<PiMode> {
             logPath: opts.logPath,
             sessionId: opts.sessionId,
             messageQueue: opts.messageQueue,
-            onModeChange: () => {},
-            mode: 'remote',
             sessionLabel: 'PiSession',
             sessionIdLabel: 'Pi',
             applySessionIdToMetadata: (metadata, sessionId) => ({
                 ...metadata,
-                ...setSessionDriverRuntimeHandle(metadata, 'pi', { sessionId })
-            })
+                ...setSessionDriverRuntimeHandle(metadata, 'pi', { sessionId }),
+            }),
         })
 
         this.startedBy = opts.startedBy
@@ -56,8 +54,8 @@ export class PiSession extends AgentSessionBase<PiMode> {
         this.client.sendStreamUpdate(update)
     }
 
-    sendOutputMessage(data: unknown): void {
-        this.client.sendOutputMessage(data)
+    sendOutputMessage(...args: Parameters<ApiSessionClient['sendOutputMessage']>): void {
+        this.client.sendOutputMessage(...args)
     }
 
     sendSessionEvent(event: Parameters<ApiSessionClient['sendSessionEvent']>[0]): void {

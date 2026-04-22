@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test'
+import { describe, expect, it } from 'vitest'
 import { resolvePiScopedModelContext } from './launchConfig'
 
 describe('resolvePiScopedModelContext', () => {
@@ -8,14 +8,14 @@ describe('resolvePiScopedModelContext', () => {
                 provider: 'openai',
                 id: 'gpt-5.4',
                 name: 'GPT-5.4',
-                reasoning: true
+                reasoning: true,
             },
             {
                 provider: 'anthropic',
                 id: 'claude-sonnet-4',
                 name: 'Claude Sonnet 4',
-                reasoning: false
-            }
+                reasoning: false,
+            },
         ] as unknown as Parameters<typeof resolvePiScopedModelContext>[0]
 
         const result = resolvePiScopedModelContext(models, ['openai/gpt-5.4:high', 'anthropic/claude-sonnet-4'])
@@ -27,13 +27,13 @@ describe('resolvePiScopedModelContext', () => {
                 id: 'openai/gpt-5.4',
                 label: 'GPT-5.4',
                 supportedThinkingLevels: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'],
-                defaultThinkingLevel: 'high'
+                defaultThinkingLevel: 'high',
             },
             {
                 id: 'anthropic/claude-sonnet-4',
                 label: 'Claude Sonnet 4',
-                supportedThinkingLevels: ['none']
-            }
+                supportedThinkingLevels: ['none'],
+            },
         ])
     })
 
@@ -42,8 +42,8 @@ describe('resolvePiScopedModelContext', () => {
             {
                 provider: 'openai',
                 id: 'gpt-5.4',
-                reasoning: true
-            }
+                reasoning: true,
+            },
         ] as unknown as Parameters<typeof resolvePiScopedModelContext>[0]
 
         const result = resolvePiScopedModelContext(models, undefined)
@@ -54,8 +54,8 @@ describe('resolvePiScopedModelContext', () => {
             {
                 id: 'openai/gpt-5.4',
                 label: 'openai/gpt-5.4',
-                supportedThinkingLevels: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh']
-            }
+                supportedThinkingLevels: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'],
+            },
         ])
     })
 })

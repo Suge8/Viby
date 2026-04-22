@@ -1,17 +1,17 @@
 import type { SessionHandoffSnapshot } from '@viby/protocol/types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { OpencodeMode } from './types'
 
 const harness = vi.hoisted(() => ({
     bootstrapArgs: [] as Array<Record<string, unknown>>,
-    sessionState: {
-        permissionMode: 'default' as string,
-        model: null as string | null,
-    },
     onUserMessage: null as null | ((message: { content: { text: string; attachments: unknown[] } }) => void),
     rpcHandlers: new Map<string, (payload: unknown) => Promise<unknown>>(),
-    queueModes: [] as Array<Record<string, unknown>>,
+    queueModes: [] as OpencodeMode[],
     queuedUserMessages: [] as Array<{ text: string; attachments?: unknown[] }>,
-    geminiLoopArgs: [] as Array<Record<string, unknown>>,
+    loopArgs: [] as Array<Record<string, unknown>>,
+    sessionState: {
+        permissionMode: 'default' as OpencodeMode['permissionMode'],
+    },
     session: {
         onUserMessage(callback: (message: { content: { text: string; attachments: unknown[] } }) => void) {
             harness.onUserMessage = callback
@@ -35,50 +35,32 @@ vi.mock('@/agent/sessionFactory', () => ({
 }))
 
 vi.mock('./loop', () => ({
-    geminiLoop: vi.fn(
+    opencodeLoop: vi.fn(
         async (
             options: {
                 messageQueue: {
-                    queue: Array<{ mode: Record<string, unknown> }>
+                    queue: Array<{ mode: OpencodeMode }>
                 }
-                onSessionReady?: (session: {
-                    setPermissionMode(mode: string): void
-                    setModel(model: string | null): void
-                }) => void
+                onSessionReady?: (session: { setPermissionMode(mode: OpencodeMode['permissionMode']): void }) => void
             } & Record<string, unknown>
         ) => {
-            harness.geminiLoopArgs.push(options)
+            harness.loopArgs.push(options)
 
             const sessionInstance = {
                 stopKeepAlive() {},
-                setPermissionMode(mode: string) {
+                setPermissionMode(mode: OpencodeMode['permissionMode']) {
                     harness.sessionState.permissionMode = mode
                 },
-                setModel(model: string | null) {
-                    harness.sessionState.model = model
-                },
+                disposeRemoteRuntime: async () => {},
             }
 
             options.onSessionReady?.(sessionInstance)
 
-            const applyConfig = harness.rpcHandlers.get('set-session-config')
-            if (!applyConfig || !harness.onUserMessage) {
-                return
-            }
-
-            const result = await applyConfig({
-                model: 'gemini-2.5-flash-lite',
-            })
-
-            expect(result).toEqual({
-                applied: {
-                    permissionMode: 'default',
-                    model: 'gemini-2.5-flash-lite',
-                },
-            })
-
             const queuedUserMessages =
                 harness.queuedUserMessages.length > 0 ? harness.queuedUserMessages : [{ text: 'ping', attachments: [] }]
+            if (!harness.onUserMessage) {
+                return
+            }
             for (const queuedUserMessage of queuedUserMessages) {
                 harness.onUserMessage({
                     content: {
@@ -117,23 +99,11 @@ vi.mock('@/agent/runnerLifecycle', () => ({
     setControlledByUser: vi.fn(),
 }))
 
-vi.mock('@/claude/utils/startHookServer', () => ({
-    startHookServer: vi.fn(async () => ({
+vi.mock('./utils/startOpencodeHookServer', () => ({
+    startOpencodeHookServer: vi.fn(async () => ({
         port: 1234,
-        token: 'token',
         stop: vi.fn(),
     })),
-}))
-
-vi.mock('@/modules/common/hooks/generateHookSettings', () => ({
-    cleanupHookSettingsFile: vi.fn(),
-    generateHookSettingsFile: vi.fn(() => '/tmp/gemini-hooks.json'),
-}))
-
-const resolveGeminiRuntimeConfigMock = vi.hoisted(() => vi.fn())
-
-vi.mock('./utils/config', () => ({
-    resolveGeminiRuntimeConfig: resolveGeminiRuntimeConfigMock,
 }))
 
 vi.mock('@/ui/logger', () => ({
@@ -146,15 +116,19 @@ vi.mock('@/utils/attachmentFormatter', () => ({
     formatMessageWithAttachments: vi.fn((text: string) => text),
 }))
 
-import { runGemini } from './runGemini'
+vi.mock('@/utils/invokedCwd', () => ({
+    getInvokedCwd: vi.fn(() => '/tmp/viby-opencode'),
+}))
+
+import { runOpencode } from './runOpencode'
 
 function createSessionContinuityHandoff(): SessionHandoffSnapshot {
     return {
-        driver: 'claude',
+        driver: 'gemini',
         workingDirectory: '/repo/project',
         liveConfig: {
-            model: 'claude-sonnet',
-            modelReasoningEffort: 'high',
+            model: 'gemini-2.5-pro',
+            modelReasoningEffort: null,
             permissionMode: 'default',
             collaborationMode: undefined,
         },
@@ -164,89 +138,31 @@ function createSessionContinuityHandoff(): SessionHandoffSnapshot {
                 id: 'message-1',
                 seq: 1,
                 createdAt: 1,
-                role: 'user',
-                text: 'Continue this exact Viby session.',
+                role: 'assistant',
+                text: 'Continue the same OpenCode session.',
             },
         ],
     }
 }
 
-describe('runGemini live session config', () => {
+describe('runOpencode continuity', () => {
     beforeEach(() => {
         harness.bootstrapArgs.length = 0
-        harness.geminiLoopArgs.length = 0
+        harness.loopArgs.length = 0
         harness.queueModes = []
         harness.queuedUserMessages = []
         harness.onUserMessage = null
         harness.rpcHandlers.clear()
         harness.sessionState.permissionMode = 'default'
-        harness.sessionState.model = null
-        resolveGeminiRuntimeConfigMock.mockReset()
     })
 
-    it('persists a resolved local or explicit model before bootstrapping the session', async () => {
-        resolveGeminiRuntimeConfigMock.mockReturnValue({
-            model: 'gemini-3-pro-preview',
-            modelSource: 'local',
-        })
-
-        await runGemini({})
-
-        expect(harness.bootstrapArgs[0]?.model).toBe('gemini-3-pro-preview')
-        expect(harness.geminiLoopArgs[0]?.model).toBe('gemini-3-pro-preview')
-    })
-
-    it('keeps terminal default semantics when Gemini runtime config has no explicit model', async () => {
-        resolveGeminiRuntimeConfigMock.mockReturnValue({
-            model: undefined,
-            modelSource: 'terminal-default',
-        })
-
-        await runGemini({})
-
-        expect(harness.bootstrapArgs[0]?.model).toBeUndefined()
-        expect(harness.geminiLoopArgs[0]?.model).toBeUndefined()
-    })
-
-    it('forwards resumeSessionId into the Gemini loop', async () => {
-        resolveGeminiRuntimeConfigMock.mockReturnValue({
-            model: 'gemini-2.5-pro',
-            modelSource: 'explicit',
-        })
-
-        await runGemini({ resumeSessionId: 'gemini-session-123' })
-
-        expect(harness.geminiLoopArgs[0]?.resumeSessionId).toBe('gemini-session-123')
-    })
-
-    it('applies live model updates to the next queued user message', async () => {
-        resolveGeminiRuntimeConfigMock.mockReturnValue({
-            model: undefined,
-            modelSource: 'terminal-default',
-        })
-
-        await runGemini({ startedBy: 'runner' })
-
-        expect(harness.sessionState.model).toBe('gemini-2.5-flash-lite')
-        expect(harness.queueModes).toEqual([
-            {
-                permissionMode: 'default',
-                model: 'gemini-2.5-flash-lite',
-            },
-        ])
-    })
-
-    it('injects session continuity exactly once into the first queued Gemini turn', async () => {
-        resolveGeminiRuntimeConfigMock.mockReturnValue({
-            model: 'gemini-2.5-pro',
-            modelSource: 'explicit',
-        })
+    it('injects session continuity exactly once into the first queued OpenCode turn', async () => {
         harness.queuedUserMessages = [
-            { text: 'Resume this old session.', attachments: [] },
-            { text: 'Do not replay the handoff here.', attachments: [] },
+            { text: 'Resume the closed OpenCode session.', attachments: [] },
+            { text: 'Second turn should be clean.', attachments: [] },
         ]
 
-        await runGemini({
+        await runOpencode({
             startedBy: 'runner',
             driverSwitchBootstrap: true,
             sessionContinuityHandoff: createSessionContinuityHandoff(),
@@ -256,7 +172,7 @@ describe('runGemini live session config', () => {
         expect(harness.queueModes[0]?.developerInstructions).toContain(
             'Private continuity handoff for resuming the same Viby session.'
         )
-        expect(harness.queueModes[0]?.developerInstructions).toContain('"previousDriver": "claude"')
+        expect(harness.queueModes[0]?.developerInstructions).toContain('"previousDriver": "gemini"')
         expect(harness.queueModes[1]?.developerInstructions).toBeUndefined()
         expect(harness.bootstrapArgs[0]?.driverSwitchBootstrap).toBe(true)
     })
