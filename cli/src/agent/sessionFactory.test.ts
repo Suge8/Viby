@@ -3,10 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const { harness, sessionClientState } = vi.hoisted(() => {
     const state = {
         metadata: null as Record<string, unknown> | null,
-        updateMetadataAndWait: vi.fn(async (handler: (metadata: Record<string, unknown>) => Record<string, unknown>) => {
-            const current = state.metadata ?? {}
-            state.metadata = handler(current)
-        }),
+        updateMetadataAndWait: vi.fn(
+            async (handler: (metadata: Record<string, unknown>) => Record<string, unknown>) => {
+                const current = state.metadata ?? {}
+                state.metadata = handler(current)
+            }
+        ),
         getMetadataSnapshot: vi.fn(() => state.metadata),
     }
 
@@ -23,7 +25,7 @@ const { harness, sessionClientState } = vi.hoisted(() => {
                 createdAt: 0,
                 updatedAt: 0,
                 active: true,
-                activeAt: 0
+                activeAt: 0,
             })),
             getOrCreateSession: vi.fn(async (options: Record<string, unknown>) => ({
                 id: typeof options.sessionId === 'string' ? options.sessionId : 'session-new',
@@ -42,7 +44,7 @@ const { harness, sessionClientState } = vi.hoisted(() => {
                 model: null,
                 modelReasoningEffort: null,
                 permissionMode: undefined,
-                collaborationMode: undefined
+                collaborationMode: undefined,
             })),
             sessionSyncClient: vi.fn((sessionInfo: { metadata?: Record<string, unknown> | null }) => {
                 state.metadata = (sessionInfo.metadata ?? null) as Record<string, unknown> | null
@@ -52,8 +54,8 @@ const { harness, sessionClientState } = vi.hoisted(() => {
                 }
             }),
             notifyRunnerSessionStarted: vi.fn(async () => ({})),
-            readSettings: vi.fn(async () => ({ machineId: 'machine-1' }))
-        }
+            readSettings: vi.fn(async () => ({ machineId: 'machine-1' })),
+        },
     }
 })
 
@@ -62,47 +64,48 @@ vi.mock('@/api/api', () => ({
         create: vi.fn(async () => ({
             getOrCreateMachine: harness.getOrCreateMachine,
             getOrCreateSession: harness.getOrCreateSession,
-            sessionSyncClient: harness.sessionSyncClient
-        }))
-    }
+            sessionSyncClient: harness.sessionSyncClient,
+        })),
+    },
 }))
 
 vi.mock('@/runner/controlClient', () => ({
-    notifyRunnerSessionStarted: harness.notifyRunnerSessionStarted
+    notifyRunnerSessionStarted: harness.notifyRunnerSessionStarted,
 }))
 
 vi.mock('@/persistence', () => ({
-    readSettings: harness.readSettings
+    readSettings: harness.readSettings,
 }))
 
 vi.mock('@/configuration', () => ({
     configuration: {
-        vibyHomeDir: '/tmp/viby-home'
-    }
+        vibyHomeDir: '/tmp/viby-home',
+    },
 }))
 
 vi.mock('@/projectPath', () => ({
-    runtimePath: () => '/tmp/viby-lib'
+    runtimePath: () => '/tmp/viby-lib',
 }))
 
 vi.mock('@/utils/invokedCwd', () => ({
-    getInvokedCwd: () => '/tmp/project'
+    getInvokedCwd: () => '/tmp/project',
 }))
 
 vi.mock('@/utils/worktreeEnv', () => ({
-    readWorktreeEnv: () => null
+    readWorktreeEnv: () => null,
 }))
 
 vi.mock('@/ui/logger', () => ({
     logger: {
-        debug: vi.fn()
-    }
+        debug: vi.fn(),
+    },
 }))
 
 import { bootstrapSession } from './sessionFactory'
 
 describe('bootstrapSession', () => {
     beforeEach(() => {
+        delete process.env.VIBY_MACHINE_ID
         sessionClientState.metadata = null
         sessionClientState.updateMetadataAndWait.mockClear()
         sessionClientState.getMetadataSnapshot.mockClear()
@@ -117,38 +120,61 @@ describe('bootstrapSession', () => {
     it('persists authoritative driver metadata for new sessions', async () => {
         await bootstrapSession({
             driver: 'codex',
-            startedBy: 'runner'
+            startedBy: 'runner',
         })
 
-        expect(harness.getOrCreateSession).toHaveBeenCalledWith(expect.objectContaining({
-            metadata: expect.objectContaining({
-                driver: 'codex',
-                path: '/tmp/project',
-                startedBy: 'runner'
+        expect(harness.getOrCreateSession).toHaveBeenCalledWith(
+            expect.objectContaining({
+                metadata: expect.objectContaining({
+                    driver: 'codex',
+                    path: '/tmp/project',
+                    startedBy: 'runner',
+                }),
             })
-        }))
+        )
+        expect(harness.getOrCreateMachine).not.toHaveBeenCalled()
+    })
+
+    it('reuses an injected machine id without reading settings again', async () => {
+        process.env.VIBY_MACHINE_ID = 'machine-from-runner-env'
+
+        await bootstrapSession({
+            driver: 'codex',
+            startedBy: 'runner',
+        })
+
+        expect(harness.readSettings).not.toHaveBeenCalled()
+        expect(harness.getOrCreateSession).toHaveBeenCalledWith(
+            expect.objectContaining({
+                metadata: expect.objectContaining({
+                    machineId: 'machine-from-runner-env',
+                }),
+            })
+        )
     })
 
     it('forwards an explicit viby session id into session bootstrap without inventing runtime handles', async () => {
         const result = await bootstrapSession({
             driver: 'codex',
             startedBy: 'runner',
-            sessionId: '11111111-1111-4111-8111-111111111111'
+            sessionId: '11111111-1111-4111-8111-111111111111',
         })
 
-        expect(harness.getOrCreateSession).toHaveBeenCalledWith(expect.objectContaining({
-            sessionId: '11111111-1111-4111-8111-111111111111',
-            metadata: expect.objectContaining({
-                driver: 'codex'
+        expect(harness.getOrCreateSession).toHaveBeenCalledWith(
+            expect.objectContaining({
+                sessionId: '11111111-1111-4111-8111-111111111111',
+                metadata: expect.objectContaining({
+                    driver: 'codex',
+                }),
             })
-        }))
+        )
         expect(result.sessionInfo.id).toBe('11111111-1111-4111-8111-111111111111')
         expect(harness.notifyRunnerSessionStarted).toHaveBeenCalledWith(
             '11111111-1111-4111-8111-111111111111',
             expect.objectContaining({
                 path: '/tmp/project',
                 startedBy: 'runner',
-                driver: 'codex'
+                driver: 'codex',
             })
         )
         const reportCall = harness.notifyRunnerSessionStarted.mock.calls[0] as unknown[] | undefined
@@ -172,8 +198,8 @@ describe('bootstrapSession', () => {
                 host: 'localhost',
                 driver: 'claude',
                 runtimeHandles: {
-                    claude: { sessionId: 'claude-thread-1' }
-                }
+                    claude: { sessionId: 'claude-thread-1' },
+                },
             },
             metadataVersion: 1,
             agentState: null,
@@ -184,29 +210,86 @@ describe('bootstrapSession', () => {
             model: null,
             modelReasoningEffort: null,
             permissionMode: undefined,
-            collaborationMode: undefined
+            collaborationMode: undefined,
         })
 
         const result = await bootstrapSession({
             driver: 'codex',
             startedBy: 'runner',
-            sessionId: 'session-existing'
+            sessionId: 'session-existing',
         })
 
         expect(sessionClientState.updateMetadataAndWait).toHaveBeenCalledTimes(1)
-        expect(result.metadata).toEqual(expect.objectContaining({
-            driver: 'codex',
-            runtimeHandles: {
-                claude: { sessionId: 'claude-thread-1' }
-            }
-        }))
+        expect(result.metadata).toEqual(
+            expect.objectContaining({
+                driver: 'codex',
+                runtimeHandles: {
+                    claude: { sessionId: 'claude-thread-1' },
+                },
+            })
+        )
         expect(harness.notifyRunnerSessionStarted).toHaveBeenCalledWith(
             'session-existing',
             expect.objectContaining({
                 driver: 'codex',
                 runtimeHandles: {
-                    claude: { sessionId: 'claude-thread-1' }
-                }
+                    claude: { sessionId: 'claude-thread-1' },
+                },
+            })
+        )
+    })
+
+    it('reuses switch-finalized metadata without re-running durable sync for driver-switch bootstrap', async () => {
+        harness.getOrCreateSession.mockResolvedValueOnce({
+            id: 'session-existing',
+            seq: 0,
+            createdAt: 0,
+            updatedAt: 0,
+            active: false,
+            activeAt: 0,
+            metadata: {
+                path: '/tmp/project',
+                host: 'localhost',
+                driver: 'claude',
+                runtimeHandles: {
+                    claude: { sessionId: 'claude-thread-1' },
+                },
+            },
+            metadataVersion: 1,
+            agentState: null,
+            agentStateVersion: 1,
+            thinking: false,
+            thinkingAt: 0,
+            todos: undefined,
+            model: null,
+            modelReasoningEffort: null,
+            permissionMode: undefined,
+            collaborationMode: undefined,
+        })
+
+        const result = await bootstrapSession({
+            driver: 'codex',
+            startedBy: 'runner',
+            sessionId: 'session-existing',
+            driverSwitchBootstrap: true,
+        })
+
+        expect(sessionClientState.updateMetadataAndWait).not.toHaveBeenCalled()
+        expect(result.metadata).toEqual(
+            expect.objectContaining({
+                driver: 'codex',
+                runtimeHandles: {
+                    claude: { sessionId: 'claude-thread-1' },
+                },
+            })
+        )
+        expect(harness.notifyRunnerSessionStarted).toHaveBeenCalledWith(
+            'session-existing',
+            expect.objectContaining({
+                driver: 'codex',
+                runtimeHandles: {
+                    claude: { sessionId: 'claude-thread-1' },
+                },
             })
         )
     })
@@ -216,7 +299,7 @@ describe('bootstrapSession', () => {
             sessionClientState.metadata = {
                 path: '/tmp/project',
                 host: 'localhost',
-                driver: 'claude'
+                driver: 'claude',
             }
         })
         harness.getOrCreateSession.mockResolvedValueOnce({
@@ -229,7 +312,7 @@ describe('bootstrapSession', () => {
             metadata: {
                 path: '/tmp/project',
                 host: 'localhost',
-                driver: 'claude'
+                driver: 'claude',
             },
             metadataVersion: 1,
             agentState: null,
@@ -240,14 +323,16 @@ describe('bootstrapSession', () => {
             model: null,
             modelReasoningEffort: null,
             permissionMode: undefined,
-            collaborationMode: undefined
+            collaborationMode: undefined,
         })
 
-        await expect(bootstrapSession({
-            driver: 'codex',
-            startedBy: 'runner',
-            sessionId: 'session-existing'
-        })).rejects.toThrow('Session bootstrap metadata sync failed for session-existing')
+        await expect(
+            bootstrapSession({
+                driver: 'codex',
+                startedBy: 'runner',
+                sessionId: 'session-existing',
+            })
+        ).rejects.toThrow('Session bootstrap metadata sync failed for session-existing')
     })
 
     it('keeps bootstrap successful when runner notification fails', async () => {
@@ -255,10 +340,11 @@ describe('bootstrapSession', () => {
 
         const result = await bootstrapSession({
             driver: 'claude',
-            startedBy: 'terminal'
+            startedBy: 'terminal',
         })
 
         expect(result.sessionInfo.id).toBe('session-new')
         expect(harness.getOrCreateSession).toHaveBeenCalledTimes(1)
+        expect(harness.getOrCreateMachine).toHaveBeenCalledTimes(1)
     })
 })

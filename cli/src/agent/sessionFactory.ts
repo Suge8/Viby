@@ -1,7 +1,8 @@
-import os from 'node:os'
 import { randomUUID } from 'node:crypto'
+import os from 'node:os'
 import { resolve } from 'node:path'
-
+import type { SessionDriver } from '@viby/protocol'
+import { getSessionDriverRuntimeHandles, MACHINE_BROWSE_DIRECTORY_CAPABILITY } from '@viby/protocol'
 import { ApiClient } from '@/api/api'
 import type { ApiSessionClient } from '@/api/apiSession'
 import type {
@@ -12,18 +13,15 @@ import type {
     SessionCollaborationMode,
     SessionModelReasoningEffort,
     SessionPermissionMode,
-    TeamSessionSpawnRole
 } from '@/api/types'
-import { MACHINE_BROWSE_DIRECTORY_CAPABILITY, getSessionDriverRuntimeHandles } from '@viby/protocol'
-import { notifyRunnerSessionStarted } from '@/runner/controlClient'
-import { readSettings } from '@/persistence'
 import { configuration } from '@/configuration'
-import { logger } from '@/ui/logger'
+import { readSettings } from '@/persistence'
 import { runtimePath } from '@/projectPath'
+import { notifyRunnerSessionStarted } from '@/runner/controlClient'
+import { logger } from '@/ui/logger'
 import { getInvokedCwd } from '@/utils/invokedCwd'
 import { readWorktreeEnv } from '@/utils/worktreeEnv'
 import packageJson from '../../package.json'
-import type { SessionDriver } from '@viby/protocol'
 
 export type SessionStartedBy = 'runner' | 'terminal'
 
@@ -31,13 +29,13 @@ export type SessionBootstrapOptions = {
     driver: SessionDriver
     sessionId?: string
     startedBy?: SessionStartedBy
+    driverSwitchBootstrap?: boolean
     workingDirectory?: string
     tag?: string
     agentState?: AgentState | null
     model?: string
     modelReasoningEffort?: SessionModelReasoningEffort
     permissionMode?: SessionPermissionMode
-    sessionRole?: TeamSessionSpawnRole
     collaborationMode?: SessionCollaborationMode
     metadataOverrides?: Partial<Metadata>
 }
@@ -60,7 +58,7 @@ export function buildMachineMetadata(): MachineMetadata {
         capabilities: [MACHINE_BROWSE_DIRECTORY_CAPABILITY],
         homeDir: os.homedir(),
         vibyHomeDir: configuration.vibyHomeDir,
-        vibyLibDir: runtimePath()
+        vibyLibDir: runtimePath(),
     }
 }
 
@@ -87,7 +85,6 @@ export function buildSessionMetadata(options: {
         vibyHomeDir: configuration.vibyHomeDir,
         vibyLibDir,
         vibyToolsDir: resolve(vibyLibDir, 'tools', 'unpacked'),
-        startedFromRunner: options.startedBy === 'runner',
         hostPid: process.pid,
         startedBy: options.startedBy,
         lifecycleState: 'running',
@@ -104,7 +101,7 @@ function mergeBootstrapMetadata(current: Metadata | null, desired: Metadata): Me
     return {
         ...(current ?? {}),
         ...desired,
-        ...(preservedRuntimeHandles ? { runtimeHandles: preservedRuntimeHandles } : {})
+        ...(preservedRuntimeHandles ? { runtimeHandles: preservedRuntimeHandles } : {}),
     }
 }
 
@@ -112,19 +109,19 @@ async function syncBootstrapMetadata(options: {
     session: ApiSessionClient
     desiredMetadata: Metadata
     sessionId?: string
+    persist?: boolean
 }): Promise<Metadata> {
-    if (!options.sessionId) {
-        return options.desiredMetadata
-    }
-
     const currentMetadata = options.session.getMetadataSnapshot()
     const nextMetadata = mergeBootstrapMetadata(currentMetadata, options.desiredMetadata)
+    if (options.persist === false || !options.sessionId) {
+        return nextMetadata
+    }
     if (JSON.stringify(currentMetadata) === JSON.stringify(nextMetadata)) {
         return currentMetadata ?? nextMetadata
     }
 
     await options.session.updateMetadataAndWait(() => nextMetadata, {
-        touchUpdatedAt: false
+        touchUpdatedAt: false,
     })
 
     const syncedMetadata = options.session.getMetadataSnapshot()
@@ -135,11 +132,27 @@ async function syncBootstrapMetadata(options: {
     return syncedMetadata
 }
 
+function shouldRegisterBootstrapMachine(startedBy: SessionStartedBy): boolean {
+    return startedBy !== 'runner'
+}
+
+function shouldPersistBootstrapMetadata(options: SessionBootstrapOptions): boolean {
+    return Boolean(options.sessionId) && options.driverSwitchBootstrap !== true
+}
+
 async function getMachineIdOrExit(): Promise<string> {
+    const injectedMachineId = process.env.VIBY_MACHINE_ID?.trim()
+    if (injectedMachineId) {
+        logger.debug(`Using injected machineId: ${injectedMachineId}`)
+        return injectedMachineId
+    }
+
     const settings = await readSettings()
     const machineId = settings?.machineId
     if (!machineId) {
-        console.error(`[START] No machine ID found in settings, which is unexpected since authAndSetupMachineIfNeeded should have created it. Please report this issue on ${packageJson.bugs}`)
+        logger.warn(
+            `[START] No machine ID found in settings, which is unexpected since authAndSetupMachineIfNeeded should have created it. Please report this issue on ${packageJson.bugs}`
+        )
         process.exit(1)
     }
     logger.debug(`Using machineId: ${machineId}`)
@@ -166,20 +179,20 @@ export async function bootstrapSession(options: SessionBootstrapOptions): Promis
     const sessionTag = options.tag ?? randomUUID()
     const agentState = options.agentState === undefined ? {} : options.agentState
 
-    const api = await ApiClient.create()
-
-    const machineId = await getMachineIdOrExit()
-    await api.getOrCreateMachine({
-        machineId,
-        metadata: buildMachineMetadata()
-    })
+    const [api, machineId] = await Promise.all([ApiClient.create(), getMachineIdOrExit()])
+    if (shouldRegisterBootstrapMachine(startedBy)) {
+        await api.getOrCreateMachine({
+            machineId,
+            metadata: buildMachineMetadata(),
+        })
+    }
 
     const metadata = buildSessionMetadata({
         driver: options.driver,
         startedBy,
         workingDirectory,
         machineId,
-        metadataOverrides: options.metadataOverrides
+        metadataOverrides: options.metadataOverrides,
     })
 
     const sessionInfo = await api.getOrCreateSession({
@@ -190,15 +203,15 @@ export async function bootstrapSession(options: SessionBootstrapOptions): Promis
         model: options.model,
         modelReasoningEffort: options.modelReasoningEffort,
         permissionMode: options.permissionMode,
-        sessionRole: options.sessionRole,
-        collaborationMode: options.collaborationMode
+        collaborationMode: options.collaborationMode,
     })
 
     const session = api.sessionSyncClient(sessionInfo)
     const syncedMetadata = await syncBootstrapMetadata({
         session,
         desiredMetadata: metadata,
-        sessionId: options.sessionId
+        sessionId: options.sessionId,
+        persist: shouldPersistBootstrapMetadata(options),
     })
 
     await reportSessionStarted(sessionInfo.id, syncedMetadata)
@@ -210,6 +223,6 @@ export async function bootstrapSession(options: SessionBootstrapOptions): Promis
         metadata: syncedMetadata,
         machineId,
         startedBy,
-        workingDirectory
+        workingDirectory,
     }
 }

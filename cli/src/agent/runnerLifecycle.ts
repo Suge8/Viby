@@ -6,6 +6,7 @@ type RunnerLifecycleOptions = {
     session: ApiSessionClient
     logTag: string
     stopKeepAlive?: () => void
+    requestShutdown?: () => Promise<void> | void
     onBeforeClose?: () => Promise<void> | void
     onAfterClose?: () => Promise<void> | void
 }
@@ -18,9 +19,17 @@ export type RunnerLifecycle = {
     registerProcessHandlers: () => void
 }
 
+export type RuntimeStopRequestOwner = {
+    requestRuntimeStop: () => Promise<boolean>
+}
+
+type RuntimeStopRequestHandlerOptions = {
+    getOwner: () => RuntimeStopRequestOwner | null | undefined
+    cleanupAndExit: () => Promise<void>
+}
+
 export function createRunnerLifecycle(options: RunnerLifecycleOptions): RunnerLifecycle {
     let exitCode = 0
-    let cleanupStarted = false
     let cleanupPromise: Promise<void> | null = null
 
     const logPrefix = `[${options.logTag}]`
@@ -36,7 +45,6 @@ export function createRunnerLifecycle(options: RunnerLifecycleOptions): RunnerLi
             return cleanupPromise
         }
 
-        cleanupStarted = true
         cleanupPromise = (async () => {
             logger.debug(`${logPrefix} Cleanup start`)
             restoreTerminalState()
@@ -82,12 +90,27 @@ export function createRunnerLifecycle(options: RunnerLifecycleOptions): RunnerLi
     }
 
     const registerProcessHandlers = () => {
+        const handleSignal = async () => {
+            if (options.requestShutdown) {
+                try {
+                    await options.requestShutdown()
+                    return
+                } catch (error) {
+                    logger.debug(`${logPrefix} Error during graceful shutdown request:`, error)
+                    await cleanupAndExit(1)
+                    return
+                }
+            }
+
+            await cleanupAndExit()
+        }
+
         process.on('SIGTERM', () => {
-            void cleanupAndExit()
+            void handleSignal()
         })
 
         process.on('SIGINT', () => {
-            void cleanupAndExit()
+            void handleSignal()
         })
 
         process.on('uncaughtException', (error) => {
@@ -106,20 +129,28 @@ export function createRunnerLifecycle(options: RunnerLifecycleOptions): RunnerLi
         markCrash,
         cleanup,
         cleanupAndExit,
-        registerProcessHandlers
+        registerProcessHandlers,
     }
 }
 
-export function setControlledByUser(session: ApiSessionClient, mode: 'local' | 'remote'): void {
+export function setControlledByUser(session: ApiSessionClient, controlledByUser: boolean): void {
     session.updateAgentState((currentState) => ({
         ...currentState,
-        controlledByUser: mode === 'local'
+        controlledByUser,
     }))
 }
 
-export function createModeChangeHandler(session: ApiSessionClient): (mode: 'local' | 'remote') => void {
-    return (mode) => {
-        session.sendSessionEvent({ type: 'switch', mode })
-        setControlledByUser(session, mode)
+export function createRuntimeStopRequestHandler(options: RuntimeStopRequestHandlerOptions): () => Promise<void> {
+    return async () => {
+        try {
+            const runtimeStopRequested = await options.getOwner()?.requestRuntimeStop()
+            if (runtimeStopRequested) {
+                return
+            }
+        } catch (error) {
+            logger.debug('[runner-lifecycle] Runtime stop owner failed; falling back to lifecycle cleanup', error)
+        }
+
+        await options.cleanupAndExit()
     }
 }
