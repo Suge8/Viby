@@ -6,10 +6,27 @@ import {
     CODEX_REASONING_EFFORTS,
     MODEL_REASONING_EFFORTS,
     PERMISSION_MODES,
-    PI_REASONING_EFFORTS
 } from './modes'
+import {
+    type PiModelCapability as PiModelCapabilityBase,
+    PiModelCapabilitySchema as PiModelCapabilitySchemaBase,
+    type PiModelScope as PiModelScopeBase,
+    PiModelScopeSchema as PiModelScopeSchemaBase,
+    PiReasoningEffortSchema as PiReasoningEffortSchemaBase,
+} from './piModelSchema'
+import type { SessionActivityKind } from './sessionActivity'
 import { SESSION_LIFECYCLE_STATES } from './sessionLifecycle'
-import { SessionTeamContextSchema } from './teamSchemas'
+import {
+    SESSION_METADATA_RUNNER_START_FLAG_KEY,
+    SESSION_METADATA_RUNTIME_HANDLE_MIGRATION_KEYS,
+} from './sessionMetadataConstants'
+
+export const PiReasoningEffortSchema = PiReasoningEffortSchemaBase
+export const PiModelCapabilitySchema = PiModelCapabilitySchemaBase
+export type PiModelCapability = PiModelCapabilityBase
+export const PiModelScopeSchema = PiModelScopeSchemaBase
+export type PiModelScope = PiModelScopeBase
+export { SESSION_METADATA_RUNNER_START_FLAG_KEY, SESSION_METADATA_RUNTIME_HANDLE_MIGRATION_KEYS }
 
 export const PermissionModeSchema = z.enum(PERMISSION_MODES)
 export const CodexCollaborationModeSchema = z.enum(CODEX_COLLABORATION_MODES)
@@ -20,7 +37,7 @@ export const SessionLifecycleStateSchema = z.enum(SESSION_LIFECYCLE_STATES)
 
 const MetadataSummarySchema = z.object({
     text: z.string(),
-    updatedAt: z.number()
+    updatedAt: z.number(),
 })
 
 export const WorktreeMetadataSchema = z.object({
@@ -28,50 +45,16 @@ export const WorktreeMetadataSchema = z.object({
     branch: z.string(),
     name: z.string(),
     worktreePath: z.string().optional(),
-    createdAt: z.number().optional()
+    createdAt: z.number().optional(),
 })
 
 export type WorktreeMetadata = z.infer<typeof WorktreeMetadataSchema>
-
-export const PiReasoningEffortSchema = z.enum(PI_REASONING_EFFORTS)
-
-export const PiModelCapabilitySchema = z.object({
-    id: z.string(),
-    label: z.string(),
-    supportedThinkingLevels: z.array(PiReasoningEffortSchema),
-    defaultThinkingLevel: PiReasoningEffortSchema.optional()
-})
-
-export type PiModelCapability = z.infer<typeof PiModelCapabilitySchema>
-
-export const PiModelScopeSchema = z.union([
-    z.object({
-        models: z.array(PiModelCapabilitySchema)
-    }),
-    z.object({
-        availableModels: z.array(z.string())
-    })
-]).transform((value) => {
-    if ('models' in value) {
-        return value
-    }
-
-    return {
-        models: value.availableModels.map((id) => ({
-            id,
-            label: id,
-            supportedThinkingLevels: [...PI_REASONING_EFFORTS]
-        }))
-    }
-})
-
-export type PiModelScope = z.infer<typeof PiModelScopeSchema>
 
 export const SessionDriverSchema = z.enum(AGENT_FLAVORS)
 export type SessionDriver = z.infer<typeof SessionDriverSchema>
 
 export const SessionDriverRuntimeHandleSchema = z.object({
-    sessionId: z.string().optional()
+    sessionId: z.string().optional(),
 })
 export type SessionDriverRuntimeHandle = z.infer<typeof SessionDriverRuntimeHandleSchema>
 
@@ -81,7 +64,8 @@ const SessionDriverHandlesShape = {
     gemini: SessionDriverRuntimeHandleSchema.optional(),
     opencode: SessionDriverRuntimeHandleSchema.optional(),
     cursor: SessionDriverRuntimeHandleSchema.optional(),
-    pi: SessionDriverRuntimeHandleSchema.optional()
+    pi: SessionDriverRuntimeHandleSchema.optional(),
+    copilot: SessionDriverRuntimeHandleSchema.optional(),
 } satisfies Record<SessionDriver, z.ZodOptional<typeof SessionDriverRuntimeHandleSchema>>
 
 export const SessionDriverHandlesSchema = z.object(SessionDriverHandlesShape)
@@ -107,7 +91,7 @@ export const MetadataSchema = z.object({
     vibyHomeDir: z.string().optional(),
     vibyLibDir: z.string().optional(),
     vibyToolsDir: z.string().optional(),
-    startedFromRunner: z.boolean().optional(),
+    startedFromRunner: z.boolean().optional(), // LEGACY READ-ONLY: migrated to startedBy by Hub
     hostPid: z.number().optional(),
     startedBy: z.enum(['runner', 'terminal']).optional(),
     lifecycleState: SessionLifecycleStateSchema.optional(),
@@ -117,7 +101,7 @@ export const MetadataSchema = z.object({
     driver: SessionDriverSchema.nullish(),
     runtimeHandles: SessionDriverHandlesSchema.optional(),
     worktree: WorktreeMetadataSchema.optional(),
-    piModelScope: PiModelScopeSchema.optional()
+    piModelScope: PiModelScopeSchema.optional(),
 })
 
 export type Metadata = z.infer<typeof MetadataSchema>
@@ -125,7 +109,7 @@ export type Metadata = z.infer<typeof MetadataSchema>
 export const AgentStateRequestSchema = z.object({
     tool: z.string(),
     arguments: z.unknown(),
-    createdAt: z.number().nullish()
+    createdAt: z.number().nullish(),
 })
 
 export type AgentStateRequest = z.infer<typeof AgentStateRequestSchema>
@@ -142,10 +126,12 @@ export const AgentStateCompletedRequestSchema = z.object({
     allowTools: z.array(z.string()).optional(),
     // Flat format: Record<string, string[]> (AskUserQuestion)
     // Nested format: Record<string, { answers: string[] }> (request_user_input)
-    answers: z.union([
-        z.record(z.string(), z.array(z.string())),
-        z.record(z.string(), z.object({ answers: z.array(z.string()) }))
-    ]).optional()
+    answers: z
+        .union([
+            z.record(z.string(), z.array(z.string())),
+            z.record(z.string(), z.object({ answers: z.array(z.string()) })),
+        ])
+        .optional(),
 })
 
 export type AgentStateCompletedRequest = z.infer<typeof AgentStateCompletedRequestSchema>
@@ -153,7 +139,7 @@ export type AgentStateCompletedRequest = z.infer<typeof AgentStateCompletedReque
 export const AgentStateSchema = z.object({
     controlledByUser: z.boolean().nullish(),
     requests: z.record(z.string(), AgentStateRequestSchema).nullish(),
-    completedRequests: z.record(z.string(), AgentStateCompletedRequestSchema).nullish()
+    completedRequests: z.record(z.string(), AgentStateCompletedRequestSchema).nullish(),
 })
 
 export type AgentState = z.infer<typeof AgentStateSchema>
@@ -162,7 +148,7 @@ export const TodoItemSchema = z.object({
     content: z.string(),
     status: z.enum(['pending', 'in_progress', 'completed']),
     priority: z.enum(['high', 'medium', 'low']),
-    id: z.string()
+    id: z.string(),
 })
 
 export type TodoItem = z.infer<typeof TodoItemSchema>
@@ -175,7 +161,7 @@ export const AttachmentMetadataSchema = z.object({
     mimeType: z.string(),
     size: z.number(),
     path: z.string(),
-    previewUrl: z.string().optional()
+    previewUrl: z.string().optional(),
 })
 
 export type AttachmentMetadata = z.infer<typeof AttachmentMetadataSchema>
@@ -185,16 +171,16 @@ export const DecryptedMessageSchema = z.object({
     seq: z.number().nullable(),
     localId: z.string().nullable(),
     content: z.unknown(),
-    createdAt: z.number()
+    createdAt: z.number(),
 })
 
 export type DecryptedMessage = z.infer<typeof DecryptedMessageSchema>
 
 export const SessionStreamStateSchema = z.object({
-    streamId: z.string(),
+    assistantTurnId: z.string(),
     startedAt: z.number(),
     updatedAt: z.number(),
-    text: z.string()
+    text: z.string(),
 })
 
 export type SessionStreamState = z.infer<typeof SessionStreamStateSchema>
@@ -213,62 +199,57 @@ export const SessionSchema = z.object({
     thinking: z.boolean(),
     thinkingAt: z.number(),
     todos: TodosSchema.optional(),
-    teamContext: SessionTeamContextSchema.optional(),
     model: z.string().nullable(),
     modelReasoningEffort: ModelReasoningEffortSchema.nullable(),
     permissionMode: PermissionModeSchema.optional(),
-    collaborationMode: CodexCollaborationModeSchema.optional()
+    collaborationMode: CodexCollaborationModeSchema.optional(),
+    latestActivityAt: z.number().nullable().optional(),
+    latestActivityKind: z.custom<SessionActivityKind | null>().optional(),
+    latestCompletedReplyAt: z.number().nullable().optional(),
 })
 
 export type Session = z.infer<typeof SessionSchema>
-
-export * from './teamProjectPreset'
-export * from './teamProjectSnapshot'
-export * from './teamSchemas'
 export * from './messageMeta'
 
 const SessionChangedSchema = z.object({
-    sessionId: z.string()
+    sessionId: z.string(),
 })
 
 const MachineChangedSchema = z.object({
-    machineId: z.string()
+    machineId: z.string(),
 })
 
 export const SyncEventSchema = z.discriminatedUnion('type', [
     SessionChangedSchema.extend({
         type: z.literal('session-added'),
-        data: z.unknown().optional()
+        data: z.unknown().optional(),
     }),
     SessionChangedSchema.extend({
         type: z.literal('session-updated'),
-        data: z.unknown().optional()
+        data: z.unknown().optional(),
     }),
     z.object({
         type: z.literal('session-removed'),
-        sessionId: z.string()
+        sessionId: z.string(),
     }),
     SessionChangedSchema.extend({
         type: z.literal('message-received'),
-        message: DecryptedMessageSchema
+        message: DecryptedMessageSchema,
     }),
     SessionChangedSchema.extend({
         type: z.literal('session-stream-updated'),
-        stream: SessionStreamStateSchema
+        stream: SessionStreamStateSchema,
     }),
     SessionChangedSchema.extend({
         type: z.literal('session-stream-cleared'),
-        streamId: z.string().optional()
+        assistantTurnId: z.string().optional(),
+    }),
+    SessionChangedSchema.extend({
+        type: z.literal('command-capabilities-invalidated'),
     }),
     MachineChangedSchema.extend({
         type: z.literal('machine-updated'),
-        data: z.unknown().optional()
-    }),
-    z.object({
-        type: z.literal('team-project-updated'),
-        projectId: z.string(),
-        managerSessionId: z.string(),
-        affectedSessionIds: z.array(z.string())
+        data: z.unknown().optional(),
     }),
     z.object({
         type: z.literal('toast'),
@@ -281,9 +262,9 @@ export const SyncEventSchema = z.discriminatedUnion('type', [
             kind: z.enum(['permission-request', 'ready']).optional(),
             sessionName: z.string().optional(),
             agentName: z.string().optional(),
-            toolName: z.string().optional()
-        })
-    })
+            toolName: z.string().optional(),
+        }),
+    }),
 ])
 
 export type SyncEvent = z.infer<typeof SyncEventSchema>

@@ -7,7 +7,7 @@ export const TerminalOpenPayloadSchema = z.object({
     sessionId: z.string().min(1),
     terminalId: z.string().min(1),
     cols: z.number().int().positive(),
-    rows: z.number().int().positive()
+    rows: z.number().int().positive(),
 })
 
 export type TerminalOpenPayload = z.infer<typeof TerminalOpenPayloadSchema>
@@ -15,7 +15,7 @@ export type TerminalOpenPayload = z.infer<typeof TerminalOpenPayloadSchema>
 export const TerminalWritePayloadSchema = z.object({
     sessionId: z.string().min(1),
     terminalId: z.string().min(1),
-    data: z.string()
+    data: z.string(),
 })
 
 export type TerminalWritePayload = z.infer<typeof TerminalWritePayloadSchema>
@@ -24,21 +24,21 @@ export const TerminalResizePayloadSchema = z.object({
     sessionId: z.string().min(1),
     terminalId: z.string().min(1),
     cols: z.number().int().positive(),
-    rows: z.number().int().positive()
+    rows: z.number().int().positive(),
 })
 
 export type TerminalResizePayload = z.infer<typeof TerminalResizePayloadSchema>
 
 export const TerminalClosePayloadSchema = z.object({
     sessionId: z.string().min(1),
-    terminalId: z.string().min(1)
+    terminalId: z.string().min(1),
 })
 
 export type TerminalClosePayload = z.infer<typeof TerminalClosePayloadSchema>
 
 export const TerminalReadyPayloadSchema = z.object({
     sessionId: z.string().min(1),
-    terminalId: z.string().min(1)
+    terminalId: z.string().min(1),
 })
 
 export type TerminalReadyPayload = z.infer<typeof TerminalReadyPayloadSchema>
@@ -46,7 +46,7 @@ export type TerminalReadyPayload = z.infer<typeof TerminalReadyPayloadSchema>
 export const TerminalOutputPayloadSchema = z.object({
     sessionId: z.string().min(1),
     terminalId: z.string().min(1),
-    data: z.string()
+    data: z.string(),
 })
 
 export type TerminalOutputPayload = z.infer<typeof TerminalOutputPayloadSchema>
@@ -55,7 +55,7 @@ export const TerminalExitPayloadSchema = z.object({
     sessionId: z.string().min(1),
     terminalId: z.string().min(1),
     code: z.number().int().nullable(),
-    signal: z.string().nullable()
+    signal: z.string().nullable(),
 })
 
 export type TerminalExitPayload = z.infer<typeof TerminalExitPayloadSchema>
@@ -63,7 +63,7 @@ export type TerminalExitPayload = z.infer<typeof TerminalExitPayloadSchema>
 export const TerminalErrorPayloadSchema = z.object({
     sessionId: z.string().min(1),
     terminalId: z.string().min(1),
-    message: z.string()
+    message: z.string(),
 })
 
 export type TerminalErrorPayload = z.infer<typeof TerminalErrorPayloadSchema>
@@ -71,31 +71,33 @@ export type TerminalErrorPayload = z.infer<typeof TerminalErrorPayloadSchema>
 export const SessionStreamAppendPayloadSchema = z.object({
     sid: z.string().min(1),
     kind: z.literal('append'),
-    streamId: z.string().min(1),
-    delta: z.string().min(1)
+    assistantTurnId: z.string().min(1),
+    delta: z.string().min(1),
 })
 
 export const SessionStreamClearPayloadSchema = z.object({
     sid: z.string().min(1),
     kind: z.literal('clear'),
-    streamId: z.string().min(1).optional()
+    assistantTurnId: z.string().min(1).optional(),
 })
 
 export const SessionStreamUpdatePayloadSchema = z.discriminatedUnion('kind', [
     SessionStreamAppendPayloadSchema,
-    SessionStreamClearPayloadSchema
+    SessionStreamClearPayloadSchema,
 ])
 
 export type SessionStreamUpdatePayload = z.infer<typeof SessionStreamUpdatePayloadSchema>
 
-export const WebSubscriptionSchema = z.object({
-    all: z.boolean().optional(),
-    sessionId: z.string().min(1).optional(),
-    machineId: z.string().min(1).optional(),
-    pushEndpoint: z.string().min(1).optional()
-}).refine((value) => value.all === true || Boolean(value.sessionId) || Boolean(value.machineId), {
-    message: 'At least one realtime scope is required'
-})
+export const WebSubscriptionSchema = z
+    .object({
+        all: z.boolean().optional(),
+        sessionId: z.string().min(1).optional(),
+        machineId: z.string().min(1).optional(),
+        pushEndpoint: z.string().min(1).optional(),
+    })
+    .refine((value) => value.all === true || Boolean(value.sessionId) || Boolean(value.machineId), {
+        message: 'At least one realtime scope is required',
+    })
 
 export type WebSubscription = z.infer<typeof WebSubscriptionSchema>
 
@@ -111,8 +113,8 @@ export const UpdateNewMessageBodySchema = z.object({
         seq: z.number(),
         createdAt: z.number(),
         localId: z.string().nullable().optional(),
-        content: z.unknown()
-    })
+        content: z.unknown(),
+    }),
 })
 
 export type UpdateNewMessageBody = z.infer<typeof UpdateNewMessageBodySchema>
@@ -120,14 +122,18 @@ export type UpdateNewMessageBody = z.infer<typeof UpdateNewMessageBodySchema>
 export const UpdateSessionBodySchema = z.object({
     t: z.literal('update-session'),
     sid: z.string(),
-    metadata: z.object({
-        version: z.number(),
-        value: z.unknown()
-    }).nullable(),
-    agentState: z.object({
-        version: z.number(),
-        value: z.unknown().nullable()
-    }).nullable()
+    metadata: z
+        .object({
+            version: z.number(),
+            value: z.unknown(),
+        })
+        .nullable(),
+    agentState: z
+        .object({
+            version: z.number(),
+            value: z.unknown().nullable(),
+        })
+        .nullable(),
 })
 
 export type UpdateSessionBody = z.infer<typeof UpdateSessionBodySchema>
@@ -135,14 +141,18 @@ export type UpdateSessionBody = z.infer<typeof UpdateSessionBodySchema>
 export const UpdateMachineBodySchema = z.object({
     t: z.literal('update-machine'),
     machineId: z.string(),
-    metadata: z.object({
-        version: z.number(),
-        value: z.unknown()
-    }).nullable(),
-    runnerState: z.object({
-        version: z.number(),
-        value: z.unknown().nullable()
-    }).nullable()
+    metadata: z
+        .object({
+            version: z.number(),
+            value: z.unknown(),
+        })
+        .nullable(),
+    runnerState: z
+        .object({
+            version: z.number(),
+            value: z.unknown().nullable(),
+        })
+        .nullable(),
 })
 
 export type UpdateMachineBody = z.infer<typeof UpdateMachineBodySchema>
@@ -151,7 +161,7 @@ export const UpdateSchema = z.object({
     id: z.string(),
     seq: z.number(),
     body: z.union([UpdateNewMessageBodySchema, UpdateSessionBodySchema, UpdateMachineBodySchema]),
-    createdAt: z.number()
+    createdAt: z.number(),
 })
 
 export type Update = z.infer<typeof UpdateSchema>
@@ -168,6 +178,7 @@ export interface ServerToClientEvents {
 
 export interface ClientToServerEvents {
     message: (data: { sid: string; message: unknown; localId?: string }) => void
+    'command-capabilities-invalidated': (data: { sid: string }) => void
     'session-alive': (data: {
         sid: string
         time: number
@@ -179,60 +190,92 @@ export interface ClientToServerEvents {
         collaborationMode?: CodexCollaborationMode
     }) => void
     'session-end': (data: { sid: string; time: number }) => void
-    'update-metadata': (data: {
-        sid: string
-        expectedVersion: number
-        metadata: unknown
-        touchUpdatedAt?: boolean
-    }, cb: (answer: {
-        result: 'error'
-        reason?: SocketErrorReason
-    } | {
-        result: 'version-mismatch'
-        version: number
-        metadata: unknown | null
-    } | {
-        result: 'success'
-        version: number
-        metadata: unknown | null
-    }) => void) => void
-    'update-state': (data: { sid: string; expectedVersion: number; agentState: unknown | null }, cb: (answer: {
-        result: 'error'
-        reason?: SocketErrorReason
-    } | {
-        result: 'version-mismatch'
-        version: number
-        agentState: unknown | null
-    } | {
-        result: 'success'
-        version: number
-        agentState: unknown | null
-    }) => void) => void
+    'update-metadata': (
+        data: {
+            sid: string
+            expectedVersion: number
+            metadata: unknown
+            touchUpdatedAt?: boolean
+        },
+        cb: (
+            answer:
+                | {
+                      result: 'error'
+                      reason?: SocketErrorReason
+                  }
+                | {
+                      result: 'version-mismatch'
+                      version: number
+                      metadata: unknown | null
+                  }
+                | {
+                      result: 'success'
+                      version: number
+                      metadata: unknown | null
+                  }
+        ) => void
+    ) => void
+    'update-state': (
+        data: { sid: string; expectedVersion: number; agentState: unknown | null },
+        cb: (
+            answer:
+                | {
+                      result: 'error'
+                      reason?: SocketErrorReason
+                  }
+                | {
+                      result: 'version-mismatch'
+                      version: number
+                      agentState: unknown | null
+                  }
+                | {
+                      result: 'success'
+                      version: number
+                      agentState: unknown | null
+                  }
+        ) => void
+    ) => void
     'machine-alive': (data: { machineId: string; time: number }) => void
-    'machine-update-metadata': (data: { machineId: string; expectedVersion: number; metadata: unknown }, cb: (answer: {
-        result: 'error'
-        reason?: SocketErrorReason
-    } | {
-        result: 'version-mismatch'
-        version: number
-        metadata: unknown | null
-    } | {
-        result: 'success'
-        version: number
-        metadata: unknown | null
-    }) => void) => void
-    'machine-update-state': (data: { machineId: string; expectedVersion: number; runnerState: unknown | null }, cb: (answer: {
-        result: 'error'
-        reason?: SocketErrorReason
-    } | {
-        result: 'version-mismatch'
-        version: number
-        runnerState: unknown | null
-    } | {
-        result: 'success'
-        version: number
-        runnerState: unknown | null
-    }) => void) => void
+    'machine-update-metadata': (
+        data: { machineId: string; expectedVersion: number; metadata: unknown },
+        cb: (
+            answer:
+                | {
+                      result: 'error'
+                      reason?: SocketErrorReason
+                  }
+                | {
+                      result: 'version-mismatch'
+                      version: number
+                      metadata: unknown | null
+                  }
+                | {
+                      result: 'success'
+                      version: number
+                      metadata: unknown | null
+                  }
+        ) => void
+    ) => void
+    'machine-update-state': (
+        data: { machineId: string; expectedVersion: number; runnerState: unknown | null },
+        cb: (
+            answer:
+                | {
+                      result: 'error'
+                      reason?: SocketErrorReason
+                  }
+                | {
+                      result: 'version-mismatch'
+                      version: number
+                      runnerState: unknown | null
+                  }
+                | {
+                      result: 'success'
+                      version: number
+                      runnerState: unknown | null
+                  }
+        ) => void
+    ) => void
     'rpc-register': (data: { method: string }) => void
     'rpc-unregister': (data: { method: string }) => void
     'terminal:ready': (data: TerminalReadyPayload) => void

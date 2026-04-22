@@ -1,4 +1,78 @@
 export type {
+    AgentAvailability,
+    AgentAvailabilityCode,
+    AgentAvailabilityResolution,
+    AgentAvailabilityResponse,
+    AgentAvailabilityStatus,
+    ListAgentAvailabilityRequest,
+} from './agentAvailability'
+export type {
+    AgentLaunchConfig,
+    ResolveAgentLaunchConfigRequest,
+    ResolveAgentLaunchConfigResponse,
+} from './agentLaunchConfig'
+export type {
+    CommandCapabilitiesResponse,
+    CommandCapability,
+    CommandCapabilityActionType,
+    CommandCapabilityKind,
+    CommandCapabilityProvider,
+    CommandCapabilitySelectionMode,
+    CommandCapabilitySessionEffect,
+    CommandCapabilitySource,
+} from './commandCapabilities'
+export type {
+    AskUserQuestionQuestion,
+    InteractivePermissionRequest,
+    InteractiveQuestionMode,
+    InteractiveQuestionRequest,
+    InteractiveRequest,
+    InteractiveRequestOption,
+    InteractiveRequestQuestion,
+    RequestUserInputQuestion,
+} from './interactiveRequest'
+export type {
+    LocalSessionCapability,
+    LocalSessionCatalog,
+    LocalSessionCatalogEntry,
+    LocalSessionCatalogRequest,
+    LocalSessionExportRequest,
+    LocalSessionExportSnapshot,
+    LocalSessionTranscriptMessage,
+} from './localSessions'
+export type { MachineCapability } from './machineCapabilities'
+export type {
+    MachineDirectoryEntry,
+    MachineDirectoryResponse,
+    MachineDirectoryRoot,
+    MachineDirectoryRootKind,
+} from './machineDirectory'
+export type { MessageMeta, MessageSentFrom } from './messageMeta'
+export type {
+    AgentFlavor,
+    ClaudeModelPreset,
+    ClaudePermissionMode,
+    ClaudeReasoningEffort,
+    ClaudeReasoningEffortOption,
+    CodexCollaborationMode,
+    CodexCollaborationModeOption,
+    CodexPermissionMode,
+    CodexReasoningEffort,
+    CodexReasoningEffortOption,
+    CopilotModelPreset,
+    CopilotPermissionMode,
+    CursorPermissionMode,
+    GeminiPermissionMode,
+    ModelReasoningEffort,
+    OpencodePermissionMode,
+    PermissionMode,
+    PermissionModeOption,
+    PermissionModeTone,
+    PiPermissionMode,
+} from './modes'
+export type { ProposedPlanSegment } from './proposedPlan'
+export type { SameSessionSwitchTargetDriver } from './sameSessionSwitch'
+export type {
     AgentState,
     AgentStateCompletedRequest,
     AgentStateRequest,
@@ -11,18 +85,14 @@ export type {
     SessionStreamState,
     SyncEvent,
     TodoItem,
-    WorktreeMetadata
+    WorktreeMetadata,
 } from './schemas'
-
-export type { SessionSummary, SessionSummaryMetadata } from './sessionSummary'
+export type { SessionActivityKind, SessionMessageActivity } from './sessionActivity'
 export type {
     SessionDriver,
     SessionDriverHandles,
-    SessionDriverRuntimeHandle
+    SessionDriverRuntimeHandle,
 } from './sessionDriver'
-export type { SessionActivityKind, SessionMessageActivity } from './sessionActivity'
-export type { SessionLifecycleState } from './sessionLifecycle'
-export type { SessionRecoveryPage } from './sessionRecovery'
 export type {
     SessionHandoffAttachment,
     SessionHandoffContractErrorCode,
@@ -30,96 +100,20 @@ export type {
     SessionHandoffMessage,
     SessionHandoffSnapshot,
 } from './sessionHandoff'
-export type { MessageMeta, MessageSentFrom, TeamMessageKind } from './messageMeta'
+export type { SessionLifecycleState } from './sessionLifecycle'
+export type { SessionRecoveryPage } from './sessionRecovery'
 export type {
-    TeamTaskAcceptanceState,
-    TeamTaskReviewStatus,
-    TeamTaskVerificationStatus
-} from './teamSchemas'
+    ResumableSessionsNotModified,
+    ResumableSessionsPage,
+    ResumableSessionsResponse,
+    ResumableSessionsSnapshot,
+    SessionResumeStrategy,
+} from './sessionResume'
+export type { SessionSummary, SessionSummaryMetadata } from './sessionSummary'
 export type {
-    TeamProjectAcceptanceReadModel,
-    TeamRoleDefinition,
-    SessionSummaryTeam,
-    SessionTeamContext,
-    TeamEventRecord,
-    TeamMemberRecord,
-    TeamProject,
-    TeamTaskAcceptanceRecord,
-    TeamTaskRecord
-} from './teamSchemas'
-export type {
-    TeamProjectCompactBrief,
-    TeamProjectCompactCounts,
-    TeamProjectCompactEvent,
-    TeamProjectCompactMember,
-    TeamProjectCompactProject,
-    TeamProjectCompactStaffing,
-    TeamProjectCompactTask,
-    TeamProjectHistoryResponse,
-    TeamProjectMemberLaunchStrategy,
-    TeamProjectNextActionHint,
-    TeamProjectNextActionKind,
-    TeamProjectSeatPressure,
-    TeamProjectSnapshot,
-    TeamProjectStaffingHint,
-    TeamProjectStaffingHintKind,
-    TeamProjectWakePriority,
-    TeamProjectWakeReason,
-    TeamProjectWakeReasonKind
-} from './teamProjectSnapshot'
-export type {
-    TeamProjectPreset,
-    TeamProjectPresetProjectSettings,
-    TeamProjectPresetRole
-} from './teamProjectPreset'
-export type {
-    AgentLaunchConfig,
-    ResolveAgentLaunchConfigRequest,
-    ResolveAgentLaunchConfigResponse
-} from './agentLaunchConfig'
-export type { MachineCapability } from './machineCapabilities'
-export type {
-    MachineDirectoryEntry,
-    MachineDirectoryResponse,
-    MachineDirectoryRoot,
-    MachineDirectoryRootKind
-} from './machineDirectory'
-
-export type {
-    AgentFlavor,
-    ClaudeReasoningEffort,
-    ClaudeReasoningEffortOption,
-    ClaudePermissionMode,
-    CodexCollaborationMode,
-    CodexCollaborationModeOption,
-    CodexReasoningEffort,
-    CodexReasoningEffortOption,
-    CodexPermissionMode,
-    CursorPermissionMode,
-    GeminiPermissionMode,
-    ModelReasoningEffort,
-    OpencodePermissionMode,
-    PiPermissionMode,
-    ClaudeModelPreset,
-    PermissionMode,
-    PermissionModeOption,
-    PermissionModeTone
-} from './modes'
-export type {
-    TeamControlOwner,
-    TeamEventActorType,
-    TeamEventKind,
-    TeamEventTargetType,
-    TeamMemberIsolationMode,
-    TeamMemberRolePrototype,
-    TeamMembershipState,
-    TeamProviderFlavor,
-    TeamProjectIsolationMode,
-    TeamProjectStatus,
-    TeamReasoningEffort,
-    TeamRoleSource,
-    TeamRolePrototype,
-    TeamSessionSpawnRole,
-    TeamSessionRole,
-    TeamTaskStatus
-} from './teamSchemas'
+    PresentedSession,
+    SessionViewInteractivity,
+    SessionViewSnapshot,
+    SessionViewWatermark,
+    SessionWindowPage,
+} from './sessionView'
