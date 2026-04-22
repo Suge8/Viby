@@ -40,6 +40,10 @@ vi.mock('@/lib/runtimeAssetRecovery', () => ({
     recordRuntimeAssetFailureRecovery: harness.recordRuntimeAssetFailureRecovery,
 }))
 
+vi.mock('@/routes/sessions/chat', () => ({}))
+vi.mock('@/routes/sessions/new', () => ({}))
+vi.mock('@/routes/settings', () => ({}))
+
 async function loadSessionRoutePreloadModule() {
     return await import('./sessionRoutePreload')
 }
