@@ -1,282 +1,414 @@
-import { describe, expect, it } from 'vitest';
-import { AppServerEventConverter } from './appServerEventConverter';
+import { describe, expect, it } from 'vitest'
+import { AppServerEventConverter } from './appServerEventConverter'
 
 describe('AppServerEventConverter', () => {
     it('maps thread/started', () => {
-        const converter = new AppServerEventConverter();
-        const events = converter.handleNotification('thread/started', { thread: { id: 'thread-1' } });
+        const converter = new AppServerEventConverter()
+        const events = converter.handleNotification('thread/started', { thread: { id: 'thread-1' } })
 
-        expect(events).toEqual([{ type: 'thread_started', thread_id: 'thread-1' }]);
-    });
+        expect(events).toEqual([{ type: 'thread_started', thread_id: 'thread-1' }])
+    })
 
     it('maps thread/resumed', () => {
-        const converter = new AppServerEventConverter();
-        const events = converter.handleNotification('thread/resumed', { thread: { id: 'thread-2' } });
+        const converter = new AppServerEventConverter()
+        const events = converter.handleNotification('thread/resumed', { thread: { id: 'thread-2' } })
 
-        expect(events).toEqual([{ type: 'thread_started', thread_id: 'thread-2' }]);
-    });
+        expect(events).toEqual([{ type: 'thread_started', thread_id: 'thread-2' }])
+    })
 
     it('maps thread/compacted when the replacement thread id is present', () => {
-        const converter = new AppServerEventConverter();
-        const events = converter.handleNotification('thread/compacted', { thread: { id: 'thread-3' } });
+        const converter = new AppServerEventConverter()
+        const events = converter.handleNotification('thread/compacted', { thread: { id: 'thread-3' } })
 
-        expect(events).toEqual([{ type: 'thread_started', thread_id: 'thread-3' }]);
-    });
+        expect(events).toEqual([{ type: 'thread_started', thread_id: 'thread-3' }])
+    })
 
     it('ignores thread/compacted without a thread id', () => {
-        const converter = new AppServerEventConverter();
-        const events = converter.handleNotification('thread/compacted', { reason: 'context window full' });
+        const converter = new AppServerEventConverter()
+        const events = converter.handleNotification('thread/compacted', { reason: 'context window full' })
 
-        expect(events).toEqual([]);
-    });
+        expect(events).toEqual([])
+    })
 
     it('maps turn/started and completed statuses', () => {
-        const converter = new AppServerEventConverter();
+        const converter = new AppServerEventConverter()
 
-        const started = converter.handleNotification('turn/started', { turn: { id: 'turn-1' } });
-        expect(started).toEqual([{ type: 'task_started', turn_id: 'turn-1' }]);
+        const started = converter.handleNotification('turn/started', { turn: { id: 'turn-1' } })
+        expect(started).toEqual([{ type: 'task_started', turn_id: 'turn-1' }])
 
-        const completed = converter.handleNotification('turn/completed', { turn: { id: 'turn-1' }, status: 'Completed' });
-        expect(completed).toEqual([{ type: 'task_complete', turn_id: 'turn-1' }]);
+        const completed = converter.handleNotification('turn/completed', {
+            turn: { id: 'turn-1' },
+            status: 'Completed',
+        })
+        expect(completed).toEqual([{ type: 'task_complete', turn_id: 'turn-1' }])
 
-        const interrupted = converter.handleNotification('turn/completed', { turn: { id: 'turn-1' }, status: 'Interrupted' });
-        expect(interrupted).toEqual([{ type: 'turn_aborted', turn_id: 'turn-1' }]);
+        const interrupted = converter.handleNotification('turn/completed', {
+            turn: { id: 'turn-1' },
+            status: 'Interrupted',
+        })
+        expect(interrupted).toEqual([{ type: 'turn_aborted', turn_id: 'turn-1' }])
 
-        const failed = converter.handleNotification('turn/completed', { turn: { id: 'turn-1' }, status: 'Failed', message: 'boom' });
-        expect(failed).toEqual([{ type: 'task_failed', turn_id: 'turn-1', error: 'boom' }]);
-    });
+        const failed = converter.handleNotification('turn/completed', {
+            turn: { id: 'turn-1' },
+            status: 'Failed',
+            message: 'boom',
+        })
+        expect(failed).toEqual([{ type: 'task_failed', turn_id: 'turn-1', error: 'boom' }])
+    })
 
     it('accumulates agent message deltas', () => {
-        const converter = new AppServerEventConverter();
+        const converter = new AppServerEventConverter()
 
-        expect(converter.handleNotification('item/agentMessage/delta', { itemId: 'msg-1', delta: 'Hello' }))
-            .toEqual([{ type: 'agent_message_delta', item_id: 'msg-1', delta: 'Hello' }]);
-        expect(converter.handleNotification('item/agentMessage/delta', { itemId: 'msg-1', delta: ' world' }))
-            .toEqual([{ type: 'agent_message_delta', item_id: 'msg-1', delta: ' world' }]);
+        expect(converter.handleNotification('item/agentMessage/delta', { itemId: 'msg-1', delta: 'Hello' })).toEqual([
+            { type: 'agent_message_delta', item_id: 'msg-1', delta: 'Hello' },
+        ])
+        expect(converter.handleNotification('item/agentMessage/delta', { itemId: 'msg-1', delta: ' world' })).toEqual([
+            { type: 'agent_message_delta', item_id: 'msg-1', delta: ' world' },
+        ])
         const completed = converter.handleNotification('item/completed', {
             item: { id: 'msg-1', type: 'agentMessage' },
-            turnId: 'turn-1'
-        });
+            turnId: 'turn-1',
+        })
 
-        expect(completed).toEqual([{ type: 'agent_message', item_id: 'msg-1', message: 'Hello world', turn_id: 'turn-1' }]);
-    });
+        expect(completed).toEqual([
+            { type: 'agent_message', item_id: 'msg-1', message: 'Hello world', turn_id: 'turn-1' },
+        ])
+    })
 
     it('deduplicates repeated agent message completions for the same item', () => {
-        const converter = new AppServerEventConverter();
+        const converter = new AppServerEventConverter()
 
-        converter.handleNotification('item/agentMessage/delta', { itemId: 'msg-1', delta: 'Hello' });
+        converter.handleNotification('item/agentMessage/delta', { itemId: 'msg-1', delta: 'Hello' })
         const first = converter.handleNotification('item/completed', {
-            item: { id: 'msg-1', type: 'AgentMessage' }
-        });
+            item: { id: 'msg-1', type: 'AgentMessage' },
+        })
         const second = converter.handleNotification('item/completed', {
-            item: { id: 'msg-1', type: 'agentMessage' }
-        });
+            item: { id: 'msg-1', type: 'agentMessage' },
+        })
 
-        expect(first).toEqual([{ type: 'agent_message', item_id: 'msg-1', message: 'Hello' }]);
-        expect(second).toEqual([]);
-    });
+        expect(first).toEqual([{ type: 'agent_message', item_id: 'msg-1', message: 'Hello' }])
+        expect(second).toEqual([])
+    })
+
+    it('accumulates plan deltas into a final plan proposal item', () => {
+        const converter = new AppServerEventConverter()
+
+        expect(converter.handleNotification('item/plan/delta', { itemId: 'plan-1', delta: '# Plan' })).toEqual([])
+        expect(converter.handleNotification('item/plan/delta', { itemId: 'plan-1', delta: '\n\n- Step 1' })).toEqual([])
+
+        const completed = converter.handleNotification('item/completed', {
+            item: { id: 'plan-1', type: 'plan' },
+            turnId: 'turn-1',
+        })
+
+        expect(completed).toEqual([
+            {
+                type: 'plan_proposal',
+                item_id: 'plan-1',
+                message: '# Plan\n\n- Step 1',
+                turn_id: 'turn-1',
+            },
+        ])
+    })
+
+    it('flushes buffered plan proposals on turn completion when no explicit plan item completion arrives', () => {
+        const converter = new AppServerEventConverter()
+
+        expect(
+            converter.handleNotification('item/plan/delta', {
+                itemId: 'plan-2',
+                turnId: 'turn-2',
+                delta: '# Plan\n\n- Step 2',
+            })
+        ).toEqual([])
+
+        const completed = converter.handleNotification('turn/completed', {
+            turn: { id: 'turn-2' },
+            status: 'Completed',
+        })
+
+        expect(completed).toEqual([
+            {
+                type: 'plan_proposal',
+                item_id: 'plan-2',
+                message: '# Plan\n\n- Step 2',
+                turn_id: 'turn-2',
+            },
+            {
+                type: 'task_complete',
+                turn_id: 'turn-2',
+            },
+        ])
+    })
 
     it('maps command execution items and output deltas', () => {
-        const converter = new AppServerEventConverter();
+        const converter = new AppServerEventConverter()
 
         const started = converter.handleNotification('item/started', {
-            item: { id: 'cmd-1', type: 'commandExecution', command: 'ls' }
-        });
-        expect(started).toEqual([{
-            type: 'exec_command_begin',
-            call_id: 'cmd-1',
-            command: 'ls'
-        }]);
+            item: { id: 'cmd-1', type: 'commandExecution', command: 'ls' },
+        })
+        expect(started).toEqual([
+            {
+                type: 'exec_command_begin',
+                call_id: 'cmd-1',
+                command: 'ls',
+            },
+        ])
 
-        converter.handleNotification('item/commandExecution/outputDelta', { itemId: 'cmd-1', delta: 'ok' });
+        converter.handleNotification('item/commandExecution/outputDelta', { itemId: 'cmd-1', delta: 'ok' })
         const completed = converter.handleNotification('item/completed', {
-            item: { id: 'cmd-1', type: 'commandExecution', exitCode: 0 }
-        });
+            item: { id: 'cmd-1', type: 'commandExecution', exitCode: 0 },
+        })
 
-        expect(completed).toEqual([{
-            type: 'exec_command_end',
-            call_id: 'cmd-1',
-            command: 'ls',
-            output: 'ok',
-            exit_code: 0
-        }]);
-    });
+        expect(completed).toEqual([
+            {
+                type: 'exec_command_end',
+                call_id: 'cmd-1',
+                command: 'ls',
+                output: 'ok',
+                exit_code: 0,
+            },
+        ])
+    })
 
     it('maps reasoning deltas', () => {
-        const converter = new AppServerEventConverter();
+        const converter = new AppServerEventConverter()
 
-        const events = converter.handleNotification('item/reasoning/textDelta', { itemId: 'r1', delta: 'step', turnId: 'turn-1' });
-        expect(events).toEqual([{ type: 'agent_reasoning_delta', delta: 'step', turn_id: 'turn-1' }]);
-    });
+        const events = converter.handleNotification('item/reasoning/textDelta', {
+            itemId: 'r1',
+            delta: 'step',
+            turnId: 'turn-1',
+        })
+        expect(events).toEqual([{ type: 'agent_reasoning_delta', delta: 'step', turn_id: 'turn-1' }])
+    })
 
     it('dedupes duplicate reasoning deltas', () => {
-        const converter = new AppServerEventConverter();
+        const converter = new AppServerEventConverter()
 
-        expect(converter.handleNotification('item/reasoning/textDelta', { itemId: 'r1', delta: 'Hello ' }))
-            .toEqual([{ type: 'agent_reasoning_delta', delta: 'Hello ' }]);
-        expect(converter.handleNotification('item/reasoning/textDelta', { itemId: 'r1', delta: 'Hello ' }))
-            .toEqual([]);
-        converter.handleNotification('item/reasoning/textDelta', { itemId: 'r1', delta: 'world' });
+        expect(converter.handleNotification('item/reasoning/textDelta', { itemId: 'r1', delta: 'Hello ' })).toEqual([
+            { type: 'agent_reasoning_delta', delta: 'Hello ' },
+        ])
+        expect(converter.handleNotification('item/reasoning/textDelta', { itemId: 'r1', delta: 'Hello ' })).toEqual([])
+        converter.handleNotification('item/reasoning/textDelta', { itemId: 'r1', delta: 'world' })
 
         const completed = converter.handleNotification('item/completed', {
             item: { id: 'r1', type: 'reasoning' },
-            turnId: 'turn-2'
-        });
+            turnId: 'turn-2',
+        })
 
-        expect(completed).toEqual([{ type: 'agent_reasoning', text: 'Hello world', turn_id: 'turn-2' }]);
-    });
+        expect(completed).toEqual([{ type: 'agent_reasoning', text: 'Hello world', turn_id: 'turn-2' }])
+    })
 
     it('maps reasoning summary deltas', () => {
-        const converter = new AppServerEventConverter();
+        const converter = new AppServerEventConverter()
 
-        const events = converter.handleNotification('item/reasoning/summaryTextDelta', { itemId: 'r1', delta: 'step' });
-        expect(events).toEqual([{ type: 'agent_reasoning_delta', delta: 'step' }]);
-    });
+        const events = converter.handleNotification('item/reasoning/summaryTextDelta', { itemId: 'r1', delta: 'step' })
+        expect(events).toEqual([{ type: 'agent_reasoning_delta', delta: 'step' }])
+    })
 
     it('deduplicates repeated reasoning completions for the same item', () => {
-        const converter = new AppServerEventConverter();
+        const converter = new AppServerEventConverter()
 
         const first = converter.handleNotification('item/completed', {
-            item: { id: 'r1', type: 'Reasoning', summary_text: ['Plan'] }
-        });
+            item: { id: 'r1', type: 'Reasoning', summary_text: ['Plan'] },
+        })
         const second = converter.handleNotification('item/completed', {
-            item: { id: 'r1', type: 'reasoning', summary_text: ['Plan'] }
-        });
+            item: { id: 'r1', type: 'reasoning', summary_text: ['Plan'] },
+        })
 
-        expect(first).toEqual([{ type: 'agent_reasoning', text: 'Plan' }]);
-        expect(second).toEqual([]);
-    });
+        expect(first).toEqual([{ type: 'agent_reasoning', text: 'Plan' }])
+        expect(second).toEqual([])
+    })
 
     it('maps diff updates', () => {
-        const converter = new AppServerEventConverter();
+        const converter = new AppServerEventConverter()
 
-        const events = converter.handleNotification('turn/diff/updated', { diff: 'diff --git a b' });
-        expect(events).toEqual([{ type: 'turn_diff', unified_diff: 'diff --git a b' }]);
-    });
+        const events = converter.handleNotification('turn/diff/updated', { diff: 'diff --git a b' })
+        expect(events).toEqual([{ type: 'turn_diff', unified_diff: 'diff --git a b' }])
+    })
+
+    it('maps direct plan updates into canonical plan_update events', () => {
+        const converter = new AppServerEventConverter()
+
+        const events = converter.handleNotification('turn/plan/updated', {
+            turnId: 'turn-1',
+            explanation: 'Keep the user posted',
+            entries: [
+                { content: 'Trace the event pipeline', status: 'completed' },
+                { content: 'Render the plan card', status: 'in_progress' },
+            ],
+        })
+
+        expect(events).toEqual([
+            {
+                type: 'plan_update',
+                turn_id: 'turn-1',
+                call_id: 'plan:turn-1',
+                explanation: 'Keep the user posted',
+                plan: [
+                    { step: 'Trace the event pipeline', status: 'completed' },
+                    { step: 'Render the plan card', status: 'in_progress' },
+                ],
+            },
+        ])
+    })
 
     it('unwraps codex/event task lifecycle', () => {
-        const converter = new AppServerEventConverter();
+        const converter = new AppServerEventConverter()
 
         const started = converter.handleNotification('codex/event/task_started', {
-            msg: { type: 'task_started', turn_id: 'turn-1' }
-        });
-        expect(started).toEqual([{ type: 'task_started', turn_id: 'turn-1' }]);
+            msg: { type: 'task_started', turn_id: 'turn-1' },
+        })
+        expect(started).toEqual([{ type: 'task_started', turn_id: 'turn-1' }])
 
         const completed = converter.handleNotification('codex/event/task_complete', {
-            msg: { type: 'task_complete', turn_id: 'turn-1' }
-        });
-        expect(completed).toEqual([{ type: 'task_complete', turn_id: 'turn-1' }]);
-    });
+            msg: { type: 'task_complete', turn_id: 'turn-1' },
+        })
+        expect(completed).toEqual([{ type: 'task_complete', turn_id: 'turn-1' }])
+    })
 
     it('ignores wrapped terminal lifecycle events without turn_id', () => {
-        const converter = new AppServerEventConverter();
+        const converter = new AppServerEventConverter()
 
         const completed = converter.handleNotification('codex/event/task_complete', {
-            msg: { type: 'task_complete' }
-        });
+            msg: { type: 'task_complete' },
+        })
 
-        expect(completed).toEqual([]);
-    });
+        expect(completed).toEqual([])
+    })
 
     it('unwraps codex/event agent deltas and item completion', () => {
-        const converter = new AppServerEventConverter();
+        const converter = new AppServerEventConverter()
 
-        expect(converter.handleNotification('codex/event/agent_message_delta', {
-            msg: { type: 'agent_message_delta', item_id: 'msg-1', delta: 'Hello' }
-        })).toEqual([{ type: 'agent_message_delta', item_id: 'msg-1', delta: 'Hello' }]);
-        expect(converter.handleNotification('codex/event/agent_message_content_delta', {
-            msg: { type: 'agent_message_content_delta', item_id: 'msg-1', delta: ' world' }
-        })).toEqual([{ type: 'agent_message_delta', item_id: 'msg-1', delta: ' world' }]);
+        expect(
+            converter.handleNotification('codex/event/agent_message_delta', {
+                msg: { type: 'agent_message_delta', item_id: 'msg-1', delta: 'Hello' },
+            })
+        ).toEqual([{ type: 'agent_message_delta', item_id: 'msg-1', delta: 'Hello' }])
+        expect(
+            converter.handleNotification('codex/event/agent_message_content_delta', {
+                msg: { type: 'agent_message_content_delta', item_id: 'msg-1', delta: ' world' },
+            })
+        ).toEqual([{ type: 'agent_message_delta', item_id: 'msg-1', delta: ' world' }])
 
         const completed = converter.handleNotification('codex/event/item_completed', {
             msg: {
                 type: 'item_completed',
                 turn_id: 'turn-1',
                 item_id: 'msg-1',
-                item: { id: 'msg-1', type: 'AgentMessage' }
-            }
-        });
+                item: { id: 'msg-1', type: 'AgentMessage' },
+            },
+        })
 
-        expect(completed).toEqual([{ type: 'agent_message', item_id: 'msg-1', message: 'Hello world', turn_id: 'turn-1' }]);
-    });
+        expect(completed).toEqual([
+            { type: 'agent_message', item_id: 'msg-1', message: 'Hello world', turn_id: 'turn-1' },
+        ])
+    })
 
     it('unwraps codex/event reasoning completion from summary text', () => {
-        const converter = new AppServerEventConverter();
+        const converter = new AppServerEventConverter()
 
         converter.handleNotification('codex/event/reasoning_content_delta', {
-            msg: { type: 'reasoning_content_delta', item_id: 'r1', delta: 'Plan' }
-        });
+            msg: { type: 'reasoning_content_delta', item_id: 'r1', delta: 'Plan' },
+        })
         const completed = converter.handleNotification('codex/event/item_completed', {
             msg: {
                 type: 'item_completed',
                 item_id: 'r1',
-                item: { id: 'r1', type: 'Reasoning', summary_text: ['Plan done'] }
-            }
-        });
+                item: { id: 'r1', type: 'Reasoning', summary_text: ['Plan done'] },
+            },
+        })
 
-        expect(completed).toEqual([{ type: 'agent_reasoning', text: 'Plan done' }]);
-    });
+        expect(completed).toEqual([{ type: 'agent_reasoning', text: 'Plan done' }])
+    })
 
     it('prefers canonical reasoning stream over wrapped agent_reasoning events', () => {
-        const converter = new AppServerEventConverter();
+        const converter = new AppServerEventConverter()
 
         const section = converter.handleNotification('codex/event/agent_reasoning_section_break', {
-            msg: { type: 'agent_reasoning_section_break', item_id: 'r1' }
-        });
+            msg: { type: 'agent_reasoning_section_break', item_id: 'r1' },
+        })
         const delta = converter.handleNotification('codex/event/agent_reasoning_delta', {
-            msg: { type: 'agent_reasoning_delta', item_id: 'r1', delta: 'step' }
-        });
+            msg: { type: 'agent_reasoning_delta', item_id: 'r1', delta: 'step' },
+        })
         const reasoning = converter.handleNotification('codex/event/agent_reasoning', {
-            msg: { type: 'agent_reasoning', item_id: 'r1', text: 'Plan' }
-        });
+            msg: { type: 'agent_reasoning', item_id: 'r1', text: 'Plan' },
+        })
 
-        expect(section).toEqual([{ type: 'agent_reasoning_section_break' }]);
-        expect(delta).toEqual([]);
-        expect(reasoning).toEqual([]);
-    });
+        expect(section).toEqual([{ type: 'agent_reasoning_section_break' }])
+        expect(delta).toEqual([])
+        expect(reasoning).toEqual([])
+    })
+
+    it('unwraps wrapped plan updates', () => {
+        const converter = new AppServerEventConverter()
+
+        const events = converter.handleNotification('codex/event/plan_update', {
+            msg: {
+                type: 'plan_update',
+                turn_id: 'turn-2',
+                entries: [
+                    { content: 'Research best practices', status: 'completed' },
+                    { content: 'Ship web rendering', status: 'pending' },
+                ],
+            },
+        })
+
+        expect(events).toEqual([
+            {
+                type: 'plan_update',
+                turn_id: 'turn-2',
+                call_id: 'plan:turn-2',
+                plan: [
+                    { step: 'Research best practices', status: 'completed' },
+                    { step: 'Ship web rendering', status: 'pending' },
+                ],
+            },
+        ])
+    })
 
     it('deduplicates section break when wrapped and direct summary part events share the same index', () => {
-        const converter = new AppServerEventConverter();
+        const converter = new AppServerEventConverter()
 
         const wrapped = converter.handleNotification('codex/event/agent_reasoning_section_break', {
-            msg: { type: 'agent_reasoning_section_break', item_id: 'r1', summary_index: 0 }
-        });
+            msg: { type: 'agent_reasoning_section_break', item_id: 'r1', summary_index: 0 },
+        })
         const direct = converter.handleNotification('item/reasoning/summaryPartAdded', {
             itemId: 'r1',
-            summaryIndex: 0
-        });
+            summaryIndex: 0,
+        })
 
-        expect(wrapped).toEqual([{ type: 'agent_reasoning_section_break' }]);
-        expect(direct).toEqual([]);
-    });
+        expect(wrapped).toEqual([{ type: 'agent_reasoning_section_break' }])
+        expect(direct).toEqual([])
+    })
 
     it('ignores wrapped final agent message and relies on item completion', () => {
-        const converter = new AppServerEventConverter();
+        const converter = new AppServerEventConverter()
 
         const wrapped = converter.handleNotification('codex/event/agent_message', {
-            msg: { type: 'agent_message', item_id: 'msg-1', message: 'Hello' }
-        });
+            msg: { type: 'agent_message', item_id: 'msg-1', message: 'Hello' },
+        })
 
-        expect(wrapped).toEqual([]);
-    });
+        expect(wrapped).toEqual([])
+    })
 
     it('ignores wrapped retryable errors', () => {
-        const converter = new AppServerEventConverter();
+        const converter = new AppServerEventConverter()
 
         const events = converter.handleNotification('codex/event/error', {
-            msg: { type: 'error', message: 'temporary', will_retry: true }
-        });
+            msg: { type: 'error', message: 'temporary', will_retry: true },
+        })
 
-        expect(events).toEqual([]);
-    });
+        expect(events).toEqual([])
+    })
 
     it('maps wrapped non-retryable errors to task_failed', () => {
-        const converter = new AppServerEventConverter();
+        const converter = new AppServerEventConverter()
 
         const events = converter.handleNotification('codex/event/error', {
-            msg: { type: 'error', message: 'fatal' }
-        });
+            msg: { type: 'error', message: 'fatal' },
+        })
 
-        expect(events).toEqual([{ type: 'task_failed', error: 'fatal' }]);
-    });
-});
+        expect(events).toEqual([{ type: 'task_failed', error: 'fatal' }])
+    })
+})

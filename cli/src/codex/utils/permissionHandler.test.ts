@@ -1,119 +1,163 @@
-import { describe, expect, it } from 'vitest';
-import type { ApiSessionClient } from '@/api/apiSession';
-import { CodexPermissionHandler } from './permissionHandler';
+import { describe, expect, it } from 'vitest'
+import type { ApiSessionClient } from '@/api/apiSession'
+import { CodexPermissionHandler } from './permissionHandler'
 
 type FakeAgentState = {
-    requests: Record<string, unknown>;
-    completedRequests: Record<string, unknown>;
-};
+    requests: Record<string, unknown>
+    completedRequests: Record<string, unknown>
+}
 
 function createHarness(mode: 'default' | 'read-only' | 'safe-yolo' | 'yolo') {
     let agentState: FakeAgentState = {
         requests: {},
-        completedRequests: {}
-    };
+        completedRequests: {},
+    }
 
-    const rpcHandlers = new Map<string, (params: unknown) => Promise<unknown> | unknown>();
+    const rpcHandlers = new Map<string, (params: unknown) => Promise<unknown> | unknown>()
     const session = {
         rpcHandlerManager: {
             registerHandler(method: string, handler: (params: unknown) => Promise<unknown> | unknown) {
-                rpcHandlers.set(method, handler);
-            }
+                rpcHandlers.set(method, handler)
+            },
         },
         updateAgentState(handler: (state: FakeAgentState) => FakeAgentState) {
-            agentState = handler(agentState);
-        }
-    } as unknown as ApiSessionClient;
+            agentState = handler(agentState)
+        },
+    } as unknown as ApiSessionClient
 
-    const handler = new CodexPermissionHandler(session, () => mode);
+    const handler = new CodexPermissionHandler(session, () => mode)
 
     return {
         handler,
         rpcHandlers,
-        getAgentState: () => agentState
-    };
+        getAgentState: () => agentState,
+    }
 }
 
 describe('CodexPermissionHandler', () => {
     it('auto-approves yolo requests for the session', async () => {
-        const { handler, getAgentState } = createHarness('yolo');
+        const { handler, getAgentState } = createHarness('yolo')
 
         await expect(handler.handleToolCall('perm-1', 'CodexPatch', { grantRoot: '/tmp' })).resolves.toEqual({
-            decision: 'approved_for_session'
-        });
+            decision: 'approved_for_session',
+        })
 
-        expect(getAgentState().requests).toEqual({});
+        expect(getAgentState().requests).toEqual({})
         expect(getAgentState().completedRequests).toMatchObject({
             'perm-1': {
                 tool: 'CodexPatch',
                 status: 'approved',
-                decision: 'approved_for_session'
-            }
-        });
-    });
+                decision: 'approved_for_session',
+            },
+        })
+    })
 
     it('auto-approves safe-yolo requests once', async () => {
-        const { handler, getAgentState } = createHarness('safe-yolo');
+        const { handler, getAgentState } = createHarness('safe-yolo')
 
         await expect(handler.handleToolCall('perm-1', 'CodexBash', { command: 'pwd' })).resolves.toEqual({
-            decision: 'approved'
-        });
+            decision: 'approved',
+        })
 
-        expect(getAgentState().requests).toEqual({});
+        expect(getAgentState().requests).toEqual({})
         expect(getAgentState().completedRequests).toMatchObject({
             'perm-1': {
                 tool: 'CodexBash',
                 status: 'approved',
-                decision: 'approved'
-            }
-        });
-    });
+                decision: 'approved',
+            },
+        })
+    })
 
     it('keeps default mode requests pending until a permission RPC arrives', async () => {
-        const { handler, rpcHandlers, getAgentState } = createHarness('default');
-        const resultPromise = handler.handleToolCall('perm-1', 'CodexPatch', { grantRoot: '/tmp' });
+        const { handler, rpcHandlers, getAgentState } = createHarness('default')
+        const resultPromise = handler.handleToolCall('perm-1', 'CodexPatch', { grantRoot: '/tmp' })
 
         expect(getAgentState().requests).toMatchObject({
             'perm-1': {
-                tool: 'CodexPatch'
-            }
-        });
+                tool: 'CodexPatch',
+            },
+        })
 
-        const permissionRpc = rpcHandlers.get('permission');
-        expect(permissionRpc).toBeTypeOf('function');
+        const permissionRpc = rpcHandlers.get('permission')
+        expect(permissionRpc).toBeTypeOf('function')
 
-        await permissionRpc?.({ id: 'perm-1', approved: true, decision: 'approved' });
+        await permissionRpc?.({ id: 'perm-1', approved: true, decision: 'approved' })
 
         await expect(resultPromise).resolves.toEqual({
             decision: 'approved',
-            reason: undefined
-        });
+            reason: undefined,
+        })
 
-        expect(getAgentState().requests).toEqual({});
+        expect(getAgentState().requests).toEqual({})
         expect(getAgentState().completedRequests).toMatchObject({
             'perm-1': {
                 tool: 'CodexPatch',
                 status: 'approved',
-                decision: 'approved'
-            }
-        });
-    });
+                decision: 'approved',
+            },
+        })
+    })
+
+    it('keeps request_user_input pending until a permission RPC returns answers', async () => {
+        const { handler, rpcHandlers, getAgentState } = createHarness('default')
+        const resultPromise = handler.handleUserInputRequest('input-1', {
+            questions: [{ id: 'risk', question: 'How risky is this?', options: [{ label: 'Low' }] }],
+        })
+
+        expect(getAgentState().requests).toMatchObject({
+            'input-1': {
+                tool: 'request_user_input',
+            },
+        })
+
+        const permissionRpc = rpcHandlers.get('permission')
+        expect(permissionRpc).toBeTypeOf('function')
+
+        await permissionRpc?.({
+            id: 'input-1',
+            approved: true,
+            answers: {
+                risk: {
+                    answers: ['Low'],
+                },
+            },
+        })
+
+        await expect(resultPromise).resolves.toEqual({
+            risk: {
+                answers: ['Low'],
+            },
+        })
+
+        expect(getAgentState().completedRequests).toMatchObject({
+            'input-1': {
+                tool: 'request_user_input',
+                status: 'approved',
+                answers: {
+                    risk: {
+                        answers: ['Low'],
+                    },
+                },
+            },
+        })
+    })
 
     it('auto-approves read-only non-write tools but not patches', async () => {
-        const { handler, getAgentState } = createHarness('read-only');
+        const { handler, getAgentState } = createHarness('read-only')
 
         await expect(handler.handleToolCall('read-1', 'Read', { file: 'README.md' })).resolves.toEqual({
-            decision: 'approved'
-        });
+            decision: 'approved',
+        })
 
-        const patchPromise = handler.handleToolCall('patch-1', 'CodexPatch', { grantRoot: '/tmp' });
+        const patchPromise = handler.handleToolCall('patch-1', 'CodexPatch', { grantRoot: '/tmp' })
         expect(getAgentState().requests).toMatchObject({
             'patch-1': {
-                tool: 'CodexPatch'
-            }
-        });
+                tool: 'CodexPatch',
+            },
+        })
 
-        handler.reset();
-        await expect(patchPromise).rejects.toThrow('Session reset');
-    });
-});
+        handler.reset()
+        await expect(patchPromise).rejects.toThrow('Session reset')
+    })
+})

@@ -1,194 +1,167 @@
-import { logger } from '@/ui/logger';
-import { loop, type EnhancedMode, type PermissionMode } from './loop';
-import { MessageQueue2 } from '@/utils/MessageQueue2';
-import { hashObject } from '@/utils/deterministicJson';
-import { registerKillSessionHandler } from '@/claude/registerKillSessionHandler';
-import type { AgentState, TeamSessionSpawnRole } from '@/api/types';
-import type { CodexSession } from './session';
-import { parseCodexCliOverrides } from './utils/codexCliOverrides';
-import { bootstrapSession } from '@/agent/sessionFactory';
-import { createModeChangeHandler, createRunnerLifecycle, setControlledByUser } from '@/agent/runnerLifecycle';
-import { assertSessionConfigPayload, resolvePermissionModeForDriver } from '@/agent/providerConfig';
-import { isPermissionModeAllowedForDriver, type SessionHandoffSnapshot } from '@viby/protocol';
-import type { CodexReasoningEffort } from '@viby/protocol/types';
-import { CodexCollaborationModeSchema, CodexReasoningEffortSchema } from '@viby/protocol/schemas';
-import { formatMessageWithAttachments } from '@/utils/attachmentFormatter';
-import { getInvokedCwd } from '@/utils/invokedCwd';
-import { mergePromptSegments, resolveTeamRolePromptContract } from '@/agent/teamPromptContract';
-import { createPendingDriverSwitchHandoffState } from '@/agent/driverSwitchHandoffState';
+import type { SessionHandoffSnapshot } from '@viby/protocol'
+import { CodexCollaborationModeSchema, CodexReasoningEffortSchema } from '@viby/protocol/schemas'
+import type { CodexReasoningEffort } from '@viby/protocol/types'
+import { createPendingSessionContinuityHandoffState } from '@/agent/driverSwitchHandoffState'
+import { mergePromptSegments } from '@/agent/promptInstructions'
+import { assertSessionConfigPayload, resolvePermissionModeForDriver } from '@/agent/providerConfig'
+import { createRunnerLifecycle, createRuntimeStopRequestHandler, setControlledByUser } from '@/agent/runnerLifecycle'
+import { bootstrapSession } from '@/agent/sessionFactory'
+import type { AgentState } from '@/api/types'
+import { registerKillSessionHandler } from '@/claude/registerKillSessionHandler'
+import { logger } from '@/ui/logger'
+import { formatMessageWithAttachments } from '@/utils/attachmentFormatter'
+import { hashObject } from '@/utils/deterministicJson'
+import { getInvokedCwd } from '@/utils/invokedCwd'
+import { MessageQueue2 } from '@/utils/MessageQueue2'
+import { type EnhancedMode, loop, type PermissionMode } from './loop'
+import {
+    applyRuntimeConfigToSession,
+    createCodexRuntimeConfig,
+    createQueuedCodexMode,
+    syncRuntimeConfigFromSession,
+} from './runCodexRuntimeConfig'
+import type { CodexSession } from './session'
+import { parseCodexCliOverrides } from './utils/codexCliOverrides'
 
-export { emitReadyIfIdle } from '@/agent/emitReadyIfIdle';
+export { emitReadyIfIdle } from '@/agent/emitReadyIfIdle'
 
 export async function runCodex(opts: {
-    startedBy?: 'runner' | 'terminal';
-    vibySessionId?: string;
-    sessionRole?: TeamSessionSpawnRole;
-    codexArgs?: string[];
-    permissionMode?: PermissionMode;
-    resumeSessionId?: string;
-    model?: string;
-    modelReasoningEffort?: CodexReasoningEffort | null;
-    collaborationMode?: EnhancedMode['collaborationMode'];
-    driverSwitchHandoff?: SessionHandoffSnapshot;
+    startedBy?: 'runner' | 'terminal'
+    vibySessionId?: string
+    driverSwitchBootstrap?: boolean
+    codexArgs?: string[]
+    permissionMode?: PermissionMode
+    resumeSessionId?: string
+    model?: string
+    modelReasoningEffort?: CodexReasoningEffort | null
+    collaborationMode?: EnhancedMode['collaborationMode']
+    sessionContinuityHandoff?: SessionHandoffSnapshot
 }): Promise<void> {
-    const workingDirectory = getInvokedCwd();
-    const startedBy = opts.startedBy ?? 'terminal';
+    const workingDirectory = getInvokedCwd()
+    const startedBy = opts.startedBy ?? 'terminal'
 
-    logger.debug(`[codex] Starting with options: startedBy=${startedBy}`);
-    if (opts.driverSwitchHandoff) {
-        logger.debug('[codex] Loaded driver switch handoff for Codex bootstrap')
+    logger.debug(`[codex] Starting with options: startedBy=${startedBy}`)
+    if (opts.sessionContinuityHandoff) {
+        logger.debug('[codex] Loaded session continuity handoff for Codex bootstrap')
     }
 
-    let state: AgentState = {
-        controlledByUser: false
-    };
+    const state: AgentState = {
+        controlledByUser: false,
+    }
     const { api, session } = await bootstrapSession({
         driver: 'codex',
         sessionId: opts.vibySessionId,
         startedBy,
+        driverSwitchBootstrap: opts.driverSwitchBootstrap,
         workingDirectory,
         agentState: state,
-        sessionRole: opts.sessionRole,
         permissionMode: opts.permissionMode ?? 'default',
         model: opts.model,
         modelReasoningEffort: opts.modelReasoningEffort,
-        collaborationMode: opts.collaborationMode ?? 'default'
-    });
-    const startingMode: 'local' | 'remote' = startedBy === 'runner' ? 'remote' : 'local';
+        collaborationMode: opts.collaborationMode ?? 'default',
+    })
+    setControlledByUser(session, false)
 
-    setControlledByUser(session, startingMode);
+    const messageQueue = new MessageQueue2<EnhancedMode>((mode) =>
+        hashObject({
+            permissionMode: mode.permissionMode,
+            model: mode.model,
+            modelReasoningEffort: mode.modelReasoningEffort,
+            collaborationMode: mode.collaborationMode,
+            developerInstructions: mode.developerInstructions,
+        })
+    )
+    const pendingSessionContinuityHandoff = createPendingSessionContinuityHandoffState(opts.sessionContinuityHandoff)
 
-    const messageQueue = new MessageQueue2<EnhancedMode>((mode) => hashObject({
-        permissionMode: mode.permissionMode,
-        model: mode.model,
-        modelReasoningEffort: mode.modelReasoningEffort,
-        collaborationMode: mode.collaborationMode,
-        developerInstructions: mode.developerInstructions
-    }));
-    const pendingDriverSwitchHandoff = createPendingDriverSwitchHandoffState(opts.driverSwitchHandoff);
+    const codexCliOverrides = parseCodexCliOverrides(opts.codexArgs)
+    const sessionWrapperRef: { current: CodexSession | null } = { current: null }
 
-    const codexCliOverrides = parseCodexCliOverrides(opts.codexArgs);
-    const sessionWrapperRef: { current: CodexSession | null } = { current: null };
+    let runtimeConfig = createCodexRuntimeConfig({
+        permissionMode: opts.permissionMode,
+        model: opts.model,
+        modelReasoningEffort: opts.modelReasoningEffort,
+        collaborationMode: opts.collaborationMode,
+    })
 
-    let currentPermissionMode: PermissionMode = opts.permissionMode ?? 'default';
-    let currentModel = opts.model;
-    let currentModelReasoningEffort: CodexReasoningEffort | null = opts.modelReasoningEffort ?? null;
-    let currentCollaborationMode: EnhancedMode['collaborationMode'] = opts.collaborationMode ?? 'default';
-
-    const lifecycle = createRunnerLifecycle({
+    let lifecycle!: ReturnType<typeof createRunnerLifecycle>
+    const requestRuntimeStopOrExit = createRuntimeStopRequestHandler({
+        getOwner: () => sessionWrapperRef.current,
+        cleanupAndExit: () => lifecycle.cleanupAndExit(),
+    })
+    lifecycle = createRunnerLifecycle({
         session,
         logTag: 'codex',
         stopKeepAlive: () => sessionWrapperRef.current?.stopKeepAlive(),
+        requestShutdown: requestRuntimeStopOrExit,
         onBeforeClose: async () => {
-            await sessionWrapperRef.current?.disposeAppServerClient();
-        }
-    });
+            await sessionWrapperRef.current?.disposeAppServerClient()
+        },
+    })
 
-    lifecycle.registerProcessHandlers();
-    registerKillSessionHandler(session.rpcHandlerManager, lifecycle.cleanupAndExit);
+    lifecycle.registerProcessHandlers()
+    registerKillSessionHandler(session.rpcHandlerManager, requestRuntimeStopOrExit)
 
-    const syncSessionMode = () => {
-        const sessionInstance = sessionWrapperRef.current;
+    function syncSessionMode(): void {
+        const sessionInstance = sessionWrapperRef.current
         if (!sessionInstance) {
-            return;
+            return
         }
-        sessionInstance.setPermissionMode(currentPermissionMode);
-        sessionInstance.setModel(currentModel ?? null);
-        sessionInstance.setModelReasoningEffort(currentModelReasoningEffort);
-        sessionInstance.setCollaborationMode(currentCollaborationMode);
-        logger.debug(
-            `[Codex] Synced session config for keepalive: ` +
-            `permissionMode=${currentPermissionMode}, model=${currentModel ?? 'auto'}, ` +
-            `reasoningEffort=${currentModelReasoningEffort ?? 'auto'}, collaborationMode=${currentCollaborationMode}`
-        );
-    };
+        runtimeConfig = applyRuntimeConfigToSession(runtimeConfig, sessionInstance)
+    }
 
     session.onUserMessage((message) => {
-        const sessionPermissionMode = sessionWrapperRef.current?.getPermissionMode();
-        if (sessionPermissionMode && isPermissionModeAllowedForDriver(sessionPermissionMode, 'codex')) {
-            currentPermissionMode = sessionPermissionMode as PermissionMode;
-        }
-        const sessionModel = sessionWrapperRef.current?.getModel();
-        if (sessionModel !== undefined) {
-            currentModel = sessionModel ?? undefined;
-        }
-        const sessionModelReasoningEffort = sessionWrapperRef.current?.getModelReasoningEffort();
-        if (sessionModelReasoningEffort !== undefined) {
-            currentModelReasoningEffort = sessionModelReasoningEffort ?? null;
-        }
-        const sessionCollaborationMode = sessionWrapperRef.current?.getCollaborationMode();
-        if (sessionCollaborationMode) {
-            currentCollaborationMode = sessionCollaborationMode;
-        }
+        runtimeConfig = syncRuntimeConfigFromSession(runtimeConfig, sessionWrapperRef.current)
 
-        const messagePermissionMode = currentPermissionMode;
         logger.debug(
-            `[Codex] User message received with permission mode: ${currentPermissionMode}, ` +
-            `model: ${currentModel ?? 'auto'}, reasoningEffort: ${currentModelReasoningEffort ?? 'auto'}, ` +
-            `collaborationMode: ${currentCollaborationMode}`
-        );
+            `[Codex] User message received with permission mode: ${runtimeConfig.permissionMode}, ` +
+                `model: ${runtimeConfig.model ?? 'auto'}, reasoningEffort: ${runtimeConfig.modelReasoningEffort ?? 'auto'}, ` +
+                `collaborationMode: ${runtimeConfig.collaborationMode}`
+        )
 
-        const formattedText = formatMessageWithAttachments(message.content.text, message.content.attachments);
-        const driverSwitchInstructions = pendingDriverSwitchHandoff.consumeForUserMessage(formattedText);
-        if (driverSwitchInstructions) {
-            logger.debug('[Codex] Consuming pending driver switch handoff on the first real user turn');
+        const formattedText = formatMessageWithAttachments(message.content.text, message.content.attachments)
+        const continuityInstructions = pendingSessionContinuityHandoff.consumeForUserMessage(formattedText)
+        if (continuityInstructions) {
+            logger.debug('[Codex] Consuming pending session continuity handoff on the first real user turn')
         }
-        const enhancedMode: EnhancedMode = {
-            permissionMode: messagePermissionMode ?? 'default',
-            model: currentModel,
-            modelReasoningEffort: currentModelReasoningEffort,
-            collaborationMode: currentCollaborationMode,
-            developerInstructions: mergePromptSegments(
-                resolveTeamRolePromptContract(session.getTeamContextSnapshot()),
-                driverSwitchInstructions
-            )
-        };
-        messageQueue.push(formattedText, enhancedMode);
-    });
-
-    const formatFailureReason = (message: string): string => {
-        const maxLength = 200;
-        if (message.length <= maxLength) {
-            return message;
-        }
-        return `${message.slice(0, maxLength)}...`;
-    };
+        const enhancedMode = createQueuedCodexMode(runtimeConfig, mergePromptSegments(continuityInstructions))
+        messageQueue.push(formattedText, enhancedMode)
+    })
 
     const resolveCollaborationMode = (value: unknown): EnhancedMode['collaborationMode'] => {
         if (value === null) {
-            return 'default';
+            return 'default'
         }
-        const parsed = CodexCollaborationModeSchema.safeParse(value);
+        const parsed = CodexCollaborationModeSchema.safeParse(value)
         if (!parsed.success) {
-            throw new Error('Invalid collaboration mode');
+            throw new Error('Invalid collaboration mode')
         }
-        return parsed.data;
-    };
+        return parsed.data
+    }
 
     const resolveModel = (value: unknown): string | null => {
         if (value === null) {
-            return null;
+            return null
         }
         if (typeof value !== 'string') {
-            throw new Error('Invalid model');
+            throw new Error('Invalid model')
         }
-        const trimmed = value.trim();
+        const trimmed = value.trim()
         if (!trimmed) {
-            throw new Error('Invalid model');
+            throw new Error('Invalid model')
         }
-        return trimmed;
-    };
+        return trimmed
+    }
 
     const resolveModelReasoningEffort = (value: unknown): CodexReasoningEffort | null => {
         if (value === null) {
-            return null;
+            return null
         }
-        const parsed = CodexReasoningEffortSchema.safeParse(value);
+        const parsed = CodexReasoningEffortSchema.safeParse(value)
         if (!parsed.success) {
-            throw new Error('Invalid model reasoning effort');
+            throw new Error('Invalid model reasoning effort')
         }
-        return parsed.data;
-    };
+        return parsed.data
+    }
 
     session.rpcHandlerManager.registerHandler('set-session-config', async (payload: unknown) => {
         const config = assertSessionConfigPayload(payload) as {
@@ -196,72 +169,77 @@ export async function runCodex(opts: {
             model?: unknown
             modelReasoningEffort?: unknown
             collaborationMode?: unknown
-        };
+        }
 
         if (config.permissionMode !== undefined) {
-            currentPermissionMode = resolvePermissionModeForDriver(config.permissionMode, 'codex') as PermissionMode;
+            runtimeConfig = {
+                ...runtimeConfig,
+                permissionMode: resolvePermissionModeForDriver(config.permissionMode, 'codex') as PermissionMode,
+            }
         }
 
         if (config.model !== undefined) {
-            currentModel = resolveModel(config.model) ?? undefined;
+            runtimeConfig = {
+                ...runtimeConfig,
+                model: resolveModel(config.model) ?? undefined,
+            }
         }
 
         if (config.modelReasoningEffort !== undefined) {
-            currentModelReasoningEffort = resolveModelReasoningEffort(config.modelReasoningEffort);
+            runtimeConfig = {
+                ...runtimeConfig,
+                modelReasoningEffort: resolveModelReasoningEffort(config.modelReasoningEffort),
+            }
         }
 
         if (config.collaborationMode !== undefined) {
-            currentCollaborationMode = resolveCollaborationMode(config.collaborationMode);
+            runtimeConfig = {
+                ...runtimeConfig,
+                collaborationMode: resolveCollaborationMode(config.collaborationMode),
+            }
         }
 
-        syncSessionMode();
+        syncSessionMode()
         return {
             applied: {
-                permissionMode: currentPermissionMode,
-                model: currentModel ?? null,
-                modelReasoningEffort: currentModelReasoningEffort,
-                collaborationMode: currentCollaborationMode
-            }
-        };
-    });
+                permissionMode: runtimeConfig.permissionMode,
+                model: runtimeConfig.model ?? null,
+                modelReasoningEffort: runtimeConfig.modelReasoningEffort,
+                collaborationMode: runtimeConfig.collaborationMode,
+            },
+        }
+    })
 
-    let loopError: unknown = null;
+    let loopError: unknown = null
     try {
         await loop({
             path: workingDirectory,
-            startingMode,
             messageQueue,
             api,
             session,
             codexArgs: opts.codexArgs,
             codexCliOverrides,
             startedBy,
-            permissionMode: currentPermissionMode,
-            model: currentModel,
-            modelReasoningEffort: currentModelReasoningEffort,
-            collaborationMode: currentCollaborationMode,
+            permissionMode: runtimeConfig.permissionMode,
+            model: runtimeConfig.model,
+            modelReasoningEffort: runtimeConfig.modelReasoningEffort,
+            collaborationMode: runtimeConfig.collaborationMode,
             resumeSessionId: opts.resumeSessionId,
-            onModeChange: createModeChangeHandler(session),
             onSessionReady: (instance) => {
-                sessionWrapperRef.current = instance;
-                syncSessionMode();
-            }
-        });
+                sessionWrapperRef.current = instance
+                syncSessionMode()
+            },
+        })
     } catch (error) {
-        loopError = error;
-        lifecycle.markCrash(error);
-        logger.debug('[codex] Loop error:', error);
-    }
-
-    const localFailure = sessionWrapperRef.current?.localLaunchFailure;
-    if (localFailure?.exitReason === 'exit') {
-        lifecycle.setExitCode(1);
+        loopError = error
+        lifecycle.markCrash(error)
+        logger.debug('[codex] Loop error:', error)
     }
 
     if (loopError) {
-        await lifecycle.cleanup();
-        throw loopError;
+        await lifecycle.cleanup()
+        throw loopError
     }
 
-    await lifecycle.cleanupAndExit();
+    await lifecycle.cleanupAndExit()
 }

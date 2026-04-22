@@ -1,45 +1,34 @@
-import { ApiClient, ApiSessionClient } from '@/lib';
-import { setSessionDriverRuntimeHandle } from '@viby/protocol';
-import { MessageQueue2 } from '@/utils/MessageQueue2';
-import { AgentSessionBase } from '@/agent/sessionBase';
-import type { EnhancedMode, PermissionMode } from './loop';
-import type { CodexCliOverrides } from './utils/codexCliOverrides';
-import type { LocalLaunchExitReason } from '@/agent/localLaunchPolicy';
-import type { CodexSessionModelReasoningEffort, SessionModel } from '@/api/types';
-import { CodexAppServerClient } from './codexAppServerClient';
-import { buildVibyMcpBridge, type VibyMcpBridge } from './utils/buildVibyMcpBridge';
-
-type LocalLaunchFailure = {
-    message: string;
-    exitReason: LocalLaunchExitReason;
-};
+import { setSessionDriverRuntimeHandle } from '@viby/protocol'
+import { AgentSessionBase } from '@/agent/sessionBase'
+import type { CodexSessionModelReasoningEffort, SessionModel } from '@/api/types'
+import { ApiClient, ApiSessionClient } from '@/lib'
+import { MessageQueue2 } from '@/utils/MessageQueue2'
+import { CodexAppServerClient } from './codexAppServerClient'
+import type { EnhancedMode, PermissionMode } from './loop'
+import { buildVibyMcpBridge, type VibyMcpBridge } from './utils/buildVibyMcpBridge'
+import type { CodexCliOverrides } from './utils/codexCliOverrides'
 
 export class CodexSession extends AgentSessionBase<EnhancedMode> {
-    readonly codexArgs?: string[];
-    readonly codexCliOverrides?: CodexCliOverrides;
-    readonly startedBy: 'runner' | 'terminal';
-    readonly startingMode: 'local' | 'remote';
-    localLaunchFailure: LocalLaunchFailure | null = null;
-    private appServerClient: CodexAppServerClient | null = null;
-    private remoteBridge: VibyMcpBridge | null = null;
+    readonly codexArgs?: string[]
+    readonly codexCliOverrides?: CodexCliOverrides
+    readonly startedBy: 'runner' | 'terminal'
+    private appServerClient: CodexAppServerClient | null = null
+    private remoteBridge: VibyMcpBridge | null = null
 
     constructor(opts: {
-        api: ApiClient;
-        client: ApiSessionClient;
-        path: string;
-        logPath: string;
-        sessionId: string | null;
-        messageQueue: MessageQueue2<EnhancedMode>;
-        onModeChange: (mode: 'local' | 'remote') => void;
-        mode?: 'local' | 'remote';
-        startedBy: 'runner' | 'terminal';
-        startingMode: 'local' | 'remote';
-        codexArgs?: string[];
-        codexCliOverrides?: CodexCliOverrides;
-        permissionMode?: PermissionMode;
-        model?: SessionModel;
-        modelReasoningEffort?: CodexSessionModelReasoningEffort;
-        collaborationMode?: EnhancedMode['collaborationMode'];
+        api: ApiClient
+        client: ApiSessionClient
+        path: string
+        logPath: string
+        sessionId: string | null
+        messageQueue: MessageQueue2<EnhancedMode>
+        startedBy: 'runner' | 'terminal'
+        codexArgs?: string[]
+        codexCliOverrides?: CodexCliOverrides
+        permissionMode?: PermissionMode
+        model?: SessionModel
+        modelReasoningEffort?: CodexSessionModelReasoningEffort
+        collaborationMode?: EnhancedMode['collaborationMode']
     }) {
         super({
             api: opts.api,
@@ -48,99 +37,92 @@ export class CodexSession extends AgentSessionBase<EnhancedMode> {
             logPath: opts.logPath,
             sessionId: opts.sessionId,
             messageQueue: opts.messageQueue,
-            onModeChange: opts.onModeChange,
-            mode: opts.mode,
             sessionLabel: 'CodexSession',
             sessionIdLabel: 'Codex',
             applySessionIdToMetadata: (metadata, sessionId) => ({
                 ...metadata,
-                ...setSessionDriverRuntimeHandle(metadata, 'codex', { sessionId })
+                ...setSessionDriverRuntimeHandle(metadata, 'codex', { sessionId }),
             }),
             permissionMode: opts.permissionMode,
             model: opts.model,
             modelReasoningEffort: opts.modelReasoningEffort,
-            collaborationMode: opts.collaborationMode
-        });
+            collaborationMode: opts.collaborationMode,
+        })
 
-        this.codexArgs = opts.codexArgs;
-        this.codexCliOverrides = opts.codexCliOverrides;
-        this.startedBy = opts.startedBy;
-        this.startingMode = opts.startingMode;
-        this.permissionMode = opts.permissionMode;
-        this.model = opts.model;
-        this.modelReasoningEffort = opts.modelReasoningEffort;
-        this.collaborationMode = opts.collaborationMode;
+        this.codexArgs = opts.codexArgs
+        this.codexCliOverrides = opts.codexCliOverrides
+        this.startedBy = opts.startedBy
+        this.permissionMode = opts.permissionMode
+        this.model = opts.model
+        this.modelReasoningEffort = opts.modelReasoningEffort
+        this.collaborationMode = opts.collaborationMode
     }
 
     setPermissionMode = (mode: PermissionMode): void => {
-        this.permissionMode = mode;
-        this.notifyKeepAliveRuntimeChanged();
-    };
+        this.permissionMode = mode
+        this.notifyKeepAliveRuntimeChanged()
+    }
 
     setModel = (model: SessionModel): void => {
-        this.model = model;
-        this.notifyKeepAliveRuntimeChanged();
-    };
+        this.model = model
+        this.notifyKeepAliveRuntimeChanged()
+    }
 
     setModelReasoningEffort = (modelReasoningEffort: CodexSessionModelReasoningEffort): void => {
-        this.modelReasoningEffort = modelReasoningEffort;
-        this.notifyKeepAliveRuntimeChanged();
-    };
+        this.modelReasoningEffort = modelReasoningEffort
+        this.notifyKeepAliveRuntimeChanged()
+    }
 
     getModelReasoningEffort(): CodexSessionModelReasoningEffort | undefined {
-        return this.modelReasoningEffort as CodexSessionModelReasoningEffort | undefined;
+        return this.modelReasoningEffort as CodexSessionModelReasoningEffort | undefined
     }
 
     setCollaborationMode = (mode: EnhancedMode['collaborationMode']): void => {
-        this.collaborationMode = mode;
-        this.notifyKeepAliveRuntimeChanged();
-    };
+        this.collaborationMode = mode
+        this.notifyKeepAliveRuntimeChanged()
+    }
 
-    recordLocalLaunchFailure = (message: string, exitReason: LocalLaunchExitReason): void => {
-        this.localLaunchFailure = { message, exitReason };
-    };
-
-    sendCodexMessage = (message: unknown): void => {
-        this.client.sendCodexMessage(message);
-    };
+    sendCodexMessage = (...args: Parameters<ApiSessionClient['sendCodexMessage']>): void => {
+        this.client.sendCodexMessage(...args)
+    }
 
     sendUserMessage = (text: string): void => {
-        this.client.sendUserMessage(text);
-    };
+        this.client.sendUserMessage(text)
+    }
 
     sendSessionEvent = (event: Parameters<ApiSessionClient['sendSessionEvent']>[0]): void => {
-        this.client.sendSessionEvent(event);
-    };
+        this.client.sendSessionEvent(event)
+    }
 
     sendStreamUpdate = (update: Parameters<ApiSessionClient['sendStreamUpdate']>[0]): void => {
-        this.client.sendStreamUpdate(update);
-    };
+        this.client.sendStreamUpdate(update)
+    }
 
     getAppServerClient(): CodexAppServerClient {
         if (!this.appServerClient) {
-            this.appServerClient = new CodexAppServerClient();
+            this.appServerClient = new CodexAppServerClient()
         }
-        return this.appServerClient;
+        return this.appServerClient
     }
 
     async ensureRemoteBridge(): Promise<VibyMcpBridge> {
         if (!this.remoteBridge) {
-            this.remoteBridge = await buildVibyMcpBridge(this.client);
+            this.remoteBridge = await buildVibyMcpBridge(this.client)
         }
-        return this.remoteBridge;
+        return this.remoteBridge
     }
 
     disposeAppServerClient = async (): Promise<void> => {
         if (this.appServerClient) {
-            const client = this.appServerClient;
-            this.appServerClient = null;
-            await client.disconnect();
+            const client = this.appServerClient
+            this.appServerClient = null
+            await client.disconnect()
         }
 
         if (this.remoteBridge) {
-            const bridge = this.remoteBridge;
-            this.remoteBridge = null;
-            bridge.server.stop();
+            const bridge = this.remoteBridge
+            this.remoteBridge = null
+            bridge.server?.stop()
         }
-    };
+    }
 }
