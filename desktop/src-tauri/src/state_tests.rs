@@ -64,8 +64,6 @@ fn make_status(pid: u32, launch_source: Option<&str>) -> HubRuntimeStatus {
         data_dir: "/tmp".to_string(),
         started_at: "2026-03-20T00:00:00.000Z".to_string(),
         updated_at: "2026-03-20T00:00:00.000Z".to_string(),
-        public_hub_url: None,
-        direct_access_url: None,
         message: None,
     }
 }

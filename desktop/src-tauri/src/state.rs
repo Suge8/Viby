@@ -48,9 +48,51 @@ pub struct HubRuntimeStatus {
     pub data_dir: String,
     pub started_at: String,
     pub updated_at: String,
-    pub public_hub_url: Option<String>,
-    pub direct_access_url: Option<String>,
     pub message: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PairingParticipantSnapshot {
+    pub token_hint: Option<String>,
+    pub label: Option<String>,
+    pub public_key: Option<String>,
+    pub connected_at: Option<u64>,
+    pub last_seen_at: Option<u64>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PairingSessionSnapshot {
+    pub id: String,
+    pub state: String,
+    pub created_at: u64,
+    pub updated_at: u64,
+    pub expires_at: u64,
+    pub ticket_expires_at: u64,
+    pub short_code: Option<String>,
+    pub approval_status: Option<String>,
+    pub host: PairingParticipantSnapshot,
+    pub guest: Option<PairingParticipantSnapshot>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PairingIceServer {
+    pub urls: serde_json::Value,
+    pub username: Option<String>,
+    pub credential: Option<String>,
+    pub credential_type: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopPairingSession {
+    pub pairing: PairingSessionSnapshot,
+    pub host_token: String,
+    pub pairing_url: String,
+    pub ws_url: String,
+    pub ice_servers: Vec<PairingIceServer>,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq, Eq)]

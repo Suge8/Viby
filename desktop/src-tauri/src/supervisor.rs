@@ -12,8 +12,7 @@ use crate::launch::{
 };
 use crate::snapshot::{build_snapshot, stop_managed_hub};
 use crate::state::{
-    DesktopState, HubRuntimePhase, HubSnapshot, ManagedHubState, StartHubOptions,
-    HUB_SNAPSHOT_EVENT,
+    DesktopState, HubRuntimePhase, HubSnapshot, ManagedHubState, StartHubOptions, HUB_SNAPSHOT_EVENT,
 };
 
 struct SnapshotUpdate {

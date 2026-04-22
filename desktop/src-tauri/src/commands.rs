@@ -1,7 +1,8 @@
 use arboard::Clipboard;
 use tauri::AppHandle;
 
-use crate::state::{HubSnapshot, StartHubOptions};
+use crate::pairing;
+use crate::state::{DesktopPairingSession, HubSnapshot, StartHubOptions};
 use crate::supervisor;
 
 async fn run_blocking<T>(
@@ -42,4 +43,21 @@ pub async fn open_preferred_url(app: AppHandle) -> Result<(), String> {
 pub fn copy_text(text: String) -> Result<(), String> {
     let mut clipboard = Clipboard::new().map_err(|error| error.to_string())?;
     clipboard.set_text(text).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn create_pairing_session(app: AppHandle) -> Result<DesktopPairingSession, String> {
+    run_blocking(move || pairing::create_pairing_session(&app)).await
+}
+
+#[tauri::command]
+pub async fn approve_pairing_session(
+    pairing: DesktopPairingSession,
+) -> Result<DesktopPairingSession, String> {
+    run_blocking(move || pairing::approve_pairing_session(pairing)).await
+}
+
+#[tauri::command]
+pub async fn delete_pairing_session(pairing: DesktopPairingSession) -> Result<(), String> {
+    run_blocking(move || pairing::delete_pairing_session(pairing)).await
 }

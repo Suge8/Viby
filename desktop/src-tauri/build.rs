@@ -7,6 +7,7 @@ fn main() {
                 "stop_hub",
                 "open_preferred_url",
                 "copy_text",
+                "create_pairing_session",
             ]),
         ),
     )

@@ -1,6 +1,7 @@
 mod commands;
 mod launch;
 mod lifecycle;
+mod pairing;
 mod snapshot;
 mod state;
 mod supervisor;
@@ -29,7 +30,10 @@ pub fn run() {
             commands::start_hub,
             commands::stop_hub,
             commands::open_preferred_url,
-            commands::copy_text
+            commands::copy_text,
+            commands::create_pairing_session,
+            commands::approve_pairing_session,
+            commands::delete_pairing_session
         ])
         .build(tauri::generate_context!())
         .expect("error while building viby desktop");

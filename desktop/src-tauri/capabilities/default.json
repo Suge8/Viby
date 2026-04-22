@@ -10,6 +10,7 @@
         "allow-start-hub",
         "allow-stop-hub",
         "allow-open-preferred-url",
-        "allow-copy-text"
+        "allow-copy-text",
+        "allow-create-pairing-session"
     ]
 }
