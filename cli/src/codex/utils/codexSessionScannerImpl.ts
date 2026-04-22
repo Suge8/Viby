@@ -39,6 +39,7 @@ export class CodexSessionScannerImpl extends BaseSessionScanner<CodexSessionEven
     private readonly targetCwd: string | null
     private readonly referenceTimestampMs: number
     private readonly sessionStartWindowMs: number
+    private readonly discoveryScanIntervalMs: number
     private readonly matchDeadlineMs: number
     private readonly sessionDatePrefixes: Set<string> | null
 
@@ -52,7 +53,8 @@ export class CodexSessionScannerImpl extends BaseSessionScanner<CodexSessionEven
     private loggedAmbiguousRecentActivity = false
 
     constructor(opts: CodexSessionScannerOptions, targetCwd: string | null) {
-        super({ fallbackIntervalMs: SESSION_DISCOVERY_SCAN_INTERVAL_MS })
+        const discoveryScanIntervalMs = opts.discoveryScanIntervalMs ?? SESSION_DISCOVERY_SCAN_INTERVAL_MS
+        super({ fallbackIntervalMs: discoveryScanIntervalMs })
         const codexHomeDir = process.env.CODEX_HOME || join(homedir(), '.codex')
         this.sessionsRoot = join(codexHomeDir, 'sessions')
         this.onEvent = opts.onEvent
@@ -63,6 +65,7 @@ export class CodexSessionScannerImpl extends BaseSessionScanner<CodexSessionEven
         this.targetCwd = targetCwd
         this.referenceTimestampMs = opts.startupTimestampMs ?? Date.now()
         this.sessionStartWindowMs = opts.sessionStartWindowMs ?? DEFAULT_SESSION_START_WINDOW_MS
+        this.discoveryScanIntervalMs = discoveryScanIntervalMs
         this.matchDeadlineMs = this.referenceTimestampMs + this.sessionStartWindowMs
         this.sessionDatePrefixes = this.targetCwd
             ? getSessionDatePrefixes(this.referenceTimestampMs, this.sessionStartWindowMs)
@@ -88,7 +91,7 @@ export class CodexSessionScannerImpl extends BaseSessionScanner<CodexSessionEven
 
     protected getFallbackIntervalMs(): number {
         if (!this.activeSessionId && this.targetCwd) {
-            return SESSION_DISCOVERY_SCAN_INTERVAL_MS
+            return this.discoveryScanIntervalMs
         }
         return ACTIVE_SESSION_FALLBACK_SCAN_INTERVAL_MS
     }

@@ -7,6 +7,8 @@ import type { CodexSessionEvent } from './codexEventConverter'
 import { createCodexSessionScanner } from './codexSessionScanner'
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+const TEST_DISCOVERY_SCAN_INTERVAL_MS = 50
+const REUSED_SESSION_SETTLE_MS = 250
 
 describe('codexSessionScanner', () => {
     let testDir: string
@@ -188,6 +190,7 @@ describe('codexSessionScanner', () => {
             sessionId: null,
             cwd: targetCwd,
             startupTimestampMs,
+            discoveryScanIntervalMs: TEST_DISCOVERY_SCAN_INTERVAL_MS,
             onEvent: (event) => events.push(event),
             onDiscoveredSessionId: (sessionId) => {
                 matchedSessionId = sessionId
@@ -204,7 +207,7 @@ describe('codexSessionScanner', () => {
         })
         await appendFile(sessionFile, newLine + '\n')
 
-        await wait(2300)
+        await wait(REUSED_SESSION_SETTLE_MS)
         expect(matchedSessionId).toBe(reusedSessionId)
         expect(events).toHaveLength(1)
         expect(events[0].type).toBe('response_item')
@@ -249,6 +252,7 @@ describe('codexSessionScanner', () => {
             sessionId: null,
             cwd: targetCwd,
             startupTimestampMs,
+            discoveryScanIntervalMs: TEST_DISCOVERY_SCAN_INTERVAL_MS,
             onEvent: (event) => events.push(event),
             onDiscoveredSessionId: (sessionId) => {
                 matchedSessionId = sessionId
@@ -269,7 +273,7 @@ describe('codexSessionScanner', () => {
         await appendFile(firstFile, firstNewLine + '\n')
         await appendFile(secondFile, secondNewLine + '\n')
 
-        await wait(2300)
+        await wait(REUSED_SESSION_SETTLE_MS)
         expect(matchedSessionId).toBeNull()
         expect(events).toHaveLength(0)
 
@@ -279,7 +283,7 @@ describe('codexSessionScanner', () => {
         })
         await appendFile(firstFile, laterUniqueLine + '\n')
 
-        await wait(2300)
+        await wait(REUSED_SESSION_SETTLE_MS)
         expect(matchedSessionId).toBeNull()
         expect(events).toHaveLength(0)
     })

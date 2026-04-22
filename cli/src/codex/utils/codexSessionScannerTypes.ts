@@ -8,6 +8,7 @@ export interface CodexSessionScannerOptions {
     cwd?: string
     startupTimestampMs?: number
     sessionStartWindowMs?: number
+    discoveryScanIntervalMs?: number
 }
 
 export interface CodexSessionScanner {
