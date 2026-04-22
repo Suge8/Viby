@@ -1,4 +1,4 @@
-import { unwrapRoleWrappedRecordEnvelope } from './messages'
+import { isHiddenAgentMetaOutput, unwrapRoleWrappedRecordEnvelope } from './messages'
 import { isObject } from './utils'
 
 export type SessionActivityKind = 'reply' | 'ready' | 'user'
@@ -22,7 +22,7 @@ export function createEmptySessionMessageActivity(): SessionMessageActivity {
     return {
         latestActivityAt: null,
         latestActivityKind: null,
-        latestCompletedReplyAt: null
+        latestCompletedReplyAt: null,
     }
 }
 
@@ -36,6 +36,10 @@ export function normalizeSessionActivityTimestamp(value: number | null | undefin
 }
 
 export function getSessionActivityKind(content: unknown): SessionActivityKind | null {
+    if (isHiddenAgentMetaOutput(content)) {
+        return null
+    }
+
     const record = unwrapRoleWrappedRecordEnvelope(content)
     if (!record) {
         return null
@@ -50,11 +54,7 @@ export function getSessionActivityKind(content: unknown): SessionActivityKind | 
     }
 
     const payload = record.content
-    if (
-        isObject(payload)
-        && payload.type === 'event'
-        && isObject(payload.data)
-    ) {
+    if (isObject(payload) && payload.type === 'event' && isObject(payload.data)) {
         const eventData = payload.data as MessageEventData
         if (eventData.type === 'ready') {
             return 'ready'
@@ -110,6 +110,6 @@ export function mergeSessionMessageActivity(
     return {
         latestActivityAt,
         latestActivityKind,
-        latestCompletedReplyAt
+        latestCompletedReplyAt,
     }
 }

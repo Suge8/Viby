@@ -8,9 +8,10 @@ export type SessionTurnStateOptions = Readonly<{
     latestActivityKind: SessionActivityKind | null
 }>
 
-export type SessionReadyForInputOptions = SessionTurnStateOptions & Readonly<{
-    active: boolean
-}>
+export type SessionReadyForInputOptions = SessionTurnStateOptions &
+    Readonly<{
+        active: boolean
+    }>
 
 const PROCESSING_ACTIVITY_KINDS: readonly SessionActivityKind[] = ['reply', 'user']
 const READY_ACTIVITY_KIND: SessionActivityKind = 'ready'
@@ -19,9 +20,14 @@ function isProcessingActivityKind(kind: SessionActivityKind | null): boolean {
     return kind !== null && PROCESSING_ACTIVITY_KINDS.includes(kind)
 }
 
-export function getPendingRequestsCount(agentState: {
-    requests?: Record<string, unknown> | null
-} | null | undefined): number {
+export function getPendingRequestsCount(
+    agentState:
+        | {
+              requests?: Record<string, unknown> | null
+          }
+        | null
+        | undefined
+): number {
     const requests = agentState?.requests
     if (!requests) {
         return 0
@@ -31,10 +37,6 @@ export function getPendingRequestsCount(agentState: {
 }
 
 export function getActiveSessionTurnState(options: SessionTurnStateOptions): ActiveSessionTurnState {
-    if (options.pendingRequestsCount > 0) {
-        return 'awaiting-input'
-    }
-
     if (options.thinking) {
         return 'processing'
     }
@@ -43,12 +45,18 @@ export function getActiveSessionTurnState(options: SessionTurnStateOptions): Act
         return 'processing'
     }
 
+    if (options.pendingRequestsCount > 0) {
+        return 'awaiting-input'
+    }
+
     return 'awaiting-input'
 }
 
 export function isSessionReadyForInput(options: SessionReadyForInputOptions): boolean {
-    return options.active
-        && !options.thinking
-        && options.pendingRequestsCount === 0
-        && options.latestActivityKind === READY_ACTIVITY_KIND
+    return (
+        options.active &&
+        !options.thinking &&
+        options.pendingRequestsCount === 0 &&
+        options.latestActivityKind === READY_ACTIVITY_KIND
+    )
 }

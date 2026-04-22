@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 
-import {
-    buildSessionHandoffSnapshot,
-    formatSessionHandoffPrompt,
-    SessionHandoffContractError,
-} from './sessionHandoff'
+import { buildSessionHandoffSnapshot, formatSessionHandoffPrompt, SessionHandoffContractError } from './sessionHandoff'
 import type { DecryptedMessage, Session } from './types'
 
 function createSession(overrides: Partial<Session> = {}): Session {
@@ -123,7 +119,7 @@ describe('buildSessionHandoffSnapshot', () => {
 
         const prompt = formatSessionHandoffPrompt(snapshot)
 
-        expect(prompt).toContain('Private continuity handoff for a driver switch inside the same Viby session.')
+        expect(prompt).toContain('Private continuity handoff for resuming the same Viby session.')
         expect(prompt).toContain('"previousDriver": "codex"')
         expect(prompt).toContain('"workingDirectory": "/repo"')
         expect(prompt).toContain('"text": "hello"')
@@ -194,18 +190,21 @@ describe('buildSessionHandoffSnapshot', () => {
     })
 
     it('uses the explicit driver from metadata when building the handoff snapshot', () => {
-        const snapshot = buildSessionHandoffSnapshot(createSession({
-            metadata: {
-                path: '/legacy',
-                host: 'machine',
-                driver: 'claude',
-                claudeSessionId: 'legacy-claude-session',
-            },
-            model: null,
-            modelReasoningEffort: null,
-            permissionMode: undefined,
-            collaborationMode: undefined,
-        }), [])
+        const snapshot = buildSessionHandoffSnapshot(
+            createSession({
+                metadata: {
+                    path: '/legacy',
+                    host: 'machine',
+                    driver: 'claude',
+                    claudeSessionId: 'legacy-claude-session',
+                },
+                model: null,
+                modelReasoningEffort: null,
+                permissionMode: undefined,
+                collaborationMode: undefined,
+            }),
+            []
+        )
 
         expect(snapshot.driver).toBe('claude')
         expect(snapshot.workingDirectory).toBe('/legacy')
@@ -252,10 +251,15 @@ describe('buildSessionHandoffSnapshot', () => {
                             message: {
                                 content: [
                                     { type: 'text', text: 'done' },
-                                    { type: 'toolCall', id: 'tool-1', name: 'read_file', arguments: { path: 'README.md' } },
-                                ]
-                            }
-                        }
+                                    {
+                                        type: 'toolCall',
+                                        id: 'tool-1',
+                                        name: 'read_file',
+                                        arguments: { path: 'README.md' },
+                                    },
+                                ],
+                            },
+                        },
                     },
                 },
             }),
@@ -274,15 +278,15 @@ describe('buildSessionHandoffSnapshot', () => {
                                     {
                                         type: 'tool_result',
                                         tool_use_id: 'tool-1',
-                                        content: [{ type: 'text', text: 'README contents' }]
-                                    }
-                                ]
+                                        content: [{ type: 'text', text: 'README contents' }],
+                                    },
+                                ],
                             },
                             toolUseResult: {
                                 toolName: 'read_file',
-                                content: [{ type: 'text', text: 'README contents' }]
-                            }
-                        }
+                                content: [{ type: 'text', text: 'README contents' }],
+                            },
+                        },
                     },
                 },
             }),
@@ -315,38 +319,59 @@ describe('buildSessionHandoffSnapshot', () => {
             })
         )
 
-        expect(() => buildSessionHandoffSnapshot(createSession({
-            metadata: {
-                host: 'machine',
-                driver: 'codex',
-            } as never,
-        }), [])).toThrow(expect.objectContaining({
-            code: 'working_directory_missing',
-            field: 'metadata.path',
-        }))
+        expect(() =>
+            buildSessionHandoffSnapshot(
+                createSession({
+                    metadata: {
+                        host: 'machine',
+                        driver: 'codex',
+                    } as never,
+                }),
+                []
+            )
+        ).toThrow(
+            expect.objectContaining({
+                code: 'working_directory_missing',
+                field: 'metadata.path',
+            })
+        )
     })
 
     it('fails explicitly for unknown or missing driver context', () => {
-        expect(() => buildSessionHandoffSnapshot(createSession({
-            metadata: {
-                path: '/repo',
-                host: 'machine',
-                driver: 'unknown',
-            } as never,
-        }), [])).toThrow(expect.objectContaining({
-            code: 'driver_context_missing',
-            field: 'metadata.driver',
-        }))
+        expect(() =>
+            buildSessionHandoffSnapshot(
+                createSession({
+                    metadata: {
+                        path: '/repo',
+                        host: 'machine',
+                        driver: 'unknown',
+                    } as never,
+                }),
+                []
+            )
+        ).toThrow(
+            expect.objectContaining({
+                code: 'driver_context_missing',
+                field: 'metadata.driver',
+            })
+        )
 
-        expect(() => buildSessionHandoffSnapshot(createSession({
-            metadata: {
-                path: '/repo',
-                host: 'machine',
-            } as never,
-        }), [])).toThrow(expect.objectContaining({
-            code: 'driver_context_missing',
-            field: 'metadata.driver',
-        }))
+        expect(() =>
+            buildSessionHandoffSnapshot(
+                createSession({
+                    metadata: {
+                        path: '/repo',
+                        host: 'machine',
+                    } as never,
+                }),
+                []
+            )
+        ).toThrow(
+            expect.objectContaining({
+                code: 'driver_context_missing',
+                field: 'metadata.driver',
+            })
+        )
     })
 
     it('fails explicitly when transcript text or attachment payloads are malformed', () => {

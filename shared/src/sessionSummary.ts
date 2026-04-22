@@ -1,28 +1,26 @@
 import type { CodexCollaborationMode, ModelReasoningEffort, PermissionMode } from './modes'
-import type { Session, SessionDriver, WorktreeMetadata } from './schemas'
-import type { SessionSummaryTeam, SessionTeamContext } from './teamSchemas'
+import type { Session, SessionDriver, SessionDriverHandles, WorktreeMetadata } from './schemas'
 import {
     createEmptySessionMessageActivity,
     type SessionActivityKind,
-    type SessionMessageActivity
+    type SessionMessageActivity,
 } from './sessionActivity'
-import { getPendingRequestsCount } from './sessionTurnState'
-import {
-    getSessionLifecycleState,
-    getSessionResumeToken,
-    type SessionLifecycleState
-} from './sessionLifecycle'
 import { resolveSessionDriver } from './sessionDriver'
+import { getSessionLifecycleRank, resolveSessionInteractivity, type SessionLifecycleState } from './sessionLifecycle'
+import { resolveSessionResumeState, type SessionResumeStrategy } from './sessionResume'
+import { getPendingRequestsCount } from './sessionTurnState'
 
 export type SessionSummaryMetadata = {
     name?: string
     path: string
-    machineId?: string
     summary?: {
         text: string
         updatedAt: number
     }
     driver?: SessionDriver | null
+    runtimeHandles?: SessionDriverHandles
+    lifecycleState?: SessionLifecycleState
+    startedBy?: 'runner' | 'terminal'
     worktree?: WorktreeMetadata
 }
 
@@ -41,22 +39,16 @@ export type SessionSummary = {
     todoProgress: { completed: number; total: number } | null
     pendingRequestsCount: number
     resumeAvailable: boolean
+    resumeStrategy: SessionResumeStrategy
     model: string | null
     modelReasoningEffort: ModelReasoningEffort | null
     permissionMode?: PermissionMode
     collaborationMode?: CodexCollaborationMode
-    team?: SessionSummaryTeam
 }
 
-type SessionSummarySortTimestampSource = Pick<
-    SessionSummary,
-    'lifecycleState' | 'lifecycleStateSince' | 'updatedAt'
->
+type SessionSummarySortTimestampSource = Pick<SessionSummary, 'lifecycleState' | 'lifecycleStateSince' | 'updatedAt'>
 
-type SessionSummaryOrderSource = Pick<
-    SessionSummary,
-    'id' | 'lifecycleState' | 'lifecycleStateSince' | 'updatedAt'
->
+type SessionSummaryOrderSource = Pick<SessionSummary, 'id' | 'lifecycleState' | 'lifecycleStateSince' | 'updatedAt'>
 
 export function resolveSessionSummaryUpdatedAt(
     sessionUpdatedAt: number,
@@ -73,11 +65,8 @@ export function getSessionSummarySortTimestamp(summary: SessionSummarySortTimest
     return summary.updatedAt
 }
 
-export function compareSessionSummaries(
-    left: SessionSummaryOrderSource,
-    right: SessionSummaryOrderSource
-): number {
-    const lifecycleRank = getSessionSummaryLifecycleRank(left.lifecycleState) - getSessionSummaryLifecycleRank(right.lifecycleState)
+export function compareSessionSummaries(left: SessionSummaryOrderSource, right: SessionSummaryOrderSource): number {
+    const lifecycleRank = getSessionLifecycleRank(left.lifecycleState) - getSessionLifecycleRank(right.lifecycleState)
     if (lifecycleRank !== 0) {
         return lifecycleRank
     }
@@ -105,23 +94,39 @@ export function toSessionSummary(session: Session, messageActivity?: SessionMess
     )
     const updatedAt = resolveSessionSummaryUpdatedAt(session.updatedAt, latestCompletedReplyAt)
     const resolvedDriver = resolveSessionDriver(session.metadata)
+    const resumeState = resolveSessionResumeState({
+        metadata: session.metadata,
+        resumeAvailableHint: getOptionalResumeAvailabilityHint(session),
+    })
+    const interactivity = resolveSessionInteractivity({
+        ...session,
+        resumeState,
+    })
 
-    const metadata: SessionSummaryMetadata | null = session.metadata ? {
-        name: session.metadata.name,
-        path: session.metadata.path,
-        machineId: session.metadata.machineId ?? undefined,
-        summary: session.metadata.summary ? {
-            text: session.metadata.summary.text,
-            updatedAt: session.metadata.summary.updatedAt
-        } : undefined,
-        driver: resolvedDriver,
-        worktree: session.metadata.worktree
-    } : null
+    const metadata: SessionSummaryMetadata | null = session.metadata
+        ? {
+              name: session.metadata.name,
+              path: session.metadata.path,
+              summary: session.metadata.summary
+                  ? {
+                        text: session.metadata.summary.text,
+                        updatedAt: session.metadata.summary.updatedAt,
+                    }
+                  : undefined,
+              driver: resolvedDriver,
+              runtimeHandles: session.metadata.runtimeHandles,
+              lifecycleState: session.metadata.lifecycleState,
+              startedBy: session.metadata.startedBy,
+              worktree: session.metadata.worktree,
+          }
+        : null
 
-    const todoProgress = session.todos?.length ? {
-        completed: session.todos.filter(t => t.status === 'completed').length,
-        total: session.todos.length
-    } : null
+    const todoProgress = session.todos?.length
+        ? {
+              completed: session.todos.filter((t) => t.status === 'completed').length,
+              total: session.todos.length,
+          }
+        : null
 
     return {
         id: session.id,
@@ -132,41 +137,25 @@ export function toSessionSummary(session: Session, messageActivity?: SessionMess
         latestActivityAt,
         latestActivityKind,
         latestCompletedReplyAt,
-        lifecycleState: getSessionLifecycleState(session),
+        lifecycleState: interactivity.lifecycleState,
         lifecycleStateSince: session.metadata?.lifecycleStateSince ?? null,
         metadata,
         todoProgress,
         pendingRequestsCount,
-        resumeAvailable: getSessionResumeToken(session.metadata) !== undefined,
+        resumeAvailable: interactivity.resumeAvailable,
+        resumeStrategy: resumeState.resumeStrategy,
         model: session.model,
         modelReasoningEffort: session.modelReasoningEffort,
         permissionMode: session.permissionMode,
         collaborationMode: session.collaborationMode,
-        team: toSessionSummaryTeam(session.teamContext)
     }
 }
 
-function toSessionSummaryTeam(teamContext: SessionTeamContext | undefined): SessionSummaryTeam | undefined {
-    if (!teamContext) {
-        return undefined
-    }
-
+export function getSessionMessageActivityFromSession(session: Session): SessionMessageActivity {
     return {
-        projectId: teamContext.projectId,
-        sessionRole: teamContext.sessionRole,
-        managerSessionId: teamContext.managerSessionId,
-        managerTitle: teamContext.managerTitle,
-        memberRole: teamContext.memberRole,
-        memberRoleId: teamContext.memberRoleId,
-        memberRoleName: teamContext.memberRoleName,
-        memberRevision: teamContext.memberRevision,
-        membershipState: teamContext.membershipState,
-        controlOwner: teamContext.controlOwner,
-        projectStatus: teamContext.projectStatus,
-        activeMemberCount: teamContext.activeMemberCount ?? 0,
-        archivedMemberCount: teamContext.archivedMemberCount ?? 0,
-        runningMemberCount: teamContext.runningMemberCount ?? 0,
-        blockedTaskCount: teamContext.blockedTaskCount ?? 0
+        latestActivityAt: session.latestActivityAt ?? null,
+        latestActivityKind: session.latestActivityKind ?? null,
+        latestCompletedReplyAt: session.latestCompletedReplyAt ?? null,
     }
 }
 
@@ -186,14 +175,10 @@ function resolveLatestActivityKind(
     return null
 }
 
-function getSessionSummaryLifecycleRank(lifecycleState: SessionLifecycleState): number {
-    if (lifecycleState === 'running') {
-        return 0
+function getOptionalResumeAvailabilityHint(session: Session): boolean | undefined {
+    if (!('resumeAvailable' in session) || typeof session.resumeAvailable !== 'boolean') {
+        return undefined
     }
 
-    if (lifecycleState === 'closed') {
-        return 1
-    }
-
-    return 2
+    return session.resumeAvailable
 }
