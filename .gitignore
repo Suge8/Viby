@@ -3,6 +3,9 @@
 
 # Build output
 **/dist/
+pairing/deploy-bundle/
+pairing/deploy-bundle.tar.gz
+pairing/deploy-bundle.sha256
 **/.vitepress/cache/
 **/dist-exe/
 **/*.tsbuildinfo
@@ -51,7 +54,10 @@ execplan/
 .viby-dev-remote.lock.json
 **/AGENTS.md
 docs/
+docs/internal/update.md
 .taskmaster/
+CLAUDE.md
+DESIGN.md
 
 # Generated npm bundle output (local)
 cli/npm/main/
@@ -95,3 +101,13 @@ tmp/
 .gsd.lock/
 .artifacts/
 .tmp/
+.tmp-*
+.omx/
+.cursor/
+.githooks/
+.github/.githooks/
+.github/copilot-instructions.md
+.github/dependabot.yml
+.github/instructions/
+.github/pull_request_template.md
+.github/workflows/harness.yml
