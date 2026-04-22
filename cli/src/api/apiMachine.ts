@@ -1,117 +1,28 @@
 import { io, type Socket } from 'socket.io-client'
-import { logger } from '@/ui/logger'
 import { configuration } from '@/configuration'
-import {
-    ResolveAgentLaunchConfigRequestSchema,
-    type ResolveAgentLaunchConfigResponse,
-} from '@viby/protocol'
-import type { Update, UpdateMachineBody } from '@viby/protocol'
-import { resolvePiAgentLaunchConfig } from '@/pi/launchConfig'
-import type { RunnerState, Machine, MachineMetadata } from './types'
-import { RunnerStateSchema, MachineMetadataSchema } from './types'
-import { backoff } from '@/utils/time'
+import { logger } from '@/ui/logger'
 import { getInvokedCwd } from '@/utils/invokedCwd'
-import { RpcHandlerManager } from './rpc/RpcHandlerManager'
+import { runDetachedTask } from '@/utils/runDetachedTask'
+import { backoff } from '@/utils/time'
 import { registerCommonHandlers } from '../modules/common/registerCommonHandlers'
-import type { SpawnSessionOptions, SpawnSessionResult } from '../modules/common/rpcTypes'
-import { applyVersionedAck } from './versionedUpdate'
+import {
+    ApiMachineClientOptions,
+    bindMachineSocketHandlers,
+    type MachineRpcHandlers,
+    machineMetadataMatches,
+    type RunnerToServerEvents,
+    readRecord,
+    registerMachineRpcHandlers,
+    type ServerToRunnerEvents,
+} from './apiMachineSupport'
 import { handleBrowseMachineDirectoryRequest } from './machineDirectoryBrowser'
 import { handlePathExistsRequest } from './pathExistsHandler'
+import { RpcHandlerManager } from './rpc/RpcHandlerManager'
+import type { Machine, MachineMetadata, RunnerState } from './types'
+import { MachineMetadataSchema, RunnerStateSchema } from './types'
+import { applyVersionedAck } from './versionedUpdate'
 
-interface ServerToRunnerEvents {
-    update: (data: Update) => void
-    'rpc-request': (data: { method: string; params: string }, callback: (response: string) => void) => void
-    error: (data: { message: string }) => void
-}
-
-interface RunnerToServerEvents {
-    'machine-alive': (data: { machineId: string; time: number }) => void
-    'machine-update-metadata': (data: { machineId: string; metadata: unknown; expectedVersion: number }, cb: (answer: {
-        result: 'error'
-    } | {
-        result: 'version-mismatch'
-        version: number
-        metadata: unknown | null
-    } | {
-        result: 'success'
-        version: number
-        metadata: unknown | null
-    }) => void) => void
-    'machine-update-state': (data: { machineId: string; runnerState: unknown | null; expectedVersion: number }, cb: (answer: {
-        result: 'error'
-    } | {
-        result: 'version-mismatch'
-        version: number
-        runnerState: unknown | null
-    } | {
-        result: 'success'
-        version: number
-        runnerState: unknown | null
-    }) => void) => void
-    'rpc-register': (data: { method: string }) => void
-    'rpc-unregister': (data: { method: string }) => void
-}
-
-type MachineRpcHandlers = {
-    spawnSession: (options: SpawnSessionOptions) => Promise<SpawnSessionResult>
-    stopSession: (sessionId: string) => boolean
-    requestShutdown: () => void
-}
-
-export interface ApiMachineClientOptions {
-    getMachineMetadata?: () => MachineMetadata
-}
-
-function readRecord(value: unknown): Record<string, unknown> {
-    return typeof value === 'object' && value !== null
-        ? value as Record<string, unknown>
-        : {}
-}
-
-function readOptionalString(value: unknown): string | undefined {
-    return typeof value === 'string' ? value : undefined
-}
-
-function readRequiredString(value: unknown, message: string): string {
-    if (typeof value !== 'string' || !value) {
-        throw new Error(message)
-    }
-
-    return value
-}
-
-function machineCapabilitiesMatch(
-    left: readonly string[] | undefined,
-    right: readonly string[] | undefined
-): boolean {
-    if (!left && !right) {
-        return true
-    }
-
-    if (!left || !right || left.length !== right.length) {
-        return false
-    }
-
-    return left.every((capability, index) => capability === right[index])
-}
-
-function machineMetadataMatches(
-    current: MachineMetadata | null,
-    next: MachineMetadata
-): boolean {
-    if (!current) {
-        return false
-    }
-
-    return current.host === next.host
-        && current.platform === next.platform
-        && current.vibyCliVersion === next.vibyCliVersion
-        && current.displayName === next.displayName
-        && machineCapabilitiesMatch(current.capabilities, next.capabilities)
-        && current.homeDir === next.homeDir
-        && current.vibyHomeDir === next.vibyHomeDir
-        && current.vibyLibDir === next.vibyLibDir
-}
+export type { ApiMachineClientOptions } from './apiMachineSupport'
 
 export class ApiMachineClient {
     private socket!: Socket<ServerToRunnerEvents, RunnerToServerEvents>
@@ -126,104 +37,28 @@ export class ApiMachineClient {
     ) {
         this.rpcHandlerManager = new RpcHandlerManager({
             scopePrefix: this.machine.id,
-            logger: (msg, data) => logger.debug(msg, data)
+            logger: (msg, data) => logger.debug(msg, data),
         })
         registerCommonHandlers(this.rpcHandlerManager, getInvokedCwd())
         this.rpcHandlerManager.registerHandler('browse-directory', handleBrowseMachineDirectoryRequest)
         this.rpcHandlerManager.registerHandler('path-exists', handlePathExistsRequest)
     }
 
-    setRPCHandlers({ spawnSession, stopSession, requestShutdown }: MachineRpcHandlers): void {
-        this.rpcHandlerManager.registerHandler('spawn-viby-session', async (params: unknown) => {
-            const request = readRecord(params)
-            const {
-                directory,
-                sessionId,
-                resumeSessionId,
-                machineId,
-                approvedNewDirectoryCreation,
-                agent,
-                model,
-                modelReasoningEffort,
-                permissionMode,
-                sessionRole,
-                collaborationMode,
-                token,
-                sessionType,
-                worktreeName,
-                driverSwitch
-            } = request
-            const result = await spawnSession({
-                directory: readRequiredString(directory, 'Directory is required'),
-                sessionId: readOptionalString(sessionId),
-                resumeSessionId: readOptionalString(resumeSessionId),
-                machineId: readOptionalString(machineId),
-                approvedNewDirectoryCreation: approvedNewDirectoryCreation === true,
-                agent: agent as SpawnSessionOptions['agent'],
-                model: readOptionalString(model),
-                modelReasoningEffort: modelReasoningEffort as SpawnSessionOptions['modelReasoningEffort'],
-                permissionMode: permissionMode as SpawnSessionOptions['permissionMode'],
-                sessionRole: sessionRole as SpawnSessionOptions['sessionRole'],
-                collaborationMode: collaborationMode as SpawnSessionOptions['collaborationMode'],
-                token: readOptionalString(token),
-                sessionType: sessionType as SpawnSessionOptions['sessionType'],
-                worktreeName: readOptionalString(worktreeName),
-                driverSwitch: driverSwitch as SpawnSessionOptions['driverSwitch']
-            })
-
-            switch (result.type) {
-                case 'success':
-                    return { type: 'success', sessionId: result.sessionId }
-                case 'requestToApproveDirectoryCreation':
-                    return { type: 'requestToApproveDirectoryCreation', directory: result.directory }
-                case 'error':
-                    return { type: 'error', errorMessage: result.errorMessage }
-            }
-        })
-
-        this.rpcHandlerManager.registerHandler('stop-session', (params: unknown) => {
-            const request = readRecord(params)
-            const sessionId = readRequiredString(request.sessionId, 'Session ID is required')
-            const success = stopSession(sessionId)
-            if (!success) {
-                throw new Error('Session not found or failed to stop')
-            }
-
-            return { message: 'Session stopped' }
-        })
-
-        this.rpcHandlerManager.registerHandler('stop-runner', () => {
-            setTimeout(() => requestShutdown(), 100)
-            return { message: 'Runner stop request acknowledged' }
-        })
-
-        this.rpcHandlerManager.registerHandler('resolve-agent-launch-config', async (params: unknown): Promise<ResolveAgentLaunchConfigResponse> => {
-            const parsed = ResolveAgentLaunchConfigRequestSchema.safeParse(params)
-            if (!parsed.success) {
-                return {
-                    type: 'error',
-                    message: 'Invalid agent launch config request'
-                }
-            }
-
-            if (parsed.data.agent !== 'pi') {
-                return {
-                    type: 'error',
-                    message: `Unsupported agent launch config request: ${parsed.data.agent}`
-                }
-            }
-
-            try {
-                return {
-                    type: 'success',
-                    config: await resolvePiAgentLaunchConfig(parsed.data.directory)
-                }
-            } catch (error) {
-                return {
-                    type: 'error',
-                    message: error instanceof Error ? error.message : 'Failed to resolve agent launch config'
-                }
-            }
+    setRPCHandlers({
+        spawnSession,
+        listLocalSessions,
+        exportLocalSession,
+        listAgentAvailability,
+        stopSession,
+        requestShutdown,
+    }: MachineRpcHandlers): void {
+        registerMachineRpcHandlers(this.rpcHandlerManager, {
+            spawnSession,
+            listLocalSessions,
+            exportLocalSession,
+            listAgentAvailability,
+            stopSession,
+            requestShutdown,
         })
     }
 
@@ -231,11 +66,11 @@ export class ApiMachineClient {
         await backoff(async () => {
             const updated = handler(this.machine.metadata)
 
-            const answer = await this.socket.emitWithAck('machine-update-metadata', {
+            const answer = (await this.socket.emitWithAck('machine-update-metadata', {
                 machineId: this.machine.id,
                 metadata: updated,
-                expectedVersion: this.machine.metadataVersion
-            }) as unknown
+                expectedVersion: this.machine.metadataVersion,
+            })) as unknown
 
             applyVersionedAck(answer, {
                 valueKey: 'metadata',
@@ -255,7 +90,7 @@ export class ApiMachineClient {
                 },
                 invalidResponseMessage: 'Invalid machine-update-metadata response',
                 errorMessage: 'Machine metadata update failed',
-                versionMismatchMessage: 'Metadata version mismatch'
+                versionMismatchMessage: 'Metadata version mismatch',
             })
         })
     }
@@ -264,11 +99,11 @@ export class ApiMachineClient {
         await backoff(async () => {
             const updated = handler(this.machine.runnerState)
 
-            const answer = await this.socket.emitWithAck('machine-update-state', {
+            const answer = (await this.socket.emitWithAck('machine-update-state', {
                 machineId: this.machine.id,
                 runnerState: updated,
-                expectedVersion: this.machine.runnerStateVersion
-            }) as unknown
+                expectedVersion: this.machine.runnerStateVersion,
+            })) as unknown
 
             applyVersionedAck(answer, {
                 valueKey: 'runnerState',
@@ -288,7 +123,7 @@ export class ApiMachineClient {
                 },
                 invalidResponseMessage: 'Invalid machine-update-state response',
                 errorMessage: 'Machine state update failed',
-                versionMismatchMessage: 'Runner state version mismatch'
+                versionMismatchMessage: 'Runner state version mismatch',
             })
         })
     }
@@ -308,79 +143,77 @@ export class ApiMachineClient {
             auth: {
                 token: this.token,
                 clientType: 'machine-scoped' as const,
-                machineId: this.machine.id
+                machineId: this.machine.id,
             },
             path: '/socket.io/',
             reconnection: true,
             reconnectionDelay: 1000,
-            reconnectionDelayMax: 5000
+            reconnectionDelayMax: 5000,
         })
-
-        this.socket.on('connect', () => {
-            logger.debug('[API MACHINE] Connected to bot')
-            this.rpcHandlerManager.onSocketConnect(this.socket)
-            this.syncMachineMetadataOnConnect().catch((error) => {
-                logger.debug('[API MACHINE] Failed to sync machine metadata on connect', error)
-            })
-            this.updateRunnerState((state) => ({
-                ...(state ?? {}),
-                status: 'running',
-                pid: process.pid,
-                httpPort: this.machine.runnerState?.httpPort,
-                startedAt: Date.now()
-            })).catch((error) => {
-                logger.debug('[API MACHINE] Failed to update runner state on connect', error)
-            })
-            this.startKeepAlive()
-        })
-
-        this.socket.on('disconnect', () => {
-            logger.debug('[API MACHINE] Disconnected from bot')
-            this.rpcHandlerManager.onSocketDisconnect()
-            this.stopKeepAlive()
-            if (!this.shuttingDown) {
-                logger.debug('[API MACHINE] Hub connection disappeared, waiting for Socket.IO reconnection')
-            }
-        })
-
-        this.socket.on('rpc-request', async (data: { method: string; params: string }, callback: (response: string) => void) => {
-            callback(await this.rpcHandlerManager.handleRequest(data))
-        })
-
-        this.socket.on('update', (data: Update) => {
-            if (data.body.t !== 'update-machine') {
-                return
-            }
-
-            const update = data.body as UpdateMachineBody
-            if (update.machineId !== this.machine.id) {
-                return
-            }
-
-            if (update.metadata) {
-                const parsed = MachineMetadataSchema.safeParse(update.metadata.value)
-                if (parsed.success) {
-                    this.machine.metadata = parsed.data
-                } else {
-                    logger.debug('[API MACHINE] Ignoring invalid metadata update', { version: update.metadata.version })
+        bindMachineSocketHandlers({
+            socket: this.socket,
+            machine: this.machine,
+            onRpcRequest: async (data, callback) => {
+                callback(await this.rpcHandlerManager.handleRequest(data))
+            },
+            onConnect: () => {
+                logger.debug('[API MACHINE] Connected to bot')
+                this.rpcHandlerManager.onSocketConnect(this.socket)
+                runDetachedTask(
+                    () => this.syncMachineMetadataOnConnect(),
+                    '[API MACHINE] Failed to sync machine metadata on connect'
+                )
+                runDetachedTask(
+                    () =>
+                        this.updateRunnerState((state) => ({
+                            ...(state ?? {}),
+                            status: 'running',
+                            pid: process.pid,
+                            httpPort: this.machine.runnerState?.httpPort,
+                            startedAt: Date.now(),
+                        })),
+                    '[API MACHINE] Failed to update runner state on connect'
+                )
+                this.startKeepAlive()
+            },
+            onDisconnect: () => {
+                logger.debug('[API MACHINE] Disconnected from bot')
+                this.rpcHandlerManager.onSocketDisconnect()
+                this.stopKeepAlive()
+                if (!this.shuttingDown) {
+                    logger.debug('[API MACHINE] Hub connection disappeared, waiting for Socket.IO reconnection')
                 }
-                this.machine.metadataVersion = update.metadata.version
-            }
-
-            if (update.runnerState) {
-                const next = update.runnerState.value
-                if (next == null) {
-                    this.machine.runnerState = null
-                } else {
-                    const parsed = RunnerStateSchema.safeParse(next)
+            },
+            onRunnerUpdate: (update) => {
+                if (update.metadata) {
+                    const parsed = MachineMetadataSchema.safeParse(update.metadata.value)
                     if (parsed.success) {
-                        this.machine.runnerState = parsed.data
+                        this.machine.metadata = parsed.data
                     } else {
-                        logger.debug('[API MACHINE] Ignoring invalid runnerState update', { version: update.runnerState.version })
+                        logger.debug('[API MACHINE] Ignoring invalid metadata update', {
+                            version: update.metadata.version,
+                        })
                     }
+                    this.machine.metadataVersion = update.metadata.version
                 }
-                this.machine.runnerStateVersion = update.runnerState.version
-            }
+
+                if (update.runnerState) {
+                    const next = update.runnerState.value
+                    if (next == null) {
+                        this.machine.runnerState = null
+                    } else {
+                        const parsed = RunnerStateSchema.safeParse(next)
+                        if (parsed.success) {
+                            this.machine.runnerState = parsed.data
+                        } else {
+                            logger.debug('[API MACHINE] Ignoring invalid runnerState update', {
+                                version: update.runnerState.version,
+                            })
+                        }
+                    }
+                    this.machine.runnerStateVersion = update.runnerState.version
+                }
+            },
         })
 
         this.socket.on('connect_error', (error) => {
@@ -397,7 +230,7 @@ export class ApiMachineClient {
         this.keepAliveInterval = setInterval(() => {
             this.socket.emit('machine-alive', {
                 machineId: this.machine.id,
-                time: Date.now()
+                time: Date.now(),
             })
         }, 20_000)
     }

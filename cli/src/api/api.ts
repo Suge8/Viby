@@ -1,44 +1,39 @@
-import axios from 'axios'
 import type { AxiosResponse } from 'axios'
+import axios from 'axios'
 import type { ZodType } from 'zod'
+import { getAuthToken } from '@/api/auth'
 import type {
     AgentState,
     CliSessionRecoveryResponse,
     CreateMachineResponse,
     CreateSessionResponse,
-    RunnerState,
     Machine,
     MachineMetadata,
     Metadata,
-    Session
+    RunnerState,
+    Session,
 } from '@/api/types'
 import {
     AgentStateSchema,
     CliSessionRecoveryResponseSchema,
     CreateMachineResponseSchema,
     CreateSessionResponseSchema,
-    RunnerStateSchema,
     MachineMetadataSchema,
-    MetadataSchema
+    MetadataSchema,
+    RunnerStateSchema,
 } from '@/api/types'
 import { configuration } from '@/configuration'
-import { getAuthToken } from '@/api/auth'
 import { apiValidationError } from '@/utils/errorUtils'
 import { ApiMachineClient, type ApiMachineClientOptions } from './apiMachine'
 import { ApiSessionClient } from './apiSession'
-import type {
-    SessionCollaborationMode,
-    SessionModelReasoningEffort,
-    SessionPermissionMode,
-    TeamSessionSpawnRole
-} from './types'
+import type { SessionCollaborationMode, SessionModelReasoningEffort, SessionPermissionMode } from './types'
 
 export class ApiClient {
     static async create(): Promise<ApiClient> {
         return new ApiClient(getAuthToken())
     }
 
-    private constructor(private readonly token: string) { }
+    private constructor(private readonly token: string) {}
 
     private parseApiPayload<T>(response: AxiosResponse, schema: ZodType<T>, errorMessage: string): T {
         const parsed = schema.safeParse(response.data)
@@ -72,11 +67,10 @@ export class ApiClient {
             thinking: raw.thinking,
             thinkingAt: raw.thinkingAt,
             todos: raw.todos,
-            teamContext: raw.teamContext,
             model: raw.model,
             modelReasoningEffort: raw.modelReasoningEffort,
             permissionMode: raw.permissionMode,
-            collaborationMode: raw.collaborationMode
+            collaborationMode: raw.collaborationMode,
         }
     }
 
@@ -91,7 +85,7 @@ export class ApiClient {
             metadata: this.parseNullable(raw.metadata, MachineMetadataSchema),
             metadataVersion: raw.metadataVersion,
             runnerState: this.parseNullable(raw.runnerState, RunnerStateSchema),
-            runnerStateVersion: raw.runnerStateVersion
+            runnerStateVersion: raw.runnerStateVersion,
         }
     }
 
@@ -103,7 +97,6 @@ export class ApiClient {
         model?: string
         modelReasoningEffort?: SessionModelReasoningEffort
         permissionMode?: SessionPermissionMode
-        sessionRole?: TeamSessionSpawnRole
         collaborationMode?: SessionCollaborationMode
     }): Promise<Session> {
         const response = await axios.post<CreateSessionResponse>(
@@ -116,23 +109,18 @@ export class ApiClient {
                 model: opts.model,
                 modelReasoningEffort: opts.modelReasoningEffort,
                 permissionMode: opts.permissionMode,
-                sessionRole: opts.sessionRole,
-                collaborationMode: opts.collaborationMode
+                collaborationMode: opts.collaborationMode,
             },
             {
                 headers: {
                     Authorization: `Bearer ${this.token}`,
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
                 },
-                timeout: 60_000
+                timeout: 60_000,
             }
         )
 
-        const parsed = this.parseApiPayload(
-            response,
-            CreateSessionResponseSchema,
-            'Invalid /cli/sessions response'
-        )
+        const parsed = this.parseApiPayload(response, CreateSessionResponseSchema, 'Invalid /cli/sessions response')
         return this.toSessionSnapshot(parsed.session)
     }
 
@@ -146,22 +134,18 @@ export class ApiClient {
             {
                 id: opts.machineId,
                 metadata: opts.metadata,
-                runnerState: opts.runnerState ?? null
+                runnerState: opts.runnerState ?? null,
             },
             {
                 headers: {
                     Authorization: `Bearer ${this.token}`,
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
                 },
-                timeout: 60_000
+                timeout: 60_000,
             }
         )
 
-        const parsed = this.parseApiPayload(
-            response,
-            CreateMachineResponseSchema,
-            'Invalid /cli/machines response'
-        )
+        const parsed = this.parseApiPayload(response, CreateMachineResponseSchema, 'Invalid /cli/machines response')
         return this.toMachineSnapshot(parsed.machine)
     }
 
@@ -175,13 +159,13 @@ export class ApiClient {
             {
                 headers: {
                     Authorization: `Bearer ${this.token}`,
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
                 },
                 params: {
                     afterSeq: opts.afterSeq ?? 0,
-                    limit: opts.limit
+                    limit: opts.limit,
                 },
-                timeout: 60_000
+                timeout: 60_000,
             }
         )
 

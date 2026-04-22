@@ -7,39 +7,35 @@
  * @template TRequest - The request data type
  * @template TResponse - The response data type
  */
-export type RpcHandler<TRequest = any, TResponse = any> = (
-    data: TRequest
-) => TResponse | Promise<TResponse>;
+export type RpcHandler<TRequest = unknown, TResponse = unknown> = (data: TRequest) => TResponse | Promise<TResponse>
 
 /**
  * Map of method names to their handlers
  */
-export type RpcHandlerMap = Map<string, RpcHandler>;
+export type RpcHandlerMap = Map<string, RpcHandler>
 
 /**
  * RPC request data from server
  */
 export interface RpcRequest {
-    method: string;
-    params: string; // JSON string
+    method: string
+    params: string // JSON string
 }
 
 /**
  * RPC response callback
  */
-export type RpcResponseCallback = (response: string) => void;
+export type RpcResponseCallback = (response: string) => void
 
 /**
  * Configuration for RPC handler manager
  */
 export interface RpcHandlerConfig {
-    scopePrefix: string;
-    logger?: (message: string, data?: any) => void;
+    scopePrefix: string
+    logger?: (message: string, data?: unknown) => void
 }
 
 /**
  * Result of RPC handler execution
  */
-export type RpcHandlerResult<T = any> =
-    | { success: true; data: T }
-    | { success: false; error: string };
+export type RpcHandlerResult<T = unknown> = { success: true; data: T } | { success: false; error: string }

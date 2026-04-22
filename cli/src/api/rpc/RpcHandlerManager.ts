@@ -3,9 +3,9 @@
  * Manages RPC method registration and handler execution (no encryption).
  */
 
+import type { Socket } from 'socket.io-client'
 import { logger as defaultLogger } from '@/ui/logger'
 import type { RpcHandler, RpcHandlerConfig, RpcHandlerMap, RpcRequest } from './types'
-import type { Socket } from 'socket.io-client'
 
 function safeJsonParse(value: string): unknown {
     try {
@@ -18,7 +18,7 @@ function safeJsonParse(value: string): unknown {
 export class RpcHandlerManager {
     private handlers: RpcHandlerMap = new Map()
     private readonly scopePrefix: string
-    private readonly logger: (message: string, data?: any) => void
+    private readonly logger: (message: string, data?: unknown) => void
     private socket: Socket | null = null
 
     constructor(config: RpcHandlerConfig) {
@@ -26,13 +26,13 @@ export class RpcHandlerManager {
         this.logger = config.logger || ((msg, data) => defaultLogger.debug(msg, data))
     }
 
-    registerHandler<TRequest = any, TResponse = any>(
+    registerHandler<TRequest = unknown, TResponse = unknown>(
         method: string,
         handler: RpcHandler<TRequest, TResponse>
     ): void {
         const prefixedMethod = this.getPrefixedMethod(method)
 
-        this.handlers.set(prefixedMethod, handler)
+        this.handlers.set(prefixedMethod, handler as RpcHandler)
 
         if (this.socket) {
             this.socket.emit('rpc-register', { method: prefixedMethod })
@@ -48,15 +48,14 @@ export class RpcHandlerManager {
             }
 
             const params = safeJsonParse(request.params)
-            const result = await handler(params as any)
+            const result = await handler(params)
             return JSON.stringify(result)
         } catch (error) {
-            const details = error instanceof Error
-                ? { message: error.message, stack: error.stack }
-                : { error: String(error) }
+            const details =
+                error instanceof Error ? { message: error.message, stack: error.stack } : { error: String(error) }
             this.logger('[RPC] [ERROR] Error handling request', details)
             return JSON.stringify({
-                error: error instanceof Error ? error.message : 'Unknown error'
+                error: error instanceof Error ? error.message : 'Unknown error',
             })
         }
     }

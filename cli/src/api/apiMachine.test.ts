@@ -1,3 +1,4 @@
+import type { LocalSessionCatalog, LocalSessionExportSnapshot } from '@viby/protocol/types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiMachineClient } from './apiMachine'
 import type { Machine, MachineMetadata } from './types'
@@ -24,7 +25,7 @@ class FakeSocket {
             return {
                 result: 'success',
                 version: 2,
-                metadata: payload.metadata
+                metadata: payload.metadata,
             }
         }
 
@@ -35,8 +36,8 @@ class FakeSocket {
                 status: 'running',
                 pid: 123,
                 httpPort: 456,
-                startedAt: 789
-            }
+                startedAt: 789,
+            },
         }
     })
 
@@ -53,27 +54,31 @@ const { sockets, ioMock } = vi.hoisted(() => {
 
     return {
         sockets: hoistedSockets,
-        ioMock: hoistedIoMock
+        ioMock: hoistedIoMock,
     }
 })
 
 vi.mock('socket.io-client', () => ({
-    io: ioMock
+    io: ioMock,
 }))
 
 vi.mock('@/ui/logger', () => ({
     logger: {
-        debug: vi.fn()
-    }
+        debug: vi.fn(),
+    },
 }))
 
 vi.mock('../modules/common/registerCommonHandlers', () => ({
-    registerCommonHandlers: vi.fn()
+    registerCommonHandlers: vi.fn(),
 }))
 
 vi.mock('./pathExistsHandler', () => ({
-    handlePathExistsRequest: vi.fn()
+    handlePathExistsRequest: vi.fn(),
 }))
+
+const TEST_HOME_DIR = '/tmp/viby-test/home'
+const TEST_VIBY_HOME_DIR = `${TEST_HOME_DIR}/.viby`
+const TEST_VIBY_CLI_DIR = '/tmp/viby-test/repo/cli'
 
 function createMachineMetadata(overrides: Partial<MachineMetadata> = {}): MachineMetadata {
     return {
@@ -81,10 +86,10 @@ function createMachineMetadata(overrides: Partial<MachineMetadata> = {}): Machin
         platform: 'darwin',
         vibyCliVersion: '0.1.0',
         capabilities: ['browse-directory'],
-        homeDir: '/Users/sugeh',
-        vibyHomeDir: '/Users/sugeh/.viby',
-        vibyLibDir: '/Users/sugeh/Project/Viby/cli',
-        ...overrides
+        homeDir: TEST_HOME_DIR,
+        vibyHomeDir: TEST_VIBY_HOME_DIR,
+        vibyLibDir: TEST_VIBY_CLI_DIR,
+        ...overrides,
     }
 }
 
@@ -100,7 +105,7 @@ function createMachine(overrides: Partial<Machine> = {}): Machine {
         metadataVersion: 0,
         runnerState: null,
         runnerStateVersion: 0,
-        ...overrides
+        ...overrides,
     }
 }
 
@@ -113,13 +118,35 @@ describe('ApiMachineClient', () => {
     it('forwards driver-switch spawn payloads through the machine RPC bridge', async () => {
         const spawnSession = vi.fn(async () => ({
             type: 'success' as const,
-            sessionId: 'session-switched'
+            sessionId: 'session-switched',
         }))
+        const listLocalSessions = vi.fn(
+            async (): Promise<LocalSessionCatalog> => ({
+                capabilities: [],
+                sessions: [],
+            })
+        )
+        const exportLocalSession = vi.fn(
+            async (): Promise<LocalSessionExportSnapshot> => ({
+                driver: 'claude',
+                providerSessionId: 'claude-session-1',
+                title: 'Recovered Claude Session',
+                path: '/tmp/project',
+                startedAt: 1,
+                updatedAt: 2,
+                messageCount: 1,
+                messages: [{ role: 'user', text: 'hello', createdAt: 1 }],
+            })
+        )
+        const listAgentAvailability = vi.fn(async () => ({ agents: [] }))
         const client = new ApiMachineClient('token', createMachine())
         client.setRPCHandlers({
             spawnSession,
+            listLocalSessions,
+            exportLocalSession,
+            listAgentAvailability,
             stopSession: vi.fn(() => true),
-            requestShutdown: vi.fn()
+            requestShutdown: vi.fn(),
         })
 
         client.connect()
@@ -127,45 +154,51 @@ describe('ApiMachineClient', () => {
         expect(socket).toBeDefined()
 
         const response = await new Promise<string>((resolve) => {
-            socket.emit('rpc-request', {
-                method: 'machine-test:spawn-viby-session',
-                params: JSON.stringify({
-                    directory: '/tmp/project',
-                    sessionId: 'session-1',
-                    agent: 'codex',
-                    driverSwitch: {
-                        targetDriver: 'codex',
-                        handoffSnapshot: {
-                            driver: 'claude',
-                            workingDirectory: '/tmp/project',
-                            liveConfig: {
-                                model: 'claude-sonnet',
-                                modelReasoningEffort: 'high',
-                                permissionMode: 'default'
+            socket.emit(
+                'rpc-request',
+                {
+                    method: 'machine-test:spawn-viby-session',
+                    params: JSON.stringify({
+                        directory: '/tmp/project',
+                        sessionId: 'session-1',
+                        agent: 'codex',
+                        driverSwitch: {
+                            targetDriver: 'codex',
+                            handoffSnapshot: {
+                                driver: 'claude',
+                                workingDirectory: '/tmp/project',
+                                liveConfig: {
+                                    model: 'claude-sonnet',
+                                    modelReasoningEffort: 'high',
+                                    permissionMode: 'default',
+                                },
+                                history: [],
+                                attachments: [],
                             },
-                            history: [],
-                            attachments: []
-                        }
-                    }
-                })
-            }, resolve)
+                        },
+                    }),
+                },
+                resolve
+            )
         })
 
-        expect(spawnSession).toHaveBeenCalledWith(expect.objectContaining({
-            directory: '/tmp/project',
-            sessionId: 'session-1',
-            agent: 'codex',
-            driverSwitch: {
-                targetDriver: 'codex',
-                handoffSnapshot: expect.objectContaining({
-                    driver: 'claude',
-                    workingDirectory: '/tmp/project'
-                })
-            }
-        }))
+        expect(spawnSession).toHaveBeenCalledWith(
+            expect.objectContaining({
+                directory: '/tmp/project',
+                sessionId: 'session-1',
+                agent: 'codex',
+                driverSwitch: {
+                    targetDriver: 'codex',
+                    handoffSnapshot: expect.objectContaining({
+                        driver: 'claude',
+                        workingDirectory: '/tmp/project',
+                    }),
+                },
+            })
+        )
         expect(JSON.parse(response)).toEqual({
             type: 'success',
-            sessionId: 'session-switched'
+            sessionId: 'session-switched',
         })
     })
 
@@ -174,13 +207,35 @@ describe('ApiMachineClient', () => {
         const requestShutdown = vi.fn()
         const spawnSession = vi.fn(async () => ({
             type: 'error' as const,
-            errorMessage: 'unused'
+            errorMessage: 'unused',
         }))
+        const listLocalSessions = vi.fn(
+            async (): Promise<LocalSessionCatalog> => ({
+                capabilities: [],
+                sessions: [],
+            })
+        )
+        const exportLocalSession = vi.fn(
+            async (): Promise<LocalSessionExportSnapshot> => ({
+                driver: 'claude',
+                providerSessionId: 'claude-session-1',
+                title: 'Recovered Claude Session',
+                path: '/tmp/project',
+                startedAt: 1,
+                updatedAt: 2,
+                messageCount: 1,
+                messages: [{ role: 'user', text: 'hello', createdAt: 1 }],
+            })
+        )
+        const listAgentAvailability = vi.fn(async () => ({ agents: [] }))
 
         client.setRPCHandlers({
             spawnSession,
+            listLocalSessions,
+            exportLocalSession,
+            listAgentAvailability,
             stopSession: vi.fn(() => false),
-            requestShutdown
+            requestShutdown,
         })
 
         client.connect()
@@ -202,12 +257,12 @@ describe('ApiMachineClient', () => {
             metadata: createMachineMetadata({
                 vibyCliVersion: '0.16.1',
                 capabilities: undefined,
-                vibyLibDir: '/Users/sugeh/Project/Viby/cli'
+                vibyLibDir: TEST_VIBY_CLI_DIR,
             }),
-            metadataVersion: 1
+            metadataVersion: 1,
         })
         const client = new ApiMachineClient('token', machine, {
-            getMachineMetadata: () => nextMetadata
+            getMachineMetadata: () => nextMetadata,
         })
 
         client.connect()
@@ -220,26 +275,29 @@ describe('ApiMachineClient', () => {
             expect(socket.emitWithAck).toHaveBeenCalledWith('machine-update-metadata', {
                 machineId: 'machine-test',
                 metadata: nextMetadata,
-                expectedVersion: 1
+                expectedVersion: 1,
             })
         })
 
         expect(machine.metadata).toEqual(nextMetadata)
         expect(machine.metadataVersion).toBe(2)
-        expect(socket.emitWithAck).toHaveBeenCalledWith('machine-update-state', expect.objectContaining({
-            machineId: 'machine-test',
-            expectedVersion: 0
-        }))
+        expect(socket.emitWithAck).toHaveBeenCalledWith(
+            'machine-update-state',
+            expect.objectContaining({
+                machineId: 'machine-test',
+                expectedVersion: 0,
+            })
+        )
     })
 
     it('skips machine metadata sync on connect when local metadata already matches', async () => {
         const currentMetadata = createMachineMetadata()
         const machine = createMachine({
             metadata: currentMetadata,
-            metadataVersion: 3
+            metadataVersion: 3,
         })
         const client = new ApiMachineClient('token', machine, {
-            getMachineMetadata: () => ({ ...currentMetadata })
+            getMachineMetadata: () => ({ ...currentMetadata }),
         })
 
         client.connect()
@@ -252,9 +310,12 @@ describe('ApiMachineClient', () => {
             expect(socket.emitWithAck).toHaveBeenCalledTimes(1)
         })
 
-        expect(socket.emitWithAck).toHaveBeenCalledWith('machine-update-state', expect.objectContaining({
-            machineId: 'machine-test',
-            expectedVersion: 0
-        }))
+        expect(socket.emitWithAck).toHaveBeenCalledWith(
+            'machine-update-state',
+            expect.objectContaining({
+                machineId: 'machine-test',
+                expectedVersion: 0,
+            })
+        )
     })
 })

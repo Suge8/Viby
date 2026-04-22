@@ -1,21 +1,20 @@
+import { MACHINE_CAPABILITIES, SessionRecoveryPageSchema } from '@viby/protocol'
 import {
     AgentStateSchema,
     AttachmentMetadataSchema,
     CodexCollaborationModeSchema,
     MessageMetaSchema,
-    ModelReasoningEffortSchema,
     MetadataSchema,
+    ModelReasoningEffortSchema,
     PermissionModeSchema,
-    SessionTeamContextSchema,
-    TodosSchema
+    TodosSchema,
 } from '@viby/protocol/schemas'
-import { MACHINE_CAPABILITIES, SessionRecoveryPageSchema } from '@viby/protocol'
 import type {
     ClaudeReasoningEffort,
     CodexCollaborationMode,
     CodexReasoningEffort,
     ModelReasoningEffort,
-    PermissionMode
+    PermissionMode,
 } from '@viby/protocol/types'
 import { z } from 'zod'
 import { UsageSchema } from '@/claude/types'
@@ -26,8 +25,8 @@ export type {
     AgentFlavor,
     AgentState,
     AttachmentMetadata,
-    ClaudeReasoningEffort,
     ClaudePermissionMode,
+    ClaudeReasoningEffort,
     CodexCollaborationMode,
     CodexPermissionMode,
     MessageMeta,
@@ -36,7 +35,6 @@ export type {
     ModelReasoningEffort,
     PiPermissionMode,
     Session,
-    TeamSessionSpawnRole
 } from '@viby/protocol/types'
 export type WritableSessionMetadata = Omit<
     import('@viby/protocol/types').Metadata,
@@ -61,7 +59,7 @@ export const MachineMetadataSchema = z.object({
     capabilities: z.array(MachineCapabilitySchema).optional(),
     homeDir: z.string(),
     vibyHomeDir: z.string(),
-    vibyLibDir: z.string()
+    vibyLibDir: z.string(),
 })
 
 export type MachineMetadata = z.infer<typeof MachineMetadataSchema>
@@ -73,13 +71,16 @@ export const RunnerStateSchema = z.object({
     startedAt: z.number().optional(),
     shutdownRequestedAt: z.number().optional(),
     shutdownSource: z.union([z.enum(['mobile-app', 'cli', 'os-signal', 'unknown']), z.string()]).optional(),
-    lastSpawnError: z.object({
-        message: z.string(),
-        pid: z.number().optional(),
-        exitCode: z.number().nullable().optional(),
-        signal: z.string().nullable().optional(),
-        at: z.number()
-    }).nullable().optional()
+    lastSpawnError: z
+        .object({
+            message: z.string(),
+            pid: z.number().optional(),
+            exitCode: z.number().nullable().optional(),
+            signal: z.string().nullable().optional(),
+            at: z.number(),
+        })
+        .nullable()
+        .optional(),
 })
 
 export type RunnerState = z.infer<typeof RunnerStateSchema>
@@ -98,13 +99,15 @@ export type Machine = {
 }
 
 export const CliMessagesResponseSchema = z.object({
-    messages: z.array(z.object({
-        id: z.string(),
-        seq: z.number(),
-        createdAt: z.number(),
-        localId: z.string().nullable().optional(),
-        content: z.unknown()
-    }))
+    messages: z.array(
+        z.object({
+            id: z.string(),
+            seq: z.number(),
+            createdAt: z.number(),
+            localId: z.string().nullable().optional(),
+            content: z.unknown(),
+        })
+    ),
 })
 
 export type CliMessagesResponse = z.infer<typeof CliMessagesResponseSchema>
@@ -127,12 +130,11 @@ export const CreateSessionResponseSchema = z.object({
         thinking: z.boolean(),
         thinkingAt: z.number(),
         todos: TodosSchema.optional(),
-        teamContext: SessionTeamContextSchema.optional(),
         model: z.string().nullable(),
         modelReasoningEffort: ModelReasoningEffortSchema.nullable(),
         permissionMode: PermissionModeSchema.optional(),
-        collaborationMode: CodexCollaborationModeSchema.optional()
-    })
+        collaborationMode: CodexCollaborationModeSchema.optional(),
+    }),
 })
 
 export type CreateSessionResponse = z.infer<typeof CreateSessionResponseSchema>
@@ -148,8 +150,8 @@ export const CreateMachineResponseSchema = z.object({
         metadata: z.unknown().nullable(),
         metadataVersion: z.number(),
         runnerState: z.unknown().nullable(),
-        runnerStateVersion: z.number()
-    })
+        runnerStateVersion: z.number(),
+    }),
 })
 
 export type CreateMachineResponse = z.infer<typeof CreateMachineResponseSchema>
@@ -159,10 +161,10 @@ export const UserMessageSchema = z.object({
     content: z.object({
         type: z.literal('text'),
         text: z.string(),
-        attachments: z.array(AttachmentMetadataSchema).optional()
+        attachments: z.array(AttachmentMetadataSchema).optional(),
     }),
     localKey: z.string().optional(),
-    meta: MessageMetaSchema.optional()
+    meta: MessageMetaSchema.optional(),
 })
 
 export type UserMessage = z.infer<typeof UserMessageSchema>
@@ -171,9 +173,9 @@ export const AgentMessageSchema = z.object({
     role: z.literal('agent'),
     content: z.object({
         type: z.literal('output'),
-        data: z.unknown()
+        data: z.unknown(),
     }),
-    meta: MessageMetaSchema.optional()
+    meta: MessageMetaSchema.optional(),
 })
 
 export type AgentMessage = z.infer<typeof AgentMessageSchema>
