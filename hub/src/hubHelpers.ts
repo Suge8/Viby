@@ -1,7 +1,5 @@
 import type { ConfigSource } from './configuration'
 
-export type RelayFlagSource = 'default' | '--relay' | '--no-relay'
-
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '0.0.0.0', '::', '::1'])
 
 export function formatSource(source: ConfigSource | 'generated'): string {
@@ -15,23 +13,6 @@ export function formatSource(source: ConfigSource | 'generated'): string {
         case 'generated':
             return 'generated'
     }
-}
-
-export function resolveRelayFlag(args: string[]): { enabled: boolean; source: RelayFlagSource } {
-    let enabled = false
-    let source: RelayFlagSource = 'default'
-
-    for (const arg of args) {
-        if (arg === '--relay') {
-            enabled = true
-            source = '--relay'
-        } else if (arg === '--no-relay') {
-            enabled = false
-            source = '--no-relay'
-        }
-    }
-
-    return { enabled, source }
 }
 
 export function normalizeOrigin(value: string): string {
@@ -67,9 +48,7 @@ export function isLoopbackOrigin(value: string): boolean {
 }
 
 export function normalizeOrigins(origins: string[]): string[] {
-    const normalized = origins
-        .map(normalizeOrigin)
-        .filter(Boolean)
+    const normalized = origins.map(normalizeOrigin).filter(Boolean)
     if (normalized.includes('*')) {
         return ['*']
     }
@@ -99,9 +78,7 @@ function formatApiHost(host: string): string {
 }
 
 export function resolveLocalApiUrl(listenHost: string, listenPort: number): string {
-    const host = listenHost === '0.0.0.0' || listenHost === '::'
-        ? '127.0.0.1'
-        : listenHost
+    const host = listenHost === '0.0.0.0' || listenHost === '::' ? '127.0.0.1' : listenHost
     return `http://${formatApiHost(host)}:${listenPort}`
 }
 
@@ -114,26 +91,16 @@ export function buildLocalOriginAliases(listenHost: string, listenPort: number):
         resolveLocalApiUrl(listenHost, listenPort),
         `http://localhost:${listenPort}`,
         `http://127.0.0.1:${listenPort}`,
-        `http://[::1]:${listenPort}`
+        `http://[::1]:${listenPort}`,
     ])
 }
 
-export function buildStartupMessage(relayEnabled: boolean): string {
-    return relayEnabled
-        ? '本地中枢启动中，公网入口稍后接通。'
-        : '本地中枢启动中。'
+export function buildStartupMessage(): string {
+    return '本地中枢启动中。'
 }
 
-export function buildConnectingMessage(relayEnabled: boolean): string {
-    return relayEnabled
-        ? '本地中枢已启动，正在连接这台机器；公网入口稍后接通。'
-        : '本地中枢已启动，正在连接这台机器。'
-}
-
-export function buildReadyMessage(relayEnabled: boolean): string {
-    return relayEnabled
-        ? '本地中枢已就绪，公网入口连接中。'
-        : '中枢已就绪。'
+export function buildConnectingMessage(): string {
+    return '本地中枢已启动，正在连接这台机器。'
 }
 
 export function formatManagedMachineExit(code: number | null, signal: NodeJS.Signals | null): string {

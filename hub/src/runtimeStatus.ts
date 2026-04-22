@@ -3,8 +3,8 @@ import { dirname, join } from 'node:path'
 import {
     HUB_RUNTIME_STATUS_FILE,
     type HubLaunchSource,
+    type HubRuntimePhase,
     type HubRuntimeStatus,
-    type HubRuntimePhase
 } from '@viby/protocol/runtimeStatus'
 
 interface HubRuntimeStatusWriterOptions {
@@ -14,15 +14,12 @@ interface HubRuntimeStatusWriterOptions {
     localHubUrl: string
     cliApiToken: string
     settingsFile: string
-    relayEnabled: boolean
     launchSource?: HubLaunchSource
 }
 
 export interface HubRuntimeStatusUpdate {
     phase: HubRuntimePhase
     preferredBrowserUrl?: string
-    publicHubUrl?: string
-    directAccessUrl?: string
     message?: string
 }
 
@@ -37,7 +34,6 @@ function createBaseStatus(options: HubRuntimeStatusWriterOptions): HubRuntimeSta
         phase: 'starting',
         pid: process.pid,
         launchSource: options.launchSource,
-        relayEnabled: options.relayEnabled,
         listenHost: options.listenHost,
         listenPort: options.listenPort,
         localHubUrl: options.localHubUrl,
@@ -46,7 +42,7 @@ function createBaseStatus(options: HubRuntimeStatusWriterOptions): HubRuntimeSta
         settingsFile: options.settingsFile,
         dataDir: options.dataDir,
         startedAt: now,
-        updatedAt: now
+        updatedAt: now,
     }
 }
 
@@ -61,9 +57,7 @@ export function getHubRuntimeStatusFile(dataDir: string): string {
     return join(dataDir, HUB_RUNTIME_STATUS_FILE)
 }
 
-export function createHubRuntimeStatusWriter(
-    options: HubRuntimeStatusWriterOptions
-): HubRuntimeStatusWriter {
+export function createHubRuntimeStatusWriter(options: HubRuntimeStatusWriterOptions): HubRuntimeStatusWriter {
     const filePath = getHubRuntimeStatusFile(options.dataDir)
     let currentStatus = createBaseStatus(options)
 
@@ -74,14 +68,12 @@ export function createHubRuntimeStatusWriter(
                 ...currentStatus,
                 phase: update.phase,
                 preferredBrowserUrl: update.preferredBrowserUrl ?? currentStatus.preferredBrowserUrl,
-                publicHubUrl: update.publicHubUrl,
-                directAccessUrl: update.directAccessUrl,
                 message: update.message,
-                updatedAt: new Date().toISOString()
+                updatedAt: new Date().toISOString(),
             }
 
             await writeStatusFile(filePath, currentStatus)
             return currentStatus
-        }
+        },
     }
 }

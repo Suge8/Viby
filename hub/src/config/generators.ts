@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
-import { readSettingsOrThrow, writeSettings, type Settings } from './settings'
+import { readSettingsOrThrow, type Settings, writeSettings } from './settings'
 
 export type GetOrCreateResult<T> = {
     value: T
@@ -45,8 +45,14 @@ export async function getOrCreateJsonFile<T>(options: {
     const fileMode = options.fileMode ?? 0o600
     const dirMode = options.dirMode ?? 0o700
 
+    async function applyFileModeIfPossible(filePath: string): Promise<void> {
+        try {
+            await chmod(filePath, fileMode)
+        } catch {}
+    }
+
     if (existsSync(options.filePath)) {
-        await chmod(options.filePath, fileMode).catch(() => {})
+        await applyFileModeIfPossible(options.filePath)
         const raw = await readFile(options.filePath, 'utf8')
         return { value: options.readValue(raw), created: false }
     }
@@ -58,6 +64,6 @@ export async function getOrCreateJsonFile<T>(options: {
     }
 
     await writeFile(options.filePath, options.writeValue(generated), { mode: fileMode })
-    await chmod(options.filePath, fileMode).catch(() => {})
+    await applyFileModeIfPossible(options.filePath)
     return { value: generated, created: true }
 }

@@ -1,6 +1,7 @@
 import * as webPush from 'web-push'
-import type { Store } from '../store'
 import type { VapidKeys } from '../config/vapidKeys'
+import { reportHubRuntimeError } from '../runtime/runtimeDiagnostics'
+import type { Store } from '../store'
 
 export type PushPayload = {
     title: string
@@ -35,9 +36,7 @@ type PushSendError = {
 type PushSender = (subscription: PushSubscription, body: string) => Promise<unknown>
 
 function getPushErrorStatusCode(error: unknown): number | null {
-    return typeof (error as PushSendError).statusCode === 'number'
-        ? (error as { statusCode: number }).statusCode
-        : null
+    return typeof (error as PushSendError).statusCode === 'number' ? (error as { statusCode: number }).statusCode : null
 }
 
 function hasErrorReason(body: unknown, reason: string): boolean {
@@ -82,21 +81,20 @@ export class PushService {
         }
 
         const body = JSON.stringify(payload)
-        await Promise.all(subscriptions.map((subscription) => {
-            return this.sendToSubscription(subscription, body)
-        }))
+        await Promise.all(
+            subscriptions.map((subscription) => {
+                return this.sendToSubscription(subscription, body)
+            })
+        )
     }
 
-    private async sendToSubscription(
-        subscription: StoredSubscription,
-        body: string
-    ): Promise<void> {
+    private async sendToSubscription(subscription: StoredSubscription, body: string): Promise<void> {
         const pushSubscription: PushSubscription = {
             endpoint: subscription.endpoint,
             keys: {
                 p256dh: subscription.p256dh,
-                auth: subscription.auth
-            }
+                auth: subscription.auth,
+            },
         }
 
         try {
@@ -107,7 +105,7 @@ export class PushService {
                 return
             }
 
-            console.error('[PushService] Failed to send notification:', error)
+            reportHubRuntimeError('Failed to send push notification.', error)
         }
     }
 }

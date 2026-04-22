@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { parseVibyLocalSettingsToml, stringifyVibyLocalSettingsToml } from '@viby/protocol/localSettings'
+import { reportHubRuntimeError } from '../runtime/runtimeDiagnostics'
 
 export interface Settings {
     machineId?: string
@@ -37,7 +38,7 @@ export async function readSettings(settingsFile: string): Promise<Settings | nul
         return parseVibyLocalSettingsToml(content)
     } catch (error) {
         // Return null to signal parse error - caller should not overwrite
-        console.error(`[WARN] Failed to parse ${settingsFile}: ${error}`)
+        reportHubRuntimeError(`Failed to parse ${settingsFile}.`, error)
         return null
     }
 }
@@ -45,9 +46,7 @@ export async function readSettings(settingsFile: string): Promise<Settings | nul
 export async function readSettingsOrThrow(settingsFile: string): Promise<Settings> {
     const settings = await readSettings(settingsFile)
     if (settings === null) {
-        throw new Error(
-            `Cannot read ${settingsFile}. Please fix or remove the file and restart.`
-        )
+        throw new Error(`Cannot read ${settingsFile}. Please fix or remove the file and restart.`)
     }
     return settings
 }

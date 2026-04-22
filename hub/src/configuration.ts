@@ -1,5 +1,5 @@
 /**
- * Configuration for viby-hub (Direct Connect)
+ * Configuration for viby-hub
  *
  * Configuration is loaded with priority: environment variable > settings.toml > default
  * When values are read from environment variables and not present in settings.toml,
@@ -11,9 +11,8 @@
  * - VIBY_LISTEN_PORT: Port for HTTP service (default: 37173)
  * - VIBY_PUBLIC_URL: Public URL for external access
  * - CORS_ORIGINS: Comma-separated CORS origins
- * - VIBY_RELAY_API: Relay API domain for tunwg (default: relay.viby.run)
- * - VIBY_RELAY_AUTH: Relay auth key for tunwg (default: viby)
- * - VIBY_RELAY_FORCE_TCP: Force TCP relay mode when UDP is unavailable (true/1)
+ * - PAIRING_BROKER_URL: Public pairing broker base URL
+ * - PAIRING_CREATE_TOKEN: Optional shared secret for pairing session creation
  * - VAPID_SUBJECT: Contact email or URL for Web Push (defaults to mailto:admin@viby.run)
  * - VIBY_HOME: Data directory (default: ~/.viby)
  * - DB_PATH: SQLite database path (default: {VIBY_HOME}/viby.db)
@@ -23,8 +22,8 @@ import { existsSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { getOrCreateCliApiToken } from './config/cliApiToken'
-import { getSettingsFile } from './config/settings'
 import { loadServerSettings, type ServerSettings, type ServerSettingsResult } from './config/serverSettings'
+import { getSettingsFile } from './config/settings'
 
 export type ConfigSource = 'env' | 'file' | 'default'
 
@@ -67,6 +66,12 @@ class Configuration {
     /** Allowed CORS origins for the web app + Socket.IO (comma-separated env override) */
     public readonly corsOrigins: string[]
 
+    /** Optional public pairing broker base URL */
+    public readonly pairingBrokerUrl: string | null
+
+    /** Optional pairing broker creation token */
+    public readonly pairingCreateToken: string | null
+
     /** Sources of each configuration value */
     public readonly sources: ConfigSources
 
@@ -86,6 +91,8 @@ class Configuration {
         this.listenPort = serverSettings.listenPort
         this.publicUrl = serverSettings.publicUrl
         this.corsOrigins = serverSettings.corsOrigins
+        this.pairingBrokerUrl = process.env.PAIRING_BROKER_URL?.trim() || null
+        this.pairingCreateToken = process.env.PAIRING_CREATE_TOKEN?.trim() || null
 
         // CLI API token - will be set by _setCliApiToken() before create() returns
         this.cliApiToken = ''
@@ -116,9 +123,7 @@ class Configuration {
         }
 
         // 2. Determine DB path (env only - not persisted)
-        const dbPath = process.env.DB_PATH
-            ? process.env.DB_PATH.replace(/^~/, homedir())
-            : join(dataDir, 'viby.db')
+        const dbPath = process.env.DB_PATH ? process.env.DB_PATH.replace(/^~/, homedir()) : join(dataDir, 'viby.db')
 
         // 3. Load hub settings (with persistence)
         const settingsResult = await loadServerSettings(dataDir)
@@ -128,12 +133,7 @@ class Configuration {
         }
 
         // 4. Create configuration instance
-        const config = new Configuration(
-            dataDir,
-            dbPath,
-            settingsResult.settings,
-            settingsResult.sources
-        )
+        const config = new Configuration(dataDir, dbPath, settingsResult.settings, settingsResult.sources)
 
         // 5. Load CLI API token
         const tokenResult = await getOrCreateCliApiToken(dataDir)
@@ -177,9 +177,13 @@ export function getConfiguration(): Configuration {
     return _configuration
 }
 
+export function hasConfiguration(): boolean {
+    return _configuration !== null
+}
+
 // For compatibility - throws on access if not configured
 export const configuration = new Proxy({} as Configuration, {
     get(_, prop) {
         return getConfiguration()[prop as keyof Configuration]
-    }
+    },
 })

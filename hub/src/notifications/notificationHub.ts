@@ -1,4 +1,6 @@
-import { getPendingRequestsCount, isSessionReadyForInput } from '@viby/protocol'
+import { getPendingRequestsCount, getSessionActivityKind, isSessionReadyForInput } from '@viby/protocol'
+import type { SessionActivityKind } from '@viby/protocol/types'
+import { reportHubRuntimeError } from '../runtime/runtimeDiagnostics'
 import type { Session, SyncEngine, SyncEvent } from '../sync/syncEngine'
 import type { NotificationChannel, NotificationHubOptions } from './notificationTypes'
 
@@ -9,7 +11,7 @@ type ReadyStateSnapshot = {
     active: boolean
     thinking: boolean
     pendingRequestsCount: number
-    latestActivityKind: ReturnType<SyncEngine['getSessionMessageActivities']>[string]['latestActivityKind']
+    latestActivityKind: SessionActivityKind | null
 }
 
 export class NotificationHub {
@@ -20,6 +22,7 @@ export class NotificationHub {
     private readonly notificationDebounce: Map<string, NodeJS.Timeout> = new Map()
     private readonly lastReadyNotificationAt: Map<string, number> = new Map()
     private readonly lastReadyState: Map<string, boolean> = new Map()
+    private readonly lastKnownActivityKinds: Map<string, SessionActivityKind | null> = new Map()
     private unsubscribeSyncEvents: (() => void) | null = null
 
     constructor(
@@ -48,6 +51,7 @@ export class NotificationHub {
         this.lastKnownRequests.clear()
         this.lastReadyNotificationAt.clear()
         this.lastReadyState.clear()
+        this.lastKnownActivityKinds.clear()
     }
 
     private handleSyncEvent(event: SyncEvent): void {
@@ -68,6 +72,7 @@ export class NotificationHub {
         }
 
         if (event.type === 'message-received' && event.sessionId) {
+            this.lastKnownActivityKinds.set(event.sessionId, getSessionActivityKind(event.message.content))
             this.syncReadyNotification(event.sessionId)
         }
     }
@@ -81,6 +86,7 @@ export class NotificationHub {
         this.lastKnownRequests.delete(sessionId)
         this.lastReadyNotificationAt.delete(sessionId)
         this.lastReadyState.delete(sessionId)
+        this.lastKnownActivityKinds.delete(sessionId)
     }
 
     private getNotifiableSession(sessionId: string): Session | null {
@@ -122,7 +128,7 @@ export class NotificationHub {
         const timer = setTimeout(() => {
             this.notificationDebounce.delete(session.id)
             this.sendPermissionNotification(session.id).catch((error) => {
-                console.error('[NotificationHub] Failed to send permission notification:', error)
+                reportHubRuntimeError('Failed to send permission notification.', error)
             })
         }, this.permissionDebounceMs)
 
@@ -153,18 +159,17 @@ export class NotificationHub {
             return
         }
 
-        void this.sendReadyNotification(sessionId).catch((error) => {
-            console.error('[NotificationHub] Failed to send ready notification:', error)
+        this.sendReadyNotification(sessionId).catch((error) => {
+            reportHubRuntimeError('Failed to send ready notification.', error)
         })
     }
 
     private getReadyStateOptions(sessionId: string, session: Session): ReadyStateSnapshot {
-        const activity = this.syncEngine.getSessionMessageActivities([sessionId])[sessionId]
         return {
             active: session.active,
             thinking: session.thinking,
             pendingRequestsCount: getPendingRequestsCount(session.agentState),
-            latestActivityKind: activity?.latestActivityKind ?? null
+            latestActivityKind: this.lastKnownActivityKinds.get(sessionId) ?? null,
         }
     }
 
@@ -189,7 +194,7 @@ export class NotificationHub {
             try {
                 await channel.sendReady(session)
             } catch (error) {
-                console.error('[NotificationHub] Failed to send ready notification:', error)
+                reportHubRuntimeError('Failed to send ready notification.', error)
             }
         }
     }
@@ -199,7 +204,7 @@ export class NotificationHub {
             try {
                 await channel.sendPermissionRequest(session)
             } catch (error) {
-                console.error('[NotificationHub] Failed to send permission notification:', error)
+                reportHubRuntimeError('Failed to send permission notification.', error)
             }
         }
     }

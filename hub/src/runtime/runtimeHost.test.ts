@@ -7,7 +7,7 @@ describe('createHubRuntimeHost', () => {
     const disposeRuntime = vi.fn()
     const createRuntimeCore = vi.fn(() => ({
         syncEngine: {} as never,
-        dispose: vi.fn()
+        dispose: vi.fn(),
     }))
     const createWebFetch = vi.fn(async () => {
         return async () => new Response('ok')
@@ -38,7 +38,7 @@ describe('createHubRuntimeHost', () => {
                 getRuntime: () => null,
                 getSyncEngine: () => null,
                 replaceRuntime,
-                disposeRuntime
+                disposeRuntime,
             },
             createRuntimeCore,
             createWebFetch,
@@ -47,15 +47,10 @@ describe('createHubRuntimeHost', () => {
             managedRunner: {
                 startStartupRecovery,
                 onRuntimeReload,
-                stop: stopManagedRunner
+                stop: stopManagedRunner,
             },
             localHubUrl: 'http://127.0.0.1:37173',
-            runtimeListenPort: 37173,
-            cliApiToken: 'token',
-            relayEnabled: false,
-            relayApiDomain: 'relay.viby.run',
-            officialWebUrl: 'https://app.viby.run',
-            portFallbackMessage: null
+            portFallbackMessage: null,
         })
 
         await host.reloadRuntime()
@@ -73,7 +68,7 @@ describe('createHubRuntimeHost', () => {
                 getRuntime: () => null,
                 getSyncEngine: () => null,
                 replaceRuntime,
-                disposeRuntime
+                disposeRuntime,
             },
             createRuntimeCore,
             createWebFetch,
@@ -82,15 +77,10 @@ describe('createHubRuntimeHost', () => {
             managedRunner: {
                 startStartupRecovery,
                 onRuntimeReload,
-                stop: stopManagedRunner
+                stop: stopManagedRunner,
             },
             localHubUrl: 'http://127.0.0.1:37173',
-            runtimeListenPort: 37173,
-            cliApiToken: 'token',
-            relayEnabled: false,
-            relayApiDomain: 'relay.viby.run',
-            officialWebUrl: 'https://app.viby.run',
-            portFallbackMessage: null
+            portFallbackMessage: null,
         })
 
         await host.start()
@@ -98,7 +88,7 @@ describe('createHubRuntimeHost', () => {
         expect(write).toHaveBeenCalledWith({
             phase: 'starting',
             preferredBrowserUrl: 'http://127.0.0.1:37173',
-            message: '本地中枢已启动，正在连接这台机器。'
+            message: '本地中枢已启动，正在连接这台机器。',
         })
         expect(startStartupRecovery).toHaveBeenCalledTimes(1)
     })
@@ -109,7 +99,7 @@ describe('createHubRuntimeHost', () => {
                 getRuntime: () => null,
                 getSyncEngine: () => null,
                 replaceRuntime,
-                disposeRuntime
+                disposeRuntime,
             },
             createRuntimeCore,
             createWebFetch,
@@ -118,15 +108,10 @@ describe('createHubRuntimeHost', () => {
             managedRunner: {
                 startStartupRecovery,
                 onRuntimeReload,
-                stop: stopManagedRunner
+                stop: stopManagedRunner,
             },
             localHubUrl: 'http://127.0.0.1:37173',
-            runtimeListenPort: 37173,
-            cliApiToken: 'token',
-            relayEnabled: false,
-            relayApiDomain: 'relay.viby.run',
-            officialWebUrl: 'https://app.viby.run',
-            portFallbackMessage: null
+            portFallbackMessage: null,
         })
 
         await expect(host.shutdown()).resolves.toBe(0)

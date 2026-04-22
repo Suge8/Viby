@@ -6,6 +6,7 @@
  */
 
 import { randomBytes } from 'node:crypto'
+import { reportHubRuntimeWarning } from '../runtime/runtimeDiagnostics'
 import { parseAccessToken } from '../utils/accessToken'
 import { getOrCreateSettingsValue } from './generators'
 import { getSettingsFile, readSettings, writeSettings } from './settings'
@@ -34,11 +35,11 @@ function isWeakToken(token: string): boolean {
 
     // Detect common weak patterns
     const weakPatterns = [
-        /^[0-9]+$/,                              // Pure numbers
-        /^(.)\1+$/,                              // Repeated character
-        /^(abc|123|password|secret|token)/i,    // Common prefixes
+        /^[0-9]+$/, // Pure numbers
+        /^(.)\1+$/, // Repeated character
+        /^(abc|123|password|secret|token)/i, // Common prefixes
     ]
-    return weakPatterns.some(p => p.test(token))
+    return weakPatterns.some((p) => p.test(token))
 }
 
 type CliApiTokenSource = 'env' | 'file'
@@ -46,7 +47,9 @@ type CliApiTokenSource = 'env' | 'file'
 function normalizeCliApiToken(rawToken: string, source: CliApiTokenSource): { token: string; didStrip: boolean } {
     const parsed = parseAccessToken(rawToken)
     if (!parsed) {
-        throw new Error(`CLI_API_TOKEN from ${source} is invalid. Single-user mode no longer accepts namespace suffixes.`)
+        throw new Error(
+            `CLI_API_TOKEN from ${source} is invalid. Single-user mode no longer accepts namespace suffixes.`
+        )
     }
     return { token: parsed, didStrip: false }
 }
@@ -67,7 +70,7 @@ export async function getOrCreateCliApiToken(dataDir: string): Promise<CliApiTok
     if (envToken) {
         const normalized = normalizeCliApiToken(envToken, 'env')
         if (isWeakToken(normalized.token)) {
-            console.warn('[WARN] CLI_API_TOKEN appears to be weak. Consider using a stronger secret.')
+            reportHubRuntimeWarning('CLI_API_TOKEN appears to be weak. Consider using a stronger secret.')
         }
 
         // Persist env token to file if not already saved (prevents token loss on env var issues)
@@ -96,13 +99,13 @@ export async function getOrCreateCliApiToken(dataDir: string): Promise<CliApiTok
         writeValue: (settings, value) => {
             settings.cliApiToken = value
         },
-        generate: generateSecureToken
+        generate: generateSecureToken,
     })
 
     return {
         token: result.value,
         source: result.created ? 'generated' : 'file',
         isNew: result.created,
-        filePath: settingsFile
+        filePath: settingsFile,
     }
 }

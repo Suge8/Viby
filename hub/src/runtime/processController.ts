@@ -1,26 +1,26 @@
-import type { Server as BunServer } from 'bun'
 import type { WebSocketData } from '@socket.io/bun-engine'
-import { createConfiguration } from '../configuration'
+import type { Server as BunServer } from 'bun'
 import { getOrCreateJwtSecret } from '../config/jwtSecret'
 import { findAvailablePort, isAddressInUseError, persistResolvedListenPort } from '../config/runtimeServerBinding'
 import { getOrCreateVapidKeys } from '../config/vapidKeys'
-import {
-    buildStartupMessage,
-    formatSource,
-    mergeCorsOrigins,
-    normalizeOrigins,
-    resolveLocalApiUrl,
-    resolveRelayFlag
-} from '../hubHelpers'
-import { PushService } from '../push/pushService'
+import { createConfiguration } from '../configuration'
+import { buildStartupMessage, formatSource, normalizeOrigins, resolveLocalApiUrl } from '../hubHelpers'
 import { PushNotificationChannel } from '../push/pushNotificationChannel'
+import { PushService } from '../push/pushService'
+import { createHubRuntimeStatusWriter, type HubRuntimeStatusWriter } from '../runtimeStatus'
 import { createSocketServer } from '../socket/server'
 import { Store } from '../store'
-import { createHubRuntimeStatusWriter, type HubRuntimeStatusWriter } from '../runtimeStatus'
-import { createWebServerFetch, startWebServer, type StartWebServerOptions } from '../web/server'
+import { createWebServerFetch, type StartWebServerOptions, startWebServer } from '../web/server'
 import { createHubRuntimeAccessor } from './accessor'
 import { createHubRuntimeCore } from './core'
 import { createManagedRunnerController } from './managedRunner'
+import {
+    buildProcessWebServerOptions,
+    buildReadyStatusMessage as buildReadyStatusMessageBase,
+    buildStartingStatusMessage as buildStartingStatusMessageBase,
+    logHubStartupConfiguration,
+    requireInitialized,
+} from './processControllerSupport'
 import { createHubRuntimeHost, type HubRuntimeHost } from './runtimeHost'
 
 export type HubShutdownOptions = {
@@ -36,17 +36,7 @@ export type HubProcessController = {
     shutdown(options?: HubShutdownOptions): Promise<number>
 }
 
-type HubProcessControllerOptions = {
-    relayApiDomain?: string
-    officialWebUrl?: string
-}
-
-export function createHubProcessController(
-    options: HubProcessControllerOptions = {}
-): HubProcessController {
-    const relayApiDomain = options.relayApiDomain ?? process.env.VIBY_RELAY_API ?? 'relay.viby.run'
-    const officialWebUrl = options.officialWebUrl ?? process.env.VIBY_OFFICIAL_WEB_URL ?? 'https://app.viby.run'
-    const relayFlag = resolveRelayFlag(process.argv)
+export function createHubProcessController(): HubProcessController {
     const launchSource = process.env.VIBY_LAUNCH_SOURCE === 'desktop' ? 'desktop' : 'cli'
     const runtimeAccessor = createHubRuntimeAccessor()
 
@@ -69,66 +59,31 @@ export function createHubProcessController(
     let shuttingDown = false
     let started = false
 
-    function getConfig(): NonNullable<typeof config> {
-        if (!config) {
-            throw new Error('Hub configuration is not initialized.')
-        }
-        return config
-    }
-
-    function getStore(): Store {
-        if (!store) {
-            throw new Error('Hub store is not initialized.')
-        }
-        return store
-    }
-
-    function getJwtSecret(): Uint8Array {
-        if (!jwtSecret) {
-            throw new Error('Hub JWT secret is not initialized.')
-        }
-        return jwtSecret
-    }
-
-    function getVapidPublicKey(): string {
-        if (!vapidPublicKey) {
-            throw new Error('Hub VAPID public key is not initialized.')
-        }
-        return vapidPublicKey
-    }
-
-    function getPushService(): PushService {
-        if (!pushService) {
-            throw new Error('Hub push service is not initialized.')
-        }
-        return pushService
-    }
-
-    function getSocketServer(): NonNullable<typeof socketServer> {
-        if (!socketServer) {
-            throw new Error('Hub socket server is not initialized.')
-        }
-        return socketServer
-    }
-
-    function joinRuntimeStatusMessage(parts: ReadonlyArray<string | null | undefined>): string {
-        return parts.filter((part): part is string => Boolean(part)).join(' ')
-    }
+    const getConfig = (): NonNullable<typeof config> =>
+        requireInitialized(config, 'Hub configuration is not initialized.')
+    const getStore = (): Store => requireInitialized(store, 'Hub store is not initialized.')
+    const getJwtSecret = (): Uint8Array => requireInitialized(jwtSecret, 'Hub JWT secret is not initialized.')
+    const getVapidPublicKey = (): string =>
+        requireInitialized(vapidPublicKey, 'Hub VAPID public key is not initialized.')
+    const getPushService = (): PushService => requireInitialized(pushService, 'Hub push service is not initialized.')
+    const getSocketServer = (): NonNullable<typeof socketServer> =>
+        requireInitialized(socketServer, 'Hub socket server is not initialized.')
 
     function buildStartingStatusMessage(message: string): string {
-        return joinRuntimeStatusMessage([message, portFallbackMessage])
+        return buildStartingStatusMessageBase(message, portFallbackMessage)
     }
 
     function buildReadyStatusMessage(overrides?: ReadonlyArray<string | null>): string {
-        return joinRuntimeStatusMessage(overrides ?? ['中枢已准备就绪。', portFallbackMessage])
+        return buildReadyStatusMessageBase(portFallbackMessage, overrides)
     }
 
     function buildWebServerOptions(): StartWebServerOptions {
         const currentStore = getStore()
         const currentSocketServer = getSocketServer()
 
-        return {
+        return buildProcessWebServerOptions({
             getSyncEngine: () => runtimeAccessor.getSyncEngine(),
+            getSessionStream: (sessionId) => currentSocketServer.webRealtimeManager.getSessionStream(sessionId),
             jwtSecret: getJwtSecret(),
             store: currentStore,
             vapidPublicKey: getVapidPublicKey(),
@@ -137,9 +92,7 @@ export function createHubProcessController(
             listenPort: runtimeListenPort,
             publicUrl: runtimePublicUrl,
             corsOrigins,
-            relayMode: relayFlag.enabled,
-            officialWebUrl
-        }
+        })
     }
 
     async function initializeProcess(): Promise<void> {
@@ -154,35 +107,12 @@ export function createHubProcessController(
         localHubUrl = resolveLocalApiUrl(config.listenHost, runtimeListenPort)
 
         const baseCorsOrigins = normalizeOrigins(config.corsOrigins)
-        const relayCorsOrigins = normalizeOrigins([officialWebUrl])
-        corsOrigins = relayFlag.enabled
-            ? mergeCorsOrigins(baseCorsOrigins, relayCorsOrigins)
-            : baseCorsOrigins
+        corsOrigins = baseCorsOrigins
 
-        if (config.cliApiTokenIsNew) {
-            console.log('')
-            console.log('='.repeat(70))
-            console.log('  NEW CLI_API_TOKEN GENERATED')
-            console.log('='.repeat(70))
-            console.log('')
-            console.log(`  Token: ${config.cliApiToken}`)
-            console.log('')
-            console.log(`  Saved to: ${config.settingsFile}`)
-            console.log('')
-            console.log('='.repeat(70))
-            console.log('')
-        } else {
-            console.log(`[Hub] CLI_API_TOKEN: loaded from ${formatSource(config.sources.cliApiToken)}`)
-        }
-
-        console.log(`[Hub] VIBY_LISTEN_HOST: ${config.listenHost} (${formatSource(config.sources.listenHost)})`)
-        console.log(`[Hub] VIBY_LISTEN_PORT: ${config.listenPort} (${formatSource(config.sources.listenPort)})`)
-        console.log(`[Hub] VIBY_PUBLIC_URL: ${config.publicUrl} (${formatSource(config.sources.publicUrl)})`)
-        console.log(
-            relayFlag.enabled
-                ? `[Hub] Tunnel: enabled (${relayFlag.source}), API: ${relayApiDomain}`
-                : `[Hub] Tunnel: disabled (${relayFlag.source})`
-        )
+        logHubStartupConfiguration({
+            ...config,
+            formatSource,
+        })
 
         store = new Store(config.dbPath)
         jwtSecret = await getOrCreateJwtSecret()
@@ -209,7 +139,7 @@ export function createHubProcessController(
             },
             onMachineAlive: (payload) => {
                 runtimeAccessor.getSyncEngine()?.handleMachineAlive(payload)
-            }
+            },
         })
 
         try {
@@ -230,7 +160,7 @@ export function createHubProcessController(
                 dataDir: config.dataDir,
                 listenHost: config.listenHost,
                 previousPort: config.listenPort,
-                resolvedPort: runtimeListenPort
+                resolvedPort: runtimeListenPort,
             })
 
             webServer = await startWebServer(buildWebServerOptions())
@@ -243,13 +173,12 @@ export function createHubProcessController(
             localHubUrl,
             cliApiToken: config.cliApiToken,
             settingsFile: config.settingsFile,
-            relayEnabled: relayFlag.enabled,
-            launchSource
+            launchSource,
         })
         await activeRuntimeStatus.write({
             phase: 'starting',
             preferredBrowserUrl: localHubUrl,
-            message: buildStartingStatusMessage(buildStartupMessage(relayFlag.enabled))
+            message: buildStartingStatusMessage(buildStartupMessage()),
         })
     }
 
@@ -261,8 +190,8 @@ export function createHubProcessController(
             rpcRegistry: currentSocketServer.rpcRegistry,
             webRealtimeManager: currentSocketServer.webRealtimeManager,
             notificationChannels: [
-                new PushNotificationChannel(getPushService(), currentSocketServer.webRealtimeManager, runtimePublicUrl)
-            ]
+                new PushNotificationChannel(getPushService(), currentSocketServer.webRealtimeManager, runtimePublicUrl),
+            ],
         })
     }
 
@@ -281,7 +210,7 @@ export function createHubProcessController(
                 await runtimeStatus.write(update)
             },
             buildReadyStatusMessage,
-            buildStartingStatusMessage
+            buildStartingStatusMessage,
         })
 
         return createHubRuntimeHost({
@@ -292,12 +221,7 @@ export function createHubProcessController(
             runtimeStatus: activeRuntimeStatus,
             managedRunner,
             localHubUrl,
-            runtimeListenPort,
-            cliApiToken: getConfig().cliApiToken,
-            relayEnabled: relayFlag.enabled,
-            relayApiDomain,
-            officialWebUrl,
-            portFallbackMessage
+            portFallbackMessage,
         })
     }
 
@@ -320,7 +244,7 @@ export function createHubProcessController(
             await activeRuntimeStatus.write({
                 phase: options.statusPhase ?? 'stopped',
                 preferredBrowserUrl: localHubUrl,
-                message: options.statusMessage ?? 'Hub stopped.'
+                message: options.statusMessage ?? 'Hub stopped.',
             })
         }
 
@@ -355,9 +279,7 @@ export function createHubProcessController(
 
         shuttingDown = true
         shutdownPromise = (async () => {
-            const exitCode = runtimeHost
-                ? await runtimeHost.shutdown(options)
-                : await shutdownProcessOnly(options)
+            const exitCode = runtimeHost ? await runtimeHost.shutdown(options) : await shutdownProcessOnly(options)
 
             runtimeHost = null
             webServer = null
@@ -372,6 +294,6 @@ export function createHubProcessController(
     return {
         start,
         reloadRuntime,
-        shutdown
+        shutdown,
     }
 }

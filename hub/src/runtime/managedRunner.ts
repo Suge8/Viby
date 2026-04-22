@@ -1,17 +1,22 @@
 import type { ChildProcess } from 'node:child_process'
-
-import type { HubRuntimeStatusUpdate } from '../runtimeStatus'
 import {
     getMachineRunnerPid,
+    type RunnerOnlineResult,
     startRunnerProcess,
     stopRunnerPid,
     stopRunnerProcess,
     waitForRunnerOnline,
-    type RunnerOnlineResult
 } from '../runner/launchRunner'
 import { shouldRestartReusedRunner } from '../runner/reusedRunnerHealth'
-import { recoverManagedRunner, type RunnerRecoveryMode, type RunnerRetryContext } from '../runner/supervisor'
-import type { Machine, SyncEngine } from '../sync/syncEngine'
+import { type RunnerRecoveryMode, type RunnerRetryContext, recoverManagedRunner } from '../runner/supervisor'
+import type { HubRuntimeStatusUpdate } from '../runtimeStatus'
+import type { SyncEngine } from '../sync/syncEngine'
+import {
+    buildRunnerRetryStatusMessage,
+    defaultIsLocalProcessAlive,
+    logRunnerRetry,
+    readReusedRunnerMachine,
+} from './managedRunnerSupport'
 
 const REUSED_RUNNER_WATCH_INTERVAL_MS = 1_000
 
@@ -23,10 +28,7 @@ type RunnerPidStopper = typeof stopRunnerPid
 type RunnerOnlineWaiter = typeof waitForRunnerOnline
 type RunnerRecoveryWorker = typeof recoverManagedRunner
 
-type ActiveRunnerBinding =
-    | { kind: 'child'; child: ChildProcess }
-    | { kind: 'reused'; machineId: string }
-    | null
+type ActiveRunnerBinding = { kind: 'child'; child: ChildProcess } | { kind: 'reused'; machineId: string } | null
 
 export type ManagedRunnerController = {
     startStartupRecovery(): Promise<void>
@@ -50,38 +52,7 @@ type CreateManagedRunnerControllerOptions = {
     recoverManagedRunner?: RunnerRecoveryWorker
 }
 
-function defaultIsLocalProcessAlive(pid: number): boolean {
-    if (!Number.isFinite(pid) || pid <= 0) {
-        return false
-    }
-
-    try {
-        process.kill(pid, 0)
-        return true
-    } catch {
-        return false
-    }
-}
-
-function readReusedRunnerMachine(
-    getSyncEngine: () => SyncEngine | null,
-    machineId: string | null
-): Machine | null {
-    if (!machineId) {
-        return null
-    }
-
-    const syncEngine = getSyncEngine()
-    if (!syncEngine) {
-        return null
-    }
-
-    return syncEngine.getMachine(machineId) ?? null
-}
-
-export function createManagedRunnerController(
-    options: CreateManagedRunnerControllerOptions
-): ManagedRunnerController {
+export function createManagedRunnerController(options: CreateManagedRunnerControllerOptions): ManagedRunnerController {
     const isLocalProcessAlive = options.isLocalProcessAlive ?? defaultIsLocalProcessAlive
     const startManagedRunnerProcess = options.startRunnerProcess ?? startRunnerProcess
     const stopManagedRunnerProcess = options.stopRunnerProcess ?? stopRunnerProcess
@@ -124,32 +95,6 @@ export function createManagedRunnerController(
         const child = getActiveRunnerChild()
         clearActiveRunner()
         await stopManagedRunnerProcess(child).catch(() => {})
-    }
-
-    function buildRunnerRetryStatusMessage(context: RunnerRetryContext): string {
-        const delaySeconds = Math.ceil(context.delayMs / 1000)
-        if (context.exit) {
-            return `本机连接异常中断，${delaySeconds} 秒后自动重连。`
-        }
-
-        return context.mode === 'startup'
-            ? `本机连接启动失败，${delaySeconds} 秒后自动重试。`
-            : `本机连接重连失败，${delaySeconds} 秒后重试。`
-    }
-
-    function logRunnerRetry(context: RunnerRetryContext): void {
-        if (context.exit) {
-            console.error(
-                `[Runner] Process exited unexpectedly (code ${context.exit.code ?? 'unknown'}, signal ${context.exit.signal ?? 'none'})`
-            )
-            console.log(`[Runner] Restarting local machine connection in ${context.delayMs}ms`)
-            return
-        }
-
-        const errorMessage = context.error instanceof Error ? context.error.message : String(context.error)
-        const actionLabel = context.mode === 'startup' ? 'startup' : 'restart'
-        console.error(`[Runner] ${actionLabel} failed: ${errorMessage}`)
-        console.log(`[Runner] Retrying in ${context.delayMs}ms`)
     }
 
     function bindReusedRunnerWatch(machineId: string): void {
@@ -208,7 +153,7 @@ export function createManagedRunnerController(
         const onlineRunner: RunnerOnlineResult = await waitUntilRunnerOnline({
             child,
             dataDir: options.dataDir,
-            syncEngine
+            syncEngine,
         })
 
         if (onlineRunner.ownership === 'reused') {
@@ -231,7 +176,7 @@ export function createManagedRunnerController(
         await writeRuntimeStatus({
             phase: 'starting',
             preferredBrowserUrl: options.localHubUrl,
-            message: options.buildStartingStatusMessage(buildRunnerRetryStatusMessage(context))
+            message: options.buildStartingStatusMessage(buildRunnerRetryStatusMessage(context)),
         })
     }
 
@@ -243,11 +188,7 @@ export function createManagedRunnerController(
         await writeRuntimeStatus({
             phase: 'ready',
             preferredBrowserUrl: options.localHubUrl,
-            message: options.buildReadyStatusMessage(
-                mode === 'restart'
-                    ? ['本机连接已重新接通。']
-                    : undefined
-            )
+            message: options.buildReadyStatusMessage(mode === 'restart' ? ['本机连接已重新接通。'] : undefined),
         })
     }
 
@@ -263,7 +204,7 @@ export function createManagedRunnerController(
             startRunner: startManagedRunner,
             cleanupRunner: cleanupManagedRunnerAfterFailure,
             onRetryScheduled: notifyRunnerRetry,
-            onRecovered: handleManagedRunnerReady
+            onRecovered: handleManagedRunnerReady,
         }).finally(() => {
             runnerRestartPromise = null
         })
@@ -271,10 +212,7 @@ export function createManagedRunnerController(
         await runnerRestartPromise
     }
 
-    async function scheduleRunnerRestart(
-        code: number | null,
-        signal: NodeJS.Signals | null
-    ): Promise<void> {
+    async function scheduleRunnerRestart(code: number | null, signal: NodeJS.Signals | null): Promise<void> {
         if (runnerRestartPromise || options.isShuttingDown()) {
             return
         }
@@ -330,6 +268,6 @@ export function createManagedRunnerController(
     return {
         startStartupRecovery,
         onRuntimeReload,
-        stop
+        stop,
     }
 }
