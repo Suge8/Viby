@@ -1,9 +1,10 @@
-import { logger } from '@/ui/logger'
-import { exec, type ExecOptions } from 'child_process'
+import { type ExecOptions, exec } from 'child_process'
 import { promisify } from 'util'
 import type { RpcHandlerManager } from '@/api/rpc/RpcHandlerManager'
+import { logger } from '@/ui/logger'
 import { validatePath } from '../pathSecurity'
 import { getErrorMessage, rpcError } from '../rpcResponses'
+import type { WorkingDirectoryProvider } from '../workingDirectory'
 
 const execAsync = promisify(exec)
 
@@ -21,9 +22,13 @@ interface BashResponse {
     error?: string
 }
 
-export function registerBashHandlers(rpcHandlerManager: RpcHandlerManager, workingDirectory: string): void {
+export function registerBashHandlers(
+    rpcHandlerManager: RpcHandlerManager,
+    getWorkingDirectory: WorkingDirectoryProvider
+): void {
     rpcHandlerManager.registerHandler<BashRequest, BashResponse>('bash', async (data) => {
         logger.debug('Shell command request:', data.command)
+        const workingDirectory = getWorkingDirectory()
 
         if (data.cwd) {
             const validation = validatePath(data.cwd, workingDirectory)
@@ -35,7 +40,7 @@ export function registerBashHandlers(rpcHandlerManager: RpcHandlerManager, worki
         try {
             const options: ExecOptions = {
                 cwd: data.cwd,
-                timeout: data.timeout || 30000
+                timeout: data.timeout || 30000,
             }
 
             const { stdout, stderr } = await execAsync(data.command, options)
@@ -44,7 +49,7 @@ export function registerBashHandlers(rpcHandlerManager: RpcHandlerManager, worki
                 success: true,
                 stdout: stdout ? stdout.toString() : '',
                 stderr: stderr ? stderr.toString() : '',
-                exitCode: 0
+                exitCode: 0,
             }
         } catch (error) {
             const execError = error as NodeJS.ErrnoException & {
@@ -58,14 +63,14 @@ export function registerBashHandlers(rpcHandlerManager: RpcHandlerManager, worki
                 return rpcError('Command timed out', {
                     stdout: execError.stdout ? execError.stdout.toString() : '',
                     stderr: execError.stderr ? execError.stderr.toString() : '',
-                    exitCode: typeof execError.code === 'number' ? execError.code : -1
+                    exitCode: typeof execError.code === 'number' ? execError.code : -1,
                 })
             }
 
             return rpcError(getErrorMessage(execError, 'Command failed'), {
                 stdout: execError.stdout ? execError.stdout.toString() : '',
                 stderr: execError.stderr ? execError.stderr.toString() : execError.message || 'Command failed',
-                exitCode: typeof execError.code === 'number' ? execError.code : 1
+                exitCode: typeof execError.code === 'number' ? execError.code : 1,
             })
         }
     })

@@ -1,11 +1,11 @@
-import { logger } from '@/ui/logger'
-import { getInvokedCwd } from '@/utils/invokedCwd'
 import type {
     TerminalErrorPayload,
     TerminalExitPayload,
     TerminalOutputPayload,
-    TerminalReadyPayload
+    TerminalReadyPayload,
 } from '@viby/protocol'
+import { logger } from '@/ui/logger'
+import { getInvokedCwd } from '@/utils/invokedCwd'
 import type { TerminalSession } from './types'
 
 type TerminalRuntime = TerminalSession & {
@@ -34,7 +34,7 @@ const SENSITIVE_ENV_KEYS = new Set([
     'OPENAI_API_KEY',
     'ANTHROPIC_API_KEY',
     'GEMINI_API_KEY',
-    'GOOGLE_API_KEY'
+    'GOOGLE_API_KEY',
 ])
 
 function resolveEnvNumber(name: string, fallback: number): number {
@@ -89,14 +89,16 @@ export class TerminalManager {
         this.onOutput = options.onOutput
         this.onExit = options.onExit
         this.onError = options.onError
-        this.idleTimeoutMs = options.idleTimeoutMs ?? resolveEnvNumber('VIBY_TERMINAL_IDLE_TIMEOUT_MS', DEFAULT_IDLE_TIMEOUT_MS)
-        this.maxTerminals = options.maxTerminals ?? resolveEnvNumber('VIBY_TERMINAL_MAX_TERMINALS', DEFAULT_MAX_TERMINALS)
+        this.idleTimeoutMs =
+            options.idleTimeoutMs ?? resolveEnvNumber('VIBY_TERMINAL_IDLE_TIMEOUT_MS', DEFAULT_IDLE_TIMEOUT_MS)
+        this.maxTerminals =
+            options.maxTerminals ?? resolveEnvNumber('VIBY_TERMINAL_MAX_TERMINALS', DEFAULT_MAX_TERMINALS)
         this.filteredEnv = buildFilteredEnv()
     }
 
     create(terminalId: string, cols: number, rows: number): void {
         if (process.platform === 'win32') {
-            this.emitError(terminalId, 'Terminal is not supported on Windows.')
+            this.emitError(terminalId, 'Remote terminal is not supported on Windows yet.')
             return
         }
 
@@ -145,7 +147,7 @@ export class TerminalManager {
                         if (exitCode === 1) {
                             this.emitError(terminalId, 'Terminal stream closed unexpectedly.')
                         }
-                    }
+                    },
                 },
                 onExit: (subprocess, exitCode) => {
                     const signal = subprocess.signalCode ?? null
@@ -153,10 +155,10 @@ export class TerminalManager {
                         sessionId: this.sessionId,
                         terminalId,
                         code: exitCode ?? null,
-                        signal
+                        signal,
                     })
                     this.cleanup(terminalId)
-                }
+                },
             })
 
             const terminal = proc.terminal
@@ -176,7 +178,7 @@ export class TerminalManager {
                 rows,
                 proc,
                 terminal,
-                idleTimer: null
+                idleTimer: null,
             }
 
             this.terminals.set(terminalId, runtime)

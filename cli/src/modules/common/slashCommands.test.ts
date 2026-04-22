@@ -1,24 +1,30 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { listSlashCommands } from './slashCommands'
 
 describe('listSlashCommands', () => {
     const originalClaudeConfigDir = process.env.CLAUDE_CONFIG_DIR
+    const originalGeminiHome = process.env.GEMINI_HOME
     let sandboxDir: string
     let claudeConfigDir: string
+    let geminiHomeDir: string
     let projectDir: string
 
     beforeEach(async () => {
         sandboxDir = await mkdtemp(join(tmpdir(), 'viby-slash-commands-'))
         claudeConfigDir = join(sandboxDir, 'global-claude')
+        geminiHomeDir = join(sandboxDir, 'global-gemini')
         projectDir = join(sandboxDir, 'project')
 
         process.env.CLAUDE_CONFIG_DIR = claudeConfigDir
+        process.env.GEMINI_HOME = geminiHomeDir
 
         await mkdir(join(claudeConfigDir, 'commands'), { recursive: true })
         await mkdir(join(projectDir, '.claude', 'commands'), { recursive: true })
+        await mkdir(join(geminiHomeDir, 'commands'), { recursive: true })
+        await mkdir(join(projectDir, '.gemini', 'commands'), { recursive: true })
     })
 
     afterEach(async () => {
@@ -26,6 +32,11 @@ describe('listSlashCommands', () => {
             delete process.env.CLAUDE_CONFIG_DIR
         } else {
             process.env.CLAUDE_CONFIG_DIR = originalClaudeConfigDir
+        }
+        if (originalGeminiHome === undefined) {
+            delete process.env.GEMINI_HOME
+        } else {
+            process.env.GEMINI_HOME = originalGeminiHome
         }
 
         await rm(sandboxDir, { recursive: true, force: true })
@@ -38,7 +49,7 @@ describe('listSlashCommands', () => {
         )
 
         const commands = await listSlashCommands('claude')
-        const command = commands.find(cmd => cmd.name === 'global-only')
+        const command = commands.find((cmd) => cmd.name === 'global-only')
 
         expect(command).toBeDefined()
         expect(command?.source).toBe('user')
@@ -52,7 +63,7 @@ describe('listSlashCommands', () => {
         )
 
         const commands = await listSlashCommands('claude', projectDir)
-        const command = commands.find(cmd => cmd.name === 'project-only')
+        const command = commands.find((cmd) => cmd.name === 'project-only')
 
         expect(command).toBeDefined()
         expect(command?.source).toBe('project')
@@ -70,7 +81,7 @@ describe('listSlashCommands', () => {
         )
 
         const commands = await listSlashCommands('claude', projectDir)
-        const sharedCommands = commands.filter(cmd => cmd.name === 'shared')
+        const sharedCommands = commands.filter((cmd) => cmd.name === 'shared')
 
         expect(sharedCommands).toHaveLength(1)
         expect(sharedCommands[0]?.source).toBe('project')
@@ -86,7 +97,7 @@ describe('listSlashCommands', () => {
         )
 
         const commands = await listSlashCommands('claude', projectDir)
-        const command = commands.find(cmd => cmd.name === 'trellis:start')
+        const command = commands.find((cmd) => cmd.name === 'trellis:start')
 
         expect(command).toBeDefined()
         expect(command?.source).toBe('project')
@@ -97,5 +108,47 @@ describe('listSlashCommands', () => {
         const nonExistentProjectDir = join(sandboxDir, 'not-exists')
 
         await expect(listSlashCommands('claude', nonExistentProjectDir)).resolves.toBeDefined()
+    })
+
+    it('does not load deprecated Codex project prompts as slash commands', async () => {
+        await mkdir(join(projectDir, '.codex', 'prompts'), { recursive: true })
+        await writeFile(
+            join(projectDir, '.codex', 'prompts', 'project-only.md'),
+            ['---', 'description: Project only', '---', '', 'Project prompt body'].join('\n')
+        )
+
+        const commands = await listSlashCommands('codex', projectDir)
+
+        expect(commands.find((command) => command.name === 'project-only')).toBeUndefined()
+    })
+
+    it('loads Gemini user and project commands from toml files', async () => {
+        await writeFile(
+            join(geminiHomeDir, 'commands', 'global.toml'),
+            ['description = "Global Gemini command"', 'prompt = "Global body"'].join('\n')
+        )
+        await mkdir(join(projectDir, '.gemini', 'commands', 'git'), { recursive: true })
+        await writeFile(
+            join(projectDir, '.gemini', 'commands', 'git', 'commit.toml'),
+            ['description = "Commit helper"', 'prompt = """', 'Write a commit message', '"""'].join('\n')
+        )
+
+        const commands = await listSlashCommands('gemini', projectDir)
+
+        expect(commands).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    name: 'global',
+                    source: 'user',
+                    description: 'Global Gemini command',
+                }),
+                expect.objectContaining({
+                    name: 'git:commit',
+                    source: 'project',
+                    description: 'Commit helper',
+                    content: 'Write a commit message',
+                }),
+            ])
+        )
     })
 })

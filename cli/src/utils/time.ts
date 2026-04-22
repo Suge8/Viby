@@ -1,44 +1,49 @@
 export async function delay(ms: number) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-export function exponentialBackoffDelay(currentFailureCount: number, minDelay: number, maxDelay: number, maxFailureCount: number) {
-    let maxDelayRet = minDelay + ((maxDelay - minDelay) / maxFailureCount) * Math.min(currentFailureCount, maxFailureCount);
-    return Math.round(Math.random() * maxDelayRet);
+export function exponentialBackoffDelay(
+    currentFailureCount: number,
+    minDelay: number,
+    maxDelay: number,
+    maxFailureCount: number
+) {
+    let maxDelayRet =
+        minDelay + ((maxDelay - minDelay) / maxFailureCount) * Math.min(currentFailureCount, maxFailureCount)
+    return Math.round(Math.random() * maxDelayRet)
 }
 
-export type BackoffFunc = <T>(callback: () => Promise<T>) => Promise<T>;
+export type BackoffFunc = <T>(callback: () => Promise<T>) => Promise<T>
 
-export function createBackoff(
-    opts?: {
-        onError?: (e: any, failuresCount: number) => void,
-        minDelay?: number,
-        maxDelay?: number,
-        maxFailureCount?: number
-    }): BackoffFunc {
+export function createBackoff(opts?: {
+    onError?: (e: unknown, failuresCount: number) => void
+    minDelay?: number
+    maxDelay?: number
+    maxFailureCount?: number
+}): BackoffFunc {
     return async <T>(callback: () => Promise<T>): Promise<T> => {
-        let currentFailureCount = 0;
-        const minDelay = opts && opts.minDelay !== undefined ? opts.minDelay : 250;
-        const maxDelay = opts && opts.maxDelay !== undefined ? opts.maxDelay : 1000;
-        const maxFailureCount = opts && opts.maxFailureCount !== undefined ? opts.maxFailureCount : 50;
+        let currentFailureCount = 0
+        const minDelay = opts && opts.minDelay !== undefined ? opts.minDelay : 250
+        const maxDelay = opts && opts.maxDelay !== undefined ? opts.maxDelay : 1000
+        const maxFailureCount = opts && opts.maxFailureCount !== undefined ? opts.maxFailureCount : 50
         while (true) {
             try {
-                return await callback();
+                return await callback()
             } catch (e) {
                 if (currentFailureCount < maxFailureCount) {
-                    currentFailureCount++;
+                    currentFailureCount++
                 }
                 if (opts && opts.onError) {
-                    opts.onError(e, currentFailureCount);
+                    opts.onError(e, currentFailureCount)
                 }
-                let waitForRequest = exponentialBackoffDelay(currentFailureCount, minDelay, maxDelay, maxFailureCount);
-                await delay(waitForRequest);
+                let waitForRequest = exponentialBackoffDelay(currentFailureCount, minDelay, maxDelay, maxFailureCount)
+                await delay(waitForRequest)
             }
         }
-    };
+    }
 }
 
-export let backoff = createBackoff();
+export let backoff = createBackoff()
 
 /**
  * Options for withRetry function
@@ -64,10 +69,7 @@ export type RetryOptions = {
  * - Has sensible defaults for runner-style long-running processes
  * - Uses clearer exponential backoff (2^n with jitter)
  */
-export async function withRetry<T>(
-    fn: () => Promise<T>,
-    options?: RetryOptions
-): Promise<T> {
+export async function withRetry<T>(fn: () => Promise<T>, options?: RetryOptions): Promise<T> {
     const maxAttempts = options?.maxAttempts ?? Infinity
     const minDelay = options?.minDelay ?? 1000
     const maxDelay = options?.maxDelay ?? 30000
@@ -95,7 +97,7 @@ export async function withRetry<T>(
             // Calculate delay with exponential backoff and jitter
             const exponentialDelay = minDelay * Math.pow(2, attempt - 1)
             const cappedDelay = Math.min(exponentialDelay, maxDelay)
-            const jitter = Math.random() * 0.3 * cappedDelay  // 0-30% jitter
+            const jitter = Math.random() * 0.3 * cappedDelay // 0-30% jitter
             const nextDelayMs = Math.round(cappedDelay + jitter)
 
             if (onRetry) {

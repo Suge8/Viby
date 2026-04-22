@@ -26,7 +26,7 @@ export class PushableAsyncIterable<T> implements AsyncIterableIterator<T> {
         if (this.isDone) {
             throw new Error('Cannot push to completed iterable')
         }
-        
+
         if (this.error) {
             throw this.error
         }
@@ -48,7 +48,7 @@ export class PushableAsyncIterable<T> implements AsyncIterableIterator<T> {
         if (this.isDone) {
             return
         }
-        
+
         this.isDone = true
         this.cleanup()
     }
@@ -60,7 +60,7 @@ export class PushableAsyncIterable<T> implements AsyncIterableIterator<T> {
         if (this.isDone) {
             return
         }
-        
+
         this.error = err
         this.isDone = true
         this.cleanup()
@@ -107,7 +107,7 @@ export class PushableAsyncIterable<T> implements AsyncIterableIterator<T> {
     /**
      * AsyncIterableIterator return implementation
      */
-    async return(_value?: any): Promise<IteratorResult<T>> {
+    async return(_value?: unknown): Promise<IteratorResult<T>> {
         this.end()
         return { done: true, value: undefined }
     }
@@ -115,7 +115,7 @@ export class PushableAsyncIterable<T> implements AsyncIterableIterator<T> {
     /**
      * AsyncIterableIterator throw implementation
      */
-    async throw(e: any): Promise<IteratorResult<T>> {
+    async throw(e: unknown): Promise<IteratorResult<T>> {
         this.setError(e instanceof Error ? e : new Error(String(e)))
         throw this.error
     }

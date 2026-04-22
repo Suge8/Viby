@@ -1,19 +1,15 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { listSkills } from './skills'
 
 async function writeSkill(skillDir: string, name: string, description: string): Promise<void> {
     await mkdir(skillDir, { recursive: true })
-    await writeFile(join(skillDir, 'SKILL.md'), [
-        '---',
-        `name: ${name}`,
-        `description: ${description}`,
-        '---',
-        '',
-        `# ${name}`,
-    ].join('\n'))
+    await writeFile(
+        join(skillDir, 'SKILL.md'),
+        ['---', `name: ${name}`, `description: ${description}`, '---', '', `# ${name}`].join('\n')
+    )
 }
 
 describe('listSkills', () => {
@@ -50,6 +46,19 @@ describe('listSkills', () => {
         expect(skills.map((skill) => skill.name)).toEqual(['amis'])
     })
 
+    it('recursively lists categorized ~/.agents skills like Codex-style directories', async () => {
+        await writeSkill(join(homeDir, '.agents', 'skills', 'development', 'taskmaster'), 'taskmaster', 'Task tracking')
+        await writeSkill(
+            join(homeDir, '.agents', 'skills', 'search', 'agent-browser'),
+            'agent-browser',
+            'Browser automation'
+        )
+
+        const skills = await listSkills()
+
+        expect(skills.map((skill) => skill.name)).toEqual(['agent-browser', 'taskmaster'])
+    })
+
     it('lists user skills from ~/.claude/skills', async () => {
         await writeSkill(join(homeDir, '.claude', 'skills', 'claude-skill'), 'claude-skill', 'Claude skill')
 
@@ -69,14 +78,17 @@ describe('listSkills', () => {
         expect(skills.find((s) => s.name === 'alpha')?.description).toBe('Alpha from agents')
     })
 
-    it('ignores legacy ~/.codex skills', async () => {
-        await writeSkill(join(homeDir, '.agents', 'skills', 'amis'), 'amis', 'AMIS guide')
+    it('lists visible ~/.codex skills while ignoring hidden system skills', async () => {
         await writeSkill(join(homeDir, '.codex', 'skills', 'hello-agents'), 'helloagents', 'Main skill')
-        await writeSkill(join(homeDir, '.codex', 'skills', '.system', 'skill-creator'), 'skill-creator', 'Create skills')
+        await writeSkill(
+            join(homeDir, '.codex', 'skills', '.system', 'skill-creator'),
+            'skill-creator',
+            'Create skills'
+        )
 
         const skills = await listSkills()
 
-        expect(skills.map((skill) => skill.name)).toEqual(['amis'])
+        expect(skills.map((skill) => skill.name)).toEqual(['helloagents'])
     })
 
     it('falls back to directory name when frontmatter is missing', async () => {
@@ -84,9 +96,7 @@ describe('listSkills', () => {
         await mkdir(skillDir, { recursive: true })
         await writeFile(join(skillDir, 'SKILL.md'), '# No Frontmatter\n')
 
-        await expect(listSkills()).resolves.toEqual([
-            { name: 'no-frontmatter', description: undefined }
-        ])
+        await expect(listSkills()).resolves.toEqual([{ name: 'no-frontmatter', description: undefined }])
     })
 
     it('loads project skills from cwd up to repo root', async () => {
@@ -111,11 +121,47 @@ describe('listSkills', () => {
 
         await mkdir(join(repoRoot, '.git'), { recursive: true })
         await writeSkill(join(repoRoot, '.claude', 'skills', 'claude-root'), 'claude-root', 'Claude root skill')
-        await writeSkill(join(workingDirectory, '.claude', 'skills', 'claude-local'), 'claude-local', 'Claude local skill')
+        await writeSkill(
+            join(workingDirectory, '.claude', 'skills', 'claude-local'),
+            'claude-local',
+            'Claude local skill'
+        )
 
         const skills = await listSkills(workingDirectory)
 
         expect(skills.map((skill) => skill.name)).toEqual(['claude-local', 'claude-root'])
+    })
+
+    it('loads project skills from .codex/skills directories while ignoring hidden entries', async () => {
+        const repoRoot = join(sandboxDir, 'repo')
+        const workingDirectory = join(repoRoot, 'apps', 'web')
+
+        await mkdir(join(repoRoot, '.git'), { recursive: true })
+        await writeSkill(join(repoRoot, '.codex', 'skills', 'codex-root'), 'codex-root', 'Codex root skill')
+        await writeSkill(join(workingDirectory, '.codex', 'skills', 'codex-local'), 'codex-local', 'Codex local skill')
+        await writeSkill(join(workingDirectory, '.codex', 'skills', '.system', 'internal'), 'internal', 'Hidden skill')
+
+        const skills = await listSkills(workingDirectory)
+
+        expect(skills.map((skill) => skill.name)).toEqual(['codex-local', 'codex-root'])
+    })
+
+    it('recursively loads categorized project skills from .agents and prefers the nearest one', async () => {
+        const repoRoot = join(sandboxDir, 'repo')
+        const workingDirectory = join(repoRoot, 'apps', 'web')
+
+        await mkdir(join(repoRoot, '.git'), { recursive: true })
+        await writeSkill(join(repoRoot, '.agents', 'skills', 'development', 'shared'), 'shared', 'Repo shared skill')
+        await writeSkill(
+            join(workingDirectory, '.agents', 'skills', 'development', 'shared'),
+            'shared',
+            'Local shared skill'
+        )
+
+        const skills = await listSkills(workingDirectory)
+
+        expect(skills).toHaveLength(1)
+        expect(skills[0]).toEqual({ name: 'shared', description: 'Local shared skill' })
     })
 
     it('prefers .agents project skills over .claude project skills with same name', async () => {
@@ -159,7 +205,7 @@ describe('listSkills', () => {
         expect(sharedSkills).toHaveLength(1)
         expect(sharedSkills[0]).toEqual({
             name: 'shared',
-            description: 'Local shared skill'
+            description: 'Local shared skill',
         })
     })
 })

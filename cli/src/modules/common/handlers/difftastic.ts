@@ -1,8 +1,9 @@
-import { logger } from '@/ui/logger'
 import type { RpcHandlerManager } from '@/api/rpc/RpcHandlerManager'
 import { run as runDifftastic } from '@/modules/difftastic/index'
+import { logger } from '@/ui/logger'
 import { validatePath } from '../pathSecurity'
 import { getErrorMessage, rpcError } from '../rpcResponses'
+import type { WorkingDirectoryProvider } from '../workingDirectory'
 
 interface DifftasticRequest {
     args: string[]
@@ -17,9 +18,13 @@ interface DifftasticResponse {
     error?: string
 }
 
-export function registerDifftasticHandlers(rpcHandlerManager: RpcHandlerManager, workingDirectory: string): void {
+export function registerDifftasticHandlers(
+    rpcHandlerManager: RpcHandlerManager,
+    getWorkingDirectory: WorkingDirectoryProvider
+): void {
     rpcHandlerManager.registerHandler<DifftasticRequest, DifftasticResponse>('difftastic', async (data) => {
         logger.debug('Difftastic request with args:', data.args, 'cwd:', data.cwd)
+        const workingDirectory = getWorkingDirectory()
 
         if (data.cwd) {
             const validation = validatePath(data.cwd, workingDirectory)
@@ -34,7 +39,7 @@ export function registerDifftasticHandlers(rpcHandlerManager: RpcHandlerManager,
                 success: true,
                 exitCode: result.exitCode,
                 stdout: result.stdout.toString(),
-                stderr: result.stderr.toString()
+                stderr: result.stderr.toString(),
             }
         } catch (error) {
             logger.debug('Failed to run difftastic:', error)

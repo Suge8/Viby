@@ -1,7 +1,7 @@
-import { beforeEach, describe, expect, it } from 'vitest'
 import { mkdir, rm, symlink, writeFile } from 'fs/promises'
-import { join } from 'path'
 import { tmpdir } from 'os'
+import { join } from 'path'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { RpcHandlerManager } from '../../../api/rpc/RpcHandlerManager'
 import { registerDirectoryHandlers } from './directories'
 
@@ -27,13 +27,13 @@ describe('directory RPC handlers', () => {
         await writeFile(join(rootDir, 'README.md'), '# test')
 
         rpc = new RpcHandlerManager({ scopePrefix: 'session-test' })
-        registerDirectoryHandlers(rpc, rootDir)
+        registerDirectoryHandlers(rpc, () => rootDir)
     })
 
     it('lists root directory via empty path', async () => {
         const response = await rpc.handleRequest({
             method: 'session-test:listDirectory',
-            params: JSON.stringify({ path: '' })
+            params: JSON.stringify({ path: '' }),
         })
 
         const parsed = JSON.parse(response) as { success: boolean; entries?: Array<{ name: string; type: string }> }
@@ -54,9 +54,12 @@ describe('directory RPC handlers', () => {
 
         const response = await rpc.handleRequest({
             method: 'session-test:listDirectory',
-            params: JSON.stringify({ path: '' })
+            params: JSON.stringify({ path: '' }),
         })
-        const parsed = JSON.parse(response) as { success: boolean; entries?: Array<{ name: string; type: string; size?: number }> }
+        const parsed = JSON.parse(response) as {
+            success: boolean
+            entries?: Array<{ name: string; type: string; size?: number }>
+        }
         expect(parsed.success).toBe(true)
         const link = (parsed.entries ?? []).find((entry) => entry.name === 'bad-link')
         expect(link).toBeTruthy()

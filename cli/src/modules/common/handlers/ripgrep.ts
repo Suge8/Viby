@@ -1,8 +1,9 @@
-import { logger } from '@/ui/logger'
 import type { RpcHandlerManager } from '@/api/rpc/RpcHandlerManager'
 import { run as runRipgrep } from '@/modules/ripgrep/index'
+import { logger } from '@/ui/logger'
 import { validatePath } from '../pathSecurity'
 import { getErrorMessage, rpcError } from '../rpcResponses'
+import type { WorkingDirectoryProvider } from '../workingDirectory'
 
 interface RipgrepRequest {
     args: string[]
@@ -17,9 +18,13 @@ interface RipgrepResponse {
     error?: string
 }
 
-export function registerRipgrepHandlers(rpcHandlerManager: RpcHandlerManager, workingDirectory: string): void {
+export function registerRipgrepHandlers(
+    rpcHandlerManager: RpcHandlerManager,
+    getWorkingDirectory: WorkingDirectoryProvider
+): void {
     rpcHandlerManager.registerHandler<RipgrepRequest, RipgrepResponse>('ripgrep', async (data) => {
         logger.debug('Ripgrep request with args:', data.args, 'cwd:', data.cwd)
+        const workingDirectory = getWorkingDirectory()
 
         if (data.cwd) {
             const validation = validatePath(data.cwd, workingDirectory)
@@ -34,7 +39,7 @@ export function registerRipgrepHandlers(rpcHandlerManager: RpcHandlerManager, wo
                 success: true,
                 exitCode: result.exitCode,
                 stdout: result.stdout.toString(),
-                stderr: result.stderr.toString()
+                stderr: result.stderr.toString(),
             }
         } catch (error) {
             logger.debug('Failed to run ripgrep:', error)

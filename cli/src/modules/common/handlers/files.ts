@@ -1,10 +1,11 @@
-import { logger } from '@/ui/logger'
-import { readFile, stat, writeFile } from 'fs/promises'
 import { createHash } from 'crypto'
+import { readFile, stat, writeFile } from 'fs/promises'
 import { resolve } from 'path'
 import type { RpcHandlerManager } from '@/api/rpc/RpcHandlerManager'
+import { logger } from '@/ui/logger'
 import { validatePath } from '../pathSecurity'
 import { getErrorMessage, rpcError } from '../rpcResponses'
+import type { WorkingDirectoryProvider } from '../workingDirectory'
 
 interface ReadFileRequest {
     path: string
@@ -28,9 +29,13 @@ interface WriteFileResponse {
     error?: string
 }
 
-export function registerFileHandlers(rpcHandlerManager: RpcHandlerManager, workingDirectory: string): void {
+export function registerFileHandlers(
+    rpcHandlerManager: RpcHandlerManager,
+    getWorkingDirectory: WorkingDirectoryProvider
+): void {
     rpcHandlerManager.registerHandler<ReadFileRequest, ReadFileResponse>('readFile', async (data) => {
         logger.debug('Read file request:', data.path)
+        const workingDirectory = getWorkingDirectory()
 
         const validation = validatePath(data.path, workingDirectory)
         if (!validation.valid) {
@@ -50,6 +55,7 @@ export function registerFileHandlers(rpcHandlerManager: RpcHandlerManager, worki
 
     rpcHandlerManager.registerHandler<WriteFileRequest, WriteFileResponse>('writeFile', async (data) => {
         logger.debug('Write file request:', data.path)
+        const workingDirectory = getWorkingDirectory()
 
         const validation = validatePath(data.path, workingDirectory)
         if (!validation.valid) {

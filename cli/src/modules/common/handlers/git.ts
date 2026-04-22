@@ -1,8 +1,9 @@
-import { execFile, type ExecFileOptions } from 'child_process'
+import { type ExecFileOptions, execFile } from 'child_process'
 import { promisify } from 'util'
 import type { RpcHandlerManager } from '@/api/rpc/RpcHandlerManager'
 import { validatePath } from '../pathSecurity'
 import { rpcError } from '../rpcResponses'
+import type { WorkingDirectoryProvider } from '../workingDirectory'
 
 const execFileAsync = promisify(execFile)
 
@@ -49,22 +50,18 @@ function validateFilePath(filePath: string, workingDirectory: string): string | 
     return null
 }
 
-async function runGitCommand(
-    args: string[],
-    cwd: string,
-    timeout?: number
-): Promise<GitCommandResponse> {
+async function runGitCommand(args: string[], cwd: string, timeout?: number): Promise<GitCommandResponse> {
     try {
         const options: ExecFileOptions = {
             cwd,
-            timeout: timeout ?? 10_000
+            timeout: timeout ?? 10_000,
         }
         const { stdout, stderr } = await execFileAsync('git', args, options)
         return {
             success: true,
             stdout: stdout ? stdout.toString() : '',
             stderr: stderr ? stderr.toString() : '',
-            exitCode: 0
+            exitCode: 0,
         }
     } catch (error) {
         const execError = error as NodeJS.ErrnoException & {
@@ -78,20 +75,24 @@ async function runGitCommand(
             return rpcError('Command timed out', {
                 stdout: execError.stdout ? execError.stdout.toString() : '',
                 stderr: execError.stderr ? execError.stderr.toString() : '',
-                exitCode: typeof execError.code === 'number' ? execError.code : -1
+                exitCode: typeof execError.code === 'number' ? execError.code : -1,
             })
         }
 
         return rpcError(execError.message || 'Command failed', {
             stdout: execError.stdout ? execError.stdout.toString() : '',
             stderr: execError.stderr ? execError.stderr.toString() : execError.message || 'Command failed',
-            exitCode: typeof execError.code === 'number' ? execError.code : 1
+            exitCode: typeof execError.code === 'number' ? execError.code : 1,
         })
     }
 }
 
-export function registerGitHandlers(rpcHandlerManager: RpcHandlerManager, workingDirectory: string): void {
+export function registerGitHandlers(
+    rpcHandlerManager: RpcHandlerManager,
+    getWorkingDirectory: WorkingDirectoryProvider
+): void {
     rpcHandlerManager.registerHandler<GitStatusRequest, GitCommandResponse>('git-status', async (data) => {
+        const workingDirectory = getWorkingDirectory()
         const resolved = resolveCwd(data.cwd, workingDirectory)
         if (resolved.error) {
             return rpcError(resolved.error)
@@ -104,17 +105,17 @@ export function registerGitHandlers(rpcHandlerManager: RpcHandlerManager, workin
     })
 
     rpcHandlerManager.registerHandler<GitDiffNumstatRequest, GitCommandResponse>('git-diff-numstat', async (data) => {
+        const workingDirectory = getWorkingDirectory()
         const resolved = resolveCwd(data.cwd, workingDirectory)
         if (resolved.error) {
             return rpcError(resolved.error)
         }
-        const args = data.staged
-            ? ['diff', '--cached', '--numstat']
-            : ['diff', '--numstat']
+        const args = data.staged ? ['diff', '--cached', '--numstat'] : ['diff', '--numstat']
         return await runGitCommand(args, resolved.cwd, data.timeout)
     })
 
     rpcHandlerManager.registerHandler<GitDiffFileRequest, GitCommandResponse>('git-diff-file', async (data) => {
+        const workingDirectory = getWorkingDirectory()
         const resolved = resolveCwd(data.cwd, workingDirectory)
         if (resolved.error) {
             return rpcError(resolved.error)

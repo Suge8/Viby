@@ -1,11 +1,10 @@
+import type { SessionDriver, SessionHandoffSnapshot } from '@viby/protocol/types'
 import type {
     AgentFlavor,
     SessionCollaborationMode,
     SessionModelReasoningEffort,
     SessionPermissionMode,
-    TeamSessionSpawnRole
 } from '@/api/types'
-import type { SessionDriver, SessionHandoffSnapshot } from '@viby/protocol/types'
 
 export interface SpawnSessionOptions {
     machineId?: string
@@ -17,7 +16,6 @@ export interface SpawnSessionOptions {
     model?: string
     modelReasoningEffort?: SessionModelReasoningEffort
     permissionMode?: SessionPermissionMode
-    sessionRole?: TeamSessionSpawnRole
     collaborationMode?: SessionCollaborationMode
     token?: string
     sessionType?: 'simple' | 'worktree'

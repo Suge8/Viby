@@ -2,4 +2,8 @@
 
 import { runCli } from './commands/runCli'
 
-void runCli()
+runCli().catch((error) => {
+    const message = error instanceof Error ? (error.stack ?? error.message) : String(error)
+    process.stderr.write(`${message}\n`)
+    process.exit(1)
+})

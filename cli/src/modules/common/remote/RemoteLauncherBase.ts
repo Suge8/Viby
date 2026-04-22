@@ -1,129 +1,81 @@
-import { render } from 'ink';
-import type { ReactElement } from 'react';
-import { MessageBuffer } from '@/ui/ink/messageBuffer';
-import { restoreTerminalState } from '@/ui/terminalState';
+import { MessageBuffer } from '@/ui/ink/messageBuffer'
 
-export type RemoteLauncherExitReason = 'switch' | 'exit';
-
-export type RemoteLauncherDisplayContext = {
-    messageBuffer: MessageBuffer;
-    logPath?: string;
-    onExit: () => void | Promise<void>;
-    onSwitchToLocal: () => void | Promise<void>;
-};
-
-export type RemoteLauncherTerminalHandlers = {
-    onExit: () => void | Promise<void>;
-    onSwitchToLocal: () => void | Promise<void>;
-};
+export type RemoteLauncherExitReason = 'exit'
+export type RemoteLauncherControl = {
+    requestStop: () => Promise<void>
+}
 
 export type RemoteLauncherAbortHandlers = {
-    onAbort: () => void | Promise<void>;
-    onSwitch: () => void | Promise<void>;
-};
+    onAbort: () => void | Promise<void>
+}
 
 type RpcHandlerManagerLike = {
     registerHandler<TRequest = unknown, TResponse = unknown>(
         method: string,
         handler: (params: TRequest) => Promise<TResponse> | TResponse
-    ): void;
-};
+    ): void
+}
 
 export abstract class RemoteLauncherBase {
-    protected readonly messageBuffer: MessageBuffer;
-    protected readonly hasTTY: boolean;
-    protected readonly logPath?: string;
-    protected exitReason: RemoteLauncherExitReason | null = null;
-    protected shouldExit: boolean = false;
-    private inkInstance: ReturnType<typeof render> | null = null;
+    protected readonly messageBuffer: MessageBuffer
+    protected readonly logPath?: string
+    protected exitReason: RemoteLauncherExitReason | null = null
+    protected shouldExit: boolean = false
+    private stopInFlight: Promise<void> | null = null
 
     protected constructor(logPath?: string) {
-        this.logPath = logPath;
-        this.hasTTY = Boolean(process.stdout.isTTY && process.stdin.isTTY);
-        this.messageBuffer = new MessageBuffer();
+        this.logPath = logPath
+        this.messageBuffer = new MessageBuffer()
     }
 
-    protected abstract createDisplay(context: RemoteLauncherDisplayContext): ReactElement;
+    protected abstract runMainLoop(): Promise<void>
 
-    protected abstract runMainLoop(): Promise<void>;
+    protected abstract cleanup(): Promise<void>
 
-    protected abstract cleanup(): Promise<void>;
-
-    protected setupTerminal(handlers: RemoteLauncherTerminalHandlers): void {
-        if (this.hasTTY) {
-            console.clear();
-            this.inkInstance = render(this.createDisplay({
-                messageBuffer: this.messageBuffer,
-                logPath: this.logPath,
-                onExit: handlers.onExit,
-                onSwitchToLocal: handlers.onSwitchToLocal
-            }), {
-                exitOnCtrlC: false,
-                patchConsole: false
-            });
-        }
-
-        if (this.hasTTY) {
-            process.stdin.resume();
-            if (process.stdin.isTTY) {
-                process.stdin.setRawMode(true);
-            }
-            process.stdin.setEncoding('utf8');
-        }
-    }
+    protected abstract abortForStop(): Promise<void>
 
     protected setupAbortHandlers(
         rpcHandlerManager: RpcHandlerManagerLike,
         handlers: RemoteLauncherAbortHandlers
     ): void {
         rpcHandlerManager.registerHandler('abort', async () => {
-            await handlers.onAbort();
-        });
-
-        rpcHandlerManager.registerHandler('switch', async () => {
-            await handlers.onSwitch();
-        });
+            await handlers.onAbort()
+        })
     }
 
     protected clearAbortHandlers(rpcHandlerManager: RpcHandlerManagerLike): void {
-        rpcHandlerManager.registerHandler('abort', async () => {});
-        rpcHandlerManager.registerHandler('switch', async () => {});
+        rpcHandlerManager.registerHandler('abort', async () => {})
     }
 
-    protected async requestExit(
-        reason: RemoteLauncherExitReason,
-        handler: () => void | Promise<void>
-    ): Promise<void> {
-        if (!this.exitReason) {
-            this.exitReason = reason;
+    protected finalize(): void {
+        this.messageBuffer.clear()
+    }
+
+    public async requestStop(): Promise<void> {
+        if (this.stopInFlight) {
+            await this.stopInFlight
+            return
         }
-        this.shouldExit = true;
-        await handler();
-    }
 
-    protected finalizeTerminal(): void {
-        restoreTerminalState();
-        if (this.hasTTY) {
-            try {
-                process.stdin.pause();
-            } catch {
+        this.shouldExit = true
+        this.exitReason = 'exit'
+        const stopPromise = this.abortForStop().finally(() => {
+            if (this.stopInFlight === stopPromise) {
+                this.stopInFlight = null
             }
-        }
-        if (this.inkInstance) {
-            this.inkInstance.unmount();
-        }
-        this.messageBuffer.clear();
+        })
+        this.stopInFlight = stopPromise
+        await stopPromise
     }
 
-    protected async start(handlers: RemoteLauncherTerminalHandlers): Promise<RemoteLauncherExitReason> {
-        this.setupTerminal(handlers);
+    protected async start(): Promise<RemoteLauncherExitReason> {
         try {
-            await this.runMainLoop();
+            await this.runMainLoop()
         } finally {
-            await this.cleanup();
-            this.finalizeTerminal();
+            await this.cleanup()
+            this.finalize()
         }
 
-        return this.exitReason || 'exit';
+        return this.exitReason || 'exit'
     }
 }
