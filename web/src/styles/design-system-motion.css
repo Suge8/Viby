@@ -1,0 +1,95 @@
+@media (prefers-reduced-motion: no-preference) and (min-width: 768px) {
+    .sessions-detail-route-transition {
+        view-transition-name: viby-sessions-detail;
+    }
+
+    ::view-transition-old(viby-sessions-detail),
+    ::view-transition-new(viby-sessions-detail) {
+        animation-duration: var(--ds-session-detail-transition-duration);
+        animation-timing-function: var(--ds-ease-emphasized);
+    }
+
+    ::view-transition-old(viby-sessions-detail) {
+        animation-name: viby-sessions-detail-old;
+    }
+
+    ::view-transition-new(viby-sessions-detail) {
+        animation-name: viby-sessions-detail-new;
+    }
+
+    .session-chat-header-shell {
+        view-transition-name: viby-session-chat-header;
+    }
+
+    .session-chat-composer-shell {
+        view-transition-name: viby-session-chat-composer;
+    }
+
+    .session-chat-local-notice-stack {
+        view-transition-name: viby-session-chat-local-notices;
+    }
+
+    ::view-transition-old(viby-session-chat-header),
+    ::view-transition-new(viby-session-chat-header),
+    ::view-transition-old(viby-session-chat-composer),
+    ::view-transition-new(viby-session-chat-composer),
+    ::view-transition-old(viby-session-chat-local-notices),
+    ::view-transition-new(viby-session-chat-local-notices) {
+        animation-duration: 1ms;
+        animation-timing-function: linear;
+    }
+}
+
+@keyframes viby-sessions-detail-old {
+    from {
+        opacity: 1;
+        transform: translate3d(0, 0, 0);
+    }
+
+    to {
+        opacity: var(--ds-session-detail-transition-old-opacity);
+        transform: translate3d(var(--ds-session-detail-transition-old-x), 0, 0);
+    }
+}
+
+@keyframes viby-sessions-detail-new {
+    from {
+        opacity: var(--ds-session-detail-transition-new-opacity);
+        transform: translate3d(var(--ds-session-detail-transition-new-x), 0, 0);
+    }
+
+    to {
+        opacity: 1;
+        transform: translate3d(0, 0, 0);
+    }
+}
+
+@keyframes composer-overlay-enter {
+    from {
+        opacity: 0;
+        transform: translateY(10px) scale(0.985);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes viby-replying-dot {
+    0%,
+    100% {
+        opacity: 0.18;
+        transform: translate3d(0, 0.16rem, 0) scale(0.82);
+    }
+
+    35% {
+        opacity: 0.72;
+        transform: translate3d(0, -0.04rem, 0) scale(1);
+    }
+
+    60% {
+        opacity: 0.34;
+        transform: translate3d(0, 0.04rem, 0) scale(0.92);
+    }
+}

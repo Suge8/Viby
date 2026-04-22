@@ -1,0 +1,212 @@
+:root {
+    --ds-font-sans:
+        "Manrope", "Avenir Next", "SF Pro Display", "Segoe UI Variable Text", "Segoe UI", "Helvetica Neue", Arial,
+        sans-serif;
+    --ds-font-brand: "Outfit", "Avenir Next", "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", sans-serif;
+    --ds-font-mono: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+
+    --ds-radius-sm: 12px;
+    --ds-radius-md: 16px;
+    --ds-radius-lg: 20px;
+    --ds-radius-xl: 24px;
+    --ds-radius-2xl: 28px;
+    --ds-radius-pill: 999px;
+
+    --ds-motion-fast: 120ms;
+    --ds-motion-base: 180ms;
+    --ds-motion-slow: 260ms;
+    --ds-ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+    --ds-ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
+    --ds-ease-decelerate: cubic-bezier(0.12, 0.72, 0.08, 1);
+    --ds-session-detail-transition-duration: 220ms;
+    --ds-session-detail-transition-old-opacity: 0.94;
+    --ds-session-detail-transition-new-opacity: 0.88;
+    --ds-session-detail-transition-old-x: -0.35rem;
+    --ds-session-detail-transition-new-x: 0.45rem;
+
+    --ds-touch-target: 48px;
+    --ds-touch-target-compact: 40px;
+    --ds-field-radius: var(--ds-radius-md);
+    --ds-field-textarea-min-height: 120px;
+    --ds-content-width: 760px;
+    --ds-stage-width: 1040px;
+    --ds-thread-width: 52rem;
+
+    --ds-canvas: #ffffff;
+    --ds-canvas-ambient: none;
+    --ds-panel: rgba(255, 255, 255, 0.88);
+    --ds-panel-strong: #ffffff;
+    --ds-elevated: #ffffff;
+    --ds-overlay: rgba(0, 0, 0, 0.48);
+
+    --ds-text-primary: #0a0a0a;
+    --ds-text-secondary: #404040;
+    --ds-text-muted: #737373;
+    --ds-text-inverse: #fafafa;
+
+    --ds-brand: #0a0a0a;
+    --ds-brand-strong: #000000;
+    --ds-brand-soft: rgba(0, 0, 0, 0.06);
+    --ds-accent-coral: #ff7a59;
+    --ds-accent-lime: #23a55a;
+    --ds-accent-violet: #6b7280;
+    --ds-accent-gold: #c0841a;
+
+    --ds-border-subtle: rgba(10, 10, 10, 0.06);
+    --ds-border-default: rgba(10, 10, 10, 0.12);
+    --ds-border-strong: rgba(10, 10, 10, 0.22);
+
+    --ds-shadow-soft: 0 2px 10px rgba(0, 0, 0, 0.04);
+    --ds-shadow-card: 0 10px 30px rgba(0, 0, 0, 0.06);
+    --ds-shadow-floating: 0 24px 60px rgba(0, 0, 0, 0.16);
+    --ds-composer-surface-bg: color-mix(in srgb, var(--ds-panel-strong) 78%, transparent);
+    --ds-composer-shell-edge-bg: color-mix(in srgb, var(--ds-panel-strong) 86%, transparent);
+    --ds-composer-surface-blur: blur(18px);
+
+    --ds-success: #20b26b;
+    --ds-success-soft: rgba(32, 178, 107, 0.15);
+    --ds-warning: #e59a17;
+    --ds-warning-soft: rgba(229, 154, 23, 0.16);
+    --ds-danger: #df4862;
+    --ds-danger-soft: rgba(223, 72, 98, 0.14);
+
+    --app-bg: var(--ds-canvas);
+    --app-fg: var(--ds-text-primary);
+    --app-hint: var(--ds-text-muted);
+    --app-link: var(--ds-brand);
+    --app-button: var(--ds-brand);
+    --app-button-text: var(--ds-text-inverse);
+    --app-banner-bg: var(--ds-panel-strong);
+    --app-banner-text: var(--ds-text-primary);
+    --app-secondary-bg: var(--ds-panel);
+    --app-border: var(--ds-border-default);
+    --app-divider: var(--ds-border-subtle);
+    --app-subtle-bg: rgba(0, 0, 0, 0.04);
+    --app-code-bg: #fafafa;
+    --app-inline-code-bg: rgba(0, 0, 0, 0.06);
+
+    --app-diff-added-bg: rgba(32, 178, 107, 0.12);
+    --app-diff-added-text: var(--ds-text-primary);
+    --app-diff-removed-bg: rgba(223, 72, 98, 0.12);
+    --app-diff-removed-text: var(--ds-text-primary);
+
+    --app-git-staged-color: var(--ds-success);
+    --app-git-unstaged-color: var(--ds-warning);
+    --app-git-deleted-color: var(--ds-danger);
+    --app-git-renamed-color: var(--ds-brand);
+    --app-git-untracked-color: var(--ds-accent-violet);
+
+    --app-badge-warning-bg: var(--ds-warning-soft);
+    --app-badge-warning-text: #8a5d08;
+    --app-badge-warning-border: rgba(229, 154, 23, 0.26);
+    --app-badge-success-bg: var(--ds-success-soft);
+    --app-badge-success-text: #14784a;
+    --app-badge-success-border: rgba(32, 178, 107, 0.24);
+    --app-badge-error-bg: var(--ds-danger-soft);
+    --app-badge-error-text: #b3314a;
+    --app-badge-error-border: rgba(223, 72, 98, 0.22);
+    --app-session-processing-surface: #fff4c4;
+    --app-session-processing-badge: #ffd84d;
+    --app-session-processing-icon: #ffe58a;
+    --app-session-processing-text: #5f4700;
+    --app-session-processing-shadow: rgba(255, 198, 46, 0.26);
+    --app-session-awaiting-surface: #e4f8e8;
+    --app-session-awaiting-badge: #72cf8c;
+    --app-session-awaiting-icon: #c4eed0;
+    --app-session-awaiting-text: #0d6131;
+    --app-session-awaiting-shadow: rgba(46, 168, 93, 0.18);
+    --app-session-closed-surface: #ececee;
+    --app-session-closed-badge: #c6c7cc;
+    --app-session-closed-icon: #d8d9de;
+    --app-session-closed-text: #2d2f34;
+    --app-session-closed-shadow: rgba(17, 17, 17, 0.08);
+    --app-session-archived-surface: #f4f4f5;
+    --app-session-archived-badge: #dfdfe3;
+    --app-session-archived-icon: #eaebee;
+    --app-session-archived-text: #595c64;
+    --app-session-archived-shadow: rgba(17, 17, 17, 0.05);
+    --app-session-selected-border: color-mix(in srgb, var(--ds-brand) 18%, var(--ds-border-strong));
+    --app-session-selected-shadow: 0 0 0 1px var(--app-session-selected-border), var(--ds-shadow-card);
+    --app-attention-bg: #111111;
+    --app-attention-text: #fafafa;
+    --app-attention-shadow: rgba(17, 17, 17, 0.22);
+    --app-attention-card-shadow: rgba(17, 17, 17, 0.14);
+}
+
+[data-theme="dark"] {
+    --ds-canvas: #0f1012;
+    --ds-canvas-ambient: none;
+    --ds-panel: rgba(20, 21, 24, 0.92);
+    --ds-panel-strong: #15161a;
+    --ds-elevated: #1b1d21;
+    --ds-overlay: rgba(0, 0, 0, 0.6);
+
+    --ds-text-primary: #fafafa;
+    --ds-text-secondary: #e5e5e5;
+    --ds-text-muted: #a1a1aa;
+    --ds-text-inverse: #0a0a0a;
+
+    --ds-brand: #fafafa;
+    --ds-brand-strong: #ffffff;
+    --ds-brand-soft: rgba(255, 255, 255, 0.09);
+    --ds-accent-coral: #ff9b7c;
+    --ds-accent-lime: #7de2a0;
+    --ds-accent-violet: #c6b5ff;
+    --ds-accent-gold: #f0c86e;
+
+    --ds-border-subtle: rgba(255, 255, 255, 0.08);
+    --ds-border-default: rgba(255, 255, 255, 0.14);
+    --ds-border-strong: rgba(255, 255, 255, 0.22);
+
+    --ds-shadow-soft: 0 2px 12px rgba(0, 0, 0, 0.22);
+    --ds-shadow-card: 0 12px 36px rgba(0, 0, 0, 0.24);
+    --ds-shadow-floating: 0 24px 70px rgba(0, 0, 0, 0.42);
+    --ds-composer-surface-bg: color-mix(in srgb, var(--ds-panel-strong) 72%, transparent);
+    --ds-composer-shell-edge-bg: color-mix(in srgb, var(--ds-panel-strong) 82%, transparent);
+    --ds-composer-surface-blur: blur(20px);
+
+    --ds-success: #61d8a0;
+    --ds-success-soft: rgba(97, 216, 160, 0.14);
+    --ds-warning: #f2be51;
+    --ds-warning-soft: rgba(242, 190, 81, 0.18);
+    --ds-danger: #ff7c94;
+    --ds-danger-soft: rgba(255, 124, 148, 0.16);
+
+    --app-button: var(--ds-brand);
+    --app-secondary-bg: var(--ds-panel);
+    --app-banner-bg: var(--ds-panel-strong);
+    --app-banner-text: var(--ds-text-primary);
+    --app-subtle-bg: rgba(255, 255, 255, 0.06);
+    --app-code-bg: #0f0f0f;
+    --app-inline-code-bg: rgba(255, 255, 255, 0.08);
+    --app-diff-added-bg: rgba(97, 216, 160, 0.14);
+    --app-diff-added-text: var(--ds-text-primary);
+    --app-diff-removed-bg: rgba(255, 124, 148, 0.14);
+    --app-diff-removed-text: var(--ds-text-primary);
+    --app-session-processing-surface: #392d08;
+    --app-session-processing-badge: #ffd54a;
+    --app-session-processing-icon: #544216;
+    --app-session-processing-text: #fff0b3;
+    --app-session-processing-shadow: rgba(0, 0, 0, 0.32);
+    --app-session-awaiting-surface: #133222;
+    --app-session-awaiting-badge: #42b36b;
+    --app-session-awaiting-icon: #1e4a31;
+    --app-session-awaiting-text: #c6f7d4;
+    --app-session-awaiting-shadow: rgba(0, 0, 0, 0.26);
+    --app-session-closed-surface: #202228;
+    --app-session-closed-badge: #40434b;
+    --app-session-closed-icon: #2c2f36;
+    --app-session-closed-text: #d9dbe1;
+    --app-session-closed-shadow: rgba(0, 0, 0, 0.22);
+    --app-session-archived-surface: #191b20;
+    --app-session-archived-badge: #2f323a;
+    --app-session-archived-icon: #24272f;
+    --app-session-archived-text: #babcc4;
+    --app-session-archived-shadow: rgba(0, 0, 0, 0.18);
+    --app-session-selected-border: color-mix(in srgb, var(--ds-brand) 34%, var(--ds-border-strong));
+    --app-session-selected-shadow: 0 0 0 1px var(--app-session-selected-border), var(--ds-shadow-card);
+    --app-attention-bg: #111111;
+    --app-attention-text: #fafafa;
+    --app-attention-shadow: rgba(0, 0, 0, 0.36);
+    --app-attention-card-shadow: rgba(0, 0, 0, 0.3);
+}

@@ -1,0 +1,179 @@
+.viby-thread-viewport {
+    --ds-transcript-row-gap-compact: 0.5rem;
+    --ds-transcript-row-gap-base: 0.75rem;
+    --ds-transcript-row-gap-loose: 1rem;
+    overflow-anchor: none;
+    scrollbar-gutter: stable both-edges;
+    scroll-padding-top: var(--chat-header-anchor-space);
+}
+
+.ds-transcript-row {
+    padding-bottom: var(--ds-transcript-row-gap-base);
+    scroll-margin-top: var(--chat-header-anchor-space);
+}
+
+.ds-transcript-row[data-row-gap="compact"] {
+    padding-bottom: var(--ds-transcript-row-gap-compact);
+}
+
+.ds-transcript-row[data-row-gap="base"] {
+    padding-bottom: var(--ds-transcript-row-gap-base);
+}
+
+.ds-transcript-row[data-row-gap="loose"] {
+    padding-bottom: var(--ds-transcript-row-gap-loose);
+}
+
+.ds-transcript-row[data-row-gap="none"] {
+    padding-bottom: 0;
+}
+
+.ds-message-card {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.ds-message-card-right {
+    width: min(100%, var(--ds-thread-width));
+    min-width: 0;
+    margin-left: auto;
+}
+
+.ds-tool-card-surface {
+    border: 1px solid color-mix(in srgb, var(--ds-border-default) 72%, transparent);
+    border-color: color-mix(in srgb, var(--ds-border-default) 72%, transparent);
+    background: color-mix(in srgb, var(--ds-panel-strong) 96%, transparent);
+    box-shadow: none;
+}
+
+.ds-message-note {
+    width: min(100%, var(--ds-thread-width));
+    margin-inline: auto;
+    padding-inline: 0.5rem;
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--app-hint);
+    opacity: 0.8;
+}
+
+.ds-message-surface {
+    --ds-message-trailing-action-offset: 0.25rem;
+    --ds-message-trailing-action-size: var(--ds-touch-target-compact);
+    --ds-message-trailing-action-reserve: calc(
+        var(--ds-message-trailing-action-size) +
+        var(--ds-message-trailing-action-offset) +
+        0.25rem
+    );
+    position: relative;
+    isolation: isolate;
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid transparent;
+    border-radius: var(--ds-radius-2xl);
+    padding: 0.75rem 0.9rem;
+    transition:
+        border-color var(--ds-motion-fast) var(--ds-ease-standard),
+        background-color var(--ds-motion-fast) var(--ds-ease-standard);
+}
+
+.ds-message-surface-user {
+    width: fit-content;
+    max-width: min(92%, var(--ds-thread-width));
+    border-color: color-mix(in srgb, var(--ds-brand) 26%, transparent);
+    background: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--ds-brand) 22%, var(--ds-panel-strong)) 0%,
+        color-mix(in srgb, var(--ds-brand) 14%, var(--ds-panel-strong)) 100%
+    );
+    color: var(--ds-text-primary);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.ds-message-surface-assistant {
+    border-color: color-mix(in srgb, var(--ds-border-default) 68%, transparent);
+    background: color-mix(in srgb, var(--ds-panel-strong) 72%, transparent);
+    color: var(--app-fg);
+}
+
+.ds-message-surface-copyable {
+    cursor: text;
+    touch-action: pan-y;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+.ds-message-surface-copyable[data-copied="true"] {
+    border-color: color-mix(in srgb, var(--ds-success) 42%, transparent);
+    background: color-mix(in srgb, var(--ds-success) 6%, var(--ds-panel-strong));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ds-success) 18%, transparent);
+}
+
+.ds-message-surface-copy-content[data-has-trailing-action="true"] {
+    padding-right: var(--ds-message-trailing-action-reserve);
+}
+
+.ds-message-surface[data-content-layout="media-only"]
+    .ds-message-surface-copy-content[data-has-trailing-action="true"] {
+    padding-right: 0;
+}
+
+.ds-message-surface[data-content-layout="media-only"] {
+    padding: 0;
+}
+
+.ds-message-surface[data-content-layout="media-only"] .ds-message-surface-copy-content .aui-md,
+.ds-message-surface[data-content-layout="media-only"] .ds-message-surface-copy-content .aui-md-p {
+    margin: 0;
+}
+
+.ds-message-surface[data-content-layout="media-only"] .ds-message-surface-copy-content .aui-md-img {
+    display: block;
+    width: 100%;
+    border-radius: 0;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .ds-message-surface-copy-content[data-has-trailing-action="true"] {
+        padding-right: 0;
+    }
+
+    .ds-message-copy-button {
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity var(--ds-motion-fast) var(--ds-ease-standard);
+    }
+
+    .ds-message-surface-copyable:is(:hover, :focus-within) .ds-message-copy-button,
+    .ds-message-copy-button:focus-visible {
+        opacity: 0.72;
+        pointer-events: auto;
+    }
+
+    .ds-message-surface-copyable:is(:hover, :focus-within) .ds-message-copy-button:hover {
+        opacity: 1;
+    }
+}
+
+.ds-message-surface-user.ds-message-surface-copyable[data-copied="true"] {
+    background: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--ds-brand) 18%, var(--ds-panel-strong)) 0%,
+        color-mix(in srgb, var(--ds-success) 12%, var(--ds-panel-strong)) 100%
+    );
+}
+
+.ds-message-surface .aui-md-p {
+    margin-block: 0;
+}
+
+.ds-message-surface .aui-md-ul,
+.ds-message-surface .aui-md-ol {
+    margin-block: 0.5rem;
+}
+
+.ds-message-surface .aui-md-li + .aui-md-li {
+    margin-top: 0.125rem;
+}

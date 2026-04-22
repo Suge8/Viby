@@ -1,0 +1,250 @@
+.ds-section-kicker {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--app-hint);
+}
+
+.ds-metric-label,
+.ds-history-timestamp {
+    font-size: 0.6875rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--app-hint);
+}
+
+.ds-history-timestamp {
+    flex-shrink: 0;
+}
+
+.ds-card {
+    border: 1px solid var(--ds-border-default);
+    border-radius: var(--ds-radius-lg);
+    background: var(--ds-panel);
+    padding: 1rem;
+}
+
+.ds-card-subtle {
+    border: 1px solid var(--ds-border-default);
+    border-radius: var(--ds-radius-md);
+    background: color-mix(in srgb, var(--ds-panel-strong) 96%, transparent);
+    padding: 0.75rem;
+}
+
+.ds-card-soft {
+    border: 1px solid var(--ds-border-default);
+    border-radius: var(--ds-radius-md);
+    background: var(--ds-panel-strong);
+    padding: 0.75rem;
+}
+
+.ds-card-empty {
+    border: 1px dashed var(--ds-border-default);
+    border-radius: var(--ds-radius-md);
+    background: color-mix(in srgb, var(--ds-panel-strong) 92%, transparent);
+    padding: 1rem;
+    font-size: 0.875rem;
+    color: var(--app-hint);
+}
+
+.ds-card-danger {
+    border: 1px solid color-mix(in srgb, var(--ds-danger) 28%, transparent);
+    border-radius: var(--ds-radius-md);
+    background: color-mix(in srgb, var(--ds-danger) 10%, transparent);
+    padding: 0.75rem;
+    font-size: 0.875rem;
+    color: var(--ds-danger);
+}
+
+.ds-card-highlight {
+    border: 1px solid color-mix(in srgb, var(--ds-brand) 28%, transparent);
+    border-radius: var(--ds-radius-md);
+    background: color-mix(in srgb, var(--ds-brand) 10%, transparent);
+    padding: 0.75rem;
+    font-size: 0.875rem;
+}
+
+.ds-card-note {
+    border: 1px solid var(--ds-border-default);
+    border-radius: var(--ds-radius-md);
+    background: var(--ds-panel);
+    padding: 0.75rem;
+    font-size: 0.875rem;
+    color: var(--app-fg);
+}
+
+.ds-field-label {
+    display: block;
+    font-size: 0.875rem;
+    color: var(--app-hint);
+}
+
+.ds-field-title {
+    font-weight: 500;
+    color: var(--ds-text-primary);
+}
+
+.ds-field-help {
+    margin-top: 0.25rem;
+    font-size: 0.6875rem;
+    line-height: 1.45;
+    color: var(--app-hint);
+}
+
+.ds-field-error {
+    color: var(--ds-danger);
+}
+
+.ds-field-control-compact {
+    min-height: 2.75rem;
+    border-radius: var(--ds-field-radius);
+    background: var(--ds-panel);
+    padding: 0.5rem 0.75rem;
+    box-shadow: none;
+}
+
+.ds-field-control-elevated {
+    min-height: 3rem;
+    border-radius: var(--ds-radius-lg);
+    background: var(--ds-elevated);
+}
+
+.ds-field-control-elevated-gold {
+    min-height: 3.125rem;
+    font-weight: 500;
+    transition:
+        border-color var(--ds-motion-fast) var(--ds-ease-standard),
+        box-shadow var(--ds-motion-fast) var(--ds-ease-standard);
+}
+
+.ds-field-control-elevated-gold:focus-visible {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--ds-accent-gold) 18%, transparent);
+}
+
+.ds-dialog-bottom-sheet {
+    bottom: 0.5rem !important;
+    top: auto !important;
+    width: calc(100vw - 12px) !important;
+    max-width: none !important;
+    transform: translateY(0) !important;
+    overflow: hidden;
+    border-radius: var(--ds-radius-lg);
+    padding: 0;
+}
+
+.ds-dialog-bottom-sheet-wide {
+    max-width: none !important;
+}
+
+@media (min-width: 640px) {
+    .ds-dialog-bottom-sheet {
+        bottom: auto !important;
+        top: 50% !important;
+        width: calc(100vw - 24px) !important;
+        max-width: 48rem !important;
+        transform: translateY(-50%) !important;
+    }
+
+    .ds-dialog-bottom-sheet-wide {
+        max-width: 64rem !important;
+    }
+}
+
+.ds-dialog-scroll-body {
+    overflow-y: auto;
+    padding-right: 0.25rem;
+}
+
+.ds-dialog-scroll-body-compact {
+    max-height: 72vh;
+}
+
+.ds-dialog-scroll-body-tall {
+    max-height: 75vh;
+    overflow: auto;
+}
+
+.ds-inline-kicker {
+    margin-bottom: 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--app-hint);
+}
+
+.ds-field-text {
+    font-size: 0.875rem;
+    color: var(--app-hint);
+}
+
+.ds-body-text {
+    font-size: 0.875rem;
+    color: var(--app-fg);
+}
+
+.ds-chat-branch-rail {
+    border-left: 1px solid color-mix(in srgb, var(--ds-border-default) 72%, transparent);
+    padding-left: 0.75rem;
+}
+
+.ds-transcript-notice-shell {
+    margin-inline: auto;
+    max-width: min(100%, 32rem);
+}
+
+.ds-transcript-role-chip {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid color-mix(in srgb, var(--ds-brand) 30%, transparent);
+    border-radius: var(--ds-radius-pill);
+    background: color-mix(in srgb, var(--ds-brand) 12%, transparent);
+    padding: 0.125rem 0.5rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--ds-text-primary);
+}
+
+.ds-checkbox-input {
+    border-radius: 0.625rem;
+}
+
+.ds-checkbox-indicator {
+    border-radius: 0.625rem;
+    border: 1px solid var(--ds-border-default);
+    background: var(--ds-panel-strong);
+    color: transparent;
+    transition:
+        border-color var(--ds-motion-fast) var(--ds-ease-standard),
+        background-color var(--ds-motion-fast) var(--ds-ease-standard),
+        color var(--ds-motion-fast) var(--ds-ease-standard),
+        opacity var(--ds-motion-fast) var(--ds-ease-standard),
+        transform var(--ds-motion-fast) var(--ds-ease-standard);
+}
+
+.ds-floating-control {
+    box-shadow: 0 18px 42px rgba(9, 15, 35, 0.16);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    transition:
+        transform var(--ds-motion-base) var(--ds-ease-emphasized),
+        box-shadow var(--ds-motion-base) var(--ds-ease-emphasized),
+        border-color var(--ds-motion-fast) var(--ds-ease-standard),
+        background-color var(--ds-motion-fast) var(--ds-ease-standard),
+        color var(--ds-motion-fast) var(--ds-ease-standard),
+        opacity var(--ds-motion-fast) var(--ds-ease-standard);
+}
+
+.ds-recent-path-chip {
+    max-width: 15rem;
+    border-radius: 999px;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    color: var(--ds-text-secondary);
+}
+
+.ds-recent-path-chip:hover {
+    border-color: var(--ds-border-strong);
+    color: var(--ds-text-primary);
+}

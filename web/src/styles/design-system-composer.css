@@ -1,0 +1,245 @@
+.ds-chat-shell {
+    display: grid;
+    height: 100%;
+    flex: 1 1 auto;
+    min-height: 0;
+    grid-template-rows: minmax(0, 1fr) auto;
+    overflow: hidden;
+}
+
+.session-chat-layout {
+    --chat-composer-offset-bottom: 0px;
+    --chat-composer-reserved-space: 0px;
+    --chat-floating-control-offset-bottom: 0px;
+    --chat-composer-stage-top: 100vh;
+    --chat-desktop-stage-center-x: 50vw;
+    --chat-composer-visual-clearance: 0.375rem;
+    --chat-composer-occupied-space: var(--chat-composer-visual-clearance);
+    --chat-bottom-control-min-offset: 1.5rem;
+    --chat-bottom-control-lift: 7.5rem;
+    --chat-desktop-bottom-control-gap: 0.5rem;
+    --chat-bottom-control-bottom-offset: calc(
+        var(--chat-composer-offset-bottom) +
+        max(
+            var(--chat-bottom-control-min-offset),
+            calc(var(--chat-composer-occupied-space) - var(--chat-bottom-control-lift))
+        )
+    );
+    --chat-side-control-right-offset: max(0.4rem, calc(env(safe-area-inset-right) + 0.4rem));
+    --chat-side-control-upper-top: 24%;
+    --chat-side-control-size: 2.5rem;
+    --chat-side-control-rest-bottom-offset: calc(env(safe-area-inset-bottom) + 6rem);
+    --chat-side-control-bottom-gap: 5.75rem;
+    --chat-side-control-bottom-offset: calc(
+        var(--chat-floating-control-offset-bottom) +
+        var(--chat-side-control-bottom-gap)
+    );
+}
+
+.ds-composer-shell {
+    position: relative;
+    z-index: 10;
+    padding-top: 0;
+    padding-bottom: 0;
+    background: transparent;
+    backdrop-filter: none;
+}
+
+.ds-composer-surface {
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--ds-border-default) 82%, transparent);
+    border-radius: calc(var(--ds-radius-2xl) + 4px);
+    background: var(--ds-composer-surface-bg);
+    box-shadow: 0 18px 48px rgba(9, 15, 35, 0.12);
+    -webkit-backdrop-filter: var(--ds-composer-surface-blur);
+    backdrop-filter: var(--ds-composer-surface-blur);
+}
+
+.ds-composer-overlay {
+    border-radius: var(--ds-radius-2xl);
+    border: 1px solid var(--ds-border-default);
+    background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--ds-panel-strong) 96%, transparent),
+        color-mix(in srgb, var(--ds-panel) 90%, transparent)
+    );
+    box-shadow: var(--ds-shadow-floating);
+    -webkit-backdrop-filter: var(--ds-composer-surface-blur);
+    backdrop-filter: var(--ds-composer-surface-blur);
+}
+
+.ds-composer-overlay-enter {
+    animation: composer-overlay-enter var(--ds-motion-slow) var(--ds-ease-emphasized);
+    transform-origin: bottom center;
+    will-change: opacity, transform;
+}
+
+.ds-composer-overlay-width {
+    max-width: min(100%, 25rem);
+}
+
+.ds-replying-indicator-anchor {
+    pointer-events: none;
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 0.35rem);
+    left: 0;
+    z-index: 1;
+}
+
+.ds-stage-empty-icon {
+    filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.18));
+}
+
+.ds-replying-indicator-shell {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+    transition:
+        opacity var(--ds-replying-indicator-exit-duration, 140ms) var(--ds-ease-emphasized),
+        transform var(--ds-replying-indicator-exit-duration, 140ms) var(--ds-ease-emphasized);
+    will-change: opacity, transform;
+}
+
+.ds-replying-indicator-shell[data-state="exiting"] {
+    opacity: 0;
+    transform: translate3d(0, 0.18rem, 0);
+}
+
+.ds-replying-indicator {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 3.5rem;
+    min-height: 2.35rem;
+    padding: 0.65rem 0.85rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--ds-brand) 8%, var(--ds-panel-strong) 92%);
+}
+
+.ds-replying-indicator-track {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.ds-replying-indicator-dot {
+    width: 0.38rem;
+    height: 0.38rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--ds-brand) 56%, white 44%);
+    opacity: 0.18;
+    transform: translate3d(0, 0.16rem, 0) scale(0.82);
+    animation: viby-replying-dot 1.08s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+    will-change: transform, opacity;
+}
+
+@media (min-width: 768px) {
+    .ds-composer-shell {
+        padding-top: 0;
+        padding-bottom: calc(env(safe-area-inset-bottom) + 0.75rem);
+    }
+}
+
+@media (max-width: 767px) {
+    .app-shell[data-viby-route="session-chat"] {
+        --ds-session-detail-transition-duration: 180ms;
+        --ds-session-detail-transition-old-x: -0.25rem;
+        --ds-session-detail-transition-new-x: 0.3rem;
+    }
+
+    .ds-composer-shell {
+        padding-top: 0;
+    }
+
+    .app-shell[data-viby-route="session-chat"],
+    .app-shell[data-viby-route="session-chat"] .app-route-layer,
+    .app-shell[data-viby-route="session-chat"] .app-route-transition,
+    .app-shell[data-viby-route="session-chat"] .sessions-detail-route-transition,
+    .app-shell[data-viby-route="session-chat"] .session-chat-page,
+    .app-shell[data-viby-route="session-chat"] .session-chat-page-body {
+        height: 100%;
+        min-height: 0;
+        background: var(--app-bg);
+        overflow: hidden;
+    }
+
+    .app-shell[data-viby-route="session-chat"],
+    .app-shell[data-viby-route="session-chat"] .app-route-layer,
+    .app-shell[data-viby-route="session-chat"] .app-route-transition,
+    .app-shell[data-viby-route="session-chat"] .sessions-detail-route-transition,
+    .app-shell[data-viby-route="session-chat"] .session-chat-page {
+        min-height: 100dvh;
+    }
+
+    .app-shell[data-viby-route="session-chat"] .session-chat-layout {
+        display: grid;
+        height: 100%;
+        min-height: 0;
+        background: var(--app-bg);
+        overflow: hidden;
+        --chat-composer-visual-clearance: 0.75rem;
+        --chat-composer-occupied-space: calc(
+            var(--chat-composer-reserved-space) +
+            var(--chat-composer-visual-clearance)
+        );
+        --chat-bottom-control-min-offset: 7rem;
+        --chat-side-control-upper-top: 23%;
+        --chat-side-control-size: 2.5rem;
+        --chat-side-control-rest-bottom-offset: calc(env(safe-area-inset-bottom) + clamp(5.5rem, 18svh, 8.5rem));
+        --chat-side-control-bottom-gap: 5.15rem;
+    }
+
+    .app-shell[data-viby-route="session-chat"] .session-chat-thread-root {
+        height: 100%;
+        min-height: 0;
+        background: transparent;
+        overflow: hidden;
+    }
+
+    .app-shell[data-viby-route="session-chat"] .session-chat-thread-viewport {
+        height: 100%;
+        min-height: 0;
+        background: transparent;
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior-y: contain;
+    }
+
+    .app-shell[data-viby-route="session-chat"] .session-chat-composer-shell {
+        position: fixed;
+        right: 0;
+        bottom: var(--chat-composer-offset-bottom);
+        left: 0;
+        z-index: 20;
+        background: transparent;
+    }
+
+    .app-shell[data-viby-route="session-chat"]
+        .session-chat-layout[data-chat-keyboard-open="true"]
+        .session-chat-thread-bottom-control-anchor {
+        bottom: var(--chat-side-control-bottom-offset);
+    }
+
+    .app-shell[data-viby-route="session-chat"] .session-chat-composer-shell > .ds-stage-shell {
+        position: relative;
+        z-index: 1;
+    }
+
+    .app-shell[data-viby-route="session-chat"] .session-chat-composer-shell .ds-composer-surface {
+        border-bottom-color: color-mix(in srgb, var(--ds-border-default) 82%, transparent);
+        border-bottom-left-radius: calc(var(--ds-radius-2xl) + 4px);
+        border-bottom-right-radius: calc(var(--ds-radius-2xl) + 4px);
+        background: linear-gradient(180deg, var(--ds-composer-surface-bg), var(--ds-composer-shell-edge-bg));
+        box-shadow: 0 18px 48px rgba(9, 15, 35, 0.12);
+        -webkit-backdrop-filter: var(--ds-composer-surface-blur);
+        backdrop-filter: var(--ds-composer-surface-blur);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ds-replying-indicator-dot {
+        animation: none;
+        opacity: 0.52;
+        transform: scale(0.92);
+    }
+}

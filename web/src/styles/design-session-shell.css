@@ -1,0 +1,183 @@
+.session-chat-page {
+    --ds-session-chat-header-layer: 20;
+    --ds-session-chat-history-control-layer: 15;
+    --ds-session-chat-bottom-control-layer: 25;
+    --ds-session-chat-header-clearance: calc(env(safe-area-inset-top) + 5rem);
+    --chat-header-visual-clearance: 0.5rem;
+    --chat-header-anchor-space: calc(var(--ds-session-chat-header-clearance) + var(--chat-header-visual-clearance));
+    --ds-session-chat-header-controls-top-gap: 0.125rem;
+    --ds-session-chat-header-controls-top-gap-desktop: 0.25rem;
+    --ds-session-chat-history-control-inset: 2rem;
+    --ds-session-chat-history-control-top-desktop: calc(var(--ds-session-chat-header-clearance) + 0.25rem);
+}
+
+.ds-sessions-shell-header {
+    background: var(--app-bg);
+    padding-top: env(safe-area-inset-top);
+}
+
+.ds-sessions-shell-header-frame {
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-inline: 4.75rem;
+}
+
+.ds-sessions-shell-header-title {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-family: var(--ds-font-brand);
+    font-size: 1.72rem;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.018em;
+    color: color-mix(in srgb, var(--ds-text-primary) 96%, white 4%);
+}
+
+.ds-sessions-shell-brand-mark {
+    color: color-mix(in srgb, var(--ds-text-primary) 94%, white 6%);
+}
+
+.ds-sessions-shell-action-button {
+    height: 2.75rem;
+    width: 2.75rem;
+    color: var(--app-hint);
+}
+
+.ds-sessions-shell-action-button:hover {
+    color: var(--app-fg);
+}
+
+.ds-sessions-shell-action-icon {
+    color: var(--ds-accent-coral);
+}
+
+.ds-thread-notice {
+    margin-inline: auto;
+    max-width: min(100%, 32rem);
+}
+
+.ds-thread-side-control-base {
+    pointer-events: auto;
+    display: flex;
+    height: var(--chat-side-control-size);
+    width: var(--chat-side-control-size);
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    text-align: center;
+}
+
+.ds-thread-history-control {
+    border-radius: 999px;
+}
+
+.ds-thread-history-control-wrapper {
+    pointer-events: none;
+    position: fixed;
+    z-index: var(--ds-session-chat-history-control-layer);
+    right: var(--chat-side-control-right-offset);
+    top: var(--chat-side-control-upper-top);
+    transform: translateY(-50%);
+}
+
+.ds-thread-bottom-control-wrapper {
+    pointer-events: none;
+    position: fixed;
+    z-index: var(--ds-session-chat-bottom-control-layer);
+    right: var(--chat-side-control-right-offset);
+    bottom: var(--chat-side-control-rest-bottom-offset);
+}
+
+.ds-thread-bottom-control {
+    border-radius: 999px;
+}
+
+.ds-thread-history-control,
+.ds-thread-bottom-control {
+    pointer-events: auto;
+}
+
+.ds-thread-side-control-pending-dot {
+    position: absolute;
+    right: -0.125rem;
+    top: -0.125rem;
+    height: 0.4375rem;
+    width: 0.4375rem;
+    border-radius: 999px;
+    background: currentColor;
+    opacity: 0.85;
+}
+
+.ds-thread-side-control-hidden {
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+}
+
+.ds-launch-section-heading {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ds-text-muted);
+}
+
+.ds-launch-select-control {
+    min-height: 3.125rem;
+    font-weight: 500;
+    transition:
+        border-color var(--ds-motion-fast) var(--ds-ease-standard),
+        box-shadow var(--ds-motion-fast) var(--ds-ease-standard);
+}
+
+.ds-launch-yolo-surface {
+    border: 1px solid var(--ds-border-default);
+    border-radius: var(--ds-radius-lg);
+    background: color-mix(in srgb, var(--ds-panel-strong) 96%, transparent);
+    padding: 0.75rem 1rem;
+}
+
+@media (min-width: 640px) {
+    .session-chat-page {
+        --ds-session-chat-header-clearance: calc(env(safe-area-inset-top) + 5.5rem);
+        --ds-session-chat-history-control-inset: 2.5rem;
+        --chat-header-visual-clearance: 0.75rem;
+    }
+}
+
+@media (min-width: 768px) {
+    .ds-thread-history-control-wrapper {
+        left: var(--chat-desktop-stage-center-x);
+        right: auto;
+        top: var(--ds-session-chat-history-control-top-desktop);
+        transform: translateX(-50%);
+    }
+
+    .ds-thread-bottom-control-wrapper {
+        left: var(--chat-desktop-stage-center-x);
+        right: auto;
+        top: calc(
+            var(--chat-composer-stage-top) -
+            var(--chat-side-control-size) -
+            var(--chat-desktop-bottom-control-gap)
+        );
+        bottom: auto;
+        transform: translateX(-50%);
+    }
+
+    .ds-thread-history-control,
+    .ds-thread-bottom-control {
+        border-radius: 999px;
+        height: var(--chat-side-control-size);
+        width: var(--chat-side-control-size);
+    }
+}

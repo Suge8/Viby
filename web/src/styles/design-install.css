@@ -1,0 +1,121 @@
+.ds-install-badge {
+    display: inline-flex;
+    border: 1px solid var(--ds-border-default);
+    border-radius: 999px;
+    background: var(--app-subtle-bg);
+    padding: 0.25rem 0.625rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--app-hint);
+}
+
+.ds-install-platform-badge {
+    display: inline-flex;
+    border: 1px solid color-mix(in srgb, var(--ds-accent-violet) 24%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--ds-accent-violet) 10%, var(--ds-panel-strong));
+    padding: 0.25rem 0.625rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--ds-accent-violet);
+}
+
+.ds-install-banner-surface {
+    overflow: hidden;
+    border: 1px solid var(--ds-border-default);
+    border-radius: 1.75rem;
+    background: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--ds-panel-strong) 90%, var(--ds-accent-coral) 10%) 0%,
+        color-mix(in srgb, var(--ds-panel-strong) 92%, var(--ds-accent-violet) 8%) 100%
+    );
+    padding: 1rem;
+    box-shadow: var(--ds-shadow-card);
+}
+
+.ds-install-brand-badge {
+    display: inline-flex;
+    height: 1.5rem;
+    width: 1.5rem;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid color-mix(in srgb, var(--ds-brand) 28%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--ds-brand) 18%, var(--ds-panel-strong));
+    color: var(--ds-brand);
+    box-shadow: var(--ds-shadow-soft);
+}
+
+.ds-install-guide-sheet {
+    width: 100%;
+    max-width: 32rem;
+    border-radius: 2rem 2rem 0 0;
+    padding: 1.5rem;
+    padding-bottom: calc(2rem + env(safe-area-inset-bottom));
+}
+
+.ds-install-close-button {
+    margin-right: -0.25rem;
+    border-radius: 999px;
+    color: var(--app-hint);
+}
+
+.ds-install-close-button:hover {
+    background: var(--app-subtle-bg);
+}
+
+.ds-install-action-button {
+    min-width: 6.5rem;
+}
+
+.ds-install-step-card {
+    border: 1px solid var(--ds-border-default);
+    border-radius: 1.5rem;
+    background: var(--ds-panel-strong);
+    padding: 1rem;
+    box-shadow: var(--ds-shadow-soft);
+}
+
+.ds-install-step-index {
+    display: inline-flex;
+    height: 2.75rem;
+    width: 2.75rem;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 1.125rem;
+    border-width: 1px;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.ds-install-step-icon {
+    display: inline-flex;
+    height: 2.5rem;
+    width: 2.5rem;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--ds-border-default);
+    border-radius: 1rem;
+    background: var(--app-subtle-bg);
+    color: var(--app-fg);
+}
+
+.ds-install-lab-icon {
+    display: inline-flex;
+    height: 3rem;
+    width: 3rem;
+    align-items: center;
+    justify-content: center;
+    border-width: 1px;
+    border-radius: 1.125rem;
+}
+
+.ds-install-lab-icon-compact {
+    height: 2rem;
+    width: 2rem;
+    border-radius: 0.875rem;
+}

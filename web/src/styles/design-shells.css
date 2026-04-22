@@ -1,0 +1,291 @@
+.ds-session-list-count-badge {
+    min-width: 1.75rem;
+    font-size: 0.6875rem;
+}
+
+.ds-sessions-list-pane {
+    width: 100%;
+}
+
+@media (min-width: 1024px) {
+    .ds-sessions-list-pane {
+        width: 26.25rem;
+    }
+}
+
+@media (min-width: 1280px) {
+    .ds-sessions-list-pane {
+        width: 30rem;
+    }
+}
+
+.ds-session-list-new-button {
+    height: 2.75rem;
+    width: 2.75rem;
+}
+
+@media (min-width: 640px) {
+    .ds-session-list-new-button {
+        width: auto;
+    }
+}
+
+.ds-session-list-group-chip {
+    font-size: 0.6875rem;
+    letter-spacing: 0.02em;
+}
+
+.ds-session-list-group-toggle {
+    min-height: 2rem;
+    font-size: 0.6875rem;
+}
+
+.ds-session-list-item-title {
+    font-size: 0.9375rem;
+}
+
+.ds-session-list-item-icon {
+    border-radius: 0.875rem;
+}
+
+.ds-session-list-section-title {
+    letter-spacing: 0.16em;
+}
+
+.ds-session-list-section-count {
+    min-width: 1.5rem;
+    font-size: 0.6875rem;
+}
+
+.ds-sessions-empty-shell {
+    max-width: 35rem;
+}
+
+.ds-sessions-empty-title {
+    font-size: 2rem;
+    letter-spacing: -0.06em;
+}
+
+.ds-sessions-empty-description {
+    max-width: 34rem;
+}
+
+.ds-surface-route-header {
+    padding-top: calc(1rem + env(safe-area-inset-top));
+}
+
+.ds-surface-route-header-eyebrow {
+    font-size: 0.6875rem;
+    letter-spacing: 0.16em;
+}
+
+.ds-surface-route-header-title {
+    font-size: 1.75rem;
+    letter-spacing: -0.05em;
+}
+
+.ds-settings-icon-glyph {
+    height: 1.125rem;
+    width: 1.125rem;
+}
+
+.ds-surface-group-card {
+    border-radius: 1.5rem;
+}
+
+.ds-surface-group-card-title {
+    font-size: 1.125rem;
+    letter-spacing: -0.04em;
+}
+
+.ds-surface-section-card-title {
+    letter-spacing: -0.04em;
+}
+
+@media (min-width: 640px) {
+    .ds-surface-section-card-title {
+        font-size: 1.0625rem;
+    }
+}
+
+.ds-surface-section-card-description {
+    font-size: 0.8125rem;
+    line-height: 1.25rem;
+}
+
+@media (min-width: 640px) {
+    .ds-surface-section-card-description {
+        font-size: 0.875rem;
+        line-height: 1.5rem;
+    }
+}
+
+.ds-settings-select-card {
+    border-radius: 1.25rem;
+}
+
+.ds-settings-select-summary {
+    min-height: 4rem;
+}
+
+.ds-settings-select-option {
+    border-radius: 1.125rem;
+}
+
+.ds-file-status-badge {
+    font-size: 0.625rem;
+}
+
+.ds-file-line-changes {
+    font-size: 0.6875rem;
+}
+
+.ds-file-search-folder-icon {
+    height: 1.375rem;
+    width: 1.375rem;
+}
+
+.ds-floating-action-menu {
+    min-width: 13.75rem;
+}
+
+.ds-floating-action-menu-heading {
+    font-size: 0.625rem;
+    letter-spacing: 0.18em;
+}
+
+.ds-language-switcher-menu {
+    min-width: 10rem;
+}
+
+.ds-cli-output-fallback-body {
+    max-height: 40vh;
+}
+
+.ds-runtime-notice-icon-shell {
+    height: 2.25rem;
+    width: 2.25rem;
+    border-radius: 0.875rem;
+}
+
+.ds-login-hub-trigger,
+.ds-login-server-hint {
+    font-size: 0.6875rem;
+}
+
+.ds-login-title {
+    letter-spacing: -0.04em;
+}
+
+.ds-loading-panel-shell {
+    max-width: 20rem;
+}
+
+.ds-loading-panel-title {
+    letter-spacing: -0.02em;
+}
+
+.ds-loading-list-icon {
+    border-radius: 0.5rem;
+}
+
+.ds-member-control-kicker {
+    font-size: 0.8125rem;
+}
+
+.ds-member-control-draft {
+    min-height: 6rem;
+}
+
+.ds-composer-option-button,
+.ds-composer-action-button {
+    border-radius: 1rem;
+}
+
+.ds-composer-settings-copy,
+.ds-composer-action-copy {
+    font-size: 0.6875rem;
+}
+
+.ds-markdown-inline-code {
+    padding: 0.1em 0.3em;
+    font-size: 0.9em;
+}
+
+.ds-attachment-chip {
+    border-radius: 1.125rem;
+}
+
+.ds-attachment-label {
+    max-width: 9.375rem;
+}
+
+.ds-message-status-icon {
+    height: 0.875rem;
+    width: 0.875rem;
+}
+
+.ds-session-header-meta,
+.ds-session-state-badge,
+.ds-machine-online-badge {
+    font-size: 0.6875rem;
+}
+
+.ds-session-attention-badge {
+    font-size: 0.625rem;
+}
+
+.ds-session-attention-badge-compact {
+    font-size: 0.5625rem;
+}
+
+.ds-session-tab-button {
+    min-height: 2.75rem;
+}
+
+.ds-directory-tree-folder-icon {
+    height: 1.375rem;
+    width: 1.375rem;
+}
+
+.ds-stage-brand-mark-glyph {
+    height: 78%;
+    width: 78%;
+}
+
+.ds-toolcard-input-textarea {
+    min-height: 5.5rem;
+}
+
+.ds-new-session-action-bar {
+    border-radius: var(--ds-radius-2xl);
+}
+
+.ds-project-picker-dialog-body {
+    max-height: min(78vh, 45rem);
+}
+
+.ds-settings-info-value {
+    letter-spacing: -0.02em;
+}
+
+.ds-toolcard-note-textarea {
+    min-height: 3.75rem;
+}
+
+.ds-sessions-shell-header-row {
+    min-height: 3rem;
+}
+
+.ds-directory-picker-button {
+    min-width: 7.75rem;
+}
+
+.ds-directory-recent-label,
+.ds-session-type-worktree-label {
+    letter-spacing: 0.14em;
+}
+
+.ds-session-type-worktree-card {
+    border-radius: 1.125rem;
+}
