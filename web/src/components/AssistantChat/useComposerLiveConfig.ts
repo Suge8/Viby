@@ -1,17 +1,12 @@
-import { useMemo } from 'react'
 import {
+    type SameSessionSwitchTargetDriver,
     supportsLiveModelReasoningEffortForDriver,
-    supportsLiveModelSelectionForDriver
+    supportsLiveModelSelectionForDriver,
 } from '@viby/protocol'
-import type {
-    CodexCollaborationMode,
-    CodexReasoningEffort,
-    ModelReasoningEffort,
-    PermissionMode,
-} from '@/types/api'
-import type { ComposerActionHandlers, ComposerConfigState } from '@/components/AssistantChat/composerTypes'
+import { useMemo } from 'react'
 import { buildComposerControlSections } from '@/components/AssistantChat/composerPanelSections'
-import { useComposerPlatform, type ComposerHaptic } from '@/components/AssistantChat/useComposerPlatform'
+import type { ComposerActionHandlers, ComposerConfigState } from '@/components/AssistantChat/composerTypes'
+import { type ComposerHaptic, useComposerPlatform } from '@/components/AssistantChat/useComposerPlatform'
 import {
     type ComposerPanelOption,
     getLocalizedCollaborationModeOptions,
@@ -20,6 +15,7 @@ import {
     getLocalizedReasoningEffortOptions,
 } from '@/lib/sessionConfigPresentation'
 import { useTranslation } from '@/lib/use-translation'
+import type { CodexCollaborationMode, CodexReasoningEffort, ModelReasoningEffort, PermissionMode } from '@/types/api'
 
 type UseComposerLiveConfigOptions = {
     config: ComposerConfigState
@@ -68,9 +64,7 @@ function getComposerReasoningEffortOptions(
     return getLocalizedReasoningEffortOptions(sessionDriver, modelReasoningEffort, availableReasoningEfforts, t)
 }
 
-export function useComposerLiveConfig(
-    options: UseComposerLiveConfigOptions
-): readonly React.ReactNode[] {
+export function useComposerLiveConfig(options: UseComposerLiveConfigOptions): readonly React.ReactNode[] {
     const { t } = useTranslation()
     const {
         permissionMode = 'default',
@@ -80,25 +74,19 @@ export function useComposerLiveConfig(
         availableReasoningEfforts = null,
         modelReasoningEffort = null,
         sessionDriver = null,
-        switchTargetDriver = null,
+        switchTargetDrivers = null,
         switchDriverPending = false,
     } = options.config
     const codexReasoningEffort = useMemo(
         () => normalizeCodexReasoningEffort(modelReasoningEffort),
         [modelReasoningEffort]
     )
-    const permissionModeOptions = useMemo(
-        () => getLocalizedPermissionModeOptions(sessionDriver, t),
-        [sessionDriver, t]
-    )
+    const permissionModeOptions = useMemo(() => getLocalizedPermissionModeOptions(sessionDriver, t), [sessionDriver, t])
     const collaborationModeOptions = useMemo(
-        () => sessionDriver === 'codex' ? getLocalizedCollaborationModeOptions(t) : [],
+        () => (sessionDriver === 'codex' ? getLocalizedCollaborationModeOptions(t) : []),
         [sessionDriver, t]
     )
-    const supportsModelSelection = useMemo(
-        () => supportsLiveModelSelectionForDriver(sessionDriver),
-        [sessionDriver]
-    )
+    const supportsModelSelection = useMemo(() => supportsLiveModelSelectionForDriver(sessionDriver), [sessionDriver])
     const modelOptions = useMemo(() => {
         if (supportsModelSelection) {
             return getLocalizedModelOptions(sessionDriver, model, piModelCapabilities, t)
@@ -111,13 +99,14 @@ export function useComposerLiveConfig(
         [sessionDriver]
     )
     const reasoningEffortOptions = useMemo(
-        () => getComposerReasoningEffortOptions(
-            sessionDriver,
-            modelReasoningEffort,
-            codexReasoningEffort,
-            availableReasoningEfforts,
-            t
-        ),
+        () =>
+            getComposerReasoningEffortOptions(
+                sessionDriver,
+                modelReasoningEffort,
+                codexReasoningEffort,
+                availableReasoningEfforts,
+                t
+            ),
         [availableReasoningEfforts, codexReasoningEffort, modelReasoningEffort, sessionDriver, t]
     )
 
@@ -130,74 +119,77 @@ export function useComposerLiveConfig(
     const showCollaborationSettings = Boolean(
         options.handlers.onCollaborationModeChange && collaborationModeOptions.length > 0
     )
-    const showPermissionSettings = Boolean(
-        options.handlers.onPermissionModeChange && permissionModeOptions.length > 0
-    )
+    const showPermissionSettings = Boolean(options.handlers.onPermissionModeChange && permissionModeOptions.length > 0)
     const showModelSettings = Boolean(
-        options.handlers.onModelChange
-        && supportsModelSelection
-        && modelOptions.length > 0
+        options.handlers.onModelChange && supportsModelSelection && modelOptions.length > 0
     )
     const showReasoningEffortSettings = Boolean(
-        options.handlers.onModelReasoningEffortChange
-        && supportsReasoningEffort
-        && reasoningEffortOptions.length > 0
+        options.handlers.onModelReasoningEffortChange && supportsReasoningEffort && reasoningEffortOptions.length > 0
     )
 
-    return useMemo(() => buildComposerControlSections({
-        collaborationMode,
-        collaborationModeOptions,
-        controlsDisabled: options.controlsDisabled,
-        onCollaborationChange: (value: CodexCollaborationMode) => runAction(options.handlers.onCollaborationModeChange, value),
-        onModelChange: (value: string | null) => runAction(options.handlers.onModelChange, value),
-        onModelReasoningEffortChange: (value: ModelReasoningEffort | null) => runAction(options.handlers.onModelReasoningEffortChange, value),
-        onPermissionChange: (value: PermissionMode) => runAction(options.handlers.onPermissionModeChange, value),
-        switchTargetDriver,
-        switchDriverPending,
-        onSwitchSessionDriver: switchTargetDriver && options.handlers.onSwitchSessionDriver
-            ? () => {
-                if (options.controlsDisabled || switchDriverPending) {
-                    return
-                }
+    return useMemo(
+        () =>
+            buildComposerControlSections({
+                collaborationMode,
+                collaborationModeOptions,
+                controlsDisabled: options.controlsDisabled,
+                onCollaborationChange: (value: CodexCollaborationMode) =>
+                    runAction(options.handlers.onCollaborationModeChange, value),
+                onModelChange: (value: string | null) => runAction(options.handlers.onModelChange, value),
+                onModelReasoningEffortChange: (value: ModelReasoningEffort | null) =>
+                    runAction(options.handlers.onModelReasoningEffortChange, value),
+                onPermissionChange: (value: PermissionMode) =>
+                    runAction(options.handlers.onPermissionModeChange, value),
+                sessionDriver,
+                switchTargetDrivers,
+                switchDriverPending,
+                onSwitchSessionDriver: options.handlers.onSwitchSessionDriver
+                    ? (targetDriver: SameSessionSwitchTargetDriver) => {
+                          if (options.controlsDisabled || switchDriverPending) {
+                              return
+                          }
 
-                options.onClose()
-                void options.handlers.onSwitchSessionDriver?.()
-            }
-            : undefined,
-        model,
-        modelOptions,
-        modelReasoningEffort,
-        permissionMode,
-        permissionModeOptions,
-        reasoningEffortOptions,
-        showCollaborationSettings,
-        showModelSettings,
-        showPermissionSettings,
-        showReasoningEffortSettings,
-        t,
-    }), [
-        collaborationMode,
-        collaborationModeOptions,
-        model,
-        modelOptions,
-        modelReasoningEffort,
-        options.controlsDisabled,
-        options.handlers.onCollaborationModeChange,
-        options.handlers.onModelChange,
-        options.handlers.onModelReasoningEffortChange,
-        options.handlers.onPermissionModeChange,
-        options.handlers.onSwitchSessionDriver,
-        options.onClose,
-        permissionMode,
-        permissionModeOptions,
-        reasoningEffortOptions,
-        runAction,
-        showCollaborationSettings,
-        showModelSettings,
-        showPermissionSettings,
-        showReasoningEffortSettings,
-        switchDriverPending,
-        switchTargetDriver,
-        t,
-    ])
+                          options.onClose()
+                          void options.handlers.onSwitchSessionDriver?.(targetDriver)
+                      }
+                    : undefined,
+                model,
+                modelOptions,
+                modelReasoningEffort,
+                permissionMode,
+                permissionModeOptions,
+                reasoningEffortOptions,
+                showCollaborationSettings,
+                showModelSettings,
+                showPermissionSettings,
+                showReasoningEffortSettings,
+                t,
+            }),
+        [
+            collaborationMode,
+            collaborationModeOptions,
+            model,
+            modelOptions,
+            modelReasoningEffort,
+            options.controlsDisabled,
+            options.handlers.onCollaborationModeChange,
+            options.handlers.onModelChange,
+            options.handlers.onModelReasoningEffortChange,
+            options.handlers.onPermissionModeChange,
+            options.handlers.onSwitchSessionDriver,
+            options.onClose,
+            permissionMode,
+            permissionModeOptions,
+            reasoningEffortOptions,
+            runAction,
+            showCollaborationSettings,
+            showModelSettings,
+            showPermissionSettings,
+            showReasoningEffortSettings,
+            sessionDriver,
+            switchDriverPending,
+            switchTargetDrivers,
+            t,
+        ]
+    )
 }

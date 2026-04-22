@@ -1,4 +1,5 @@
 import type { AgentEvent } from '@/chat/types'
+import { formatSessionAgentLabel } from '@/lib/sessionAgentLabel'
 
 export function formatUnixTimestamp(value: number): string {
     const ms = value < 1_000_000_000_000 ? value * 1000 : value
@@ -13,20 +14,6 @@ function formatDuration(ms: number): string {
     const mins = Math.floor(seconds / 60)
     const secs = Math.round(seconds % 60)
     return `${mins}m ${secs}s`
-}
-
-function formatDriverLabel(driver: unknown): string | null {
-    if (driver === 'claude') {
-        return 'Claude'
-    }
-    if (driver === 'codex') {
-        return 'Codex'
-    }
-    if (typeof driver === 'string' && driver.trim().length > 0) {
-        return driver
-    }
-
-    return null
 }
 
 export type EventPresentation = {
@@ -50,40 +37,32 @@ export function getEventPresentation(event: AgentEvent): EventPresentation {
         return { icon: '⚠️', text: 'API error', tone: 'warning' }
     }
     if (event.type === 'driver-switched') {
-        const previousDriver = formatDriverLabel(event.previousDriver)
-        const targetDriver = formatDriverLabel(event.targetDriver)
-        if (previousDriver && targetDriver) {
-            return { icon: '↔️', text: `${previousDriver} changed to ${targetDriver}`, tone: 'info' }
-        }
+        const targetDriver = formatSessionAgentLabel(event.targetDriver)
         if (targetDriver) {
-            return { icon: '↔️', text: `Changed to ${targetDriver}`, tone: 'info' }
+            return { icon: '↔️', text: `Switched to ${targetDriver}`, tone: 'info' }
         }
-        return { icon: '↔️', text: 'Agent changed', tone: 'info' }
+        return { icon: '↔️', text: 'Agent switched', tone: 'info' }
     }
     if (event.type === 'driver-switch-send-failed') {
         if (event.code === 'empty_first_turn') {
             return {
                 icon: '⚠️',
                 text: 'The first post-switch message was empty and was not sent.',
-                tone: 'warning'
+                tone: 'warning',
             }
         }
         if (event.code === 'timeout') {
             return {
                 icon: '⚠️',
                 text: 'The first post-switch message timed out before the new agent accepted it.',
-                tone: 'warning'
+                tone: 'warning',
             }
         }
         return {
             icon: '⚠️',
             text: 'The first post-switch message failed before the new agent accepted it.',
-            tone: 'warning'
+            tone: 'warning',
         }
-    }
-    if (event.type === 'title-changed') {
-        const title = typeof event.title === 'string' ? event.title : ''
-        return { icon: null, text: title ? `Title changed to "${title}"` : 'Title changed', tone: 'default' }
     }
     if (event.type === 'permission-mode-changed') {
         const modeValue = (event as Record<string, unknown>).mode
@@ -95,7 +74,7 @@ export function getEventPresentation(event: AgentEvent): EventPresentation {
         return {
             icon: '⏳',
             text: endsAt ? `Usage limit reached until ${formatUnixTimestamp(endsAt)}` : 'Usage limit reached',
-            tone: 'warning'
+            tone: 'warning',
         }
     }
     if (event.type === 'message') {

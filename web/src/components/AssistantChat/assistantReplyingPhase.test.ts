@@ -3,33 +3,39 @@ import { resolveAssistantReplyingPhase } from '@/components/AssistantChat/assist
 
 describe('resolveAssistantReplyingPhase', () => {
     it('keeps replying active while the session is still thinking', () => {
-        expect(resolveAssistantReplyingPhase({
-            isResponding: true,
-            pendingReply: {
-                localId: 'local-1',
-                requestStartedAt: 1_000,
-                serverAcceptedAt: 1_100,
-                phase: 'preparing'
-            }
-        })).toBe('replying')
+        expect(
+            resolveAssistantReplyingPhase({
+                thinking: true,
+                pendingReply: {
+                    localId: 'local-1',
+                    requestStartedAt: 1_000,
+                    serverAcceptedAt: 1_100,
+                    phase: 'preparing',
+                },
+            })
+        ).toBe('replying')
     })
 
     it('falls back to the optimistic pendingReply phase before runtime thinking becomes visible', () => {
-        expect(resolveAssistantReplyingPhase({
-            isResponding: false,
-            pendingReply: {
-                localId: 'local-1',
-                requestStartedAt: 1_000,
-                serverAcceptedAt: null,
-                phase: 'sending'
-            }
-        })).toBe('sending')
+        expect(
+            resolveAssistantReplyingPhase({
+                thinking: false,
+                pendingReply: {
+                    localId: 'local-1',
+                    requestStartedAt: 1_000,
+                    serverAcceptedAt: null,
+                    phase: 'sending',
+                },
+            })
+        ).toBe('sending')
     })
 
     it('clears the indicator once neither pendingReply nor runtime thinking is active', () => {
-        expect(resolveAssistantReplyingPhase({
-            isResponding: false,
-            pendingReply: null
-        })).toBeNull()
+        expect(
+            resolveAssistantReplyingPhase({
+                thinking: false,
+                pendingReply: null,
+            })
+        ).toBeNull()
     })
 })

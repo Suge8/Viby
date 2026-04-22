@@ -40,10 +40,7 @@ function normalizeAnswerEntry(entry: string[] | { answers: string[] }): string[]
     return entry.answers ?? []
 }
 
-function areAnswersEqual(
-    left?: AnswersFormat | null,
-    right?: AnswersFormat | null
-): boolean {
+function areAnswersEqual(left?: AnswersFormat | null, right?: AnswersFormat | null): boolean {
     if (left === right) return true
     if (!left || !right) return false
     const leftKeys = Object.keys(left)
@@ -64,16 +61,18 @@ function areAnswersEqual(
 function arePermissionsEqual(left?: ToolPermission, right?: ToolPermission): boolean {
     if (left === right) return true
     if (!left || !right) return false
-    return left.id === right.id
-        && left.status === right.status
-        && left.reason === right.reason
-        && left.mode === right.mode
-        && left.decision === right.decision
-        && left.date === right.date
-        && left.createdAt === right.createdAt
-        && left.completedAt === right.completedAt
-        && areStringArraysEqual(left.allowedTools, right.allowedTools)
-        && areAnswersEqual(left.answers, right.answers)
+    return (
+        left.id === right.id &&
+        left.status === right.status &&
+        left.reason === right.reason &&
+        left.mode === right.mode &&
+        left.decision === right.decision &&
+        left.date === right.date &&
+        left.createdAt === right.createdAt &&
+        left.completedAt === right.completedAt &&
+        areStringArraysEqual(left.allowedTools, right.allowedTools) &&
+        areAnswersEqual(left.answers, right.answers)
+    )
 }
 
 function getEventKey(event: AgentEvent): string {
@@ -82,8 +81,6 @@ function getEventKey(event: AgentEvent): string {
             return `switch:${event.mode}`
         case 'message':
             return `message:${event.message}`
-        case 'title-changed':
-            return `title:${event.title}`
         case 'limit-reached':
             return `limit:${event.endsAt}`
         case 'ready':
@@ -103,59 +100,69 @@ function areAgentEventsEqual(left: AgentEvent, right: AgentEvent): boolean {
 }
 
 function areUserTextBlocksEqual(left: UserTextBlock, right: UserTextBlock): boolean {
-    return left.text === right.text
-        && left.renderMode === right.renderMode
-        && left.status === right.status
-        && left.originalText === right.originalText
-        && left.localId === right.localId
-        && left.createdAt === right.createdAt
-        && left.meta === right.meta
+    return (
+        left.text === right.text &&
+        left.renderMode === right.renderMode &&
+        left.status === right.status &&
+        left.originalText === right.originalText &&
+        left.localId === right.localId &&
+        left.createdAt === right.createdAt &&
+        left.meta === right.meta
+    )
 }
 
 function areAgentTextBlocksEqual(left: AgentTextBlock, right: AgentTextBlock): boolean {
-    return left.text === right.text
-        && left.renderMode === right.renderMode
-        && left.localId === right.localId
-        && left.createdAt === right.createdAt
-        && left.meta === right.meta
+    return (
+        left.text === right.text &&
+        left.renderMode === right.renderMode &&
+        left.localId === right.localId &&
+        left.createdAt === right.createdAt &&
+        left.meta === right.meta
+    )
 }
 
 function areAgentReasoningBlocksEqual(left: AgentReasoningBlock, right: AgentReasoningBlock): boolean {
-    return left.text === right.text
-        && left.localId === right.localId
-        && left.createdAt === right.createdAt
-        && left.meta === right.meta
+    return (
+        left.text === right.text &&
+        left.localId === right.localId &&
+        left.createdAt === right.createdAt &&
+        left.meta === right.meta
+    )
 }
 
 function areCliOutputBlocksEqual(left: CliOutputBlock, right: CliOutputBlock): boolean {
-    return left.text === right.text
-        && left.localId === right.localId
-        && left.createdAt === right.createdAt
-        && left.source === right.source
-        && left.meta === right.meta
+    return (
+        left.text === right.text &&
+        left.localId === right.localId &&
+        left.createdAt === right.createdAt &&
+        left.source === right.source &&
+        left.meta === right.meta
+    )
 }
 
 function areAgentEventBlocksEqual(left: AgentEventBlock, right: AgentEventBlock): boolean {
-    return left.createdAt === right.createdAt
-        && left.meta === right.meta
-        && areAgentEventsEqual(left.event, right.event)
+    return (
+        left.createdAt === right.createdAt && left.meta === right.meta && areAgentEventsEqual(left.event, right.event)
+    )
 }
 
 function areToolCallsEqual(left: ToolCallBlock, right: ToolCallBlock, childrenSame: boolean): boolean {
     if (!childrenSame) return false
-    return left.localId === right.localId
-        && left.createdAt === right.createdAt
-        && left.meta === right.meta
-        && left.tool.id === right.tool.id
-        && left.tool.name === right.tool.name
-        && left.tool.state === right.tool.state
-        && left.tool.input === right.tool.input
-        && left.tool.result === right.tool.result
-        && left.tool.description === right.tool.description
-        && left.tool.createdAt === right.tool.createdAt
-        && left.tool.startedAt === right.tool.startedAt
-        && left.tool.completedAt === right.tool.completedAt
-        && arePermissionsEqual(left.tool.permission, right.tool.permission)
+    return (
+        left.localId === right.localId &&
+        left.createdAt === right.createdAt &&
+        left.meta === right.meta &&
+        left.tool.id === right.tool.id &&
+        left.tool.name === right.tool.name &&
+        left.tool.state === right.tool.state &&
+        left.tool.input === right.tool.input &&
+        left.tool.result === right.tool.result &&
+        left.tool.description === right.tool.description &&
+        left.tool.createdAt === right.tool.createdAt &&
+        left.tool.startedAt === right.tool.startedAt &&
+        left.tool.completedAt === right.tool.completedAt &&
+        arePermissionsEqual(left.tool.permission, right.tool.permission)
+    )
 }
 
 function reconcileBlockList(blocks: ChatBlock[], prevById: ChatBlocksById): ChatBlock[] {
@@ -175,13 +182,12 @@ function reconcileBlock(block: ChatBlock, prevById: ChatBlocksById): ChatBlock {
 
     if (block.kind === 'tool-call') {
         const nextChildren = reconcileBlockList(block.children, prevById)
-        const nextBlock = nextChildren === block.children
-            ? block
-            : { ...block, children: nextChildren }
+        const nextBlock = nextChildren === block.children ? block : { ...block, children: nextChildren }
 
         if (prev && prev.kind === 'tool-call') {
-            const childrenSame = prev.children.length === nextChildren.length
-                && prev.children.every((child, idx) => child === nextChildren[idx])
+            const childrenSame =
+                prev.children.length === nextChildren.length &&
+                prev.children.every((child, idx) => child === nextChildren[idx])
             if (areToolCallsEqual(prev, nextBlock, childrenSame)) {
                 return prev
             }
@@ -217,7 +223,10 @@ function reconcileBlock(block: ChatBlock, prevById: ChatBlocksById): ChatBlock {
     return areAgentEventBlocksEqual(prevBlock, block) ? prevBlock : block
 }
 
-export function reconcileChatBlocks(nextBlocks: ChatBlock[], prevById: ChatBlocksById): {
+export function reconcileChatBlocks(
+    nextBlocks: ChatBlock[],
+    prevById: ChatBlocksById
+): {
     blocks: ChatBlock[]
     byId: ChatBlocksById
 } {

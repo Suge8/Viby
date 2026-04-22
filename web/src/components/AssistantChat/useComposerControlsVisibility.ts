@@ -1,7 +1,7 @@
 import {
     getPermissionModesForDriver,
     supportsLiveModelReasoningEffortForDriver,
-    supportsLiveModelSelectionForDriver
+    supportsLiveModelSelectionForDriver,
 } from '@viby/protocol'
 import type { ComposerActionHandlers, ComposerConfigState } from '@/components/AssistantChat/composerTypes'
 import type { PermissionMode } from '@/types/api'
@@ -10,18 +10,15 @@ export function getComposerPermissionModes(sessionDriver: string | null): readon
     return getPermissionModesForDriver(sessionDriver)
 }
 
-export function hasComposerControls(
-    config: ComposerConfigState,
-    handlers: ComposerActionHandlers
-): boolean {
+export function hasComposerControls(config: ComposerConfigState, handlers: ComposerActionHandlers): boolean {
     const sessionDriver = config.sessionDriver ?? null
     const permissionModes = getComposerPermissionModes(sessionDriver)
 
     return Boolean(
-        (handlers.onPermissionModeChange && permissionModes.length > 0)
-        || (handlers.onCollaborationModeChange && sessionDriver === 'codex')
-        || (handlers.onModelChange && supportsLiveModelSelectionForDriver(sessionDriver))
-        || (handlers.onModelReasoningEffortChange && supportsLiveModelReasoningEffortForDriver(sessionDriver))
-        || (Boolean(config.switchTargetDriver) && Boolean(handlers.onSwitchSessionDriver))
+        (handlers.onPermissionModeChange && permissionModes.length > 0) ||
+            (handlers.onCollaborationModeChange && sessionDriver === 'codex') ||
+            (handlers.onModelChange && supportsLiveModelSelectionForDriver(sessionDriver)) ||
+            (handlers.onModelReasoningEffortChange && supportsLiveModelReasoningEffortForDriver(sessionDriver)) ||
+            (Boolean(config.switchTargetDrivers?.length) && Boolean(handlers.onSwitchSessionDriver))
     )
 }

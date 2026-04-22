@@ -1,156 +1,202 @@
-import { renderHook } from '@testing-library/react'
+import { renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { COMPOSER_DRAFT_TTL_MS, useComposerDraftPersistence } from './useComposerDraftPersistence'
+import { removeComposerDraftFromIndexedDb } from '@/components/AssistantChat/composerDraftIndexedDb'
+import {
+    COMPOSER_DRAFT_TTL_MS,
+    readComposerDraftFromIndexedDb,
+    resetComposerDraftPersistenceForTests,
+    seedComposerDraftForTests,
+} from '@/components/AssistantChat/composerDraftStore'
+import { useComposerDraftPersistence } from './useComposerDraftPersistence'
 
 const harness = vi.hoisted(() => ({
     composerText: '',
-    setText: vi.fn()
+    setText: vi.fn(),
 }))
 
 vi.mock('@assistant-ui/react', () => ({
     useAssistantApi: () => ({
         composer: () => ({
-            setText: harness.setText
-        })
+            setText: harness.setText,
+        }),
     }),
     useAssistantState: (selector: (state: { composer: { text: string } }) => unknown) => {
         return selector({
-            composer: { text: harness.composerText }
+            composer: { text: harness.composerText },
         })
-    }
+    },
 }))
 
-const COMPOSER_DRAFT_STORAGE_PREFIX = 'viby-composer-draft::'
-
-function getComposerDraftKey(sessionId: string): string {
-    return `${COMPOSER_DRAFT_STORAGE_PREFIX}${sessionId}`
+function renderPersistenceHook(initialProps: { activationKey: string; composerText: string; sessionId: string }) {
+    return renderHook(
+        (props: { activationKey: string; composerText: string; sessionId: string }) => {
+            harness.composerText = props.composerText
+            useComposerDraftPersistence({
+                activationKey: props.activationKey,
+                sessionId: props.sessionId,
+            })
+        },
+        {
+            initialProps,
+        }
+    )
 }
 
-function writeStoredDraft(sessionId: string, value: string, updatedAt: number = Date.now()): void {
-    window.localStorage.setItem(getComposerDraftKey(sessionId), JSON.stringify({
-        value,
-        updatedAt
-    }))
-}
-
-function renderPersistenceHook(initialProps: {
-    sessionId: string
-    composerText: string
-    activationKey: string
-}) {
-    return renderHook((props: {
-        sessionId: string
-        composerText: string
-        activationKey: string
-    }) => {
-        harness.composerText = props.composerText
-        useComposerDraftPersistence({
-            sessionId: props.sessionId,
-            activationKey: props.activationKey
-        })
-    }, {
-        initialProps
+async function expectIndexedDbDraft(sessionId: string, expectedValue: string | null): Promise<void> {
+    await waitFor(async () => {
+        const result = await readComposerDraftFromIndexedDb(sessionId, Date.now())
+        expect(result.value).toBe(expectedValue)
     })
 }
 
 describe('useComposerDraftPersistence', () => {
-    beforeEach(() => {
-        vi.useFakeTimers()
-        vi.setSystemTime(new Date('2026-03-21T12:00:00Z'))
-        window.localStorage.clear()
+    beforeEach(async () => {
+        vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-03-21T12:00:00Z').getTime())
+        await resetComposerDraftPersistenceForTests()
         harness.composerText = ''
         harness.setText.mockReset()
     })
 
     afterEach(() => {
-        vi.useRealTimers()
+        vi.restoreAllMocks()
     })
 
-    it('restores the saved draft only once for the same route activation', () => {
-        writeStoredDraft('session-1', 'saved draft')
+    it('restores the saved draft only once for the same route activation', async () => {
+        await seedComposerDraftForTests('session-1', {
+            updatedAt: Date.now(),
+            value: 'saved draft',
+        })
 
         const { rerender } = renderPersistenceHook({
-            sessionId: 'session-1',
+            activationKey: 'activation-a',
             composerText: '',
-            activationKey: 'activation-a'
+            sessionId: 'session-1',
         })
 
-        expect(harness.setText).toHaveBeenCalledTimes(1)
-        expect(harness.setText).toHaveBeenCalledWith('saved draft')
+        await waitFor(() => {
+            expect(harness.setText).toHaveBeenCalledTimes(1)
+            expect(harness.setText).toHaveBeenCalledWith('saved draft')
+        })
 
         rerender({
-            sessionId: 'session-1',
+            activationKey: 'activation-a',
             composerText: '',
-            activationKey: 'activation-a'
+            sessionId: 'session-1',
         })
 
         expect(harness.setText).toHaveBeenCalledTimes(1)
     })
 
-    it('does not clear the stored draft while a new activation is still restoring it', () => {
-        writeStoredDraft('session-1', 'saved draft')
+    it('does not clear the stored draft while a new activation is still restoring it', async () => {
+        await seedComposerDraftForTests('session-1', {
+            updatedAt: Date.now(),
+            value: 'saved draft',
+        })
 
         renderPersistenceHook({
-            sessionId: 'session-1',
+            activationKey: 'activation-a',
             composerText: '',
-            activationKey: 'activation-a'
+            sessionId: 'session-1',
         })
 
-        expect(harness.setText).toHaveBeenCalledWith('saved draft')
-        expect(window.localStorage.getItem(getComposerDraftKey('session-1'))).toBe(JSON.stringify({
-            value: 'saved draft',
-            updatedAt: Date.now()
-        }))
+        await waitFor(() => {
+            expect(harness.setText).toHaveBeenCalledWith('saved draft')
+        })
+        await expectIndexedDbDraft('session-1', 'saved draft')
     })
 
-    it('does not rehydrate the old draft after the current activation clears the composer', () => {
-        writeStoredDraft('session-1', 'stale draft')
-
-        const { rerender } = renderPersistenceHook({
-            sessionId: 'session-1',
-            composerText: 'stale draft',
-            activationKey: 'activation-a'
+    it('does not remove an existing draft on an empty remount before restore finishes', async () => {
+        await seedComposerDraftForTests('session-1', {
+            updatedAt: Date.now(),
+            value: 'draft survives remount',
         })
-
-        expect(harness.setText).not.toHaveBeenCalled()
-
-        rerender({
-            sessionId: 'session-1',
-            composerText: '',
-            activationKey: 'activation-a'
-        })
-
-        expect(harness.setText).not.toHaveBeenCalled()
-        expect(window.localStorage.getItem(getComposerDraftKey('session-1'))).toBeNull()
-    })
-
-    it('restores drafts independently for each session', () => {
-        writeStoredDraft('session-1', 'draft one')
-        writeStoredDraft('session-2', 'draft two')
-
-        const { rerender } = renderPersistenceHook({
-            sessionId: 'session-1',
-            composerText: '',
-            activationKey: 'activation-a'
-        })
-
-        rerender({
-            sessionId: 'session-2',
-            composerText: '',
-            activationKey: 'activation-b'
-        })
-
-        expect(harness.setText).toHaveBeenNthCalledWith(1, 'draft one')
-        expect(harness.setText).toHaveBeenNthCalledWith(2, 'draft two')
-    })
-
-    it('restores again when the chat view remounts with a new activation key', () => {
-        writeStoredDraft('session-1', 'route return draft')
 
         const firstRender = renderPersistenceHook({
+            activationKey: 'activation-a',
+            composerText: 'draft survives remount',
             sessionId: 'session-1',
+        })
+
+        firstRender.unmount()
+
+        harness.setText.mockClear()
+        renderPersistenceHook({
+            activationKey: 'activation-b',
+            composerText: '',
+            sessionId: 'session-1',
+        })
+
+        await waitFor(() => {
+            expect(harness.setText).toHaveBeenCalledWith('draft survives remount')
+        })
+        await expectIndexedDbDraft('session-1', 'draft survives remount')
+    })
+
+    it('preserves the last non-empty draft when runtime transitions the composer to empty', async () => {
+        await seedComposerDraftForTests('session-1', {
+            updatedAt: Date.now(),
+            value: 'stale draft',
+        })
+
+        const { rerender } = renderPersistenceHook({
+            activationKey: 'activation-a',
+            composerText: 'stale draft',
+            sessionId: 'session-1',
+        })
+
+        expect(harness.setText).not.toHaveBeenCalled()
+
+        rerender({
+            activationKey: 'activation-a',
+            composerText: '',
+            sessionId: 'session-1',
+        })
+
+        expect(harness.setText).not.toHaveBeenCalled()
+        await expectIndexedDbDraft('session-1', 'stale draft')
+    })
+
+    it('restores drafts independently for each session', async () => {
+        await seedComposerDraftForTests('session-1', {
+            updatedAt: Date.now(),
+            value: 'draft one',
+        })
+        await seedComposerDraftForTests('session-2', {
+            updatedAt: Date.now(),
+            value: 'draft two',
+        })
+
+        const { rerender } = renderPersistenceHook({
+            activationKey: 'activation-a',
+            composerText: '',
+            sessionId: 'session-1',
+        })
+
+        await waitFor(() => {
+            expect(harness.setText).toHaveBeenNthCalledWith(1, 'draft one')
+        })
+
+        rerender({
+            activationKey: 'activation-b',
+            composerText: '',
+            sessionId: 'session-2',
+        })
+
+        await waitFor(() => {
+            expect(harness.setText).toHaveBeenNthCalledWith(2, 'draft two')
+        })
+    })
+
+    it('restores again when the chat view remounts with a new activation key', async () => {
+        await seedComposerDraftForTests('session-1', {
+            updatedAt: Date.now(),
+            value: 'route return draft',
+        })
+
+        const firstRender = renderPersistenceHook({
+            activationKey: 'activation-a',
             composerText: 'route return draft',
-            activationKey: 'activation-a'
+            sessionId: 'session-1',
         })
 
         expect(harness.setText).not.toHaveBeenCalled()
@@ -158,73 +204,108 @@ describe('useComposerDraftPersistence', () => {
         firstRender.unmount()
 
         renderPersistenceHook({
-            sessionId: 'session-1',
+            activationKey: 'activation-b',
             composerText: '',
-            activationKey: 'activation-b'
+            sessionId: 'session-1',
         })
 
-        expect(harness.setText).toHaveBeenCalledTimes(1)
-        expect(harness.setText).toHaveBeenCalledWith('route return draft')
+        await waitFor(() => {
+            expect(harness.setText).toHaveBeenCalledTimes(1)
+            expect(harness.setText).toHaveBeenCalledWith('route return draft')
+        })
     })
 
-    it('drops expired drafts instead of restoring stale content', () => {
-        writeStoredDraft('session-1', 'expired draft', Date.now() - COMPOSER_DRAFT_TTL_MS - 1)
+    it('restores from the in-memory hot cache even when the durable cache is empty', async () => {
+        const firstRender = renderPersistenceHook({
+            activationKey: 'activation-a',
+            composerText: 'memory draft',
+            sessionId: 'session-1',
+        })
+
+        firstRender.unmount()
+        await removeComposerDraftFromIndexedDb('session-1')
+        harness.setText.mockClear()
 
         renderPersistenceHook({
-            sessionId: 'session-1',
+            activationKey: 'activation-b',
             composerText: '',
-            activationKey: 'activation-a'
+            sessionId: 'session-1',
+        })
+
+        expect(harness.setText).toHaveBeenCalledWith('memory draft')
+    })
+
+    it('drops expired drafts instead of restoring stale content', async () => {
+        await seedComposerDraftForTests('session-1', {
+            updatedAt: Date.now() - COMPOSER_DRAFT_TTL_MS - 1,
+            value: 'expired draft',
+        })
+
+        renderPersistenceHook({
+            activationKey: 'activation-a',
+            composerText: '',
+            sessionId: 'session-1',
         })
 
         expect(harness.setText).not.toHaveBeenCalled()
-        expect(window.localStorage.getItem(getComposerDraftKey('session-1'))).toBeNull()
+        await expectIndexedDbDraft('session-1', null)
     })
 
-    it('flushes the latest draft on pagehide', () => {
+    it('flushes the latest draft on pagehide', async () => {
         const { rerender } = renderPersistenceHook({
-            sessionId: 'session-1',
+            activationKey: 'activation-a',
             composerText: 'draft one',
-            activationKey: 'activation-a'
+            sessionId: 'session-1',
         })
 
         rerender({
-            sessionId: 'session-1',
+            activationKey: 'activation-a',
             composerText: 'draft two',
-            activationKey: 'activation-a'
+            sessionId: 'session-1',
         })
-        window.localStorage.removeItem(getComposerDraftKey('session-1'))
 
         window.dispatchEvent(new PageTransitionEvent('pagehide'))
 
-        expect(window.localStorage.getItem(getComposerDraftKey('session-1'))).toBe(JSON.stringify({
-            value: 'draft two',
-            updatedAt: Date.now()
-        }))
+        await expectIndexedDbDraft('session-1', 'draft two')
     })
 
-    it('flushes the latest draft when the document becomes hidden', () => {
-        const { rerender } = renderPersistenceHook({
-            sessionId: 'session-1',
+    it('flushes the latest draft on unmount', async () => {
+        const { rerender, unmount } = renderPersistenceHook({
+            activationKey: 'activation-a',
             composerText: 'draft one',
-            activationKey: 'activation-a'
+            sessionId: 'session-1',
         })
 
         rerender({
+            activationKey: 'activation-a',
+            composerText: 'draft on unmount',
             sessionId: 'session-1',
-            composerText: 'draft hidden',
-            activationKey: 'activation-a'
         })
-        window.localStorage.removeItem(getComposerDraftKey('session-1'))
+
+        unmount()
+
+        await expectIndexedDbDraft('session-1', 'draft on unmount')
+    })
+
+    it('flushes the latest draft when the document becomes hidden', async () => {
+        const { rerender } = renderPersistenceHook({
+            activationKey: 'activation-a',
+            composerText: 'draft one',
+            sessionId: 'session-1',
+        })
+
+        rerender({
+            activationKey: 'activation-a',
+            composerText: 'draft hidden',
+            sessionId: 'session-1',
+        })
 
         Object.defineProperty(document, 'visibilityState', {
             configurable: true,
-            value: 'hidden'
+            value: 'hidden',
         })
         document.dispatchEvent(new Event('visibilitychange'))
 
-        expect(window.localStorage.getItem(getComposerDraftKey('session-1'))).toBe(JSON.stringify({
-            value: 'draft hidden',
-            updatedAt: Date.now()
-        }))
+        await expectIndexedDbDraft('session-1', 'draft hidden')
     })
 })

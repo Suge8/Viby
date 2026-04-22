@@ -1,14 +1,26 @@
+import type { SameSessionSwitchTargetDriver, SessionDriver } from '@viby/protocol'
 import type { ReactNode } from 'react'
-import type { SameSessionSwitchTargetDriver } from '@/lib/sameSessionDriverSwitch'
-import type {
-    CodexCollaborationMode,
-    ModelReasoningEffort,
-    PermissionMode,
-} from '@/types/api'
 import { ComposerActionSection } from '@/components/AssistantChat/ComposerActionSection'
 import { ComposerSettingsSection } from '@/components/AssistantChat/ComposerSettingsSection'
-import { FeatureSwitchToRemoteIcon as SwitchToRemoteIcon } from '@/components/featureIcons'
+import { getSelectedComposerOptionLabel } from '@/components/AssistantChat/composerControlPresentation'
+import {
+    FeatureAgentIcon as AgentIcon,
+    FeatureGitBranchIcon as CollaborationIcon,
+    FeatureModelIcon as ModelIcon,
+    FeatureBulbIcon as ReasoningIcon,
+    FeatureShieldIcon as ShieldIcon,
+    FeatureSwitchToRemoteIcon as SwitchToRemoteIcon,
+} from '@/components/featureIcons'
 import type { ComposerPanelOption } from '@/lib/sessionConfigPresentation'
+import {
+    COMPOSER_COLLABORATION_SECTION_TEST_ID,
+    COMPOSER_MODEL_SECTION_TEST_ID,
+    COMPOSER_PERMISSION_SECTION_TEST_ID,
+    COMPOSER_REASONING_SECTION_TEST_ID,
+    COMPOSER_SWITCH_AGENT_SECTION_TEST_ID,
+    getComposerSwitchTargetTestId,
+} from '@/lib/sessionUiContracts'
+import type { CodexCollaborationMode, ModelReasoningEffort, PermissionMode } from '@/types/api'
 
 type Translate = (key: string, params?: Record<string, string | number>) => string
 
@@ -16,30 +28,41 @@ type ComposerActionItemDescriptor = {
     key: string
     label: string
     pendingLabel?: string
-    description: string
     icon: ReactNode
     disabled: boolean
     pending?: boolean
+    testId?: string
     onSelect: () => void
+}
+
+type ComposerSettingsSectionDescriptor<T extends string | null> = {
+    key: string
+    options: readonly ComposerPanelOption<T>[]
+    selectedValue: T
+    testId: string
+    title: string
+    icon: ReactNode
+    onSelect: (value: T) => void
 }
 
 type BuildComposerControlSectionsOptions = {
     collaborationMode: CodexCollaborationMode
-    collaborationModeOptions: ComposerPanelOption<CodexCollaborationMode>[]
+    collaborationModeOptions: readonly ComposerPanelOption<CodexCollaborationMode>[]
     controlsDisabled: boolean
     model: string | null
-    modelOptions: ComposerPanelOption<string | null>[]
+    modelOptions: readonly ComposerPanelOption<string | null>[]
     modelReasoningEffort: ModelReasoningEffort | null
+    sessionDriver: SessionDriver | null
     onCollaborationChange: (mode: CodexCollaborationMode) => void
     onModelChange: (model: string | null) => void
     onModelReasoningEffortChange: (modelReasoningEffort: ModelReasoningEffort | null) => void
     onPermissionChange: (mode: PermissionMode) => void
-    switchTargetDriver?: SameSessionSwitchTargetDriver | null
+    switchTargetDrivers?: readonly SameSessionSwitchTargetDriver[] | null
     switchDriverPending?: boolean
-    onSwitchSessionDriver?: () => void
+    onSwitchSessionDriver?: (targetDriver: SameSessionSwitchTargetDriver) => void
     permissionMode: PermissionMode
-    permissionModeOptions: ComposerPanelOption<PermissionMode>[]
-    reasoningEffortOptions: ComposerPanelOption<ModelReasoningEffort | null>[]
+    permissionModeOptions: readonly ComposerPanelOption<PermissionMode>[]
+    reasoningEffortOptions: readonly ComposerPanelOption<ModelReasoningEffort | null>[]
     showCollaborationSettings: boolean
     showModelSettings: boolean
     showPermissionSettings: boolean
@@ -47,129 +70,152 @@ type BuildComposerControlSectionsOptions = {
     t: Translate
 }
 
-function getSwitchTargetLabel(targetDriver: SameSessionSwitchTargetDriver, t: Translate): string {
+function getDriverLabel(targetDriver: SessionDriver | SameSessionSwitchTargetDriver, t: Translate): string {
     return t(`composer.switchDriver.target.${targetDriver}`)
-}
-
-function appendSettingsSection<T extends string | null>(
-    sections: ReactNode[],
-    section: {
-        visible: boolean
-        sectionKey: string
-        title: string
-        description: string
-        options: ComposerPanelOption<T>[]
-        selectedValue: T
-        disabled: boolean
-        onSelect: (value: T) => void
-    }
-): void {
-    if (!section.visible) {
-        return
-    }
-
-    sections.push(
-        <ComposerSettingsSection
-            key={section.sectionKey}
-            title={section.title}
-            description={section.description}
-            options={section.options}
-            selectedValue={section.selectedValue}
-            disabled={section.disabled}
-            onSelect={section.onSelect}
-        />
-    )
 }
 
 function buildComposerActionItems(options: {
     controlsDisabled: boolean
-    switchTargetDriver?: SameSessionSwitchTargetDriver | null
+    switchTargetDrivers?: readonly SameSessionSwitchTargetDriver[] | null
     switchDriverPending?: boolean
-    onSwitchSessionDriver?: () => void
+    onSwitchSessionDriver?: (targetDriver: SameSessionSwitchTargetDriver) => void
     t: Translate
 }): ComposerActionItemDescriptor[] {
-    const items: ComposerActionItemDescriptor[] = []
+    if (!options.switchTargetDrivers || !options.onSwitchSessionDriver) {
+        return []
+    }
 
-    if (options.switchTargetDriver && options.onSwitchSessionDriver) {
-        const targetLabel = getSwitchTargetLabel(options.switchTargetDriver, options.t)
-        items.push({
-            key: 'switch-driver',
+    const onSwitchSessionDriver = options.onSwitchSessionDriver
+
+    return options.switchTargetDrivers.map((targetDriver) => {
+        const targetLabel = getDriverLabel(targetDriver, options.t)
+
+        return {
+            key: `switch-driver:${targetDriver}`,
             label: options.t('composer.switchDriver', { driver: targetLabel }),
             pendingLabel: options.t('composer.switchDriver.pending', { driver: targetLabel }),
-            description: options.t('chat.switchDriver', { driver: targetLabel }),
             icon: <SwitchToRemoteIcon className="h-4 w-4" />,
             disabled: options.controlsDisabled || options.switchDriverPending === true,
             pending: options.switchDriverPending === true,
-            onSelect: options.onSwitchSessionDriver
-        })
-    }
+            testId: getComposerSwitchTargetTestId(targetDriver),
+            onSelect: () => onSwitchSessionDriver(targetDriver),
+        }
+    })
+}
 
-    return items
+function buildComposerSettingsSection<T extends string | null>(
+    descriptor: ComposerSettingsSectionDescriptor<T>,
+    controlsDisabled: boolean,
+    t: Translate
+): ReactNode {
+    return (
+        <ComposerSettingsSection
+            key={descriptor.key}
+            icon={descriptor.icon}
+            testId={descriptor.testId}
+            title={descriptor.title}
+            summary={getSelectedComposerOptionLabel(descriptor.options, descriptor.selectedValue, t)}
+            options={descriptor.options}
+            selectedValue={descriptor.selectedValue}
+            disabled={controlsDisabled}
+            onSelect={descriptor.onSelect}
+        />
+    )
 }
 
 export function buildComposerControlSections(options: BuildComposerControlSectionsOptions): ReactNode[] {
     const sections: ReactNode[] = []
-
-    appendSettingsSection(sections, {
-        visible: options.showModelSettings,
-        sectionKey: 'model',
-        title: options.t('misc.model'),
-        description: options.t('composer.panel.model.model.description'),
-        options: options.modelOptions,
-        selectedValue: options.model,
-        disabled: options.controlsDisabled,
-        onSelect: options.onModelChange
-    })
-
-    appendSettingsSection(sections, {
-        visible: options.showReasoningEffortSettings,
-        sectionKey: 'reasoning-effort',
-        title: options.t('misc.reasoningEffort'),
-        description: options.t('composer.panel.model.reasoning.description'),
-        options: options.reasoningEffortOptions,
-        selectedValue: options.modelReasoningEffort,
-        disabled: options.controlsDisabled,
-        onSelect: options.onModelReasoningEffortChange
-    })
-
-    appendSettingsSection(sections, {
-        visible: options.showCollaborationSettings,
-        sectionKey: 'collaboration',
-        title: options.t('misc.collaborationMode'),
-        description: options.t('composer.panel.settings.collaboration.description'),
-        options: options.collaborationModeOptions,
-        selectedValue: options.collaborationMode,
-        disabled: options.controlsDisabled,
-        onSelect: options.onCollaborationChange
-    })
-
-    appendSettingsSection(sections, {
-        visible: options.showPermissionSettings,
-        sectionKey: 'permission',
-        title: options.t('misc.permissionMode'),
-        description: options.t('composer.panel.settings.permission.description'),
-        options: options.permissionModeOptions,
-        selectedValue: options.permissionMode,
-        disabled: options.controlsDisabled,
-        onSelect: options.onPermissionChange
-    })
-
     const actionItems = buildComposerActionItems({
         controlsDisabled: options.controlsDisabled,
-        switchTargetDriver: options.switchTargetDriver,
+        switchTargetDrivers: options.switchTargetDrivers,
         switchDriverPending: options.switchDriverPending,
         onSwitchSessionDriver: options.onSwitchSessionDriver,
-        t: options.t
+        t: options.t,
     })
 
     if (actionItems.length > 0) {
+        const currentDriverLabel = options.sessionDriver ? getDriverLabel(options.sessionDriver, options.t) : null
+
         sections.push(
             <ComposerActionSection
                 key="actions"
-                title={options.t('composer.actions')}
+                currentDriver={options.sessionDriver}
+                icon={<AgentIcon className="h-4 w-4" />}
+                testId={COMPOSER_SWITCH_AGENT_SECTION_TEST_ID}
+                title={options.t('composer.switchAgent')}
+                summary={currentDriverLabel ? options.t('composer.currentAgent', { driver: currentDriverLabel }) : null}
                 items={actionItems}
             />
         )
+    }
+
+    const settingsSections: Array<ReactNode | null> = [
+        options.showModelSettings
+            ? buildComposerSettingsSection(
+                  {
+                      key: 'model',
+                      icon: <ModelIcon className="h-4 w-4" />,
+                      testId: COMPOSER_MODEL_SECTION_TEST_ID,
+                      title: options.t('misc.model'),
+                      options: options.modelOptions,
+                      selectedValue: options.model,
+                      onSelect: options.onModelChange,
+                  },
+                  options.controlsDisabled,
+                  options.t
+              )
+            : null,
+        options.showReasoningEffortSettings
+            ? buildComposerSettingsSection(
+                  {
+                      key: 'reasoning-effort',
+                      icon: <ReasoningIcon className="h-4 w-4" />,
+                      testId: COMPOSER_REASONING_SECTION_TEST_ID,
+                      title: options.t('misc.reasoningEffort'),
+                      options: options.reasoningEffortOptions,
+                      selectedValue: options.modelReasoningEffort,
+                      onSelect: options.onModelReasoningEffortChange,
+                  },
+                  options.controlsDisabled,
+                  options.t
+              )
+            : null,
+        options.showCollaborationSettings
+            ? buildComposerSettingsSection(
+                  {
+                      key: 'collaboration',
+                      icon: <CollaborationIcon className="h-4 w-4" />,
+                      testId: COMPOSER_COLLABORATION_SECTION_TEST_ID,
+                      title: options.t('misc.collaborationMode'),
+                      options: options.collaborationModeOptions,
+                      selectedValue: options.collaborationMode,
+                      onSelect: options.onCollaborationChange,
+                  },
+                  options.controlsDisabled,
+                  options.t
+              )
+            : null,
+        options.showPermissionSettings
+            ? buildComposerSettingsSection(
+                  {
+                      key: 'permission',
+                      icon: <ShieldIcon className="h-4 w-4" />,
+                      testId: COMPOSER_PERMISSION_SECTION_TEST_ID,
+                      title: options.t('misc.permissionMode'),
+                      options: options.permissionModeOptions,
+                      selectedValue: options.permissionMode,
+                      onSelect: options.onPermissionChange,
+                  },
+                  options.controlsDisabled,
+                  options.t
+              )
+            : null,
+    ]
+
+    for (const section of settingsSections) {
+        if (section !== null) {
+            sections.push(section)
+        }
     }
 
     return sections

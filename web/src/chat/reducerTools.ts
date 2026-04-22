@@ -1,7 +1,8 @@
-import type { AgentState } from '@/types/api'
 import type { ChatBlock, ChatToolCall, NormalizedMessage, ToolCallBlock, ToolPermission } from '@/chat/types'
+import type { AgentState } from '@/types/api'
 
 const TOOL_PLACEHOLDER_NAMES = new Set(['', 'tool', 'unknown'])
+const REMOVED_TITLE_TOOL_NAMES = new Set(['mcp__viby__change_title', 'viby__change_title'])
 
 export type PermissionEntry = {
     toolName: string
@@ -27,8 +28,8 @@ export function getPermissions(agentState: AgentState | null | undefined): Map<s
                     allowedTools: entry.allowTools,
                     answers: entry.answers,
                     createdAt: entry.createdAt ?? null,
-                    completedAt: entry.completedAt ?? null
-                }
+                    completedAt: entry.completedAt ?? null,
+                },
             })
         }
     }
@@ -43,8 +44,8 @@ export function getPermissions(agentState: AgentState | null | undefined): Map<s
                 permission: {
                     id,
                     status: 'pending',
-                    createdAt: request.createdAt ?? null
-                }
+                    createdAt: request.createdAt ?? null,
+                },
             })
         }
     }
@@ -122,11 +123,12 @@ export function ensureToolBlock(
         return existing
     }
 
-    const initialState: ChatToolCall['state'] = seed.permission?.status === 'pending'
-        ? 'pending'
-        : seed.permission?.status === 'denied' || seed.permission?.status === 'canceled'
-            ? 'error'
-            : 'running'
+    const initialState: ChatToolCall['state'] =
+        seed.permission?.status === 'pending'
+            ? 'pending'
+            : seed.permission?.status === 'denied' || seed.permission?.status === 'canceled'
+              ? 'error'
+              : 'running'
 
     const tool: ChatToolCall = {
         id,
@@ -137,7 +139,7 @@ export function ensureToolBlock(
         startedAt: initialState === 'running' ? seed.createdAt : null,
         completedAt: null,
         description: seed.description,
-        permission: seed.permission
+        permission: seed.permission,
     }
 
     const block: ToolCallBlock = {
@@ -147,7 +149,7 @@ export function ensureToolBlock(
         createdAt: seed.createdAt,
         tool,
         children: [],
-        meta: seed.meta
+        meta: seed.meta,
     }
 
     toolBlocksById.set(id, block)
@@ -170,27 +172,15 @@ export function collectToolIdsFromMessages(messages: NormalizedMessage[]): Set<s
     return ids
 }
 
-export function isChangeTitleToolName(name: string): boolean {
-    return name === 'mcp__viby__change_title' || name === 'viby__change_title'
-}
-
-export function extractTitleFromChangeTitleInput(input: unknown): string | null {
-    if (!input || typeof input !== 'object') return null
-    const title = (input as { title?: unknown }).title
-    return typeof title === 'string' && title.trim().length > 0 ? title.trim() : null
-}
-
-export function collectTitleChanges(messages: NormalizedMessage[]): Map<string, string> {
-    const map = new Map<string, string>()
+export function collectRemovedTitleToolIds(messages: NormalizedMessage[]): Set<string> {
+    const ids = new Set<string>()
     for (const msg of messages) {
         if (msg.role !== 'agent') continue
         for (const content of msg.content) {
             if (content.type !== 'tool-call') continue
-            if (!isChangeTitleToolName(content.name)) continue
-            const title = extractTitleFromChangeTitleInput(content.input)
-            if (!title) continue
-            map.set(content.id, title)
+            if (!REMOVED_TITLE_TOOL_NAMES.has(content.name)) continue
+            ids.add(content.id)
         }
     }
-    return map
+    return ids
 }

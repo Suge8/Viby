@@ -1,29 +1,20 @@
-import { memo, useCallback, useMemo, type ReactNode } from 'react'
-import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
+import { memo, type ReactNode, useCallback, useMemo } from 'react'
+import { CopyActionButton } from '@/components/CopyActionButton'
+import { useCopyAction } from '@/hooks/useCopyAction'
+import { COPY_FEEDBACK_DURATION_MS } from '@/lib/copyFeedback'
 import { useNoticeCenter } from '@/lib/notice-center'
 import { useTranslation } from '@/lib/use-translation'
 import { cn } from '@/lib/utils'
 
-const COPY_SUCCESS_DISMISS_MS = 1_800
+export type MessageSurfaceTone = 'assistant' | 'user'
+export type MessageSurfaceContentLayout = 'default' | 'media-only'
 
-const COPY_GUARD_SELECTOR = [
-    'a',
-    'button',
-    'input',
-    'textarea',
-    'select',
-    'summary',
-    '[role="button"]',
-    '[role="link"]',
-    '[contenteditable="true"]',
-    '[data-prevent-message-copy]'
-].join(',')
-
-export type MessageSurfaceTone = 'assistant' | 'user' | 'manager'
+const DEFAULT_MESSAGE_SURFACE_CONTENT_LAYOUT: MessageSurfaceContentLayout = 'default'
 
 type MessageSurfaceProps = {
     children: ReactNode
     tone: MessageSurfaceTone
+    contentLayout?: MessageSurfaceContentLayout
     copyText?: string | null
     className?: string
 }
@@ -32,27 +23,15 @@ function getSurfaceToneClassName(tone: MessageSurfaceTone): string {
     switch (tone) {
         case 'user':
             return 'ds-message-surface-user'
-        case 'manager':
-            return 'ds-message-surface-manager'
         default:
             return 'ds-message-surface-assistant'
     }
 }
 
-function shouldIgnoreCopyTarget(target: EventTarget | null, container: HTMLDivElement): boolean {
-    if (!(target instanceof HTMLElement)) {
-        return false
-    }
-
-    const guardedTarget = target.closest(COPY_GUARD_SELECTOR)
-    return guardedTarget !== null && guardedTarget !== container && container.contains(guardedTarget)
-}
-
 function MessageSurfaceComponent(props: MessageSurfaceProps): React.JSX.Element {
     const { t } = useTranslation()
     const { addToast } = useNoticeCenter()
-    const { copied, copy } = useCopyToClipboard()
-
+    const contentLayout = props.contentLayout ?? DEFAULT_MESSAGE_SURFACE_CONTENT_LAYOUT
     const normalizedCopyText = useMemo(() => props.copyText?.trim() ?? '', [props.copyText])
     const isCopyable = normalizedCopyText.length > 0
     const surfaceClassName = useMemo(() => {
@@ -64,47 +43,44 @@ function MessageSurfaceComponent(props: MessageSurfaceProps): React.JSX.Element 
         )
     }, [isCopyable, props.className, props.tone])
 
-    const handleCopy = useCallback(async (): Promise<void> => {
-        if (!isCopyable) {
-            return
-        }
-
-        const didCopy = await copy(normalizedCopyText)
-        if (!didCopy) {
-            return
-        }
-
+    const handleCopied = useCallback((): void => {
         addToast({
             tone: 'success',
             title: t('chat.messageCopied.title'),
             description: t('chat.messageCopied.description'),
-            dismissAfterMs: COPY_SUCCESS_DISMISS_MS
+            dismissAfterMs: COPY_FEEDBACK_DURATION_MS,
         })
-    }, [addToast, copy, isCopyable, normalizedCopyText, t])
-
-    const handleClick = useCallback((event: React.MouseEvent<HTMLDivElement>): void => {
-        if (!isCopyable || event.defaultPrevented) {
-            return
-        }
-
-        if (shouldIgnoreCopyTarget(event.target, event.currentTarget)) {
-            return
-        }
-
-        void handleCopy()
-    }, [handleCopy, isCopyable])
+    }, [addToast, t])
+    const { copied, handleCopyClick } = useCopyAction({
+        text: normalizedCopyText,
+        enabled: isCopyable,
+        onCopied: handleCopied,
+    })
 
     return (
         <div
             className={surfaceClassName}
             data-copyable={isCopyable ? 'true' : undefined}
             data-copied={copied ? 'true' : undefined}
-            title={isCopyable ? t('chat.messageCopyHint') : undefined}
-            onClick={handleClick}
+            data-content-layout={contentLayout}
         >
-            <div className="relative z-10 min-w-0">
+            <div
+                className="ds-message-surface-copy-content z-10 min-w-0"
+                data-has-trailing-action={isCopyable ? 'true' : undefined}
+            >
                 {props.children}
             </div>
+            {isCopyable ? (
+                <CopyActionButton
+                    label={t('chat.messageCopyHint')}
+                    copied={copied}
+                    copiedLabel={t('chat.messageCopied.badge')}
+                    onCopy={(event) => void handleCopyClick(event)}
+                    className="ds-message-copy-button"
+                    variant="floating"
+                    placement="bubble-trailing"
+                />
+            ) : null}
         </div>
     )
 }

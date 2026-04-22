@@ -1,10 +1,13 @@
 import type { RefObject } from 'react'
-import { Autocomplete } from '@/components/ChatInput/Autocomplete'
 import { AnchoredFloatingOverlay } from '@/components/ChatInput/AnchoredFloatingOverlay'
+import { Autocomplete } from '@/components/ChatInput/Autocomplete'
 import type { Suggestion } from '@/hooks/useActiveSuggestions'
 
 type ComposerSuggestionsOverlayProps = {
     anchorRef: RefObject<HTMLElement | null>
+    autocompleteLayout?: {
+        visibleViewportBottomPx: number
+    }
     hidden?: boolean
     suggestions: readonly Suggestion[]
     selectedIndex: number
@@ -17,7 +20,11 @@ export function ComposerSuggestionsOverlay(props: ComposerSuggestionsOverlayProp
     }
 
     return (
-        <AnchoredFloatingOverlay anchorRef={props.anchorRef}>
+        <AnchoredFloatingOverlay
+            anchorRef={props.anchorRef}
+            maxHeight={360}
+            visibleViewportBottomPx={props.autocompleteLayout?.visibleViewportBottomPx}
+        >
             <Autocomplete
                 suggestions={props.suggestions}
                 selectedIndex={props.selectedIndex}

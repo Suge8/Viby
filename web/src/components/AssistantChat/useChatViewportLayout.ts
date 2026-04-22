@@ -1,10 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useStandaloneDisplayMode } from '@/hooks/useStandaloneDisplayMode'
 import { TRANSIENT_EDITABLE_ATTRIBUTE } from '@/lib/domAttributes'
-import {
-    isNavigationTransitionActive,
-    NAVIGATION_TRANSITION_EVENT_NAME
-} from '@/lib/navigationTransition'
 
 type VisualViewportLike = Pick<VisualViewport, 'height' | 'offsetTop'>
 const APP_SAFE_AREA_INSET_BOTTOM_CSS_VARIABLE = '--app-safe-area-inset-bottom'
@@ -17,6 +13,7 @@ export type ChatViewportLayout = {
     isKeyboardOpen: boolean
     bottomInsetPx: number
     floatingControlBottomInsetPx: number
+    visibleViewportBottomPx: number
 }
 
 type ChatViewportState = ChatViewportLayout & {
@@ -24,28 +21,23 @@ type ChatViewportState = ChatViewportLayout & {
     orientationKey: ViewportOrientationKey
 }
 
-function areChatViewportStatesEqual(
-    previousState: ChatViewportState | null,
-    nextState: ChatViewportState
-): boolean {
+function areChatViewportStatesEqual(previousState: ChatViewportState | null, nextState: ChatViewportState): boolean {
     if (!previousState) {
         return false
     }
 
     return (
-        previousState.isStandalone === nextState.isStandalone
-        && previousState.isKeyboardOpen === nextState.isKeyboardOpen
-        && previousState.bottomInsetPx === nextState.bottomInsetPx
-        && previousState.floatingControlBottomInsetPx === nextState.floatingControlBottomInsetPx
-        && previousState.stableViewportHeightPx === nextState.stableViewportHeightPx
-        && previousState.orientationKey === nextState.orientationKey
+        previousState.isStandalone === nextState.isStandalone &&
+        previousState.isKeyboardOpen === nextState.isKeyboardOpen &&
+        previousState.bottomInsetPx === nextState.bottomInsetPx &&
+        previousState.floatingControlBottomInsetPx === nextState.floatingControlBottomInsetPx &&
+        previousState.visibleViewportBottomPx === nextState.visibleViewportBottomPx &&
+        previousState.stableViewportHeightPx === nextState.stableViewportHeightPx &&
+        previousState.orientationKey === nextState.orientationKey
     )
 }
 
-function getVisibleViewportBottom(
-    layoutViewportHeight: number,
-    visualViewport: VisualViewportLike | null
-): number {
+function getVisibleViewportBottom(layoutViewportHeight: number, visualViewport: VisualViewportLike | null): number {
     if (!visualViewport) {
         return layoutViewportHeight
     }
@@ -54,10 +46,7 @@ function getVisibleViewportBottom(
     return Math.round(Math.min(layoutViewportHeight, visibleViewportBottom))
 }
 
-function getSafeAreaCompensation(options: {
-    rawBottomInsetPx: number
-    safeAreaInsetBottomPx: number
-}): number {
+function getSafeAreaCompensation(options: { rawBottomInsetPx: number; safeAreaInsetBottomPx: number }): number {
     const { rawBottomInsetPx, safeAreaInsetBottomPx } = options
     if (rawBottomInsetPx <= safeAreaInsetBottomPx) {
         return 0
@@ -87,9 +76,7 @@ function readViewportOrientationKey(): ViewportOrientationKey {
         return PORTRAIT_ORIENTATION_KEY
     }
 
-    return window.innerWidth > window.innerHeight
-        ? LANDSCAPE_ORIENTATION_KEY
-        : PORTRAIT_ORIENTATION_KEY
+    return window.innerWidth > window.innerHeight ? LANDSCAPE_ORIENTATION_KEY : PORTRAIT_ORIENTATION_KEY
 }
 
 function isEditableElement(element: Element | null): boolean {
@@ -116,6 +103,10 @@ function readEditableFocusActive(): boolean {
     return isEditableElement(document.activeElement)
 }
 
+function shouldSyncLayoutForFocusTransition(event: FocusEvent): boolean {
+    return isEditableElement(event.target as Element | null) || isEditableElement(event.relatedTarget as Element | null)
+}
+
 export function getChatViewportMetrics(
     layoutViewportHeight: number,
     visualViewport: VisualViewportLike | null,
@@ -125,13 +116,13 @@ export function getChatViewportMetrics(
     const rawBottomInsetPx = Math.max(0, layoutViewportHeight - visibleViewportBottom)
     const safeAreaCompensationPx = getSafeAreaCompensation({
         rawBottomInsetPx,
-        safeAreaInsetBottomPx
+        safeAreaInsetBottomPx,
     })
     const bottomInsetPx = Math.max(0, rawBottomInsetPx - safeAreaCompensationPx)
 
     return {
         isKeyboardOpen: bottomInsetPx > 0,
-        bottomInsetPx
+        bottomInsetPx,
     }
 }
 
@@ -145,7 +136,7 @@ function getStableViewportHeight(options: {
         return layoutViewportHeight
     }
 
-    return Math.min(previousState.stableViewportHeightPx, layoutViewportHeight)
+    return Math.max(previousState.stableViewportHeightPx, layoutViewportHeight)
 }
 
 function getStableFloatingControlBottomInset(options: {
@@ -171,8 +162,9 @@ function createIdleChatViewportState(options: {
         isKeyboardOpen: false,
         bottomInsetPx: 0,
         floatingControlBottomInsetPx: 0,
+        visibleViewportBottomPx: options.stableViewportHeightPx,
         stableViewportHeightPx: options.stableViewportHeightPx,
-        orientationKey: options.orientationKey
+        orientationKey: options.orientationKey,
     }
 }
 
@@ -182,7 +174,6 @@ export function getNextChatViewportState(options: {
     safeAreaInsetBottomPx: number
     editableFocusActive: boolean
     isStandalone: boolean
-    navigationTransitionActive: boolean
     previousState: ChatViewportState | null
     orientationKey: ViewportOrientationKey
 }): ChatViewportState {
@@ -192,60 +183,45 @@ export function getNextChatViewportState(options: {
         safeAreaInsetBottomPx,
         editableFocusActive,
         isStandalone,
-        navigationTransitionActive,
         previousState,
-        orientationKey
+        orientationKey,
     } = options
-
-    if (navigationTransitionActive && !editableFocusActive && previousState) {
-        return {
-            ...previousState,
-            isStandalone,
-            orientationKey
-        }
-    }
 
     const stableViewportHeightPx = getStableViewportHeight({
         layoutViewportHeight,
         previousState,
-        orientationKey
+        orientationKey,
     })
 
     if (!editableFocusActive) {
         return createIdleChatViewportState({
             isStandalone,
             stableViewportHeightPx,
-            orientationKey
+            orientationKey,
         })
     }
 
-    const metrics = getChatViewportMetrics(
-        stableViewportHeightPx,
-        visualViewport,
-        safeAreaInsetBottomPx
-    )
+    const metrics = getChatViewportMetrics(stableViewportHeightPx, visualViewport, safeAreaInsetBottomPx)
     return {
         isStandalone,
         ...metrics,
         floatingControlBottomInsetPx: getStableFloatingControlBottomInset({
             bottomInsetPx: metrics.bottomInsetPx,
             previousState,
-            orientationKey
+            orientationKey,
         }),
+        visibleViewportBottomPx: getVisibleViewportBottom(stableViewportHeightPx, visualViewport),
         stableViewportHeightPx,
-        orientationKey
+        orientationKey,
     }
 }
 
-function readChatViewportState(
-    isStandalone: boolean,
-    previousState: ChatViewportState | null
-): ChatViewportState {
+function readChatViewportState(isStandalone: boolean, previousState: ChatViewportState | null): ChatViewportState {
     if (typeof window === 'undefined') {
         return createIdleChatViewportState({
             isStandalone,
             stableViewportHeightPx: 0,
-            orientationKey: PORTRAIT_ORIENTATION_KEY
+            orientationKey: PORTRAIT_ORIENTATION_KEY,
         })
     }
 
@@ -255,9 +231,8 @@ function readChatViewportState(
         safeAreaInsetBottomPx: readSafeAreaInsetBottom(),
         editableFocusActive: readEditableFocusActive(),
         isStandalone,
-        navigationTransitionActive: isNavigationTransitionActive(),
         previousState,
-        orientationKey: readViewportOrientationKey()
+        orientationKey: readViewportOrientationKey(),
     })
 }
 
@@ -281,23 +256,29 @@ export function useChatViewportLayout(): ChatViewportLayout {
             })
         }
 
+        function handleFocusTransition(event: FocusEvent): void {
+            if (!shouldSyncLayoutForFocusTransition(event)) {
+                return
+            }
+
+            syncLayout()
+        }
+
         syncLayout()
 
         const visualViewport = window.visualViewport
-        document.addEventListener('focusin', syncLayout, true)
-        document.addEventListener('focusout', syncLayout, true)
+        document.addEventListener('focusin', handleFocusTransition, true)
+        document.addEventListener('focusout', handleFocusTransition, true)
         window.addEventListener('resize', syncLayout)
         window.addEventListener('orientationchange', syncLayout)
-        window.addEventListener(NAVIGATION_TRANSITION_EVENT_NAME, syncLayout)
         visualViewport?.addEventListener('resize', syncLayout)
         visualViewport?.addEventListener('scroll', syncLayout)
 
         return () => {
-            document.removeEventListener('focusin', syncLayout, true)
-            document.removeEventListener('focusout', syncLayout, true)
+            document.removeEventListener('focusin', handleFocusTransition, true)
+            document.removeEventListener('focusout', handleFocusTransition, true)
             window.removeEventListener('resize', syncLayout)
             window.removeEventListener('orientationchange', syncLayout)
-            window.removeEventListener(NAVIGATION_TRANSITION_EVENT_NAME, syncLayout)
             visualViewport?.removeEventListener('resize', syncLayout)
             visualViewport?.removeEventListener('scroll', syncLayout)
         }
@@ -307,6 +288,7 @@ export function useChatViewportLayout(): ChatViewportLayout {
         isStandalone: state.isStandalone,
         isKeyboardOpen: state.isKeyboardOpen,
         bottomInsetPx: state.bottomInsetPx,
-        floatingControlBottomInsetPx: state.floatingControlBottomInsetPx
+        floatingControlBottomInsetPx: state.floatingControlBottomInsetPx,
+        visibleViewportBottomPx: state.visibleViewportBottomPx,
     }
 }

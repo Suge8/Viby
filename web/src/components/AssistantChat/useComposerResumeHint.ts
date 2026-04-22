@@ -4,7 +4,6 @@ type UseComposerResumeHintOptions = {
     active: boolean
     allowSendWhenInactive: boolean
     controlledByUser: boolean
-    isResuming: boolean
 }
 
 type UseComposerResumeHintResult = {
@@ -12,15 +11,8 @@ type UseComposerResumeHintResult = {
     clearResumeHint: () => void
 }
 
-export function useComposerResumeHint(
-    options: UseComposerResumeHintOptions
-): UseComposerResumeHintResult {
-    const {
-        active,
-        allowSendWhenInactive,
-        controlledByUser,
-        isResuming
-    } = options
+export function useComposerResumeHint(options: UseComposerResumeHintOptions): UseComposerResumeHintResult {
+    const { active, allowSendWhenInactive, controlledByUser } = options
     const [showResumeHint, setShowResumeHint] = useState(false)
     const previousControlledByUserRef = useRef(controlledByUser)
 
@@ -39,7 +31,7 @@ export function useComposerResumeHint(
     }, [])
 
     return {
-        showResumePlaceholder: !isResuming && (showResumeHint || (!active && allowSendWhenInactive)),
-        clearResumeHint
+        showResumePlaceholder: showResumeHint || (!active && allowSendWhenInactive),
+        clearResumeHint,
     }
 }

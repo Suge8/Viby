@@ -8,7 +8,7 @@ const LazyCliOutputBlock = lazy(async () => {
 function CliOutputFallback(props: { text: string }): React.JSX.Element {
     return (
         <div className="w-full overflow-hidden rounded-xl border border-[var(--ds-border-subtle)] bg-[var(--app-code-bg)]">
-            <pre className="m-0 max-h-[40vh] overflow-auto whitespace-pre-wrap break-words p-3 text-xs font-mono text-[var(--ds-text-secondary)]">
+            <pre className="ds-cli-output-fallback-body m-0 overflow-auto whitespace-pre-wrap break-words p-3 text-xs font-mono text-[var(--ds-text-secondary)]">
                 {props.text}
             </pre>
         </div>

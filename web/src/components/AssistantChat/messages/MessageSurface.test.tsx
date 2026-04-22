@@ -10,35 +10,38 @@ const copyMock = vi.fn<(text: string) => Promise<void>>()
 const hapticNotificationMock = vi.fn()
 
 vi.mock('@/lib/clipboard', () => ({
-    safeCopyToClipboard: (text: string) => copyMock(text)
+    safeCopyToClipboard: (text: string) => copyMock(text),
 }))
 
 vi.mock('@/hooks/usePlatform', () => ({
     usePlatform: () => ({
+        isTouch: false,
         haptic: {
-            notification: hapticNotificationMock
-        }
-    })
+            impact: vi.fn(),
+            notification: hapticNotificationMock,
+            selection: vi.fn(),
+        },
+    }),
 }))
 
 vi.mock('@/components/ui/animated-list', () => ({
-    AnimatedList: (props: { children: ReactNode }) => <div>{props.children}</div>
+    AnimatedList: (props: { children: ReactNode }) => <div>{props.children}</div>,
 }))
 
 vi.mock('@/components/ui/blur-fade', () => ({
-    BlurFade: (props: { children: ReactNode }) => <div>{props.children}</div>
+    BlurFade: (props: { children: ReactNode }) => <div>{props.children}</div>,
 }))
 
 vi.mock('@tanstack/react-router', () => ({
-    useNavigate: () => vi.fn()
+    useNavigate: () => vi.fn(),
 }))
 
-async function renderMessageSurface(children: ReactNode) {
+async function renderMessageSurface(ui: ReactNode) {
     await preloadI18nForTests()
     return render(
         <I18nTestWrapper>
             <NoticeProvider>
-                {children}
+                {ui}
                 <FloatingNoticeViewport />
             </NoticeProvider>
         </I18nTestWrapper>
@@ -56,14 +59,14 @@ describe('MessageSurface', () => {
         hapticNotificationMock.mockReset()
     })
 
-    it('copies message content and shows the existing floating notice feedback', async () => {
-        const view = await renderMessageSurface(
+    it('copies message content from the explicit copy button and shows the floating notice feedback', async () => {
+        await renderMessageSurface(
             <MessageSurface tone="assistant" copyText="hello world">
                 <div>hello world</div>
             </MessageSurface>
         )
 
-        fireEvent.click(view.container.firstElementChild as HTMLElement)
+        fireEvent.click(screen.getByRole('button', { name: 'Copy message' }))
 
         await waitFor(() => {
             expect(copyMock).toHaveBeenCalledWith('hello world')
@@ -71,26 +74,10 @@ describe('MessageSurface', () => {
 
         expect(screen.getByText('Bubble copied')).toBeInTheDocument()
         expect(hapticNotificationMock).toHaveBeenCalledWith('success')
-        expect(screen.queryByRole('button', { name: 'Copy message' })).toBeNull()
+        expect(screen.getByRole('button', { name: 'Copy message' })).toHaveClass('ds-message-copy-button')
     })
 
-    it('does not copy when the click originates from a nested interactive element', () => {
-        return renderMessageSurface(
-            <MessageSurface tone="assistant" copyText="hello world">
-                <button type="button">Nested action</button>
-            </MessageSurface>
-        ).then(() => {
-            fireEvent.click(screen.getByRole('button', { name: 'Nested action' }))
-
-            expect(copyMock).not.toHaveBeenCalled()
-        })
-    })
-
-    it('still copies even if another selection exists elsewhere on the page', async () => {
-        const selectionSpy = vi.spyOn(window, 'getSelection').mockReturnValue({
-            toString: () => 'selected text'
-        } as Selection)
-
+    it('does not copy when pressing the message surface body', async () => {
         const view = await renderMessageSurface(
             <MessageSurface tone="assistant" copyText="hello world">
                 <div>hello world</div>
@@ -99,9 +86,6 @@ describe('MessageSurface', () => {
 
         fireEvent.click(view.container.firstElementChild as HTMLElement)
 
-        await waitFor(() => {
-            expect(copyMock).toHaveBeenCalledWith('hello world')
-        })
-        selectionSpy.mockRestore()
+        expect(copyMock).not.toHaveBeenCalled()
     })
 })

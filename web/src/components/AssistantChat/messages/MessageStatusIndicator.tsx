@@ -1,11 +1,8 @@
-import type { MessageStatus } from '@/types/api'
 import { AlertIcon } from '@/components/icons'
 import { Button } from '@/components/ui/button'
+import type { MessageStatus } from '@/types/api'
 
-export function MessageStatusIndicator(props: {
-    status?: MessageStatus
-    onRetry?: () => void
-}) {
+export function MessageStatusIndicator(props: { status?: MessageStatus; onRetry?: () => void }) {
     if (props.status !== 'failed') {
         return null
     }
@@ -13,7 +10,7 @@ export function MessageStatusIndicator(props: {
     return (
         <span className="inline-flex items-center gap-1">
             <span className="text-[var(--ds-danger)]">
-                <AlertIcon className="h-[14px] w-[14px]" />
+                <AlertIcon className="ds-message-status-icon" />
             </span>
             {props.onRetry ? (
                 <Button

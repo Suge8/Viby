@@ -6,18 +6,28 @@ export type ComposerAttachment = {
 }
 
 export const DEFAULT_AUTOCOMPLETE_PREFIXES = ['@', '/', '$'] as const
+const TOUCH_COMPOSER_ENTER_KEY_HINT = 'enter'
+const DESKTOP_COMPOSER_ENTER_KEY_HINT = 'send'
 
 export function defaultSuggestionHandler(): Promise<Suggestion[]> {
     return Promise.resolve([])
 }
 
+export function getComposerEnterKeyHint(isTouch: boolean): 'enter' | 'send' {
+    if (isTouch) {
+        return TOUCH_COMPOSER_ENTER_KEY_HINT
+    }
+
+    return DESKTOP_COMPOSER_ENTER_KEY_HINT
+}
+
 export function getComposerPlaceholder(options: {
-    isResuming: boolean
+    isReadonlyHistory: boolean
     showResumePlaceholder: boolean
     t: (key: string) => string
 }): string {
-    if (options.isResuming) {
-        return options.t('misc.resumingSession')
+    if (options.isReadonlyHistory) {
+        return options.t('misc.readonlyHistoryMessage')
     }
     if (options.showResumePlaceholder) {
         return options.t('misc.resumeMessage')
@@ -37,8 +47,6 @@ function isAttachmentReady(attachment: ComposerAttachment): boolean {
     return typeof attachment.path === 'string' && attachment.path.length > 0
 }
 
-export function areAttachmentsReady(
-    attachments: readonly ComposerAttachment[]
-): boolean {
+export function areAttachmentsReady(attachments: readonly ComposerAttachment[]): boolean {
     return attachments.length === 0 || attachments.every(isAttachmentReady)
 }

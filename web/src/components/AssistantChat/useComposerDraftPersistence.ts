@@ -1,100 +1,97 @@
 import { useAssistantApi, useAssistantState } from '@assistant-ui/react'
 import { useEffect, useRef } from 'react'
 import {
-    readBrowserStorageJson,
-    removeBrowserStorageItem,
-    writeBrowserStorageJson
-} from '@/lib/browserStorage'
+    COMPOSER_DRAFT_TTL_MS,
+    type ComposerDraftReadResult,
+    clearComposerDraft,
+    readComposerDraftFromFastPath,
+    readComposerDraftFromIndexedDb,
+    resetComposerDraftPersistenceForTests,
+    writeComposerDraft,
+} from '@/components/AssistantChat/composerDraftStore'
+import { emitDraftTrace } from '@/components/AssistantChat/composerDraftTrace'
 
-const COMPOSER_DRAFT_STORAGE_PREFIX = 'viby-composer-draft::'
-export const COMPOSER_DRAFT_TTL_MS = 24 * 60 * 60 * 1000
-type ComposerDraftRecord = {
-    value: string
-    updatedAt: number
-}
+export { COMPOSER_DRAFT_TTL_MS, clearComposerDraft, resetComposerDraftPersistenceForTests }
 
 type ComposerDraftSnapshot = {
     sessionId: string
     composerText: string
 }
 
+type UseComposerDraftPersistenceOptions = {
+    sessionId: string
+    activationKey: string
+}
+
 function getComposerDraftActivationScopeKey(sessionId: string, activationKey: string): string {
     return `${sessionId}::${activationKey}`
 }
 
-function getComposerDraftKey(sessionId: string): string {
-    return `${COMPOSER_DRAFT_STORAGE_PREFIX}${sessionId}`
-}
-
-function removeComposerDraft(sessionId: string): void {
-    removeBrowserStorageItem('local', getComposerDraftKey(sessionId))
-}
-
-function parseComposerDraftRecord(value: string): ComposerDraftRecord | null {
-    try {
-        const parsed = JSON.parse(value) as unknown
-        if (!parsed || typeof parsed !== 'object') {
-            return null
-        }
-
-        const record = parsed as Partial<ComposerDraftRecord>
-        if (typeof record.value !== 'string' || typeof record.updatedAt !== 'number' || !Number.isFinite(record.updatedAt)) {
-            return null
-        }
-
-        return {
-            value: record.value,
-            updatedAt: record.updatedAt
-        }
-    } catch {
-        return null
-    }
-}
-
-function readComposerDraft(sessionId: string, now: number): string | null {
-    const record = readBrowserStorageJson({
-        storage: 'local',
-        key: getComposerDraftKey(sessionId),
-        parse: parseComposerDraftRecord
-    })
-    if (!record) {
-        return null
-    }
-
-    if (record.value.length === 0) {
-        removeComposerDraft(sessionId)
-        return null
-    }
-
-    if (now - record.updatedAt > COMPOSER_DRAFT_TTL_MS) {
-        removeComposerDraft(sessionId)
-        return null
-    }
-
-    return record.value
-}
-
-function writeComposerDraft(sessionId: string, value: string, now: number): void {
-    if (value.length === 0) {
-        removeComposerDraft(sessionId)
+function flushComposerDraft(snapshot: ComposerDraftSnapshot, reason: string): void {
+    if (snapshot.composerText.length === 0) {
+        emitDraftTrace({
+            type: 'flush-skip-empty',
+            sessionId: snapshot.sessionId,
+            valueLength: 0,
+            reason,
+        })
         return
     }
 
-    const record: ComposerDraftRecord = {
-        value,
-        updatedAt: now
+    writeComposerDraft(snapshot.sessionId, snapshot.composerText, Date.now(), reason)
+}
+
+function restoreCurrentActivation(options: {
+    activationScopeKey: string
+    cancelled: boolean
+    currentActivationScopeKey: string | null
+    currentComposerText: string
+    savedDraft: ComposerDraftReadResult
+    sessionId: string
+    setRuntimeText: (value: string) => void
+    markRestorePending: () => void
+}): void {
+    if (options.cancelled || options.currentActivationScopeKey !== options.activationScopeKey) {
+        return
     }
 
-    writeBrowserStorageJson('local', getComposerDraftKey(sessionId), record)
-}
+    const { savedDraft, sessionId, currentComposerText } = options
+    if (!savedDraft.value) {
+        emitDraftTrace({
+            type: 'restore-skipped',
+            sessionId,
+            valueLength: 0,
+            reason: `${savedDraft.source ?? 'none'}:no-saved-draft`,
+        })
+        return
+    }
+    if (savedDraft.value === currentComposerText) {
+        emitDraftTrace({
+            type: 'restore-skipped',
+            sessionId,
+            valueLength: savedDraft.value.length,
+            reason: `${savedDraft.source}:saved-draft-already-in-runtime`,
+        })
+        return
+    }
+    if (currentComposerText.length > 0) {
+        emitDraftTrace({
+            type: 'restore-skipped',
+            sessionId,
+            valueLength: savedDraft.value.length,
+            reason: `${savedDraft.source}:runtime-dirty`,
+        })
+        return
+    }
 
-function flushComposerDraft(snapshot: ComposerDraftSnapshot): void {
-    writeComposerDraft(snapshot.sessionId, snapshot.composerText, Date.now())
-}
-
-type UseComposerDraftPersistenceOptions = {
-    sessionId: string
-    activationKey: string
+    emitDraftTrace({
+        type: 'restore',
+        sessionId,
+        valueLength: savedDraft.value.length,
+        reason: `${savedDraft.source}:activation-restore`,
+    })
+    options.markRestorePending()
+    options.setRuntimeText(savedDraft.value)
 }
 
 export function useComposerDraftPersistence(options: UseComposerDraftPersistenceOptions): void {
@@ -104,14 +101,17 @@ export function useComposerDraftPersistence(options: UseComposerDraftPersistence
     const activationScopeKey = getComposerDraftActivationScopeKey(sessionId, activationKey)
     const restoredScopeKeyRef = useRef<string | null>(null)
     const isActivationRestorePendingRef = useRef(false)
+    const currentComposerTextRef = useRef(composerText)
+    const previousComposerTextRef = useRef(composerText)
     const latestSnapshotRef = useRef<ComposerDraftSnapshot>({
         sessionId,
-        composerText
+        composerText,
     })
 
+    currentComposerTextRef.current = composerText
     latestSnapshotRef.current = {
         sessionId,
-        composerText
+        composerText,
     }
 
     useEffect(() => {
@@ -119,18 +119,53 @@ export function useComposerDraftPersistence(options: UseComposerDraftPersistence
             return
         }
 
+        let cancelled = false
         restoredScopeKeyRef.current = activationScopeKey
         isActivationRestorePendingRef.current = false
-        const savedDraft = readComposerDraft(sessionId, Date.now())
-        if (!savedDraft || savedDraft === composerText) {
-            return
+        previousComposerTextRef.current = composerText
+
+        const restoreArgs = {
+            activationScopeKey,
+            cancelled,
+            currentActivationScopeKey: restoredScopeKeyRef.current,
+            currentComposerText: currentComposerTextRef.current,
+            sessionId,
+            setRuntimeText: (value: string) => api.composer().setText(value),
+            markRestorePending: () => {
+                isActivationRestorePendingRef.current = true
+            },
         }
 
-        isActivationRestorePendingRef.current = true
-        api.composer().setText(savedDraft)
+        const fastPathDraft = readComposerDraftFromFastPath(sessionId, Date.now())
+        if (fastPathDraft.value) {
+            restoreCurrentActivation({
+                ...restoreArgs,
+                savedDraft: fastPathDraft,
+            })
+            return () => {
+                cancelled = true
+            }
+        }
+
+        void readComposerDraftFromIndexedDb(sessionId, Date.now()).then((savedIndexedDbDraft) => {
+            restoreCurrentActivation({
+                ...restoreArgs,
+                cancelled,
+                currentActivationScopeKey: restoredScopeKeyRef.current,
+                currentComposerText: currentComposerTextRef.current,
+                savedDraft: savedIndexedDbDraft,
+            })
+        })
+
+        return () => {
+            cancelled = true
+        }
     }, [activationScopeKey, api, composerText, sessionId])
 
     useEffect(() => {
+        const previousComposerText = previousComposerTextRef.current
+        previousComposerTextRef.current = composerText
+
         if (isActivationRestorePendingRef.current) {
             if (composerText.length === 0) {
                 return
@@ -139,12 +174,16 @@ export function useComposerDraftPersistence(options: UseComposerDraftPersistence
             isActivationRestorePendingRef.current = false
         }
 
-        writeComposerDraft(sessionId, composerText, Date.now())
+        if (composerText.length === 0 && previousComposerText.length === 0) {
+            return
+        }
+
+        writeComposerDraft(sessionId, composerText, Date.now(), 'composer-change')
     }, [activationScopeKey, composerText, sessionId])
 
     useEffect(() => {
         function handlePageHide(): void {
-            flushComposerDraft(latestSnapshotRef.current)
+            flushComposerDraft(latestSnapshotRef.current, 'pagehide')
         }
 
         function handleVisibilityChange(): void {
@@ -152,13 +191,14 @@ export function useComposerDraftPersistence(options: UseComposerDraftPersistence
                 return
             }
 
-            flushComposerDraft(latestSnapshotRef.current)
+            flushComposerDraft(latestSnapshotRef.current, 'visibilitychange-hidden')
         }
 
         window.addEventListener('pagehide', handlePageHide)
         document.addEventListener('visibilitychange', handleVisibilityChange)
 
         return () => {
+            flushComposerDraft(latestSnapshotRef.current, 'effect-cleanup-unmount')
             window.removeEventListener('pagehide', handlePageHide)
             document.removeEventListener('visibilitychange', handleVisibilityChange)
         }

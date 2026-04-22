@@ -1,68 +1,68 @@
 import type { ReactNode } from 'react'
+import { COMPOSER_CONTROL_OPTION_BUTTON_CLASS_NAME } from '@/components/AssistantChat/composerControlPresentation'
 import { Spinner } from '@/components/Spinner'
 import { Button } from '@/components/ui/button'
+import { DisclosureCardSection, DisclosureCardSummary } from '@/components/ui/DisclosureCardSection'
+import { getInteractiveCardClassName } from '@/components/ui/interactiveCardStyles'
+import { cn } from '@/lib/utils'
 
 type ComposerActionItem = {
     key: string
     label: string
     pendingLabel?: string
-    description?: string
     icon: ReactNode
     disabled: boolean
     pending?: boolean
+    testId?: string
     onSelect: () => void
 }
 
 type ComposerActionSectionProps = {
+    currentDriver?: string | null
+    icon: ReactNode
+    testId?: string
     title: string
-    items: ComposerActionItem[]
+    summary?: string | null
+    items: readonly ComposerActionItem[]
 }
-
-const COMPOSER_ACTION_BUTTON_CLASS_NAME =
-    'w-full gap-3 rounded-[16px] px-3 py-2.5 text-left transition-colors [&>[data-button-content]]:w-full [&>[data-button-content]]:justify-start'
 
 export function ComposerActionSection(props: ComposerActionSectionProps): ReactNode {
     return (
-        <section className="px-3 py-2">
-            <div className="px-1 pb-1.5 text-xs font-medium text-[var(--app-hint)]">
-                {props.title}
-            </div>
-            <div className="overflow-hidden">
-                {props.items.map((item, index) => (
+        <div data-testid={props.testId} data-current-driver={props.currentDriver ?? undefined}>
+            <DisclosureCardSection
+                triggerContent={<DisclosureCardSummary icon={props.icon} title={props.title} summary={props.summary} />}
+                panelClassName="px-0.5 pt-1"
+                panelInnerClassName="grid grid-cols-2 gap-1"
+            >
+                {props.items.map((item) => (
                     <Button
                         key={item.key}
+                        data-testid={item.testId}
                         type="button"
-                        variant="ghost"
+                        variant="plain"
                         size="sm"
                         disabled={item.disabled}
-                        className={`${COMPOSER_ACTION_BUTTON_CLASS_NAME} ${
-                            index > 0 ? 'mt-1' : ''
-                        } ${
-                            item.disabled
-                                ? 'cursor-not-allowed opacity-50'
-                                : 'hover:bg-[color:color-mix(in_srgb,var(--ds-panel-strong)_92%,transparent)]'
-                        }`}
+                        className={cn(
+                            getInteractiveCardClassName('disclosure-trigger'),
+                            COMPOSER_CONTROL_OPTION_BUTTON_CLASS_NAME,
+                            item.disabled ? 'cursor-not-allowed opacity-50' : ''
+                        )}
                         aria-busy={item.pending === true}
                         onClick={item.onSelect}
                         onMouseDown={(event) => event.preventDefault()}
                     >
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[color:color-mix(in_srgb,var(--ds-panel)_96%,transparent)] text-[var(--app-fg)]">
-                            {item.icon}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                            <span className="flex items-center gap-2 text-sm font-medium text-[var(--app-fg)]">
-                                <span>{item.pending ? item.pendingLabel ?? item.label : item.label}</span>
-                                {item.pending ? <Spinner size="sm" label={null} className="text-current" /> : null}
+                        <span className="flex min-w-0 items-center gap-2">
+                            <span className="flex h-4 w-4 shrink-0 items-center justify-center text-[var(--app-hint)]">
+                                {item.icon}
                             </span>
-                            {item.description ? (
-                                <span className="mt-0.5 block text-[11px] text-[var(--app-hint)]">
-                                    {item.description}
-                                </span>
-                            ) : null}
+                            <span className="truncate text-sm font-medium text-[var(--app-fg)]">
+                                {item.pending ? (item.pendingLabel ?? item.label) : item.label}
+                            </span>
                         </span>
+                        {item.pending ? <Spinner size="sm" label={null} className="text-[var(--app-hint)]" /> : null}
                     </Button>
                 ))}
-            </div>
-        </section>
+            </DisclosureCardSection>
+        </div>
     )
 }

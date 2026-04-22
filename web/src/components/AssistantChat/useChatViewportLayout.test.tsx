@@ -1,16 +1,7 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TRANSIENT_EDITABLE_ATTRIBUTE } from '@/lib/domAttributes'
-import {
-    getChatViewportMetrics,
-    getNextChatViewportState,
-    useChatViewportLayout
-} from './useChatViewportLayout'
-
-vi.mock('@/lib/navigationTransition', () => ({
-    NAVIGATION_TRANSITION_EVENT_NAME: 'viby:navigation-transition-change',
-    isNavigationTransitionActive: vi.fn(() => false)
-}))
+import { getChatViewportMetrics, getNextChatViewportState, useChatViewportLayout } from './useChatViewportLayout'
 
 type VisualViewportMock = {
     height: number
@@ -20,10 +11,7 @@ type VisualViewportMock = {
     emit: (type: string) => void
 }
 
-function createVisualViewportMock(options: {
-    height: number
-    offsetTop?: number
-}): VisualViewportMock {
+function createVisualViewportMock(options: { height: number; offsetTop?: number }): VisualViewportMock {
     const listeners = new Map<string, Set<EventListener>>()
 
     return {
@@ -42,7 +30,7 @@ function createVisualViewportMock(options: {
             for (const listener of listeners.get(type) ?? []) {
                 listener(event)
             }
-        }
+        },
     }
 }
 
@@ -57,8 +45,8 @@ function installMatchMediaMock(isStandalone: boolean): void {
             removeEventListener: vi.fn(),
             addListener: vi.fn(),
             removeListener: vi.fn(),
-            dispatchEvent: vi.fn()
-        }))
+            dispatchEvent: vi.fn(),
+        })),
     })
 }
 
@@ -76,56 +64,67 @@ describe('useChatViewportLayout', () => {
         setSafeAreaInsetBottom('0px')
         Object.defineProperty(window, 'innerHeight', {
             configurable: true,
-            value: 844
+            value: 844,
         })
     })
 
     afterEach(() => {
         Object.defineProperty(window, 'matchMedia', {
             configurable: true,
-            value: originalMatchMedia
+            value: originalMatchMedia,
         })
         Object.defineProperty(window, 'innerHeight', {
             configurable: true,
-            value: originalInnerHeight
+            value: originalInnerHeight,
         })
         Object.defineProperty(window, 'visualViewport', {
             configurable: true,
-            value: originalVisualViewport
+            value: originalVisualViewport,
         })
         document.documentElement.style.removeProperty('--app-safe-area-inset-bottom')
     })
 
     it('derives keyboard inset from the visible viewport bottom after subtracting safe area compensation', () => {
-        expect(getChatViewportMetrics(844, {
-            height: 524,
-            offsetTop: 0
-        }, 34)).toEqual({
+        expect(
+            getChatViewportMetrics(
+                844,
+                {
+                    height: 524,
+                    offsetTop: 0,
+                },
+                34
+            )
+        ).toEqual({
             isKeyboardOpen: true,
-            bottomInsetPx: 286
+            bottomInsetPx: 286,
         })
     })
 
     it('keeps small browser chrome insets instead of subtracting them away', () => {
-        expect(getChatViewportMetrics(844, {
-            height: 820,
-            offsetTop: 0
-        }, 34)).toEqual({
+        expect(
+            getChatViewportMetrics(
+                844,
+                {
+                    height: 820,
+                    offsetTop: 0,
+                },
+                34
+            )
+        ).toEqual({
             isKeyboardOpen: true,
-            bottomInsetPx: 24
+            bottomInsetPx: 24,
         })
     })
 
-    it('keeps a stable viewport baseline across repeated focus cycles', () => {
+    it('promotes the stable viewport baseline to the largest layout height seen in the current orientation', () => {
         const firstFocusState = getNextChatViewportState({
             layoutViewportHeight: 664,
             visualViewport: { height: 385, offsetTop: 0 },
             safeAreaInsetBottomPx: 34,
             editableFocusActive: true,
             isStandalone: true,
-            navigationTransitionActive: false,
             previousState: null,
-            orientationKey: 'portrait'
+            orientationKey: 'portrait',
         })
 
         expect(firstFocusState).toMatchObject({
@@ -133,7 +132,8 @@ describe('useChatViewportLayout', () => {
             isKeyboardOpen: true,
             bottomInsetPx: 245,
             floatingControlBottomInsetPx: 245,
-            stableViewportHeightPx: 664
+            visibleViewportBottomPx: 385,
+            stableViewportHeightPx: 664,
         })
 
         const blurState = getNextChatViewportState({
@@ -142,9 +142,8 @@ describe('useChatViewportLayout', () => {
             safeAreaInsetBottomPx: 34,
             editableFocusActive: false,
             isStandalone: true,
-            navigationTransitionActive: false,
             previousState: firstFocusState,
-            orientationKey: 'portrait'
+            orientationKey: 'portrait',
         })
 
         expect(blurState).toMatchObject({
@@ -152,7 +151,8 @@ describe('useChatViewportLayout', () => {
             isKeyboardOpen: false,
             bottomInsetPx: 0,
             floatingControlBottomInsetPx: 0,
-            stableViewportHeightPx: 664
+            visibleViewportBottomPx: 724,
+            stableViewportHeightPx: 724,
         })
 
         const secondFocusState = getNextChatViewportState({
@@ -161,17 +161,47 @@ describe('useChatViewportLayout', () => {
             safeAreaInsetBottomPx: 34,
             editableFocusActive: true,
             isStandalone: true,
-            navigationTransitionActive: false,
             previousState: blurState,
-            orientationKey: 'portrait'
+            orientationKey: 'portrait',
         })
 
         expect(secondFocusState).toMatchObject({
             isStandalone: true,
             isKeyboardOpen: true,
-            bottomInsetPx: 245,
-            floatingControlBottomInsetPx: 245,
-            stableViewportHeightPx: 664
+            bottomInsetPx: 305,
+            floatingControlBottomInsetPx: 305,
+            visibleViewportBottomPx: 385,
+            stableViewportHeightPx: 724,
+        })
+    })
+
+    it('keeps keyboard detection working when interactive-widget shrinks the layout viewport itself', () => {
+        const previousIdleState = getNextChatViewportState({
+            layoutViewportHeight: 844,
+            visualViewport: { height: 844, offsetTop: 0 },
+            safeAreaInsetBottomPx: 34,
+            editableFocusActive: false,
+            isStandalone: true,
+            previousState: null,
+            orientationKey: 'portrait',
+        })
+
+        const focusedState = getNextChatViewportState({
+            layoutViewportHeight: 544,
+            visualViewport: { height: 544, offsetTop: 0 },
+            safeAreaInsetBottomPx: 34,
+            editableFocusActive: true,
+            isStandalone: true,
+            previousState: previousIdleState,
+            orientationKey: 'portrait',
+        })
+
+        expect(focusedState).toMatchObject({
+            isKeyboardOpen: true,
+            bottomInsetPx: 266,
+            floatingControlBottomInsetPx: 266,
+            visibleViewportBottomPx: 544,
+            stableViewportHeightPx: 844,
         })
     })
 
@@ -182,9 +212,8 @@ describe('useChatViewportLayout', () => {
             safeAreaInsetBottomPx: 34,
             editableFocusActive: true,
             isStandalone: true,
-            navigationTransitionActive: false,
             previousState: null,
-            orientationKey: 'portrait'
+            orientationKey: 'portrait',
         })
 
         const jitteredFocusState = getNextChatViewportState({
@@ -193,18 +222,17 @@ describe('useChatViewportLayout', () => {
             safeAreaInsetBottomPx: 34,
             editableFocusActive: true,
             isStandalone: true,
-            navigationTransitionActive: false,
             previousState: firstFocusState,
-            orientationKey: 'portrait'
+            orientationKey: 'portrait',
         })
 
         expect(firstFocusState).toMatchObject({
             bottomInsetPx: 266,
-            floatingControlBottomInsetPx: 266
+            floatingControlBottomInsetPx: 266,
         })
         expect(jitteredFocusState).toMatchObject({
             bottomInsetPx: 218,
-            floatingControlBottomInsetPx: 266
+            floatingControlBottomInsetPx: 266,
         })
     })
 
@@ -218,7 +246,7 @@ describe('useChatViewportLayout', () => {
         const visualViewport = createVisualViewportMock({ height: 844 })
         Object.defineProperty(window, 'visualViewport', {
             configurable: true,
-            value: visualViewport
+            value: visualViewport,
         })
 
         const { result } = renderHook(() => useChatViewportLayout())
@@ -227,7 +255,8 @@ describe('useChatViewportLayout', () => {
             isStandalone: true,
             isKeyboardOpen: false,
             bottomInsetPx: 0,
-            floatingControlBottomInsetPx: 0
+            floatingControlBottomInsetPx: 0,
+            visibleViewportBottomPx: 844,
         })
 
         act(() => {
@@ -240,7 +269,8 @@ describe('useChatViewportLayout', () => {
             isStandalone: true,
             isKeyboardOpen: true,
             bottomInsetPx: 266,
-            floatingControlBottomInsetPx: 266
+            floatingControlBottomInsetPx: 266,
+            visibleViewportBottomPx: 544,
         })
 
         act(() => {
@@ -253,22 +283,41 @@ describe('useChatViewportLayout', () => {
             isStandalone: true,
             isKeyboardOpen: false,
             bottomInsetPx: 0,
-            floatingControlBottomInsetPx: 0
+            floatingControlBottomInsetPx: 0,
+            visibleViewportBottomPx: 844,
         })
 
         input.remove()
     })
 
-    it('keeps the previous non-editable layout stable while a navigation transition is active', () => {
+    it('ignores non-editable focus transitions so floating controls do not perturb chat layout', () => {
+        installMatchMediaMock(true)
+        setSafeAreaInsetBottom('34px')
+
+        const button = document.createElement('button')
+        document.body.appendChild(button)
+
+        const { result } = renderHook(() => useChatViewportLayout())
+        const initialLayout = result.current
+
+        act(() => {
+            button.focus()
+            button.blur()
+        })
+
+        expect(result.current).toEqual(initialLayout)
+        button.remove()
+    })
+
+    it('returns the current idle layout without consulting global navigation state', () => {
         const previousState = getNextChatViewportState({
             layoutViewportHeight: 844,
             visualViewport: { height: 844, offsetTop: 0 },
             safeAreaInsetBottomPx: 34,
             editableFocusActive: false,
             isStandalone: true,
-            navigationTransitionActive: false,
             previousState: null,
-            orientationKey: 'portrait'
+            orientationKey: 'portrait',
         })
 
         const nextState = getNextChatViewportState({
@@ -277,9 +326,8 @@ describe('useChatViewportLayout', () => {
             safeAreaInsetBottomPx: 34,
             editableFocusActive: false,
             isStandalone: true,
-            navigationTransitionActive: true,
             previousState,
-            orientationKey: 'portrait'
+            orientationKey: 'portrait',
         })
 
         expect(nextState).toMatchObject({
@@ -287,7 +335,8 @@ describe('useChatViewportLayout', () => {
             isKeyboardOpen: false,
             bottomInsetPx: 0,
             floatingControlBottomInsetPx: 0,
-            stableViewportHeightPx: 844
+            visibleViewportBottomPx: 844,
+            stableViewportHeightPx: 844,
         })
     })
 
@@ -302,7 +351,7 @@ describe('useChatViewportLayout', () => {
         const visualViewport = createVisualViewportMock({ height: 844 })
         Object.defineProperty(window, 'visualViewport', {
             configurable: true,
-            value: visualViewport
+            value: visualViewport,
         })
 
         const { result } = renderHook(() => useChatViewportLayout())
@@ -317,7 +366,8 @@ describe('useChatViewportLayout', () => {
             isStandalone: true,
             isKeyboardOpen: false,
             bottomInsetPx: 0,
-            floatingControlBottomInsetPx: 0
+            floatingControlBottomInsetPx: 0,
+            visibleViewportBottomPx: 844,
         })
 
         clipboardBuffer.remove()

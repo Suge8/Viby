@@ -5,18 +5,19 @@ import { ComposerAttachmentButton } from './ComposerAttachmentButton'
 
 const harness = vi.hoisted(() => ({
     addAttachment: vi.fn().mockResolvedValue(undefined),
-    attachmentAccept: 'image/*'
+    attachmentAccept: 'image/*' as string | string[],
 }))
 
 vi.mock('@assistant-ui/react', () => ({
     useAssistantApi: () => ({
         composer: () => ({
-            addAttachment: harness.addAttachment
-        })
+            addAttachment: harness.addAttachment,
+        }),
     }),
-    useAssistantState: (selector: (state: { composer: { attachmentAccept: string } }) => string) => selector({
-        composer: { attachmentAccept: harness.attachmentAccept }
-    })
+    useAssistantState: (selector: (state: { composer: { attachmentAccept: string | string[] } }) => string) =>
+        selector({
+            composer: { attachmentAccept: harness.attachmentAccept },
+        }),
 }))
 
 describe('ComposerAttachmentButton', () => {
@@ -68,6 +69,24 @@ describe('ComposerAttachmentButton', () => {
         expect(input?.accept).toContain('application/pdf')
     })
 
+    it('normalizes array accept filters into a stable input accept string', () => {
+        harness.attachmentAccept = ['image/*', 'application/pdf']
+
+        const { container } = render(
+            <I18nProvider>
+                <ComposerAttachmentButton
+                    disabled={false}
+                    ariaLabel="Attach file"
+                    title="Attach file"
+                    className="test-button"
+                />
+            </I18nProvider>
+        )
+
+        const input = container.querySelector('input[type="file"]') as HTMLInputElement | null
+        expect(input?.accept).toBe('image/*,application/pdf')
+    })
+
     it('adds every selected file through the assistant runtime', async () => {
         harness.addAttachment.mockClear()
         harness.attachmentAccept = 'image/*'
@@ -89,8 +108,8 @@ describe('ComposerAttachmentButton', () => {
 
         fireEvent.change(input, {
             target: {
-                files: [image, text]
-            }
+                files: [image, text],
+            },
         })
 
         await waitFor(() => {

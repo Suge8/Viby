@@ -14,12 +14,8 @@ export type VibyChatContextValue = {
 
 const VibyChatContext = createContext<VibyChatContextValue | null>(null)
 
-export function VibyChatProvider(props: { value: VibyChatContextValue; children: ReactNode }) {
-    return (
-        <VibyChatContext.Provider value={props.value}>
-            {props.children}
-        </VibyChatContext.Provider>
-    )
+export function VibyChatProvider(props: { value: VibyChatContextValue; children: ReactNode }): React.JSX.Element {
+    return <VibyChatContext.Provider value={props.value}>{props.children}</VibyChatContext.Provider>
 }
 
 export function useVibyChatContext(): VibyChatContextValue {

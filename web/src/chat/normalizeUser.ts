@@ -1,6 +1,6 @@
+import { isObject, sanitizeDurableAttachmentPreviewUrl } from '@viby/protocol'
 import type { NormalizedMessage } from '@/chat/types'
 import type { AttachmentMetadata } from '@/types/api'
-import { isObject } from '@viby/protocol'
 
 function parseAttachments(raw: unknown): AttachmentMetadata[] | undefined {
     if (!Array.isArray(raw)) return undefined
@@ -20,7 +20,7 @@ function parseAttachments(raw: unknown): AttachmentMetadata[] | undefined {
                 mimeType: item.mimeType,
                 size: item.size,
                 path: item.path,
-                previewUrl: typeof item.previewUrl === 'string' ? item.previewUrl : undefined
+                previewUrl: sanitizeDurableAttachmentPreviewUrl(item.previewUrl),
             })
         }
     }
@@ -42,7 +42,7 @@ export function normalizeUserRecord(
             role: 'user',
             content: { type: 'text', text: content },
             isSidechain: false,
-            meta
+            meta,
         }
     }
 
@@ -55,7 +55,7 @@ export function normalizeUserRecord(
             role: 'user',
             content: { type: 'text', text: content.text, attachments },
             isSidechain: false,
-            meta
+            meta,
         }
     }
 

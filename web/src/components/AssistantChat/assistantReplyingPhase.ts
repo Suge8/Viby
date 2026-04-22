@@ -3,10 +3,10 @@ import type { PendingReplyState } from '@/lib/message-window-store'
 export type AssistantReplyingPhase = 'sending' | 'preparing' | 'replying'
 
 export function resolveAssistantReplyingPhase(options: {
-    isResponding: boolean
+    thinking: boolean
     pendingReply: PendingReplyState | null
 }): AssistantReplyingPhase | null {
-    if (options.isResponding) {
+    if (options.thinking) {
         return 'replying'
     }
 

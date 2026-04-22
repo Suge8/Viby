@@ -1,9 +1,9 @@
-import type { ChatBlock, ToolCallBlock, ToolPermission } from '@/chat/types'
-import { resolveTextRenderMode } from '@/chat/textRenderMode'
-import type { TracedMessage } from '@/chat/tracer'
 import { createCliOutputBlock, isCliOutputText, mergeCliOutputBlocks } from '@/chat/reducerCliOutput'
 import { parseMessageAsEvent } from '@/chat/reducerEvents'
-import { ensureToolBlock, extractTitleFromChangeTitleInput, isChangeTitleToolName, type PermissionEntry } from '@/chat/reducerTools'
+import { ensureToolBlock, type PermissionEntry } from '@/chat/reducerTools'
+import { resolveTextRenderMode } from '@/chat/textRenderMode'
+import type { TracedMessage } from '@/chat/tracer'
+import type { ChatBlock, ToolCallBlock, ToolPermission } from '@/chat/types'
 
 export function reduceTimeline(
     messages: TracedMessage[],
@@ -11,8 +11,6 @@ export function reduceTimeline(
         permissionsById: Map<string, PermissionEntry>
         groups: Map<string, TracedMessage[]>
         consumedGroupIds: Set<string>
-        titleChangesByToolUseId: Map<string, string>
-        emittedTitleChangeToolUseIds: Set<string>
     }
 ): { blocks: ChatBlock[]; toolBlocksById: Map<string, ToolCallBlock>; hasReadyEvent: boolean } {
     const blocks: ChatBlock[] = []
@@ -30,7 +28,7 @@ export function reduceTimeline(
                 id: msg.id,
                 createdAt: msg.createdAt,
                 event: msg.content,
-                meta: msg.meta
+                meta: msg.meta,
             })
             continue
         }
@@ -42,21 +40,23 @@ export function reduceTimeline(
                 id: msg.id,
                 createdAt: msg.createdAt,
                 event,
-                meta: msg.meta
+                meta: msg.meta,
             })
             continue
         }
 
         if (msg.role === 'user') {
             if (isCliOutputText(msg.content.text, msg.meta)) {
-                blocks.push(createCliOutputBlock({
-                    id: msg.id,
-                    localId: msg.localId,
-                    createdAt: msg.createdAt,
-                    text: msg.content.text,
-                    source: 'user',
-                    meta: msg.meta
-                }))
+                blocks.push(
+                    createCliOutputBlock({
+                        id: msg.id,
+                        localId: msg.localId,
+                        createdAt: msg.createdAt,
+                        text: msg.content.text,
+                        source: 'user',
+                        meta: msg.meta,
+                    })
+                )
                 continue
             }
             blocks.push({
@@ -69,24 +69,41 @@ export function reduceTimeline(
                 attachments: msg.content.attachments,
                 status: msg.status,
                 originalText: msg.originalText,
-                meta: msg.meta
+                meta: msg.meta,
             })
             continue
         }
 
         if (msg.role === 'agent') {
+            const taskToolCall = msg.content.find((content) => content.type === 'tool-call' && content.name === 'Task')
+            const taskPromptText = (() => {
+                if (!taskToolCall || taskToolCall.type !== 'tool-call') {
+                    return null
+                }
+                const input = taskToolCall.input
+                if (!input || typeof input !== 'object' || !('prompt' in input)) {
+                    return null
+                }
+                return typeof input.prompt === 'string' ? input.prompt.trim() : null
+            })()
+
             for (let idx = 0; idx < msg.content.length; idx += 1) {
                 const c = msg.content[idx]
                 if (c.type === 'text') {
+                    if (taskPromptText && c.text.trim() === taskPromptText) {
+                        continue
+                    }
                     if (isCliOutputText(c.text, msg.meta)) {
-                        blocks.push(createCliOutputBlock({
-                            id: `${msg.id}:${idx}`,
-                            localId: msg.localId,
-                            createdAt: msg.createdAt,
-                            text: c.text,
-                            source: 'assistant',
-                            meta: msg.meta
-                        }))
+                        blocks.push(
+                            createCliOutputBlock({
+                                id: `${msg.id}:${idx}`,
+                                localId: msg.localId,
+                                createdAt: msg.createdAt,
+                                text: c.text,
+                                source: 'assistant',
+                                meta: msg.meta,
+                            })
+                        )
                         continue
                     }
                     blocks.push({
@@ -96,7 +113,7 @@ export function reduceTimeline(
                         createdAt: msg.createdAt,
                         text: c.text,
                         renderMode: resolveTextRenderMode(c.text),
-                        meta: msg.meta
+                        meta: msg.meta,
                     })
                     continue
                 }
@@ -108,38 +125,12 @@ export function reduceTimeline(
                         localId: msg.localId,
                         createdAt: msg.createdAt,
                         text: c.text,
-                        meta: msg.meta
-                    })
-                    continue
-                }
-
-                if (c.type === 'summary') {
-                    blocks.push({
-                        kind: 'agent-event',
-                        id: `${msg.id}:${idx}`,
-                        createdAt: msg.createdAt,
-                        event: { type: 'message', message: c.summary },
-                        meta: msg.meta
+                        meta: msg.meta,
                     })
                     continue
                 }
 
                 if (c.type === 'tool-call') {
-                    if (isChangeTitleToolName(c.name)) {
-                        const title = context.titleChangesByToolUseId.get(c.id) ?? extractTitleFromChangeTitleInput(c.input)
-                        if (title && !context.emittedTitleChangeToolUseIds.has(c.id)) {
-                            context.emittedTitleChangeToolUseIds.add(c.id)
-                            blocks.push({
-                                kind: 'agent-event',
-                                id: `${msg.id}:${idx}`,
-                                createdAt: msg.createdAt,
-                                event: { type: 'title-changed', title },
-                                meta: msg.meta
-                            })
-                        }
-                        continue
-                    }
-
                     const permission = context.permissionsById.get(c.id)?.permission
 
                     const block = ensureToolBlock(blocks, toolBlocksById, c.id, {
@@ -149,7 +140,7 @@ export function reduceTimeline(
                         name: c.name,
                         input: c.input,
                         description: c.description,
-                        permission
+                        permission,
                     })
 
                     if (block.tool.state === 'pending') {
@@ -170,38 +161,26 @@ export function reduceTimeline(
                 }
 
                 if (c.type === 'tool-result') {
-                    const title = context.titleChangesByToolUseId.get(c.tool_use_id) ?? null
-                    if (title) {
-                        if (!context.emittedTitleChangeToolUseIds.has(c.tool_use_id)) {
-                            context.emittedTitleChangeToolUseIds.add(c.tool_use_id)
-                            blocks.push({
-                                kind: 'agent-event',
-                                id: `${msg.id}:${idx}`,
-                                createdAt: msg.createdAt,
-                                event: { type: 'title-changed', title },
-                                meta: msg.meta
-                            })
-                        }
-                        continue
-                    }
-
                     const permissionEntry = context.permissionsById.get(c.tool_use_id)
-                    const permissionFromResult = c.permissions ? ({
-                        id: c.tool_use_id,
-                        status: c.permissions.result === 'approved' ? 'approved' : 'denied',
-                        date: c.permissions.date,
-                        mode: c.permissions.mode,
-                        allowedTools: c.permissions.allowedTools,
-                        decision: c.permissions.decision
-                    } satisfies ToolPermission) : undefined
+                    const permissionFromResult = c.permissions
+                        ? ({
+                              id: c.tool_use_id,
+                              status: c.permissions.result === 'approved' ? 'approved' : 'denied',
+                              date: c.permissions.date,
+                              mode: c.permissions.mode,
+                              allowedTools: c.permissions.allowedTools,
+                              decision: c.permissions.decision,
+                          } satisfies ToolPermission)
+                        : undefined
 
                     const permission = (() => {
                         if (permissionFromResult && permissionEntry?.permission) {
                             return {
                                 ...permissionEntry.permission,
                                 ...permissionFromResult,
-                                allowedTools: permissionFromResult.allowedTools ?? permissionEntry.permission.allowedTools,
-                                decision: permissionFromResult.decision ?? permissionEntry.permission.decision
+                                allowedTools:
+                                    permissionFromResult.allowedTools ?? permissionEntry.permission.allowedTools,
+                                decision: permissionFromResult.decision ?? permissionEntry.permission.decision,
                             } satisfies ToolPermission
                         }
                         return permissionFromResult ?? permissionEntry?.permission
@@ -214,7 +193,7 @@ export function reduceTimeline(
                         name: permissionEntry?.toolName ?? 'Tool',
                         input: permissionEntry?.input ?? null,
                         description: null,
-                        permission
+                        permission,
                     })
 
                     block.tool.result = c.content
@@ -224,14 +203,8 @@ export function reduceTimeline(
                 }
 
                 if (c.type === 'sidechain') {
-                    blocks.push({
-                        kind: 'user-text',
-                        id: `${msg.id}:${idx}`,
-                        localId: null,
-                        createdAt: msg.createdAt,
-                        text: c.prompt,
-                        renderMode: 'plain'
-                    })
+                    // Task prompts already appear in the parent tool card input.
+                    continue
                 }
             }
         }

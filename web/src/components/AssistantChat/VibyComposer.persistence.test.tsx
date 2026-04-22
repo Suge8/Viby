@@ -1,26 +1,30 @@
+import { AssistantRuntimeProvider } from '@assistant-ui/react'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AssistantRuntimeProvider } from '@assistant-ui/react'
 import { ComposerDraftController } from '@/components/AssistantChat/ComposerDraftController'
-import { I18nProvider } from '@/lib/i18n-context'
+import {
+    readComposerDraftFromIndexedDb,
+    resetComposerDraftPersistenceForTests,
+} from '@/components/AssistantChat/composerDraftStore'
 import { useVibyRuntime } from '@/lib/assistant-runtime'
+import { I18nProvider } from '@/lib/i18n-context'
 import { preloadI18nForTests } from '@/test/i18n'
 import { VibyComposer } from './VibyComposer'
 
 vi.mock('@tanstack/react-router', () => ({
     useLocation: ({
-        select
+        select,
     }: {
-        select: (location: { pathname: string, href: string, state?: { __TSR_key?: string } }) => string
+        select: (location: { pathname: string; href: string; state?: { __TSR_key?: string } }) => string
     }) => {
         return select({
             pathname: '/sessions/session-1',
             href: '/sessions/session-1',
             state: {
-                __TSR_key: 'activation-a'
-            }
+                __TSR_key: 'activation-a',
+            },
         })
-    }
+    },
 }))
 
 vi.mock('@/hooks/usePlatform', () => ({
@@ -29,29 +33,27 @@ vi.mock('@/hooks/usePlatform', () => ({
         haptic: {
             impact: vi.fn(),
             notification: vi.fn(),
-            selection: vi.fn()
-        }
-    })
+            selection: vi.fn(),
+        },
+    }),
 }))
 
 vi.mock('@/components/AssistantChat/ComposerButtons', () => ({
-    ComposerButtons: () => <div data-testid="composer-buttons" />
+    ComposerButtons: () => <div data-testid="composer-buttons" />,
 }))
 
 vi.mock('@/components/AssistantChat/AttachmentItem', () => ({
-    AttachmentItem: () => null
+    AttachmentItem: () => null,
 }))
 
 vi.mock('@/components/AssistantChat/ComposerSuggestionsOverlay', () => ({
-    ComposerSuggestionsOverlay: () => null
+    ComposerSuggestionsOverlay: () => null,
 }))
 
-const DRAFT_STORAGE_KEY = 'viby-composer-draft::session-1'
-
-function ComposerPersistenceHarness(): React.JSX.Element {
+function ComposerPersistenceRuntime(props: { sessionId: string }): React.JSX.Element {
     const runtime = useVibyRuntime({
         session: {
-            id: 'session-1',
+            id: props.sessionId,
             active: true,
             thinking: false,
             permissionMode: 'default',
@@ -59,45 +61,52 @@ function ComposerPersistenceHarness(): React.JSX.Element {
             model: null,
             modelReasoningEffort: null,
             metadata: { driver: 'codex' },
-            agentState: { controlledByUser: false }
+            agentState: { controlledByUser: false },
         } as never,
-        blocks: [],
         isSending: false,
         onSendMessage: vi.fn(),
-        onAbort: vi.fn(async () => undefined)
+        onAbort: vi.fn(async () => undefined),
     })
 
     return (
+        <AssistantRuntimeProvider runtime={runtime}>
+            <ComposerDraftController sessionId={props.sessionId} />
+            <VibyComposer
+                model={{
+                    sessionId: props.sessionId,
+                    config: {
+                        permissionMode: 'default',
+                        collaborationMode: 'default',
+                        model: null,
+                        modelReasoningEffort: null,
+                        active: true,
+                        allowSendWhenInactive: false,
+                        controlledByUser: false,
+                        sessionDriver: 'codex',
+                        attachmentsSupported: true,
+                    },
+                    handlers: {
+                        onPermissionModeChange: vi.fn(),
+                    },
+                }}
+            />
+        </AssistantRuntimeProvider>
+    )
+}
+
+function ComposerPersistenceHarness(props: { sessionId?: string }): React.JSX.Element {
+    const sessionId = props.sessionId ?? 'session-1'
+
+    return (
         <I18nProvider>
-            <AssistantRuntimeProvider runtime={runtime}>
-                <ComposerDraftController sessionId="session-1" />
-                <VibyComposer
-                    model={{
-                        sessionId: 'session-1',
-                        config: {
-                            permissionMode: 'default',
-                            collaborationMode: 'default',
-                            model: null,
-                            modelReasoningEffort: null,
-                            active: true,
-                            allowSendWhenInactive: false,
-                            controlledByUser: false,
-                            sessionDriver: 'codex',
-                            attachmentsSupported: true
-                        },
-                        handlers: {
-                            onPermissionModeChange: vi.fn()
-                        }
-                    }}
-                />
-            </AssistantRuntimeProvider>
+            <ComposerPersistenceRuntime key={sessionId} sessionId={sessionId} />
         </I18nProvider>
     )
 }
 
 describe('VibyComposer draft persistence', () => {
-    beforeEach(() => {
-        window.localStorage.clear()
+    beforeEach(async () => {
+        await resetComposerDraftPersistenceForTests()
     })
 
     afterEach(() => {
@@ -113,12 +122,13 @@ describe('VibyComposer draft persistence', () => {
             target: {
                 value: 'draft survives remount',
                 selectionStart: 21,
-                selectionEnd: 21
-            }
+                selectionEnd: 21,
+            },
         })
 
-        await waitFor(() => {
-            expect(window.localStorage.getItem(DRAFT_STORAGE_KEY)).toContain('draft survives remount')
+        await waitFor(async () => {
+            const result = await readComposerDraftFromIndexedDb('session-1', Date.now())
+            expect(result.value).toBe('draft survives remount')
         })
 
         firstRender.unmount()
@@ -127,6 +137,31 @@ describe('VibyComposer draft persistence', () => {
 
         await waitFor(() => {
             expect(screen.getByPlaceholderText('Type a message...')).toHaveValue('draft survives remount')
+        })
+    })
+
+    it('does not leak composer memory state across sessions', async () => {
+        await preloadI18nForTests()
+        const view = render(<ComposerPersistenceHarness sessionId="session-1" />)
+        const textarea = screen.getByPlaceholderText('Type a message...') as HTMLTextAreaElement
+
+        fireEvent.change(textarea, {
+            target: {
+                value: 'session one only',
+                selectionStart: 16,
+                selectionEnd: 16,
+            },
+        })
+
+        await waitFor(async () => {
+            const result = await readComposerDraftFromIndexedDb('session-1', Date.now())
+            expect(result.value).toBe('session one only')
+        })
+
+        view.rerender(<ComposerPersistenceHarness sessionId="session-2" />)
+
+        await waitFor(() => {
+            expect(screen.getByPlaceholderText('Type a message...')).toHaveValue('')
         })
     })
 })

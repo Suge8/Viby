@@ -1,5 +1,5 @@
-import type { AttachmentMetadata, MessageStatus } from '@/types/api'
 import type { TextRenderMode } from '@/chat/textRenderMode'
+import type { AttachmentMetadata, MessageStatus } from '@/types/api'
 
 export type UsageData = {
     input_tokens: number
@@ -11,9 +11,12 @@ export type UsageData = {
 
 export type AgentEvent =
     | { type: 'driver-switched'; previousDriver?: string; targetDriver?: string }
-    | { type: 'driver-switch-send-failed'; stage?: 'socket_update' | 'callback_flush'; code?: 'empty_first_turn' | 'timeout' | 'unknown' }
+    | {
+          type: 'driver-switch-send-failed'
+          stage?: 'socket_update' | 'callback_flush'
+          code?: 'empty_first_turn' | 'timeout' | 'unknown'
+      }
     | { type: 'message'; message: string }
-    | { type: 'title-changed'; title: string }
     | { type: 'limit-reached'; endsAt: number }
     | { type: 'ready' }
     | { type: 'api-error'; retryAttempt: number; maxRetries: number; error: unknown }
@@ -52,32 +55,35 @@ export type ToolResult = {
 
 export type NormalizedAgentContent =
     | {
-        type: 'text'
-        text: string
-        uuid: string
-        parentUUID: string | null
-    }
+          type: 'text'
+          text: string
+          uuid: string
+          parentUUID: string | null
+      }
     | {
-        type: 'reasoning'
-        text: string
-        uuid: string
-        parentUUID: string | null
-    }
+          type: 'reasoning'
+          text: string
+          uuid: string
+          parentUUID: string | null
+      }
     | ToolUse
     | ToolResult
-    | { type: 'summary'; summary: string }
     | { type: 'sidechain'; uuid: string; prompt: string }
 
-export type NormalizedMessage = ({
-    role: 'user'
-    content: { type: 'text'; text: string; attachments?: AttachmentMetadata[] }
-} | {
-    role: 'agent'
-    content: NormalizedAgentContent[]
-} | {
-    role: 'event'
-    content: AgentEvent
-}) & {
+export type NormalizedMessage = (
+    | {
+          role: 'user'
+          content: { type: 'text'; text: string; attachments?: AttachmentMetadata[] }
+      }
+    | {
+          role: 'agent'
+          content: NormalizedAgentContent[]
+      }
+    | {
+          role: 'event'
+          content: AgentEvent
+      }
+) & {
     id: string
     localId: string | null
     createdAt: number
@@ -174,4 +180,10 @@ export type ToolCallBlock = {
     meta?: unknown
 }
 
-export type ChatBlock = UserTextBlock | AgentTextBlock | AgentReasoningBlock | CliOutputBlock | ToolCallBlock | AgentEventBlock
+export type ChatBlock =
+    | UserTextBlock
+    | AgentTextBlock
+    | AgentReasoningBlock
+    | CliOutputBlock
+    | ToolCallBlock
+    | AgentEventBlock

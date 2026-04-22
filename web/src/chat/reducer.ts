@@ -1,9 +1,14 @@
-import type { AgentState } from '@/types/api'
-import type { ChatBlock, NormalizedMessage, UsageData } from '@/chat/types'
-import { traceMessages, type TracedMessage } from '@/chat/tracer'
 import { dedupeAgentEvents, foldApiErrorEvents } from '@/chat/reducerEvents'
-import { collectTitleChanges, collectToolIdsFromMessages, ensureToolBlock, getPermissions } from '@/chat/reducerTools'
 import { reduceTimeline } from '@/chat/reducerTimeline'
+import {
+    collectRemovedTitleToolIds,
+    collectToolIdsFromMessages,
+    ensureToolBlock,
+    getPermissions,
+} from '@/chat/reducerTools'
+import { type TracedMessage, traceMessages } from '@/chat/tracer'
+import type { ChatBlock, NormalizedMessage, UsageData } from '@/chat/types'
+import type { AgentState } from '@/types/api'
 
 // Calculate context size from usage data
 function calculateContextSize(usage: UsageData): number {
@@ -19,15 +24,48 @@ export type LatestUsage = {
     timestamp: number
 }
 
+function stripRemovedTitleToolArtifacts(messages: NormalizedMessage[]): NormalizedMessage[] {
+    const removedToolIds = collectRemovedTitleToolIds(messages)
+    if (removedToolIds.size === 0) {
+        return messages
+    }
+
+    const sanitizedMessages: NormalizedMessage[] = []
+    for (const message of messages) {
+        if (message.role !== 'agent') {
+            sanitizedMessages.push(message)
+            continue
+        }
+
+        const content = message.content.filter((item) => {
+            if (item.type === 'tool-call') {
+                return !removedToolIds.has(item.id)
+            }
+            if (item.type === 'tool-result') {
+                return !removedToolIds.has(item.tool_use_id)
+            }
+            return true
+        })
+
+        if (content.length === 0) {
+            continue
+        }
+
+        sanitizedMessages.push(content.length === message.content.length ? message : { ...message, content })
+    }
+
+    return sanitizedMessages
+}
+
 export function reduceChatBlocks(
     normalized: NormalizedMessage[],
     agentState: AgentState | null | undefined
 ): { blocks: ChatBlock[]; hasReadyEvent: boolean; latestUsage: LatestUsage | null } {
+    const sanitizedMessages = stripRemovedTitleToolArtifacts(normalized)
     const permissionsById = getPermissions(agentState)
-    const toolIdsInMessages = collectToolIdsFromMessages(normalized)
-    const titleChangesByToolUseId = collectTitleChanges(normalized)
+    const toolIdsInMessages = collectToolIdsFromMessages(sanitizedMessages)
 
-    const traced = traceMessages(normalized)
+    const traced = traceMessages(sanitizedMessages)
     const groups = new Map<string, TracedMessage[]>()
     const root: TracedMessage[] = []
 
@@ -42,17 +80,15 @@ export function reduceChatBlocks(
     }
 
     const consumedGroupIds = new Set<string>()
-    const emittedTitleChangeToolUseIds = new Set<string>()
-    const reducerContext = { permissionsById, groups, consumedGroupIds, titleChangesByToolUseId, emittedTitleChangeToolUseIds }
+    const reducerContext = { permissionsById, groups, consumedGroupIds }
     const rootResult = reduceTimeline(root, reducerContext)
     let hasReadyEvent = rootResult.hasReadyEvent
 
     // Only create permission-only tool cards when there is no tool call/result in the transcript.
     // Also skip if the permission is older than the oldest message in the current view,
     // to avoid mixing old tool cards with newer messages when paginating.
-    const oldestMessageTime = normalized.length > 0
-        ? Math.min(...normalized.map(m => m.createdAt))
-        : null
+    const oldestMessageTime =
+        sanitizedMessages.length > 0 ? Math.min(...sanitizedMessages.map((m) => m.createdAt)) : null
 
     for (const [id, entry] of permissionsById) {
         if (toolIdsInMessages.has(id)) continue
@@ -72,7 +108,7 @@ export function reduceChatBlocks(
             name: entry.toolName,
             input: entry.input,
             description: null,
-            permission: entry.permission
+            permission: entry.permission,
         })
 
         if (entry.permission.status === 'approved') {
@@ -92,8 +128,8 @@ export function reduceChatBlocks(
 
     // Calculate latest usage from messages (find the most recent message with usage data)
     let latestUsage: LatestUsage | null = null
-    for (let i = normalized.length - 1; i >= 0; i--) {
-        const msg = normalized[i]
+    for (let i = sanitizedMessages.length - 1; i >= 0; i--) {
+        const msg = sanitizedMessages[i]
         if (msg.usage) {
             latestUsage = {
                 inputTokens: msg.usage.input_tokens,
@@ -101,7 +137,7 @@ export function reduceChatBlocks(
                 cacheCreation: msg.usage.cache_creation_input_tokens ?? 0,
                 cacheRead: msg.usage.cache_read_input_tokens ?? 0,
                 contextSize: calculateContextSize(msg.usage),
-                timestamp: msg.createdAt
+                timestamp: msg.createdAt,
             }
             break
         }

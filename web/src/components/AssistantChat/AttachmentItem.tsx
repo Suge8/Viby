@@ -1,7 +1,7 @@
-import { AttachmentPrimitive, useThreadComposerAttachment } from '@assistant-ui/react'
 import type { PendingAttachment } from '@assistant-ui/react'
-import { AlertIcon } from '@/components/icons'
+import { AttachmentPrimitive, useThreadComposerAttachment } from '@assistant-ui/react'
 import { FeatureCloseIcon as CloseIcon } from '@/components/featureIcons'
+import { AlertIcon } from '@/components/icons'
 import { Spinner } from '@/components/Spinner'
 
 export function AttachmentItem() {
@@ -14,13 +14,9 @@ export function AttachmentItem() {
     const previewUrl = attachment.previewUrl
 
     return (
-        <AttachmentPrimitive.Root className="flex items-center gap-3 rounded-[18px] bg-[var(--app-subtle-bg)] px-3 py-2 text-base text-[var(--app-fg)]">
+        <AttachmentPrimitive.Root className="ds-attachment-chip flex items-center gap-3 bg-[var(--app-subtle-bg)] px-3 py-2 text-base text-[var(--app-fg)]">
             {type === 'image' && previewUrl ? (
-                <img
-                    src={previewUrl}
-                    alt={name}
-                    className="h-11 w-11 shrink-0 rounded-xl object-cover"
-                />
+                <img src={previewUrl} alt={name} className="h-11 w-11 shrink-0 rounded-xl object-cover" />
             ) : null}
             {isUploading ? <Spinner size="sm" label={null} className="text-[var(--app-hint)]" /> : null}
             {isError ? (
@@ -28,7 +24,7 @@ export function AttachmentItem() {
                     <AlertIcon className="h-4 w-4" />
                 </span>
             ) : null}
-            <span className="max-w-[150px] truncate text-sm font-medium">{name}</span>
+            <span className="ds-attachment-label truncate text-sm font-medium">{name}</span>
             <AttachmentPrimitive.Remove
                 className="ml-auto flex h-5 w-5 items-center justify-center rounded text-[var(--app-hint)] transition-colors hover:text-[var(--app-fg)]"
                 aria-label="Remove attachment"
