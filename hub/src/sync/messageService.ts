@@ -1,8 +1,4 @@
-import {
-    getSessionActivityKind,
-    shouldMessageAdvanceSessionUpdatedAt,
-    type SessionDriver
-} from '@viby/protocol'
+import { isObject, type SessionDriver, sanitizeDurableAttachmentMetadataList } from '@viby/protocol'
 import type { AttachmentMetadata, DecryptedMessage, MessageMeta, SessionMessageActivity } from '@viby/protocol/types'
 import type { Server } from 'socket.io'
 import type { Store } from '../store'
@@ -25,8 +21,8 @@ function createDriverSwitchedMessageContent(event: DriverSwitchedEvent): {
         role: 'agent',
         content: {
             type: 'event',
-            data: event
-        }
+            data: event,
+        },
     }
 }
 
@@ -35,10 +31,12 @@ export class MessageService {
         private readonly store: Store,
         private readonly io: Server,
         private readonly publisher: EventPublisher
-    ) {
-    }
+    ) {}
 
-    getMessagesPage(sessionId: string, options: { limit: number; beforeSeq: number | null }): {
+    getMessagesPage(
+        sessionId: string,
+        options: { limit: number; beforeSeq: number | null }
+    ): {
         messages: DecryptedMessage[]
         page: {
             limit: number
@@ -47,13 +45,15 @@ export class MessageService {
             hasMore: boolean
         }
     } {
-        const stored = this.store.messages.getMessages(sessionId, options.limit, options.beforeSeq ?? undefined)
-        const messages: DecryptedMessage[] = stored.map((message) => ({
+        const stored = this.store.messages.getMessages(sessionId, options.limit + 1, options.beforeSeq ?? undefined)
+        const hasMore = stored.length > options.limit
+        const visibleMessages = hasMore ? stored.slice(-options.limit) : stored
+        const messages: DecryptedMessage[] = visibleMessages.map((message) => ({
             id: message.id,
             seq: message.seq,
             localId: message.localId,
-            content: message.content,
-            createdAt: message.createdAt
+            content: sanitizeDurableMessageContent(message.content),
+            createdAt: message.createdAt,
         }))
 
         let oldestSeq: number | null = null
@@ -64,18 +64,14 @@ export class MessageService {
             }
         }
 
-        const nextBeforeSeq = oldestSeq
-        const hasMore = nextBeforeSeq !== null
-            && this.store.messages.getMessages(sessionId, 1, nextBeforeSeq).length > 0
-
         return {
             messages,
             page: {
                 limit: options.limit,
                 beforeSeq: options.beforeSeq,
-                nextBeforeSeq,
-                hasMore
-            }
+                nextBeforeSeq: oldestSeq,
+                hasMore,
+            },
         }
     }
 
@@ -85,13 +81,13 @@ export class MessageService {
             id: message.id,
             seq: message.seq,
             localId: message.localId,
-            content: message.content,
-            createdAt: message.createdAt
+            content: sanitizeDurableMessageContent(message.content),
+            createdAt: message.createdAt,
         }))
     }
 
     getSessionMessageActivities(sessionIds: string[]): Record<string, SessionMessageActivity> {
-        return this.store.messages.getSessionMessageActivities(sessionIds)
+        return this.store.sessions.getSessionMessageActivities(sessionIds)
     }
 
     hasMessages(sessionId: string): boolean {
@@ -107,14 +103,15 @@ export class MessageService {
             meta?: MessageMeta
         }
     ): Promise<void> {
+        const attachments = sanitizeDurableAttachmentMetadataList(payload.attachments)
         const content = {
             role: 'user',
             content: {
                 type: 'text',
                 text: payload.text,
-                attachments: payload.attachments
+                attachments,
             },
-            ...(payload.meta ? { meta: payload.meta } : {})
+            ...(payload.meta ? { meta: payload.meta } : {}),
         }
         await this.appendMessage(sessionId, content, payload.localId ?? undefined)
     }
@@ -133,24 +130,17 @@ export class MessageService {
             localId: payload.localId,
             attachments: payload.attachments,
             meta: {
-                sentFrom: payload.sentFrom ?? 'webapp'
-            }
+                sentFrom: payload.sentFrom ?? 'webapp',
+            },
         })
     }
 
-    async appendDriverSwitchedEvent(
-        sessionId: string,
-        event: DriverSwitchedEvent
-    ): Promise<void> {
+    async appendDriverSwitchedEvent(sessionId: string, event: DriverSwitchedEvent): Promise<void> {
         await this.appendMessage(sessionId, createDriverSwitchedMessageContent(event))
     }
 
     private async appendMessage(sessionId: string, content: unknown, localId?: string): Promise<void> {
         const msg = this.store.messages.addMessage(sessionId, content, localId)
-        const activityKind = getSessionActivityKind(msg.content)
-        if (shouldMessageAdvanceSessionUpdatedAt(activityKind)) {
-            this.store.sessions.touchSessionUpdatedAt(sessionId, msg.createdAt)
-        }
 
         const update = {
             id: msg.id,
@@ -164,9 +154,9 @@ export class MessageService {
                     seq: msg.seq,
                     createdAt: msg.createdAt,
                     localId: msg.localId,
-                    content: msg.content
-                }
-            }
+                    content: msg.content,
+                },
+            },
         }
         this.io.of('/cli').to(`session:${sessionId}`).emit('update', update)
 
@@ -178,8 +168,68 @@ export class MessageService {
                 seq: msg.seq,
                 localId: msg.localId,
                 content: msg.content,
-                createdAt: msg.createdAt
-            }
+                createdAt: msg.createdAt,
+            },
         })
+    }
+}
+
+function sanitizeDurableMessageContent(content: unknown): unknown {
+    if (
+        !isObject(content) ||
+        content.role !== 'user' ||
+        !isObject(content.content) ||
+        content.content.type !== 'text'
+    ) {
+        return content
+    }
+
+    const rawAttachments = content.content.attachments
+    if (!Array.isArray(rawAttachments)) {
+        return content
+    }
+
+    let changed = false
+    const nextAttachments = rawAttachments.map((attachment) => {
+        if (
+            !isObject(attachment) ||
+            typeof attachment.id !== 'string' ||
+            typeof attachment.filename !== 'string' ||
+            typeof attachment.mimeType !== 'string' ||
+            typeof attachment.size !== 'number' ||
+            typeof attachment.path !== 'string'
+        ) {
+            return attachment
+        }
+
+        const sanitized =
+            sanitizeDurableAttachmentMetadataList([
+                {
+                    id: attachment.id,
+                    filename: attachment.filename,
+                    mimeType: attachment.mimeType,
+                    size: attachment.size,
+                    path: attachment.path,
+                    previewUrl: typeof attachment.previewUrl === 'string' ? attachment.previewUrl : undefined,
+                },
+            ])?.[0] ?? attachment
+
+        if (sanitized.previewUrl !== (typeof attachment.previewUrl === 'string' ? attachment.previewUrl : undefined)) {
+            changed = true
+        }
+
+        return sanitized
+    })
+
+    if (!changed) {
+        return content
+    }
+
+    return {
+        ...content,
+        content: {
+            ...content.content,
+            attachments: nextAttachments,
+        },
     }
 }

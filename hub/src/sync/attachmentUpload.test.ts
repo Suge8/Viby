@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 import type { Server } from 'socket.io'
-import { Store } from '../store'
 import { RpcRegistry } from '../socket/rpcRegistry'
+import { Store } from '../store'
 import { SyncEngine } from './syncEngine'
 
 function createIoStub(): Server {
@@ -11,23 +11,17 @@ function createIoStub(): Server {
                 sockets: new Map(),
                 to() {
                     return {
-                        emit() {
-                        }
+                        emit() {},
                     }
-                }
+                },
             }
-        }
+        },
     } as unknown as Server
 }
 
 function createEngine(): { engine: SyncEngine; store: Store } {
     const store = new Store(':memory:')
-    const engine = new SyncEngine(
-        store,
-        createIoStub(),
-        new RpcRegistry(),
-        { broadcast() {} } as never
-    )
+    const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), { broadcast() {} } as never)
 
     return { engine, store }
 }
@@ -39,26 +33,30 @@ function seedSession(engine: SyncEngine, store: Store) {
             path: '/tmp/project',
             host: 'localhost',
             machineId: 'machine-1',
-            flavor: 'codex',
-            codexSessionId: 'codex-thread-1'
+            driver: 'codex',
+            runtimeHandles: {
+                codex: {
+                    sessionId: 'codex-thread-1',
+                },
+            },
         },
         model: 'gpt-5.4',
-        agentState: null
+        agentState: null,
     } as Parameters<SyncEngine['getOrCreateSession']>[0])
 
     store.messages.addMessage(session.id, {
         role: 'assistant',
         content: {
             type: 'text',
-            text: 'existing reply'
-        }
+            text: 'existing reply',
+        },
     })
 
     return session
 }
 
 describe('SyncEngine attachment uploads', () => {
-    it('resumes inactive sessions before uploading attachment files', async () => {
+    it('uploads attachment files for inactive sessions without resuming them', async () => {
         const { engine, store } = createEngine()
         try {
             const session = seedSession(engine, store)
@@ -70,13 +68,14 @@ describe('SyncEngine attachment uploads', () => {
                 engine.handleSessionAlive({ sid: sessionId, time: Date.now() })
                 return { type: 'success', sessionId }
             }
-            ;(engine as any).rpcGateway.uploadFile = async (
+            ;(engine as any).rpcGateway.uploadMachineFile = async (
+                machineId: string,
                 sessionId: string,
                 filename: string,
                 _content: string,
                 mimeType: string
             ) => {
-                steps.push(`upload:${sessionId}:${filename}:${mimeType}`)
+                steps.push(`upload:${machineId}:${sessionId}:${filename}:${mimeType}`)
                 return { success: true, path: '/tmp/uploaded.png' }
             }
 
@@ -84,18 +83,16 @@ describe('SyncEngine attachment uploads', () => {
 
             expect(result).toEqual({
                 success: true,
-                path: '/tmp/uploaded.png'
+                path: '/tmp/uploaded.png',
             })
-            expect(steps).toEqual([
-                `resume:${session.id}`,
-                `upload:${session.id}:photo.png:image/png`
-            ])
+            expect(steps).toEqual([`upload:machine-1:${session.id}:photo.png:image/png`])
+            expect(engine.getSession(session.id)?.active).toBe(false)
         } finally {
             engine.stop()
         }
     })
 
-    it('resumes inactive sessions before deleting attachment files', async () => {
+    it('deletes attachment files for inactive sessions without resuming them', async () => {
         const { engine, store } = createEngine()
         try {
             const session = seedSession(engine, store)
@@ -107,18 +104,20 @@ describe('SyncEngine attachment uploads', () => {
                 engine.handleSessionAlive({ sid: sessionId, time: Date.now() })
                 return { type: 'success', sessionId }
             }
-            ;(engine as any).rpcGateway.deleteUploadFile = async (sessionId: string, path: string) => {
-                steps.push(`delete:${sessionId}:${path}`)
+            ;(engine as any).rpcGateway.deleteMachineUploadFile = async (
+                machineId: string,
+                sessionId: string,
+                path: string
+            ) => {
+                steps.push(`delete:${machineId}:${sessionId}:${path}`)
                 return { success: true }
             }
 
             const result = await engine.deleteUploadFile(session.id, '/tmp/uploaded.png')
 
             expect(result).toEqual({ success: true })
-            expect(steps).toEqual([
-                `resume:${session.id}`,
-                `delete:${session.id}:/tmp/uploaded.png`
-            ])
+            expect(steps).toEqual([`delete:machine-1:${session.id}:/tmp/uploaded.png`])
+            expect(engine.getSession(session.id)?.active).toBe(false)
         } finally {
             engine.stop()
         }

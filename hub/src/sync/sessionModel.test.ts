@@ -1,59 +1,16 @@
 import { describe, expect, it } from 'bun:test'
 import { getSessionLifecycleState, getSessionResumeToken, toSessionSummary } from '@viby/protocol'
-import type { Session, SyncEvent, TeamSessionSpawnRole } from '@viby/protocol/types'
-import type { Server } from 'socket.io'
-import { Store } from '../store'
-import { RpcRegistry } from '../socket/rpcRegistry'
-import type { EventPublisher } from './eventPublisher'
-import { SessionCache } from './sessionCache'
-import { SyncEngine } from './syncEngine'
-
-function createPublisher(events: SyncEvent[]): EventPublisher {
-    return {
-        emit: (event: SyncEvent) => {
-            events.push(event)
-        }
-    } as unknown as EventPublisher
-}
-
-function createIoStub(): Server {
-    return {
-        of() {
-            return {
-                to() {
-                    return {
-                        emit() {
-                        }
-                    }
-                }
-            }
-        }
-    } as unknown as Server
-}
-
-type CacheSessionInput = Omit<Parameters<SessionCache['getOrCreateSession']>[0], 'agentState'> & {
-    agentState?: unknown
-}
-type EngineSessionInput = Omit<Parameters<SyncEngine['getOrCreateSession']>[0], 'agentState' | 'sessionRole'> & {
-    agentState?: unknown
-    sessionRole?: TeamSessionSpawnRole
-}
-
-function createCachedSession(cache: SessionCache, input: CacheSessionInput): Session {
-    const { agentState = null, ...rest } = input
-    return cache.getOrCreateSession({
-        ...rest,
-        agentState
-    })
-}
-
-function createEngineSession(engine: SyncEngine, input: EngineSessionInput): Session {
-    const { agentState = null, ...rest } = input
-    return engine.getOrCreateSession({
-        ...rest,
-        agentState
-    })
-}
+import type { SyncEvent } from '@viby/protocol/types'
+import {
+    createCachedSession,
+    createEngineSession,
+    createIoStub,
+    createPublisher,
+    RpcRegistry,
+    SessionCache,
+    Store,
+    SyncEngine,
+} from './sessionModel.support.test'
 
 describe('session model', () => {
     it('includes explicit model and live config modes in session summaries', () => {
@@ -63,8 +20,8 @@ describe('session model', () => {
 
         const session = createCachedSession(cache, {
             tag: 'session-model-summary',
-            metadata: { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
-            model: 'gpt-5.4'
+            metadata: { path: '/tmp/project', host: 'localhost', driver: 'codex' },
+            model: 'gpt-5.4',
         })
 
         expect(session.model).toBe('gpt-5.4')
@@ -77,6 +34,32 @@ describe('session model', () => {
         expect(toSessionSummary(session).collaborationMode).toBe('plan')
     })
 
+    it('preserves durable resume tokens when a session is closed', async () => {
+        const store = new Store(':memory:')
+        const events: SyncEvent[] = []
+        const cache = new SessionCache(store, createPublisher(events))
+
+        const session = createCachedSession(cache, {
+            tag: 'session-close-preserves-token',
+            metadata: {
+                path: '/tmp/project',
+                host: 'localhost',
+                driver: 'codex',
+                runtimeHandles: {
+                    codex: { sessionId: 'codex-thread-keep' },
+                },
+            },
+        })
+
+        const closedSession = await cache.transitionSessionLifecycle(session.id, 'closed', {
+            markInactive: true,
+        })
+
+        expect(getSessionLifecycleState(closedSession)).toBe('closed')
+        expect(getSessionResumeToken(closedSession.metadata)).toBe('codex-thread-keep')
+        expect(toSessionSummary(closedSession).resumeAvailable).toBe(true)
+    })
+
     it('projects durable resume availability into session summaries', () => {
         const store = new Store(':memory:')
         const events: SyncEvent[] = []
@@ -87,176 +70,60 @@ describe('session model', () => {
             metadata: {
                 path: '/tmp/project',
                 host: 'localhost',
-                flavor: 'codex',
-                codexSessionId: 'codex-thread-1'
+                driver: 'codex',
+                runtimeHandles: {
+                    codex: { sessionId: 'codex-thread-1' },
+                },
             },
-            model: 'gpt-5.4'
+            model: 'gpt-5.4',
         })
         const legacySession = createCachedSession(cache, {
             tag: 'session-resume-unavailable',
-            metadata: { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
-            model: 'gpt-5.4'
+            metadata: { path: '/tmp/project', host: 'localhost', driver: 'codex' },
+            model: 'gpt-5.4',
         })
 
         expect(toSessionSummary(resumableSession).resumeAvailable).toBe(true)
         expect(toSessionSummary(legacySession).resumeAvailable).toBe(false)
     })
 
-    it('projects manager teams read model into session and session summary', () => {
+    it('projects pi transcript replay sessions as resumable without provider runtime handles', () => {
         const store = new Store(':memory:')
         const events: SyncEvent[] = []
         const cache = new SessionCache(store, createPublisher(events))
 
-        const managerSession = createCachedSession(cache, {
-            tag: 'manager-session',
+        const piSession = createCachedSession(cache, {
+            tag: 'session-pi-replay-resume',
             metadata: {
                 path: '/tmp/project',
                 host: 'localhost',
-                flavor: 'codex',
-                name: 'Manager One'
+                driver: 'pi',
+                lifecycleState: 'closed',
             },
-            model: 'gpt-5.4',
-            sessionId: 'manager-session-id'
-        })
-        const memberSession = createCachedSession(cache, {
-            tag: 'member-session',
-            metadata: { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
-            model: 'gpt-5.4',
-            sessionId: 'member-session-id'
+            model: 'openai/gpt-5.4-mini',
         })
 
-        store.sessions.setSessionAlive(memberSession.id, 2_000)
-        store.teams.upsertProject({
-            id: 'project-1',
-            managerSessionId: managerSession.id,
-            machineId: 'machine-1',
-            rootDirectory: '/tmp/project',
-            title: 'Project One',
-            goal: 'Ship manager teams',
-            status: 'active',
-            maxActiveMembers: 6,
-            defaultIsolationMode: 'hybrid',
-            createdAt: 1_000,
-            updatedAt: 1_500,
-            deliveredAt: null,
-            archivedAt: null
-        })
-        store.teams.upsertMember({
-            id: 'member-1',
-            projectId: 'project-1',
-            sessionId: memberSession.id,
-            managerSessionId: managerSession.id,
-            role: 'implementer',
-            roleId: 'implementer',
-            providerFlavor: 'codex',
-            model: 'gpt-5.4',
-            reasoningEffort: 'high',
-            isolationMode: 'worktree',
-            workspaceRoot: '/tmp/project/worktrees/member-1',
-            controlOwner: 'manager',
-            membershipState: 'active',
-            revision: 1,
-            supersedesMemberId: null,
-            supersededByMemberId: null,
-            spawnedForTaskId: null,
-            createdAt: 1_100,
-            updatedAt: 1_600,
-            archivedAt: null,
-            removedAt: null
-        })
-        store.teams.upsertTask({
-            id: 'task-1',
-            projectId: 'project-1',
-            parentTaskId: null,
-            title: 'Implement',
-            description: null,
-            acceptanceCriteria: null,
-            status: 'blocked',
-            assigneeMemberId: 'member-1',
-            reviewerMemberId: null,
-            verifierMemberId: null,
-            priority: 'high',
-            dependsOn: [],
-            retryCount: 0,
-            createdAt: 1_200,
-            updatedAt: 1_700,
-            completedAt: null
-        })
-
-        const refreshedMember = cache.refreshSession(memberSession.id)
-
-        expect(refreshedMember?.teamContext).toMatchObject({
-            projectId: 'project-1',
-            sessionRole: 'member',
-            memberId: 'member-1',
-            memberRole: 'implementer',
-            memberRoleId: 'implementer',
-            memberRoleName: 'implementer',
-            managerTitle: 'Manager One',
-            activeMemberCount: 1,
-            blockedTaskCount: 1
-        })
-        expect(toSessionSummary(refreshedMember!)).toMatchObject({
-            team: {
-                projectId: 'project-1',
-                sessionRole: 'member',
-                managerSessionId: managerSession.id,
-                memberRole: 'implementer',
-                memberRoleId: 'implementer',
-                memberRoleName: 'implementer',
-                memberRevision: 1,
-                membershipState: 'active',
-                controlOwner: 'manager',
-                projectStatus: 'active',
-                activeMemberCount: 1,
-                archivedMemberCount: 0,
-                runningMemberCount: 1,
-                blockedTaskCount: 1
-            }
-        })
+        expect(toSessionSummary(piSession).resumeAvailable).toBe(true)
     })
 
-    it('bootstraps manager team context during /cli/sessions session creation', () => {
+    it('projects runner-managed continuity resume sessions as resumable without durable provider tokens', () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(
-            store,
-            createIoStub(),
-            {} as RpcRegistry,
-            { broadcast() {} }
-        )
+        const events: SyncEvent[] = []
+        const cache = new SessionCache(store, createPublisher(events))
 
-        const session = createEngineSession(engine, {
-            tag: 'manager-bootstrap-session',
+        const session = createCachedSession(cache, {
+            tag: 'session-runner-continuity-resume',
             metadata: {
-                path: '/tmp/projects/manager-beta',
+                path: '/tmp/project',
                 host: 'localhost',
-                flavor: 'claude',
-                machineId: 'machine-1',
-                name: 'Manager Beta'
+                driver: 'gemini',
+                startedBy: 'runner',
+                lifecycleState: 'closed',
             },
-            model: 'sonnet',
-            sessionRole: 'manager'
+            model: 'gemini-2.5-pro',
         })
 
-        expect(session.teamContext).toMatchObject({
-            projectId: session.id,
-            sessionRole: 'manager',
-            managerSessionId: session.id,
-            managerTitle: 'Manager Beta',
-            projectStatus: 'active',
-            activeMemberCount: 0,
-            archivedMemberCount: 0,
-            runningMemberCount: 0,
-            blockedTaskCount: 0
-        })
-        expect(store.teams.getProjectByManagerSessionId(session.id)).toMatchObject({
-            id: session.id,
-            title: 'Manager Beta',
-            machineId: 'machine-1',
-            rootDirectory: '/tmp/projects/manager-beta'
-        })
-
-        engine.stop()
+        expect(toSessionSummary(session).resumeAvailable).toBe(true)
     })
 
     it('keeps updatedAt stable while reply chunks are still streaming', () => {
@@ -266,15 +133,15 @@ describe('session model', () => {
 
         const session = createCachedSession(cache, {
             tag: 'session-message-activity',
-            metadata: { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
-            model: 'gpt-5.4'
+            metadata: { path: '/tmp/project', host: 'localhost', driver: 'codex' },
+            model: 'gpt-5.4',
         })
         session.updatedAt = 1_000
 
         const summary = toSessionSummary(session, {
             latestActivityAt: 2_000,
             latestActivityKind: 'reply',
-            latestCompletedReplyAt: null
+            latestCompletedReplyAt: null,
         })
 
         expect(summary.updatedAt).toBe(1_000)
@@ -293,20 +160,20 @@ describe('session model', () => {
             metadata: {
                 path: '/tmp/project',
                 host: 'localhost',
-                flavor: 'claude',
+                driver: 'claude',
                 summary: {
                     text: 'Streaming title',
-                    updatedAt: 6_000
-                }
+                    updatedAt: 6_000,
+                },
             },
-            model: 'sonnet'
+            model: 'sonnet',
         })
         session.updatedAt = 1_000
 
         const summary = toSessionSummary(session, {
             latestActivityAt: 5_000,
             latestActivityKind: 'reply',
-            latestCompletedReplyAt: null
+            latestCompletedReplyAt: null,
         })
 
         expect(summary.updatedAt).toBe(1_000)
@@ -322,15 +189,15 @@ describe('session model', () => {
 
         const session = createCachedSession(cache, {
             tag: 'session-completed-message-activity',
-            metadata: { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
-            model: 'gpt-5.4'
+            metadata: { path: '/tmp/project', host: 'localhost', driver: 'codex' },
+            model: 'gpt-5.4',
         })
         session.updatedAt = 1_000
 
         const summary = toSessionSummary(session, {
             latestActivityAt: 2_001,
             latestActivityKind: 'ready',
-            latestCompletedReplyAt: 2_000
+            latestCompletedReplyAt: 2_000,
         })
 
         expect(summary.updatedAt).toBe(2_000)
@@ -345,21 +212,29 @@ describe('session model', () => {
 
         const closedSession = createCachedSession(cache, {
             tag: 'session-lifecycle-closed',
-            metadata: { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
-            model: 'gpt-5.4'
+            metadata: { path: '/tmp/project', host: 'localhost', driver: 'codex' },
+            model: 'gpt-5.4',
         })
         const archivedSession = createCachedSession(cache, {
             tag: 'session-lifecycle-archived',
-            metadata: { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
-            model: 'gpt-5.4'
+            metadata: { path: '/tmp/project', host: 'localhost', driver: 'codex' },
+            model: 'gpt-5.4',
         })
 
         expect(toSessionSummary(closedSession).lifecycleState).toBe('closed')
 
         await cache.setSessionLifecycleState(archivedSession.id, 'archived')
         expect(toSessionSummary(cache.getSession(archivedSession.id)!)).toMatchObject({
-            lifecycleState: 'archived'
+            lifecycleState: 'archived',
         })
+    })
+
+    it('awaits lifecycle metadata writes instead of fire-and-forget updates', async () => {
+        const store = new Store(':memory:')
+        const events: SyncEvent[] = []
+        const cache = new SessionCache(store, createPublisher(events))
+
+        await expect(cache.setSessionLifecycleState('missing-session', 'archived')).rejects.toThrow('Session not found')
     })
 
     it('publishes only the final archived snapshot when archiving an active session', async () => {
@@ -372,16 +247,18 @@ describe('session model', () => {
             metadata: {
                 path: '/tmp/project',
                 host: 'localhost',
-                flavor: 'codex',
-                codexSessionId: 'codex-thread-archive'
+                driver: 'codex',
+                runtimeHandles: {
+                    codex: { sessionId: 'codex-thread-archive' },
+                },
             },
-            model: 'gpt-5.4'
+            model: 'gpt-5.4',
         })
 
         cache.handleSessionAlive({
             sid: session.id,
             time: 2_000,
-            thinking: true
+            thinking: true,
         })
         events.length = 0
 
@@ -389,7 +266,7 @@ describe('session model', () => {
             markInactive: true,
             archivedBy: 'web',
             archiveReason: 'Archived by user',
-            transitionAt: 3_000
+            transitionAt: 3_000,
         })
 
         expect(archivedSession).toMatchObject({
@@ -398,8 +275,8 @@ describe('session model', () => {
             metadata: {
                 lifecycleState: 'archived',
                 archivedBy: 'web',
-                archiveReason: 'Archived by user'
-            }
+                archiveReason: 'Archived by user',
+            },
         })
         expect(events).toHaveLength(1)
         expect(events[0]).toMatchObject({
@@ -409,9 +286,9 @@ describe('session model', () => {
                 active: false,
                 thinking: false,
                 metadata: {
-                    lifecycleState: 'archived'
-                }
-            }
+                    lifecycleState: 'archived',
+                },
+            },
         })
     })
 
@@ -425,24 +302,26 @@ describe('session model', () => {
             metadata: {
                 path: '/tmp/project',
                 host: 'localhost',
-                flavor: 'codex',
-                codexSessionId: 'codex-thread-archive'
+                driver: 'codex',
+                runtimeHandles: {
+                    codex: { sessionId: 'codex-thread-archive' },
+                },
             },
-            model: 'gpt-5.4'
+            model: 'gpt-5.4',
         })
 
         const archivedSession = await cache.transitionSessionLifecycle(session.id, 'archived', {
             markInactive: true,
             archivedBy: 'web',
             archiveReason: 'Archived by user',
-            transitionAt: 3_000
+            transitionAt: 3_000,
         })
         events.length = 0
 
         cache.handleSessionAlive({
             sid: session.id,
             time: 4_000,
-            thinking: false
+            thinking: false,
         })
 
         expect(cache.getSession(session.id)).toMatchObject({
@@ -450,27 +329,22 @@ describe('session model', () => {
             thinking: false,
             metadata: {
                 lifecycleState: 'archived',
-                lifecycleStateSince: archivedSession.metadata?.lifecycleStateSince
-            }
+                lifecycleStateSince: archivedSession.metadata?.lifecycleStateSince,
+            },
         })
         expect(store.sessions.getSession(session.id)).toMatchObject({
             active: false,
             metadata: {
                 lifecycleState: 'archived',
-                lifecycleStateSince: archivedSession.metadata?.lifecycleStateSince
-            }
+                lifecycleStateSince: archivedSession.metadata?.lifecycleStateSince,
+            },
         })
         expect(events).toEqual([])
     })
 
     it('resumes a closed session inside the Hub-owned send command before persisting the user message', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(
-            store,
-            createIoStub(),
-            new RpcRegistry(),
-            { broadcast() {} } as never
-        )
+        const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {
@@ -479,44 +353,46 @@ describe('session model', () => {
                     path: '/tmp/project',
                     host: 'localhost',
                     machineId: 'machine-1',
-                    flavor: 'gemini',
-                    geminiSessionId: 'gemini-thread-1'
+                    driver: 'gemini',
+                    geminiSessionId: 'gemini-thread-1',
                 },
-                model: 'gemini-2.5-pro'
+                model: 'gemini-2.5-pro',
             })
             store.messages.addMessage(session.id, {
                 role: 'assistant',
                 content: {
                     type: 'text',
-                    text: 'existing reply'
-                }
+                    text: 'existing reply',
+                },
             })
 
             ;(engine as any).resumeSession = async (sessionId: string) => {
                 engine.handleSessionAlive({
                     sid: sessionId,
-                    time: Date.now()
+                    time: Date.now(),
                 })
                 return { type: 'success', sessionId }
             }
 
             const result = await engine.sendMessage(session.id, {
                 text: 'hello after close',
-                localId: 'local-1'
+                localId: 'local-1',
             })
 
             expect(result.active).toBe(true)
             expect(getSessionLifecycleState(result)).toBe('running')
-            expect(store.messages.getMessages(session.id, 10)).toContainEqual(expect.objectContaining({
-                localId: 'local-1',
-                content: expect.objectContaining({
-                    role: 'user',
+            expect(store.messages.getMessages(session.id, 10)).toContainEqual(
+                expect.objectContaining({
+                    localId: 'local-1',
                     content: expect.objectContaining({
-                        type: 'text',
-                        text: 'hello after close'
-                    })
+                        role: 'user',
+                        content: expect.objectContaining({
+                            type: 'text',
+                            text: 'hello after close',
+                        }),
+                    }),
                 })
-            }))
+            )
         } finally {
             engine.stop()
         }
@@ -524,12 +400,7 @@ describe('session model', () => {
 
     it('auto-unarchives archived sessions inside the Hub-owned send command before resuming them', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(
-            store,
-            createIoStub(),
-            new RpcRegistry(),
-            { broadcast() {} } as never
-        )
+        const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {
@@ -538,17 +409,17 @@ describe('session model', () => {
                     path: '/tmp/project',
                     host: 'localhost',
                     machineId: 'machine-1',
-                    flavor: 'gemini',
-                    geminiSessionId: 'gemini-thread-2'
+                    driver: 'gemini',
+                    geminiSessionId: 'gemini-thread-2',
                 },
-                model: 'gemini-2.5-pro'
+                model: 'gemini-2.5-pro',
             })
             store.messages.addMessage(session.id, {
                 role: 'assistant',
                 content: {
                     type: 'text',
-                    text: 'existing reply'
-                }
+                    text: 'existing reply',
+                },
             })
 
             await (engine as any).sessionCache.setSessionLifecycleState(session.id, 'archived')
@@ -563,27 +434,29 @@ describe('session model', () => {
                 steps.push('resume')
                 engine.handleSessionAlive({
                     sid: sessionId,
-                    time: Date.now()
+                    time: Date.now(),
                 })
                 return { type: 'success', sessionId }
             }
 
             const result = await engine.sendMessage(session.id, {
-                text: 'hello after archive'
+                text: 'hello after archive',
             })
 
             expect(steps).toEqual(['unarchive', 'resume'])
             expect(result.active).toBe(true)
             expect(getSessionLifecycleState(result)).toBe('running')
-            expect(store.messages.getMessages(session.id, 10)).toContainEqual(expect.objectContaining({
-                content: expect.objectContaining({
-                    role: 'user',
+            expect(store.messages.getMessages(session.id, 10)).toContainEqual(
+                expect.objectContaining({
                     content: expect.objectContaining({
-                        type: 'text',
-                        text: 'hello after archive'
-                    })
+                        role: 'user',
+                        content: expect.objectContaining({
+                            type: 'text',
+                            text: 'hello after archive',
+                        }),
+                    }),
                 })
-            }))
+            )
         } finally {
             engine.stop()
         }
@@ -591,12 +464,7 @@ describe('session model', () => {
 
     it('fresh-starts empty inactive sessions on the explicit send chain instead of requiring resume reattachment', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(
-            store,
-            createIoStub(),
-            new RpcRegistry(),
-            { broadcast() {} } as never
-        )
+        const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {
@@ -605,10 +473,12 @@ describe('session model', () => {
                     path: '/tmp/project',
                     host: 'localhost',
                     machineId: 'machine-1',
-                    flavor: 'codex',
-                    codexSessionId: 'codex-thread-old'
+                    driver: 'codex',
+                    runtimeHandles: {
+                        codex: { sessionId: 'codex-thread-old' },
+                    },
                 },
-                model: 'gpt-5.4'
+                model: 'gpt-5.4',
             })
 
             await (engine as any).sessionCache.setSessionLifecycleState(session.id, 'archived')
@@ -624,11 +494,11 @@ describe('session model', () => {
                 spawnCalls.push(options)
                 engine.handleSessionAlive({
                     sid: session.id,
-                    time: Date.now()
+                    time: Date.now(),
                 })
                 return {
                     type: 'success',
-                    sessionId: session.id
+                    sessionId: session.id,
                 }
             }
             ;(engine as any).resumeSession = async () => {
@@ -636,7 +506,7 @@ describe('session model', () => {
             }
 
             const result = await engine.sendMessage(session.id, {
-                text: 'hello after archive without prior transcript'
+                text: 'hello after archive without prior transcript',
             })
 
             expect(spawnCalls).toEqual([
@@ -648,8 +518,8 @@ describe('session model', () => {
                     model: 'gpt-5.4',
                     modelReasoningEffort: undefined,
                     permissionMode: undefined,
-                    collaborationMode: undefined
-                }
+                    collaborationMode: undefined,
+                },
             ])
             expect(result.active).toBe(true)
             expect(getSessionLifecycleState(result)).toBe('running')
@@ -659,10 +529,10 @@ describe('session model', () => {
                         role: 'user',
                         content: {
                             type: 'text',
-                            text: 'hello after archive without prior transcript'
-                        }
-                    }
-                }
+                            text: 'hello after archive without prior transcript',
+                        },
+                    },
+                },
             ])
         } finally {
             engine.stop()
@@ -671,12 +541,7 @@ describe('session model', () => {
 
     it('switches an idle session to a new driver on the same hub session id', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(
-            store,
-            createIoStub(),
-            new RpcRegistry(),
-            { broadcast() {} } as never
-        )
+        const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {
@@ -685,13 +550,12 @@ describe('session model', () => {
                     path: '/tmp/project',
                     host: 'localhost',
                     machineId: 'machine-1',
-                    flavor: 'codex',
-                    driver: 'codex'
+                    driver: 'codex',
                 },
                 model: 'gpt-5.4',
                 modelReasoningEffort: 'xhigh',
                 permissionMode: 'default',
-                collaborationMode: 'plan'
+                collaborationMode: 'plan',
             })
             engine.getOrCreateMachine(
                 'machine-1',
@@ -727,10 +591,14 @@ describe('session model', () => {
                     id: session.id,
                     active: true,
                     metadata: {
-                        driver: 'claude'
-                    }
-                }
+                        driver: 'claude',
+                    },
+                },
             })
+            if (result.type !== 'success') {
+                throw new Error('Expected a successful claude driver switch')
+            }
+            expect(result.session.collaborationMode).toBeUndefined()
             const recoveryPage = engine.getSessionRecoveryPage(session.id, { afterSeq: 0, limit: 10 })
             expect(recoveryPage.messages).toHaveLength(1)
             expect(recoveryPage.messages[0]?.content).toEqual({
@@ -740,9 +608,9 @@ describe('session model', () => {
                     data: {
                         type: 'driver-switched',
                         previousDriver: 'codex',
-                        targetDriver: 'claude'
-                    }
-                }
+                        targetDriver: 'claude',
+                    },
+                },
             })
             expect(handoffBuilds).toBe(1)
             expect(spawnCalls).toHaveLength(1)
@@ -751,16 +619,192 @@ describe('session model', () => {
             expect(spawnCalls[0]?.directory).toBe('/tmp/project')
             expect(spawnCalls[0]?.agent).toBe('claude')
             expect(spawnCalls[0]?.model).toBeUndefined()
-            expect(spawnCalls[0]?.modelReasoningEffort).toBeUndefined()
+            expect(spawnCalls[0]?.modelReasoningEffort).toBeNull()
             expect(spawnCalls[0]?.permissionMode).toBe('default')
             expect(spawnCalls[0]?.collaborationMode).toBeUndefined()
             expect(spawnCalls[0]?.driverSwitch).toMatchObject({
                 targetDriver: 'claude',
-                handoffSnapshot: expect.objectContaining({
+                handoffSnapshot: {
                     driver: 'codex',
-                    workingDirectory: '/tmp/project'
-                })
+                    workingDirectory: '/tmp/project',
+                    liveConfig: expect.objectContaining({
+                        model: null,
+                        modelReasoningEffort: null,
+                        permissionMode: 'default',
+                    }),
+                },
             })
+        } finally {
+            engine.stop()
+        }
+    })
+
+    it('preserves model carryover for a codex to cursor switch while sanitizing unsupported config', async () => {
+        const store = new Store(':memory:')
+        const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), { broadcast() {} } as never)
+
+        try {
+            const session = createEngineSession(engine, {
+                tag: 'session-driver-switch-cursor-config',
+                metadata: {
+                    path: '/tmp/project',
+                    host: 'localhost',
+                    machineId: 'machine-1',
+                    driver: 'codex',
+                },
+                model: 'gpt-5.4-mini',
+                modelReasoningEffort: 'xhigh',
+                permissionMode: 'safe-yolo',
+                collaborationMode: 'plan',
+            })
+            engine.getOrCreateMachine(
+                'machine-1',
+                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+                null
+            )
+            engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
+            engine.handleSessionAlive({ sid: session.id, time: Date.now(), thinking: false })
+
+            const spawnCalls: Array<Record<string, unknown>> = []
+            ;(engine as any).rpcGateway.killSession = async () => {
+                engine.handleSessionEnd({ sid: session.id, time: Date.now() })
+            }
+            ;(engine as any).rpcGateway.spawnSession = async (options: Record<string, unknown>) => {
+                spawnCalls.push(options)
+                engine.handleSessionAlive({ sid: session.id, time: Date.now(), thinking: false })
+                return { type: 'success', sessionId: session.id }
+            }
+
+            const result = await engine.switchSessionDriver(session.id, 'cursor')
+
+            expect(result).toMatchObject({
+                type: 'success',
+                targetDriver: 'cursor',
+                session: {
+                    id: session.id,
+                    metadata: {
+                        driver: 'cursor',
+                    },
+                    model: 'gpt-5.4-mini',
+                    modelReasoningEffort: null,
+                    permissionMode: 'default',
+                },
+            })
+            if (result.type !== 'success') {
+                throw new Error('Expected a successful cursor driver switch')
+            }
+            expect(result.session.collaborationMode).toBeUndefined()
+            expect(spawnCalls).toHaveLength(1)
+            expect(spawnCalls[0]).toMatchObject({
+                agent: 'cursor',
+                model: 'gpt-5.4-mini',
+                modelReasoningEffort: null,
+                permissionMode: 'default',
+                collaborationMode: undefined,
+                driverSwitch: {
+                    targetDriver: 'cursor',
+                },
+            })
+            expect(
+                (
+                    spawnCalls[0]?.driverSwitch as
+                        | { handoffSnapshot?: { liveConfig?: Record<string, unknown> } }
+                        | undefined
+                )?.handoffSnapshot?.liveConfig
+            ).toEqual({
+                model: 'gpt-5.4-mini',
+                modelReasoningEffort: null,
+                permissionMode: 'default',
+                collaborationMode: undefined,
+            })
+            const persisted = engine.getSession(session.id)
+            expect(persisted).toMatchObject({
+                metadata: {
+                    driver: 'cursor',
+                },
+                model: 'gpt-5.4-mini',
+                modelReasoningEffort: null,
+                permissionMode: 'default',
+            })
+            expect(persisted?.collaborationMode).toBeUndefined()
+        } finally {
+            engine.stop()
+        }
+    })
+
+    it('sanitizes durable config during a codex to copilot switch while preserving compatible models', async () => {
+        const store = new Store(':memory:')
+        const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), { broadcast() {} } as never)
+
+        try {
+            const session = createEngineSession(engine, {
+                tag: 'session-driver-switch-copilot-config',
+                metadata: {
+                    path: '/tmp/project',
+                    host: 'localhost',
+                    machineId: 'machine-1',
+                    driver: 'codex',
+                },
+                model: 'gpt-5.4-mini',
+                modelReasoningEffort: 'xhigh',
+                permissionMode: 'safe-yolo',
+                collaborationMode: 'plan',
+            })
+            engine.getOrCreateMachine(
+                'machine-1',
+                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+                null
+            )
+            engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
+            engine.handleSessionAlive({ sid: session.id, time: Date.now(), thinking: false })
+
+            const spawnCalls: Array<Record<string, unknown>> = []
+            ;(engine as any).rpcGateway.killSession = async () => {
+                engine.handleSessionEnd({ sid: session.id, time: Date.now() })
+            }
+            ;(engine as any).rpcGateway.spawnSession = async (options: Record<string, unknown>) => {
+                spawnCalls.push(options)
+                engine.handleSessionAlive({ sid: session.id, time: Date.now(), thinking: false })
+                return { type: 'success', sessionId: session.id }
+            }
+
+            const result = await engine.switchSessionDriver(session.id, 'copilot')
+
+            expect(result).toMatchObject({
+                type: 'success',
+                targetDriver: 'copilot',
+                session: {
+                    id: session.id,
+                    metadata: {
+                        driver: 'copilot',
+                    },
+                    model: 'gpt-5.4-mini',
+                    modelReasoningEffort: null,
+                    permissionMode: 'default',
+                },
+            })
+            if (result.type !== 'success') {
+                throw new Error('Expected a successful copilot driver switch')
+            }
+            expect(result.session.collaborationMode).toBeUndefined()
+            expect(spawnCalls).toHaveLength(1)
+            expect(spawnCalls[0]).toMatchObject({
+                agent: 'copilot',
+                model: 'gpt-5.4-mini',
+                modelReasoningEffort: null,
+                permissionMode: 'default',
+                collaborationMode: undefined,
+            })
+            const persisted = engine.getSession(session.id)
+            expect(persisted).toMatchObject({
+                metadata: {
+                    driver: 'copilot',
+                },
+                model: 'gpt-5.4-mini',
+                modelReasoningEffort: null,
+                permissionMode: 'default',
+            })
+            expect(persisted?.collaborationMode).toBeUndefined()
         } finally {
             engine.stop()
         }
@@ -768,12 +812,7 @@ describe('session model', () => {
 
     it('rejects driver switching for thinking sessions before shutdown starts', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(
-            store,
-            createIoStub(),
-            new RpcRegistry(),
-            { broadcast() {} } as never
-        )
+        const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {
@@ -782,10 +821,9 @@ describe('session model', () => {
                     path: '/tmp/project',
                     host: 'localhost',
                     machineId: 'machine-1',
-                    flavor: 'codex',
-                    driver: 'codex'
+                    driver: 'codex',
                 },
-                model: 'gpt-5.4'
+                model: 'gpt-5.4',
             })
             engine.handleSessionAlive({ sid: session.id, time: Date.now(), thinking: true })
 
@@ -812,8 +850,61 @@ describe('session model', () => {
                 session: expect.objectContaining({
                     id: session.id,
                     active: true,
-                    thinking: true
-                })
+                    thinking: true,
+                }),
+            })
+            expect(killCalls).toBe(0)
+            expect(spawnCalls).toBe(0)
+        } finally {
+            engine.stop()
+        }
+    })
+
+    it('rejects same-driver switching before shutdown starts', async () => {
+        const store = new Store(':memory:')
+        const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), { broadcast() {} } as never)
+
+        try {
+            const session = createEngineSession(engine, {
+                tag: 'session-driver-switch-same-driver',
+                metadata: {
+                    path: '/tmp/project',
+                    host: 'localhost',
+                    machineId: 'machine-1',
+                    driver: 'codex',
+                },
+                model: 'gpt-5.4',
+            })
+            engine.handleSessionAlive({ sid: session.id, time: Date.now(), thinking: false })
+
+            let killCalls = 0
+            let spawnCalls = 0
+            ;(engine as any).rpcGateway.killSession = async () => {
+                killCalls += 1
+            }
+            ;(engine as any).rpcGateway.spawnSession = async () => {
+                spawnCalls += 1
+                return { type: 'success', sessionId: session.id }
+            }
+
+            const result = await engine.switchSessionDriver(session.id, 'codex')
+
+            expect(result).toEqual({
+                type: 'error',
+                message: 'Target driver already owns this session',
+                code: 'target_driver_matches_current',
+                stage: 'idle_gate',
+                status: 409,
+                targetDriver: 'codex',
+                rollbackResult: 'not_started',
+                session: expect.objectContaining({
+                    id: session.id,
+                    active: true,
+                    thinking: false,
+                    metadata: expect.objectContaining({
+                        driver: 'codex',
+                    }),
+                }),
             })
             expect(killCalls).toBe(0)
             expect(spawnCalls).toBe(0)
@@ -824,12 +915,7 @@ describe('session model', () => {
 
     it('surfaces driver-switch marker append failures instead of reporting a clean switch', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(
-            store,
-            createIoStub(),
-            new RpcRegistry(),
-            { broadcast() {} } as never
-        )
+        const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {
@@ -838,10 +924,9 @@ describe('session model', () => {
                     path: '/tmp/project',
                     host: 'localhost',
                     machineId: 'machine-1',
-                    flavor: 'codex',
-                    driver: 'codex'
+                    driver: 'codex',
                 },
-                model: 'gpt-5.4'
+                model: 'gpt-5.4',
             })
             engine.getOrCreateMachine(
                 'machine-1',
@@ -859,7 +944,9 @@ describe('session model', () => {
                 return { type: 'success', sessionId: session.id }
             }
 
-            const originalAppendDriverSwitchedEvent = (engine as any).messageService.appendDriverSwitchedEvent.bind((engine as any).messageService)
+            const originalAppendDriverSwitchedEvent = (engine as any).messageService.appendDriverSwitchedEvent.bind(
+                (engine as any).messageService
+            )
             ;(engine as any).messageService.appendDriverSwitchedEvent = async (...args: unknown[]) => {
                 void args
                 throw new Error('marker append failed')
@@ -878,8 +965,8 @@ describe('session model', () => {
                 rollbackResult: 'not_needed',
                 session: expect.objectContaining({
                     id: session.id,
-                    metadata: expect.objectContaining({ driver: 'claude' })
-                })
+                    metadata: expect.objectContaining({ driver: 'claude' }),
+                }),
             })
             expect(recoveryPage.messages).toHaveLength(0)
             ;(engine as any).messageService.appendDriverSwitchedEvent = originalAppendDriverSwitchedEvent
@@ -890,12 +977,7 @@ describe('session model', () => {
 
     it('keeps the previous driver when driver-switch spawn fails', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(
-            store,
-            createIoStub(),
-            new RpcRegistry(),
-            { broadcast() {} } as never
-        )
+        const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {
@@ -904,13 +986,12 @@ describe('session model', () => {
                     path: '/tmp/project',
                     host: 'localhost',
                     machineId: 'machine-1',
-                    flavor: 'codex',
-                    driver: 'codex'
+                    driver: 'codex',
                 },
                 model: 'gpt-5.4',
                 modelReasoningEffort: 'xhigh',
                 permissionMode: 'default',
-                collaborationMode: 'plan'
+                collaborationMode: 'plan',
             })
             engine.getOrCreateMachine(
                 'machine-1',
@@ -928,7 +1009,7 @@ describe('session model', () => {
                 capturedSpawnOptions = options
                 return {
                     type: 'error',
-                    message: 'spawn failed'
+                    message: 'spawn failed',
                 }
             }
 
@@ -938,7 +1019,7 @@ describe('session model', () => {
             expect(capturedSpawnOptions).toMatchObject({
                 sessionId: session.id,
                 agent: 'claude',
-                permissionMode: 'default'
+                permissionMode: 'default',
             })
             expect(capturedSpawnOptions).not.toBeNull()
             const spawnOptions = (capturedSpawnOptions ?? {}) as {
@@ -947,7 +1028,7 @@ describe('session model', () => {
                 collaborationMode?: unknown
             }
             expect(spawnOptions.model).toBeUndefined()
-            expect(spawnOptions.modelReasoningEffort).toBeUndefined()
+            expect(spawnOptions.modelReasoningEffort).toBeNull()
             expect(spawnOptions.collaborationMode).toBeUndefined()
             expect(result).toEqual({
                 type: 'error',
@@ -964,15 +1045,15 @@ describe('session model', () => {
                     modelReasoningEffort: 'xhigh',
                     permissionMode: 'default',
                     collaborationMode: 'plan',
-                    metadata: expect.objectContaining({ driver: 'codex' })
-                })
+                    metadata: expect.objectContaining({ driver: 'codex' }),
+                }),
             })
             expect(switchedSnapshot).toMatchObject({
                 model: 'gpt-5.4',
                 modelReasoningEffort: 'xhigh',
                 permissionMode: 'default',
                 collaborationMode: 'plan',
-                metadata: { driver: 'codex' }
+                metadata: { driver: 'codex' },
             })
         } finally {
             engine.stop()
@@ -986,42 +1067,18 @@ describe('session model', () => {
 
         const originalSession = createCachedSession(cache, {
             tag: 'session-model-old',
-            metadata: { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
-            model: 'gpt-5.4'
+            metadata: { path: '/tmp/project', host: 'localhost', driver: 'codex' },
+            model: 'gpt-5.4',
         })
         const resumedSession = createCachedSession(cache, {
             tag: 'session-model-old-resume',
-            metadata: { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
-            sessionId: originalSession.id
+            metadata: { path: '/tmp/project', host: 'localhost', driver: 'codex' },
+            sessionId: originalSession.id,
         })
 
         expect(resumedSession.id).toBe(originalSession.id)
         expect(cache.getSessions()).toHaveLength(1)
         expect(cache.getSession(originalSession.id)?.model).toBe('gpt-5.4')
-    })
-
-    it('preserves placeholder model config when hydrating a precreated team member session', () => {
-        const store = new Store(':memory:')
-        const events: SyncEvent[] = []
-        const cache = new SessionCache(store, createPublisher(events))
-
-        const placeholderSession = createCachedSession(cache, {
-            tag: 'team-member-member-1',
-            metadata: { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
-            model: 'gpt-5.4',
-            permissionMode: 'read-only',
-            sessionId: 'member-session-id'
-        })
-        const hydratedSession = createCachedSession(cache, {
-            tag: 'runtime-member-session',
-            metadata: { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
-            sessionId: placeholderSession.id
-        })
-
-        expect(hydratedSession.id).toBe(placeholderSession.id)
-        expect(cache.getSession(placeholderSession.id)?.model).toBe('gpt-5.4')
-        expect(cache.getSession(placeholderSession.id)?.permissionMode).toBe('read-only')
-        expect(cache.getSessions()).toHaveLength(1)
     })
 
     it('renames from the latest stored metadata when the cache version is stale', async () => {
@@ -1031,15 +1088,15 @@ describe('session model', () => {
 
         const session = createCachedSession(cache, {
             tag: 'session-rename-stale-version',
-            metadata: { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
-            model: 'gpt-5.4'
+            metadata: { path: '/tmp/project', host: 'localhost', driver: 'codex' },
+            model: 'gpt-5.4',
         })
 
         const autoSummaryUpdate = store.sessions.updateSessionMetadata(
             session.id,
             {
                 ...session.metadata,
-                summary: { text: 'Auto title', updatedAt: 2_000 }
+                summary: { text: 'Auto title', updatedAt: 2_000 },
             },
             session.metadataVersion,
             { touchUpdatedAt: false }
@@ -1051,7 +1108,7 @@ describe('session model', () => {
 
         expect(renamed.metadata).toMatchObject({
             name: 'Pinned title',
-            summary: { text: 'Auto title', updatedAt: 2_000 }
+            summary: { text: 'Auto title', updatedAt: 2_000 },
         })
         expect(store.sessions.getSession(session.id)?.metadataVersion).toBe(3)
     })
@@ -1063,8 +1120,8 @@ describe('session model', () => {
 
         const session = createCachedSession(cache, {
             tag: 'session-auto-summary-stable-time',
-            metadata: { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
-            model: 'gpt-5.4'
+            metadata: { path: '/tmp/project', host: 'localhost', driver: 'codex' },
+            model: 'gpt-5.4',
         })
         const originalUpdatedAt = session.updatedAt
 
@@ -1072,7 +1129,7 @@ describe('session model', () => {
             session.id,
             {
                 ...session.metadata,
-                summary: { text: 'Streaming title', updatedAt: originalUpdatedAt + 5_000 }
+                summary: { text: 'Streaming title', updatedAt: originalUpdatedAt + 5_000 },
             },
             session.metadataVersion,
             { touchUpdatedAt: false }
@@ -1089,9 +1146,9 @@ describe('session model', () => {
 
         const session = createCachedSession(cache, {
             tag: 'session-agent-state-stable-time',
-            metadata: { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
+            metadata: { path: '/tmp/project', host: 'localhost', driver: 'codex' },
             agentState: { requests: {}, completedRequests: {} },
-            model: 'gpt-5.4'
+            model: 'gpt-5.4',
         })
         const originalUpdatedAt = session.updatedAt
 
@@ -1102,10 +1159,10 @@ describe('session model', () => {
                     'request-1': {
                         tool: 'read_file',
                         arguments: {},
-                        createdAt: originalUpdatedAt + 1_000
-                    }
+                        createdAt: originalUpdatedAt + 1_000,
+                    },
                 },
-                completedRequests: {}
+                completedRequests: {},
             },
             session.agentStateVersion
         )
@@ -1121,12 +1178,18 @@ describe('session model', () => {
 
         const session = createCachedSession(cache, {
             tag: 'session-derived-projection-stable-time',
-            metadata: { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
-            model: 'gpt-5.4'
+            metadata: { path: '/tmp/project', host: 'localhost', driver: 'codex' },
+            model: 'gpt-5.4',
         })
         const originalUpdatedAt = session.updatedAt
 
-        expect(store.sessions.setSessionTodos(session.id, [{ id: 'todo-1', content: 'Check', status: 'pending', priority: 'medium' }], originalUpdatedAt + 1_000)).toBe(true)
+        expect(
+            store.sessions.setSessionTodos(
+                session.id,
+                [{ id: 'todo-1', content: 'Check', status: 'pending', priority: 'medium' }],
+                originalUpdatedAt + 1_000
+            )
+        ).toBe(true)
         expect(store.sessions.getSession(session.id)?.updatedAt).toBe(originalUpdatedAt)
     })
 
@@ -1137,8 +1200,8 @@ describe('session model', () => {
 
         const session = createCachedSession(cache, {
             tag: 'session-model-config',
-            metadata: { path: '/tmp/project', host: 'localhost', flavor: 'claude' },
-            model: 'sonnet'
+            metadata: { path: '/tmp/project', host: 'localhost', driver: 'claude' },
+            model: 'sonnet',
         })
 
         cache.applySessionConfig(session.id, { model: 'opus[1m]' })
@@ -1157,15 +1220,15 @@ describe('session model', () => {
 
         const session = createCachedSession(cache, {
             tag: 'session-model-heartbeat',
-            metadata: { path: '/tmp/project', host: 'localhost', flavor: 'claude' },
-            model: 'sonnet'
+            metadata: { path: '/tmp/project', host: 'localhost', driver: 'claude' },
+            model: 'sonnet',
         })
 
         cache.handleSessionAlive({
             sid: session.id,
             time: Date.now(),
             thinking: false,
-            model: null
+            model: null,
         })
 
         expect(cache.getSession(session.id)?.model).toBeNull()
@@ -1179,15 +1242,15 @@ describe('session model', () => {
 
         const session = createCachedSession(cache, {
             tag: 'session-active-reload',
-            metadata: { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
-            model: 'gpt-5.4'
+            metadata: { path: '/tmp/project', host: 'localhost', driver: 'codex' },
+            model: 'gpt-5.4',
         })
         const aliveAt = Date.now()
 
         cache.handleSessionAlive({
             sid: session.id,
             time: aliveAt,
-            thinking: true
+            thinking: true,
         })
 
         const stored = store.sessions.getSession(session.id)
@@ -1208,15 +1271,15 @@ describe('session model', () => {
 
         const session = createCachedSession(cache, {
             tag: 'session-inactive-reload',
-            metadata: { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
-            model: 'gpt-5.4'
+            metadata: { path: '/tmp/project', host: 'localhost', driver: 'codex' },
+            model: 'gpt-5.4',
         })
         const aliveAt = Date.now()
 
         cache.handleSessionAlive({
             sid: session.id,
             time: aliveAt,
-            thinking: false
+            thinking: false,
         })
         cache.expireInactive(aliveAt + 30_001)
 
@@ -1232,6 +1295,236 @@ describe('session model', () => {
         expect(reloadedSession?.activeAt).toBe(aliveAt)
     })
 
+    it('preserves explicitly open lifecycle when inactivity timeout detaches the runtime', async () => {
+        const store = new Store(':memory:')
+        const events: SyncEvent[] = []
+        const cache = new SessionCache(store, createPublisher(events))
+
+        const session = createCachedSession(cache, {
+            tag: 'session-timeout-open-lifecycle',
+            metadata: { path: '/tmp/project', host: 'localhost', driver: 'codex' },
+            model: 'gpt-5.4',
+        })
+        const aliveAt = Date.now()
+
+        cache.handleSessionAlive({
+            sid: session.id,
+            time: aliveAt,
+            thinking: false,
+        })
+        await cache.setSessionLifecycleState(session.id, 'open', {
+            touchUpdatedAt: false,
+        })
+
+        cache.expireInactive(aliveAt + 30_001)
+
+        expect(cache.getSession(session.id)?.active).toBe(false)
+        expect(cache.getSession(session.id)?.metadata?.lifecycleState).toBe('open')
+        const persistedMetadata = store.sessions.getSession(session.id)?.metadata
+        expect(
+            persistedMetadata && typeof persistedMetadata === 'object' && 'lifecycleState' in persistedMetadata
+                ? persistedMetadata.lifecycleState
+                : undefined
+        ).toBe('open')
+    })
+
+    it('normalizes inactive durable lifecycle to closed when a session ends naturally', () => {
+        const store = new Store(':memory:')
+        const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), { broadcast() {} } as never)
+
+        try {
+            const session = createEngineSession(engine, {
+                tag: 'session-natural-end-lifecycle',
+                metadata: { path: '/tmp/project', host: 'localhost', driver: 'codex' },
+                model: 'gpt-5.4',
+            })
+            const endAt = Date.now()
+
+            engine.handleSessionAlive({
+                sid: session.id,
+                time: endAt - 1_000,
+                thinking: false,
+            })
+            engine.handleSessionEnd({
+                sid: session.id,
+                time: endAt,
+            })
+
+            const stored = store.sessions.getSession(session.id)
+            expect(stored?.active).toBe(false)
+            expect((stored?.metadata as { lifecycleState?: string } | null)?.lifecycleState).toBe('closed')
+            expect(engine.getSession(session.id)?.metadata?.lifecycleState).toBe('closed')
+        } finally {
+            engine.stop()
+        }
+    })
+
+    it('preserves explicitly open lifecycle when an aborted session later reports inactive', async () => {
+        const store = new Store(':memory:')
+        const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), { broadcast() {} } as never)
+
+        try {
+            const session = createEngineSession(engine, {
+                tag: 'session-abort-open-lifecycle',
+                metadata: { path: '/tmp/project', host: 'localhost', driver: 'codex' },
+                model: 'gpt-5.4',
+            })
+            const endAt = Date.now()
+
+            engine.handleSessionAlive({
+                sid: session.id,
+                time: endAt - 1_000,
+                thinking: true,
+            })
+
+            await (
+                engine as unknown as { syncServices: { sessionCache: SessionCache } }
+            ).syncServices.sessionCache.setSessionLifecycleState(session.id, 'open', {
+                touchUpdatedAt: false,
+            })
+
+            engine.handleSessionEnd({
+                sid: session.id,
+                time: endAt,
+            })
+
+            const stored = store.sessions.getSession(session.id)
+            expect(stored?.active).toBe(false)
+            expect((stored?.metadata as { lifecycleState?: string } | null)?.lifecycleState).toBe('open')
+            expect(engine.getSession(session.id)?.metadata?.lifecycleState).toBe('open')
+        } finally {
+            engine.stop()
+        }
+    })
+
+    it('repairs historical inactive running durable lifecycle when the cache boots', () => {
+        const store = new Store(':memory:')
+        const stored = store.sessions.getOrCreateSession({
+            tag: 'session-startup-lifecycle-repair',
+            metadata: {
+                path: '/tmp/project',
+                host: 'localhost',
+                driver: 'codex',
+                lifecycleState: 'running',
+                lifecycleStateSince: Date.now(),
+            },
+            model: 'gpt-5.4',
+        })
+
+        store.sessions.setSessionInactive(stored.id)
+
+        const events: SyncEvent[] = []
+        const cache = new SessionCache(store, createPublisher(events))
+        const repaired = store.sessions.getSession(stored.id)
+
+        expect(repaired?.active).toBe(false)
+        expect((repaired?.metadata as { lifecycleState?: string } | null)?.lifecycleState).toBe('closed')
+        expect(cache.refreshSession(stored.id)?.metadata?.lifecycleState).toBe('closed')
+    })
+
+    it('refreshes cached sessions from durable inactive state instead of preserving stale active memory', () => {
+        const store = new Store(':memory:')
+        const events: SyncEvent[] = []
+        const cache = new SessionCache(store, createPublisher(events))
+
+        const session = createCachedSession(cache, {
+            tag: 'session-refresh-durable-inactive',
+            metadata: { path: '/tmp/project', host: 'localhost', driver: 'codex' },
+            model: 'gpt-5.4',
+        })
+        const aliveAt = Date.now()
+
+        cache.handleSessionAlive({
+            sid: session.id,
+            time: aliveAt,
+            thinking: true,
+        })
+        store.sessions.setSessionInactive(session.id)
+
+        const refreshedSession = cache.refreshSession(session.id)
+
+        expect(refreshedSession?.active).toBe(false)
+        expect(refreshedSession?.thinking).toBe(false)
+        expect(refreshedSession?.activeAt).toBe(aliveAt)
+    })
+
+    it('strips data-url attachment previews from durable user messages and legacy message reads', async () => {
+        const store = new Store(':memory:')
+        const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), { broadcast() {} } as never)
+
+        try {
+            const session = createEngineSession(engine, {
+                tag: 'session-attachment-preview-sanitize',
+                metadata: { path: '/tmp/project', host: 'localhost', driver: 'codex' },
+                model: 'gpt-5.4',
+            })
+
+            engine.handleSessionAlive({
+                sid: session.id,
+                time: Date.now(),
+                thinking: false,
+            })
+
+            await engine.sendMessage(session.id, {
+                text: 'photo',
+                attachments: [
+                    {
+                        id: 'attachment-1',
+                        filename: 'photo.png',
+                        mimeType: 'image/png',
+                        size: 123,
+                        path: '/tmp/photo.png',
+                        previewUrl: 'data:image/png;base64,abc',
+                    },
+                ],
+            })
+
+            store.messages.addMessage(session.id, {
+                role: 'user',
+                content: {
+                    type: 'text',
+                    text: 'legacy photo',
+                    attachments: [
+                        {
+                            id: 'attachment-legacy',
+                            filename: 'legacy.png',
+                            mimeType: 'image/png',
+                            size: 456,
+                            path: '/tmp/legacy.png',
+                            previewUrl: 'data:image/png;base64,legacy',
+                        },
+                    ],
+                },
+            })
+
+            const storedMessages = store.messages.getMessages(session.id, 10)
+            const sentMessage = storedMessages.find((message) => {
+                return (message.content as { content?: { text?: string } })?.content?.text === 'photo'
+            })
+            expect(
+                (
+                    sentMessage?.content as {
+                        content?: { attachments?: Array<{ previewUrl?: string }> }
+                    }
+                )?.content?.attachments?.[0]?.previewUrl
+            ).toBeUndefined()
+
+            const page = engine.getMessagesPage(session.id, { limit: 10, beforeSeq: null })
+            const legacyMessage = page.messages.find((message) => {
+                return (message.content as { content?: { text?: string } })?.content?.text === 'legacy photo'
+            })
+            expect(
+                (
+                    legacyMessage?.content as {
+                        content?: { attachments?: Array<{ previewUrl?: string }> }
+                    }
+                )?.content?.attachments?.[0]?.previewUrl
+            ).toBeUndefined()
+        } finally {
+            engine.stop()
+        }
+    })
+
     it('tracks collaboration mode updates in memory from config and keepalive', () => {
         const store = new Store(':memory:')
         const events: SyncEvent[] = []
@@ -1239,8 +1532,8 @@ describe('session model', () => {
 
         const session = createCachedSession(cache, {
             tag: 'session-collaboration-mode',
-            metadata: { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
-            model: 'gpt-5.4'
+            metadata: { path: '/tmp/project', host: 'localhost', driver: 'codex' },
+            model: 'gpt-5.4',
         })
 
         cache.applySessionConfig(session.id, { collaborationMode: 'plan' })
@@ -1251,7 +1544,7 @@ describe('session model', () => {
             sid: session.id,
             time: Date.now(),
             thinking: false,
-            collaborationMode: 'default'
+            collaborationMode: 'default',
         })
         expect(cache.getSession(session.id)?.collaborationMode).toBe('default')
         expect(store.sessions.getSession(session.id)?.collaborationMode).toBe('default')
@@ -1264,8 +1557,8 @@ describe('session model', () => {
 
         const session = createCachedSession(cache, {
             tag: 'session-permission-mode',
-            metadata: { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
-            model: 'gpt-5.4'
+            metadata: { path: '/tmp/project', host: 'localhost', driver: 'codex' },
+            model: 'gpt-5.4',
         })
 
         cache.applySessionConfig(session.id, { permissionMode: 'read-only' })
@@ -1276,7 +1569,7 @@ describe('session model', () => {
             sid: session.id,
             time: Date.now(),
             thinking: false,
-            permissionMode: 'safe-yolo'
+            permissionMode: 'safe-yolo',
         })
         expect(cache.getSession(session.id)?.permissionMode).toBe('safe-yolo')
         expect(store.sessions.getSession(session.id)?.permissionMode).toBe('safe-yolo')
@@ -1289,9 +1582,9 @@ describe('session model', () => {
 
         const session = createCachedSession(cache, {
             tag: 'session-model-reasoning-effort',
-            metadata: { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
+            metadata: { path: '/tmp/project', host: 'localhost', driver: 'codex' },
             model: 'gpt-5.4',
-            modelReasoningEffort: 'high'
+            modelReasoningEffort: 'high',
         })
 
         cache.applySessionConfig(session.id, { modelReasoningEffort: 'xhigh' })
@@ -1302,489 +1595,9 @@ describe('session model', () => {
             sid: session.id,
             time: Date.now(),
             thinking: false,
-            modelReasoningEffort: null
+            modelReasoningEffort: null,
         })
         expect(cache.getSession(session.id)?.modelReasoningEffort).toBeNull()
         expect(store.sessions.getSession(session.id)?.modelReasoningEffort).toBeNull()
-    })
-
-    it('uses the resolved driver and runtime handle when respawning a resumed session', async () => {
-        const store = new Store(':memory:')
-        const engine = new SyncEngine(
-            store,
-            {} as never,
-            new RpcRegistry(),
-            { broadcast() {} } as never
-        )
-
-        try {
-            const session = createEngineSession(engine, {
-                tag: 'session-driver-resume',
-                metadata: {
-                    path: '/tmp/project',
-                    host: 'localhost',
-                    machineId: 'machine-1',
-                    driver: 'gemini',
-                    flavor: 'codex',
-                    runtimeHandles: {
-                        gemini: { sessionId: 'gemini-thread-1' }
-                    },
-                    codexSessionId: 'codex-thread-legacy'
-                },
-                model: 'gemini-2.5-pro'
-            })
-            engine.getOrCreateMachine(
-                'machine-1',
-                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
-                null
-            )
-            engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
-
-            let capturedAgent: string | undefined
-            let capturedResumeSessionId: string | undefined
-            ;(engine as any).rpcGateway.spawnSession = async (options: {
-                agent?: string
-                resumeSessionId?: string
-            }) => {
-                capturedAgent = options.agent
-                capturedResumeSessionId = options.resumeSessionId
-                return { type: 'success', sessionId: session.id }
-            }
-            ;(engine as any).waitForResumedSessionContract = async () => 'ready'
-
-            const result = await engine.resumeSession(session.id)
-
-            expect(result).toEqual({ type: 'success', sessionId: session.id })
-            expect(capturedAgent).toBe('gemini')
-            expect(capturedResumeSessionId).toBe('gemini-thread-1')
-        } finally {
-            engine.stop()
-        }
-    })
-
-    it('returns resume_unavailable when the resolved driver has no runtime handle', async () => {
-        const store = new Store(':memory:')
-        const engine = new SyncEngine(
-            store,
-            {} as never,
-            new RpcRegistry(),
-            { broadcast() {} } as never
-        )
-
-        try {
-            const session = createEngineSession(engine, {
-                tag: 'session-driver-missing-handle',
-                metadata: {
-                    path: '/tmp/project',
-                    host: 'localhost',
-                    machineId: 'machine-1',
-                    driver: 'gemini',
-                    flavor: 'codex',
-                    codexSessionId: 'codex-thread-legacy'
-                },
-                model: 'gemini-2.5-pro'
-            })
-            engine.getOrCreateMachine(
-                'machine-1',
-                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
-                null
-            )
-            engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
-
-            const result = await engine.resumeSession(session.id)
-
-            expect(result).toEqual({
-                type: 'error',
-                message: 'Resume session ID unavailable',
-                code: 'resume_unavailable'
-            })
-        } finally {
-            engine.stop()
-        }
-    })
-
-    it('passes the stored model when respawning a resumed session', async () => {
-        const store = new Store(':memory:')
-        const engine = new SyncEngine(
-            store,
-            {} as never,
-            new RpcRegistry(),
-            { broadcast() {} } as never
-        )
-
-        try {
-            const session = createEngineSession(engine, {
-                tag: 'session-model-resume',
-                metadata: {
-                    path: '/tmp/project',
-                    host: 'localhost',
-                    machineId: 'machine-1',
-                    flavor: 'codex',
-                    codexSessionId: 'codex-thread-1'
-                },
-                model: 'gpt-5.4'
-            })
-            engine.getOrCreateMachine(
-                'machine-1',
-                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
-                null
-            )
-            engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
-
-            let capturedModel: string | undefined
-            let capturedModelReasoningEffort: string | undefined
-            let capturedPermissionMode: string | undefined
-            let capturedCollaborationMode: string | undefined
-            ;(engine as any).rpcGateway.spawnSession = async (options: {
-                model?: string
-                modelReasoningEffort?: string
-                permissionMode?: string
-                collaborationMode?: string
-            }) => {
-                capturedModel = options.model
-                capturedModelReasoningEffort = options.modelReasoningEffort
-                capturedPermissionMode = options.permissionMode
-                capturedCollaborationMode = options.collaborationMode
-                return { type: 'success', sessionId: session.id }
-            }
-            ;(engine as any).waitForResumedSessionContract = async () => 'ready'
-
-            const result = await engine.resumeSession(session.id)
-
-            expect(result).toEqual({ type: 'success', sessionId: session.id })
-            expect(capturedModel).toBe('gpt-5.4')
-            expect(capturedModelReasoningEffort).toBeUndefined()
-            expect(capturedPermissionMode).toBeUndefined()
-            expect(capturedCollaborationMode).toBeUndefined()
-        } finally {
-            engine.stop()
-        }
-    })
-
-    it('passes the stored reasoning effort when respawning a resumed session', async () => {
-        const store = new Store(':memory:')
-        const engine = new SyncEngine(
-            store,
-            {} as never,
-            new RpcRegistry(),
-            { broadcast() {} } as never
-        )
-
-        try {
-            const session = createEngineSession(engine, {
-                tag: 'session-model-reasoning-resume',
-                metadata: {
-                    path: '/tmp/project',
-                    host: 'localhost',
-                    machineId: 'machine-1',
-                    flavor: 'codex',
-                    codexSessionId: 'codex-thread-2'
-                },
-                model: 'gpt-5.4',
-                modelReasoningEffort: 'xhigh'
-            })
-            engine.getOrCreateMachine(
-                'machine-1',
-                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
-                null
-            )
-            engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
-
-            let capturedModelReasoningEffort: string | undefined
-            let capturedPermissionMode: string | undefined
-            let capturedCollaborationMode: string | undefined
-            ;(engine as any).rpcGateway.spawnSession = async (options: {
-                modelReasoningEffort?: string
-                permissionMode?: string
-                collaborationMode?: string
-            }) => {
-                capturedModelReasoningEffort = options.modelReasoningEffort
-                capturedPermissionMode = options.permissionMode
-                capturedCollaborationMode = options.collaborationMode
-                return { type: 'success', sessionId: session.id }
-            }
-            ;(engine as any).waitForResumedSessionContract = async () => 'ready'
-
-            const result = await engine.resumeSession(session.id)
-
-            expect(result).toEqual({ type: 'success', sessionId: session.id })
-            expect(capturedModelReasoningEffort).toBe('xhigh')
-            expect(capturedPermissionMode).toBeUndefined()
-            expect(capturedCollaborationMode).toBeUndefined()
-        } finally {
-            engine.stop()
-        }
-    })
-
-    it('passes stored permission and collaboration mode when respawning a resumed session', async () => {
-        const store = new Store(':memory:')
-        const engine = new SyncEngine(
-            store,
-            {} as never,
-            new RpcRegistry(),
-            { broadcast() {} } as never
-        )
-
-        try {
-            const session = createEngineSession(engine, {
-                tag: 'session-config-resume',
-                metadata: {
-                    path: '/tmp/project',
-                    host: 'localhost',
-                    machineId: 'machine-1',
-                    flavor: 'codex',
-                    codexSessionId: 'codex-thread-3'
-                },
-                model: 'gpt-5.4',
-                modelReasoningEffort: 'high',
-                permissionMode: 'safe-yolo',
-                collaborationMode: 'plan'
-            })
-            engine.getOrCreateMachine(
-                'machine-1',
-                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
-                null
-            )
-            engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
-
-            let capturedPermissionMode: string | undefined
-            let capturedCollaborationMode: string | undefined
-            ;(engine as any).rpcGateway.spawnSession = async (options: {
-                permissionMode?: string
-                collaborationMode?: string
-            }) => {
-                capturedPermissionMode = options.permissionMode
-                capturedCollaborationMode = options.collaborationMode
-                return { type: 'success', sessionId: session.id }
-            }
-            ;(engine as any).waitForResumedSessionContract = async () => 'ready'
-
-            const result = await engine.resumeSession(session.id)
-
-            expect(result).toEqual({ type: 'success', sessionId: session.id })
-            expect(capturedPermissionMode).toBe('safe-yolo')
-            expect(capturedCollaborationMode).toBe('plan')
-        } finally {
-            engine.stop()
-        }
-    })
-
-    it('waits for the stored resume token before completing resume', async () => {
-        const store = new Store(':memory:')
-        const engine = new SyncEngine(
-            store,
-            {} as never,
-            new RpcRegistry(),
-            { broadcast() {} } as never
-        )
-
-        try {
-            const original = createEngineSession(engine, {
-                tag: 'session-resume-token-wait',
-                metadata: {
-                    path: '/tmp/project',
-                    host: 'localhost',
-                    machineId: 'machine-1',
-                    flavor: 'codex',
-                    codexSessionId: 'codex-thread-old'
-                },
-                model: 'gpt-5.4'
-            })
-            engine.getOrCreateMachine(
-                'machine-1',
-                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
-                null
-            )
-            engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
-
-            let capturedSpawnOptions: Record<string, unknown> | null = null
-            ;(engine as any).rpcGateway.spawnSession = async (options: Record<string, unknown>) => {
-                capturedSpawnOptions = options
-                return {
-                    type: 'success',
-                    sessionId: original.id
-                }
-            }
-
-            setTimeout(() => {
-                const clearedSession = store.sessions.getSession(original.id)
-                const clearedMetadata = clearedSession?.metadata
-                if (!clearedSession || !clearedMetadata || typeof clearedMetadata !== 'object' || Array.isArray(clearedMetadata)) {
-                    throw new Error('Expected original session metadata to exist')
-                }
-                engine.handleSessionAlive({ sid: original.id, time: Date.now() })
-                store.sessions.updateSessionMetadata(original.id, {
-                    ...(clearedMetadata as Record<string, unknown>),
-                    codexSessionId: 'codex-thread-old'
-                }, clearedSession.metadataVersion, {
-                    touchUpdatedAt: false
-                })
-                ;((engine as any).sessionCache as { refreshSession: (sessionId: string) => void }).refreshSession(original.id)
-            }, 50)
-
-            const result = await engine.resumeSession(original.id)
-
-            expect(result).toEqual({ type: 'success', sessionId: original.id })
-            expect(capturedSpawnOptions).toMatchObject({
-                sessionId: original.id,
-                resumeSessionId: 'codex-thread-old'
-            })
-        } finally {
-            engine.stop()
-        }
-    })
-
-    it('fails resume when the spawned session does not reattach the previous agent token', async () => {
-        const store = new Store(':memory:')
-        const engine = new SyncEngine(
-            store,
-            {} as never,
-            new RpcRegistry(),
-            { broadcast() {} } as never
-        )
-
-        try {
-            const original = createEngineSession(engine, {
-                tag: 'session-resume-token-check',
-                metadata: {
-                    path: '/tmp/project',
-                    host: 'localhost',
-                    machineId: 'machine-1',
-                    flavor: 'codex',
-                    codexSessionId: 'codex-thread-old'
-                },
-                model: 'gpt-5.4'
-            })
-            engine.getOrCreateMachine(
-                'machine-1',
-                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
-                null
-            )
-            engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
-
-            let killedSessionId: string | null = null
-            ;(engine as any).rpcGateway.spawnSession = async () => ({
-                type: 'success',
-                sessionId: original.id
-            })
-            ;(engine as any).rpcGateway.killSession = async (targetSessionId: string): Promise<void> => {
-                killedSessionId = targetSessionId
-            }
-            ;(engine as any).waitForResumedSessionContract = async () => 'token_mismatch'
-
-            const result = await engine.resumeSession(original.id)
-
-            expect(result).toEqual({
-                type: 'error',
-                message: 'Session failed to reattach to the previous agent session',
-                code: 'resume_failed'
-            })
-            expect(killedSessionId).not.toBeNull()
-            const killedSessionIdValue = killedSessionId
-            if (killedSessionIdValue === null) {
-                throw new Error('Expected killSession to be called for failed resume cleanup')
-            }
-            expect(killedSessionIdValue === original.id).toBe(true)
-            const originalStoredSession = store.sessions.getSession(original.id)
-            if (originalStoredSession === null) {
-                throw new Error('Expected original session to remain after failed resume cleanup')
-            }
-            expect(originalStoredSession.id).toBe(original.id)
-            expect(getSessionResumeToken(originalStoredSession.metadata as Session['metadata'])).toBe('codex-thread-old')
-        } finally {
-            engine.stop()
-        }
-    })
-
-    it('cleans up spawned sessions when resume times out before reattachment', async () => {
-        const store = new Store(':memory:')
-        const engine = new SyncEngine(
-            store,
-            {} as never,
-            new RpcRegistry(),
-            { broadcast() {} } as never
-        )
-
-        try {
-            const original = createEngineSession(engine, {
-                tag: 'session-resume-timeout',
-                metadata: {
-                    path: '/tmp/project',
-                    host: 'localhost',
-                    machineId: 'machine-1',
-                    flavor: 'codex',
-                    codexSessionId: 'codex-thread-old'
-                },
-                model: 'gpt-5.4'
-            })
-            engine.getOrCreateMachine(
-                'machine-1',
-                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
-                null
-            )
-            engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
-
-            let killedSessionId: string | null = null
-            ;(engine as any).rpcGateway.spawnSession = async () => ({
-                type: 'success',
-                sessionId: original.id
-            })
-            ;(engine as any).rpcGateway.killSession = async (targetSessionId: string): Promise<void> => {
-                killedSessionId = targetSessionId
-            }
-            ;(engine as any).waitForResumedSessionContract = async () => 'timeout'
-
-            const result = await engine.resumeSession(original.id)
-
-            expect(result).toEqual({
-                type: 'error',
-                message: 'Session resume timed out before the previous agent session reattached',
-                code: 'resume_failed'
-            })
-            if (killedSessionId === null) {
-                throw new Error('Expected killSession to be called for timeout cleanup')
-            }
-            const killedSessionIdValue: string = killedSessionId
-            expect(killedSessionIdValue).toBe(original.id)
-            expect(getSessionResumeToken(store.sessions.getSession(original.id)?.metadata as Session['metadata'] | undefined)).toBe('codex-thread-old')
-        } finally {
-            engine.stop()
-        }
-    })
-
-    it('blocks direct resume for archived sessions', async () => {
-        const store = new Store(':memory:')
-        const engine = new SyncEngine(
-            store,
-            {} as never,
-            new RpcRegistry(),
-            { broadcast() {} } as never
-        )
-
-        try {
-            const session = createEngineSession(engine, {
-                tag: 'session-archived-resume',
-                metadata: {
-                    path: '/tmp/project',
-                    host: 'localhost',
-                    machineId: 'machine-1',
-                    flavor: 'codex',
-                    codexSessionId: 'codex-thread-archived',
-                    lifecycleState: 'archived',
-                    lifecycleStateSince: Date.now()
-                },
-                model: 'gpt-5.4'
-            })
-
-            const result = await engine.resumeSession(session.id)
-
-            expect(result).toEqual({
-                type: 'error',
-                message: 'Archived sessions must be restored before resuming',
-                code: 'session_archived'
-            })
-        } finally {
-            engine.stop()
-        }
     })
 })

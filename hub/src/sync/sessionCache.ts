@@ -1,60 +1,67 @@
-import {
-    AgentStateSchema,
-    CodexCollaborationModeSchema,
-    MetadataSchema,
-    PermissionModeSchema,
-    SessionTeamContextSchema
-} from '@viby/protocol/schemas'
-import type { CodexCollaborationMode, Metadata, PermissionMode, Session, SessionLifecycleState } from '@viby/protocol/types'
+import { resolveInactiveSessionLifecycleState } from '@viby/protocol'
+import type { Metadata, Session, SessionLifecycleState, SyncEvent } from '@viby/protocol/types'
 import type { Store } from '../store'
-import { clampAliveTime } from './aliveTime'
-import { EventPublisher } from './eventPublisher'
 import type { SyncEventListener } from './eventPublisher'
-import { extractTodoWriteTodosFromMessageContent, TodosSchema } from './todos'
-
-const SESSION_BROADCAST_THROTTLE_MS = 10_000
-const SESSION_ACTIVE_PERSIST_INTERVAL_MS = 10_000
-const SESSION_INACTIVE_TIMEOUT_MS = 30_000
-
-type WaitForSessionConditionOptions<T> = {
-    timeoutMs: number
-    resolveValue: (session: Session | undefined) => T | null
-    onTimeout: () => T
-    isRelevantEvent?: (event: Parameters<SyncEventListener>[0]) => boolean
-}
+import { EventPublisher } from './eventPublisher'
+import { refreshSessionSnapshot } from './sessionCacheSnapshot'
+import { SessionConfigMutationService } from './sessionConfigMutationService'
+import { SessionListSnapshotCache } from './sessionListSnapshotCache'
+import { buildLifecycleMetadata, SessionMetadataMutationService } from './sessionMetadataMutationService'
+import type { SessionConfigPatch, SessionDurableConfigPatch } from './sessionPayloadTypes'
+import { SessionPresenceService } from './sessionPresenceService'
+import { type WaitForSessionConditionOptions, waitForSessionCondition } from './sessionWaitForCondition'
 
 type CreateSessionInput = Parameters<Store['sessions']['getOrCreateSession']>[0]
 
 export class SessionCache {
     private readonly sessions: Map<string, Session> = new Map()
+    private readonly sessionListSnapshotCache = new SessionListSnapshotCache()
     private readonly lastBroadcastAtBySessionId: Map<string, number> = new Map()
     private readonly lastPersistedActiveAtBySessionId: Map<string, number> = new Map()
     private readonly todoBackfillAttemptedSessionIds: Set<string> = new Set()
+    private readonly presenceService: SessionPresenceService
+    private readonly configMutationService: SessionConfigMutationService
+    private readonly metadataMutationService: SessionMetadataMutationService
 
     constructor(
         private readonly store: Store,
         private readonly publisher: EventPublisher
     ) {
+        this.presenceService = new SessionPresenceService(
+            store,
+            this.sessions,
+            this.lastBroadcastAtBySessionId,
+            this.lastPersistedActiveAtBySessionId,
+            (sessionId) => this.sessions.get(sessionId) ?? this.refreshSession(sessionId),
+            (sessionId, data) => {
+                this.emitSessionSnapshotEvent({ type: 'session-updated', sessionId, data })
+            },
+            (sessionId) => this.normalizeInactiveSessionLifecycle(sessionId)
+        )
+        this.configMutationService = new SessionConfigMutationService(
+            store,
+            (sessionId) => this.sessions.get(sessionId) ?? this.refreshSession(sessionId),
+            (sessionId, session) => {
+                this.emitSessionSnapshotEvent({ type: 'session-updated', sessionId, data: session })
+            }
+        )
+        this.metadataMutationService = new SessionMetadataMutationService(
+            store,
+            (sessionId) => this.sessions.get(sessionId) ?? this.refreshSession(sessionId),
+            (sessionId) => this.refreshSession(sessionId)
+        )
+        this.repairInactiveRunningLifecycleDrift()
     }
 
-    private static readonly METADATA_UPDATE_MAX_ATTEMPTS = 3
+    private markSessionsDirty(): void {
+        this.sessionListSnapshotCache.markDirty()
+    }
 
-    private persistSessionAliveState(
-        sessionId: string,
-        activeAt: number,
-        options?: { force?: boolean }
+    private emitSessionSnapshotEvent(
+        event: Extract<SyncEvent, { type: 'session-added' | 'session-updated' | 'session-removed' }>
     ): void {
-        const lastPersistedActiveAt = this.lastPersistedActiveAtBySessionId.get(sessionId) ?? 0
-        if (!options?.force && activeAt - lastPersistedActiveAt < SESSION_ACTIVE_PERSIST_INTERVAL_MS) {
-            return
-        }
-
-        const persisted = this.store.sessions.setSessionAlive(sessionId, activeAt)
-        if (!persisted) {
-            return
-        }
-
-        this.lastPersistedActiveAtBySessionId.set(sessionId, Math.max(lastPersistedActiveAt, activeAt))
+        this.markSessionsDirty()
+        this.publisher.emit(event)
     }
 
     private persistSessionInactiveState(sessionId: string): void {
@@ -62,8 +69,50 @@ export class SessionCache {
         this.lastPersistedActiveAtBySessionId.delete(sessionId)
     }
 
+    private loadSession(sessionId: string): Session | null {
+        return this.sessions.get(sessionId) ?? this.refreshSession(sessionId)
+    }
+
+    private clearCachedSessionState(sessionId: string): void {
+        this.sessions.delete(sessionId)
+        this.lastBroadcastAtBySessionId.delete(sessionId)
+        this.lastPersistedActiveAtBySessionId.delete(sessionId)
+        this.todoBackfillAttemptedSessionIds.delete(sessionId)
+    }
+
+    private normalizeInactiveSessionLifecycle(
+        sessionId: string
+    ): Pick<NonNullable<Session['metadata']>, 'lifecycleState' | 'lifecycleStateSince'> | undefined {
+        const session = this.loadSession(sessionId)
+        if (!session) {
+            return undefined
+        }
+
+        const currentLifecycleState = session.metadata?.lifecycleState
+        const normalizedLifecycleState = resolveInactiveSessionLifecycleState(currentLifecycleState)
+        if (currentLifecycleState === normalizedLifecycleState) {
+            return getSessionLifecycleMetadataPatch(session)
+        }
+
+        const nextSession = this.metadataMutationService.commitMetadataMutation(
+            sessionId,
+            (currentMetadata) => {
+                return buildLifecycleMetadata(currentMetadata, normalizedLifecycleState)
+            },
+            { touchUpdatedAt: false }
+        )
+
+        return getSessionLifecycleMetadataPatch(nextSession)
+    }
+
+    private repairInactiveRunningLifecycleDrift(): void {
+        for (const sessionId of this.store.sessions.getInactiveRunningSessionIds()) {
+            this.metadataMutationService.normalizeInactiveStoredLifecycle(sessionId)
+        }
+    }
+
     getSessions(): Session[] {
-        return Array.from(this.sessions.values())
+        return this.sessionListSnapshotCache.getSnapshot(this.sessions)
     }
 
     getSession(sessionId: string): Session | undefined {
@@ -74,181 +123,48 @@ export class SessionCache {
         return this.getSessions().filter((session) => session.active)
     }
 
+    getSessionsRevision(): number {
+        return this.sessionListSnapshotCache.getRevision()
+    }
+
     subscribe(listener: SyncEventListener): () => void {
         return this.publisher.subscribe(listener)
     }
 
-    async waitForSessionCondition<T>(
-        sessionId: string,
-        options: WaitForSessionConditionOptions<T>
-    ): Promise<T> {
-        const resolveCurrentValue = (): T | null => {
-            const session = this.getSession(sessionId) ?? this.refreshSession(sessionId) ?? undefined
-            return options.resolveValue(session)
-        }
-
-        const immediateValue = resolveCurrentValue()
-        if (immediateValue !== null) {
-            return immediateValue
-        }
-
-        return await new Promise<T>((resolve, reject) => {
-            let settled = false
-            let timeoutId: ReturnType<typeof setTimeout> | null = null
-
-            const cleanup = (unsubscribe: () => void): void => {
-                if (timeoutId) {
-                    clearTimeout(timeoutId)
-                    timeoutId = null
-                }
-                unsubscribe()
-            }
-
-            const settle = (unsubscribe: () => void, finalize: () => T): void => {
-                if (settled) {
-                    return
-                }
-                settled = true
-                cleanup(unsubscribe)
-                try {
-                    resolve(finalize())
-                } catch (error) {
-                    reject(error)
-                }
-            }
-
-            const unsubscribe = this.subscribe((event) => {
-                if (!('sessionId' in event)) {
-                    return
-                }
-                if (event.sessionId !== sessionId) {
-                    return
-                }
-                if (options.isRelevantEvent && !options.isRelevantEvent(event)) {
-                    return
-                }
-
-                const nextValue = resolveCurrentValue()
-                if (nextValue !== null) {
-                    settle(unsubscribe, () => nextValue)
-                }
-            })
-
-            timeoutId = setTimeout(() => {
-                settle(unsubscribe, options.onTimeout)
-            }, options.timeoutMs)
-            timeoutId.unref?.()
-
-            const nextValue = resolveCurrentValue()
-            if (nextValue !== null) {
-                settle(unsubscribe, () => nextValue)
-            }
+    async waitForSessionCondition<T>(sessionId: string, options: WaitForSessionConditionOptions<T>): Promise<T> {
+        return await waitForSessionCondition({
+            sessionId,
+            loadSession: (targetSessionId) => this.loadSession(targetSessionId),
+            subscribe: (listener) => this.subscribe(listener),
+            condition: options,
         })
     }
 
     getOrCreateSession(input: CreateSessionInput): Session {
         const stored = this.store.sessions.getOrCreateSession({
             ...input,
-            modelReasoningEffort: input.modelReasoningEffort ?? undefined
+            modelReasoningEffort: input.modelReasoningEffort ?? undefined,
         })
-        return this.refreshSession(stored.id) ?? (() => { throw new Error('Failed to load session') })()
+        return (
+            this.refreshSession(stored.id) ??
+            (() => {
+                throw new Error('Failed to load session')
+            })()
+        )
     }
 
     refreshSession(sessionId: string): Session | null {
-        let stored = this.store.sessions.getSession(sessionId)
-        if (!stored) {
-            const existed = this.sessions.delete(sessionId)
-            this.lastBroadcastAtBySessionId.delete(sessionId)
-            this.lastPersistedActiveAtBySessionId.delete(sessionId)
-            this.todoBackfillAttemptedSessionIds.delete(sessionId)
-            if (existed) {
-                this.publisher.emit({ type: 'session-removed', sessionId })
-            }
-            return null
-        }
-
-        const existing = this.sessions.get(sessionId)
-
-        if (stored.todos === null && !this.todoBackfillAttemptedSessionIds.has(sessionId)) {
-            this.todoBackfillAttemptedSessionIds.add(sessionId)
-            const messages = this.store.messages.getMessages(sessionId, 200)
-            for (let i = messages.length - 1; i >= 0; i -= 1) {
-                const message = messages[i]
-                const todos = extractTodoWriteTodosFromMessageContent(message.content)
-                if (todos) {
-                    const updated = this.store.sessions.setSessionTodos(sessionId, todos, message.createdAt)
-                    if (updated) {
-                        stored = this.store.sessions.getSession(sessionId) ?? stored
-                    }
-                    break
-                }
-            }
-        }
-
-        const metadata = (() => {
-            const parsed = MetadataSchema.safeParse(stored.metadata)
-            return parsed.success ? parsed.data : null
-        })()
-
-        const agentState = (() => {
-            const parsed = AgentStateSchema.safeParse(stored.agentState)
-            return parsed.success ? parsed.data : null
-        })()
-
-        const todos = (() => {
-            if (stored.todos === null) return undefined
-            const parsed = TodosSchema.safeParse(stored.todos)
-            return parsed.success ? parsed.data : undefined
-        })()
-
-        const teamContext = (() => {
-            const resolved = this.store.teams.getSessionTeamContext(stored.id)
-            if (!resolved) return undefined
-            const parsed = SessionTeamContextSchema.safeParse(resolved)
-            return parsed.success ? parsed.data : undefined
-        })()
-
-        const permissionMode = (() => {
-            if (stored.permissionMode === null) return undefined
-            const parsed = PermissionModeSchema.safeParse(stored.permissionMode)
-            return parsed.success ? parsed.data : undefined
-        })()
-
-        const collaborationMode = (() => {
-            if (stored.collaborationMode === null) return undefined
-            const parsed = CodexCollaborationModeSchema.safeParse(stored.collaborationMode)
-            return parsed.success ? parsed.data : undefined
-        })()
-
-        const session: Session = {
-            id: stored.id,
-            seq: stored.seq,
-            createdAt: stored.createdAt,
-            updatedAt: stored.updatedAt,
-            active: existing?.active ?? stored.active,
-            activeAt: existing?.activeAt ?? (stored.activeAt ?? stored.createdAt),
-            metadata,
-            metadataVersion: stored.metadataVersion,
-            agentState,
-            agentStateVersion: stored.agentStateVersion,
-            thinking: existing?.thinking ?? false,
-            thinkingAt: existing?.thinkingAt ?? 0,
-            todos,
-            teamContext,
-            model: stored.model,
-            modelReasoningEffort: stored.modelReasoningEffort,
-            permissionMode,
-            collaborationMode
-        }
-
-        this.sessions.set(sessionId, session)
-        if (stored.activeAt !== null) {
-            this.lastPersistedActiveAtBySessionId.set(sessionId, stored.activeAt)
-        } else {
-            this.lastPersistedActiveAtBySessionId.delete(sessionId)
-        }
-        this.publisher.emit({ type: existing ? 'session-updated' : 'session-added', sessionId, data: session })
-        return session
+        return refreshSessionSnapshot({
+            store: this.store,
+            sessionId,
+            sessions: this.sessions,
+            lastBroadcastAtBySessionId: this.lastBroadcastAtBySessionId,
+            lastPersistedActiveAtBySessionId: this.lastPersistedActiveAtBySessionId,
+            todoBackfillAttemptedSessionIds: this.todoBackfillAttemptedSessionIds,
+            emit: (event) => {
+                this.emitSessionSnapshotEvent(event)
+            },
+        })
     }
 
     reloadAll(): void {
@@ -263,198 +179,28 @@ export class SessionCache {
         time: number
         thinking?: boolean
         mode?: 'local' | 'remote'
-        permissionMode?: PermissionMode
+        permissionMode?: Session['permissionMode']
         model?: string | null
         modelReasoningEffort?: Session['modelReasoningEffort']
-        collaborationMode?: CodexCollaborationMode
+        collaborationMode?: Session['collaborationMode']
     }): void {
-        const t = clampAliveTime(payload.time)
-        if (!t) return
-
-        const session = this.sessions.get(payload.sid) ?? this.refreshSession(payload.sid)
-        if (!session) return
-        if (session.metadata?.lifecycleState === 'archived') {
-            return
-        }
-
-        const wasActive = session.active
-        const wasThinking = session.thinking
-        const previousPermissionMode = session.permissionMode
-        const previousModel = session.model
-        const previousModelReasoningEffort = session.modelReasoningEffort
-        const previousCollaborationMode = session.collaborationMode
-
-        session.active = true
-        session.activeAt = Math.max(session.activeAt, t)
-        session.thinking = Boolean(payload.thinking)
-        session.thinkingAt = t
-        this.persistSessionAliveState(payload.sid, session.activeAt, { force: !wasActive })
-        if (payload.permissionMode !== undefined) {
-            if (payload.permissionMode !== session.permissionMode) {
-                this.store.sessions.setSessionPermissionMode(payload.sid, payload.permissionMode)
-            }
-            session.permissionMode = payload.permissionMode
-        }
-        if (payload.model !== undefined) {
-            if (payload.model !== session.model) {
-                this.store.sessions.setSessionModel(payload.sid, payload.model, {
-                    touchUpdatedAt: false
-                })
-            }
-            session.model = payload.model
-        }
-        if (payload.modelReasoningEffort !== undefined) {
-            if (payload.modelReasoningEffort !== session.modelReasoningEffort) {
-                this.store.sessions.setSessionModelReasoningEffort(payload.sid, payload.modelReasoningEffort, {
-                    touchUpdatedAt: false
-                })
-            }
-            session.modelReasoningEffort = payload.modelReasoningEffort
-        }
-        if (payload.collaborationMode !== undefined) {
-            if (payload.collaborationMode !== session.collaborationMode) {
-                this.store.sessions.setSessionCollaborationMode(payload.sid, payload.collaborationMode)
-            }
-            session.collaborationMode = payload.collaborationMode
-        }
-
-        const now = Date.now()
-        const lastBroadcastAt = this.lastBroadcastAtBySessionId.get(session.id) ?? 0
-        const modeChanged = previousPermissionMode !== session.permissionMode
-            || previousModel !== session.model
-            || previousModelReasoningEffort !== session.modelReasoningEffort
-            || previousCollaborationMode !== session.collaborationMode
-        const shouldBroadcast = (!wasActive && session.active)
-            || (wasThinking !== session.thinking)
-            || modeChanged
-            || (now - lastBroadcastAt > SESSION_BROADCAST_THROTTLE_MS)
-
-        if (shouldBroadcast) {
-            this.lastBroadcastAtBySessionId.set(session.id, now)
-            this.publisher.emit({
-                type: 'session-updated',
-                sessionId: session.id,
-                data: {
-                    active: true,
-                    activeAt: session.activeAt,
-                    thinking: session.thinking,
-                    permissionMode: session.permissionMode,
-                    model: session.model,
-                    modelReasoningEffort: session.modelReasoningEffort,
-                    collaborationMode: session.collaborationMode
-                }
-            })
-        }
+        this.presenceService.handleSessionAlive(payload)
     }
 
     handleSessionEnd(payload: { sid: string; time: number }): void {
-        const t = clampAliveTime(payload.time) ?? Date.now()
-
-        const session = this.sessions.get(payload.sid) ?? this.refreshSession(payload.sid)
-        if (!session) return
-
-        if (!session.active && !session.thinking) {
-            this.persistSessionInactiveState(payload.sid)
-            return
-        }
-
-        session.active = false
-        session.thinking = false
-        session.thinkingAt = t
-        this.persistSessionInactiveState(payload.sid)
-
-        this.publisher.emit({ type: 'session-updated', sessionId: session.id, data: { active: false, thinking: false } })
+        this.presenceService.handleSessionEnd(payload)
     }
 
     setSessionThinking(sessionId: string, thinking: boolean, transitionAt: number = Date.now()): Session | null {
-        const session = this.sessions.get(sessionId) ?? this.refreshSession(sessionId)
-        if (!session) {
-            return null
-        }
-
-        if (session.thinking === thinking) {
-            return session
-        }
-
-        session.thinking = thinking
-        session.thinkingAt = transitionAt
-        this.publisher.emit({
-            type: 'session-updated',
-            sessionId,
-            data: {
-                active: session.active,
-                activeAt: session.activeAt,
-                thinking: session.thinking
-            }
-        })
-        return session
+        return this.presenceService.setSessionThinking(sessionId, thinking, transitionAt)
     }
 
     expireInactive(now: number = Date.now()): void {
-        for (const session of this.sessions.values()) {
-            if (!session.active) continue
-            if (now - session.activeAt <= SESSION_INACTIVE_TIMEOUT_MS) continue
-            session.active = false
-            session.thinking = false
-            this.persistSessionInactiveState(session.id)
-            this.publisher.emit({ type: 'session-updated', sessionId: session.id, data: { active: false } })
-        }
+        this.presenceService.expireInactive(now)
     }
 
-    applySessionConfig(
-        sessionId: string,
-        config: {
-            permissionMode?: PermissionMode
-            model?: string | null
-            modelReasoningEffort?: Session['modelReasoningEffort']
-            collaborationMode?: CodexCollaborationMode
-        }
-    ): void {
-        const session = this.sessions.get(sessionId) ?? this.refreshSession(sessionId)
-        if (!session) {
-            return
-        }
-
-        if (config.permissionMode !== undefined) {
-            const updated = this.store.sessions.setSessionPermissionMode(sessionId, config.permissionMode)
-            const persisted = this.store.sessions.getSession(sessionId)?.permissionMode ?? null
-            if (!updated && persisted !== config.permissionMode) {
-                throw new Error('Failed to update session permission mode')
-            }
-            session.permissionMode = config.permissionMode
-        }
-        if (config.model !== undefined) {
-            if (config.model !== session.model) {
-                const updated = this.store.sessions.setSessionModel(sessionId, config.model, {
-                    touchUpdatedAt: false
-                })
-                if (!updated) {
-                    throw new Error('Failed to update session model')
-                }
-            }
-            session.model = config.model
-        }
-        if (config.modelReasoningEffort !== undefined) {
-            if (config.modelReasoningEffort !== session.modelReasoningEffort) {
-                const updated = this.store.sessions.setSessionModelReasoningEffort(sessionId, config.modelReasoningEffort, {
-                    touchUpdatedAt: false
-                })
-                if (!updated) {
-                    throw new Error('Failed to update session model reasoning effort')
-                }
-            }
-            session.modelReasoningEffort = config.modelReasoningEffort
-        }
-        if (config.collaborationMode !== undefined) {
-            const updated = this.store.sessions.setSessionCollaborationMode(sessionId, config.collaborationMode)
-            const persisted = this.store.sessions.getSession(sessionId)?.collaborationMode ?? null
-            if (!updated && persisted !== config.collaborationMode) {
-                throw new Error('Failed to update session collaboration mode')
-            }
-            session.collaborationMode = config.collaborationMode
-        }
-
-        this.publisher.emit({ type: 'session-updated', sessionId, data: session })
+    applySessionConfig(sessionId: string, config: SessionDurableConfigPatch): void {
+        this.configMutationService.applySessionConfig(sessionId, config)
     }
 
     async mutateSessionMetadata(
@@ -462,14 +208,18 @@ export class SessionCache {
         buildNextMetadata: (currentMetadata: Metadata) => Metadata,
         options?: { touchUpdatedAt?: boolean }
     ): Promise<Session> {
-        return this.commitMetadataMutation(sessionId, buildNextMetadata, options)
+        return this.metadataMutationService.commitMetadataMutation(sessionId, buildNextMetadata, options)
     }
 
     async renameSession(sessionId: string, name: string): Promise<Session> {
-        return this.mutateSessionMetadata(sessionId, (currentMetadata) => ({
-            ...currentMetadata,
-            name
-        }), { touchUpdatedAt: false })
+        return this.mutateSessionMetadata(
+            sessionId,
+            (currentMetadata) => ({
+                ...currentMetadata,
+                name,
+            }),
+            { touchUpdatedAt: false }
+        )
     }
 
     async setSessionLifecycleState(
@@ -481,9 +231,13 @@ export class SessionCache {
             touchUpdatedAt?: boolean
         }
     ): Promise<void> {
-        this.mutateSessionMetadata(sessionId, (currentMetadata) => {
-            return buildLifecycleMetadata(currentMetadata, lifecycleState, options)
-        }, { touchUpdatedAt: options?.touchUpdatedAt })
+        await this.mutateSessionMetadata(
+            sessionId,
+            (currentMetadata) => {
+                return buildLifecycleMetadata(currentMetadata, lifecycleState, options)
+            },
+            { touchUpdatedAt: options?.touchUpdatedAt }
+        )
     }
 
     async transitionSessionLifecycle(
@@ -497,7 +251,7 @@ export class SessionCache {
             transitionAt?: number
         }
     ): Promise<Session> {
-        const cachedSession = this.sessions.get(sessionId) ?? this.refreshSession(sessionId)
+        const cachedSession = this.loadSession(sessionId)
         if (!cachedSession) {
             throw new Error('Session not found')
         }
@@ -510,9 +264,13 @@ export class SessionCache {
             this.persistSessionInactiveState(sessionId)
         }
 
-        return this.commitMetadataMutation(sessionId, (currentMetadata) => {
-            return buildLifecycleMetadata(currentMetadata, lifecycleState, options)
-        }, { touchUpdatedAt: options?.touchUpdatedAt })
+        return this.metadataMutationService.commitMetadataMutation(
+            sessionId,
+            (currentMetadata) => {
+                return buildLifecycleMetadata(currentMetadata, lifecycleState, options)
+            },
+            { touchUpdatedAt: options?.touchUpdatedAt }
+        )
     }
 
     async deleteSession(sessionId: string): Promise<void> {
@@ -530,82 +288,21 @@ export class SessionCache {
             throw new Error('Failed to delete session')
         }
 
-        this.sessions.delete(sessionId)
-        this.lastBroadcastAtBySessionId.delete(sessionId)
-        this.lastPersistedActiveAtBySessionId.delete(sessionId)
-        this.todoBackfillAttemptedSessionIds.delete(sessionId)
+        this.clearCachedSessionState(sessionId)
 
-        this.publisher.emit({ type: 'session-removed', sessionId })
-    }
-
-    private commitMetadataMutation(
-        sessionId: string,
-        buildNextMetadata: (currentMetadata: Metadata) => Metadata,
-        options?: { touchUpdatedAt?: boolean }
-    ): Session {
-        const cachedSession = this.sessions.get(sessionId) ?? this.refreshSession(sessionId)
-        if (!cachedSession) {
-            throw new Error('Session not found')
-        }
-
-        const fallbackMetadata = cachedSession.metadata ?? { path: '', host: '' }
-        for (let attempt = 0; attempt < SessionCache.METADATA_UPDATE_MAX_ATTEMPTS; attempt += 1) {
-            const storedSession = this.store.sessions.getSession(sessionId)
-            if (!storedSession) {
-                this.refreshSession(sessionId)
-                throw new Error('Session not found')
-            }
-
-            const parsedMetadata = MetadataSchema.safeParse(storedSession.metadata)
-            const currentMetadata = parsedMetadata.success ? parsedMetadata.data : fallbackMetadata
-            const nextMetadata = buildNextMetadata(currentMetadata)
-            const result = this.store.sessions.updateSessionMetadata(
-                sessionId,
-                nextMetadata,
-                storedSession.metadataVersion,
-                { touchUpdatedAt: options?.touchUpdatedAt }
-            )
-
-            if (result.result === 'success') {
-                const refreshedSession = this.refreshSession(sessionId)
-                if (!refreshedSession) {
-                    throw new Error('Session not found')
-                }
-                return refreshedSession
-            }
-
-            if (result.result === 'error') {
-                throw new Error('Failed to update session metadata')
-            }
-        }
-
-        throw new Error('Session was modified concurrently. Please try again.')
+        this.emitSessionSnapshotEvent({ type: 'session-removed', sessionId })
     }
 }
 
-function buildLifecycleMetadata(
-    metadata: Metadata,
-    lifecycleState: SessionLifecycleState,
-    options?: {
-        archivedBy?: string
-        archiveReason?: string
-    }
-): Metadata {
-    if (lifecycleState !== 'archived') {
-        return {
-            ...metadata,
-            lifecycleState,
-            lifecycleStateSince: Date.now(),
-            archivedBy: undefined,
-            archiveReason: undefined
-        }
+function getSessionLifecycleMetadataPatch(
+    session: Session
+): Pick<NonNullable<Session['metadata']>, 'lifecycleState' | 'lifecycleStateSince'> | undefined {
+    if (!session.metadata) {
+        return undefined
     }
 
     return {
-        ...metadata,
-        lifecycleState,
-        lifecycleStateSince: Date.now(),
-        archivedBy: options?.archivedBy ?? 'web',
-        archiveReason: options?.archiveReason ?? 'Archived by user'
+        lifecycleState: session.metadata.lifecycleState,
+        lifecycleStateSince: session.metadata.lifecycleStateSince,
     }
 }

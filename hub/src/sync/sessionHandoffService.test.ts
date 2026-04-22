@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'bun:test'
 import {
-    SESSION_RECOVERY_PAGE_SIZE,
-    SessionHandoffContractError,
     type DecryptedMessage,
+    SESSION_RECOVERY_PAGE_SIZE,
     type Session,
+    SessionHandoffContractError,
 } from '@viby/protocol'
 import type { Server } from 'socket.io'
-import { Store } from '../store'
 import type { RpcRegistry } from '../socket/rpcRegistry'
+import { Store } from '../store'
 import { SessionHandoffBuildError, SessionHandoffService } from './sessionHandoffService'
 import { SyncEngine } from './syncEngine'
 
@@ -17,12 +17,11 @@ function createIoStub(): Server {
             return {
                 to() {
                     return {
-                        emit() {
-                        }
+                        emit() {},
                     }
-                }
+                },
             }
-        }
+        },
     } as unknown as Server
 }
 
@@ -54,12 +53,7 @@ function createSession(overrides: Partial<Session> = {}): Session {
 
 function createEngineHarness() {
     const store = new Store(':memory:')
-    const engine = new SyncEngine(
-        store,
-        createIoStub(),
-        {} as RpcRegistry,
-        { broadcast() {} }
-    )
+    const engine = new SyncEngine(store, createIoStub(), {} as RpcRegistry, { broadcast() {} })
 
     return { store, engine }
 }
@@ -79,12 +73,14 @@ function createEngineSession(
             driver: 'codex',
         },
         agentState: null,
-        ...(includeLiveConfigDefaults ? {
-            model: 'gpt-5',
-            modelReasoningEffort: 'high',
-            permissionMode: 'safe-yolo',
-            collaborationMode: 'plan',
-        } : {}),
+        ...(includeLiveConfigDefaults
+            ? {
+                  model: 'gpt-5',
+                  modelReasoningEffort: 'high',
+                  permissionMode: 'safe-yolo',
+                  collaborationMode: 'plan',
+              }
+            : {}),
         ...overrides,
     })
 }
@@ -183,15 +179,19 @@ describe('session handoff service', () => {
 
     it('returns an empty history when the session has no transcript yet', () => {
         const { engine } = createEngineHarness()
-        const session = createEngineSession(engine, {
-            metadata: {
-                path: '/empty',
-                host: 'machine',
-                flavor: 'claude',
+        const session = createEngineSession(
+            engine,
+            {
+                metadata: {
+                    path: '/empty',
+                    host: 'machine',
+                    driver: 'claude',
+                },
             },
-        }, {
-            includeLiveConfigDefaults: false,
-        })
+            {
+                includeLiveConfigDefaults: false,
+            }
+        )
 
         try {
             expect(engine.buildSessionHandoff(session.id)).toEqual({
@@ -280,16 +280,13 @@ describe('session handoff service', () => {
     })
 
     it('fails transcript traversal instead of truncating when a full page cannot advance the recovery cursor', () => {
-        const stalledPage: DecryptedMessage[] = Array.from(
-            { length: SESSION_RECOVERY_PAGE_SIZE },
-            (_, index) => ({
-                id: `message-${index + 1}`,
-                seq: null,
-                localId: null,
-                createdAt: index + 1,
-                content: createTextMessage('user', `message-${index + 1}`),
-            })
-        )
+        const stalledPage: DecryptedMessage[] = Array.from({ length: SESSION_RECOVERY_PAGE_SIZE }, (_, index) => ({
+            id: `message-${index + 1}`,
+            seq: null,
+            localId: null,
+            createdAt: index + 1,
+            content: createTextMessage('user', `message-${index + 1}`),
+        }))
         const service = new SessionHandoffService({
             getSession: () => createSession(),
             getMessagesAfter: () => stalledPage,

@@ -1,4 +1,5 @@
 import type { SyncEvent } from '@viby/protocol/types'
+import { reportHubRuntimeError } from '../runtime/runtimeDiagnostics'
 
 export type SyncEventListener = (event: SyncEvent) => void
 export type SyncEventBroadcaster = {
@@ -8,10 +9,7 @@ export type SyncEventBroadcaster = {
 export class EventPublisher {
     private readonly listeners: Set<SyncEventListener> = new Set()
 
-    constructor(
-        private readonly broadcaster: SyncEventBroadcaster
-    ) {
-    }
+    constructor(private readonly broadcaster: SyncEventBroadcaster) {}
 
     subscribe(listener: SyncEventListener): () => void {
         this.listeners.add(listener)
@@ -23,7 +21,7 @@ export class EventPublisher {
             try {
                 listener(event)
             } catch (error) {
-                console.error('[SyncEngine] Listener error:', error)
+                reportHubRuntimeError('Sync listener threw unexpectedly.', error)
             }
         }
 

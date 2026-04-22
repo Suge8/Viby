@@ -4,10 +4,7 @@ import { Store } from '../store'
 import { EventPublisher } from './eventPublisher'
 import { MessageService } from './messageService'
 
-function createStoredSession(
-    store: Store,
-    input: Parameters<Store['sessions']['getOrCreateSession']>[0]
-) {
+function createStoredSession(store: Store, input: Parameters<Store['sessions']['getOrCreateSession']>[0]) {
     return store.sessions.getOrCreateSession(input)
 }
 
@@ -18,16 +15,16 @@ function createIoStub() {
             return {
                 to() {
                     return {
-                        emit
+                        emit,
                     }
-                }
+                },
             }
-        }
+        },
     } as unknown as Server
 
     return {
         io,
-        emit
+        emit,
     }
 }
 
@@ -35,7 +32,7 @@ function createPublisherHarness() {
     const broadcast = mock((_event: unknown) => {})
     return {
         publisher: new EventPublisher({ broadcast }),
-        broadcast
+        broadcast,
     }
 }
 
@@ -48,9 +45,9 @@ describe('message service', () => {
         const store = new Store(':memory:')
         const session = createStoredSession(store, {
             tag: 'session-message-service',
-            metadata: { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
+            metadata: { path: '/tmp/project', host: 'localhost', driver: 'codex' },
             agentState: null,
-            model: 'gpt-5.4'
+            model: 'gpt-5.4',
         })
         const originalUpdatedAt = session.updatedAt
         const { io } = createIoStub()
@@ -62,7 +59,7 @@ describe('message service', () => {
         try {
             await service.sendMessage(session.id, {
                 text: 'hello world',
-                localId: 'local-1'
+                localId: 'local-1',
             })
         } finally {
             Date.now = originalDateNow
@@ -73,13 +70,13 @@ describe('message service', () => {
         expect(updatedSession!.updatedAt).toBe(originalUpdatedAt + 1_000)
     })
 
-    it('keeps internal team metadata available when appending a user message through the hub owner', async () => {
+    it('keeps message metadata available when appending a user message through the hub owner', async () => {
         const store = new Store(':memory:')
         const session = createStoredSession(store, {
             tag: 'session-message-service-team-meta',
-            metadata: { path: '/tmp/project', host: 'localhost', flavor: 'claude' },
+            metadata: { path: '/tmp/project', host: 'localhost', driver: 'claude' },
             agentState: null,
-            model: 'sonnet'
+            model: 'sonnet',
         })
         const { io } = createIoStub()
         const { publisher } = createPublisherHarness()
@@ -88,28 +85,18 @@ describe('message service', () => {
         await service.appendUserMessage(session.id, {
             text: 'Manager says verify this change',
             meta: {
-                sentFrom: 'manager',
-                teamProjectId: 'project-1',
-                managerSessionId: 'manager-session-1',
-                memberId: 'member-1',
-                sessionRole: 'member',
-                teamMessageKind: 'verify-request',
-                controlOwner: 'manager'
-            }
+                sentFrom: 'user',
+                customSystemPrompt: 'Focus on verification',
+            },
         })
 
         const storedMessage = store.messages.getMessages(session.id, 1)[0]
         expect(storedMessage?.content).toMatchObject({
             role: 'user',
             meta: {
-                sentFrom: 'manager',
-                teamProjectId: 'project-1',
-                managerSessionId: 'manager-session-1',
-                memberId: 'member-1',
-                sessionRole: 'member',
-                teamMessageKind: 'verify-request',
-                controlOwner: 'manager'
-            }
+                sentFrom: 'user',
+                customSystemPrompt: 'Focus on verification',
+            },
         })
     })
 
@@ -121,9 +108,9 @@ describe('message service', () => {
         const store = new Store(':memory:')
         const session = createStoredSession(store, {
             tag: 'session-message-service-driver-switched',
-            metadata: { path: '/tmp/project', host: 'localhost', flavor: 'codex', driver: 'codex' },
+            metadata: { path: '/tmp/project', host: 'localhost', driver: 'codex' },
             agentState: null,
-            model: 'gpt-5.4'
+            model: 'gpt-5.4',
         })
         const originalUpdatedAt = session.updatedAt
         const { io, emit } = createIoStub()
@@ -136,7 +123,7 @@ describe('message service', () => {
             await service.appendDriverSwitchedEvent(session.id, {
                 type: 'driver-switched',
                 previousDriver: 'codex',
-                targetDriver: 'claude'
+                targetDriver: 'claude',
             })
         } finally {
             Date.now = originalDateNow
@@ -150,9 +137,9 @@ describe('message service', () => {
                 data: {
                     type: 'driver-switched',
                     previousDriver: 'codex',
-                    targetDriver: 'claude'
-                }
-            }
+                    targetDriver: 'claude',
+                },
+            },
         })
 
         const updatedSession = store.sessions.getSession(session.id)
@@ -171,12 +158,12 @@ describe('message service', () => {
                             data: {
                                 type: 'driver-switched',
                                 previousDriver: 'codex',
-                                targetDriver: 'claude'
-                            }
-                        }
-                    }
-                }
-            }
+                                targetDriver: 'claude',
+                            },
+                        },
+                    },
+                },
+            },
         })
         expect(broadcast).toHaveBeenCalledTimes(1)
         expect(broadcast.mock.calls[0]?.[0]).toMatchObject({
@@ -190,11 +177,11 @@ describe('message service', () => {
                         data: {
                             type: 'driver-switched',
                             previousDriver: 'codex',
-                            targetDriver: 'claude'
-                        }
-                    }
-                }
-            }
+                            targetDriver: 'claude',
+                        },
+                    },
+                },
+            },
         })
     })
 })

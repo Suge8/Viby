@@ -2,21 +2,21 @@ import type { SessionStreamState, SyncEvent } from '@viby/protocol/types'
 
 type SessionStreamManagerUpdate =
     | {
-        kind: 'append'
-        streamId: string
-        delta: string
-    }
+          kind: 'append'
+          assistantTurnId: string
+          delta: string
+      }
     | {
-        kind: 'clear'
-        streamId?: string
-    }
+          kind: 'clear'
+          assistantTurnId?: string
+      }
 
-function createStreamState(streamId: string, delta: string, now: number): SessionStreamState {
+function createStreamState(assistantTurnId: string, delta: string, now: number): SessionStreamState {
     return {
-        streamId,
+        assistantTurnId,
         startedAt: now,
         updatedAt: now,
-        text: delta
+        text: delta,
     }
 }
 
@@ -25,33 +25,34 @@ export class SessionStreamManager {
 
     applyUpdate(sessionId: string, update: SessionStreamManagerUpdate): SyncEvent | null {
         if (update.kind === 'clear') {
-            return this.clear(sessionId, update.streamId)
+            return this.clear(sessionId, update.assistantTurnId)
         }
 
         const now = Date.now()
         const current = this.streams.get(sessionId)
-        const next = current && current.streamId === update.streamId
-            ? {
-                ...current,
-                text: current.text + update.delta,
-                updatedAt: now
-            }
-            : createStreamState(update.streamId, update.delta, now)
+        const next =
+            current && current.assistantTurnId === update.assistantTurnId
+                ? {
+                      ...current,
+                      text: current.text + update.delta,
+                      updatedAt: now,
+                  }
+                : createStreamState(update.assistantTurnId, update.delta, now)
 
         this.streams.set(sessionId, next)
         return {
             type: 'session-stream-updated',
             sessionId,
-            stream: next
+            stream: next,
         }
     }
 
-    clear(sessionId: string, streamId?: string): SyncEvent | null {
+    clear(sessionId: string, assistantTurnId?: string): SyncEvent | null {
         const current = this.streams.get(sessionId)
         if (!current) {
             return null
         }
-        if (streamId && current.streamId !== streamId) {
+        if (assistantTurnId && current.assistantTurnId !== assistantTurnId) {
             return null
         }
 
@@ -59,16 +60,16 @@ export class SessionStreamManager {
         return {
             type: 'session-stream-cleared',
             sessionId,
-            ...(streamId ? { streamId } : {})
+            ...(assistantTurnId ? { assistantTurnId } : {}),
         }
     }
 
-    drop(sessionId: string, streamId?: string): boolean {
+    drop(sessionId: string, assistantTurnId?: string): boolean {
         const current = this.streams.get(sessionId)
         if (!current) {
             return false
         }
-        if (streamId && current.streamId !== streamId) {
+        if (assistantTurnId && current.assistantTurnId !== assistantTurnId) {
             return false
         }
 
