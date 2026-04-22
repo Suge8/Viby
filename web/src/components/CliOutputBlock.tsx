@@ -82,7 +82,10 @@ function extractCommandName(text: string): string | null {
     const match = text.match(COMMAND_NAME_REGEX)
     if (!match) return null
     const normalized = normalizeCliText(match[1] ?? '')
-    const firstLine = normalized.split('\n').find((line) => line.trim().length > 0)?.trim()
+    const firstLine = normalized
+        .split('\n')
+        .find((line) => line.trim().length > 0)
+        ?.trim()
     return firstLine && firstLine.length > 0 ? firstLine : null
 }
 
@@ -123,7 +126,7 @@ export function CliOutputBlock(props: { text: string }) {
                         <DialogHeader>
                             <DialogTitle>{t('terminal.commandName')}</DialogTitle>
                         </DialogHeader>
-                        <div className="mt-3 max-h-[75vh] overflow-auto">
+                        <div className="ds-dialog-scroll-body-tall mt-3">
                             <div className="min-w-0 max-w-full overflow-x-auto overflow-y-hidden">
                                 <pre className="m-0 w-max min-w-full bg-[var(--app-code-bg)] p-2 text-xs font-mono">
                                     {content}

@@ -1,16 +1,16 @@
 import type { ComponentType } from 'react'
 import type { ToolCallBlock } from '@/chat/types'
-import type { SessionMetadataSummary } from '@/types/api'
+import { AskUserQuestionView } from '@/components/ToolCard/views/AskUserQuestionView'
 import { CodexDiffCompactView, CodexDiffFullView } from '@/components/ToolCard/views/CodexDiffView'
 import { CodexPatchView } from '@/components/ToolCard/views/CodexPatchView'
 import { EditView } from '@/components/ToolCard/views/EditView'
-import { AskUserQuestionView } from '@/components/ToolCard/views/AskUserQuestionView'
-import { RequestUserInputView } from '@/components/ToolCard/views/RequestUserInputView'
-import { ExitPlanModeView } from '@/components/ToolCard/views/ExitPlanModeView'
 import { MultiEditFullView, MultiEditView } from '@/components/ToolCard/views/MultiEditView'
+import { PlanProposalView } from '@/components/ToolCard/views/PlanProposalView'
+import { RequestUserInputView } from '@/components/ToolCard/views/RequestUserInputView'
 import { TodoWriteView } from '@/components/ToolCard/views/TodoWriteView'
 import { UpdatePlanView } from '@/components/ToolCard/views/UpdatePlanView'
 import { WriteView } from '@/components/ToolCard/views/WriteView'
+import type { SessionMetadataSummary } from '@/types/api'
 
 export type ToolViewProps = {
     block: ToolCallBlock
@@ -27,10 +27,11 @@ export const toolViewRegistry: Record<string, ToolViewComponent> = {
     update_plan: UpdatePlanView,
     CodexDiff: CodexDiffCompactView,
     AskUserQuestion: AskUserQuestionView,
-    ExitPlanMode: ExitPlanModeView,
+    ExitPlanMode: PlanProposalView,
     ask_user_question: AskUserQuestionView,
-    exit_plan_mode: ExitPlanModeView,
-    request_user_input: RequestUserInputView
+    exit_plan_mode: PlanProposalView,
+    proposed_plan: PlanProposalView,
+    request_user_input: RequestUserInputView,
 }
 
 export const toolFullViewRegistry: Record<string, ToolViewComponent> = {
@@ -40,10 +41,11 @@ export const toolFullViewRegistry: Record<string, ToolViewComponent> = {
     CodexDiff: CodexDiffFullView,
     CodexPatch: CodexPatchView,
     AskUserQuestion: AskUserQuestionView,
-    ExitPlanMode: ExitPlanModeView,
+    ExitPlanMode: PlanProposalView,
     ask_user_question: AskUserQuestionView,
-    exit_plan_mode: ExitPlanModeView,
-    request_user_input: RequestUserInputView
+    exit_plan_mode: PlanProposalView,
+    proposed_plan: PlanProposalView,
+    request_user_input: RequestUserInputView,
 }
 
 export function getToolViewComponent(toolName: string): ToolViewComponent | null {

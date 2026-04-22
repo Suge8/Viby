@@ -8,5 +8,9 @@ type ShikiCodeContentProps = {
 export default function ShikiCodeContent(props: ShikiCodeContentProps): React.JSX.Element {
     const highlighted = useShikiHighlighter(props.code, props.language)
 
-    return <code className="block">{highlighted ?? props.code}</code>
+    if (!highlighted) {
+        return <code className="block">{props.code}</code>
+    }
+
+    return <code className="block" dangerouslySetInnerHTML={{ __html: highlighted }} />
 }

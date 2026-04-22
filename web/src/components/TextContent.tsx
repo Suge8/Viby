@@ -1,18 +1,13 @@
-import { lazy, memo, Suspense, useMemo } from 'react'
+import { lazy, memo, Suspense } from 'react'
 import type { PreferredTextRenderMode } from '@/chat/textRenderMode'
 import { resolveTextRenderMode } from '@/chat/textRenderMode'
+import { getLoadedMarkdownRendererModule } from '@/components/markdown/loadMarkdownRenderer'
 import { PlainTextContent } from '@/components/PlainTextContent'
 
-let markdownRendererModulePromise: Promise<{ default: typeof import('@/components/MarkdownRenderer').MarkdownRenderer }> | null = null
-
-function loadMarkdownRendererModule() {
-    markdownRendererModulePromise ??= import('@/components/MarkdownRenderer').then((module) => ({
-        default: module.MarkdownRenderer,
-    }))
-    return markdownRendererModulePromise
-}
-
-const LazyMarkdownRenderer = lazy(loadMarkdownRendererModule)
+const LazyMarkdownRenderer = lazy(async () => {
+    const module = await import('@/components/MarkdownRenderer')
+    return { default: module.MarkdownRenderer }
+})
 
 type TextContentProps = {
     text: string
@@ -21,14 +16,17 @@ type TextContentProps = {
 }
 
 function TextContentComponent(props: TextContentProps): React.JSX.Element {
-    const renderMode = useMemo(
-        () => props.mode ?? resolveTextRenderMode(props.text, 'auto'),
-        [props.mode, props.text]
-    )
+    const renderMode = props.mode ?? resolveTextRenderMode(props.text, 'auto')
     const plainContent = <PlainTextContent text={props.text} className={props.plainClassName} />
 
     if (renderMode === 'plain') {
         return plainContent
+    }
+
+    const loadedMarkdownRenderer = getLoadedMarkdownRendererModule()
+    if (loadedMarkdownRenderer) {
+        const { MarkdownRenderer } = loadedMarkdownRenderer
+        return <MarkdownRenderer content={props.text} />
     }
 
     return (

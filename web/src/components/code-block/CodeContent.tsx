@@ -1,10 +1,10 @@
-import { Suspense, lazy, memo } from 'react'
-import { PlainCodeContent } from '@/components/code-block/PlainCodeContent'
+import { lazy, memo, Suspense } from 'react'
 import {
+    type CodeHighlightMode,
     resolveCodeLanguage,
     shouldUseShikiHighlight,
-    type CodeHighlightMode
 } from '@/components/code-block/codeBlockLanguage'
+import { PlainCodeContent } from '@/components/code-block/PlainCodeContent'
 
 const LazyShikiCodeContent = lazy(() => import('@/components/code-block/ShikiCodeContent'))
 
@@ -17,8 +17,9 @@ type CodeContentProps = {
 function CodeContentComponent(props: CodeContentProps): React.JSX.Element {
     const resolvedLanguage = resolveCodeLanguage(props.language)
     const shouldHighlight = shouldUseShikiHighlight({
+        code: props.code,
         language: resolvedLanguage,
-        highlight: props.highlight
+        highlight: props.highlight,
     })
 
     if (!shouldHighlight) {
@@ -27,10 +28,7 @@ function CodeContentComponent(props: CodeContentProps): React.JSX.Element {
 
     return (
         <Suspense fallback={<PlainCodeContent code={props.code} />}>
-            <LazyShikiCodeContent
-                code={props.code}
-                language={resolvedLanguage}
-            />
+            <LazyShikiCodeContent code={props.code} language={resolvedLanguage} />
         </Suspense>
     )
 }

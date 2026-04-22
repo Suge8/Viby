@@ -1,16 +1,10 @@
 import { memo } from 'react'
-import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
-import {
-    FeatureCheckIcon as CheckIcon,
-    FeatureCopyIcon as CopyIcon,
-} from '@/components/featureIcons'
-import { Button } from '@/components/ui/button'
-import { useTranslation } from '@/lib/use-translation'
-import {
-    CodeContent,
-    type CodeHighlightMode
-} from '@/components/code-block/CodeContent'
+import { CopyActionButton } from '@/components/CopyActionButton'
+import { CodeContent, type CodeHighlightMode } from '@/components/code-block/CodeContent'
 import { CodeSurface } from '@/components/code-block/CodeSurface'
+import { useCopyAction } from '@/hooks/useCopyAction'
+import { useNoticeCenter } from '@/lib/notice-center'
+import { useTranslation } from '@/lib/use-translation'
 
 type CodeBlockProps = {
     code: string
@@ -21,30 +15,36 @@ type CodeBlockProps = {
 
 function CodeBlockComponent(props: CodeBlockProps) {
     const { t } = useTranslation()
+    const { addToast } = useNoticeCenter()
     const showCopyButton = props.showCopyButton ?? true
-    const { copied, copy } = useCopyToClipboard()
+    const { copied, handleCopyClick } = useCopyAction({
+        text: props.code,
+        onCopied: () => {
+            addToast({
+                tone: 'success',
+                title: t('code.copied.title'),
+                description: t('code.copied.description'),
+            })
+        },
+    })
 
     return (
         <div className="relative min-w-0 max-w-full">
             {showCopyButton ? (
-                <Button
-                    type="button"
-                    variant="plain"
-                    size="iconSm"
-                    onClick={() => copy(props.code)}
-                    className="absolute right-1.5 top-1.5 h-8 w-8 rounded-md p-1 text-[var(--app-hint)] hover:bg-[var(--app-subtle-bg)] hover:text-[var(--app-fg)]"
-                    title={t('code.copy')}
-                >
-                    {copied ? <CheckIcon className="h-3.5 w-3.5" /> : <CopyIcon className="h-3.5 w-3.5" />}
-                </Button>
+                <div className="absolute right-0.5 top-0.5 z-10">
+                    <CopyActionButton
+                        label={t('code.copy')}
+                        copied={copied}
+                        onCopy={(event) => void handleCopyClick(event)}
+                    />
+                </div>
             ) : null}
 
-            <CodeSurface preClassName="p-2 pr-8 text-xs">
-                <CodeContent
-                    code={props.code}
-                    language={props.language}
-                    highlight={props.highlight}
-                />
+            <CodeSurface
+                data-copied={copied ? 'true' : undefined}
+                preClassName="p-2 [padding-right:calc(var(--ds-touch-target-compact)+0.5rem)] text-xs"
+            >
+                <CodeContent code={props.code} language={props.language} highlight={props.highlight} />
             </CodeSurface>
         </div>
     )

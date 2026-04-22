@@ -2,14 +2,22 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TextContent } from '@/components/TextContent'
 
+const loadMarkdownHarness = vi.hoisted(() => ({
+    getLoadedMarkdownRendererModule: vi.fn<() => unknown>(() => null),
+}))
+
 vi.mock('@/components/MarkdownRenderer', () => ({
-    MarkdownRenderer: (props: { content: string }) => (
-        <div data-testid="markdown-renderer">{props.content}</div>
-    ),
+    MarkdownRenderer: (props: { content: string }) => <div data-testid="markdown-renderer">{props.content}</div>,
+}))
+
+vi.mock('@/components/markdown/loadMarkdownRenderer', () => ({
+    getLoadedMarkdownRendererModule: loadMarkdownHarness.getLoadedMarkdownRendererModule,
 }))
 
 afterEach(() => {
     cleanup()
+    loadMarkdownHarness.getLoadedMarkdownRendererModule.mockReset()
+    loadMarkdownHarness.getLoadedMarkdownRendererModule.mockReturnValue(null)
 })
 
 describe('TextContent', () => {
@@ -30,6 +38,18 @@ describe('TextContent', () => {
         render(<TextContent text="plain but markdown" mode="markdown" />)
 
         expect(await screen.findByTestId('markdown-renderer')).toHaveTextContent('plain but markdown')
+    })
+
+    it('reuses the preloaded markdown renderer without suspending back to plain text', () => {
+        loadMarkdownHarness.getLoadedMarkdownRendererModule.mockReturnValue({
+            MarkdownRenderer: (props: { content: string }) => (
+                <div data-testid="markdown-renderer">{props.content}</div>
+            ),
+        })
+
+        render(<TextContent text="**preloaded**" mode="markdown" />)
+
+        expect(screen.getByTestId('markdown-renderer')).toHaveTextContent('**preloaded**')
     })
 
     it('keeps hook order stable when switching between plain and auto markdown modes', async () => {

@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react'
 import { isObject } from '@viby/protocol'
+import type { ReactNode } from 'react'
+import { extractPlanProgressExplanation, extractPlanProgressItems } from '@/lib/planProgress'
 
 export type ChecklistStatus = 'pending' | 'in_progress' | 'completed'
 
@@ -7,6 +8,20 @@ export type ChecklistItem = {
     id?: string
     text: string
     status: ChecklistStatus
+}
+
+export type ChecklistData = {
+    explanation: string | null
+    items: ChecklistItem[]
+}
+
+function toChecklistItems(
+    items: Array<{
+        step: string
+        status: 'pending' | 'in_progress' | 'completed'
+    }>
+): ChecklistItem[] {
+    return items.map((item) => ({ text: item.step, status: item.status }))
 }
 
 function normalizeChecklistStatus(value: unknown): ChecklistStatus {
@@ -35,7 +50,7 @@ function parseChecklistEntries(
         items.push({
             id: typeof idValue === 'string' ? idValue : undefined,
             text,
-            status: normalizeChecklistStatus(entry.status)
+            status: normalizeChecklistStatus(entry.status),
         })
     }
 
@@ -46,7 +61,7 @@ export function extractTodoChecklist(input: unknown, result: unknown): Checklist
     if (isObject(input) && Array.isArray(input.todos)) {
         const items = parseChecklistEntries(input.todos, {
             textKey: 'content',
-            idKey: 'id'
+            idKey: 'id',
         })
         if (items.length > 0) return items
     }
@@ -54,7 +69,7 @@ export function extractTodoChecklist(input: unknown, result: unknown): Checklist
     if (isObject(result) && Array.isArray(result.newTodos)) {
         return parseChecklistEntries(result.newTodos, {
             textKey: 'content',
-            idKey: 'id'
+            idKey: 'id',
         })
     }
 
@@ -63,18 +78,29 @@ export function extractTodoChecklist(input: unknown, result: unknown): Checklist
 
 export function extractUpdatePlanChecklist(input: unknown, result: unknown): ChecklistItem[] {
     if (isObject(input) && Object.prototype.hasOwnProperty.call(input, 'plan')) {
-        return parseChecklistEntries(input.plan, {
-            textKey: 'step'
-        })
+        return toChecklistItems(extractPlanProgressItems(input.plan))
+    }
+    if (isObject(input) && Object.prototype.hasOwnProperty.call(input, 'entries')) {
+        return toChecklistItems(extractPlanProgressItems(input.entries))
     }
 
     if (isObject(result)) {
-        return parseChecklistEntries(result.plan, {
-            textKey: 'step'
-        })
+        const fromPlan = toChecklistItems(extractPlanProgressItems(result.plan))
+        if (fromPlan.length > 0) {
+            return fromPlan
+        }
+        return toChecklistItems(extractPlanProgressItems(result.entries))
     }
 
     return []
+}
+
+export function extractUpdatePlanData(input: unknown, result: unknown): ChecklistData {
+    const explanation = extractPlanProgressExplanation(input) ?? extractPlanProgressExplanation(result)
+    return {
+        explanation,
+        items: extractUpdatePlanChecklist(input, result),
+    }
 }
 
 function checklistTone(item: ChecklistItem): string {
@@ -85,26 +111,27 @@ function checklistTone(item: ChecklistItem): string {
 
 function checklistIcon(item: ChecklistItem): ReactNode {
     if (item.status === 'completed') return '☑'
+    if (item.status === 'in_progress') return '◐'
     return '☐'
 }
 
-export function ChecklistList(props: { items: ChecklistItem[]; emptyLabel?: string | null }) {
+export function ChecklistList(props: { items: ChecklistItem[]; emptyLabel?: string | null }): React.JSX.Element | null {
     if (props.items.length === 0) {
-        return props.emptyLabel ? (
-            <div className="text-sm text-[var(--app-hint)]">{props.emptyLabel}</div>
-        ) : null
+        return props.emptyLabel ? <div className="text-sm text-[var(--app-hint)]">{props.emptyLabel}</div> : null
     }
 
     return (
-        <div className="flex flex-col gap-1">
+        <ol className="flex list-none flex-col gap-1" aria-label="Checklist">
             {props.items.map((item, idx) => {
                 const text = item.text.trim().length > 0 ? item.text.trim() : '(empty)'
                 return (
-                    <div key={item.id ?? String(idx)} className={`text-sm ${checklistTone(item)}`}>
-                        {checklistIcon(item)} {text}
-                    </div>
+                    <li key={item.id ?? String(idx)} className={`text-sm ${checklistTone(item)}`}>
+                        <span aria-hidden="true">{checklistIcon(item)}</span>{' '}
+                        <span className="sr-only">{item.status.replace('_', ' ')}: </span>
+                        {text}
+                    </li>
                 )
             })}
-        </div>
+        </ol>
     )
 }

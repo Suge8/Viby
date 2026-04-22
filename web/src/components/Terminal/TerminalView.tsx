@@ -1,5 +1,5 @@
-import { memo, useEffect, useRef } from 'react'
 import type { Terminal } from '@xterm/xterm'
+import { memo, useEffect, useRef } from 'react'
 import '@xterm/xterm/css/xterm.css'
 import { ensureBuiltinFontLoaded, getFontProvider } from '@/lib/terminalFont'
 
@@ -60,6 +60,9 @@ function TerminalViewComponent(props: TerminalViewProps) {
 
         const abortController = new AbortController()
         let cleanup: (() => void) | null = null
+        let pendingFitFrame: number | null = null
+        let pendingForceFit = false
+        let lastMeasuredViewportKey: string | null = null
 
         void loadTerminalModules().then(async ({ Terminal, FitAddon, WebLinksAddon }) => {
             if (abortController.signal.aborted) {
@@ -76,10 +79,10 @@ function TerminalViewComponent(props: TerminalViewProps) {
                     background,
                     foreground,
                     cursor: foreground,
-                    selectionBackground
+                    selectionBackground,
                 },
                 convertEol: true,
-                customGlyphs: true
+                customGlyphs: true,
             })
 
             const fitAddon = new FitAddon()
@@ -88,11 +91,37 @@ function TerminalViewComponent(props: TerminalViewProps) {
             terminal.loadAddon(webLinksAddon)
             terminal.open(container)
 
-            const observer = new ResizeObserver(() => {
-                requestAnimationFrame(() => {
-                    fitAddon.fit()
-                    onResizeRef.current?.(terminal.cols, terminal.rows)
+            const runFit = (force: boolean) => {
+                if (abortController.signal.aborted) {
+                    return
+                }
+
+                pendingFitFrame = null
+                const viewportKey = `${container.clientWidth}x${container.clientHeight}`
+                if (!force && viewportKey === lastMeasuredViewportKey) {
+                    return
+                }
+
+                lastMeasuredViewportKey = viewportKey
+                fitAddon.fit()
+                onResizeRef.current?.(terminal.cols, terminal.rows)
+            }
+
+            const scheduleFit = (force: boolean = false) => {
+                pendingForceFit = pendingForceFit || force
+                if (pendingFitFrame !== null) {
+                    return
+                }
+
+                pendingFitFrame = requestAnimationFrame(() => {
+                    const shouldForceFit = pendingForceFit
+                    pendingForceFit = false
+                    runFit(shouldForceFit)
                 })
+            }
+
+            const observer = new ResizeObserver(() => {
+                scheduleFit()
             })
             observer.observe(container)
 
@@ -112,8 +141,7 @@ function TerminalViewComponent(props: TerminalViewProps) {
                         if (terminal.rows > 0) {
                             terminal.refresh(0, terminal.rows - 1)
                         }
-                        fitAddon.fit()
-                        onResizeRef.current?.(terminal.cols, terminal.rows)
+                        scheduleFit(true)
                     })
                     return
                 }
@@ -122,8 +150,7 @@ function TerminalViewComponent(props: TerminalViewProps) {
                 if (terminal.rows > 0) {
                     terminal.refresh(0, terminal.rows - 1)
                 }
-                fitAddon.fit()
-                onResizeRef.current?.(terminal.cols, terminal.rows)
+                scheduleFit(forceRemeasure)
             }
 
             const loaded = await ensureBuiltinFontLoaded()
@@ -131,13 +158,14 @@ function TerminalViewComponent(props: TerminalViewProps) {
                 refreshFont(true)
             }
 
-            requestAnimationFrame(() => {
-                fitAddon.fit()
-                onResizeRef.current?.(terminal.cols, terminal.rows)
-            })
+            scheduleFit(true)
             onMountRef.current?.(terminal)
 
             cleanup = () => {
+                if (pendingFitFrame !== null) {
+                    cancelAnimationFrame(pendingFitFrame)
+                    pendingFitFrame = null
+                }
                 observer.disconnect()
                 fitAddon.dispose()
                 webLinksAddon.dispose()
@@ -151,12 +179,7 @@ function TerminalViewComponent(props: TerminalViewProps) {
         }
     }, [])
 
-    return (
-        <div
-            ref={containerRef}
-            className={`h-full w-full ${props.className ?? ''}`}
-        />
-    )
+    return <div ref={containerRef} className={`h-full w-full ${props.className ?? ''}`} />
 }
 
 export const TerminalView = memo(TerminalViewComponent)

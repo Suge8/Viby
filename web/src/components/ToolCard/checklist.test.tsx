@@ -1,7 +1,12 @@
-import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { describe, expect, it } from 'vitest'
 import type { ToolCallBlock } from '@/chat/types'
-import { ChecklistList, extractTodoChecklist, extractUpdatePlanChecklist } from '@/components/ToolCard/checklist'
+import {
+    ChecklistList,
+    extractTodoChecklist,
+    extractUpdatePlanChecklist,
+    extractUpdatePlanData,
+} from '@/components/ToolCard/checklist'
 import { getToolPresentation } from '@/components/ToolCard/knownTools'
 import { getToolViewComponent } from '@/components/ToolCard/views/_all'
 import { UpdatePlanView } from '@/components/ToolCard/views/UpdatePlanView'
@@ -21,9 +26,9 @@ function makeUpdatePlanBlock(input: unknown, result?: unknown): ToolCallBlock {
             startedAt: 0,
             completedAt: 0,
             description: null,
-            result
+            result,
         },
-        children: []
+        children: [],
     }
 }
 
@@ -31,35 +36,40 @@ describe('extractUpdatePlanChecklist', () => {
     it('prefers input.plan over result.plan', () => {
         const items = extractUpdatePlanChecklist(
             {
-                plan: [
-                    { step: 'Patch root cause', status: 'completed' }
-                ]
+                plan: [{ step: 'Patch root cause', status: 'completed' }],
             },
             {
-                plan: [
-                    { step: 'Result fallback', status: 'pending' }
-                ]
+                plan: [{ step: 'Result fallback', status: 'pending' }],
             }
         )
 
-        expect(items).toEqual([
-            { text: 'Patch root cause', status: 'completed', id: undefined }
-        ])
+        expect(items).toEqual([{ text: 'Patch root cause', status: 'completed', id: undefined }])
     })
 
     it('falls back to result.plan when input.plan is absent', () => {
         const items = extractUpdatePlanChecklist(
             {},
             {
-                plan: [
-                    { step: 'Re-run build validation', status: 'in_progress' }
-                ]
+                plan: [{ step: 'Re-run build validation', status: 'in_progress' }],
             }
         )
 
-        expect(items).toEqual([
-            { text: 'Re-run build validation', status: 'in_progress', id: undefined }
-        ])
+        expect(items).toEqual([{ text: 'Re-run build validation', status: 'in_progress', id: undefined }])
+    })
+
+    it('keeps the first available explanation alongside the checklist', () => {
+        const data = extractUpdatePlanData(
+            {
+                explanation: 'Surface the latest status clearly',
+                plan: [{ step: 'Render plan card', status: 'completed' }],
+            },
+            null
+        )
+
+        expect(data).toEqual({
+            explanation: 'Surface the latest status clearly',
+            items: [{ text: 'Render plan card', status: 'completed', id: undefined }],
+        })
     })
 
     it('keeps valid steps and normalizes unknown status to pending', () => {
@@ -68,32 +78,23 @@ describe('extractUpdatePlanChecklist', () => {
                 plan: [
                     { step: 'Summarize fix', status: 'unknown_status' },
                     { step: 123, status: 'completed' },
-                    { status: 'pending' }
-                ]
+                    { status: 'pending' },
+                ],
             },
             null
         )
 
-        expect(items).toEqual([
-            { text: 'Summarize fix', status: 'pending', id: undefined }
-        ])
+        expect(items).toEqual([{ text: 'Summarize fix', status: 'pending', id: undefined }])
     })
 })
 
 describe('extractTodoChecklist', () => {
     it('uses result.newTodos when input.todos is unavailable', () => {
-        const items = extractTodoChecklist(
-            null,
-            {
-                newTodos: [
-                    { id: 'todo-1', content: 'Ship it', status: 'completed' }
-                ]
-            }
-        )
+        const items = extractTodoChecklist(null, {
+            newTodos: [{ id: 'todo-1', content: 'Ship it', status: 'completed' }],
+        })
 
-        expect(items).toEqual([
-            { id: 'todo-1', text: 'Ship it', status: 'completed' }
-        ])
+        expect(items).toEqual([{ id: 'todo-1', text: 'Ship it', status: 'completed' }])
     })
 })
 
@@ -104,13 +105,13 @@ describe('update_plan tool presentation', () => {
             input: {
                 plan: [
                     { step: 'Reproduce web build failure', status: 'completed' },
-                    { step: 'Trace broken build path', status: 'completed' }
-                ]
+                    { step: 'Trace broken build path', status: 'completed' },
+                ],
             },
             result: undefined,
             childrenCount: 0,
             description: null,
-            metadata: null
+            metadata: null,
         })
 
         expect(presentation.title).toBe('Plan')
@@ -125,7 +126,7 @@ describe('update_plan tool presentation', () => {
             result: undefined,
             childrenCount: 0,
             description: null,
-            metadata: null
+            metadata: null,
         })
 
         expect(presentation.subtitle).toBeNull()
@@ -141,8 +142,8 @@ describe('UpdatePlanView', () => {
                     plan: [
                         { step: 'Reproduce web build failure', status: 'completed' },
                         { step: 'Trace broken build path', status: 'in_progress' },
-                        { step: 'Summarize fix', status: 'unknown_status' }
-                    ]
+                        { step: 'Summarize fix', status: 'unknown_status' },
+                    ],
                 })}
                 metadata={null}
             />
@@ -158,6 +159,21 @@ describe('UpdatePlanView', () => {
         expect(pending.className).toContain('text-[var(--app-hint)]')
     })
 
+    it('renders the explanation before the checklist when present', () => {
+        render(
+            <UpdatePlanView
+                block={makeUpdatePlanBlock({
+                    explanation: 'Keep the user aligned on what is happening.',
+                    plan: [{ step: 'Implement web rendering', status: 'in_progress' }],
+                })}
+                metadata={null}
+            />
+        )
+
+        expect(screen.getByText(/Keep the user aligned/)).toBeInTheDocument()
+        expect(screen.getAllByLabelText('Checklist').length).toBeGreaterThan(0)
+    })
+
     it('is registered as the compact tool view', () => {
         expect(getToolViewComponent('update_plan')).toBe(UpdatePlanView)
     })
@@ -165,13 +181,7 @@ describe('UpdatePlanView', () => {
 
 describe('ChecklistList', () => {
     it('renders blank steps as empty placeholders', () => {
-        render(
-            <ChecklistList
-                items={[
-                    { text: '   ', status: 'pending' }
-                ]}
-            />
-        )
+        render(<ChecklistList items={[{ text: '   ', status: 'pending' }]} />)
 
         expect(screen.getByText(/\(empty\)/)).toBeInTheDocument()
     })

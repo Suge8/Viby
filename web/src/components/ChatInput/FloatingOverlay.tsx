@@ -14,10 +14,7 @@ export const FloatingOverlay = memo(function FloatingOverlay(props: FloatingOver
     const { children, className, maxHeight = 240 } = props
 
     return (
-        <div
-            className={`overflow-hidden rounded-[24px] border border-[color:color-mix(in_srgb,var(--ds-border-default)_68%,transparent)] bg-[color:color-mix(in_srgb,var(--ds-panel-strong)_94%,transparent)] shadow-[0_24px_60px_rgba(9,15,35,0.16)] backdrop-blur-xl ${className ?? ''}`}
-            style={{ maxHeight }}
-        >
+        <div className={`ds-floating-overlay-shell overflow-hidden ${className ?? ''}`} style={{ maxHeight }}>
             <div className="overflow-y-auto" style={{ maxHeight }}>
                 {children}
             </div>

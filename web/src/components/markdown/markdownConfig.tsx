@@ -1,37 +1,32 @@
-import type { ComponentPropsWithoutRef } from 'react'
 import {
+    type CodeHeaderProps,
     unstable_memoizeMarkdownComponents as memoizeMarkdownComponents,
     useIsMarkdownCodeBlock,
-    type CodeHeaderProps,
 } from '@assistant-ui/react-markdown'
+import type { ComponentPropsWithoutRef } from 'react'
 import remarkGfm from 'remark-gfm'
 import { SyntaxHighlighter } from '@/components/assistant-ui/shiki-highlighter'
-import { FeatureCheckIcon as CheckIcon, FeatureCopyIcon as CopyIcon } from '@/components/featureIcons'
-import { Button } from '@/components/ui/button'
-import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
+import { CopyActionButton } from '@/components/CopyActionButton'
+import { useCopyAction } from '@/hooks/useCopyAction'
 import { joinClassNames } from '@/lib/joinClassNames'
+import { useTranslation } from '@/lib/use-translation'
 
 export const MARKDOWN_PLUGINS = [remarkGfm]
 
 function CodeHeader(props: CodeHeaderProps) {
-    const { copied, copy } = useCopyToClipboard()
+    const { t } = useTranslation()
+    const { copied, handleCopyClick } = useCopyAction({ text: props.code })
     const language = props.language && props.language !== 'unknown' ? props.language : ''
 
     return (
         <div className="aui-md-codeheader flex items-center justify-between rounded-t-md bg-[var(--app-code-bg)] px-2 py-1">
-            <div className="min-w-0 flex-1 pr-2 text-xs font-mono text-[var(--app-hint)]">
-                {language}
-            </div>
-            <Button
-                type="button"
-                variant="plain"
-                size="iconSm"
-                onClick={() => copy(props.code)}
-                className="h-8 w-8 shrink-0 rounded-md p-1 text-[var(--app-hint)] hover:bg-[var(--app-subtle-bg)] hover:text-[var(--app-fg)]"
-                title="Copy"
-            >
-                {copied ? <CheckIcon className="h-3.5 w-3.5" /> : <CopyIcon className="h-3.5 w-3.5" />}
-            </Button>
+            <div className="min-w-0 flex-1 pr-2 text-xs font-mono text-[var(--app-hint)]">{language}</div>
+            <CopyActionButton
+                label={t('code.copy')}
+                copied={copied}
+                onCopy={(event) => void handleCopyClick(event)}
+                className="shrink-0"
+            />
         </div>
     )
 }
@@ -56,19 +51,14 @@ function Code(props: ComponentPropsWithoutRef<'code'>) {
     const isCodeBlock = useIsMarkdownCodeBlock()
 
     if (isCodeBlock) {
-        return (
-            <code
-                {...props}
-                className={joinClassNames('aui-md-codeblockcode font-mono', props.className)}
-            />
-        )
+        return <code {...props} className={joinClassNames('aui-md-codeblockcode font-mono', props.className)} />
     }
 
     return (
         <code
             {...props}
             className={joinClassNames(
-                'aui-md-code break-words rounded bg-[var(--app-inline-code-bg)] px-[0.3em] py-[0.1em] font-mono text-[0.9em]',
+                'aui-md-code ds-markdown-inline-code break-words rounded bg-[var(--app-inline-code-bg)] font-mono',
                 props.className
             )}
         />
@@ -95,7 +85,10 @@ function Blockquote(props: ComponentPropsWithoutRef<'blockquote'>) {
     return (
         <blockquote
             {...props}
-            className={joinClassNames('aui-md-blockquote border-l-4 border-[var(--app-hint)] pl-3 opacity-85', props.className)}
+            className={joinClassNames(
+                'aui-md-blockquote border-l-4 border-[var(--app-hint)] pl-3 opacity-85',
+                props.className
+            )}
         />
     )
 }
@@ -151,7 +144,12 @@ function Th(props: ComponentPropsWithoutRef<'th'>) {
 }
 
 function Td(props: ComponentPropsWithoutRef<'td'>) {
-    return <td {...props} className={joinClassNames('aui-md-td border border-[var(--app-border)] px-2 py-1', props.className)} />
+    return (
+        <td
+            {...props}
+            className={joinClassNames('aui-md-td border border-[var(--app-border)] px-2 py-1', props.className)}
+        />
+    )
 }
 
 function H1(props: ComponentPropsWithoutRef<'h1'>) {

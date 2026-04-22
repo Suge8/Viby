@@ -1,7 +1,7 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getToolResultViewComponent } from '@/components/ToolCard/views/_results'
 import type { ToolCallBlock } from '@/chat/types'
+import { getToolResultViewComponent } from '@/components/ToolCard/views/_results'
 
 const textContentMock = vi.fn((props: { text: string; mode?: string }) => (
     <div data-testid="text-content" data-mode={props.mode ?? 'auto'}>
@@ -43,6 +43,16 @@ function createBlock(toolName: string, result: unknown): ToolCallBlock {
 }
 
 describe('tool result render modes', () => {
+    it('renders multiline mutation results as code blocks to avoid markdown mis-parsing', () => {
+        textContentMock.mockClear()
+        const View = getToolResultViewComponent('Write')
+
+        render(<View block={createBlock('Write', '# heading\nline 2\nline 3\nline 4')} metadata={null} />)
+
+        expect(screen.getAllByTestId('code-block').length).toBeGreaterThan(0)
+        expect(screen.queryByTestId('text-content')).toBeNull()
+    })
+
     it('keeps generic text results on the plain path', () => {
         textContentMock.mockClear()
         const View = getToolResultViewComponent('UnknownTool')
