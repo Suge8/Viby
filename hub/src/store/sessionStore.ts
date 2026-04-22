@@ -2,15 +2,16 @@ import type { Database } from 'bun:sqlite'
 import type {
     CodexCollaborationMode,
     ModelReasoningEffort,
-    PermissionMode
+    PermissionMode,
+    SessionMessageActivity,
 } from '@viby/protocol/types'
-
-import type { StoredSession, VersionedUpdateResult } from './types'
 import {
     type CreateStoredSessionInput,
     deleteSession,
+    getInactiveRunningSessionIds,
     getOrCreateSession,
     getSession,
+    getSessionMessageActivities,
     getSessions,
     setSessionAlive,
     setSessionCollaborationMode,
@@ -21,8 +22,9 @@ import {
     setSessionTodos,
     touchSessionUpdatedAt,
     updateSessionAgentState,
-    updateSessionMetadata
+    updateSessionMetadata,
 } from './sessions'
+import type { StoredSession, VersionedUpdateResult } from './types'
 
 export class SessionStore {
     private readonly db: Database
@@ -94,6 +96,14 @@ export class SessionStore {
 
     getSessions(): StoredSession[] {
         return getSessions(this.db)
+    }
+
+    getInactiveRunningSessionIds(): string[] {
+        return getInactiveRunningSessionIds(this.db)
+    }
+
+    getSessionMessageActivities(sessionIds: string[]): Record<string, SessionMessageActivity> {
+        return getSessionMessageActivities(this.db, sessionIds)
     }
 
     deleteSession(id: string): boolean {

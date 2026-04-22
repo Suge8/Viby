@@ -2,12 +2,7 @@ import type {
     CodexCollaborationMode,
     ModelReasoningEffort,
     PermissionMode,
-    SessionTeamContext,
-    TeamEventRecord,
-    TeamMemberRecord,
-    TeamProject,
-    TeamRoleDefinition,
-    TeamTaskRecord
+    SessionActivityKind,
 } from '@viby/protocol/types'
 
 export type StoredSession = {
@@ -26,6 +21,9 @@ export type StoredSession = {
     collaborationMode: CodexCollaborationMode | null
     todos: unknown | null
     todosUpdatedAt: number | null
+    latestActivityAt: number | null
+    latestActivityKind: SessionActivityKind | null
+    latestCompletedReplyAt: number | null
     active: boolean
     activeAt: number | null
     seq: number
@@ -60,13 +58,6 @@ export type StoredPushSubscription = {
     auth: string
     createdAt: number
 }
-
-export type StoredTeamProject = TeamProject
-export type StoredTeamRole = TeamRoleDefinition
-export type StoredTeamMember = TeamMemberRecord
-export type StoredTeamTask = TeamTaskRecord
-export type StoredTeamEvent = TeamEventRecord
-export type StoredSessionTeamContext = SessionTeamContext
 
 export type VersionedUpdateResult<T> =
     | { result: 'success'; version: number; value: T }

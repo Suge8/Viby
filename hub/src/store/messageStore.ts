@@ -1,14 +1,6 @@
-import type { SessionMessageActivity } from '@viby/protocol'
 import type { Database } from 'bun:sqlite'
-
+import { addMessage, addMessages, getMessages, getMessagesAfter, mergeSessionMessages } from './messages'
 import type { StoredMessage } from './types'
-import {
-    addMessage,
-    getMessages,
-    getMessagesAfter,
-    getSessionMessageActivities,
-    mergeSessionMessages
-} from './messages'
 
 export class MessageStore {
     private readonly db: Database
@@ -17,8 +9,15 @@ export class MessageStore {
         this.db = db
     }
 
-    addMessage(sessionId: string, content: unknown, localId?: string): StoredMessage {
-        return addMessage(this.db, sessionId, content, localId)
+    addMessage(sessionId: string, content: unknown, localId?: string, createdAt?: number): StoredMessage {
+        return addMessage(this.db, sessionId, content, localId, createdAt)
+    }
+
+    addMessages(
+        sessionId: string,
+        inputs: Array<{ content: unknown; localId?: string; createdAt?: number }>
+    ): StoredMessage[] {
+        return addMessages(this.db, sessionId, inputs)
     }
 
     getMessages(sessionId: string, limit: number = 200, beforeSeq?: number): StoredMessage[] {
@@ -29,11 +28,10 @@ export class MessageStore {
         return getMessagesAfter(this.db, sessionId, afterSeq, limit)
     }
 
-    getSessionMessageActivities(sessionIds: string[]): Record<string, SessionMessageActivity> {
-        return getSessionMessageActivities(this.db, sessionIds)
-    }
-
-    mergeSessionMessages(fromSessionId: string, toSessionId: string): { moved: number; oldMaxSeq: number; newMaxSeq: number } {
+    mergeSessionMessages(
+        fromSessionId: string,
+        toSessionId: string
+    ): { moved: number; oldMaxSeq: number; newMaxSeq: number } {
         return mergeSessionMessages(this.db, fromSessionId, toSessionId)
     }
 }

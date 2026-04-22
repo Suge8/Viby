@@ -2,10 +2,7 @@ import { describe, expect, it } from 'bun:test'
 
 import { Store } from './index'
 
-function createStoredSession(
-    store: Store,
-    input: Parameters<Store['sessions']['getOrCreateSession']>[0]
-) {
+function createStoredSession(store: Store, input: Parameters<Store['sessions']['getOrCreateSession']>[0]) {
     return store.sessions.getOrCreateSession(input)
 }
 
@@ -14,9 +11,9 @@ describe('MessageStore', () => {
         const store = new Store(':memory:')
         const session = createStoredSession(store, {
             tag: 'tag-1',
-            metadata: { path: '/tmp/project', flavor: 'codex' },
+            metadata: { path: '/tmp/project', driver: 'codex' },
             agentState: {},
-            sessionId: 'session-1'
+            sessionId: 'session-1',
         })
 
         const first = store.messages.addMessage(session.id, { role: 'user', content: [] }, 'local-1')
@@ -27,5 +24,11 @@ describe('MessageStore', () => {
         expect(duplicate.id).toBe(first.id)
         expect(duplicate.seq).toBe(1)
         expect(second.seq).toBe(2)
+        expect(store.sessions.getSession(session.id)).toMatchObject({
+            updatedAt: first.createdAt,
+            latestActivityAt: first.createdAt,
+            latestActivityKind: 'user',
+            latestCompletedReplyAt: null,
+        })
     })
 })
