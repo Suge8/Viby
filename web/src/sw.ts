@@ -1,12 +1,13 @@
 /// <reference lib="webworker" />
-import { precacheAndRoute } from 'workbox-precaching'
+
+import { ExpirationPlugin } from 'workbox-expiration'
+import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching'
 import { registerRoute } from 'workbox-routing'
 import { CacheFirst, NetworkFirst } from 'workbox-strategies'
-import { ExpirationPlugin } from 'workbox-expiration'
-import { cleanupOutdatedCaches } from 'workbox-precaching'
 import {
     buildAppShellPrecacheManifest,
-    isNonCriticalPrecacheAssetUrl
+    isNonCriticalPrecacheAssetUrl,
+    isOptionalRuntimeCacheAssetUrl,
 } from '@/lib/swPrecacheManifest'
 
 declare const self: ServiceWorkerGlobalScope & {
@@ -28,7 +29,7 @@ type PushPayload = {
 
 const API_SESSIONS_CACHE_NAME = 'api-sessions'
 const API_SESSION_DETAIL_CACHE_NAME = 'api-session-detail'
-const API_MACHINES_CACHE_NAME = 'api-machines'
+const API_RUNTIME_CACHE_NAME = 'api-runtime'
 const CDN_SOCKET_IO_CACHE_NAME = 'cdn-socketio'
 const OPTIONAL_ASSET_CACHE_NAME = 'optional-assets'
 const API_NETWORK_TIMEOUT_SECONDS = 10
@@ -36,8 +37,8 @@ const API_SESSIONS_MAX_ENTRIES = 10
 const API_SESSIONS_MAX_AGE_SECONDS = 60 * 5
 const API_SESSION_DETAIL_MAX_ENTRIES = 20
 const API_SESSION_DETAIL_MAX_AGE_SECONDS = 60 * 5
-const API_MACHINES_MAX_ENTRIES = 5
-const API_MACHINES_MAX_AGE_SECONDS = 60 * 10
+const API_RUNTIME_MAX_ENTRIES = 5
+const API_RUNTIME_MAX_AGE_SECONDS = 60 * 10
 const CDN_SOCKET_IO_MAX_ENTRIES = 5
 const CDN_SOCKET_IO_MAX_AGE_SECONDS = 60 * 60 * 24 * 30
 const OPTIONAL_ASSET_MAX_ENTRIES = 64
@@ -61,7 +62,7 @@ function isRuntimeCacheableOptionalAssetRequest(request: Request, url: URL): boo
         return false
     }
 
-    return isNonCriticalPrecacheAssetUrl(url.pathname)
+    return isOptionalRuntimeCacheAssetUrl(url.pathname)
 }
 
 function resolveNotificationTargetUrl(url: string): string {
@@ -75,14 +76,11 @@ function createCacheableResponsePlugin(statuses: readonly number[]): CacheableRe
         name: 'cacheable-response-plugin',
         async cacheWillUpdate({ response }) {
             return allowedStatuses.has(response.status) ? response : null
-        }
+        },
     }
 }
 
-function createExpirationPlugin(options: {
-    maxEntries: number
-    maxAgeSeconds: number
-}): ExpirationPlugin {
+function createExpirationPlugin(options: { maxEntries: number; maxAgeSeconds: number }): ExpirationPlugin {
     return new ExpirationPlugin(options)
 }
 
@@ -98,9 +96,9 @@ function createNetworkFirstRuntimeCache(options: {
             createCacheableResponsePlugin(SAME_ORIGIN_CACHEABLE_RESPONSE_STATUSES),
             createExpirationPlugin({
                 maxEntries: options.maxEntries,
-                maxAgeSeconds: options.maxAgeSeconds
-            })
-        ]
+                maxAgeSeconds: options.maxAgeSeconds,
+            }),
+        ],
     })
 }
 
@@ -116,9 +114,9 @@ function createCacheFirstRuntimeCache(options: {
             createCacheableResponsePlugin(options.statuses),
             createExpirationPlugin({
                 maxEntries: options.maxEntries,
-                maxAgeSeconds: options.maxAgeSeconds
-            })
-        ]
+                maxAgeSeconds: options.maxAgeSeconds,
+            }),
+        ],
     })
 }
 
@@ -126,7 +124,7 @@ async function focusExistingClient(url: string): Promise<boolean> {
     const targetUrl = resolveNotificationTargetUrl(url)
     const clients = await self.clients.matchAll({
         type: 'window',
-        includeUncontrolled: true
+        includeUncontrolled: true,
     })
     const targetClient = clients.find((client) => client.url === targetUrl)
 
@@ -163,7 +161,7 @@ registerRoute(
     createNetworkFirstRuntimeCache({
         cacheName: API_SESSIONS_CACHE_NAME,
         maxEntries: API_SESSIONS_MAX_ENTRIES,
-        maxAgeSeconds: API_SESSIONS_MAX_AGE_SECONDS
+        maxAgeSeconds: API_SESSIONS_MAX_AGE_SECONDS,
     })
 )
 
@@ -172,16 +170,16 @@ registerRoute(
     createNetworkFirstRuntimeCache({
         cacheName: API_SESSION_DETAIL_CACHE_NAME,
         maxEntries: API_SESSION_DETAIL_MAX_ENTRIES,
-        maxAgeSeconds: API_SESSION_DETAIL_MAX_AGE_SECONDS
+        maxAgeSeconds: API_SESSION_DETAIL_MAX_AGE_SECONDS,
     })
 )
 
 registerRoute(
-    ({ url }) => url.pathname === '/api/machines',
+    ({ url }) => url.pathname === '/api/runtime',
     createNetworkFirstRuntimeCache({
-        cacheName: API_MACHINES_CACHE_NAME,
-        maxEntries: API_MACHINES_MAX_ENTRIES,
-        maxAgeSeconds: API_MACHINES_MAX_AGE_SECONDS
+        cacheName: API_RUNTIME_CACHE_NAME,
+        maxEntries: API_RUNTIME_MAX_ENTRIES,
+        maxAgeSeconds: API_RUNTIME_MAX_AGE_SECONDS,
     })
 )
 
@@ -191,7 +189,7 @@ registerRoute(
         cacheName: CDN_SOCKET_IO_CACHE_NAME,
         maxEntries: CDN_SOCKET_IO_MAX_ENTRIES,
         maxAgeSeconds: CDN_SOCKET_IO_MAX_AGE_SECONDS,
-        statuses: CROSS_ORIGIN_CACHEABLE_RESPONSE_STATUSES
+        statuses: CROSS_ORIGIN_CACHEABLE_RESPONSE_STATUSES,
     })
 )
 
@@ -201,7 +199,7 @@ registerRoute(
         cacheName: OPTIONAL_ASSET_CACHE_NAME,
         maxEntries: OPTIONAL_ASSET_MAX_ENTRIES,
         maxAgeSeconds: OPTIONAL_ASSET_MAX_AGE_SECONDS,
-        statuses: SAME_ORIGIN_CACHEABLE_RESPONSE_STATUSES
+        statuses: SAME_ORIGIN_CACHEABLE_RESPONSE_STATUSES,
     })
 )
 
@@ -224,7 +222,7 @@ self.addEventListener('push', (event) => {
             icon,
             badge,
             data,
-            tag
+            tag,
         })
     )
 })
@@ -233,10 +231,12 @@ self.addEventListener('notificationclick', (event) => {
     event.notification.close()
     const data = event.notification.data as { url?: string } | undefined
     const url = data?.url ?? '/'
-    event.waitUntil((async () => {
-        const focused = await focusExistingClient(url)
-        if (!focused) {
-            await self.clients.openWindow(url)
-        }
-    })())
+    event.waitUntil(
+        (async () => {
+            const focused = await focusExistingClient(url)
+            if (!focused) {
+                await self.clients.openWindow(url)
+            }
+        })()
+    )
 })

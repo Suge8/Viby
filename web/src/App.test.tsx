@@ -101,16 +101,14 @@ vi.mock('@/components/LoadingState', () => ({
     LoadingState: (props: { label?: string }) => <div data-testid="loading-state">{props.label}</div>,
 }))
 
-type RealtimeConnectHandler = (details: {
-    initial: boolean
-    recovered: boolean
-    transport: string | null
-}) => void
+type RealtimeConnectHandler = (details: { initial: boolean; recovered: boolean; transport: string | null }) => void
 
 function getRealtimeConnectHandler(): RealtimeConnectHandler {
-    const realtimeOptions = useRealtimeConnectionMock.mock.calls.at(-1)?.[0] as {
-        onConnect: RealtimeConnectHandler
-    } | undefined
+    const realtimeOptions = useRealtimeConnectionMock.mock.calls.at(-1)?.[0] as
+        | {
+              onConnect: RealtimeConnectHandler
+          }
+        | undefined
 
     if (!realtimeOptions) {
         throw new Error('Expected useRealtimeConnection to be called before reading onConnect')
@@ -123,16 +121,20 @@ describe('App', () => {
     afterEach(() => {
         cleanup()
         resetPendingRuntimeUpdate()
+        window.sessionStorage.clear()
+        document.documentElement.removeAttribute('data-boot-mode')
     })
 
     beforeEach(() => {
+        window.sessionStorage.clear()
+        document.documentElement.removeAttribute('data-boot-mode')
         useMatchRouteMock.mockReturnValue(() => null)
         useLocationMock.mockReturnValue('/')
         useRouterMock.mockReturnValue({
             history: {
                 location: { pathname: '/', search: '', hash: '', state: null },
                 replace: vi.fn(),
-            }
+            },
         })
         useQueryClientMock.mockReturnValue({
             clear: vi.fn(),
@@ -185,6 +187,32 @@ describe('App', () => {
         expect(screen.queryByTestId('loading-state')).not.toBeInTheDocument()
     })
 
+    it('retains the ready app shell while auth refresh temporarily drops token and api but keeps authSource alive', async () => {
+        const authState: {
+            token: string | null
+            api: object | null
+            isLoading: boolean
+            error: string | null
+        } = {
+            token: 'session-token',
+            api: {} as object | null,
+            isLoading: false,
+            error: null as string | null,
+        }
+        useAuthMock.mockImplementation(() => authState)
+
+        const { rerender } = render(<App />)
+
+        expect(screen.getByTestId('outlet')).toBeInTheDocument()
+
+        authState.token = null
+        authState.api = null
+        rerender(<App />)
+
+        expect(screen.getByTestId('outlet')).toBeInTheDocument()
+        expect(screen.queryByTestId('login-prompt')).toBeNull()
+    })
+
     it('clears stale access token sources after auth 401 errors', async () => {
         useAuthMock.mockReturnValue({
             token: null,
@@ -196,7 +224,9 @@ describe('App', () => {
         render(<App />)
 
         expect(clearAuthMock).toHaveBeenCalledTimes(1)
-        expect(await screen.findByTestId('login-prompt')).toHaveTextContent('Auth failed: HTTP 401 Unauthorized: {"error":"Invalid access token"}')
+        expect(await screen.findByTestId('login-prompt')).toHaveTextContent(
+            'Auth failed: HTTP 401 Unauthorized: {"error":"Invalid access token"}'
+        )
     })
 
     it('suppresses the install banner while app recovery is restoring the session', async () => {
@@ -267,7 +297,7 @@ describe('App', () => {
 
         await waitFor(() => {
             expect(installPromptPropsMock).toHaveBeenLastCalledWith({
-                suppressed: false
+                suppressed: false,
             })
         })
     })
@@ -292,6 +322,52 @@ describe('App', () => {
         expect(screen.queryByTestId('loading-state')).not.toBeInTheDocument()
     })
 
+    it('marks the authenticated app shell as the single session-chat viewport owner', () => {
+        useLocationMock.mockReturnValue('/sessions/session-1')
+        useRouterMock.mockReturnValue({
+            history: {
+                location: { pathname: '/sessions/session-1', search: '', hash: '', state: null },
+                replace: vi.fn(),
+            },
+        })
+        useAuthMock.mockReturnValue({
+            token: 'session-token',
+            api: {} as object,
+            isLoading: false,
+            error: null,
+        })
+
+        const { unmount } = render(<App />)
+        const appShell = document.querySelector('.app-shell')
+
+        expect(appShell?.getAttribute('data-viby-route')).toBe('session-chat')
+
+        unmount()
+
+        expect(document.querySelector('.app-shell')).toBeNull()
+    })
+
+    it('keeps the cold boot shell unreleased on session-chat routes until the detail owner finalizes it', () => {
+        useLocationMock.mockReturnValue('/sessions/session-1')
+        useRouterMock.mockReturnValue({
+            history: {
+                location: { pathname: '/sessions/session-1', search: '', hash: '', state: null },
+                replace: vi.fn(),
+            },
+        })
+        useAuthMock.mockReturnValue({
+            token: 'session-token',
+            api: {} as object,
+            isLoading: false,
+            error: null,
+        })
+
+        render(<App />)
+
+        expect(window.sessionStorage.getItem('viby-app-shell-revealed')).toBeNull()
+        expect(screen.getByTestId('outlet')).toBeInTheDocument()
+    })
+
     it('does not block the app shell on background auth loading when a ready session already exists', async () => {
         useAuthMock.mockReturnValue({
             token: 'session-token',
@@ -304,6 +380,54 @@ describe('App', () => {
 
         expect(screen.getByTestId('outlet')).toBeInTheDocument()
         expect(screen.queryByTestId('loading-state')).not.toBeInTheDocument()
+    })
+
+    it('retains the revealed app shell during transient auth refresh gaps', async () => {
+        useAuthMock.mockReturnValue({
+            token: 'session-token',
+            api: {} as object,
+            isLoading: false,
+            error: null,
+        })
+
+        const { rerender } = render(<App />)
+
+        expect(await screen.findByTestId('outlet')).toBeInTheDocument()
+
+        useAuthMock.mockReturnValue({
+            token: null,
+            api: null,
+            isLoading: true,
+            error: null,
+        })
+        rerender(<App />)
+
+        expect(screen.getByTestId('outlet')).toBeInTheDocument()
+        expect(screen.queryByTestId('login-prompt')).not.toBeInTheDocument()
+        expect(screen.queryByTestId('loading-state')).not.toBeInTheDocument()
+    })
+
+    it('drops the retained app shell once authentication has terminally failed', async () => {
+        useAuthMock.mockReturnValue({
+            token: 'session-token',
+            api: {} as object,
+            isLoading: false,
+            error: null,
+        })
+
+        const { rerender } = render(<App />)
+
+        expect(await screen.findByTestId('outlet')).toBeInTheDocument()
+
+        useAuthMock.mockReturnValue({
+            token: null,
+            api: null,
+            isLoading: false,
+            error: 'Session expired. Please login again.',
+        })
+        rerender(<App />)
+
+        expect(await screen.findByTestId('login-prompt')).toHaveTextContent('Session expired. Please login again.')
     })
 
     it('keeps auth refresh neutral when no ready session exists yet', () => {
@@ -329,7 +453,7 @@ describe('App', () => {
             history: {
                 location: { pathname: '/sessions', search: '', hash: '', state: { from: 'test' } },
                 replace: replaceMock,
-            }
+            },
         })
         useAuthMock.mockReturnValue({
             token: 'session-token',
@@ -346,7 +470,7 @@ describe('App', () => {
             runCatchupSync: vi.fn(),
         })
         recordPendingAppRecovery('vite-preload-error', {
-            resumeHref: '/sessions/session-1'
+            resumeHref: '/sessions/session-1',
         })
 
         render(<App />)
@@ -355,7 +479,35 @@ describe('App', () => {
         expect(announceRecoveryMock).toHaveBeenCalledWith('vite-preload-error')
     })
 
-    it('marks mobile chat routes on html and body as the viewport owner fact source', async () => {
+    it('lets the recovery boot shell stay the single visible loading surface on cold recovery', () => {
+        const announceRecoveryMock = vi.fn()
+
+        document.documentElement.setAttribute('data-boot-mode', 'recovery')
+        window.sessionStorage.setItem('viby-boot-recovery-surface-owner', 'boot-shell')
+        recordPendingAppRecovery('page-discarded')
+
+        useAuthMock.mockReturnValue({
+            token: 'session-token',
+            api: {} as object,
+            isLoading: false,
+            error: null,
+        })
+        useRealtimeFeedbackMock.mockReturnValue({
+            banner: { kind: 'hidden' },
+            handleConnect: vi.fn(),
+            handleDisconnect: vi.fn(),
+            handleConnectError: vi.fn(),
+            announceRecovery: announceRecoveryMock,
+            runCatchupSync: vi.fn(),
+        })
+
+        render(<App />)
+
+        expect(announceRecoveryMock).not.toHaveBeenCalled()
+        expect(window.sessionStorage.getItem('viby-boot-recovery-surface-owner')).toBeNull()
+    })
+
+    it('marks mobile chat routes on the app shell instead of mutating document owners', async () => {
         useLocationMock.mockReturnValue('/sessions/session-1')
         useAuthMock.mockReturnValue({
             token: 'session-token',
@@ -367,8 +519,9 @@ describe('App', () => {
         render(<App />)
 
         await waitFor(() => {
-            expect(document.documentElement.dataset.vibyRoute).toBe('session-chat')
-            expect(document.body.dataset.vibyRoute).toBe('session-chat')
+            expect(document.querySelector('.app-shell')?.getAttribute('data-viby-route')).toBe('session-chat')
+            expect(document.documentElement.dataset.vibyRoute).toBeUndefined()
+            expect(document.body.dataset.vibyRoute).toBeUndefined()
         })
     })
 
@@ -402,10 +555,12 @@ describe('App', () => {
 
         await waitFor(() => {
             expect(runCatchupSyncMock).toHaveBeenCalledTimes(1)
-            expect(runRealtimeRecoveryMock).toHaveBeenCalledWith(expect.objectContaining({
-                api,
-                selectedSessionId: 'session-1'
-            }))
+            expect(runRealtimeRecoveryMock).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    api,
+                    selectedSessionId: 'session-1',
+                })
+            )
         })
     })
 
@@ -438,10 +593,12 @@ describe('App', () => {
 
         await waitFor(() => {
             expect(runCatchupSyncMock).toHaveBeenCalledTimes(1)
-            expect(runRealtimeRecoveryMock).toHaveBeenCalledWith(expect.objectContaining({
-                api,
-                selectedSessionId: null
-            }))
+            expect(runRealtimeRecoveryMock).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    api,
+                    selectedSessionId: null,
+                })
+            )
         })
     })
 

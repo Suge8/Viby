@@ -1,86 +1,82 @@
 import type {
+    AgentAvailabilityResponse,
     AgentFlavor,
     AgentLaunchConfig,
-    DecryptedMessage as ProtocolDecryptedMessage,
+    CommandCapabilitiesResponse,
+    CommandCapability,
+    CommandCapabilityActionType,
     MachineCapability,
-    MachineDirectoryResponse as ProtocolMachineDirectoryResponse,
+    MachineDirectoryEntry,
+    MachineDirectoryRoot,
+    MachineDirectoryRootKind,
     PiModelCapability,
     PiModelScope,
+    DecryptedMessage as ProtocolDecryptedMessage,
+    LocalSessionCapability as ProtocolLocalSessionCapability,
+    LocalSessionCatalog as ProtocolLocalSessionCatalog,
+    LocalSessionCatalogEntry as ProtocolLocalSessionCatalogEntry,
+    LocalSessionExportRequest as ProtocolLocalSessionExportRequest,
+    MachineDirectoryResponse as ProtocolMachineDirectoryResponse,
+    SyncEvent as ProtocolSyncEvent,
+    ResolveAgentLaunchConfigResponse,
+    ResumableSessionsPage,
+    ResumableSessionsResponse,
+    ResumableSessionsSnapshot,
+    Session,
+    SessionActivityKind,
+    SessionLifecycleState,
     SessionRecoveryPage,
     SessionStreamState,
-    SessionActivityKind,
-    Session,
-    SessionLifecycleState,
     SessionSummary,
-    SyncEvent as ProtocolSyncEvent,
-    TeamControlOwner,
-    TeamEventRecord,
-    TeamMemberIsolationMode,
-    TeamMemberRecord,
-    TeamMemberRolePrototype,
-    TeamProjectAcceptanceReadModel,
-    TeamProject,
-    TeamProjectHistoryResponse,
-    TeamProjectPreset,
-    TeamProjectSnapshot,
-    TeamProviderFlavor,
-    TeamReasoningEffort,
-    TeamRoleDefinition,
-    TeamRolePrototype,
-    TeamSessionSpawnRole,
-    TeamSessionRole,
-    TeamTaskAcceptanceRecord,
-    TeamTaskRecord,
+    SessionViewSnapshot,
     WorktreeMetadata,
-    ResolveAgentLaunchConfigResponse,
 } from '@viby/protocol/types'
 
 export type {
+    AgentAvailability,
+    AgentAvailabilityResolution,
+    AgentAvailabilityResponse,
+    AgentAvailabilityStatus,
     AgentFlavor,
     AgentLaunchConfig,
     AgentState,
     AttachmentMetadata,
     ClaudeReasoningEffort,
     CodexCollaborationMode,
+    CodexReasoningEffort,
+    CommandCapabilitiesResponse,
+    CommandCapability,
+    CommandCapabilityActionType,
+    ListAgentAvailabilityRequest,
+    LocalSessionCapability,
+    LocalSessionCatalog,
+    LocalSessionCatalogEntry,
+    LocalSessionExportRequest,
+    LocalSessionExportSnapshot,
+    LocalSessionTranscriptMessage,
     MachineCapability,
     MachineDirectoryEntry,
     MachineDirectoryResponse,
     MachineDirectoryRoot,
     MachineDirectoryRootKind,
-    CodexReasoningEffort,
     ModelReasoningEffort,
+    PermissionMode,
     PiModelCapability,
     PiModelScope,
-    PermissionMode,
-    SessionActivityKind,
+    ResolveAgentLaunchConfigResponse,
+    ResumableSessionsPage,
+    ResumableSessionsResponse,
+    ResumableSessionsSnapshot,
     Session,
+    SessionActivityKind,
     SessionLifecycleState,
-    SessionSummary,
-    SessionStreamState,
     SessionRecoveryPage,
+    SessionStreamState,
+    SessionSummary,
     SessionSummaryMetadata,
-    SessionTeamContext,
-    TeamControlOwner,
-    TeamEventRecord,
-    TeamMemberIsolationMode,
-    TeamMemberRecord,
-    TeamMemberRolePrototype,
-    TeamProjectAcceptanceReadModel,
-    TeamProject,
-    TeamProjectHistoryResponse,
-    TeamProjectPreset,
-    TeamProjectSnapshot,
-    TeamProviderFlavor,
-    TeamReasoningEffort,
-    TeamRoleDefinition,
-    TeamRolePrototype,
-    TeamSessionSpawnRole,
-    TeamSessionRole,
-    TeamTaskAcceptanceRecord,
-    TeamTaskRecord,
+    SessionViewSnapshot,
     TodoItem,
     WorktreeMetadata,
-    ResolveAgentLaunchConfigResponse
 } from '@viby/protocol/types'
 
 export type SessionMetadataSummary = {
@@ -90,7 +86,6 @@ export type SessionMetadataSummary = {
     name?: string
     os?: string
     summary?: { text: string; updatedAt: number }
-    machineId?: string
     tools?: string[]
     driver?: AgentFlavor | null
     worktree?: WorktreeMetadata
@@ -119,7 +114,7 @@ export type RunnerState = {
     } | null
 }
 
-export type Machine = {
+export type LocalRuntime = {
     id: string
     active: boolean
     metadata: {
@@ -131,6 +126,10 @@ export type Machine = {
     } | null
     runnerState?: RunnerState | null
 }
+
+export type RuntimeDirectoryEntry = MachineDirectoryEntry
+export type RuntimeDirectoryRoot = MachineDirectoryRoot
+export type RuntimeDirectoryRootKind = MachineDirectoryRootKind
 
 export type AuthResponse = {
     token: string
@@ -154,14 +153,15 @@ export type MessagesResponse = {
     }
 }
 
-export type MachinesResponse = { machines: Machine[] }
-export type MachinePathsExistsResponse = { exists: Record<string, boolean> }
-export type MachineBrowseDirectoryResponse = ProtocolMachineDirectoryResponse
+export type RuntimeResponse = { runtime: LocalRuntime | null }
+export type RuntimeAgentAvailabilityResponse = AgentAvailabilityResponse
+export type RuntimePathsExistsResponse = { exists: Record<string, boolean> }
+export type RuntimeBrowseDirectoryResponse = ProtocolMachineDirectoryResponse
 export type AgentLaunchConfigResponse = ResolveAgentLaunchConfigResponse
+export type RuntimeLocalSessionsResponse = ProtocolLocalSessionCatalog
+export type RuntimeImportLocalSessionResponse = { session: Session; imported: boolean }
 
-export type SpawnResponse =
-    | { type: 'success'; session: Session }
-    | { type: 'error'; message: string }
+export type SpawnResponse = { type: 'success'; session: Session } | { type: 'error'; message: string }
 
 export type GitCommandResponse = {
     success: boolean
@@ -231,31 +231,6 @@ export type GitStatusFiles = {
     branch: string | null
     totalStaged: number
     totalUnstaged: number
-}
-
-export type SlashCommand = {
-    name: string
-    description?: string
-    source: 'builtin' | 'user' | 'plugin' | 'project'
-    content?: string  // Expanded content for Codex user prompts
-    pluginName?: string
-}
-
-export type SlashCommandsResponse = {
-    success: boolean
-    commands?: SlashCommand[]
-    error?: string
-}
-
-export type SkillSummary = {
-    name: string
-    description?: string
-}
-
-export type SkillsResponse = {
-    success: boolean
-    skills?: SkillSummary[]
-    error?: string
 }
 
 export type PushSubscriptionKeys = {

@@ -4,7 +4,25 @@
 
 :root {
     --app-font-scale: 1;
+    --app-overlay-edge-offset: 0.75rem;
     --app-safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+    --app-safe-area-inset-right: env(safe-area-inset-right, 0px);
+    --app-interactive-request-max-width: 30rem;
+    --app-interactive-request-max-height: min(68vh, 34rem);
+    --app-interactive-request-shadow: 0 20px 48px rgba(15, 23, 42, 0.22);
+}
+
+.interactive-request-owner-shell {
+    bottom: calc(var(--app-safe-area-inset-bottom) + var(--app-overlay-edge-offset));
+}
+
+.interactive-request-panel {
+    max-width: min(100%, var(--app-interactive-request-max-width));
+    box-shadow: var(--app-interactive-request-shadow);
+}
+
+.interactive-request-panel-body {
+    max-height: var(--app-interactive-request-max-height);
 }
 
 html {
@@ -34,27 +52,11 @@ body {
     height: 100%;
 }
 
-@media (max-width: 767px) {
-    html[data-viby-route='session-chat'],
-    body[data-viby-route='session-chat'] {
-        height: 100%;
-        min-height: 100dvh;
-    }
-
-    html[data-viby-route='session-chat'] {
-        background: var(--app-bg);
-    }
-
-    body[data-viby-route='session-chat'] {
-        background: var(--app-bg);
-        overflow: hidden;
-        overscroll-behavior-y: none;
-    }
-
-    body[data-viby-route='session-chat'] #root {
-        height: 100%;
-        min-height: 0;
-    }
+#app-overlays {
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    pointer-events: none;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -64,33 +66,16 @@ body {
     }
 }
 
-/* Desktop-only: move the sidebar scrollbar to the left without flipping content. */
+/* Desktop session list: stable vertical gutter, no horizontal rail, no RTL layout hack. */
 @media (min-width: 1024px) {
-    .desktop-scrollbar-left {
-        direction: rtl;
+    .desktop-scrollbar-stable {
+        /*
+         * `overflow-y:auto` keeps the rail hidden until content actually
+         * overflows; `stable both-edges` preserves centered card geometry and
+         * prevents width jitter when switching sections under classic scrollbars.
+         */
+        scrollbar-gutter: stable both-edges;
     }
-
-    .desktop-scrollbar-left > * {
-        direction: ltr;
-    }
-}
-
-/*
- * content-visibility: auto lets the browser skip layout/paint for messages
- * scrolled out of the viewport. Big win on Windows with long conversations (#310).
- * contain-intrinsic-size gives a rough height hint so scrollbar doesn't jump.
- */
-.viby-thread-messages > * {
-    content-visibility: auto;
-    contain-intrinsic-size: auto 80px;
-}
-
-/*
- * During history jump/restore we need exact message heights, not the
- * speculative intrinsic-size placeholders from content-visibility:auto.
- */
-.viby-thread-messages[data-viby-measure-all='true'] > * {
-    content-visibility: visible;
 }
 
 .viby-thread-viewport {
@@ -134,110 +119,110 @@ html[data-theme="dark"] .shiki span {
 
 /* PWA install prompt animation */
 @keyframes slide-up {
-  from {
-    transform: translateY(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
+    from {
+        transform: translateY(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
 }
 
 .animate-slide-up {
-  animation: slide-up 0.3s ease-out;
+    animation: slide-up 0.3s ease-out;
 }
 
 @keyframes menu-pop {
-  from {
-    opacity: 0;
-    transform: scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
+    from {
+        opacity: 0;
+        transform: scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
 }
 
 .animate-menu-pop {
-  animation: menu-pop 0.18s ease-out;
+    animation: menu-pop 0.18s ease-out;
 }
 
 /* Syncing spinner animation */
 @keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 .animate-spin {
-  animation: spin 1s linear infinite;
+    animation: spin 1s linear infinite;
 }
 
 @keyframes loading-shimmer {
-  0% {
-    transform: translateX(-140%);
-    opacity: 0.22;
-  }
-  50% {
-    opacity: 0.55;
-  }
-  100% {
-    transform: translateX(220%);
-    opacity: 0.22;
-  }
+    0% {
+        transform: translateX(-140%);
+        opacity: 0.22;
+    }
+    50% {
+        opacity: 0.55;
+    }
+    100% {
+        transform: translateX(220%);
+        opacity: 0.22;
+    }
 }
 
 .ds-loading-shimmer {
-  position: relative;
-  overflow: hidden;
+    position: relative;
+    overflow: hidden;
 }
 
 .ds-loading-shimmer::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    color-mix(in srgb, var(--ds-brand) 20%, transparent) 48%,
-    transparent 100%
-  );
-  transform: translateX(-140%);
-  animation: loading-shimmer 1.4s ease-in-out infinite;
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        color-mix(in srgb, var(--ds-brand) 20%, transparent) 48%,
+        transparent 100%
+    );
+    transform: translateX(-140%);
+    animation: loading-shimmer 1.4s ease-in-out infinite;
 }
 
 /* New messages indicator bounce animation */
 @keyframes bounce-in {
-  0% {
-    transform: translateX(-50%) scale(0.8);
-    opacity: 0;
-  }
-  50% {
-    transform: translateX(-50%) scale(1.05);
-  }
-  100% {
-    transform: translateX(-50%) scale(1);
-    opacity: 1;
-  }
+    0% {
+        transform: translateX(-50%) scale(0.8);
+        opacity: 0;
+    }
+    50% {
+        transform: translateX(-50%) scale(1.05);
+    }
+    100% {
+        transform: translateX(-50%) scale(1);
+        opacity: 1;
+    }
 }
 
 .animate-bounce-in {
-  animation: bounce-in 0.3s ease-out;
+    animation: bounce-in 0.3s ease-out;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ds-loading-shimmer::after {
-    animation: none;
-    transform: none;
-  }
+    .ds-loading-shimmer::after {
+        animation: none;
+        transform: none;
+    }
 }
 
 /* ReactQueryDevtools button - move to middle-right to avoid blocking UI */
 .tsqd-open-btn-container {
-  bottom: 50% !important;
-  transform: translateY(50%);
+    bottom: 50% !important;
+    transform: translateY(50%);
 }

@@ -7,7 +7,7 @@
         <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet" />
         <meta
             name="viewport"
-            content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+            content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content"
         />
 
         <!-- PWA Meta Tags -->
@@ -73,6 +73,11 @@
             #app-boot-shell.is-hidden {
                 opacity: 0;
                 transform: scale(1.01);
+                pointer-events: none;
+            }
+
+            html[data-boot-shell-hidden="true"] #app-boot-shell {
+                opacity: 0;
                 pointer-events: none;
             }
 
@@ -200,6 +205,8 @@
         <script>
             (function () {
                 var RECOVERY_KEY = 'viby-pending-app-recovery'
+                var BOOT_RECOVERY_SURFACE_OWNER_KEY = 'viby-boot-recovery-surface-owner'
+                var APP_SHELL_REVEALED_KEY = 'viby-app-shell-revealed'
 
                 try {
                     if (document.wasDiscarded) {
@@ -209,8 +216,13 @@
                         }))
                     }
 
+                    if (sessionStorage.getItem(APP_SHELL_REVEALED_KEY) === 'done') {
+                        document.documentElement.setAttribute('data-boot-shell-hidden', 'true')
+                    }
+
                     if (document.wasDiscarded || sessionStorage.getItem(RECOVERY_KEY)) {
                         document.documentElement.setAttribute('data-boot-mode', 'recovery')
+                        sessionStorage.setItem(BOOT_RECOVERY_SURFACE_OWNER_KEY, 'boot-shell')
                     }
                 } catch (error) {
                     // Ignore storage errors.
@@ -219,14 +231,22 @@
         </script>
         <script>
             (function () {
+                var IS_VITE_DEV = '%MODE%' === 'development'
                 var RECOVERY_KEY = 'viby-runtime-asset-recovery'
                 var APP_RECOVERY_KEY = 'viby-pending-app-recovery'
+                var APP_SHELL_REVEALED_KEY = 'viby-app-shell-revealed'
+                var RUNTIME_UPDATE_READY_EVENT = 'viby:runtime-update-ready'
+                var RUNTIME_UPDATE_STORAGE_KEY = 'viby-runtime-update-ready'
                 var ERROR_PATTERNS = [
                     'failed to fetch dynamically imported module',
                     'importing a module script failed',
                     'loading module from',
                     'dynamically imported module'
                 ]
+
+                if (IS_VITE_DEV) {
+                    return
+                }
 
                 function normalize(value) {
                     return typeof value === 'string' ? value.trim().toLowerCase() : ''
@@ -275,15 +295,32 @@
                             return
                         }
                         sessionStorage.setItem(RECOVERY_KEY, reason)
+                        await clearRuntimeAssets()
+
+                        if (sessionStorage.getItem(APP_SHELL_REVEALED_KEY) === 'done') {
+                            var snapshot = {
+                                availableAt: Date.now(),
+                                mode: 'reload',
+                                recoveryReason: 'runtime-asset-reload',
+                                resumeHref: window.location.pathname + window.location.search + window.location.hash
+                            }
+                            sessionStorage.setItem(RUNTIME_UPDATE_STORAGE_KEY, JSON.stringify(snapshot))
+                            window.dispatchEvent(new CustomEvent(RUNTIME_UPDATE_READY_EVENT, {
+                                detail: snapshot
+                            }))
+                            return
+                        }
+
                         sessionStorage.setItem(APP_RECOVERY_KEY, JSON.stringify({
                             reason: 'runtime-asset-reload',
                             at: Date.now()
                         }))
-                        await clearRuntimeAssets()
                     } catch (error) {
                         console.error('Failed to clear stale runtime assets', error)
                     } finally {
-                        window.location.reload()
+                        if (sessionStorage.getItem(APP_SHELL_REVEALED_KEY) !== 'done') {
+                            window.location.reload()
+                        }
                     }
                 }
 
@@ -330,7 +367,6 @@
         <script>
             (function () {
                 var LOCALE_PREFERENCE_STORAGE_KEY = 'viby-lang-preference'
-                var LEGACY_LOCALE_STORAGE_KEY = 'viby-lang'
                 var STRINGS = {
                     en: {
                         normal: {
@@ -358,10 +394,9 @@
                 function readPreferredLocale() {
                     try {
                         var storedPreference = localStorage.getItem(LOCALE_PREFERENCE_STORAGE_KEY)
-                        var legacyLocale = localStorage.getItem(LEGACY_LOCALE_STORAGE_KEY)
                         var rawLocale = storedPreference && storedPreference !== 'system'
                             ? storedPreference
-                            : legacyLocale
+                            : null
 
                         if (rawLocale === 'zh-CN') {
                             return rawLocale

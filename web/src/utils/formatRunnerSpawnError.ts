@@ -1,15 +1,11 @@
-import type { Machine } from '../types/api'
+import type { LocalRuntime } from '../types/api'
 
-export function formatRunnerSpawnError(machine: Machine | null): string | null {
-    const lastSpawnError = machine?.runnerState?.lastSpawnError
+export function formatRunnerSpawnError(runtime: LocalRuntime | null): string | null {
+    const lastSpawnError = runtime?.runnerState?.lastSpawnError
     if (!lastSpawnError?.message) {
         return null
     }
 
-    const at = typeof lastSpawnError.at === 'number'
-        ? new Date(lastSpawnError.at).toLocaleString()
-        : null
-    return at
-        ? `${lastSpawnError.message} (${at})`
-        : lastSpawnError.message
+    const at = typeof lastSpawnError.at === 'number' ? new Date(lastSpawnError.at).toLocaleString() : null
+    return at ? `${lastSpawnError.message} (${at})` : lastSpawnError.message
 }

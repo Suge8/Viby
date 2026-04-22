@@ -1,17 +1,20 @@
 import './index.css'
 import { createRoot } from 'react-dom/client'
-import { createAppElement } from './app-bootstrap'
 import { initializeFontScale } from '@/hooks/useFontScale'
+import { reloadWindowForRecovery } from '@/lib/appRecovery'
 import { resolveInitialLocale } from '@/lib/i18n-context'
 import { preloadTranslations } from '@/lib/i18nCatalog'
-import { reloadWindowForRecovery } from '@/lib/appRecovery'
 import { installVitePreloadErrorHandler } from '@/lib/installVitePreloadErrorHandler'
+import { ensureAppOverlayRoot } from '@/lib/overlayRoot'
 import { shouldRegisterServiceWorkerForOrigin } from '@/lib/runtimeAssetPolicy'
 import {
     clearRuntimeAssetRecoveryMarker,
     disableServiceWorkerForCurrentOrigin,
-    invalidateRuntimeAssetsForBuild
+    publishRuntimeUpdateForBuild,
 } from '@/lib/runtimeAssetRecovery'
+import { preloadAppCacheRuntime } from '@/lib/storage/preloadAppCacheRuntime'
+import { createAppElement } from './app-bootstrap'
+
 const APP_ROOT_ELEMENT_ID = 'root'
 
 function renderApplication(rootElement: HTMLElement): void {
@@ -21,8 +24,10 @@ function renderApplication(rootElement: HTMLElement): void {
 
 async function bootstrap(): Promise<void> {
     initializeFontScale()
+    ensureAppOverlayRoot()
     const currentOrigin = window.location.origin
     await preloadTranslations(resolveInitialLocale())
+    await preloadAppCacheRuntime()
 
     const shouldReloadAfterServiceWorkerReset = await disableServiceWorkerForCurrentOrigin()
     if (shouldReloadAfterServiceWorkerReset) {
@@ -32,7 +37,7 @@ async function bootstrap(): Promise<void> {
 
     if (import.meta.env.PROD) {
         installVitePreloadErrorHandler()
-        await invalidateRuntimeAssetsForBuild(__APP_BUILD_ID__)
+        publishRuntimeUpdateForBuild(__APP_BUILD_ID__)
     }
 
     const rootElement = document.getElementById(APP_ROOT_ELEMENT_ID)

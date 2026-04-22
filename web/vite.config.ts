@@ -1,10 +1,10 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import { VitePWA } from 'vite-plugin-pwa'
 import { existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
+import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite'
+import { VitePWA } from 'vite-plugin-pwa'
 import { parseVibyLocalSettingsToml } from '../shared/src/localSettings'
 import { DEFAULT_VIBY_LISTEN_HOST, DEFAULT_VIBY_LISTEN_PORT } from '../shared/src/runtimeDefaults'
 
@@ -64,14 +64,38 @@ function getManualChunkName(id: string): string | undefined {
         return undefined
     }
 
+    if (
+        id.includes('/node_modules/react/') ||
+        id.includes('/node_modules/react-dom/') ||
+        id.includes('/node_modules/scheduler/')
+    ) {
+        return 'vendor-react'
+    }
+
+    if (id.includes('/node_modules/@tanstack/')) {
+        return 'vendor-tanstack'
+    }
+
+    if (id.includes('/node_modules/motion/')) {
+        return 'vendor-motion'
+    }
+
+    if (
+        id.includes('/node_modules/@radix-ui/') ||
+        id.includes('/node_modules/lucide-react/') ||
+        id.includes('/node_modules/@lucide/') ||
+        id.includes('/node_modules/clsx/') ||
+        id.includes('/node_modules/class-variance-authority/') ||
+        id.includes('/node_modules/tailwind-merge/')
+    ) {
+        return 'vendor-ui'
+    }
+
     if (id.includes('/node_modules/@xterm/')) {
         return 'vendor-terminal'
     }
 
-    if (
-        id.includes('/node_modules/shiki/')
-        || id.includes('/node_modules/hast-util-to-jsx-runtime/')
-    ) {
+    if (id.includes('/node_modules/shiki/')) {
         return 'vendor-syntax'
     }
 
@@ -89,13 +113,13 @@ export default defineConfig({
         proxy: {
             '/api': {
                 target: hubTarget,
-                changeOrigin: true
+                changeOrigin: true,
             },
             '/socket.io': {
                 target: hubTarget,
-                ws: true
-            }
-        }
+                ws: true,
+            },
+        },
     },
     plugins: [
         react(),
@@ -119,25 +143,25 @@ export default defineConfig({
                     {
                         src: 'pwa-64x64.png',
                         sizes: '64x64',
-                        type: 'image/png'
+                        type: 'image/png',
                     },
                     {
                         src: 'pwa-192x192.png',
                         sizes: '192x192',
-                        type: 'image/png'
+                        type: 'image/png',
                     },
                     {
                         src: 'pwa-512x512.png',
                         sizes: '512x512',
-                        type: 'image/png'
+                        type: 'image/png',
                     },
                     {
                         src: 'maskable-icon-512x512.png',
                         sizes: '512x512',
                         type: 'image/png',
-                        purpose: 'maskable'
-                    }
-                ]
+                        purpose: 'maskable',
+                    },
+                ],
             },
             injectManifest: {
                 // `vite-plugin-pwa@1.2.0` + Workbox 7.4 tries to inject back into the
@@ -147,10 +171,13 @@ export default defineConfig({
                 injectionPoint: undefined,
             },
             devOptions: {
-                enabled: true,
-                type: 'module'
-            }
-        })
+                // Local/dev origins must stay SW-free. A dev service worker on
+                // 5173 fights our local-runtime owner, causes registration
+                // failures, and can pin mobile sessions to stale assets/routes.
+                enabled: false,
+                type: 'module',
+            },
+        }),
     ],
     base,
     resolve: {
@@ -162,7 +189,7 @@ export default defineConfig({
             { find: '@viby/protocol/types', replacement: resolveProtocolModule('types.ts') },
             { find: '@viby/protocol/utils', replacement: resolveProtocolModule('utils.ts') },
             { find: '@viby/protocol', replacement: resolveProtocolModule('index.ts') },
-        ]
+        ],
     },
     build: {
         outDir: 'dist',
@@ -171,8 +198,8 @@ export default defineConfig({
             output: {
                 manualChunks(id) {
                     return getManualChunkName(id)
-                }
-            }
-        }
-    }
+                },
+            },
+        },
+    },
 })
