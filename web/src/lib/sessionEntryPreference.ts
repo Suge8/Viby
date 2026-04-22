@@ -1,10 +1,8 @@
-import {
-    readBrowserStorageJson,
-    writeBrowserStorageJson
-} from '@/lib/browserStorage'
+import { readBrowserStorageJson, writeBrowserStorageJson } from '@/lib/browserStorage'
+import { LOCAL_STORAGE_KEYS } from '@/lib/storage/storageRegistry'
 
 const SESSION_ENTRY_PREFERENCE_STORAGE = 'local'
-const LAST_OPENED_SESSION_STORAGE_KEY = 'viby:last-opened-session'
+const LAST_OPENED_SESSION_STORAGE_KEY = LOCAL_STORAGE_KEYS.lastOpenedSession
 
 type LastOpenedSessionRecord = Readonly<{
     sessionId: string
@@ -17,7 +15,7 @@ function parseLastOpenedSessionRecord(rawValue: string): LastOpenedSessionRecord
             return null
         }
         return {
-            sessionId: parsed.sessionId
+            sessionId: parsed.sessionId,
         }
     } catch {
         return null
@@ -25,17 +23,15 @@ function parseLastOpenedSessionRecord(rawValue: string): LastOpenedSessionRecord
 }
 
 export function readLastOpenedSessionId(): string | null {
-    return readBrowserStorageJson({
-        storage: SESSION_ENTRY_PREFERENCE_STORAGE,
-        key: LAST_OPENED_SESSION_STORAGE_KEY,
-        parse: parseLastOpenedSessionRecord
-    })?.sessionId ?? null
+    return (
+        readBrowserStorageJson({
+            storage: SESSION_ENTRY_PREFERENCE_STORAGE,
+            key: LAST_OPENED_SESSION_STORAGE_KEY,
+            parse: parseLastOpenedSessionRecord,
+        })?.sessionId ?? null
+    )
 }
 
 export function writeLastOpenedSessionId(sessionId: string): void {
-    writeBrowserStorageJson(
-        SESSION_ENTRY_PREFERENCE_STORAGE,
-        LAST_OPENED_SESSION_STORAGE_KEY,
-        { sessionId }
-    )
+    writeBrowserStorageJson(SESSION_ENTRY_PREFERENCE_STORAGE, LAST_OPENED_SESSION_STORAGE_KEY, { sessionId })
 }

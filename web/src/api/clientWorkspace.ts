@@ -8,10 +8,7 @@ import type {
 } from '@/types/api'
 import type { ApiClientRequest } from './client'
 
-export async function getGitStatus(
-    request: ApiClientRequest,
-    sessionId: string
-): Promise<GitCommandResponse> {
+export async function getGitStatus(request: ApiClientRequest, sessionId: string): Promise<GitCommandResponse> {
     return await request<GitCommandResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/git-status`)
 }
 
@@ -22,7 +19,9 @@ export async function getGitDiffNumstat(
 ): Promise<GitCommandResponse> {
     const params = new URLSearchParams()
     params.set('staged', staged ? 'true' : 'false')
-    return await request<GitCommandResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/git-diff-numstat?${params.toString()}`)
+    return await request<GitCommandResponse>(
+        `/api/sessions/${encodeURIComponent(sessionId)}/git-diff-numstat?${params.toString()}`
+    )
 }
 
 export async function getGitDiffFile(
@@ -36,7 +35,9 @@ export async function getGitDiffFile(
     if (staged !== undefined) {
         params.set('staged', staged ? 'true' : 'false')
     }
-    return await request<GitCommandResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/git-diff-file?${params.toString()}`)
+    return await request<GitCommandResponse>(
+        `/api/sessions/${encodeURIComponent(sessionId)}/git-diff-file?${params.toString()}`
+    )
 }
 
 export async function searchSessionFiles(
@@ -53,7 +54,9 @@ export async function searchSessionFiles(
         params.set('limit', `${limit}`)
     }
     const qs = params.toString()
-    return await request<FileSearchResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/files${qs ? `?${qs}` : ''}`)
+    return await request<FileSearchResponse>(
+        `/api/sessions/${encodeURIComponent(sessionId)}/files${qs ? `?${qs}` : ''}`
+    )
 }
 
 export async function readSessionFile(
@@ -85,13 +88,16 @@ export async function listSessionDirectory(
 export async function uploadFile(
     request: ApiClientRequest,
     sessionId: string,
-    filename: string,
-    content: string,
+    file: File,
     mimeType: string
 ): Promise<UploadFileResponse> {
+    const formData = new FormData()
+    formData.append('file', file, file.name)
+    formData.append('mimeType', mimeType)
+
     return await request<UploadFileResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/upload`, {
         method: 'POST',
-        body: JSON.stringify({ filename, content, mimeType })
+        body: formData,
     })
 }
 
@@ -102,6 +108,6 @@ export async function deleteUploadFile(
 ): Promise<DeleteUploadResponse> {
     return await request<DeleteUploadResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/upload/delete`, {
         method: 'POST',
-        body: JSON.stringify({ path })
+        body: JSON.stringify({ path }),
     })
 }

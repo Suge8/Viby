@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useLayoutEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useState } from 'react'
+import { readBrowserStorageItem, removeBrowserStorageItem, writeBrowserStorageItem } from '@/lib/browserStorage'
+import { type BrowserLocalStorageKey, LOCAL_STORAGE_KEYS } from '@/lib/storage/storageRegistry'
 
 export type FontScale = 0.8 | 0.9 | 1 | 1.1 | 1.2
 
@@ -12,8 +14,8 @@ export function getFontScaleOptions(): ReadonlyArray<{ value: FontScale; label: 
     ]
 }
 
-function getFontScaleStorageKey(): string {
-    return 'viby-font-scale'
+function getFontScaleStorageKey(): typeof LOCAL_STORAGE_KEYS.fontScale {
+    return LOCAL_STORAGE_KEYS.fontScale
 }
 
 function isBrowser(): boolean {
@@ -22,37 +24,25 @@ function isBrowser(): boolean {
 
 const useIsomorphicLayoutEffect = isBrowser() ? useLayoutEffect : useEffect
 
-function safeGetItem(key: string): string | null {
+function safeGetItem(key: BrowserLocalStorageKey): string | null {
     if (!isBrowser()) {
         return null
     }
-    try {
-        return localStorage.getItem(key)
-    } catch {
-        return null
-    }
+    return readBrowserStorageItem('local', key)
 }
 
-function safeSetItem(key: string, value: string): void {
+function safeSetItem(key: BrowserLocalStorageKey, value: string): void {
     if (!isBrowser()) {
         return
     }
-    try {
-        localStorage.setItem(key, value)
-    } catch {
-        // Ignore storage errors
-    }
+    writeBrowserStorageItem('local', key, value)
 }
 
-function safeRemoveItem(key: string): void {
+function safeRemoveItem(key: BrowserLocalStorageKey): void {
     if (!isBrowser()) {
         return
     }
-    try {
-        localStorage.removeItem(key)
-    } catch {
-        // Ignore storage errors
-    }
+    removeBrowserStorageItem('local', key)
 }
 
 function parseFontScale(raw: string | null): FontScale {
@@ -102,7 +92,7 @@ export function useFontScale(): { fontScale: FontScale; setFontScale: (scale: Fo
         return () => window.removeEventListener('storage', onStorage)
     }, [])
 
-    const setFontScale = useCallback((scale: FontScale) => {
+    function setFontScale(scale: FontScale): void {
         setFontScaleState(scale)
 
         if (scale === 1) {
@@ -110,7 +100,7 @@ export function useFontScale(): { fontScale: FontScale; setFontScale: (scale: Fo
         } else {
             safeSetItem(getFontScaleStorageKey(), String(scale))
         }
-    }, [])
+    }
 
     return { fontScale, setFontScale }
 }

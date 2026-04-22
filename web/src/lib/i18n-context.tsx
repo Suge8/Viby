@@ -1,4 +1,6 @@
-import { createContext, useCallback, useEffect, useState, type ReactNode } from 'react'
+import { createContext, type ReactNode, useCallback, useEffect, useState } from 'react'
+import { readBrowserStorageItem, writeBrowserStorageItem } from '@/lib/browserStorage'
+import { LOCAL_STORAGE_KEYS } from '@/lib/storage/storageRegistry'
 import { getCachedTranslations, preloadTranslations } from './i18nCatalog'
 
 export type Locale = 'en' | 'zh-CN'
@@ -15,8 +17,7 @@ export type I18nContextValue = {
 
 export const I18nContext = createContext<I18nContextValue | null>(null)
 
-const LEGACY_LOCALE_STORAGE_KEY = 'viby-lang'
-const LOCALE_PREFERENCE_STORAGE_KEY = 'viby-lang-preference'
+const LOCALE_PREFERENCE_STORAGE_KEY = LOCAL_STORAGE_KEYS.localePreference
 const EMPTY_TRANSLATIONS: Translations = {}
 
 function isLocale(value: string | null): value is Locale {
@@ -42,17 +43,8 @@ export function resolveLocale(localePreference: LocalePreference): Locale {
 }
 
 export function readStoredLocalePreference(): LocalePreference {
-    if (typeof localStorage === 'undefined') {
-        return 'system'
-    }
-
-    const storedPreference = localStorage.getItem(LOCALE_PREFERENCE_STORAGE_KEY)
-    if (isLocalePreference(storedPreference)) {
-        return storedPreference
-    }
-
-    const legacyLocale = localStorage.getItem(LEGACY_LOCALE_STORAGE_KEY)
-    return isLocale(legacyLocale) ? legacyLocale : 'system'
+    const storedPreference = readBrowserStorageItem('local', LOCALE_PREFERENCE_STORAGE_KEY)
+    return isLocalePreference(storedPreference) ? storedPreference : 'system'
 }
 
 export function resolveInitialLocale(): Locale {
@@ -60,17 +52,7 @@ export function resolveInitialLocale(): Locale {
 }
 
 function persistLocalePreference(localePreference: LocalePreference): void {
-    if (typeof localStorage === 'undefined') {
-        return
-    }
-
-    localStorage.setItem(LOCALE_PREFERENCE_STORAGE_KEY, localePreference)
-    if (localePreference === 'system') {
-        localStorage.removeItem(LEGACY_LOCALE_STORAGE_KEY)
-        return
-    }
-
-    localStorage.setItem(LEGACY_LOCALE_STORAGE_KEY, localePreference)
+    writeBrowserStorageItem('local', LOCALE_PREFERENCE_STORAGE_KEY, localePreference)
 }
 
 function interpolate(str: string, params?: Record<string, string | number>): string {
@@ -95,10 +77,13 @@ export function I18nProvider({ children }: { children: ReactNode }) {
         setLocalePreference(nextLocalePreference)
     }, [])
 
-    const t = useCallback((key: string, params?: Record<string, string | number>): string => {
-        const value = translations[key]
-        return interpolate(value ?? key, params)
-    }, [translations])
+    const t = useCallback(
+        (key: string, params?: Record<string, string | number>): string => {
+            const value = translations[key]
+            return interpolate(value ?? key, params)
+        },
+        [translations]
+    )
 
     useEffect(() => {
         document.documentElement.lang = locale
@@ -138,9 +123,5 @@ export function I18nProvider({ children }: { children: ReactNode }) {
         }
     }, [localePreference])
 
-    return (
-        <I18nContext.Provider value={{ t, locale, localePreference, setLocale }}>
-            {children}
-        </I18nContext.Provider>
-    )
+    return <I18nContext.Provider value={{ t, locale, localePreference, setLocale }}>{children}</I18nContext.Provider>
 }

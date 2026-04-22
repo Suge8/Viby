@@ -1,41 +1,20 @@
 import type { QueryClient } from '@tanstack/react-query'
-import type {
-    Machine,
-    MachinesResponse,
-    Session,
-    SessionResponse,
-    SessionsResponse,
-    SyncEvent
-} from '@/types/api'
-import {
-    applySessionStream,
-    clearSessionStream,
-    ingestIncomingMessages
-} from '@/lib/message-window-store'
+import { resolveCommandCapabilityScopeKey } from '@viby/protocol'
+import { applySessionStream, clearSessionStream, ingestIncomingMessages } from '@/lib/message-window-store'
+import { queryKeys } from '@/lib/query-keys'
 import {
     getSessionPatch,
     hasUnknownSessionPatchKeys,
     isArchivedKeepalivePatch,
-    isInactiveMachinePatch,
-    isMachineRecord,
-    isMachineRefreshOnlyPayload,
     isSessionRecord,
     type SessionPatch,
 } from '@/lib/realtimeEventGuards'
-import { queryKeys } from '@/lib/query-keys'
-import {
-    patchSessionSummaryCache,
-    patchSessionSummaryFromMessageCache,
-} from '@/lib/realtimeSessionSummaryCache'
+import { createRealtimeInvalidationBatch } from '@/lib/realtimeInvalidationBatch'
+import { patchSessionSummaryCache, patchSessionSummaryFromMessageCache } from '@/lib/realtimeSessionSummaryCache'
+import { reportWebRuntimeError } from '@/lib/runtimeDiagnostics'
 import { removeSessionClientState, writeSessionToQueryCache } from '@/lib/sessionQueryCache'
+import type { Session, SessionResponse, SessionsResponse, SyncEvent } from '@/types/api'
 export type ToastEvent = Extract<SyncEvent, { type: 'toast' }>
-const INVALIDATION_BATCH_MS = 16
-type PendingInvalidations = {
-    sessions: boolean
-    machines: boolean
-    sessionIds: Set<string>
-    teamProjectIds: Set<string>
-}
 type RealtimeEventControllerOptions = {
     queryClient: QueryClient
     onEvent: (event: SyncEvent) => void
@@ -45,83 +24,12 @@ export function createRealtimeEventController(options: RealtimeEventControllerOp
     handleEvent: (event: SyncEvent) => void
     dispose: () => void
 } {
-    let invalidationTimer: ReturnType<typeof setTimeout> | null = null
-    const pendingInvalidations: PendingInvalidations = {
-        sessions: false,
-        machines: false,
-        sessionIds: new Set<string>(),
-        teamProjectIds: new Set<string>()
-    }
-
-    function flushInvalidations(): void {
-        if (
-            !pendingInvalidations.sessions
-            && !pendingInvalidations.machines
-            && pendingInvalidations.sessionIds.size === 0
-            && pendingInvalidations.teamProjectIds.size === 0
-        ) {
-            return
-        }
-
-        const shouldInvalidateSessions = pendingInvalidations.sessions
-        const shouldInvalidateMachines = pendingInvalidations.machines
-        const sessionIds = Array.from(pendingInvalidations.sessionIds)
-        const teamProjectIds = Array.from(pendingInvalidations.teamProjectIds)
-
-        pendingInvalidations.sessions = false
-        pendingInvalidations.machines = false
-        pendingInvalidations.sessionIds.clear()
-        pendingInvalidations.teamProjectIds.clear()
-
-        const tasks: Array<Promise<unknown>> = []
-        if (shouldInvalidateSessions) {
-            tasks.push(options.queryClient.invalidateQueries({ queryKey: queryKeys.sessions }))
-        }
-        for (const sessionId of sessionIds) {
-            tasks.push(options.queryClient.invalidateQueries({ queryKey: queryKeys.session(sessionId) }))
-        }
-        for (const projectId of teamProjectIds) {
-            tasks.push(options.queryClient.invalidateQueries({ queryKey: queryKeys.teamProject(projectId) }))
-            tasks.push(options.queryClient.invalidateQueries({ queryKey: queryKeys.teamProjectHistory(projectId) }))
-        }
-        if (shouldInvalidateMachines) {
-            tasks.push(options.queryClient.invalidateQueries({ queryKey: queryKeys.machines }))
-        }
-
-        if (tasks.length > 0) {
-            void Promise.all(tasks).catch(() => {})
-        }
-    }
-
-    function scheduleInvalidationFlush(): void {
-        if (invalidationTimer) {
-            return
-        }
-        invalidationTimer = setTimeout(() => {
-            invalidationTimer = null
-            flushInvalidations()
-        }, INVALIDATION_BATCH_MS)
-    }
-
-    function queueSessionListInvalidation(): void {
-        pendingInvalidations.sessions = true
-        scheduleInvalidationFlush()
-    }
-
-    function queueSessionDetailInvalidation(sessionId: string): void {
-        pendingInvalidations.sessionIds.add(sessionId)
-        scheduleInvalidationFlush()
-    }
-
-    function queueMachinesInvalidation(): void {
-        pendingInvalidations.machines = true
-        scheduleInvalidationFlush()
-    }
-
-    function queueTeamProjectInvalidation(projectId: string): void {
-        pendingInvalidations.teamProjectIds.add(projectId)
-        scheduleInvalidationFlush()
-    }
+    const invalidationBatch = createRealtimeInvalidationBatch({
+        queryClient: options.queryClient,
+        onError: (error) => {
+            reportWebRuntimeError('Failed to flush realtime query invalidations.', error)
+        },
+    })
 
     function patchSessionSummary(sessionId: string, patch: SessionPatch): boolean {
         let patched = false
@@ -152,6 +60,7 @@ export function createRealtimeEventController(options: RealtimeEventControllerOp
 
     function patchSessionDetail(sessionId: string, patch: SessionPatch): boolean {
         let patched = false
+        let commandCapabilityScopeChanged = false
 
         options.queryClient.setQueryData<SessionResponse | undefined>(queryKeys.session(sessionId), (previous) => {
             if (!previous?.session) {
@@ -163,6 +72,17 @@ export function createRealtimeEventController(options: RealtimeEventControllerOp
             }
 
             patched = true
+            const nextMetadata = hasLifecycleMetadataHint(patch)
+                ? {
+                      ...(previous.session.metadata ?? { path: '', host: '' }),
+                      lifecycleState: patch.lifecycleStateHint ?? previous.session.metadata?.lifecycleState,
+                      lifecycleStateSince:
+                          patch.lifecycleStateSinceHint ?? previous.session.metadata?.lifecycleStateSince,
+                  }
+                : previous.session.metadata
+            commandCapabilityScopeChanged =
+                resolveCommandCapabilityScopeKey(previous.session.metadata) !==
+                resolveCommandCapabilityScopeKey(nextMetadata)
             return {
                 ...previous,
                 session: {
@@ -172,66 +92,23 @@ export function createRealtimeEventController(options: RealtimeEventControllerOp
                     activeAt: patch.activeAt ?? previous.session.activeAt,
                     updatedAt: patch.updatedAt ?? previous.session.updatedAt,
                     model: Object.prototype.hasOwnProperty.call(patch, 'model')
-                        ? patch.model ?? null
+                        ? (patch.model ?? null)
                         : previous.session.model,
                     modelReasoningEffort: Object.prototype.hasOwnProperty.call(patch, 'modelReasoningEffort')
-                        ? patch.modelReasoningEffort ?? null
+                        ? (patch.modelReasoningEffort ?? null)
                         : previous.session.modelReasoningEffort,
                     permissionMode: patch.permissionMode ?? previous.session.permissionMode,
                     collaborationMode: patch.collaborationMode ?? previous.session.collaborationMode,
-                    metadata: hasLifecycleMetadataHint(patch)
-                        ? {
-                            ...(previous.session.metadata ?? { path: '', host: '' }),
-                            lifecycleState: patch.lifecycleStateHint ?? previous.session.metadata?.lifecycleState,
-                            lifecycleStateSince: patch.lifecycleStateSinceHint ?? previous.session.metadata?.lifecycleStateSince
-                        }
-                        : previous.session.metadata
-                }
+                    metadata: nextMetadata,
+                },
             }
         })
+
+        if (commandCapabilityScopeChanged) {
+            invalidationBatch.queueCommandCapabilities(sessionId)
+        }
 
         return patched
-    }
-
-    function upsertMachine(machine: Machine): void {
-        options.queryClient.setQueryData<MachinesResponse | undefined>(queryKeys.machines, (previous) => {
-            if (!previous) {
-                return previous
-            }
-
-            const nextMachines = previous.machines.slice()
-            const index = nextMachines.findIndex((item) => item.id === machine.id)
-            if (!machine.active) {
-                if (index >= 0) {
-                    nextMachines.splice(index, 1)
-                    return { ...previous, machines: nextMachines }
-                }
-                return previous
-            }
-
-            if (index >= 0) {
-                nextMachines[index] = machine
-            } else {
-                nextMachines.push(machine)
-            }
-
-            return { ...previous, machines: nextMachines }
-        })
-    }
-
-    function removeMachine(machineId: string): void {
-        options.queryClient.setQueryData<MachinesResponse | undefined>(queryKeys.machines, (previous) => {
-            if (!previous) {
-                return previous
-            }
-
-            const nextMachines = previous.machines.filter((item) => item.id !== machineId)
-            if (nextMachines.length === previous.machines.length) {
-                return previous
-            }
-
-            return { ...previous, machines: nextMachines }
-        })
     }
 
     function handleEvent(event: SyncEvent): void {
@@ -243,7 +120,7 @@ export function createRealtimeEventController(options: RealtimeEventControllerOp
         if (event.type === 'message-received') {
             ingestIncomingMessages(event.sessionId, [event.message])
             if (!patchSessionSummaryFromMessage(event.sessionId, event.message)) {
-                queueSessionListInvalidation()
+                invalidationBatch.queueSessions()
             }
         }
 
@@ -252,7 +129,11 @@ export function createRealtimeEventController(options: RealtimeEventControllerOp
         }
 
         if (event.type === 'session-stream-cleared') {
-            clearSessionStream(event.sessionId, event.streamId)
+            clearSessionStream(event.sessionId, event.assistantTurnId)
+        }
+
+        if (event.type === 'command-capabilities-invalidated') {
+            invalidationBatch.queueCommandCapabilities(event.sessionId)
         }
 
         if (event.type === 'session-added' || event.type === 'session-updated' || event.type === 'session-removed') {
@@ -267,53 +148,37 @@ export function createRealtimeEventController(options: RealtimeEventControllerOp
                     const summaryPatched = patchSessionSummary(event.sessionId, patch)
 
                     if (!detailPatched) {
-                        queueSessionDetailInvalidation(event.sessionId)
+                        invalidationBatch.queueSession(event.sessionId)
                     }
                     if (!summaryPatched) {
-                        queueSessionListInvalidation()
+                        invalidationBatch.queueSessions()
                     }
                     if (hasUnknownSessionPatchKeys(event.data)) {
-                        queueSessionDetailInvalidation(event.sessionId)
-                        queueSessionListInvalidation()
+                        invalidationBatch.queueSession(event.sessionId)
+                        invalidationBatch.queueSessions()
+                        invalidationBatch.queueCommandCapabilities(event.sessionId)
                     }
                 } else {
-                    queueSessionDetailInvalidation(event.sessionId)
-                    queueSessionListInvalidation()
+                    invalidationBatch.queueSession(event.sessionId)
+                    invalidationBatch.queueSessions()
                 }
             }
         }
 
         if (event.type === 'machine-updated') {
-            if (isMachineRecord(event.data)) {
-                upsertMachine(event.data)
-            } else if (event.data === null || isInactiveMachinePatch(event.data)) {
-                removeMachine(event.machineId)
-            } else if (isMachineRefreshOnlyPayload(event.data)) {
-                queueMachinesInvalidation()
-            }
-        }
-
-        if (event.type === 'team-project-updated') {
-            queueTeamProjectInvalidation(event.projectId)
+            invalidationBatch.queueRuntime()
         }
 
         options.onEvent(event)
     }
 
     function dispose(): void {
-        if (invalidationTimer) {
-            clearTimeout(invalidationTimer)
-            invalidationTimer = null
-        }
-        pendingInvalidations.sessions = false
-        pendingInvalidations.machines = false
-        pendingInvalidations.sessionIds.clear()
-        pendingInvalidations.teamProjectIds.clear()
+        invalidationBatch.dispose()
     }
 
     return {
         handleEvent,
-        dispose
+        dispose,
     }
 }
 

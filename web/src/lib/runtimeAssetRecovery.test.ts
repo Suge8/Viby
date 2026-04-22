@@ -1,20 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { consumePendingAppRecovery } from '@/lib/appRecovery'
-import {
-    isLocalNetworkOrigin,
-    isLoopbackOrigin,
-    shouldRegisterServiceWorkerForOrigin
-} from '@/lib/runtimeAssetPolicy'
-import {
-    isLikelyRuntimeAssetFailure,
-    recordRuntimeAssetFailureRecovery
-} from '@/lib/runtimeAssetFailure'
+import { isLikelyRuntimeAssetFailure, recordRuntimeAssetFailureRecovery } from '@/lib/runtimeAssetFailure'
+import { isLocalNetworkOrigin, isLoopbackOrigin, shouldRegisterServiceWorkerForOrigin } from '@/lib/runtimeAssetPolicy'
 import {
     clearRuntimeAssetRecoveryMarker,
     disableServiceWorkerForCurrentOrigin,
-    invalidateRuntimeAssetsForBuild,
+    publishRuntimeUpdateForBuild,
     recoverRuntimeAssets,
 } from '@/lib/runtimeAssetRecovery'
+import {
+    applyPendingRuntimeUpdate,
+    readPendingRuntimeUpdate,
+    resetPendingRuntimeUpdate,
+} from '@/lib/runtimeUpdateChannel'
 
 describe('runtimeAssetRecovery', () => {
     afterEach(() => {
@@ -22,63 +20,78 @@ describe('runtimeAssetRecovery', () => {
         window.localStorage.clear()
         window.sessionStorage.clear()
         clearRuntimeAssetRecoveryMarker()
+        resetPendingRuntimeUpdate()
     })
 
     it('detects runtime asset failures from asset filenames', () => {
-        expect(isLikelyRuntimeAssetFailure({
-            filename: 'https://example.com/assets/vendor-assistant-CTzFxex6.js',
-            message: 'Loading module from https://example.com/assets/vendor-assistant-CTzFxex6.js failed.'
-        })).toBe(true)
+        expect(
+            isLikelyRuntimeAssetFailure({
+                filename: 'https://example.com/assets/vendor-assistant-CTzFxex6.js',
+                message: 'Loading module from https://example.com/assets/vendor-assistant-CTzFxex6.js failed.',
+            })
+        ).toBe(true)
     })
 
     it('detects runtime asset failures from known module loading messages', () => {
-        expect(isLikelyRuntimeAssetFailure({
-            message: 'Failed to fetch dynamically imported module'
-        })).toBe(true)
+        expect(
+            isLikelyRuntimeAssetFailure({
+                message: 'Failed to fetch dynamically imported module',
+            })
+        ).toBe(true)
     })
 
     it('does not treat generic initialization errors as runtime asset failures without asset evidence', () => {
-        expect(isLikelyRuntimeAssetFailure({
-            message: "Cannot access 'SessionList' before initialization"
-        })).toBe(false)
+        expect(
+            isLikelyRuntimeAssetFailure({
+                message: "Cannot access 'SessionList' before initialization",
+            })
+        ).toBe(false)
     })
 
     it('does not treat generic initialization errors inside asset stacks as runtime asset failures', () => {
-        expect(isLikelyRuntimeAssetFailure({
-            message: "Cannot access 'tt' before initialization",
-            stack: "ReferenceError: Cannot access 'tt' before initialization\n    at https://example.com/assets/tanstack.js:1:1"
-        })).toBe(false)
+        expect(
+            isLikelyRuntimeAssetFailure({
+                message: "Cannot access 'tt' before initialization",
+                stack: "ReferenceError: Cannot access 'tt' before initialization\n    at https://example.com/assets/tanstack.js:1:1",
+            })
+        ).toBe(false)
     })
 
     it('records pending recovery only for confirmed asset failures', () => {
-        expect(recordRuntimeAssetFailureRecovery({
-            reason: 'runtime-asset-reload',
-            failure: {
-                message: "Cannot access 'SessionList' before initialization"
-            },
-            resumeHref: '/sessions/session-1'
-        })).toBe(false)
+        expect(
+            recordRuntimeAssetFailureRecovery({
+                reason: 'runtime-asset-reload',
+                failure: {
+                    message: "Cannot access 'SessionList' before initialization",
+                },
+                resumeHref: '/sessions/session-1',
+            })
+        ).toBe(false)
         expect(consumePendingAppRecovery()).toBeNull()
 
-        expect(recordRuntimeAssetFailureRecovery({
-            reason: 'runtime-asset-reload',
-            failure: {
-                stack: 'TypeError at https://example.com/assets/chat.js:1:1'
-            },
-            resumeHref: '/sessions/session-1'
-        })).toBe(false)
+        expect(
+            recordRuntimeAssetFailureRecovery({
+                reason: 'runtime-asset-reload',
+                failure: {
+                    stack: 'TypeError at https://example.com/assets/chat.js:1:1',
+                },
+                resumeHref: '/sessions/session-1',
+            })
+        ).toBe(false)
         expect(consumePendingAppRecovery()).toBeNull()
 
-        expect(recordRuntimeAssetFailureRecovery({
-            reason: 'runtime-asset-reload',
-            failure: {
-                message: 'Failed to fetch dynamically imported module: https://example.com/assets/chat.js'
-            },
-            resumeHref: '/sessions/session-1'
-        })).toBe(true)
+        expect(
+            recordRuntimeAssetFailureRecovery({
+                reason: 'runtime-asset-reload',
+                failure: {
+                    message: 'Failed to fetch dynamically imported module: https://example.com/assets/chat.js',
+                },
+                resumeHref: '/sessions/session-1',
+            })
+        ).toBe(true)
         expect(consumePendingAppRecovery()).toMatchObject({
             reason: 'runtime-asset-reload',
-            resumeHref: '/sessions/session-1'
+            resumeHref: '/sessions/session-1',
         })
     })
 
@@ -108,11 +121,11 @@ describe('runtimeAssetRecovery', () => {
 
         vi.stubGlobal('navigator', {
             ...navigator,
-            serviceWorker: { getRegistrations }
+            serviceWorker: { getRegistrations },
         })
         vi.stubGlobal('caches', {
             keys,
-            delete: deleteCache
+            delete: deleteCache,
         })
 
         await expect(recoverRuntimeAssets('runtime:error')).resolves.toBe(true)
@@ -125,37 +138,34 @@ describe('runtimeAssetRecovery', () => {
     it('avoids repeating the same recovery attempt in one tab session', async () => {
         vi.stubGlobal('navigator', {
             ...navigator,
-            serviceWorker: { getRegistrations: vi.fn().mockResolvedValue([]) }
+            serviceWorker: { getRegistrations: vi.fn().mockResolvedValue([]) },
         })
         vi.stubGlobal('caches', {
             keys: vi.fn().mockResolvedValue([]),
-            delete: vi.fn()
+            delete: vi.fn(),
         })
 
         await expect(recoverRuntimeAssets('runtime:error')).resolves.toBe(true)
         await expect(recoverRuntimeAssets('runtime:error')).resolves.toBe(false)
     })
 
-    it('clears runtime assets once when app build id changes', async () => {
-        const unregister = vi.fn().mockResolvedValue(true)
-        const getRegistrations = vi.fn().mockResolvedValue([{ unregister }])
-        const deleteCache = vi.fn().mockResolvedValue(true)
-        const keys = vi.fn().mockResolvedValue(['precache-v2'])
-
-        vi.stubGlobal('navigator', {
-            ...navigator,
-            serviceWorker: { getRegistrations }
+    it('publishes a one-shot runtime update when app build id changes', async () => {
+        const reload = vi.fn()
+        const location = window.location
+        Object.defineProperty(window, 'location', {
+            configurable: true,
+            value: {
+                ...location,
+                reload,
+            },
         })
-        vi.stubGlobal('caches', {
-            keys,
-            delete: deleteCache
-        })
-
         window.localStorage.setItem('viby-app-build-id', '0.1.0-older-build')
 
-        await expect(invalidateRuntimeAssetsForBuild('0.1.0-newer-build')).resolves.toBe(true)
-        expect(unregister).toHaveBeenCalledTimes(1)
-        expect(deleteCache).toHaveBeenCalledWith('precache-v2')
+        expect(publishRuntimeUpdateForBuild('0.1.0-newer-build')).toBe(true)
+        expect(readPendingRuntimeUpdate()).not.toBeNull()
+
+        await expect(applyPendingRuntimeUpdate()).resolves.toBe(true)
+        expect(reload).toHaveBeenCalledTimes(1)
     })
 
     it('cleans local service workers and requests one reload when already controlled', async () => {
@@ -168,12 +178,12 @@ describe('runtimeAssetRecovery', () => {
             ...navigator,
             serviceWorker: {
                 controller: {},
-                getRegistrations
-            }
+                getRegistrations,
+            },
         })
         vi.stubGlobal('caches', {
             keys,
-            delete: deleteCache
+            delete: deleteCache,
         })
 
         await expect(disableServiceWorkerForCurrentOrigin()).resolves.toBe(true)

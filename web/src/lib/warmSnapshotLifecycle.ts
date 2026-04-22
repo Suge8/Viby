@@ -1,5 +1,7 @@
+import { subscribeBrowserLifecycle } from '@/lib/browserLifecycle'
+
 const lifecycleFlushCallbacks = new Set<() => void>()
-let lifecycleListenersInstalled = false
+let unsubscribeBrowserLifecycle: (() => void) | null = null
 
 function flushAllWarmSnapshots(): void {
     for (const callback of lifecycleFlushCallbacks) {
@@ -8,30 +10,26 @@ function flushAllWarmSnapshots(): void {
 }
 
 function installWarmSnapshotLifecycleListeners(): void {
-    if (
-        lifecycleListenersInstalled
-        || typeof window === 'undefined'
-        || typeof document === 'undefined'
-    ) {
+    if (unsubscribeBrowserLifecycle) {
         return
     }
 
-    const handleLifecycleFlush = () => {
-        flushAllWarmSnapshots()
-    }
-    const handleVisibilityChange = () => {
-        if (document.visibilityState === 'hidden') {
+    unsubscribeBrowserLifecycle = subscribeBrowserLifecycle((event) => {
+        if (event.kind === 'visibility-hidden' || event.kind === 'pagehide' || event.kind === 'freeze') {
             flushAllWarmSnapshots()
         }
-    }
-
-    window.addEventListener('pagehide', handleLifecycleFlush)
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    document.addEventListener('freeze', handleLifecycleFlush as EventListener)
-    lifecycleListenersInstalled = true
+    })
 }
 
 export function registerWarmSnapshotLifecycleFlush(callback: () => void): void {
     lifecycleFlushCallbacks.add(callback)
     installWarmSnapshotLifecycleListeners()
+}
+
+export function resetWarmSnapshotLifecycleForTests(): void {
+    lifecycleFlushCallbacks.clear()
+    if (unsubscribeBrowserLifecycle) {
+        unsubscribeBrowserLifecycle()
+        unsubscribeBrowserLifecycle = null
+    }
 }

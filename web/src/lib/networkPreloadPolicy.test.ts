@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { shouldPreloadIdleSessionRoutes } from '@/lib/networkPreloadPolicy'
+import { shouldPreloadForegroundSessionDetail, shouldPreloadIdleSessionRoutes } from '@/lib/networkPreloadPolicy'
 
 describe('network preload policy', () => {
     it('allows idle preloading when connection info is unavailable', () => {
@@ -17,5 +17,15 @@ describe('network preload policy', () => {
 
     it('keeps idle preloading on fast connections', () => {
         expect(shouldPreloadIdleSessionRoutes({ effectiveType: '4g' })).toBe(true)
+    })
+
+    it('disables foreground preloading while the page is hidden', () => {
+        expect(shouldPreloadForegroundSessionDetail({ connection: { effectiveType: '4g' } })).toBe(true)
+        expect(
+            shouldPreloadForegroundSessionDetail({
+                connection: { effectiveType: '4g' },
+                visibilityState: 'hidden',
+            })
+        ).toBe(false)
     })
 })

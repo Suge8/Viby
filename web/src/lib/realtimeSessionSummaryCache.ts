@@ -3,20 +3,13 @@ import {
     getSessionActivityKind,
     mergeSessionMessageActivity,
     normalizeSessionActivityTimestamp,
+    resolveSessionLifecyclePatch,
     resolveSessionSummaryUpdatedAt,
     shouldMessageAdvanceSessionUpdatedAt,
-    toSessionSummary
+    toSessionSummary,
 } from '@viby/protocol'
-import type {
-    Session,
-    SessionsResponse,
-    SessionSummary,
-    SyncEvent
-} from '@/types/api'
-import {
-    isArchivedKeepalivePatch,
-    type SessionPatch
-} from '@/lib/realtimeEventGuards'
+import { isArchivedKeepalivePatch, type SessionPatch } from '@/lib/realtimeEventGuards'
+import type { Session, SessionSummary, SessionsResponse, SyncEvent } from '@/types/api'
 
 type SessionSummaryCacheResult = {
     next: SessionsResponse | undefined
@@ -42,10 +35,10 @@ export function upsertSessionSummaryCache(
     const existingSummary = existingIndex >= 0 ? nextSessions[existingIndex] : null
     const summary = existingSummary
         ? toSessionSummary(session, {
-            latestActivityAt: existingSummary.latestActivityAt,
-            latestActivityKind: existingSummary.latestActivityKind,
-            latestCompletedReplyAt: existingSummary.latestCompletedReplyAt
-        })
+              latestActivityAt: existingSummary.latestActivityAt,
+              latestActivityKind: existingSummary.latestActivityKind,
+              latestCompletedReplyAt: existingSummary.latestCompletedReplyAt,
+          })
         : toSessionSummary(session)
     if (existingIndex >= 0) {
         nextSessions[existingIndex] = summary
@@ -74,29 +67,34 @@ export function patchSessionSummaryCache(
         return { next: previous, patched: true }
     }
 
-    const nextLifecycleState = resolveNextLifecycleState(target.current, patch)
+    const lifecyclePatch = resolveSessionLifecyclePatch({
+        currentLifecycleState: target.current.lifecycleState,
+        currentLifecycleStateSince: target.current.lifecycleStateSince,
+        currentActive: target.current.active,
+        currentActiveAt: target.current.activeAt,
+        currentUpdatedAt: target.current.updatedAt,
+        patch,
+    })
     target.nextSessions[target.index] = {
         ...target.current,
         active: patch.active ?? target.current.active,
         thinking: patch.thinking ?? target.current.thinking,
         activeAt: patch.activeAt ?? target.current.activeAt,
         updatedAt: patch.updatedAt ?? target.current.updatedAt,
-        lifecycleState: nextLifecycleState,
-        lifecycleStateSince: shouldUpdateLifecycleStateSince(target.current, patch, nextLifecycleState)
-            ? resolveNextLifecycleStateSince(target.current, patch)
-            : target.current.lifecycleStateSince,
-        model: Object.prototype.hasOwnProperty.call(patch, 'model') ? patch.model ?? null : target.current.model,
+        lifecycleState: lifecyclePatch.lifecycleState,
+        lifecycleStateSince: lifecyclePatch.lifecycleStateSince,
+        model: Object.prototype.hasOwnProperty.call(patch, 'model') ? (patch.model ?? null) : target.current.model,
         modelReasoningEffort: Object.prototype.hasOwnProperty.call(patch, 'modelReasoningEffort')
-            ? patch.modelReasoningEffort ?? null
+            ? (patch.modelReasoningEffort ?? null)
             : target.current.modelReasoningEffort,
         permissionMode: patch.permissionMode ?? target.current.permissionMode,
-        collaborationMode: patch.collaborationMode ?? target.current.collaborationMode
+        collaborationMode: patch.collaborationMode ?? target.current.collaborationMode,
     }
 
     target.nextSessions.sort(compareSessionSummaries)
     return {
         next: { ...previous, sessions: target.nextSessions },
-        patched: true
+        patched: true,
     }
 }
 
@@ -119,20 +117,21 @@ export function patchSessionSummaryFromMessageCache(
         {
             latestActivityAt: target.current.latestActivityAt,
             latestActivityKind: target.current.latestActivityKind,
-            latestCompletedReplyAt: target.current.latestCompletedReplyAt
+            latestCompletedReplyAt: target.current.latestCompletedReplyAt,
         },
         message
     )
     const normalizedMessageUpdatedAt = normalizeSessionActivityTimestamp(message.createdAt)
-    const nextUpdatedAt = shouldMessageAdvanceSessionUpdatedAt(messageKind) && normalizedMessageUpdatedAt !== null
-        ? resolveSessionSummaryUpdatedAt(normalizedMessageUpdatedAt, nextActivity.latestCompletedReplyAt)
-        : target.current.updatedAt
+    const nextUpdatedAt =
+        shouldMessageAdvanceSessionUpdatedAt(messageKind) && normalizedMessageUpdatedAt !== null
+            ? resolveSessionSummaryUpdatedAt(normalizedMessageUpdatedAt, nextActivity.latestCompletedReplyAt)
+            : target.current.updatedAt
 
     if (
-        nextActivity.latestActivityAt === target.current.latestActivityAt
-        && nextActivity.latestActivityKind === target.current.latestActivityKind
-        && nextActivity.latestCompletedReplyAt === target.current.latestCompletedReplyAt
-        && nextUpdatedAt === target.current.updatedAt
+        nextActivity.latestActivityAt === target.current.latestActivityAt &&
+        nextActivity.latestActivityKind === target.current.latestActivityKind &&
+        nextActivity.latestCompletedReplyAt === target.current.latestCompletedReplyAt &&
+        nextUpdatedAt === target.current.updatedAt
     ) {
         return { next: previous, patched: false }
     }
@@ -142,13 +141,13 @@ export function patchSessionSummaryFromMessageCache(
         updatedAt: nextUpdatedAt,
         latestActivityAt: nextActivity.latestActivityAt,
         latestActivityKind: nextActivity.latestActivityKind,
-        latestCompletedReplyAt: nextActivity.latestCompletedReplyAt
+        latestCompletedReplyAt: nextActivity.latestCompletedReplyAt,
     }
     target.nextSessions.sort(compareSessionSummaries)
 
     return {
         next: { ...previous, sessions: target.nextSessions },
-        patched: true
+        patched: true,
     }
 }
 
@@ -175,9 +174,9 @@ export function markSessionSummaryPendingUserTurn(
     const nextUpdatedAt = resolveSessionSummaryUpdatedAt(normalizedCreatedAt, target.current.latestCompletedReplyAt)
 
     if (
-        target.current.latestActivityKind === 'user'
-        && target.current.latestActivityAt === nextLatestActivityAt
-        && target.current.updatedAt === nextUpdatedAt
+        target.current.latestActivityKind === 'user' &&
+        target.current.latestActivityAt === nextLatestActivityAt &&
+        target.current.updatedAt === nextUpdatedAt
     ) {
         return { next: previous, patched: false }
     }
@@ -186,13 +185,13 @@ export function markSessionSummaryPendingUserTurn(
         ...target.current,
         updatedAt: nextUpdatedAt,
         latestActivityAt: nextLatestActivityAt,
-        latestActivityKind: 'user'
+        latestActivityKind: 'user',
     }
     target.nextSessions.sort(compareSessionSummaries)
 
     return {
         next: { ...previous, sessions: target.nextSessions },
-        patched: true
+        patched: true,
     }
 }
 
@@ -211,49 +210,6 @@ export function removeSessionSummaryCache(
 
     return { ...previous, sessions: nextSessions }
 }
-
-function resolveNextLifecycleState(
-    current: SessionSummary,
-    patch: SessionPatch
-): SessionSummary['lifecycleState'] {
-    if (patch.lifecycleStateHint) {
-        return patch.lifecycleStateHint
-    }
-
-    if (patch.active === true) {
-        return 'running'
-    }
-
-    if (patch.active === false) {
-        return current.lifecycleState === 'archived' ? 'archived' : 'closed'
-    }
-
-    return current.lifecycleState
-}
-function resolveNextLifecycleStateSince(current: SessionSummary, patch: SessionPatch): number | null {
-    if (patch.lifecycleStateSinceHint !== undefined) {
-        return patch.lifecycleStateSinceHint
-    }
-
-    if (patch.active === true) {
-        return patch.activeAt ?? patch.updatedAt ?? current.activeAt ?? current.updatedAt
-    }
-
-    if (patch.active === false) {
-        return patch.updatedAt ?? current.updatedAt
-    }
-
-    return current.lifecycleStateSince
-}
-
-function shouldUpdateLifecycleStateSince(
-    current: SessionSummary,
-    patch: SessionPatch,
-    nextLifecycleState: SessionSummary['lifecycleState']
-): boolean {
-    return patch.lifecycleStateSinceHint !== undefined || nextLifecycleState !== current.lifecycleState
-}
-
 function resolveMutableSessionSummaryTarget(
     previous: SessionsResponse,
     sessionId: string
@@ -272,6 +228,6 @@ function resolveMutableSessionSummaryTarget(
     return {
         nextSessions,
         index,
-        current
+        current,
     }
 }

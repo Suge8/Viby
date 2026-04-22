@@ -1,19 +1,52 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import type {
+    CommandCapabilityActionType,
+    CommandCapabilityKind,
+    CommandCapabilityProvider,
+    CommandCapabilitySelectionMode,
+} from '@viby/protocol/types'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { reportWebRuntimeError } from '@/lib/runtimeDiagnostics'
+
+export type SuggestionBadge =
+    | {
+          kind: 'provider'
+          provider: CommandCapabilityProvider
+          tone: 'neutral'
+      }
+    | {
+          kind: 'source'
+          source: 'project' | 'local' | 'plugin' | 'viby'
+          tone: 'neutral' | 'accent'
+      }
+    | {
+          kind: 'effect'
+          effect: 'context'
+          tone: 'warning'
+      }
 
 export interface Suggestion {
     key: string
     text: string
     label: string
     description?: string
-    content?: string  // Expanded content for Codex user prompts
-    source?: 'builtin' | 'user' | 'plugin' | 'project'
+    content?: string // Expanded content for Codex user prompts
+    source?: 'builtin' | 'user' | 'plugin' | 'project' | 'provider' | 'viby'
+    kind?: CommandCapabilityKind
+    provider?: CommandCapabilityProvider
+    selectionMode?: CommandCapabilitySelectionMode
+    actionType?: CommandCapabilityActionType
+    disabled?: boolean
+    disabledReason?: string
+    groupLabel?: string
+    badges?: SuggestionBadge[]
 }
 
 interface SuggestionOptions {
-    clampSelection?: boolean   // If true, clamp instead of preserving exact position
-    autoSelectFirst?: boolean  // If true, automatically select first item when suggestions appear
-    wrapAround?: boolean       // If true, wrap around when reaching top/bottom
-    allowEmptyQuery?: boolean  // If true, allow empty string queries
+    clampSelection?: boolean // If true, clamp instead of preserving exact position
+    autoSelectFirst?: boolean // If true, automatically select first item when suggestions appear
+    wrapAround?: boolean // If true, wrap around when reaching top/bottom
+    allowEmptyQuery?: boolean // If true, allow empty string queries
+    refreshKey?: number | string // If changed, rerun the current query even if the text is unchanged
 }
 
 /**
@@ -55,7 +88,7 @@ class ValueSync<T> {
             try {
                 await this.command(value)
             } catch (e) {
-                console.error('ValueSync error:', e)
+                reportWebRuntimeError('Autocomplete ValueSync error.', e)
             }
         }
         this.processing = false
@@ -75,7 +108,8 @@ export function useActiveSuggestions(
         clampSelection = true,
         autoSelectFirst = true,
         wrapAround = true,
-        allowEmptyQuery = false
+        allowEmptyQuery = false,
+        refreshKey,
     } = options
 
     // State for suggestions
@@ -84,7 +118,7 @@ export function useActiveSuggestions(
         selected: number
     }>({
         suggestions: [],
-        selected: -1
+        selected: -1,
     })
 
     const moveUp = useCallback(() => {
@@ -164,7 +198,7 @@ export function useActiveSuggestions(
                     // Try to preserve selection by key (old behavior)
                     if (prev.selected >= 0 && prev.selected < prev.suggestions.length) {
                         const previousKey = prev.suggestions[prev.selected].key
-                        const newIndex = suggestions.findIndex(s => s.key === previousKey)
+                        const newIndex = suggestions.findIndex((s) => s.key === previousKey)
                         if (newIndex !== -1) {
                             // Found the same key, keep it selected
                             return { suggestions, selected: newIndex }
@@ -175,7 +209,8 @@ export function useActiveSuggestions(
                     const clampedSelection = Math.min(prev.selected, suggestions.length - 1)
                     return {
                         suggestions,
-                        selected: clampedSelection < 0 && suggestions.length > 0 && autoSelectFirst ? 0 : clampedSelection
+                        selected:
+                            clampedSelection < 0 && suggestions.length > 0 && autoSelectFirst ? 0 : clampedSelection,
                     }
                 }
             })
@@ -193,7 +228,7 @@ export function useActiveSuggestions(
 
     useEffect(() => {
         syncRef.current?.setValue(query)
-    }, [query, handler, clampSelection, autoSelectFirst, allowEmptyQuery])
+    }, [query, handler, clampSelection, autoSelectFirst, allowEmptyQuery, refreshKey])
 
     // If no query return empty suggestions
     if (query === null || (!allowEmptyQuery && query === '')) {

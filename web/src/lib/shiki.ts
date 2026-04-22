@@ -1,15 +1,14 @@
+import { useEffect, useState } from 'react'
+import type { HighlighterCore } from 'shiki/core'
 import { createHighlighterCore } from 'shiki/core'
 import { createJavaScriptRegexEngine } from 'shiki/engine/javascript'
-import type { HighlighterCore } from 'shiki/core'
-import { useState, useEffect, type ReactNode } from 'react'
-import { toJsxRuntime } from 'hast-util-to-jsx-runtime'
-import { jsx, jsxs, Fragment } from 'react/jsx-runtime'
-import { useTheme } from '@/hooks/useTheme'
 import {
-    CODE_LANGUAGE_ALIASES,
     CODE_BLOCK_PLAIN_TEXT_LANGUAGE,
+    CODE_LANGUAGE_ALIASES,
     resolveCodeLanguage,
+    SHIKI_SUPPORTED_LANGUAGES,
 } from '@/components/code-block/codeBlockLanguage'
+import { useTheme } from '@/hooks/useTheme'
 
 const THEME_LOADERS = {
     'github-light': () => import('@shikijs/themes/github-light'),
@@ -22,29 +21,18 @@ const LANGUAGE_LOADERS = {
     json: () => import('@shikijs/langs/json'),
     yaml: () => import('@shikijs/langs/yaml'),
     toml: () => import('@shikijs/langs/toml'),
-    xml: () => import('@shikijs/langs/xml'),
-    ini: () => import('@shikijs/langs/ini'),
     markdown: () => import('@shikijs/langs/markdown'),
     html: () => import('@shikijs/langs/html'),
     css: () => import('@shikijs/langs/css'),
-    scss: () => import('@shikijs/langs/scss'),
     javascript: () => import('@shikijs/langs/javascript'),
     typescript: () => import('@shikijs/langs/typescript'),
     jsx: () => import('@shikijs/langs/jsx'),
     tsx: () => import('@shikijs/langs/tsx'),
     sql: () => import('@shikijs/langs/sql'),
     graphql: () => import('@shikijs/langs/graphql'),
-    c: () => import('@shikijs/langs/c'),
     rust: () => import('@shikijs/langs/rust'),
     go: () => import('@shikijs/langs/go'),
-    java: () => import('@shikijs/langs/java'),
-    kotlin: () => import('@shikijs/langs/kotlin'),
     python: () => import('@shikijs/langs/python'),
-    php: () => import('@shikijs/langs/php'),
-    swift: () => import('@shikijs/langs/swift'),
-    csharp: () => import('@shikijs/langs/csharp'),
-    dockerfile: () => import('@shikijs/langs/dockerfile'),
-    make: () => import('@shikijs/langs/make'),
     diff: () => import('@shikijs/langs/diff'),
 } as const
 
@@ -60,7 +48,7 @@ export const langAlias = CODE_LANGUAGE_ALIASES
 let highlighterPromise: Promise<HighlighterCore> | null = null
 const themeLoadPromises = new Map<string, Promise<void>>()
 const languageLoadPromises = new Map<string, Promise<boolean>>()
-const highlightedRenderCache = new Map<string, ReactNode>()
+const highlightedHtmlCache = new Map<string, string>()
 
 function getHighlighter(): Promise<HighlighterCore> {
     if (!highlighterPromise) {
@@ -95,11 +83,11 @@ async function ensureThemeLoaded(
     await task
 }
 
-async function ensureLanguageLoaded(
-    highlighter: HighlighterCore,
-    language: string
-): Promise<boolean> {
+async function ensureLanguageLoaded(highlighter: HighlighterCore, language: string): Promise<boolean> {
     if (language === CODE_BLOCK_PLAIN_TEXT_LANGUAGE) {
+        return false
+    }
+    if (!SHIKI_SUPPORTED_LANGUAGES.has(language)) {
         return false
     }
 
@@ -129,42 +117,39 @@ function getHighlightCacheKey(theme: string, language: string, code: string): st
     return `${theme}\u0000${language}\u0000${code}`
 }
 
-function readHighlightedRenderCache(key: string): ReactNode | null {
-    const cached = highlightedRenderCache.get(key)
+function readHighlightedHtmlCache(key: string): string | null {
+    const cached = highlightedHtmlCache.get(key)
     if (!cached) {
         return null
     }
 
-    highlightedRenderCache.delete(key)
-    highlightedRenderCache.set(key, cached)
+    highlightedHtmlCache.delete(key)
+    highlightedHtmlCache.set(key, cached)
     return cached
 }
 
-function writeHighlightedRenderCache(key: string, rendered: ReactNode): void {
-    if (highlightedRenderCache.has(key)) {
-        highlightedRenderCache.delete(key)
+function writeHighlightedHtmlCache(key: string, rendered: string): void {
+    if (highlightedHtmlCache.has(key)) {
+        highlightedHtmlCache.delete(key)
     }
 
-    highlightedRenderCache.set(key, rendered)
-    if (highlightedRenderCache.size <= SHIKI_RENDER_CACHE_LIMIT) {
+    highlightedHtmlCache.set(key, rendered)
+    if (highlightedHtmlCache.size <= SHIKI_RENDER_CACHE_LIMIT) {
         return
     }
 
-    const oldestKey = highlightedRenderCache.keys().next().value
+    const oldestKey = highlightedHtmlCache.keys().next().value
     if (typeof oldestKey === 'string') {
-        highlightedRenderCache.delete(oldestKey)
+        highlightedHtmlCache.delete(oldestKey)
     }
 }
 
 /**
  * Custom hook for syntax highlighting with our minimal Shiki bundle
  */
-export function useShikiHighlighter(
-    code: string,
-    language: string | undefined
-): ReactNode | null {
+export function useShikiHighlighter(code: string, language: string | undefined): string | null {
     const { colorScheme } = useTheme()
-    const [highlighted, setHighlighted] = useState<ReactNode | null>(null)
+    const [highlighted, setHighlighted] = useState<string | null>(null)
 
     useEffect(() => {
         let cancelled = false
@@ -187,31 +172,22 @@ export function useShikiHighlighter(
             }
 
             const cacheKey = getHighlightCacheKey(theme, lang, code)
-            const cached = readHighlightedRenderCache(cacheKey)
+            const cached = readHighlightedHtmlCache(cacheKey)
             if (cached) {
                 setHighlighted(cached)
                 return
             }
 
-            const hast = highlighter.codeToHast(code, {
+            const html = highlighter.codeToHtml(code, {
                 lang,
-                themes: {
-                    light: theme,
-                    dark: theme,
-                },
-                defaultColor: false,
+                theme,
                 structure: 'inline',
             })
 
             if (cancelled) return
 
-            const rendered = toJsxRuntime(hast, {
-                jsx,
-                jsxs,
-                Fragment,
-            })
-            writeHighlightedRenderCache(cacheKey, rendered as ReactNode)
-            setHighlighted(rendered as ReactNode)
+            writeHighlightedHtmlCache(cacheKey, html)
+            setHighlighted(html)
         }
 
         // Debounce highlighting — 150ms reduces CPU pressure on Windows during

@@ -1,10 +1,11 @@
 import type { RealtimeBannerState } from '@/hooks/useRealtimeFeedback'
+import { resolveDirectSessionIdFromPath, resolveSessionRouteParam } from '@/routes/sessions/sessionRoutePaths'
 
 export type RealtimeSubscription = { all: true; sessionId?: string }
 export type AppViewportRoute = 'default' | 'session-chat'
 
 function isSessionChatPath(pathname: string): boolean {
-    return /^\/sessions\/[^/]+\/?$/.test(pathname) && pathname !== '/sessions/new'
+    return resolveDirectSessionIdFromPath(pathname) !== null
 }
 
 export function isUnauthorizedAuthError(error: string | null): boolean {
@@ -37,11 +38,7 @@ export function shouldSuppressInstallPrompt(options: {
 }
 
 export function getSelectedSessionId(sessionMatch: false | Record<string, string>): string | null {
-    if (!sessionMatch || sessionMatch.sessionId === 'new') {
-        return null
-    }
-
-    return sessionMatch.sessionId
+    return sessionMatch ? resolveSessionRouteParam(sessionMatch.sessionId) : null
 }
 
 export function buildRealtimeSubscription(selectedSessionId: string | null): RealtimeSubscription {
@@ -51,6 +48,6 @@ export function buildRealtimeSubscription(selectedSessionId: string | null): Rea
 
     return {
         all: true,
-        sessionId: selectedSessionId
+        sessionId: selectedSessionId,
     }
 }

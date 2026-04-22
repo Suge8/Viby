@@ -16,7 +16,7 @@ export type RealtimeTraceEventType =
     | 'first_stream_delta'
     | 'first_reply_detected'
     | 'post_switch_send_failed'
-    | 'post_switch_no_reply'
+    | 'post_switch_catchup_error'
 
 export type RealtimeTraceEntry = {
     at: number

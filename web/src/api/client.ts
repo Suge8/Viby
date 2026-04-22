@@ -1,135 +1,29 @@
-import type {
-    AgentFlavor,
-    AgentLaunchConfigResponse,
-    AttachmentMetadata,
-    CodexCollaborationMode,
-    DeleteUploadResponse,
-    ListDirectoryResponse,
-    FileReadResponse,
-    FileSearchResponse,
-    GitCommandResponse,
-    MachineBrowseDirectoryResponse,
-    MachinePathsExistsResponse,
-    MachinesResponse,
-    MessagesResponse,
-    PermissionMode,
-    PushSubscriptionPayload,
-    SessionRecoveryPage,
-    PushUnsubscribePayload,
-    PushVapidPublicKeyResponse,
-    SlashCommandsResponse,
-    SkillsResponse,
-    SpawnResponse,
-    TeamProjectHistoryResponse,
-    TeamProjectPreset,
-    TeamProjectSnapshot,
-    TeamProject,
-    TeamRoleDefinition,
-    TeamSessionSpawnRole,
-    UploadFileResponse,
-    ModelReasoningEffort,
-    Session,
-    SessionResponse,
-    SessionsResponse
-} from '@/types/api'
+import type { Session } from '@/types/api'
+import { createApiClientAutocompleteMethods } from './clientAutocompleteMethods'
+import { createApiClientPushMethods } from './clientPushMethods'
+import { createApiClientRuntimeMethods } from './clientRuntimeMethods'
+import { createApiClientSessionMethods } from './clientSessionMethods'
 import {
-    assertSameSessionSwitchTargetDriver,
-    isSameSessionSwitchTargetDriver,
-    type SameSessionSwitchTargetDriver,
-} from '@/lib/sameSessionDriverSwitch'
+    isSessionActionLegacyResponse,
+    isSessionActionResponse,
+    type SessionSnapshotAction,
+} from './clientSessionSupport'
 import { ApiError, buildApiUrl, parseErrorPayload } from './clientShared'
+import { createApiClientWorkspaceMethods } from './clientWorkspaceMethods'
+
 export { ApiError } from './clientShared'
+
+const API_REQUEST_TIMEOUT_MS = 15_000
+const API_UPLOAD_REQUEST_TIMEOUT_MS = 60_000
+
+export type ApiRequestInit = RequestInit & {
+    timeoutMs?: number
+}
 
 type ApiClientOptions = {
     baseUrl?: string
     getToken?: () => string | null
     onUnauthorized?: () => Promise<string | null>
-}
-
-type SessionActionResponse = {
-    ok: true
-    session: Session
-}
-
-type ResumeSessionResponse = {
-    type: 'success'
-    session: Session
-}
-
-type SessionActionLegacyResponse = {
-    ok: true
-}
-
-type ResumeSessionLegacyResponse = {
-    type: 'success'
-    sessionId: string
-}
-
-type DriverSwitchResponse = {
-    ok: true
-    targetDriver: SameSessionSwitchTargetDriver
-    session: Session
-}
-
-type SessionSnapshotAction =
-    | 'archive'
-    | 'close'
-    | 'unarchive'
-    | 'permission-mode'
-    | 'collaboration-mode'
-    | 'model'
-    | 'model-reasoning-effort'
-
-function createCachedModuleLoader<TModule>(
-    load: () => Promise<TModule>
-): () => Promise<TModule> {
-    let modulePromise: Promise<TModule> | null = null
-
-    return function loadCachedModule(): Promise<TModule> {
-        modulePromise ??= load()
-        return modulePromise
-    }
-}
-
-export type ApiClientRequest = <T>(path: string, init?: RequestInit) => Promise<T>
-export type ApiClientFetchSessionSnapshot = (sessionId: string) => Promise<Session>
-
-type ApprovePermissionOptions = {
-    mode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan'
-    allowTools?: string[]
-    decision?: 'approved' | 'approved_for_session' | 'denied' | 'abort'
-    answers?: Record<string, string[]> | Record<string, { answers: string[] }>
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-    return typeof value === 'object' && value !== null
-}
-
-function isSession(value: unknown): value is Session {
-    return isRecord(value) && typeof value.id === 'string'
-}
-
-function isResumeSessionResponse(value: unknown): value is ResumeSessionResponse {
-    return isRecord(value) && value.type === 'success' && isSession(value.session)
-}
-
-function isResumeSessionLegacyResponse(value: unknown): value is ResumeSessionLegacyResponse {
-    return isRecord(value) && value.type === 'success' && typeof value.sessionId === 'string'
-}
-
-function isSessionActionResponse(value: unknown): value is SessionActionResponse {
-    return isRecord(value) && value.ok === true && isSession(value.session)
-}
-
-function isSessionActionLegacyResponse(value: unknown): value is SessionActionLegacyResponse {
-    return isRecord(value) && value.ok === true
-}
-
-function isDriverSwitchResponse(value: unknown): value is DriverSwitchResponse {
-    return isRecord(value)
-        && value.ok === true
-        && isSameSessionSwitchTargetDriver(value.targetDriver)
-        && isSession(value.session)
 }
 
 function resolveRequestToken(
@@ -155,37 +49,107 @@ function buildApiErrorDetail(message: string | null | undefined, body: string): 
     return ''
 }
 
-function normalizeApprovePermissionBody(
-    modeOrOptions?: ApprovePermissionOptions['mode'] | ApprovePermissionOptions
-): ApprovePermissionOptions {
-    if (typeof modeOrOptions === 'string' || modeOrOptions === undefined) {
-        return { mode: modeOrOptions }
-    }
-
-    return modeOrOptions
+function shouldSetJsonContentType(body: RequestInit['body']): boolean {
+    return body !== undefined && !(body instanceof FormData)
 }
 
-const loadPushModule = createCachedModuleLoader(() => import('./clientPush'))
-const loadWorkspaceModule = createCachedModuleLoader(() => import('./clientWorkspace'))
-const loadMachinesModule = createCachedModuleLoader(() => import('./clientMachines'))
-const loadAutocompleteModule = createCachedModuleLoader(() => import('./clientAutocomplete'))
-const loadTeamsModule = createCachedModuleLoader(() => import('./clientTeams'))
+function resolveRequestTimeoutMs(init?: ApiRequestInit): number {
+    if (typeof init?.timeoutMs === 'number' && Number.isFinite(init.timeoutMs) && init.timeoutMs > 0) {
+        return init.timeoutMs
+    }
+
+    return init?.body instanceof FormData ? API_UPLOAD_REQUEST_TIMEOUT_MS : API_REQUEST_TIMEOUT_MS
+}
+
+function createRequestSignal(
+    sourceSignal: AbortSignal | null | undefined,
+    timeoutMs: number
+): {
+    signal: AbortSignal | undefined
+    cleanup: () => void
+    timedOut: () => boolean
+} {
+    if (typeof AbortController === 'undefined') {
+        return {
+            signal: sourceSignal ?? undefined,
+            cleanup: () => {},
+            timedOut: () => false,
+        }
+    }
+
+    const controller = new AbortController()
+    let timedOut = false
+    let sourceAbortHandler: (() => void) | null = null
+
+    if (sourceSignal) {
+        if (sourceSignal.aborted) {
+            controller.abort(sourceSignal.reason)
+        } else {
+            sourceAbortHandler = () => {
+                controller.abort(sourceSignal.reason)
+            }
+            sourceSignal.addEventListener('abort', sourceAbortHandler, { once: true })
+        }
+    }
+
+    const timeoutId = setTimeout(() => {
+        timedOut = true
+        controller.abort(new Error(`Request timed out after ${timeoutMs}ms`))
+    }, timeoutMs)
+
+    return {
+        signal: controller.signal,
+        cleanup: () => {
+            clearTimeout(timeoutId)
+            if (sourceSignal && sourceAbortHandler) {
+                sourceSignal.removeEventListener('abort', sourceAbortHandler)
+            }
+        },
+        timedOut: () => timedOut,
+    }
+}
+
+export type ApiClientRequest = <T>(path: string, init?: ApiRequestInit) => Promise<T>
+export type ApiClientUnknownRequest = (path: string, init?: RequestInit) => Promise<unknown>
+export type ApiClientFetchSessionSnapshot = (sessionId: string) => Promise<Session>
+export type ApiClientResolveSessionActionSnapshotResponse = (
+    response: unknown,
+    sessionId: string,
+    action: string
+) => Promise<Session>
 
 export class ApiClient {
     private token: string
     private readonly baseUrl: string | null
     private readonly getToken: (() => string | null) | null
     private readonly onUnauthorized: (() => Promise<string | null>) | null
-    private readonly boundRequest: ApiClientRequest
-    private readonly boundFetchSessionSnapshot: ApiClientFetchSessionSnapshot
 
     constructor(token: string, options?: ApiClientOptions) {
         this.token = token
         this.baseUrl = options?.baseUrl ?? null
         this.getToken = options?.getToken ?? null
         this.onUnauthorized = options?.onUnauthorized ?? null
-        this.boundRequest = this.request.bind(this)
-        this.boundFetchSessionSnapshot = this.fetchSessionSnapshot.bind(this)
+
+        const request = this.request.bind(this) as ApiClientRequest
+        const requestUnknown: ApiClientUnknownRequest = async (path, init) => {
+            return await this.request<unknown>(path, init)
+        }
+        const fetchSessionSnapshot = this.fetchSessionSnapshot.bind(this)
+        const resolveSessionActionSnapshotResponse = this.resolveSessionActionSnapshotResponse.bind(this)
+
+        Object.assign(
+            this,
+            createApiClientSessionMethods({
+                request,
+                requestUnknown,
+                fetchSessionSnapshot,
+                resolveSessionActionSnapshotResponse,
+            }),
+            createApiClientPushMethods(request),
+            createApiClientWorkspaceMethods(request),
+            createApiClientRuntimeMethods(request, fetchSessionSnapshot),
+            createApiClientAutocompleteMethods(request)
+        )
     }
 
     private buildUrl(path: string): string {
@@ -194,7 +158,7 @@ export class ApiClient {
 
     private async request<T>(
         path: string,
-        init?: RequestInit,
+        init?: ApiRequestInit,
         attempt: number = 0,
         overrideToken?: string | null
     ): Promise<T> {
@@ -204,16 +168,31 @@ export class ApiClient {
         if (authToken) {
             headers.set('authorization', `Bearer ${authToken}`)
         }
-        if (init?.body !== undefined && !headers.has('content-type')) {
+        if (shouldSetJsonContentType(init?.body) && !headers.has('content-type')) {
             headers.set('content-type', 'application/json')
         }
 
-        const res = await fetch(this.buildUrl(path), {
-            ...init,
-            headers
-        })
+        const timeoutMs = resolveRequestTimeoutMs(init)
+        const requestSignal = createRequestSignal(init?.signal ?? null, timeoutMs)
+        let response: Response
+        const { timeoutMs: _timeoutMs, ...requestInit } = init ?? {}
 
-        if (res.status === 401) {
+        try {
+            response = await fetch(this.buildUrl(path), {
+                ...requestInit,
+                headers,
+                signal: requestSignal.signal,
+            })
+        } catch (error) {
+            requestSignal.cleanup()
+            if (requestSignal.timedOut()) {
+                throw new Error(`Request timed out after ${timeoutMs}ms`)
+            }
+            throw error
+        }
+        requestSignal.cleanup()
+
+        if (response.status === 401) {
             if (attempt === 0 && this.onUnauthorized) {
                 const refreshed = await this.onUnauthorized()
                 if (refreshed) {
@@ -224,14 +203,19 @@ export class ApiClient {
             throw new Error('Session expired. Please sign in again.')
         }
 
-        if (!res.ok) {
-            const body = await res.text().catch(() => '')
+        if (!response.ok) {
+            const body = await response.text().catch(() => '')
             const parsed = parseErrorPayload(body)
             const detail = buildApiErrorDetail(parsed.message, body)
-            throw new ApiError(`HTTP ${res.status} ${res.statusText}${detail}`, res.status, parsed.code, body || undefined)
+            throw new ApiError(
+                `HTTP ${response.status} ${response.statusText}${detail}`,
+                response.status,
+                parsed.code,
+                body || undefined
+            )
         }
 
-        return await res.json() as T
+        return (await response.json()) as T
     }
 
     private async fetchSessionSnapshot(sessionId: string): Promise<Session> {
@@ -252,396 +236,10 @@ export class ApiClient {
 
         throw new Error(`Invalid session action response for ${action}`)
     }
-
-    async getSessions(): Promise<SessionsResponse> {
-        return await this.request<SessionsResponse>('/api/sessions')
-    }
-
-    async getPushVapidPublicKey(): Promise<PushVapidPublicKeyResponse> {
-        const module = await loadPushModule()
-        return await module.getPushVapidPublicKey(this.boundRequest)
-    }
-
-    async subscribePushNotifications(payload: PushSubscriptionPayload): Promise<void> {
-        const module = await loadPushModule()
-        await module.subscribePushNotifications(this.boundRequest, payload)
-    }
-
-    async unsubscribePushNotifications(payload: PushUnsubscribePayload): Promise<void> {
-        const module = await loadPushModule()
-        await module.unsubscribePushNotifications(this.boundRequest, payload)
-    }
-
-    async getSession(sessionId: string): Promise<SessionResponse> {
-        return await this.request<SessionResponse>(`/api/sessions/${encodeURIComponent(sessionId)}`)
-    }
-
-    async getMessages(sessionId: string, options: { beforeSeq?: number | null; afterSeq?: number | null; limit?: number }): Promise<MessagesResponse> {
-        const params = new URLSearchParams()
-        if (options.beforeSeq !== undefined && options.beforeSeq !== null) {
-            params.set('beforeSeq', `${options.beforeSeq}`)
-        }
-        if (options.afterSeq !== undefined && options.afterSeq !== null) {
-            params.set('afterSeq', `${options.afterSeq}`)
-        }
-        if (options.limit !== undefined && options.limit !== null) {
-            params.set('limit', `${options.limit}`)
-        }
-
-        const qs = params.toString()
-        const url = `/api/sessions/${encodeURIComponent(sessionId)}/messages${qs ? `?${qs}` : ''}`
-        return await this.request<MessagesResponse>(url)
-    }
-
-    async getSessionRecovery(sessionId: string, options: { afterSeq: number; limit?: number }): Promise<SessionRecoveryPage> {
-        const params = new URLSearchParams()
-        params.set('afterSeq', `${options.afterSeq}`)
-        if (options.limit !== undefined && options.limit !== null) {
-            params.set('limit', `${options.limit}`)
-        }
-
-        return await this.request<SessionRecoveryPage>(
-            `/api/sessions/${encodeURIComponent(sessionId)}/recovery?${params.toString()}`
-        )
-    }
-
-    async getGitStatus(sessionId: string): Promise<GitCommandResponse> {
-        const module = await loadWorkspaceModule()
-        return await module.getGitStatus(this.boundRequest, sessionId)
-    }
-
-    async getGitDiffNumstat(sessionId: string, staged: boolean): Promise<GitCommandResponse> {
-        const module = await loadWorkspaceModule()
-        return await module.getGitDiffNumstat(this.boundRequest, sessionId, staged)
-    }
-
-    async getGitDiffFile(sessionId: string, path: string, staged?: boolean): Promise<GitCommandResponse> {
-        const module = await loadWorkspaceModule()
-        return await module.getGitDiffFile(this.boundRequest, sessionId, path, staged)
-    }
-
-    async searchSessionFiles(sessionId: string, query: string, limit?: number): Promise<FileSearchResponse> {
-        const module = await loadWorkspaceModule()
-        return await module.searchSessionFiles(this.boundRequest, sessionId, query, limit)
-    }
-
-    async readSessionFile(sessionId: string, path: string): Promise<FileReadResponse> {
-        const module = await loadWorkspaceModule()
-        return await module.readSessionFile(this.boundRequest, sessionId, path)
-    }
-
-    async listSessionDirectory(sessionId: string, path?: string): Promise<ListDirectoryResponse> {
-        const module = await loadWorkspaceModule()
-        return await module.listSessionDirectory(this.boundRequest, sessionId, path)
-    }
-
-    async uploadFile(sessionId: string, filename: string, content: string, mimeType: string): Promise<UploadFileResponse> {
-        const module = await loadWorkspaceModule()
-        return await module.uploadFile(this.boundRequest, sessionId, filename, content, mimeType)
-    }
-
-    async deleteUploadFile(sessionId: string, path: string): Promise<DeleteUploadResponse> {
-        const module = await loadWorkspaceModule()
-        return await module.deleteUploadFile(this.boundRequest, sessionId, path)
-    }
-
-    async resumeSession(sessionId: string): Promise<Session> {
-        const response = await this.request<unknown>(
-            `/api/sessions/${encodeURIComponent(sessionId)}/resume`,
-            { method: 'POST' }
-        )
-        if (isResumeSessionResponse(response)) {
-            return response.session
-        }
-        if (isResumeSessionLegacyResponse(response)) {
-            return await this.fetchSessionSnapshot(response.sessionId)
-        }
-
-        throw new Error('Invalid resume session response')
-    }
-
-    async sendMessage(sessionId: string, text: string, localId?: string | null, attachments?: AttachmentMetadata[]): Promise<Session> {
-        const response = await this.request<unknown>(`/api/sessions/${encodeURIComponent(sessionId)}/messages`, {
-            method: 'POST',
-            body: JSON.stringify({
-                text,
-                localId: localId ?? undefined,
-                attachments: attachments ?? undefined
-            })
-        })
-
-        if (isSessionActionResponse(response)) {
-            return response.session
-        }
-        if (isSessionActionLegacyResponse(response)) {
-            return await this.fetchSessionSnapshot(sessionId)
-        }
-
-        throw new Error('Invalid send message response')
-    }
-
-    async abortSession(sessionId: string): Promise<Session> {
-        const response = await this.request<unknown>(`/api/sessions/${encodeURIComponent(sessionId)}/abort`, {
-            method: 'POST',
-            body: JSON.stringify({})
-        })
-
-        return await this.resolveSessionActionSnapshotResponse(response, sessionId, 'abort')
-    }
-
-    async archiveSession(sessionId: string): Promise<Session> {
-        return await this.postSessionSnapshotAction(sessionId, 'archive', {})
-    }
-
-    async closeSession(sessionId: string): Promise<Session> {
-        return await this.postSessionSnapshotAction(sessionId, 'close', {})
-    }
-
-    async unarchiveSession(sessionId: string): Promise<Session> {
-        return await this.postSessionSnapshotAction(sessionId, 'unarchive', {})
-    }
-
-    async switchSessionDriver(sessionId: string, targetDriver: SameSessionSwitchTargetDriver): Promise<Session> {
-        const validatedTargetDriver = assertSameSessionSwitchTargetDriver(targetDriver)
-        const response = await this.request<unknown>(`/api/sessions/${encodeURIComponent(sessionId)}/driver-switch`, {
-            method: 'POST',
-            body: JSON.stringify({ targetDriver: validatedTargetDriver })
-        })
-
-        if (!isDriverSwitchResponse(response)) {
-            throw new Error('Invalid driver switch response')
-        }
-
-        return response.session
-    }
-
-    async setPermissionMode(sessionId: string, mode: PermissionMode): Promise<Session> {
-        return await this.postSessionSnapshotAction(sessionId, 'permission-mode', { mode })
-    }
-
-    async setCollaborationMode(sessionId: string, mode: CodexCollaborationMode): Promise<Session> {
-        return await this.postSessionSnapshotAction(sessionId, 'collaboration-mode', { mode })
-    }
-
-    async setModel(sessionId: string, model: string | null): Promise<Session> {
-        return await this.postSessionSnapshotAction(sessionId, 'model', { model })
-    }
-
-    async setModelReasoningEffort(sessionId: string, modelReasoningEffort: ModelReasoningEffort | null): Promise<Session> {
-        return await this.postSessionSnapshotAction(sessionId, 'model-reasoning-effort', { modelReasoningEffort })
-    }
-
-    async approvePermission(
-        sessionId: string,
-        requestId: string,
-        modeOrOptions?: ApprovePermissionOptions['mode'] | ApprovePermissionOptions
-    ): Promise<void> {
-        await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/permissions/${encodeURIComponent(requestId)}/approve`, {
-            method: 'POST',
-            body: JSON.stringify(normalizeApprovePermissionBody(modeOrOptions))
-        })
-    }
-
-    async denyPermission(
-        sessionId: string,
-        requestId: string,
-        options?: {
-            decision?: 'approved' | 'approved_for_session' | 'denied' | 'abort'
-        }
-    ): Promise<void> {
-        await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/permissions/${encodeURIComponent(requestId)}/deny`, {
-            method: 'POST',
-            body: JSON.stringify(options ?? {})
-        })
-    }
-
-    async getMachines(): Promise<MachinesResponse> {
-        const module = await loadMachinesModule()
-        return await module.getMachines(this.boundRequest)
-    }
-
-    async getTeamProject(projectId: string): Promise<TeamProjectSnapshot> {
-        const module = await loadTeamsModule()
-        return await module.getTeamProject(this.boundRequest, projectId)
-    }
-
-    async getTeamProjectHistory(projectId: string): Promise<TeamProjectHistoryResponse> {
-        const module = await loadTeamsModule()
-        return await module.getTeamProjectHistory(this.boundRequest, projectId)
-    }
-
-    async updateTeamProjectSettings(
-        projectId: string,
-        input: {
-            managerSessionId: string
-            maxActiveMembers: number
-            defaultIsolationMode: TeamProject['defaultIsolationMode']
-        }
-    ): Promise<TeamProjectSnapshot> {
-        const module = await loadTeamsModule()
-        return await module.updateTeamProjectSettings(this.boundRequest, projectId, input)
-    }
-
-
-    async getTeamProjectPreset(projectId: string): Promise<TeamProjectPreset> {
-        const module = await loadTeamsModule()
-        return await module.getTeamProjectPreset(this.boundRequest, projectId)
-    }
-
-    async createTeamRole(
-        projectId: string,
-        input: {
-            managerSessionId: string
-            roleId: string
-            prototype: TeamRoleDefinition['prototype']
-            name: string
-            promptExtension?: string | null
-            providerFlavor: TeamRoleDefinition['providerFlavor']
-            model: string | null
-            reasoningEffort: TeamRoleDefinition['reasoningEffort']
-            isolationMode: TeamRoleDefinition['isolationMode']
-        }
-    ): Promise<TeamRoleDefinition> {
-        const module = await loadTeamsModule()
-        return await module.createTeamRole(this.boundRequest, projectId, input)
-    }
-
-    async updateTeamRole(
-        projectId: string,
-        roleId: string,
-        input: {
-            managerSessionId: string
-            name: string
-            promptExtension?: string | null
-            providerFlavor: TeamRoleDefinition['providerFlavor']
-            model: string | null
-            reasoningEffort: TeamRoleDefinition['reasoningEffort']
-            isolationMode: TeamRoleDefinition['isolationMode']
-        }
-    ): Promise<TeamRoleDefinition> {
-        const module = await loadTeamsModule()
-        return await module.updateTeamRole(this.boundRequest, projectId, roleId, input)
-    }
-
-    async deleteTeamRole(
-        projectId: string,
-        roleId: string,
-        input: {
-            managerSessionId: string
-        }
-    ): Promise<string> {
-        const module = await loadTeamsModule()
-        return await module.deleteTeamRole(this.boundRequest, projectId, roleId, input)
-    }
-
-    async applyTeamProjectPreset(
-        projectId: string,
-        input: {
-            managerSessionId: string
-            preset: TeamProjectPreset
-        }
-    ): Promise<TeamProjectSnapshot> {
-        const module = await loadTeamsModule()
-        return await module.applyTeamProjectPreset(this.boundRequest, projectId, input)
-    }
-
-    async interjectTeamMember(
-        memberId: string,
-        input: {
-            text: string
-            localId?: string | null
-        }
-    ): Promise<Session> {
-        const module = await loadTeamsModule()
-        return await module.interjectTeamMember(this.boundRequest, memberId, input)
-    }
-
-    async takeOverTeamMember(memberId: string): Promise<Session> {
-        const module = await loadTeamsModule()
-        return await module.takeOverTeamMember(this.boundRequest, memberId)
-    }
-
-    async returnTeamMember(memberId: string): Promise<Session> {
-        const module = await loadTeamsModule()
-        return await module.returnTeamMember(this.boundRequest, memberId)
-    }
-
-    async checkMachinePathsExists(
-        machineId: string,
-        paths: string[]
-    ): Promise<MachinePathsExistsResponse> {
-        const module = await loadMachinesModule()
-        return await module.checkMachinePathsExists(this.boundRequest, machineId, paths)
-    }
-
-    async browseMachineDirectory(
-        machineId: string,
-        path?: string
-    ): Promise<MachineBrowseDirectoryResponse> {
-        const module = await loadMachinesModule()
-        return await module.browseMachineDirectory(this.boundRequest, machineId, path)
-    }
-
-    async resolveAgentLaunchConfig(
-        machineId: string,
-        input: {
-            agent: AgentFlavor
-            directory: string
-        }
-    ): Promise<AgentLaunchConfigResponse> {
-        const module = await loadMachinesModule()
-        return await module.resolveAgentLaunchConfig(this.boundRequest, machineId, input)
-    }
-
-    async spawnSession(input: {
-        machineId: string
-        directory: string
-        agent?: AgentFlavor
-        model?: string
-        modelReasoningEffort?: ModelReasoningEffort
-        permissionMode?: PermissionMode
-        sessionRole?: TeamSessionSpawnRole
-        sessionType?: 'simple' | 'worktree'
-        worktreeName?: string
-        collaborationMode?: CodexCollaborationMode
-    }): Promise<SpawnResponse> {
-        const module = await loadMachinesModule()
-        return await module.spawnSession(this.boundRequest, this.boundFetchSessionSnapshot, input)
-    }
-
-    async getSlashCommands(sessionId: string): Promise<SlashCommandsResponse> {
-        const module = await loadAutocompleteModule()
-        return await module.getSlashCommands(this.boundRequest, sessionId)
-    }
-
-    async getSkills(sessionId: string): Promise<SkillsResponse> {
-        const module = await loadAutocompleteModule()
-        return await module.getSkills(this.boundRequest, sessionId)
-    }
-
-    async renameSession(sessionId: string, name: string): Promise<Session> {
-        const response = await this.request<SessionResponse>(`/api/sessions/${encodeURIComponent(sessionId)}`, {
-            method: 'PATCH',
-            body: JSON.stringify({ name })
-        })
-        return response.session
-    }
-
-    async deleteSession(sessionId: string): Promise<void> {
-        await this.request(`/api/sessions/${encodeURIComponent(sessionId)}`, {
-            method: 'DELETE'
-        })
-    }
-
-    private async postSessionSnapshotAction(
-        sessionId: string,
-        action: SessionSnapshotAction,
-        body: Record<string, unknown>
-    ): Promise<Session> {
-        const response = await this.request<unknown>(`/api/sessions/${encodeURIComponent(sessionId)}/${action}`, {
-            method: 'POST',
-            body: JSON.stringify(body)
-        })
-        return await this.resolveSessionActionSnapshotResponse(response, sessionId, action)
-    }
 }
+
+export interface ApiClient extends ReturnType<typeof createApiClientSessionMethods> {}
+export interface ApiClient extends ReturnType<typeof createApiClientPushMethods> {}
+export interface ApiClient extends ReturnType<typeof createApiClientWorkspaceMethods> {}
+export interface ApiClient extends ReturnType<typeof createApiClientRuntimeMethods> {}
+export interface ApiClient extends ReturnType<typeof createApiClientAutocompleteMethods> {}

@@ -1,9 +1,17 @@
-import type { Machine, Session } from '@/types/api'
+import { isSessionArchivedLifecycleState, isSessionLifecycleState } from '@viby/protocol'
+import type { Session } from '@/types/api'
 
 export type SessionPatch = Partial<
     Pick<
         Session,
-        'active' | 'thinking' | 'activeAt' | 'updatedAt' | 'model' | 'modelReasoningEffort' | 'permissionMode' | 'collaborationMode'
+        | 'active'
+        | 'thinking'
+        | 'activeAt'
+        | 'updatedAt'
+        | 'model'
+        | 'modelReasoningEffort'
+        | 'permissionMode'
+        | 'collaborationMode'
     >
 > & {
     lifecycleStateHint?: NonNullable<Session['metadata']>['lifecycleState']
@@ -14,9 +22,13 @@ export function isArchivedKeepalivePatch(
     lifecycleState: SessionPatch['lifecycleStateHint'] | null | undefined,
     patch: SessionPatch
 ): boolean {
-    return lifecycleState === 'archived'
-        && patch.lifecycleStateHint === undefined
-        && patch.active === true
+    return (
+        lifecycleState !== undefined &&
+        lifecycleState !== null &&
+        isSessionArchivedLifecycleState(lifecycleState) &&
+        patch.lifecycleStateHint === undefined &&
+        patch.active === true
+    )
 }
 
 function hasRecordShape(value: unknown): value is Record<string, unknown> {
@@ -38,11 +50,7 @@ function getLifecycleMetadataPatch(
     const patch: Pick<SessionPatch, 'lifecycleStateHint' | 'lifecycleStateSinceHint'> = {}
     let hasLifecyclePatch = false
 
-    if (
-        metadata.lifecycleState === 'running'
-        || metadata.lifecycleState === 'closed'
-        || metadata.lifecycleState === 'archived'
-    ) {
+    if (isSessionLifecycleState(metadata.lifecycleState)) {
         patch.lifecycleStateHint = metadata.lifecycleState
         hasLifecyclePatch = true
     }
@@ -59,11 +67,13 @@ export function isSessionRecord(value: unknown): value is Session {
     if (!hasRecordShape(value)) {
         return false
     }
-    return typeof value.id === 'string'
-        && typeof value.active === 'boolean'
-        && typeof value.activeAt === 'number'
-        && typeof value.updatedAt === 'number'
-        && typeof value.thinking === 'boolean'
+    return (
+        typeof value.id === 'string' &&
+        typeof value.active === 'boolean' &&
+        typeof value.activeAt === 'number' &&
+        typeof value.updatedAt === 'number' &&
+        typeof value.thinking === 'boolean'
+    )
 }
 
 export function getSessionPatch(value: unknown): SessionPatch | null {
@@ -130,7 +140,7 @@ export function hasUnknownSessionPatchKeys(value: unknown): boolean {
         'modelReasoningEffort',
         'permissionMode',
         'collaborationMode',
-        'metadata'
+        'metadata',
     ])
 
     return Object.entries(value).some(([key, nestedValue]) => {
@@ -146,37 +156,8 @@ export function hasUnknownSessionPatchKeys(value: unknown): boolean {
             return true
         }
 
-        return Object.keys(nestedValue).some((nestedKey) => (
-            nestedKey !== 'lifecycleState' && nestedKey !== 'lifecycleStateSince'
-        ))
+        return Object.keys(nestedValue).some(
+            (nestedKey) => nestedKey !== 'lifecycleState' && nestedKey !== 'lifecycleStateSince'
+        )
     })
-}
-
-function isMachineMetadata(value: unknown): value is Machine['metadata'] {
-    if (value === null) {
-        return true
-    }
-    if (!hasRecordShape(value)) {
-        return false
-    }
-    return typeof value.host === 'string'
-        && typeof value.platform === 'string'
-        && typeof value.vibyCliVersion === 'string'
-}
-
-export function isMachineRecord(value: unknown): value is Machine {
-    if (!hasRecordShape(value)) {
-        return false
-    }
-    return typeof value.id === 'string'
-        && typeof value.active === 'boolean'
-        && isMachineMetadata(value.metadata)
-}
-
-export function isInactiveMachinePatch(value: unknown): boolean {
-    return hasRecordShape(value) && value.active === false
-}
-
-export function isMachineRefreshOnlyPayload(value: unknown): boolean {
-    return !hasRecordShape(value) || typeof value.activeAt !== 'number'
 }

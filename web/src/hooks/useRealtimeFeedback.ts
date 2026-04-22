@@ -4,7 +4,7 @@ import { appendRealtimeTrace, type RealtimeTraceEventType } from '@/lib/realtime
 
 const BUSY_BANNER_DEBOUNCE_MS = 450
 const BUSY_BANNER_MAX_DURATION_MS = 10_000
-const RESTORE_BANNER_DURATION_MS = 2_400
+const RESTORE_BANNER_DURATION_MS = 1_600
 
 export type RealtimeBannerState =
     | { kind: 'hidden' }
@@ -23,7 +23,7 @@ type RealtimeFeedbackState = {
     handleDisconnect: (reason: string) => void
     handleConnectError: (error: unknown) => void
     announceRecovery: (reason: AppRecoveryReason) => void
-    runCatchupSync: (task: Promise<unknown>) => void
+    runCatchupSync: (task: Promise<unknown>, options?: { silent?: boolean }) => void
 }
 
 function getErrorMessage(error: unknown): string {
@@ -33,6 +33,7 @@ function getErrorMessage(error: unknown): string {
 export function useRealtimeFeedback(): RealtimeFeedbackState {
     const [banner, setBanner] = useState<RealtimeBannerState>({ kind: 'hidden' })
     const hasConnectedRef = useRef(false)
+    const pendingSyncCountRef = useRef(0)
     const busyDelayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const busyMaxTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const restoreTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -41,8 +42,16 @@ export function useRealtimeFeedback(): RealtimeFeedbackState {
         appendRealtimeTrace({
             at: Date.now(),
             type,
-            details
+            details,
         })
+    }, [])
+
+    const hasPendingBusyWork = useCallback(() => {
+        return (
+            pendingSyncCountRef.current > 0 ||
+            busyDelayTimeoutRef.current !== null ||
+            busyMaxTimeoutRef.current !== null
+        )
     }, [])
 
     const clearBusyTimers = useCallback(() => {
@@ -71,14 +80,10 @@ export function useRealtimeFeedback(): RealtimeFeedbackState {
                 return current
             }
 
-            if (busyDelayTimeoutRef.current || busyMaxTimeoutRef.current) {
-                return { kind: 'busy' }
-            }
-
-            return { kind: 'hidden' }
+            return hasPendingBusyWork() ? { kind: 'busy' } : { kind: 'hidden' }
         })
         restoreTimeoutRef.current = null
-    }, [])
+    }, [hasPendingBusyWork])
 
     const scheduleBusyBanner = useCallback(() => {
         if (busyDelayTimeoutRef.current || busyMaxTimeoutRef.current) {
@@ -96,57 +101,79 @@ export function useRealtimeFeedback(): RealtimeFeedbackState {
             })
             busyMaxTimeoutRef.current = setTimeout(() => {
                 busyMaxTimeoutRef.current = null
-                setBanner((current) => current.kind === 'busy' ? { kind: 'hidden' } : current)
+                setBanner((current) => (current.kind === 'busy' ? { kind: 'hidden' } : current))
             }, BUSY_BANNER_MAX_DURATION_MS)
         }, BUSY_BANNER_DEBOUNCE_MS)
     }, [])
 
-    const handleConnect = useCallback((details: RealtimeConnectDetails) => {
-        hasConnectedRef.current = true
+    const handleConnect = useCallback(
+        (details: RealtimeConnectDetails) => {
+            hasConnectedRef.current = true
 
-        if (details.initial || details.recovered) {
+            if (details.initial || details.recovered) {
+                clearBusyTimers()
+                setBanner((current) => (current.kind === 'restoring' ? current : { kind: 'hidden' }))
+            }
+            pushTrace('connect', details)
+        },
+        [clearBusyTimers, pushTrace]
+    )
+
+    const handleDisconnect = useCallback(
+        (reason: string) => {
+            if (!hasConnectedRef.current) {
+                return
+            }
+            scheduleBusyBanner()
+            pushTrace('disconnect', { reason })
+        },
+        [pushTrace, scheduleBusyBanner]
+    )
+
+    const handleConnectError = useCallback(
+        (error: unknown) => {
+            scheduleBusyBanner()
+            pushTrace('connect_error', { message: getErrorMessage(error) })
+        },
+        [pushTrace, scheduleBusyBanner]
+    )
+
+    const announceRecovery = useCallback(
+        (reason: AppRecoveryReason) => {
             clearBusyTimers()
-            setBanner((current) => current.kind === 'restoring' ? current : { kind: 'hidden' })
-        }
-        pushTrace('connect', details)
-    }, [clearBusyTimers, pushTrace])
+            clearRestoreTimer()
+            setBanner({ kind: 'restoring', reason })
+            pushTrace('restore', { reason })
+            restoreTimeoutRef.current = setTimeout(() => {
+                resolveBannerAfterRestore()
+            }, RESTORE_BANNER_DURATION_MS)
+        },
+        [clearBusyTimers, clearRestoreTimer, pushTrace, resolveBannerAfterRestore]
+    )
 
-    const handleDisconnect = useCallback((reason: string) => {
-        if (!hasConnectedRef.current) {
-            return
-        }
-        scheduleBusyBanner()
-        pushTrace('disconnect', { reason })
-    }, [pushTrace, scheduleBusyBanner])
+    const runCatchupSync = useCallback(
+        (task: Promise<unknown>, options?: { silent?: boolean }) => {
+            pendingSyncCountRef.current += 1
+            if (options?.silent !== true) {
+                scheduleBusyBanner()
+            }
+            pushTrace('sync_start', options?.silent === true ? { silent: true } : undefined)
 
-    const handleConnectError = useCallback((error: unknown) => {
-        scheduleBusyBanner()
-        pushTrace('connect_error', { message: getErrorMessage(error) })
-    }, [pushTrace, scheduleBusyBanner])
-
-    const announceRecovery = useCallback((reason: AppRecoveryReason) => {
-        clearBusyTimers()
-        clearRestoreTimer()
-        setBanner({ kind: 'restoring', reason })
-        pushTrace('restore', { reason })
-        restoreTimeoutRef.current = setTimeout(() => {
-            resolveBannerAfterRestore()
-        }, RESTORE_BANNER_DURATION_MS)
-    }, [clearBusyTimers, clearRestoreTimer, pushTrace, resolveBannerAfterRestore])
-
-    const runCatchupSync = useCallback((task: Promise<unknown>) => {
-        scheduleBusyBanner()
-        pushTrace('sync_start')
-
-        void task.finally(() => {
-            clearBusyTimers()
-            setBanner((current) => current.kind === 'restoring' ? current : { kind: 'hidden' })
-            pushTrace('sync_end')
-        })
-    }, [clearBusyTimers, pushTrace, scheduleBusyBanner])
+            void task.finally(() => {
+                pendingSyncCountRef.current = Math.max(0, pendingSyncCountRef.current - 1)
+                if (pendingSyncCountRef.current === 0) {
+                    clearBusyTimers()
+                    setBanner((current) => (current.kind === 'restoring' ? current : { kind: 'hidden' }))
+                }
+                pushTrace('sync_end')
+            })
+        },
+        [clearBusyTimers, pushTrace, scheduleBusyBanner]
+    )
 
     useEffect(() => {
         return () => {
+            pendingSyncCountRef.current = 0
             clearBusyTimers()
             clearRestoreTimer()
         }
@@ -158,6 +185,6 @@ export function useRealtimeFeedback(): RealtimeFeedbackState {
         handleDisconnect,
         handleConnectError,
         announceRecovery,
-        runCatchupSync
+        runCatchupSync,
     }
 }

@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { ApiClient } from '@/api/client'
 import { I18nProvider } from '@/lib/i18n-context'
 import { queryKeys } from '@/lib/query-keys'
+import { TEST_PROJECT_PATH } from '@/test/sessionFactories'
 import type { Session, SessionsResponse } from '@/types/api'
 import { useSpawnSession } from './useSpawnSession'
 
@@ -14,9 +15,9 @@ function createQueryClient(): QueryClient {
     return new QueryClient({
         defaultOptions: {
             queries: {
-                retry: false
-            }
-        }
+                retry: false,
+            },
+        },
     })
 }
 
@@ -24,9 +25,7 @@ function createWrapper(queryClient: QueryClient): (props: PropsWithChildren) => 
     return function Wrapper(props: PropsWithChildren): React.JSX.Element {
         return (
             <I18nProvider>
-                <QueryClientProvider client={queryClient}>
-                    {props.children}
-                </QueryClientProvider>
+                <QueryClientProvider client={queryClient}>{props.children}</QueryClientProvider>
             </I18nProvider>
         )
     }
@@ -41,12 +40,12 @@ function createSession(): Session {
         active: true,
         activeAt: 1_000,
         metadata: {
-            path: '/Users/demo/Project/Viby',
+            path: TEST_PROJECT_PATH,
             host: 'demo.local',
             driver: 'codex',
             machineId: 'machine-1',
             lifecycleState: 'running',
-            lifecycleStateSince: 1_000
+            lifecycleStateSince: 1_000,
         },
         metadataVersion: 1,
         agentState: null,
@@ -57,12 +56,12 @@ function createSession(): Session {
         modelReasoningEffort: 'high',
         permissionMode: 'safe-yolo',
         collaborationMode: 'plan',
-        todos: undefined
+        todos: undefined,
     }
 }
 
 describe('useSpawnSession', () => {
-    it('writes the spawned session snapshot directly into cache without invalidating', async () => {
+    it('writes the spawned session snapshot directly into cache and only refreshes command capabilities when needed', async () => {
         const queryClient = createQueryClient()
         const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
         queryClient.setQueryData<SessionsResponse>(queryKeys.sessions, { sessions: [] })
@@ -71,37 +70,35 @@ describe('useSpawnSession', () => {
         const api = {
             spawnSession: vi.fn(async () => ({
                 type: 'success' as const,
-                session: spawnedSession
-            }))
+                session: spawnedSession,
+            })),
         } as Partial<ApiClient> as ApiClient
 
-        const { result } = renderHook(
-            () => useSpawnSession(api),
-            { wrapper: createWrapper(queryClient) }
-        )
+        const { result } = renderHook(() => useSpawnSession(api), { wrapper: createWrapper(queryClient) })
 
         await act(async () => {
             const response = await result.current.spawnSession({
-                machineId: 'machine-1',
-                directory: '/Users/demo/Project/Viby',
+                directory: TEST_PROJECT_PATH,
                 agent: 'codex',
-                sessionRole: 'manager'
             })
             expect(response).toEqual({
                 type: 'success',
-                session: spawnedSession
+                session: spawnedSession,
             })
         })
 
         expect(api.spawnSession).toHaveBeenCalledWith({
-            machineId: 'machine-1',
-            directory: '/Users/demo/Project/Viby',
+            directory: TEST_PROJECT_PATH,
             agent: 'codex',
-            sessionRole: 'manager'
         })
-        expect(queryClient.getQueryData<{ session: Session }>(queryKeys.session('session-1'))?.session).toEqual(spawnedSession)
+        expect(queryClient.getQueryData<{ session: Session }>(queryKeys.session('session-1'))?.session).toEqual(
+            spawnedSession
+        )
         expect(queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)?.sessions[0]?.id).toBe('session-1')
-        expect(invalidateQueries).not.toHaveBeenCalled()
+        expect(invalidateQueries).toHaveBeenCalledTimes(1)
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: queryKeys.commandCapabilities('session-1'),
+        })
     })
 
     it('returns friendly error copy for technical spawn failures', async () => {
@@ -109,20 +106,18 @@ describe('useSpawnSession', () => {
         const api = {
             spawnSession: vi.fn(async () => {
                 throw new Error('HTTP 500 Internal Server Error: gRPC spawn failed')
-            })
+            }),
         } as Partial<ApiClient> as ApiClient
 
-        const { result } = renderHook(
-            () => useSpawnSession(api),
-            { wrapper: createWrapper(queryClient) }
-        )
+        const { result } = renderHook(() => useSpawnSession(api), { wrapper: createWrapper(queryClient) })
 
         await act(async () => {
-            await expect(result.current.spawnSession({
-                machineId: 'machine-1',
-                directory: '/Users/demo/Project/Viby',
-                agent: 'codex'
-            })).rejects.toThrow('HTTP 500 Internal Server Error: gRPC spawn failed')
+            await expect(
+                result.current.spawnSession({
+                    directory: TEST_PROJECT_PATH,
+                    agent: 'codex',
+                })
+            ).rejects.toThrow('HTTP 500 Internal Server Error: gRPC spawn failed')
         })
 
         await waitFor(() => {

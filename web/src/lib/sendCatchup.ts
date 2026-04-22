@@ -1,10 +1,9 @@
-import type { AgentEvent } from '@/chat/types'
 import { normalizeDecryptedMessage } from '@/chat/normalize'
-import type { DecryptedMessage } from '@/types/api'
+import type { AgentEvent } from '@/chat/types'
 import { isUserMessage } from '@/lib/messages'
+import type { DecryptedMessage } from '@/types/api'
 
-export const SEND_CATCHUP_DELAY_MS = 500
-export const SEND_CATCHUP_MAX_ATTEMPTS = 8
+export const SEND_CATCHUP_TIMEOUT_MS = 1250
 
 export type DriverSwitchSendFailedEvent = Extract<AgentEvent, { type: 'driver-switch-send-failed' }>
 
@@ -16,44 +15,50 @@ type DriverSwitchedEvent = Extract<AgentEvent, { type: 'driver-switched' }>
 
 export type SendCatchupOutcome =
     | {
-        type: 'reply-detected'
-        reply: DecryptedMessage
-        attempt: number
-    }
+          type: 'reply-detected'
+          reply: DecryptedMessage
+          attempt: number
+      }
     | {
-        type: 'driver-switch-send-failed'
-        event: DriverSwitchSendFailedEvent
-        attempt: number
-    }
+          type: 'driver-switch-send-failed'
+          event: DriverSwitchSendFailedEvent
+          attempt: number
+      }
     | {
-        type: 'no-reply'
-        attemptCount: number
-    }
+          type: 'no-evidence'
+          attemptCount: number
+      }
 
 interface CatchupOptions {
     createdAt: number
-    maxAttempts?: number
-    delayMs?: number
-    syncOnce: () => Promise<CatchupSnapshot>
+    readSnapshot: () => CatchupSnapshot
+    syncOnce?: () => Promise<void>
+    subscribe?: (listener: () => void) => () => void
+    timeoutMs?: number
     onReplyDetected?: (info: { reply: DecryptedMessage; attempt: number }) => void
-    sleep?: (ms: number) => Promise<void>
 }
 
-export function findFirstAgentReplyAfter(messages: readonly DecryptedMessage[], createdAt: number): DecryptedMessage | null {
+export function findFirstAgentReplyAfter(
+    messages: readonly DecryptedMessage[],
+    createdAt: number
+): DecryptedMessage | null {
     for (const message of messages) {
         if (message.createdAt < createdAt) {
             continue
         }
-        if (isUserMessage(message)) {
-            continue
-        }
-
-        const normalized = normalizeDecryptedMessage(message)
-        if (normalized?.role === 'agent') {
+        if (isAgentReplyMessage(message)) {
             return message
         }
     }
     return null
+}
+
+function isAgentReplyMessage(message: DecryptedMessage): boolean {
+    if (isUserMessage(message)) {
+        return false
+    }
+
+    return normalizeDecryptedMessage(message)?.role === 'agent'
 }
 
 function normalizeDriverSwitchSendFailedEvent(message: DecryptedMessage): DriverSwitchSendFailedEvent | null {
@@ -68,7 +73,7 @@ function normalizeDriverSwitchSendFailedEvent(message: DecryptedMessage): Driver
     return {
         type: 'driver-switch-send-failed',
         code: code === 'empty_first_turn' || code === 'timeout' || code === 'unknown' ? code : undefined,
-        stage: stage === 'socket_update' || stage === 'callback_flush' ? stage : undefined
+        stage: stage === 'socket_update' || stage === 'callback_flush' ? stage : undefined,
     }
 }
 
@@ -80,44 +85,43 @@ function normalizeDriverSwitchedEvent(message: DecryptedMessage): DriverSwitched
 
     return {
         type: 'driver-switched',
-        previousDriver: typeof normalized.content.previousDriver === 'string' ? normalized.content.previousDriver : undefined,
+        previousDriver:
+            typeof normalized.content.previousDriver === 'string' ? normalized.content.previousDriver : undefined,
         targetDriver: typeof normalized.content.targetDriver === 'string' ? normalized.content.targetDriver : undefined,
     }
 }
 
 export function shouldRunPostSwitchCatchup(messages: readonly DecryptedMessage[], createdAt: number): boolean {
-    let latestDriverSwitchedAt: number | null = null
-    let latestPriorUserMessageAt: number | null = null
-
-    for (const message of messages) {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+        const message = messages[index]
         if (message.createdAt >= createdAt) {
             continue
         }
 
-        if (normalizeDriverSwitchedEvent(message)) {
-            latestDriverSwitchedAt = message.createdAt
-            continue
-        }
-
         if (isUserMessage(message)) {
-            latestPriorUserMessageAt = message.createdAt
+            return false
+        }
+        if (normalizeDriverSwitchedEvent(message)) {
+            return true
         }
     }
 
-    if (latestDriverSwitchedAt === null) {
-        return false
-    }
-
-    return latestPriorUserMessageAt === null || latestPriorUserMessageAt < latestDriverSwitchedAt
+    return false
 }
 
-function detectCatchupOutcome(messages: readonly DecryptedMessage[], createdAt: number): {
-    type: 'reply-detected'
-    reply: DecryptedMessage
-} | {
-    type: 'driver-switch-send-failed'
-    event: DriverSwitchSendFailedEvent
-} | null {
+function detectCatchupOutcome(
+    messages: readonly DecryptedMessage[],
+    createdAt: number
+):
+    | {
+          type: 'reply-detected'
+          reply: DecryptedMessage
+      }
+    | {
+          type: 'driver-switch-send-failed'
+          event: DriverSwitchSendFailedEvent
+      }
+    | null {
     for (const message of messages) {
         if (message.createdAt < createdAt) {
             continue
@@ -127,15 +131,14 @@ function detectCatchupOutcome(messages: readonly DecryptedMessage[], createdAt: 
         if (failureEvent) {
             return {
                 type: 'driver-switch-send-failed',
-                event: failureEvent
+                event: failureEvent,
             }
         }
 
-        const reply = findFirstAgentReplyAfter([message], createdAt)
-        if (reply) {
+        if (isAgentReplyMessage(message)) {
             return {
                 type: 'reply-detected',
-                reply
+                reply: message,
             }
         }
     }
@@ -143,44 +146,111 @@ function detectCatchupOutcome(messages: readonly DecryptedMessage[], createdAt: 
     return null
 }
 
-function defaultSleep(ms: number): Promise<void> {
+function readCatchupOutcome(options: {
+    createdAt: number
+    attempt: number
+    messages: readonly DecryptedMessage[]
+    onReplyDetected?: (info: { reply: DecryptedMessage; attempt: number }) => void
+}): SendCatchupOutcome | null {
+    const outcome = detectCatchupOutcome(options.messages, options.createdAt)
+    if (outcome?.type === 'reply-detected') {
+        const replyOutcome: SendCatchupOutcome = {
+            type: 'reply-detected',
+            reply: outcome.reply,
+            attempt: options.attempt,
+        }
+        options.onReplyDetected?.({ reply: outcome.reply, attempt: options.attempt })
+        return replyOutcome
+    }
+    if (outcome?.type === 'driver-switch-send-failed') {
+        return {
+            type: 'driver-switch-send-failed',
+            event: outcome.event,
+            attempt: options.attempt,
+        }
+    }
+
+    return null
+}
+
+function waitForCatchupEvidence(options: {
+    subscribe: (listener: () => void) => () => void
+    timeoutMs: number
+    readOutcome: () => SendCatchupOutcome | null
+    getAttemptCount: () => number
+}): Promise<SendCatchupOutcome> {
     return new Promise((resolve) => {
-        globalThis.setTimeout(resolve, ms)
+        let settled = false
+        let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null
+        let unsubscribe: (() => void) | undefined
+        const finish = (outcome: SendCatchupOutcome) => {
+            if (settled) {
+                return
+            }
+            settled = true
+            if (timeoutId !== null) {
+                globalThis.clearTimeout(timeoutId)
+            }
+            unsubscribe?.()
+            resolve(outcome)
+        }
+        unsubscribe = options.subscribe(() => {
+            const outcome = options.readOutcome()
+            if (outcome) {
+                finish(outcome)
+            }
+        })
+        const currentOutcome = options.readOutcome()
+        if (currentOutcome) {
+            finish(currentOutcome)
+            return
+        }
+        timeoutId = globalThis.setTimeout(() => {
+            finish({
+                type: 'no-evidence',
+                attemptCount: options.getAttemptCount(),
+            })
+        }, options.timeoutMs)
     })
 }
 
 export async function runSendCatchup(options: CatchupOptions): Promise<SendCatchupOutcome> {
-    const maxAttempts = options.maxAttempts ?? SEND_CATCHUP_MAX_ATTEMPTS
-    const delayMs = options.delayMs ?? SEND_CATCHUP_DELAY_MS
-    const sleep = options.sleep ?? defaultSleep
-
-    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-        const snapshot = await options.syncOnce()
-        const outcome = detectCatchupOutcome(snapshot.messages, options.createdAt)
-        if (outcome?.type === 'reply-detected') {
-            const replyOutcome: SendCatchupOutcome = {
-                type: 'reply-detected',
-                reply: outcome.reply,
-                attempt: attempt + 1
-            }
-            options.onReplyDetected?.({ reply: outcome.reply, attempt: attempt + 1 })
-            return replyOutcome
-        }
-        if (outcome?.type === 'driver-switch-send-failed') {
-            return {
-                type: 'driver-switch-send-failed',
-                event: outcome.event,
-                attempt: attempt + 1
-            }
-        }
-        if (attempt === maxAttempts - 1) {
-            break
-        }
-        await sleep(delayMs)
+    let attemptCount = 0
+    const readOutcome = () => {
+        attemptCount += 1
+        return readCatchupOutcome({
+            createdAt: options.createdAt,
+            attempt: attemptCount,
+            messages: options.readSnapshot().messages,
+            onReplyDetected: options.onReplyDetected,
+        })
     }
 
-    return {
-        type: 'no-reply',
-        attemptCount: maxAttempts
+    const currentOutcome = readOutcome()
+    if (currentOutcome) {
+        return currentOutcome
     }
+
+    // This bounded catch-up only bridges the race to a durable failure event or
+    // a very fast first reply after switching drivers. Silence is not failure.
+    await options.syncOnce?.()
+    const syncedOutcome = readOutcome()
+    if (syncedOutcome) {
+        return syncedOutcome
+    }
+
+    const timeoutMs = options.timeoutMs ?? SEND_CATCHUP_TIMEOUT_MS
+    if (!options.subscribe || timeoutMs <= 0) {
+        return {
+            type: 'no-evidence',
+            attemptCount,
+        }
+    }
+
+    return waitForCatchupEvidence({
+        subscribe: options.subscribe,
+        timeoutMs,
+        readOutcome,
+        getAttemptCount: () => attemptCount,
+    })
 }

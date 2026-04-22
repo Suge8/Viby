@@ -1,58 +1,36 @@
-import { useCallback, useMemo } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
+    assertSameSessionSwitchTargetDriver,
     isPermissionModeAllowedForDriver,
-    supportsLiveModelReasoningEffortForDriver,
     type LiveSessionConfigSupport,
-    type SessionDriver
+    resolveSessionDriver,
+    type SameSessionSwitchTargetDriver,
+    type SessionDriver,
+    supportsLiveModelReasoningEffortForDriver,
 } from '@viby/protocol'
+import { useCallback } from 'react'
 import type { ApiClient } from '@/api/client'
-import type { CodexCollaborationMode, ModelReasoningEffort, PermissionMode, Session, SessionResponse, SessionsResponse } from '@/types/api'
-import { queryKeys } from '@/lib/query-keys'
-import { assertSameSessionSwitchTargetDriver, type SameSessionSwitchTargetDriver } from '@/lib/sameSessionDriverSwitch'
+import { setSessionReplyingState } from '@/lib/message-window-store'
 import { removeSessionClientState, writeSessionToQueryCache } from '@/lib/sessionQueryCache'
+import type { CodexCollaborationMode, ModelReasoningEffort, PermissionMode, Session, SessionSummary } from '@/types/api'
+import {
+    type AbortSessionMutationContext,
+    captureAbortSessionMutationContext,
+    restoreAbortSessionMutationContext,
+} from './sessionAbortSupport'
+import { createSessionMutationFn, getMutationPendingState, getRequiredSessionTarget } from './sessionMutationSupport'
 
-function getRequiredSessionTarget(
-    api: ApiClient | null,
-    sessionId: string | null
-): { api: ApiClient; sessionId: string } {
-    if (!api || !sessionId) {
-        throw new Error('Session unavailable')
-    }
-
-    return { api, sessionId }
-}
-
-function createSessionMutationFn<TVariables, TResult>(
-    api: ApiClient | null,
-    sessionId: string | null,
-    run: (api: ApiClient, sessionId: string, variables: TVariables) => Promise<TResult>
-): (variables: TVariables) => Promise<TResult> {
-    return async (variables: TVariables) => {
-        const target = getRequiredSessionTarget(api, sessionId)
-        return await run(target.api, target.sessionId, variables)
-    }
-}
-
-function getMutationPendingState(
-    mutations: ReadonlyArray<{ isPending: boolean }>
-): boolean {
-    return mutations.some((mutation) => mutation.isPending)
-}
+type SessionActionSource = Pick<Session, 'id' | 'metadata'> | Pick<SessionSummary, 'id' | 'metadata'>
 
 export function useSessionActions(
     api: ApiClient | null,
-    sessionId: string | null,
-    sessionDriver?: SessionDriver | null,
+    session: SessionActionSource | null | undefined,
     options?: {
         liveConfigSupport?: LiveSessionConfigSupport
     }
 ): {
     abortSession: () => Promise<void>
-    resumeSession: () => Promise<Session>
-    closeSession: () => Promise<void>
-    archiveSession: () => Promise<void>
-    unarchiveSession: () => Promise<void>
+    stopSession: () => Promise<void>
     switchSessionDriver: (targetDriver: SessionDriver | null | undefined) => Promise<void>
     setPermissionMode: (mode: PermissionMode) => Promise<void>
     setCollaborationMode: (mode: CodexCollaborationMode) => Promise<void>
@@ -64,12 +42,16 @@ export function useSessionActions(
     isSwitchingSessionDriver: boolean
 } {
     const queryClient = useQueryClient()
+    const sessionId = session?.id ?? null
+    const sessionDriver = resolveSessionDriver(session?.metadata)
+    const writeSessionSnapshot = useCallback(
+        (nextSession: Session): void => {
+            writeSessionToQueryCache(queryClient, nextSession)
+        },
+        [queryClient]
+    )
 
-    const writeSessionSnapshot = useCallback((session: Session): void => {
-        writeSessionToQueryCache(queryClient, session)
-    }, [queryClient])
-
-    const abortMutation = useMutation({
+    const abortMutation = useMutation<Session, Error, void, AbortSessionMutationContext | undefined>({
         mutationFn: createSessionMutationFn(api, sessionId, async (resolvedApi, resolvedSessionId) => {
             return await resolvedApi.abortSession(resolvedSessionId)
         }),
@@ -78,60 +60,31 @@ export function useSessionActions(
                 return undefined
             }
 
-            const previousSession = queryClient.getQueryData<SessionResponse>(queryKeys.session(sessionId))
-            const previousSessions = queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)
-
-            if (previousSession) {
-                writeSessionSnapshot({
-                    ...previousSession.session,
-                    thinking: false,
-                    thinkingAt: Date.now()
-                })
-            }
-
-            return {
-                previousSession,
-                previousSessions
-            }
+            return captureAbortSessionMutationContext({
+                queryClient,
+                sessionId,
+            })
         },
-        onSuccess: writeSessionSnapshot,
+        onSuccess: (nextSession) => {
+            writeSessionSnapshot(nextSession)
+            setSessionReplyingState(nextSession.id, null)
+        },
         onError: (_error, _variables, context) => {
             if (!sessionId) {
                 return
             }
-            if (context?.previousSession) {
-                queryClient.setQueryData(queryKeys.session(sessionId), context.previousSession)
-            }
-            if (context?.previousSessions) {
-                queryClient.setQueryData(queryKeys.sessions, context.previousSessions)
-            }
+
+            restoreAbortSessionMutationContext({
+                queryClient,
+                sessionId,
+                context,
+            })
         },
     })
 
-    const archiveMutation = useMutation({
-        mutationFn: createSessionMutationFn(api, sessionId, async (resolvedApi, resolvedSessionId) => {
-            return await resolvedApi.archiveSession(resolvedSessionId)
-        }),
-        onSuccess: writeSessionSnapshot,
-    })
-
-    const closeMutation = useMutation({
+    const stopMutation = useMutation({
         mutationFn: createSessionMutationFn(api, sessionId, async (resolvedApi, resolvedSessionId) => {
             return await resolvedApi.closeSession(resolvedSessionId)
-        }),
-        onSuccess: writeSessionSnapshot,
-    })
-
-    const unarchiveMutation = useMutation({
-        mutationFn: createSessionMutationFn(api, sessionId, async (resolvedApi, resolvedSessionId) => {
-            return await resolvedApi.unarchiveSession(resolvedSessionId)
-        }),
-        onSuccess: writeSessionSnapshot,
-    })
-
-    const resumeMutation = useMutation({
-        mutationFn: createSessionMutationFn(api, sessionId, async (resolvedApi, resolvedSessionId) => {
-            return await resolvedApi.resumeSession(resolvedSessionId)
         }),
         onSuccess: writeSessionSnapshot,
     })
@@ -179,7 +132,9 @@ export function useSessionActions(
         mutationFn: async (model: string | null) => {
             const target = getRequiredSessionTarget(api, sessionId)
             if (!options?.liveConfigSupport?.canChangeModel) {
-                throw new Error('Model selection is only supported for Viby-managed Claude, Codex, Gemini, and Pi sessions')
+                throw new Error(
+                    'Model selection is only supported for Viby-managed Claude, Codex, Gemini, and Pi sessions'
+                )
             }
             return await target.api.setModel(target.sessionId, model)
         },
@@ -193,7 +148,9 @@ export function useSessionActions(
                 throw new Error('Model reasoning effort is not supported for this session driver')
             }
             if (!options?.liveConfigSupport?.canChangeModelReasoningEffort) {
-                throw new Error('Model reasoning effort is only supported for Viby-managed sessions with reasoning controls')
+                throw new Error(
+                    'Model reasoning effort is only supported for Viby-managed sessions with reasoning controls'
+                )
             }
             return await target.api.setModelReasoningEffort(target.sessionId, modelReasoningEffort)
         },
@@ -223,75 +180,71 @@ export function useSessionActions(
         await abortMutation.mutateAsync(undefined)
     }, [abortMutation.mutateAsync])
 
-    const resumeSession = useCallback(async (): Promise<Session> => {
-        return await resumeMutation.mutateAsync(undefined)
-    }, [resumeMutation.mutateAsync])
+    const stopSession = useCallback(async (): Promise<void> => {
+        await stopMutation.mutateAsync(undefined)
+    }, [stopMutation.mutateAsync])
 
-    const closeSession = useCallback(async (): Promise<void> => {
-        await closeMutation.mutateAsync(undefined)
-    }, [closeMutation.mutateAsync])
-
-    const archiveSession = useCallback(async (): Promise<void> => {
-        await archiveMutation.mutateAsync(undefined)
-    }, [archiveMutation.mutateAsync])
-
-    const unarchiveSession = useCallback(async (): Promise<void> => {
-        await unarchiveMutation.mutateAsync(undefined)
-    }, [unarchiveMutation.mutateAsync])
-
-    const switchSessionDriver = useCallback(async (
-        targetDriver: SessionDriver | null | undefined
-    ): Promise<void> => {
-        await switchMutation.mutateAsync(assertSameSessionSwitchTargetDriver(targetDriver))
-    }, [switchMutation.mutateAsync])
+    const switchSessionDriver = useCallback(
+        async (targetDriver: SessionDriver | null | undefined): Promise<void> => {
+            await switchMutation.mutateAsync(assertSameSessionSwitchTargetDriver(targetDriver))
+        },
+        [switchMutation.mutateAsync]
+    )
 
     const deleteSession = useCallback(async (): Promise<void> => {
         await deleteMutation.mutateAsync(undefined)
     }, [deleteMutation.mutateAsync])
 
-    const setPermissionMode = useCallback(async (mode: PermissionMode): Promise<void> => {
-        await permissionMutation.mutateAsync(mode)
-    }, [permissionMutation.mutateAsync])
+    const setPermissionMode = useCallback(
+        async (mode: PermissionMode): Promise<void> => {
+            await permissionMutation.mutateAsync(mode)
+        },
+        [permissionMutation.mutateAsync]
+    )
 
-    const setCollaborationMode = useCallback(async (mode: CodexCollaborationMode): Promise<void> => {
-        await collaborationMutation.mutateAsync(mode)
-    }, [collaborationMutation.mutateAsync])
+    const setCollaborationMode = useCallback(
+        async (mode: CodexCollaborationMode): Promise<void> => {
+            await collaborationMutation.mutateAsync(mode)
+        },
+        [collaborationMutation.mutateAsync]
+    )
 
-    const setModel = useCallback(async (model: string | null): Promise<void> => {
-        await modelMutation.mutateAsync(model)
-    }, [modelMutation.mutateAsync])
+    const setModel = useCallback(
+        async (model: string | null): Promise<void> => {
+            await modelMutation.mutateAsync(model)
+        },
+        [modelMutation.mutateAsync]
+    )
 
-    const setModelReasoningEffort = useCallback(async (
-        modelReasoningEffort: ModelReasoningEffort | null
-    ): Promise<void> => {
-        await modelReasoningEffortMutation.mutateAsync(modelReasoningEffort)
-    }, [modelReasoningEffortMutation.mutateAsync])
+    const setModelReasoningEffort = useCallback(
+        async (modelReasoningEffort: ModelReasoningEffort | null): Promise<void> => {
+            await modelReasoningEffortMutation.mutateAsync(modelReasoningEffort)
+        },
+        [modelReasoningEffortMutation.mutateAsync]
+    )
 
-    const renameSession = useCallback(async (name: string): Promise<void> => {
-        await renameMutation.mutateAsync(name)
-    }, [renameMutation.mutateAsync])
+    const renameSession = useCallback(
+        async (name: string): Promise<void> => {
+            await renameMutation.mutateAsync(name)
+        },
+        [renameMutation.mutateAsync]
+    )
 
     const isPending = getMutationPendingState([
         abortMutation,
-        resumeMutation,
-        closeMutation,
-        archiveMutation,
-        unarchiveMutation,
+        stopMutation,
         switchMutation,
         permissionMutation,
         collaborationMutation,
         modelMutation,
         modelReasoningEffortMutation,
         renameMutation,
-        deleteMutation
+        deleteMutation,
     ])
 
-    return useMemo(() => ({
+    return {
         abortSession,
-        resumeSession,
-        closeSession,
-        archiveSession,
-        unarchiveSession,
+        stopSession,
         switchSessionDriver,
         setPermissionMode,
         setCollaborationMode,
@@ -301,20 +254,5 @@ export function useSessionActions(
         deleteSession,
         isPending,
         isSwitchingSessionDriver: switchMutation.isPending,
-    }), [
-        abortSession,
-        archiveSession,
-        closeSession,
-        deleteSession,
-        isPending,
-        renameSession,
-        resumeSession,
-        setCollaborationMode,
-        setModel,
-        setModelReasoningEffort,
-        setPermissionMode,
-        switchMutation.isPending,
-        switchSessionDriver,
-        unarchiveSession
-    ])
+    }
 }

@@ -8,9 +8,8 @@ export type NoticePresetKey =
     | 'genericInfo'
     | 'loginError'
     | 'loginServerError'
-    | 'newSessionLoadMachinesError'
+    | 'newSessionLoadRuntimeError'
     | 'newSessionCreateError'
-    | 'newSessionRunnerError'
     | 'dialogError'
     | 'renameError'
     | 'toolRequestFailed'
@@ -32,12 +31,10 @@ export function getNoticePreset(key: NoticePresetKey, t: TranslationFn): NoticeP
             return { tone: 'danger', title: t('login.error.title') }
         case 'loginServerError':
             return { tone: 'danger', title: t('login.server.error.title') }
-        case 'newSessionLoadMachinesError':
-            return { tone: 'danger', title: t('newSession.error.loadMachinesTitle') }
+        case 'newSessionLoadRuntimeError':
+            return { tone: 'danger', title: t('newSession.error.loadRuntimeTitle') }
         case 'newSessionCreateError':
             return { tone: 'danger', title: t('newSession.error.createTitle') }
-        case 'newSessionRunnerError':
-            return { tone: 'danger', title: t('newSession.error.runnerTitle') }
         case 'dialogError':
             return { tone: 'danger', title: t('dialog.error.title') }
         case 'renameError':

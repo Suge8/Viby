@@ -1,15 +1,15 @@
 import { renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { resetForegroundPulseForTests } from '@/lib/foregroundPulse'
+import { seedSessionAttentionSnapshotForTests } from '@/lib/sessionAttentionStore'
+import { TEST_PROJECT_PATH } from '@/test/sessionFactories'
 import type { SessionSummary } from '@/types/api'
 import { useSessionAttention } from './useSessionAttention'
 
-const SESSION_ATTENTION_STORAGE_KEY = 'viby:session-attention'
 const SEEN_AT = 1_700_000_000_000
 const REPLY_AT = 1_700_000_060_000
 
-function createSessionSummary(
-    overrides: Partial<SessionSummary> & Pick<SessionSummary, 'id'>
-): SessionSummary {
+function createSessionSummary(overrides: Partial<SessionSummary> & Pick<SessionSummary, 'id'>): SessionSummary {
     const { id, ...rest } = overrides
 
     return {
@@ -23,41 +23,41 @@ function createSessionSummary(
         lifecycleState: 'closed',
         lifecycleStateSince: 0,
         metadata: {
-            path: '/Users/sugeh/Project/Viby',
+            path: TEST_PROJECT_PATH,
             driver: 'codex',
-            summary: { text: 'Summary', updatedAt: 0 }
+            summary: { text: 'Summary', updatedAt: 0 },
         },
         todoProgress: null,
         pendingRequestsCount: 0,
         resumeAvailable: false,
+        resumeStrategy: 'none',
         model: null,
         modelReasoningEffort: null,
         ...rest,
-        id
+        id,
     }
 }
 
 describe('useSessionAttention', () => {
     beforeEach(() => {
-        window.localStorage.clear()
         Object.defineProperty(document, 'visibilityState', {
             configurable: true,
-            value: 'visible'
+            value: 'visible',
         })
     })
 
     afterEach(() => {
-        window.localStorage.clear()
+        resetForegroundPulseForTests()
     })
 
-    it('reports a new reply when latestCompletedReplyAt is newer than the stored seen timestamp', () => {
+    it('reports a new reply when latestCompletedReplyAt is newer than the stored seen timestamp', async () => {
         const session = createSessionSummary({
             id: 'session-2',
-            latestCompletedReplyAt: REPLY_AT
+            latestCompletedReplyAt: REPLY_AT,
         })
-        window.localStorage.setItem(SESSION_ATTENTION_STORAGE_KEY, JSON.stringify({
-            'session-2': SEEN_AT
-        }))
+        await seedSessionAttentionSnapshotForTests({
+            'session-2': SEEN_AT,
+        })
 
         const { result } = renderHook(() => useSessionAttention([session], null))
 
@@ -67,25 +67,25 @@ describe('useSessionAttention', () => {
     it('marks the selected session as seen through the shared browser storage boundary', async () => {
         const session = createSessionSummary({
             id: 'session-1',
-            latestCompletedReplyAt: REPLY_AT
+            latestCompletedReplyAt: REPLY_AT,
         })
-        window.localStorage.setItem(SESSION_ATTENTION_STORAGE_KEY, JSON.stringify({
-            'session-1': SEEN_AT
-        }))
+        await seedSessionAttentionSnapshotForTests({
+            'session-1': SEEN_AT,
+        })
         const initialProps: { selectedSessionId: string | null } = {
-            selectedSessionId: 'session-1'
+            selectedSessionId: 'session-1',
         }
 
-        const { result, rerender } = renderHook(({ selectedSessionId }: { selectedSessionId: string | null }) => (
-            useSessionAttention([session], selectedSessionId)
-        ), {
-            initialProps
-        })
+        const { result, rerender } = renderHook(
+            ({ selectedSessionId }: { selectedSessionId: string | null }) =>
+                useSessionAttention([session], selectedSessionId),
+            {
+                initialProps,
+            }
+        )
 
         await waitFor(() => {
-            expect(window.localStorage.getItem(SESSION_ATTENTION_STORAGE_KEY)).toBe(JSON.stringify({
-                'session-1': REPLY_AT
-            }))
+            expect(result.current.hasUnseenReply(session)).toBe(false)
         })
 
         rerender({ selectedSessionId: null })

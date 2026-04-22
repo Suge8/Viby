@@ -1,21 +1,13 @@
 import { useMemo } from 'react'
 import type { SessionSummary } from '@/types/api'
 
-export function useDirectorySuggestions(
-    machineId: string | null,
-    sessions: SessionSummary[],
-    recentPaths: string[]
-): string[] {
+export function useDirectorySuggestions(sessions: SessionSummary[], recentPaths: string[]): string[] {
     return useMemo(() => {
-        const machineSessions = machineId
-            ? sessions.filter((session) => session.metadata?.machineId === machineId)
-            : sessions
-
-        const sessionPaths = machineSessions
+        const sessionPaths = sessions
             .map((session) => session.metadata?.path)
             .filter((path): path is string => Boolean(path))
 
-        const worktreePaths = machineSessions
+        const worktreePaths = sessions
             .map((session) => session.metadata?.worktree?.basePath)
             .filter((path): path is string => Boolean(path))
 
@@ -27,5 +19,5 @@ export function useDirectorySuggestions(
             .sort((a, b) => a.localeCompare(b))
 
         return [...dedupedRecent, ...otherPaths]
-    }, [machineId, sessions, recentPaths])
+    }, [sessions, recentPaths])
 }

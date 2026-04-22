@@ -3,17 +3,14 @@ import { renderHook, waitFor } from '@testing-library/react'
 import type { PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/lib/i18n-context'
-import { readSessionsWarmSnapshot } from '@/lib/sessionsWarmSnapshot'
-import { writeSessionsWarmSnapshot } from '@/lib/sessionsWarmSnapshot'
+import { readSessionsWarmSnapshot, writeSessionsWarmSnapshot } from '@/lib/sessionsWarmSnapshot'
 import { useSessions } from './useSessions'
 
 function createWrapper(queryClient: QueryClient): (props: PropsWithChildren) => React.JSX.Element {
     return function Wrapper(props: PropsWithChildren): React.JSX.Element {
         return (
             <I18nProvider>
-                <QueryClientProvider client={queryClient}>
-                    {props.children}
-                </QueryClientProvider>
+                <QueryClientProvider client={queryClient}>{props.children}</QueryClientProvider>
             </I18nProvider>
         )
     }
@@ -24,8 +21,8 @@ function createQueryClient(): QueryClient {
         defaultOptions: {
             queries: {
                 retry: false,
-            }
-        }
+            },
+        },
     })
 }
 
@@ -45,8 +42,9 @@ function createSessionSummary(id: string) {
         todoProgress: null,
         pendingRequestsCount: 0,
         resumeAvailable: true,
+        resumeStrategy: 'provider-handle',
         model: 'gpt-5.4',
-        modelReasoningEffort: 'high'
+        modelReasoningEffort: 'high',
     } as const
 }
 
@@ -59,11 +57,11 @@ describe('useSessions', () => {
         writeSessionsWarmSnapshot([createSessionSummary('session-1')])
         const queryClient = createQueryClient()
         const api = {
-            getSessions: vi.fn(() => new Promise(() => undefined))
+            getSessions: vi.fn(() => new Promise(() => undefined)),
         }
 
         const { result } = renderHook(() => useSessions(api as never), {
-            wrapper: createWrapper(queryClient)
+            wrapper: createWrapper(queryClient),
         })
 
         expect(result.current.sessions).toEqual([createSessionSummary('session-1')])
@@ -76,11 +74,11 @@ describe('useSessions', () => {
         const queryClient = createQueryClient()
         const sessions = [createSessionSummary('session-1')]
         const api = {
-            getSessions: vi.fn(async () => ({ sessions }))
+            getSessions: vi.fn(async () => ({ sessions })),
         }
 
         const { result } = renderHook(() => useSessions(api as never), {
-            wrapper: createWrapper(queryClient)
+            wrapper: createWrapper(queryClient),
         })
 
         await waitFor(() => {

@@ -1,6 +1,7 @@
 import { renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/hooks/useAuth'
+import { resetForegroundPulseForTests } from '@/lib/foregroundPulse'
 
 function encodeBase64Url(value: string): string {
     return btoa(value).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
@@ -15,6 +16,7 @@ function createJwt(expSeconds: number): string {
 afterEach(() => {
     localStorage.clear()
     vi.restoreAllMocks()
+    resetForegroundPulseForTests()
 })
 
 describe('useAuth', () => {

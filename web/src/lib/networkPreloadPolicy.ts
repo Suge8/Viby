@@ -18,10 +18,7 @@ export function getNetworkInformation(): NetworkInformationLike | null {
         webkitConnection?: NetworkInformationLike
     }
 
-    return networkNavigator.connection
-        ?? networkNavigator.mozConnection
-        ?? networkNavigator.webkitConnection
-        ?? null
+    return networkNavigator.connection ?? networkNavigator.mozConnection ?? networkNavigator.webkitConnection ?? null
 }
 
 export function shouldPreloadIdleSessionRoutes(connection?: NetworkInformationLike | null): boolean {
@@ -36,4 +33,15 @@ export function shouldPreloadIdleSessionRoutes(connection?: NetworkInformationLi
         return true
     }
     return !SLOW_CONNECTION_TYPES.has(effectiveType)
+}
+
+export function shouldPreloadForegroundSessionDetail(options?: {
+    connection?: NetworkInformationLike | null
+    visibilityState?: DocumentVisibilityState
+}): boolean {
+    if (options?.visibilityState === 'hidden') {
+        return false
+    }
+
+    return shouldPreloadIdleSessionRoutes(options?.connection)
 }

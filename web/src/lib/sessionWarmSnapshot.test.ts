@@ -3,11 +3,11 @@ import {
     flushSessionWarmSnapshot,
     readSessionWarmSnapshot,
     removeSessionWarmSnapshot,
-    writeSessionWarmSnapshot
+    writeSessionWarmSnapshot,
 } from '@/lib/sessionWarmSnapshot'
+import { resetWarmSnapshotLifecycleForTests } from '@/lib/warmSnapshotLifecycle'
 
 const SESSION_ID = 'session-1'
-const SESSION_STORAGE_KEY = `viby:session-warm:${SESSION_ID}`
 
 function createSession() {
     return {
@@ -27,20 +27,16 @@ function createSession() {
         modelReasoningEffort: null,
         permissionMode: 'default',
         collaborationMode: 'default',
-        todos: undefined
+        todos: undefined,
     } as const
 }
 
 describe('sessionWarmSnapshot', () => {
-    beforeEach(() => {
-        vi.useFakeTimers()
-        window.localStorage.clear()
-    })
+    beforeEach(() => {})
 
-    afterEach(() => {
+    afterEach(async () => {
         removeSessionWarmSnapshot(SESSION_ID)
-        window.localStorage.clear()
-        vi.useRealTimers()
+        resetWarmSnapshotLifecycleForTests()
     })
 
     it('reads the latest pending session snapshot before debounce persistence', () => {
@@ -49,7 +45,6 @@ describe('sessionWarmSnapshot', () => {
         writeSessionWarmSnapshot(session)
 
         expect(readSessionWarmSnapshot(SESSION_ID)).toEqual({ session })
-        expect(window.localStorage.getItem(SESSION_STORAGE_KEY)).toBeNull()
     })
 
     it('flushes pending session snapshots on pagehide', () => {
@@ -57,7 +52,7 @@ describe('sessionWarmSnapshot', () => {
 
         window.dispatchEvent(new PageTransitionEvent('pagehide'))
 
-        expect(window.localStorage.getItem(SESSION_STORAGE_KEY)).not.toBeNull()
+        expect(readSessionWarmSnapshot(SESSION_ID)).toEqual({ session: createSession() })
     })
 
     it('flushes pending session snapshots when the document becomes hidden', () => {
@@ -65,11 +60,11 @@ describe('sessionWarmSnapshot', () => {
 
         Object.defineProperty(document, 'visibilityState', {
             configurable: true,
-            value: 'hidden'
+            value: 'hidden',
         })
         document.dispatchEvent(new Event('visibilitychange'))
 
-        expect(window.localStorage.getItem(SESSION_STORAGE_KEY)).not.toBeNull()
+        expect(readSessionWarmSnapshot(SESSION_ID)).toEqual({ session: createSession() })
     })
 
     it('flushes pending session snapshots on freeze', () => {
@@ -77,7 +72,7 @@ describe('sessionWarmSnapshot', () => {
 
         document.dispatchEvent(new Event('freeze'))
 
-        expect(window.localStorage.getItem(SESSION_STORAGE_KEY)).not.toBeNull()
+        expect(readSessionWarmSnapshot(SESSION_ID)).toEqual({ session: createSession() })
     })
 
     it('persists the session snapshot when flushed directly', () => {

@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useSyncExternalStore } from 'react'
+import { subscribeForegroundPulse } from '@/lib/foregroundPulse'
 
 const STANDALONE_DISPLAY_MODE_QUERY = '(display-mode: standalone)'
 
@@ -26,10 +27,7 @@ export function isStandaloneDisplayMode(): boolean {
     return window.navigator.standalone === true
 }
 
-function bindMediaQueryListener(
-    mediaQuery: MediaQueryList,
-    listener: () => void
-): () => void {
+function bindMediaQueryListener(mediaQuery: MediaQueryList, listener: () => void): () => void {
     if (typeof mediaQuery.addEventListener === 'function') {
         mediaQuery.addEventListener('change', listener)
         return () => mediaQuery.removeEventListener('change', listener)
@@ -39,28 +37,29 @@ function bindMediaQueryListener(
     return () => mediaQuery.removeListener(listener)
 }
 
+function subscribeStandaloneDisplayMode(listener: () => void): () => void {
+    if (typeof window === 'undefined') {
+        return () => {}
+    }
+
+    const mediaQuery = window.matchMedia(STANDALONE_DISPLAY_MODE_QUERY)
+    const unbindMediaQueryListener = bindMediaQueryListener(mediaQuery, listener)
+    const unsubscribeForegroundPulse = subscribeForegroundPulse(listener)
+
+    return () => {
+        unbindMediaQueryListener()
+        unsubscribeForegroundPulse()
+    }
+}
+
+function getStandaloneDisplayModeServerSnapshot(): boolean {
+    return false
+}
+
 export function useStandaloneDisplayMode(): boolean {
-    const [isStandalone, setIsStandalone] = useState<boolean>(() => isStandaloneDisplayMode())
-
-    useEffect(() => {
-        if (typeof window === 'undefined') {
-            return
-        }
-
-        const mediaQuery = window.matchMedia(STANDALONE_DISPLAY_MODE_QUERY)
-        function syncStandaloneDisplayMode(): void {
-            setIsStandalone(isStandaloneDisplayMode())
-        }
-
-        syncStandaloneDisplayMode()
-        const unbindMediaQueryListener = bindMediaQueryListener(mediaQuery, syncStandaloneDisplayMode)
-        window.addEventListener('pageshow', syncStandaloneDisplayMode)
-
-        return () => {
-            unbindMediaQueryListener()
-            window.removeEventListener('pageshow', syncStandaloneDisplayMode)
-        }
-    }, [])
-
-    return isStandalone
+    return useSyncExternalStore(
+        subscribeStandaloneDisplayMode,
+        isStandaloneDisplayMode,
+        getStandaloneDisplayModeServerSnapshot
+    )
 }

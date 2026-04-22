@@ -51,7 +51,7 @@ describe('useRealtimeFeedback', () => {
             'disconnect',
             'connect',
             'sync_start',
-            'sync_end'
+            'sync_end',
         ])
     })
 
@@ -81,7 +81,7 @@ describe('useRealtimeFeedback', () => {
         expect(result.current.banner).toEqual({ kind: 'restoring', reason: 'page-discarded' })
 
         await act(async () => {
-            vi.advanceTimersByTime(2_400)
+            vi.advanceTimersByTime(1_600)
         })
 
         expect(result.current.banner).toEqual({ kind: 'hidden' })
@@ -99,7 +99,7 @@ describe('useRealtimeFeedback', () => {
         expect(result.current.banner).toEqual({ kind: 'restoring', reason: 'page-restored' })
 
         await act(async () => {
-            vi.advanceTimersByTime(2_400)
+            vi.advanceTimersByTime(1_600)
         })
 
         expect(result.current.banner).toEqual({ kind: 'hidden' })
@@ -127,7 +127,7 @@ describe('useRealtimeFeedback', () => {
         expect(result.current.banner).toEqual({ kind: 'restoring', reason: 'page-restored' })
 
         await act(async () => {
-            vi.advanceTimersByTime(1_950)
+            vi.advanceTimersByTime(1_150)
         })
 
         expect(result.current.banner).toEqual({ kind: 'busy' })
@@ -138,5 +138,73 @@ describe('useRealtimeFeedback', () => {
         })
 
         expect(result.current.banner).toEqual({ kind: 'hidden' })
+    })
+
+    it('keeps one busy banner visible until overlapping sync tasks all finish', async () => {
+        const { result } = renderHook(() => useRealtimeFeedback())
+
+        let resolveFirstTask: (() => void) | null = null
+        const firstTask = new Promise<void>((resolve) => {
+            resolveFirstTask = resolve
+        })
+        let resolveSecondTask: (() => void) | null = null
+        const secondTask = new Promise<void>((resolve) => {
+            resolveSecondTask = resolve
+        })
+
+        act(() => {
+            result.current.handleConnect({ initial: true, recovered: false })
+            result.current.handleDisconnect('closed')
+            result.current.runCatchupSync(firstTask)
+            result.current.runCatchupSync(secondTask)
+        })
+
+        await act(async () => {
+            vi.advanceTimersByTime(450)
+        })
+
+        expect(result.current.banner).toEqual({ kind: 'busy' })
+
+        await act(async () => {
+            resolveFirstTask?.()
+            await firstTask
+        })
+
+        expect(result.current.banner).toEqual({ kind: 'busy' })
+
+        await act(async () => {
+            resolveSecondTask?.()
+            await secondTask
+        })
+
+        expect(result.current.banner).toEqual({ kind: 'hidden' })
+    })
+
+    it('keeps silent catch-up sync hidden while still tracing the work', async () => {
+        const { result } = renderHook(() => useRealtimeFeedback())
+
+        let resolveTask: (() => void) | null = null
+        const task = new Promise<void>((resolve) => {
+            resolveTask = resolve
+        })
+
+        act(() => {
+            result.current.runCatchupSync(task, { silent: true })
+        })
+
+        await act(async () => {
+            vi.advanceTimersByTime(450)
+        })
+
+        expect(result.current.banner).toEqual({ kind: 'hidden' })
+
+        await act(async () => {
+            resolveTask?.()
+            await task
+        })
+
+        expect(result.current.banner).toEqual({ kind: 'hidden' })
+        expect(window.__vibyRealtimeTrace?.map((entry) => entry.type)).toEqual(['sync_start', 'sync_end'])
+        expect(window.__vibyRealtimeTrace?.[0]?.details).toEqual({ silent: true })
     })
 })

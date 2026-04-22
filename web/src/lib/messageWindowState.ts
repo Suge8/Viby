@@ -1,16 +1,11 @@
-import { extractAssistantMessageStreamId } from '@viby/protocol'
-import type { DecryptedMessage, MessageStatus, SessionStreamState } from '@/types/api'
 import { normalizeDecryptedMessage } from '@/chat/normalize'
 import { isCliOutputText } from '@/chat/reducerCliOutput'
-import {
-    readMessageWindowWarmSnapshot,
-    type MessageWindowWarmSnapshot
-} from '@/lib/messageWindowWarmSnapshot'
 import { isUserMessage, mergeMessages } from '@/lib/messages'
-import {
-    MESSAGE_WINDOW_PENDING_OVERFLOW_WARNING_KEY,
-    type MessageWindowWarningKey
-} from '@/lib/messageWindowWarnings'
+import { countVisiblePendingMessages, syncPendingVisibilityCache } from '@/lib/messageWindowPendingVisibility'
+import { deriveSeqBounds } from '@/lib/messageWindowSnapshotSupport'
+import { readMessageWindowWarmSnapshot } from '@/lib/messageWindowWarmSnapshot'
+import { MESSAGE_WINDOW_PENDING_OVERFLOW_WARNING_KEY, type MessageWindowWarningKey } from '@/lib/messageWindowWarnings'
+import type { DecryptedMessage, MessageStatus, SessionStreamState } from '@/types/api'
 
 export type PendingReplyPhase = 'sending' | 'preparing'
 
@@ -54,6 +49,10 @@ export type InternalState = MessageWindowState & {
     historyExpanded: boolean
 }
 
+export { clearPendingVisibilityCache } from '@/lib/messageWindowPendingVisibility'
+export { resolvePendingReplyAfterMessages, resolveStreamAfterMessages } from '@/lib/messageWindowReplyResolution'
+export { createWarmSnapshot } from '@/lib/messageWindowSnapshotSupport'
+
 type BuildStateUpdates = {
     messages?: DecryptedMessage[]
     pending?: DecryptedMessage[]
@@ -72,13 +71,6 @@ type BuildStateUpdates = {
     restoredFromWarmSnapshot?: boolean
 }
 
-type PendingVisibilityCacheEntry = {
-    source: DecryptedMessage
-    visible: boolean
-}
-
-const pendingVisibilityCacheBySession = new Map<string, Map<string, PendingVisibilityCacheEntry>>()
-
 export function createPendingReplyState(options: {
     localId: string
     requestStartedAt: number
@@ -89,58 +81,7 @@ export function createPendingReplyState(options: {
         localId: options.localId,
         requestStartedAt: options.requestStartedAt,
         serverAcceptedAt: options.serverAcceptedAt ?? null,
-        phase: options.phase
-    }
-}
-
-function getPendingVisibilityCache(sessionId: string): Map<string, PendingVisibilityCacheEntry> {
-    const existing = pendingVisibilityCacheBySession.get(sessionId)
-    if (existing) {
-        return existing
-    }
-
-    const created = new Map<string, PendingVisibilityCacheEntry>()
-    pendingVisibilityCacheBySession.set(sessionId, created)
-    return created
-}
-
-export function clearPendingVisibilityCache(sessionId: string): void {
-    pendingVisibilityCacheBySession.delete(sessionId)
-}
-
-function isVisiblePendingMessage(sessionId: string, message: DecryptedMessage): boolean {
-    const cache = getPendingVisibilityCache(sessionId)
-    const cached = cache.get(message.id)
-    if (cached && cached.source === message) {
-        return cached.visible
-    }
-
-    const visible = normalizeDecryptedMessage(message) !== null
-    cache.set(message.id, { source: message, visible })
-    return visible
-}
-
-function countVisiblePendingMessages(sessionId: string, messages: DecryptedMessage[]): number {
-    let count = 0
-    for (const message of messages) {
-        if (isVisiblePendingMessage(sessionId, message)) {
-            count += 1
-        }
-    }
-    return count
-}
-
-function syncPendingVisibilityCache(sessionId: string, pending: DecryptedMessage[]): void {
-    const cache = pendingVisibilityCacheBySession.get(sessionId)
-    if (!cache) {
-        return
-    }
-
-    const keep = new Set(pending.map((message) => message.id))
-    for (const id of cache.keys()) {
-        if (!keep.has(id)) {
-            cache.delete(id)
-        }
+        phase: options.phase,
     }
 }
 
@@ -170,36 +111,6 @@ export function createEmptyState(sessionId: string): InternalState {
     }
 }
 
-function deriveSeqBounds(messages: DecryptedMessage[]): { oldestSeq: number | null; newestSeq: number | null } {
-    let oldest: number | null = null
-    let newest: number | null = null
-
-    for (const message of messages) {
-        if (typeof message.seq !== 'number') {
-            continue
-        }
-        if (oldest === null || message.seq < oldest) {
-            oldest = message.seq
-        }
-        if (newest === null || message.seq > newest) {
-            newest = message.seq
-        }
-    }
-
-    return { oldestSeq: oldest, newestSeq: newest }
-}
-
-export function createWarmSnapshot(state: InternalState): MessageWindowWarmSnapshot {
-    return {
-        sessionId: state.sessionId,
-        messages: [...state.messages],
-        hasLoadedLatest: state.hasLoadedLatest,
-        hasMore: state.hasMore,
-        historyExpanded: state.historyExpanded,
-        atBottom: state.atBottom
-    }
-}
-
 export function restoreWarmSnapshotState(sessionId: string): InternalState | null {
     const snapshot = readMessageWindowWarmSnapshot(sessionId)
     if (!snapshot) {
@@ -218,45 +129,8 @@ export function restoreWarmSnapshotState(sessionId: string): InternalState | nul
         newestSeq,
         messagesVersion: snapshot.messages.length > 0 ? 1 : 0,
         historyExpanded: snapshot.historyExpanded,
-        restoredFromWarmSnapshot: true
+        restoredFromWarmSnapshot: true,
     }
-}
-
-export function resolveStreamAfterMessages(
-    stream: SessionStreamState | null,
-    messages: DecryptedMessage[]
-): SessionStreamState | null {
-    if (!stream) {
-        return null
-    }
-
-    for (const message of messages) {
-        if (extractAssistantMessageStreamId(message.content) === stream.streamId) {
-            return null
-        }
-    }
-
-    return stream
-}
-
-export function resolvePendingReplyAfterMessages(
-    pendingReply: PendingReplyState | null,
-    messages: readonly DecryptedMessage[]
-): PendingReplyState | null {
-    if (!pendingReply) {
-        return null
-    }
-
-    for (const message of messages) {
-        if (isUserMessage(message)) {
-            continue
-        }
-        if (message.createdAt >= pendingReply.requestStartedAt) {
-            return null
-        }
-    }
-
-    return pendingReply
 }
 
 export function buildState(prev: InternalState, updates: BuildStateUpdates): InternalState {
@@ -300,9 +174,10 @@ export function buildState(prev: InternalState, updates: BuildStateUpdates): Int
         pendingReply: updates.pendingReply !== undefined ? updates.pendingReply : prev.pendingReply,
         stream,
         streamVersion,
-        restoredFromWarmSnapshot: updates.restoredFromWarmSnapshot !== undefined
-            ? updates.restoredFromWarmSnapshot
-            : prev.restoredFromWarmSnapshot,
+        restoredFromWarmSnapshot:
+            updates.restoredFromWarmSnapshot !== undefined
+                ? updates.restoredFromWarmSnapshot
+                : prev.restoredFromWarmSnapshot,
         historyExpanded: updates.historyExpanded !== undefined ? updates.historyExpanded : prev.historyExpanded,
     }
 }
@@ -379,7 +254,10 @@ export function isOptimisticMessage(message: DecryptedMessage): boolean {
     return Boolean(message.localId && message.id === message.localId)
 }
 
-export function mergeIntoPending(prev: InternalState, incoming: DecryptedMessage[]): {
+export function mergeIntoPending(
+    prev: InternalState,
+    incoming: DecryptedMessage[]
+): {
     pending: DecryptedMessage[]
     pendingVisibleCount: number
     pendingOverflowCount: number
@@ -392,7 +270,7 @@ export function mergeIntoPending(prev: InternalState, incoming: DecryptedMessage
             pendingVisibleCount: prev.pendingVisibleCount,
             pendingOverflowCount: prev.pendingOverflowCount,
             pendingOverflowVisibleCount: prev.pendingOverflowVisibleCount,
-            warning: prev.warning
+            warning: prev.warning,
         }
     }
 
@@ -402,15 +280,13 @@ export function mergeIntoPending(prev: InternalState, incoming: DecryptedMessage
     const pendingVisibleCount = countVisiblePendingMessages(prev.sessionId, pending)
     const pendingOverflowCount = prev.pendingOverflowCount + dropped
     const pendingOverflowVisibleCount = prev.pendingOverflowVisibleCount + droppedVisible
-    const warning = droppedVisible > 0 && !prev.warning
-        ? MESSAGE_WINDOW_PENDING_OVERFLOW_WARNING_KEY
-        : prev.warning
+    const warning = droppedVisible > 0 && !prev.warning ? MESSAGE_WINDOW_PENDING_OVERFLOW_WARNING_KEY : prev.warning
 
     return {
         pending,
         pendingVisibleCount,
         pendingOverflowCount,
         pendingOverflowVisibleCount,
-        warning
+        warning,
     }
 }

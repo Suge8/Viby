@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ApiClient } from '@/api/client'
+import { subscribeForegroundPulse } from '@/lib/foregroundPulse'
 import { shouldRegisterServiceWorkerForOrigin } from '@/lib/runtimeAssetPolicy'
+import { reportWebRuntimeError } from '@/lib/runtimeDiagnostics'
 
 export type PushNotificationsError =
     | 'permission-blocked'
@@ -9,21 +11,19 @@ export type PushNotificationsError =
     | 'unsubscribe-failed'
     | null
 
-const PUSH_VISIBILITY_STATE = 'visible'
-
 function isPushSupported(): boolean {
-    return typeof window !== 'undefined'
-        && shouldRegisterServiceWorkerForOrigin(window.location.origin)
-        && 'serviceWorker' in navigator
-        && 'PushManager' in window
-        && 'Notification' in window
+    return (
+        typeof window !== 'undefined' &&
+        shouldRegisterServiceWorkerForOrigin(window.location.origin) &&
+        'serviceWorker' in navigator &&
+        'PushManager' in window &&
+        'Notification' in window
+    )
 }
 
 function base64UrlToUint8Array(base64Url: string): Uint8Array {
     const padding = '='.repeat((4 - (base64Url.length % 4)) % 4)
-    const base64 = (base64Url + padding)
-        .replace(/-/g, '+')
-        .replace(/_/g, '/')
+    const base64 = (base64Url + padding).replace(/-/g, '+').replace(/_/g, '/')
     const raw = atob(base64)
     const output = new Uint8Array(raw.length)
     for (let i = 0; i < raw.length; i += 1) {
@@ -64,7 +64,7 @@ async function getPushRegistration(): Promise<ServiceWorkerRegistration | null> 
         return null
     }
 
-    return await navigator.serviceWorker.getRegistration() ?? null
+    return (await navigator.serviceWorker.getRegistration()) ?? null
 }
 
 export function usePushNotifications(api: ApiClient | null) {
@@ -107,29 +107,9 @@ export function usePushNotifications(api: ApiClient | null) {
     useEffect(() => {
         void refreshSubscription()
 
-        if (typeof window === 'undefined') {
-            return
-        }
-
-        function handlePageShow(): void {
+        return subscribeForegroundPulse(() => {
             void refreshSubscription()
-        }
-
-        function handleVisibilityChange(): void {
-            if (document.visibilityState === PUSH_VISIBILITY_STATE) {
-                void refreshSubscription()
-            }
-        }
-
-        window.addEventListener('pageshow', handlePageShow)
-        window.addEventListener('focus', handlePageShow)
-        document.addEventListener('visibilitychange', handleVisibilityChange)
-
-        return () => {
-            window.removeEventListener('pageshow', handlePageShow)
-            window.removeEventListener('focus', handlePageShow)
-            document.removeEventListener('visibilitychange', handleVisibilityChange)
-        }
+        })
     }, [refreshSubscription])
 
     const subscribeWithCurrentPermission = useCallback(async (): Promise<boolean> => {
@@ -167,7 +147,7 @@ export function usePushNotifications(api: ApiClient | null) {
                 const subscribeKey = Uint8Array.from(applicationServerKey).buffer
                 subscription = await registration.pushManager.subscribe({
                     userVisibleOnly: true,
-                    applicationServerKey: subscribeKey
+                    applicationServerKey: subscribeKey,
                 })
             }
 
@@ -182,15 +162,15 @@ export function usePushNotifications(api: ApiClient | null) {
                 endpoint: json.endpoint,
                 keys: {
                     p256dh: keys.p256dh,
-                    auth: keys.auth
-                }
+                    auth: keys.auth,
+                },
             })
             setLastError(null)
             setIsSubscribed(true)
             setPushEndpoint(json.endpoint)
             return true
         } catch (error) {
-            console.error('[PushNotifications] Failed to subscribe:', error)
+            reportWebRuntimeError('Failed to subscribe to push notifications.', error)
             setLastError('subscribe-failed')
             setPushEndpoint(null)
             return false
@@ -206,9 +186,7 @@ export function usePushNotifications(api: ApiClient | null) {
         setLastError(null)
 
         try {
-            const result = Notification.permission === 'granted'
-                ? 'granted'
-                : await Notification.requestPermission()
+            const result = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission()
             setPermission(result)
 
             if (result !== 'granted') {
@@ -265,7 +243,7 @@ export function usePushNotifications(api: ApiClient | null) {
             setPushEndpoint(null)
             return success
         } catch (error) {
-            console.error('[PushNotifications] Failed to unsubscribe:', error)
+            reportWebRuntimeError('Failed to unsubscribe from push notifications.', error)
             setLastError('unsubscribe-failed')
             return false
         } finally {
@@ -283,6 +261,6 @@ export function usePushNotifications(api: ApiClient | null) {
         refreshSubscription,
         enableNotifications,
         ensureSubscription,
-        disableNotifications
+        disableNotifications,
     }
 }

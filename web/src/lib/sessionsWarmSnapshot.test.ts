@@ -3,8 +3,9 @@ import {
     flushSessionsWarmSnapshot,
     readSessionsWarmSnapshot,
     removeSessionsWarmSnapshot,
-    writeSessionsWarmSnapshot
+    writeSessionsWarmSnapshot,
 } from '@/lib/sessionsWarmSnapshot'
+import { resetWarmSnapshotLifecycleForTests } from '@/lib/warmSnapshotLifecycle'
 
 function createSessionSummary(id: string) {
     return {
@@ -22,23 +23,24 @@ function createSessionSummary(id: string) {
         todoProgress: null,
         pendingRequestsCount: 0,
         resumeAvailable: true,
+        resumeStrategy: 'provider-handle',
         model: 'gpt-5.4',
-        modelReasoningEffort: 'high'
+        modelReasoningEffort: 'high',
     } as const
 }
 
 describe('sessionsWarmSnapshot', () => {
-    afterEach(() => {
-        removeSessionsWarmSnapshot()
-        window.localStorage.clear()
+    afterEach(async () => {
         vi.useRealTimers()
+        removeSessionsWarmSnapshot()
+        resetWarmSnapshotLifecycleForTests()
     })
 
     it('reads pending sessions immediately before the debounce flush fires', () => {
         writeSessionsWarmSnapshot([createSessionSummary('session-1')])
 
         expect(readSessionsWarmSnapshot()).toEqual({
-            sessions: [createSessionSummary('session-1')]
+            sessions: [createSessionSummary('session-1')],
         })
     })
 
@@ -47,17 +49,19 @@ describe('sessionsWarmSnapshot', () => {
         flushSessionsWarmSnapshot()
 
         expect(readSessionsWarmSnapshot()).toEqual({
-            sessions: [createSessionSummary('session-1')]
+            sessions: [createSessionSummary('session-1')],
         })
     })
 
     it('expires stale sessions snapshots', () => {
-        vi.useFakeTimers()
+        const nowSpy = vi.spyOn(Date, 'now')
+        nowSpy.mockReturnValue(1_000)
         writeSessionsWarmSnapshot([createSessionSummary('session-1')])
         flushSessionsWarmSnapshot()
 
-        vi.advanceTimersByTime(30 * 60 * 1_000 + 1)
+        nowSpy.mockReturnValue(1_000 + 30 * 60 * 1_000 + 1)
 
         expect(readSessionsWarmSnapshot()).toBeUndefined()
+        nowSpy.mockRestore()
     })
 })

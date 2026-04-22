@@ -1,15 +1,8 @@
+import { readAllAppCacheRecords, removeAppCacheRecord, writeAppCacheRecord } from '@/lib/storage/appCacheDb'
+import { APP_CACHE_STORES } from '@/lib/storage/storageRegistry'
+import { isWarmSnapshotFresh, WARM_SNAPSHOT_WRITE_DEBOUNCE_MS } from '@/lib/warmSnapshotPolicy'
+import { createWarmSnapshotWriteScheduler } from '@/lib/warmSnapshotWriteScheduler'
 import type { Session, SessionResponse } from '@/types/api'
-import {
-    readBrowserStorageJson,
-    removeBrowserStorageItem,
-    writeBrowserStorageJson
-} from '@/lib/browserStorage'
-import { registerWarmSnapshotLifecycleFlush } from '@/lib/warmSnapshotLifecycle'
-
-const SESSION_WARM_SNAPSHOT_STORAGE = 'local'
-const SESSION_WARM_SNAPSHOT_PREFIX = 'viby:session-warm:'
-const SESSION_WARM_SNAPSHOT_MAX_AGE_MS = 30 * 60 * 1_000
-const SESSION_WARM_SNAPSHOT_WRITE_DEBOUNCE_MS = 160
 
 type SessionWarmSnapshotRecord = Readonly<{
     at: number
@@ -19,94 +12,153 @@ type SessionWarmSnapshotRecord = Readonly<{
 type PendingSessionWarmSnapshotEntry = {
     at: number
     session: Session
-    timeoutId: ReturnType<typeof setTimeout> | null
+    fingerprint: string
 }
 
 const pendingSessionWarmSnapshots = new Map<string, PendingSessionWarmSnapshotEntry>()
-let lifecycleFlushRegistered = false
+const persistedSessionWarmSnapshots = new Map<string, SessionWarmSnapshotRecord>()
+const persistedSessionWarmSnapshotFingerprints = new Map<string, string>()
+const pendingPersistPromises = new Map<string, Promise<void>>()
+const sessionWarmSnapshotScheduler = createWarmSnapshotWriteScheduler<string>({
+    debounceMs: WARM_SNAPSHOT_WRITE_DEBOUNCE_MS,
+    flush: (sessionId) => {
+        const pending = pendingSessionWarmSnapshots.get(sessionId)
+        if (!pending) {
+            return
+        }
 
-function getSessionWarmSnapshotKey(sessionId: string): string {
-    return `${SESSION_WARM_SNAPSHOT_PREFIX}${sessionId}`
-}
+        if (persistedSessionWarmSnapshotFingerprints.get(sessionId) === pending.fingerprint) {
+            pendingSessionWarmSnapshots.delete(sessionId)
+            return
+        }
+
+        void persistSessionWarmSnapshot(
+            {
+                at: pending.at,
+                session: pending.session,
+            },
+            pending.fingerprint
+        )
+        pendingSessionWarmSnapshots.delete(sessionId)
+    },
+})
 
 function isFreshSnapshot(snapshot: SessionWarmSnapshotRecord, now: number = Date.now()): boolean {
-    return now - snapshot.at <= SESSION_WARM_SNAPSHOT_MAX_AGE_MS
+    return isWarmSnapshotFresh(snapshot.at, now)
 }
 
-function parseSessionWarmSnapshotRecord(rawValue: string): SessionWarmSnapshotRecord | null {
-    try {
-        const parsed = JSON.parse(rawValue) as Partial<SessionWarmSnapshotRecord>
-        if (typeof parsed.at !== 'number' || !parsed.session || typeof parsed.session.id !== 'string') {
-            return null
-        }
-
-        return {
-            at: parsed.at,
-            session: parsed.session as Session
-        }
-    } catch {
-        return null
-    }
+export function serializeSessionWarmSnapshotFingerprint(session: Session): string {
+    const resumableSession = session as Session & { resumeAvailable?: boolean }
+    return JSON.stringify({
+        id: session.id,
+        seq: session.seq,
+        createdAt: session.createdAt,
+        updatedAt: session.updatedAt,
+        active: session.active,
+        activeAt: session.activeAt,
+        metadataVersion: session.metadataVersion,
+        agentStateVersion: session.agentStateVersion,
+        thinking: session.thinking,
+        thinkingAt: session.thinkingAt,
+        model: session.model,
+        modelReasoningEffort: session.modelReasoningEffort,
+        permissionMode: session.permissionMode,
+        collaborationMode: session.collaborationMode,
+        todos: session.todos ?? null,
+        resumeAvailable: resumableSession.resumeAvailable ?? null,
+    })
 }
 
-function persistSessionWarmSnapshot(record: SessionWarmSnapshotRecord): void {
-    writeBrowserStorageJson(
-        SESSION_WARM_SNAPSHOT_STORAGE,
-        getSessionWarmSnapshotKey(record.session.id),
-        record
+async function persistSessionWarmSnapshot(record: SessionWarmSnapshotRecord, fingerprint: string): Promise<void> {
+    persistedSessionWarmSnapshots.set(record.session.id, record)
+    persistedSessionWarmSnapshotFingerprints.set(record.session.id, fingerprint)
+    const persistPromise = writeAppCacheRecord(APP_CACHE_STORES.sessionWarm, record.session.id, {
+        at: record.at,
+        session: record.session,
+        fingerprint,
+    })
+        .then(() => undefined)
+        .finally(() => {
+            if (pendingPersistPromises.get(record.session.id) === persistPromise) {
+                pendingPersistPromises.delete(record.session.id)
+            }
+        })
+    pendingPersistPromises.set(record.session.id, persistPromise)
+    await persistPromise
+}
+
+export async function hydrateSessionWarmSnapshotsFromAppCache(): Promise<void> {
+    const records = await readAllAppCacheRecords(APP_CACHE_STORES.sessionWarm)
+    const now = Date.now()
+    persistedSessionWarmSnapshots.clear()
+    persistedSessionWarmSnapshotFingerprints.clear()
+
+    await Promise.all(
+        records.map(async ([sessionId, record]) => {
+            if (
+                typeof record?.at !== 'number' ||
+                typeof record?.fingerprint !== 'string' ||
+                !record.session ||
+                (record.session as { id?: unknown }).id !== sessionId
+            ) {
+                await removeAppCacheRecord(APP_CACHE_STORES.sessionWarm, sessionId)
+                return
+            }
+
+            const snapshot = {
+                at: record.at,
+                session: record.session as Session,
+            } satisfies SessionWarmSnapshotRecord
+            if (!isFreshSnapshot(snapshot, now)) {
+                await removeAppCacheRecord(APP_CACHE_STORES.sessionWarm, sessionId)
+                return
+            }
+
+            persistedSessionWarmSnapshots.set(sessionId, snapshot)
+            persistedSessionWarmSnapshotFingerprints.set(sessionId, record.fingerprint)
+        })
     )
 }
 
-function flushAllSessionWarmSnapshots(): void {
-    for (const sessionId of pendingSessionWarmSnapshots.keys()) {
-        flushSessionWarmSnapshot(sessionId)
-    }
-}
-
-function ensureWarmSnapshotLifecycleFlushRegistered(): void {
-    if (lifecycleFlushRegistered) {
+export function writeSessionWarmSnapshot(session: Session): void {
+    const fingerprint = serializeSessionWarmSnapshotFingerprint(session)
+    const existing = pendingSessionWarmSnapshots.get(session.id)
+    if (existing?.fingerprint === fingerprint) {
         return
     }
-
-    registerWarmSnapshotLifecycleFlush(flushAllSessionWarmSnapshots)
-    lifecycleFlushRegistered = true
-}
-
-export function writeSessionWarmSnapshot(session: Session): void {
-    ensureWarmSnapshotLifecycleFlushRegistered()
-
-    const existing = pendingSessionWarmSnapshots.get(session.id)
-    if (existing?.timeoutId) {
-        clearTimeout(existing.timeoutId)
+    if (persistedSessionWarmSnapshotFingerprints.get(session.id) === fingerprint) {
+        return
     }
 
     const entry: PendingSessionWarmSnapshotEntry = {
         at: Date.now(),
         session,
-        timeoutId: null
+        fingerprint,
     }
 
-    entry.timeoutId = setTimeout(() => {
-        flushSessionWarmSnapshot(session.id)
-    }, SESSION_WARM_SNAPSHOT_WRITE_DEBOUNCE_MS)
-
     pendingSessionWarmSnapshots.set(session.id, entry)
+    sessionWarmSnapshotScheduler.schedule(session.id)
 }
 
 export function flushSessionWarmSnapshot(sessionId: string): void {
+    sessionWarmSnapshotScheduler.cancel(sessionId)
     const pending = pendingSessionWarmSnapshots.get(sessionId)
     if (!pending) {
         return
     }
 
-    if (pending.timeoutId) {
-        clearTimeout(pending.timeoutId)
+    if (persistedSessionWarmSnapshotFingerprints.get(sessionId) === pending.fingerprint) {
+        pendingSessionWarmSnapshots.delete(sessionId)
+        return
     }
 
-    persistSessionWarmSnapshot({
-        at: pending.at,
-        session: pending.session
-    })
+    void persistSessionWarmSnapshot(
+        {
+            at: pending.at,
+            session: pending.session,
+        },
+        pending.fingerprint
+    )
     pendingSessionWarmSnapshots.delete(sessionId)
 }
 
@@ -119,15 +171,11 @@ export function readSessionWarmSnapshot(sessionId: string): SessionResponse | un
         }
 
         return {
-            session: pending.session
+            session: pending.session,
         }
     }
 
-    const snapshot = readBrowserStorageJson({
-        storage: SESSION_WARM_SNAPSHOT_STORAGE,
-        key: getSessionWarmSnapshotKey(sessionId),
-        parse: parseSessionWarmSnapshotRecord
-    })
+    const snapshot = persistedSessionWarmSnapshots.get(sessionId)
     if (!snapshot) {
         return undefined
     }
@@ -137,15 +185,25 @@ export function readSessionWarmSnapshot(sessionId: string): SessionResponse | un
     }
 
     return {
-        session: snapshot.session
+        session: snapshot.session,
     }
 }
 
 export function removeSessionWarmSnapshot(sessionId: string): void {
-    const pending = pendingSessionWarmSnapshots.get(sessionId)
-    if (pending?.timeoutId) {
-        clearTimeout(pending.timeoutId)
-    }
+    sessionWarmSnapshotScheduler.cancel(sessionId)
     pendingSessionWarmSnapshots.delete(sessionId)
-    removeBrowserStorageItem(SESSION_WARM_SNAPSHOT_STORAGE, getSessionWarmSnapshotKey(sessionId))
+    persistedSessionWarmSnapshots.delete(sessionId)
+    persistedSessionWarmSnapshotFingerprints.delete(sessionId)
+    void removeAppCacheRecord(APP_CACHE_STORES.sessionWarm, sessionId)
+}
+
+export async function resetSessionWarmSnapshotForTests(): Promise<void> {
+    sessionWarmSnapshotScheduler.reset()
+    pendingSessionWarmSnapshots.clear()
+    persistedSessionWarmSnapshots.clear()
+    persistedSessionWarmSnapshotFingerprints.clear()
+    await Promise.all(
+        [...pendingPersistPromises.values()].map((persistPromise) => persistPromise.catch(() => undefined))
+    )
+    pendingPersistPromises.clear()
 }

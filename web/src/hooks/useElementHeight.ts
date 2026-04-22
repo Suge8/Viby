@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState, type RefObject } from 'react'
+import { type RefObject, useLayoutEffect, useState } from 'react'
 
 function readElementHeight(element: HTMLElement | null): number {
     if (!element) {
@@ -14,12 +14,13 @@ export function useElementHeight(elementRef: RefObject<HTMLElement | null>): num
     useLayoutEffect(() => {
         const element = elementRef.current
         if (!element) {
-            setHeight(0)
+            setHeight((previousHeight) => (previousHeight === 0 ? previousHeight : 0))
             return
         }
 
         function syncHeight(): void {
-            setHeight(readElementHeight(element))
+            const nextHeight = readElementHeight(element)
+            setHeight((previousHeight) => (previousHeight === nextHeight ? previousHeight : nextHeight))
         }
 
         syncHeight()

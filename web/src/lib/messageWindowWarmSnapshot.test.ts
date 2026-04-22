@@ -3,11 +3,11 @@ import {
     flushMessageWindowWarmSnapshot,
     readMessageWindowWarmSnapshot,
     removeMessageWindowWarmSnapshot,
-    scheduleMessageWindowWarmSnapshot
+    scheduleMessageWindowWarmSnapshot,
 } from '@/lib/messageWindowWarmSnapshot'
+import { resetWarmSnapshotLifecycleForTests } from '@/lib/warmSnapshotLifecycle'
 
 const SESSION_ID = 'session-1'
-const STORAGE_KEY = `viby:message-window-warm:${SESSION_ID}`
 
 function createSnapshot() {
     return {
@@ -16,20 +16,16 @@ function createSnapshot() {
         hasLoadedLatest: true,
         hasMore: false,
         historyExpanded: false,
-        atBottom: true
+        atBottom: true,
     }
 }
 
 describe('messageWindowWarmSnapshot', () => {
-    beforeEach(() => {
-        vi.useFakeTimers()
-        window.localStorage.clear()
-    })
+    beforeEach(() => {})
 
-    afterEach(() => {
+    afterEach(async () => {
         removeMessageWindowWarmSnapshot(SESSION_ID)
-        window.localStorage.clear()
-        vi.useRealTimers()
+        resetWarmSnapshotLifecycleForTests()
     })
 
     it('flushes pending message window snapshots on pagehide', () => {
@@ -37,7 +33,7 @@ describe('messageWindowWarmSnapshot', () => {
 
         window.dispatchEvent(new PageTransitionEvent('pagehide'))
 
-        expect(window.localStorage.getItem(STORAGE_KEY)).not.toBeNull()
+        expect(readMessageWindowWarmSnapshot(SESSION_ID)).toEqual(createSnapshot())
     })
 
     it('flushes pending message window snapshots on freeze', () => {
@@ -45,7 +41,7 @@ describe('messageWindowWarmSnapshot', () => {
 
         document.dispatchEvent(new Event('freeze'))
 
-        expect(window.localStorage.getItem(STORAGE_KEY)).not.toBeNull()
+        expect(readMessageWindowWarmSnapshot(SESSION_ID)).toEqual(createSnapshot())
     })
 
     it('persists and reads the flushed message window snapshot', () => {

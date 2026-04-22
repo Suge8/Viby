@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
-import { createAttachmentAdapter } from '@/lib/attachmentAdapter'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createAttachmentAdapter, getCachedAttachmentAdapter } from '@/lib/attachmentAdapter'
 
 async function collectAttachmentStates(adapter: ReturnType<typeof createAttachmentAdapter>, file: File) {
     const states = []
@@ -16,7 +16,42 @@ async function collectAttachmentStates(adapter: ReturnType<typeof createAttachme
     return states
 }
 
+const originalCreateObjectURL = URL.createObjectURL
+const originalRevokeObjectURL = URL.revokeObjectURL
+
+function installObjectUrlMocks() {
+    const createObjectURL = vi.fn(() => 'blob:preview-url')
+    const revokeObjectURL = vi.fn()
+
+    Object.defineProperty(URL, 'createObjectURL', {
+        configurable: true,
+        writable: true,
+        value: createObjectURL,
+    })
+    Object.defineProperty(URL, 'revokeObjectURL', {
+        configurable: true,
+        writable: true,
+        value: revokeObjectURL,
+    })
+
+    return { createObjectURL, revokeObjectURL }
+}
+
 describe('createAttachmentAdapter', () => {
+    afterEach(() => {
+        Object.defineProperty(URL, 'createObjectURL', {
+            configurable: true,
+            writable: true,
+            value: originalCreateObjectURL,
+        })
+        Object.defineProperty(URL, 'revokeObjectURL', {
+            configurable: true,
+            writable: true,
+            value: originalRevokeObjectURL,
+        })
+        vi.restoreAllMocks()
+    })
+
     it('exposes an explicit accept list instead of a wildcard picker', () => {
         const api = {
             uploadFile: vi.fn(),
@@ -31,7 +66,8 @@ describe('createAttachmentAdapter', () => {
         expect(adapter.accept).not.toBe('*/*')
     })
 
-    it('uploads and cleans up against the same session id', async () => {
+    it('uploads files as binary blobs and revokes local previews on cleanup', async () => {
+        const { revokeObjectURL } = installObjectUrlMocks()
         const api = {
             uploadFile: vi.fn().mockResolvedValue({ success: true, path: '/tmp/uploaded.png' }),
             deleteUploadFile: vi.fn().mockResolvedValue({ success: true }),
@@ -42,14 +78,16 @@ describe('createAttachmentAdapter', () => {
         const states = await collectAttachmentStates(adapter, file)
         const pendingAttachment = states.at(-1)
 
-        expect(api.uploadFile).toHaveBeenCalledWith('session-1', 'screenshot.png', expect.any(String), 'image/png')
+        expect(api.uploadFile).toHaveBeenCalledWith('session-1', file, 'image/png')
         expect(pendingAttachment).toMatchObject({
             status: { type: 'requires-action', reason: 'composer-send' },
-            path: '/tmp/uploaded.png'
+            path: '/tmp/uploaded.png',
+            previewUrl: 'blob:preview-url',
         })
 
         await adapter.remove(pendingAttachment as never)
 
+        expect(revokeObjectURL).toHaveBeenCalledWith('blob:preview-url')
         expect(api.deleteUploadFile).toHaveBeenCalledWith('session-1', '/tmp/uploaded.png')
     })
 
@@ -67,20 +105,19 @@ describe('createAttachmentAdapter', () => {
         const metadataText = completeAttachment.content[0]
 
         expect(metadataText).toMatchObject({ type: 'text' })
-        expect(
-            JSON.parse((metadataText as { text: string }).text)
-        ).toEqual({
+        expect(JSON.parse((metadataText as { text: string }).text)).toEqual({
             __attachmentMetadata: {
                 id: pendingAttachment?.id,
                 filename: 'notes.txt',
                 mimeType: 'text/plain',
                 size: 5,
-                path: '/tmp/uploaded.txt'
-            }
+                path: '/tmp/uploaded.txt',
+            },
         })
     })
 
-    it('marks image uploads as image attachments and keeps both preview and metadata on send', async () => {
+    it('does not persist inline image previews into durable attachment metadata', async () => {
+        const { revokeObjectURL } = installObjectUrlMocks()
         const api = {
             uploadFile: vi.fn().mockResolvedValue({ success: true, path: '/tmp/uploaded.png' }),
             deleteUploadFile: vi.fn().mockResolvedValue({ success: true }),
@@ -93,24 +130,37 @@ describe('createAttachmentAdapter', () => {
         expect(pendingAttachment).toMatchObject({
             type: 'image',
             contentType: 'image/jpeg',
-            status: { type: 'requires-action', reason: 'composer-send' }
+            status: { type: 'requires-action', reason: 'composer-send' },
+            previewUrl: 'blob:preview-url',
         })
 
         const completeAttachment = await adapter.send(pendingAttachment as never)
+        expect(revokeObjectURL).toHaveBeenCalledWith('blob:preview-url')
         expect(completeAttachment.type).toBe('image')
-        expect(completeAttachment.content[0]).toMatchObject({ type: 'image' })
-        expect(completeAttachment.content[1]).toMatchObject({ type: 'text' })
-        expect(
-            JSON.parse((completeAttachment.content[1] as { text: string }).text)
-        ).toEqual({
+        expect(completeAttachment.content).toHaveLength(1)
+        expect(completeAttachment.content[0]).toMatchObject({ type: 'text' })
+        expect(JSON.parse((completeAttachment.content[0] as { text: string }).text)).toEqual({
             __attachmentMetadata: {
                 id: pendingAttachment?.id,
                 filename: 'photo.jpg',
                 mimeType: 'image/jpeg',
                 size: file.size,
                 path: '/tmp/uploaded.png',
-                previewUrl: expect.any(String)
-            }
+            },
         })
+    })
+
+    it('reuses the same adapter instance for the same api/session pair', () => {
+        const api = {
+            uploadFile: vi.fn(),
+            deleteUploadFile: vi.fn(),
+        }
+
+        const first = getCachedAttachmentAdapter(api as never, 'session-1')
+        const second = getCachedAttachmentAdapter(api as never, 'session-1')
+        const third = getCachedAttachmentAdapter(api as never, 'session-2')
+
+        expect(first).toBe(second)
+        expect(first).not.toBe(third)
     })
 })

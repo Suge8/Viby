@@ -5,10 +5,12 @@
  * Loads Nerd Font from CDN to ensure icons display correctly on all devices.
  */
 
+import { reportWebRuntimeError, reportWebRuntimeInfo, reportWebRuntimeWarning } from '@/lib/runtimeDiagnostics'
+
 const BUILTIN_FONT_NAME = 'MesloLGLDZ Nerd Font Mono'
 const CDN_FONT_URLS = [
     'https://cdn.jsdmirror.com/gh/mshaugh/nerdfont-webfonts@v3.3.0/build/fonts/MesloLGLDZNerdFontMono-Regular.woff2',
-    'https://cdn.jsdelivr.net/gh/mshaugh/nerdfont-webfonts@v3.3.0/build/fonts/MesloLGLDZNerdFontMono-Regular.woff2'
+    'https://cdn.jsdelivr.net/gh/mshaugh/nerdfont-webfonts@v3.3.0/build/fonts/MesloLGLDZNerdFontMono-Regular.woff2',
 ]
 
 /**
@@ -39,7 +41,7 @@ const LOCAL_NERD_FONTS = [
     'CaskaydiaCove Nerd Font',
     'MesloLGS Nerd Font',
     'SourceCodePro Nerd Font',
-    'UbuntuMono Nerd Font'
+    'UbuntuMono Nerd Font',
 ]
 
 /**
@@ -47,14 +49,7 @@ const LOCAL_NERD_FONTS = [
  */
 const GENERIC_FAMILIES = ['ui-monospace', 'monospace']
 
-const SYSTEM_FALLBACKS = [
-    '"SFMono-Regular"',
-    '"Menlo"',
-    '"Monaco"',
-    '"Consolas"',
-    '"Liberation Mono"',
-    '"Courier New"'
-]
+const SYSTEM_FALLBACKS = ['"SFMono-Regular"', '"Menlo"', '"Monaco"', '"Consolas"', '"Liberation Mono"', '"Courier New"']
 
 /**
  * Load Nerd Font from CDN with fallback
@@ -63,17 +58,17 @@ async function loadBuiltinFont(): Promise<void> {
     let lastError: Error | null = null
     for (const url of CDN_FONT_URLS) {
         try {
-            const font = new FontFace(
-                BUILTIN_FONT_NAME,
-                `url(${url}) format("woff2")`,
-                { style: 'normal', weight: '400', display: 'swap' }
-            )
+            const font = new FontFace(BUILTIN_FONT_NAME, `url(${url}) format("woff2")`, {
+                style: 'normal',
+                weight: '400',
+                display: 'swap',
+            })
             await font.load()
             document.fonts.add(font)
             return
         } catch (err) {
             lastError = err as Error
-            console.warn(`[TerminalFont] Failed to load from ${url}, trying next...`)
+            reportWebRuntimeWarning(`Terminal font CDN failed at ${url}; trying next mirror.`, err)
         }
     }
     throw lastError ?? new Error('All CDN URLs failed')
@@ -94,7 +89,7 @@ class FontProvider implements ITerminalFontProvider {
     }
 }
 
-const LOCAL_FONT_FAMILY = LOCAL_NERD_FONTS.map(f => `"${f}"`).join(', ')
+const LOCAL_FONT_FAMILY = LOCAL_NERD_FONTS.map((f) => `"${f}"`).join(', ')
 const FONT_FAMILY_PARTS = [LOCAL_FONT_FAMILY, `"${BUILTIN_FONT_NAME}"`, ...SYSTEM_FALLBACKS, ...GENERIC_FAMILIES]
 const FONT_FAMILY = FONT_FAMILY_PARTS.join(', ')
 
@@ -134,16 +129,16 @@ export function getFontProvider(): ITerminalFontProvider {
 export function ensureBuiltinFontLoaded(): Promise<boolean> {
     if (!fontLoadPromise) {
         if (hasLocalNerdFont()) {
-            console.log('[TerminalFont] Local Nerd Font detected; skip CDN load')
+            reportWebRuntimeInfo('Local Nerd Font detected; skip CDN load.')
             fontLoadPromise = Promise.resolve(false)
         } else {
             fontLoadPromise = loadBuiltinFont()
                 .then(() => {
-                    console.log('[TerminalFont] CDN font loaded')
+                    reportWebRuntimeInfo('Terminal CDN font loaded.')
                     return true
                 })
-                .catch(err => {
-                    console.error('[TerminalFont] Failed to load CDN font:', err)
+                .catch((err) => {
+                    reportWebRuntimeError('Terminal CDN font load failed.', err)
                     return false
                 })
         }

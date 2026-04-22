@@ -1,16 +1,22 @@
-import { getPermissionModesForDriver, type CodexCollaborationMode, type PermissionMode, type PiModelCapability } from '@viby/protocol'
-import type { ModelReasoningEffort } from '@/types/api'
+import {
+    type CodexCollaborationMode,
+    getPermissionModesForDriver,
+    type PermissionMode,
+    type PiModelCapability,
+} from '@viby/protocol'
 import {
     getClaudeComposerModelOptions,
     getClaudeComposerReasoningEffortOptions,
     getCodexComposerModelOptions,
     getCodexComposerReasoningEffortOptions,
+    getCopilotComposerModelOptions,
     getGeminiComposerModelOptions,
     getPiComposerModelOptions,
     getPiComposerReasoningEffortOptions,
     getSessionModelDisplayLabelWithCapabilities,
     type SessionConfigOption,
 } from '@/lib/sessionConfigOptions'
+import type { ModelReasoningEffort } from '@/types/api'
 
 export type ComposerOptionTone = 'neutral' | 'brand' | 'warning' | 'danger'
 
@@ -178,6 +184,10 @@ function getModelOptionsForDriver(
         return getClaudeComposerModelOptions(currentModel)
     }
 
+    if (sessionDriver === 'copilot') {
+        return getCopilotComposerModelOptions(currentModel)
+    }
+
     if (sessionDriver === 'gemini') {
         return getGeminiComposerModelOptions(currentModel)
     }
@@ -193,7 +203,10 @@ function getModelOptionsForDriver(
     return []
 }
 
-export function getLocalizedPermissionModeOptions(sessionDriver: string | null, t: Translate): ComposerPanelOption<PermissionMode>[] {
+export function getLocalizedPermissionModeOptions(
+    sessionDriver: string | null,
+    t: Translate
+): ComposerPanelOption<PermissionMode>[] {
     return getPermissionModesForDriver(sessionDriver).map((mode) => ({
         value: mode,
         label: getPermissionLabel(mode, t),
@@ -241,11 +254,12 @@ export function getLocalizedReasoningEffortOptions(
     supportedEfforts: readonly ModelReasoningEffort[] | null | undefined,
     t: Translate
 ): ComposerPanelOption<ModelReasoningEffort | null>[] {
-    const options = sessionDriver === 'claude'
-        ? getClaudeComposerReasoningEffortOptions(currentEffort as never)
-        : sessionDriver === 'pi'
-            ? getPiComposerReasoningEffortOptions(currentEffort, supportedEfforts)
-            : getCodexComposerReasoningEffortOptions(currentEffort as never)
+    const options =
+        sessionDriver === 'claude'
+            ? getClaudeComposerReasoningEffortOptions(currentEffort as never)
+            : sessionDriver === 'pi'
+              ? getPiComposerReasoningEffortOptions(currentEffort, supportedEfforts)
+              : getCodexComposerReasoningEffortOptions(currentEffort as never)
 
     return options.map((option) => ({
         ...option,

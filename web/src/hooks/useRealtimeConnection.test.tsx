@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderHook, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PropsWithChildren } from 'react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useRealtimeConnection } from '@/hooks/useRealtimeConnection'
+import { resetForegroundPulseForTests } from '@/lib/foregroundPulse'
 
 type SocketEventHandler = (...args: any[]) => void
 
@@ -64,34 +65,35 @@ function createWrapper() {
     const queryClient = new QueryClient()
 
     return function Wrapper(props: PropsWithChildren) {
-        return (
-            <QueryClientProvider client={queryClient}>
-                {props.children}
-            </QueryClientProvider>
-        )
+        return <QueryClientProvider client={queryClient}>{props.children}</QueryClientProvider>
     }
 }
 
 afterEach(() => {
     sockets.length = 0
     ioMock.mockClear()
+    resetForegroundPulseForTests()
 })
 
 describe('useRealtimeConnection', () => {
     it('keeps the existing socket across token refresh and updates auth in place', async () => {
         const wrapper = createWrapper()
 
-        const { rerender } = renderHook((props: { token: string }) => useRealtimeConnection({
-            enabled: true,
-            token: props.token,
-            baseUrl: 'http://hub.test',
-            subscription: { all: true },
-            onEvent: () => {},
-            onConnect: () => {},
-        }), {
-            initialProps: { token: 'token-1' },
-            wrapper,
-        })
+        const { rerender } = renderHook(
+            (props: { token: string }) =>
+                useRealtimeConnection({
+                    enabled: true,
+                    token: props.token,
+                    baseUrl: 'http://hub.test',
+                    subscription: { all: true },
+                    onEvent: () => {},
+                    onConnect: () => {},
+                }),
+            {
+                initialProps: { token: 'token-1' },
+                wrapper,
+            }
+        )
 
         await waitFor(() => {
             expect(ioMock).toHaveBeenCalledTimes(1)
@@ -100,12 +102,17 @@ describe('useRealtimeConnection', () => {
         const socket = sockets[0]
         expect(socket).toBeDefined()
         expect(ioMock).toHaveBeenCalledTimes(1)
-        expect(ioMock).toHaveBeenCalledWith('http://hub.test/web', expect.objectContaining({
-            path: '/socket.io/',
-            transports: ['polling', 'websocket'],
-            autoConnect: false,
-            timeout: 10_000,
-        }))
+        expect(ioMock).toHaveBeenCalledWith(
+            'http://hub.test/web',
+            expect.objectContaining({
+                path: '/socket.io/',
+                transports: ['websocket', 'polling'],
+                autoConnect: false,
+                rememberUpgrade: false,
+                timeout: 10_000,
+                tryAllTransports: true,
+            })
+        )
 
         rerender({ token: 'token-2' })
 
@@ -119,19 +126,23 @@ describe('useRealtimeConnection', () => {
 
         Object.defineProperty(document, 'visibilityState', {
             configurable: true,
-            get: () => 'visible'
+            get: () => 'visible',
         })
 
-        renderHook(() => useRealtimeConnection({
-            enabled: true,
-            token: 'token-1',
-            baseUrl: 'http://hub.test',
-            subscription: { all: true },
-            onEvent: () => {},
-            onConnect: () => {},
-        }), {
-            wrapper,
-        })
+        renderHook(
+            () =>
+                useRealtimeConnection({
+                    enabled: true,
+                    token: 'token-1',
+                    baseUrl: 'http://hub.test',
+                    subscription: { all: true },
+                    onEvent: () => {},
+                    onConnect: () => {},
+                }),
+            {
+                wrapper,
+            }
+        )
 
         await waitFor(() => {
             expect(ioMock).toHaveBeenCalledTimes(1)
@@ -145,7 +156,47 @@ describe('useRealtimeConnection', () => {
 
         expect(socket.connectCalls).toBe(1)
         socket.connected = false
-        window.dispatchEvent(new Event('pageshow'))
+        window.dispatchEvent(new Event('focus'))
+
+        expect(socket.connectCalls).toBe(2)
+    })
+
+    it('actively reconnects when a visible page resumes through the shared lifecycle owner', async () => {
+        const wrapper = createWrapper()
+
+        Object.defineProperty(document, 'visibilityState', {
+            configurable: true,
+            get: () => 'visible',
+        })
+
+        renderHook(
+            () =>
+                useRealtimeConnection({
+                    enabled: true,
+                    token: 'token-1',
+                    baseUrl: 'http://hub.test',
+                    subscription: { all: true },
+                    onEvent: () => {},
+                    onConnect: () => {},
+                }),
+            {
+                wrapper,
+            }
+        )
+
+        await waitFor(() => {
+            expect(ioMock).toHaveBeenCalledTimes(1)
+        })
+
+        const socket = sockets[0]
+        expect(socket).toBeDefined()
+        if (!socket) {
+            return
+        }
+
+        expect(socket.connectCalls).toBe(1)
+        socket.connected = false
+        document.dispatchEvent(new Event('resume'))
 
         expect(socket.connectCalls).toBe(2)
     })
@@ -153,17 +204,21 @@ describe('useRealtimeConnection', () => {
     it('includes the current push endpoint when subscribing after connect', async () => {
         const wrapper = createWrapper()
 
-        renderHook(() => useRealtimeConnection({
-            enabled: true,
-            token: 'token-1',
-            baseUrl: 'http://hub.test',
-            subscription: { sessionId: 'session-1' },
-            pushEndpoint: 'https://push.example.com/device-1',
-            onEvent: () => {},
-            onConnect: () => {},
-        }), {
-            wrapper,
-        })
+        renderHook(
+            () =>
+                useRealtimeConnection({
+                    enabled: true,
+                    token: 'token-1',
+                    baseUrl: 'http://hub.test',
+                    subscription: { sessionId: 'session-1' },
+                    pushEndpoint: 'https://push.example.com/device-1',
+                    onEvent: () => {},
+                    onConnect: () => {},
+                }),
+            {
+                wrapper,
+            }
+        )
 
         await waitFor(() => {
             expect(ioMock).toHaveBeenCalledTimes(1)
@@ -183,8 +238,8 @@ describe('useRealtimeConnection', () => {
             event: 'web:subscribe',
             payload: {
                 sessionId: 'session-1',
-                pushEndpoint: 'https://push.example.com/device-1'
-            }
+                pushEndpoint: 'https://push.example.com/device-1',
+            },
         })
     })
 })

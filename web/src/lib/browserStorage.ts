@@ -1,8 +1,21 @@
+import { reportWebRuntimeWarning } from '@/lib/runtimeDiagnostics'
+import type { BrowserStorageKeyByKind } from '@/lib/storage/storageRegistry'
+
 export type BrowserStorageKind = 'local' | 'session'
+
+export type BrowserStorageWriteResult =
+    | {
+          ok: true
+      }
+    | {
+          ok: false
+          reason: 'unavailable' | 'quota' | 'error'
+          errorName?: string
+      }
 
 type ReadBrowserStorageJsonOptions<T> = {
     storage: BrowserStorageKind
-    key: string
+    key: BrowserStorageKeyByKind[BrowserStorageKind]
     parse: (rawValue: string) => T | null
     removeInvalid?: boolean
 }
@@ -36,16 +49,66 @@ export function getBrowserStorage(storage: BrowserStorageKind): Storage | null {
     }
 }
 
-export function removeBrowserStorageItem(storage: BrowserStorageKind, key: string): void {
-    accessBrowserStorage(storage, (storageHost) => {
-        storageHost.removeItem(key)
-    }, undefined)
+export function removeBrowserStorageItem<K extends BrowserStorageKind>(
+    storage: K,
+    key: BrowserStorageKeyByKind[K]
+): void {
+    accessBrowserStorage(
+        storage,
+        (storageHost) => {
+            storageHost.removeItem(key)
+        },
+        undefined
+    )
 }
 
-export function readBrowserStorageItem(storage: BrowserStorageKind, key: string): string | null {
-    return accessBrowserStorage(storage, (storageHost) => {
-        return storageHost.getItem(key)
-    }, null)
+export function readBrowserStorageItem<K extends BrowserStorageKind>(
+    storage: K,
+    key: BrowserStorageKeyByKind[K]
+): string | null {
+    return accessBrowserStorage(
+        storage,
+        (storageHost) => {
+            return storageHost.getItem(key)
+        },
+        null
+    )
+}
+
+export function writeBrowserStorageItem<K extends BrowserStorageKind>(
+    storage: K,
+    key: BrowserStorageKeyByKind[K],
+    value: string
+): BrowserStorageWriteResult {
+    const storageHost = getBrowserStorage(storage)
+    if (!storageHost) {
+        return {
+            ok: false,
+            reason: 'unavailable',
+        }
+    }
+
+    try {
+        storageHost.setItem(key, value)
+        return {
+            ok: true,
+        }
+    } catch (error) {
+        const errorName =
+            error instanceof DOMException || error instanceof Error ? error.name : typeof error === 'object' ? '' : ''
+        const reason = errorName === 'QuotaExceededError' ? 'quota' : 'error'
+        reportWebRuntimeWarning('browser storage write failed', {
+            storage,
+            key,
+            reason,
+            errorName: errorName || undefined,
+        })
+        return {
+            ok: false,
+            reason,
+            errorName: errorName || undefined,
+        }
+    }
 }
 
 export function readBrowserStorageJson<T>(options: ReadBrowserStorageJsonOptions<T>): T | null {
@@ -67,8 +130,10 @@ export function readBrowserStorageJson<T>(options: ReadBrowserStorageJsonOptions
     return null
 }
 
-export function writeBrowserStorageJson(storage: BrowserStorageKind, key: string, value: unknown): void {
-    accessBrowserStorage(storage, (storageHost) => {
-        storageHost.setItem(key, JSON.stringify(value))
-    }, undefined)
+export function writeBrowserStorageJson<K extends BrowserStorageKind>(
+    storage: K,
+    key: BrowserStorageKeyByKind[K],
+    value: unknown
+): BrowserStorageWriteResult {
+    return writeBrowserStorageItem(storage, key, JSON.stringify(value))
 }

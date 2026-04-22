@@ -1,41 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import type { SessionsResponse, SessionSummary } from '@/types/api'
+import { createTestSessionSummary } from '@/test/sessionFactories'
+import type { SessionSummary, SessionsResponse } from '@/types/api'
 import { patchSessionSummaryCache, patchSessionSummaryFromMessageCache } from './realtimeSessionSummaryCache'
 
-function createSessionSummary(
-    overrides: Partial<SessionSummary> & Pick<SessionSummary, 'id'>
-): SessionSummary {
-    const {
-        id,
-        latestActivityAt = 0,
-        latestActivityKind = 'ready',
-        latestCompletedReplyAt = 0,
-        ...restOverrides
-    } = overrides
-
-    return {
-        id,
-        active: false,
-        thinking: false,
-        activeAt: 0,
-        updatedAt: 0,
-        latestActivityAt,
-        latestActivityKind,
-        latestCompletedReplyAt,
-        lifecycleState: 'closed',
-        lifecycleStateSince: 0,
-        metadata: {
-            path: '/tmp/project',
-            driver: 'codex',
-            summary: { text: 'Summary', updatedAt: 0 }
-        },
-        todoProgress: null,
-        pendingRequestsCount: 0,
-        resumeAvailable: false,
-        model: null,
-        modelReasoningEffort: null,
-        ...restOverrides
-    }
+function createSessionSummary(overrides: Partial<SessionSummary> & Pick<SessionSummary, 'id'>): SessionSummary {
+    return createTestSessionSummary(overrides)
 }
 
 describe('patchSessionSummaryCache', () => {
@@ -47,20 +16,48 @@ describe('patchSessionSummaryCache', () => {
                     active: false,
                     updatedAt: 3_000,
                     lifecycleState: 'closed',
-                    lifecycleStateSince: 3_000
-                })
-            ]
+                    lifecycleStateSince: 3_000,
+                }),
+            ],
         }
 
         const result = patchSessionSummaryCache(previous, 'session-1', {
             lifecycleStateHint: 'archived',
-            lifecycleStateSinceHint: 3_100
+            lifecycleStateSinceHint: 3_100,
         })
 
         expect(result.patched).toBe(true)
         expect(result.next?.sessions[0]).toMatchObject({
             lifecycleState: 'archived',
-            lifecycleStateSince: 3_100
+            lifecycleStateSince: 3_100,
+        })
+    })
+
+    it('keeps explicitly open summaries out of history when the inactive patch arrives after abort', () => {
+        const previous: SessionsResponse = {
+            sessions: [
+                createSessionSummary({
+                    id: 'session-1',
+                    active: true,
+                    thinking: false,
+                    updatedAt: 3_000,
+                    lifecycleState: 'running',
+                    lifecycleStateSince: 3_000,
+                }),
+            ],
+        }
+
+        const result = patchSessionSummaryCache(previous, 'session-1', {
+            active: false,
+            lifecycleStateHint: 'open',
+            lifecycleStateSinceHint: 3_050,
+        })
+
+        expect(result.patched).toBe(true)
+        expect(result.next?.sessions[0]).toMatchObject({
+            active: false,
+            lifecycleState: 'open',
+            lifecycleStateSince: 3_050,
         })
     })
 
@@ -72,22 +69,22 @@ describe('patchSessionSummaryCache', () => {
                     model: 'gpt-5.4',
                     modelReasoningEffort: null,
                     permissionMode: 'default',
-                    collaborationMode: 'default'
-                })
-            ]
+                    collaborationMode: 'default',
+                }),
+            ],
         }
 
         const result = patchSessionSummaryCache(previous, 'session-1', {
             modelReasoningEffort: 'high',
             permissionMode: 'yolo',
-            collaborationMode: 'plan'
+            collaborationMode: 'plan',
         })
 
         expect(result.patched).toBe(true)
         expect(result.next?.sessions[0]).toMatchObject({
             modelReasoningEffort: 'high',
             permissionMode: 'yolo',
-            collaborationMode: 'plan'
+            collaborationMode: 'plan',
         })
     })
 })
@@ -101,9 +98,9 @@ describe('patchSessionSummaryFromMessageCache', () => {
                     updatedAt: 5_000,
                     latestActivityAt: 4_000,
                     latestActivityKind: 'ready',
-                    latestCompletedReplyAt: 4_000
-                })
-            ]
+                    latestCompletedReplyAt: 4_000,
+                }),
+            ],
         }
 
         const result = patchSessionSummaryFromMessageCache(previous, 'session-1', {
@@ -118,10 +115,10 @@ describe('patchSessionSummaryFromMessageCache', () => {
                     data: {
                         type: 'driver-switched',
                         previousDriver: 'codex',
-                        targetDriver: 'claude'
-                    }
-                }
-            }
+                        targetDriver: 'claude',
+                    },
+                },
+            },
         })
 
         expect(result.patched).toBe(false)

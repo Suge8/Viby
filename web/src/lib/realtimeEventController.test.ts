@@ -1,78 +1,18 @@
 import { QueryClient } from '@tanstack/react-query'
 import { waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import type { Session, SessionSummary, SessionsResponse, SyncEvent } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
+import { createTestSession, createTestSessionSummary } from '@/test/sessionFactories'
+import type { Session, SessionSummary, SessionsResponse, SyncEvent } from '@/types/api'
 import { getMessageWindowState, ingestIncomingMessages } from './message-window-store'
 import { createRealtimeEventController } from './realtimeEventController'
 
-function createSessionSummary(
-    overrides: Partial<SessionSummary> & Pick<SessionSummary, 'id'>
-): SessionSummary {
-    const {
-        id,
-        latestActivityAt = 0,
-        latestActivityKind = 'ready',
-        latestCompletedReplyAt = 0,
-        ...restOverrides
-    } = overrides
-
-    return {
-        id,
-        active: false,
-        thinking: false,
-        activeAt: 0,
-        updatedAt: 0,
-        latestActivityAt,
-        latestActivityKind,
-        latestCompletedReplyAt,
-        lifecycleState: 'closed',
-        lifecycleStateSince: 0,
-        metadata: {
-            path: '/tmp/project',
-            driver: 'codex',
-            summary: { text: 'Summary', updatedAt: 0 }
-        },
-        todoProgress: null,
-        pendingRequestsCount: 0,
-        resumeAvailable: false,
-        model: null,
-        modelReasoningEffort: null,
-        ...restOverrides
-    }
+function createSessionSummary(overrides: Partial<SessionSummary> & Pick<SessionSummary, 'id'>): SessionSummary {
+    return createTestSessionSummary(overrides)
 }
 
 function createSessionRecord(overrides: Partial<Session> & Pick<Session, 'id'>): Session {
-    const { id, ...restOverrides } = overrides
-
-    return {
-        id,
-        seq: 1,
-        createdAt: 1_000,
-        updatedAt: 1_000,
-        active: true,
-        activeAt: 1_000,
-        metadata: {
-            path: '/tmp/project',
-            host: 'localhost',
-            driver: 'codex'
-        },
-        metadataVersion: 1,
-        agentState: {
-            controlledByUser: false,
-            requests: {},
-            completedRequests: {}
-        },
-        agentStateVersion: 1,
-        thinking: false,
-        thinkingAt: 1_000,
-        todos: undefined,
-        model: null,
-        modelReasoningEffort: null,
-        permissionMode: undefined,
-        collaborationMode: undefined,
-        ...restOverrides
-    }
+    return createTestSession(overrides)
 }
 
 describe('createRealtimeEventController', () => {
@@ -85,16 +25,16 @@ describe('createRealtimeEventController', () => {
             activeAt: 1_000,
             updatedAt: 2_000,
             lifecycleState: 'running',
-            lifecycleStateSince: 1_000
+            lifecycleStateSince: 1_000,
         })
 
         queryClient.setQueryData<SessionsResponse>(queryKeys.sessions, {
-            sessions: [session]
+            sessions: [session],
         })
 
         const controller = createRealtimeEventController({
             queryClient,
-            onEvent: vi.fn()
+            onEvent: vi.fn(),
         })
 
         controller.handleEvent({
@@ -103,8 +43,8 @@ describe('createRealtimeEventController', () => {
             data: {
                 active: false,
                 thinking: false,
-                updatedAt: 3_000
-            }
+                updatedAt: 3_000,
+            },
         } as SyncEvent)
 
         const result = queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)
@@ -113,7 +53,7 @@ describe('createRealtimeEventController', () => {
             thinking: false,
             updatedAt: 3_000,
             lifecycleState: 'closed',
-            lifecycleStateSince: 3_000
+            lifecycleStateSince: 3_000,
         })
     })
 
@@ -125,16 +65,16 @@ describe('createRealtimeEventController', () => {
             thinking: false,
             updatedAt: 5_000,
             lifecycleState: 'archived',
-            lifecycleStateSince: 4_000
+            lifecycleStateSince: 4_000,
         })
 
         queryClient.setQueryData<SessionsResponse>(queryKeys.sessions, {
-            sessions: [session]
+            sessions: [session],
         })
 
         const controller = createRealtimeEventController({
             queryClient,
-            onEvent: vi.fn()
+            onEvent: vi.fn(),
         })
 
         controller.handleEvent({
@@ -142,14 +82,14 @@ describe('createRealtimeEventController', () => {
             sessionId: session.id,
             data: {
                 active: false,
-                updatedAt: 6_000
-            }
+                updatedAt: 6_000,
+            },
         } as SyncEvent)
 
         const result = queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)
         expect(result?.sessions[0]).toMatchObject({
             lifecycleState: 'archived',
-            lifecycleStateSince: 4_000
+            lifecycleStateSince: 4_000,
         })
     })
 
@@ -161,16 +101,16 @@ describe('createRealtimeEventController', () => {
             thinking: false,
             updatedAt: 5_000,
             lifecycleState: 'archived',
-            lifecycleStateSince: 4_000
+            lifecycleStateSince: 4_000,
         })
 
         queryClient.setQueryData<SessionsResponse>(queryKeys.sessions, {
-            sessions: [session]
+            sessions: [session],
         })
 
         const controller = createRealtimeEventController({
             queryClient,
-            onEvent: vi.fn()
+            onEvent: vi.fn(),
         })
 
         controller.handleEvent({
@@ -179,8 +119,8 @@ describe('createRealtimeEventController', () => {
             data: {
                 active: true,
                 activeAt: 6_000,
-                thinking: false
-            }
+                thinking: false,
+            },
         } as SyncEvent)
 
         const result = queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)
@@ -189,7 +129,7 @@ describe('createRealtimeEventController', () => {
             thinking: false,
             activeAt: session.activeAt,
             lifecycleState: 'archived',
-            lifecycleStateSince: 4_000
+            lifecycleStateSince: 4_000,
         })
     })
 
@@ -204,16 +144,16 @@ describe('createRealtimeEventController', () => {
             latestActivityKind: 'ready',
             latestCompletedReplyAt: 2_000,
             lifecycleState: 'running',
-            lifecycleStateSince: 1_000
+            lifecycleStateSince: 1_000,
         })
 
         queryClient.setQueryData<SessionsResponse>(queryKeys.sessions, {
-            sessions: [session]
+            sessions: [session],
         })
 
         const controller = createRealtimeEventController({
             queryClient,
-            onEvent: vi.fn()
+            onEvent: vi.fn(),
         })
 
         controller.handleEvent({
@@ -222,8 +162,8 @@ describe('createRealtimeEventController', () => {
             data: {
                 active: false,
                 thinking: false,
-                updatedAt: 3_000
-            }
+                updatedAt: 3_000,
+            },
         } as SyncEvent)
 
         controller.handleEvent({
@@ -232,37 +172,82 @@ describe('createRealtimeEventController', () => {
             data: {
                 metadata: {
                     lifecycleState: 'archived',
-                    lifecycleStateSince: 3_100
-                }
-            }
+                    lifecycleStateSince: 3_100,
+                },
+            },
         } as SyncEvent)
 
         const result = queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)
         expect(result?.sessions[0]).toMatchObject({
             active: false,
             lifecycleState: 'archived',
-            lifecycleStateSince: 3_100
+            lifecycleStateSince: 3_100,
         })
     })
 
-    it('invalidates team project and history queries from the dedicated team realtime owner', async () => {
+    it('keeps an aborted session in open lifecycle after the inactive realtime patch lands', () => {
+        const queryClient = new QueryClient()
+        const session = createSessionSummary({
+            id: 'session-aborted-open',
+            active: true,
+            thinking: true,
+            activeAt: 1_000,
+            updatedAt: 2_000,
+            lifecycleState: 'running',
+            lifecycleStateSince: 1_000,
+        })
+
+        queryClient.setQueryData<SessionsResponse>(queryKeys.sessions, {
+            sessions: [session],
+        })
+
+        const controller = createRealtimeEventController({
+            queryClient,
+            onEvent: vi.fn(),
+        })
+
+        controller.handleEvent({
+            type: 'session-updated',
+            sessionId: session.id,
+            data: {
+                active: false,
+                thinking: false,
+                updatedAt: 3_000,
+                metadata: {
+                    lifecycleState: 'open',
+                    lifecycleStateSince: 3_100,
+                },
+            },
+        } as SyncEvent)
+
+        const result = queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)
+        expect(result?.sessions[0]).toMatchObject({
+            active: false,
+            thinking: false,
+            updatedAt: 3_000,
+            lifecycleState: 'open',
+            lifecycleStateSince: 3_100,
+        })
+    })
+
+    it('invalidates command capability queries from the dedicated realtime owner', async () => {
         const queryClient = new QueryClient()
         const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
         const controller = createRealtimeEventController({
             queryClient,
-            onEvent: vi.fn()
+            onEvent: vi.fn(),
         })
 
         controller.handleEvent({
-            type: 'team-project-updated',
-            projectId: 'project-1',
-            managerSessionId: 'manager-session-1',
-            affectedSessionIds: ['manager-session-1', 'member-session-1']
+            type: 'command-capabilities-invalidated',
+            sessionId: 'session-1',
         } as SyncEvent)
 
         await waitFor(() => {
-            expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: queryKeys.teamProject('project-1') })
-            expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: queryKeys.teamProjectHistory('project-1') })
+            expect(invalidateQueries).toHaveBeenCalledWith({
+                queryKey: queryKeys.commandCapabilities('session-1'),
+                refetchType: 'none',
+            })
         })
     })
 
@@ -275,16 +260,16 @@ describe('createRealtimeEventController', () => {
             lifecycleStateSince: 1_000,
             modelReasoningEffort: null,
             permissionMode: 'default',
-            collaborationMode: 'default'
+            collaborationMode: 'default',
         })
 
         queryClient.setQueryData<SessionsResponse>(queryKeys.sessions, {
-            sessions: [session]
+            sessions: [session],
         })
 
         const controller = createRealtimeEventController({
             queryClient,
-            onEvent: vi.fn()
+            onEvent: vi.fn(),
         })
 
         controller.handleEvent({
@@ -293,15 +278,15 @@ describe('createRealtimeEventController', () => {
             data: {
                 modelReasoningEffort: 'high',
                 permissionMode: 'yolo',
-                collaborationMode: 'plan'
-            }
+                collaborationMode: 'plan',
+            },
         } as SyncEvent)
 
         const result = queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)
         expect(result?.sessions[0]).toMatchObject({
             modelReasoningEffort: 'high',
             permissionMode: 'yolo',
-            collaborationMode: 'plan'
+            collaborationMode: 'plan',
         })
     })
 
@@ -317,16 +302,16 @@ describe('createRealtimeEventController', () => {
             latestActivityKind: 'user',
             latestCompletedReplyAt: null,
             lifecycleState: 'running',
-            lifecycleStateSince: 500
+            lifecycleStateSince: 500,
         })
 
         queryClient.setQueryData<SessionsResponse>(queryKeys.sessions, {
-            sessions: [session]
+            sessions: [session],
         })
 
         const controller = createRealtimeEventController({
             queryClient,
-            onEvent: vi.fn()
+            onEvent: vi.fn(),
         })
 
         controller.handleEvent({
@@ -343,11 +328,11 @@ describe('createRealtimeEventController', () => {
                         type: 'codex',
                         data: {
                             type: 'message',
-                            message: 'Still responding'
-                        }
-                    }
-                }
-            }
+                            message: 'Still responding',
+                        },
+                    },
+                },
+            },
         })
 
         const result = queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)
@@ -355,7 +340,7 @@ describe('createRealtimeEventController', () => {
             updatedAt: 1_000,
             latestActivityAt: replyAt,
             latestActivityKind: 'reply',
-            latestCompletedReplyAt: null
+            latestCompletedReplyAt: null,
         })
 
         controller.handleEvent({
@@ -371,11 +356,11 @@ describe('createRealtimeEventController', () => {
                     content: {
                         type: 'event',
                         data: {
-                            type: 'ready'
-                        }
-                    }
-                }
-            }
+                            type: 'ready',
+                        },
+                    },
+                },
+            },
         })
 
         const readyResult = queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)
@@ -383,7 +368,7 @@ describe('createRealtimeEventController', () => {
             updatedAt: replyAt + 1,
             latestActivityAt: replyAt + 1,
             latestActivityKind: 'ready',
-            latestCompletedReplyAt: replyAt
+            latestCompletedReplyAt: replyAt,
         })
     })
 
@@ -400,16 +385,16 @@ describe('createRealtimeEventController', () => {
             latestActivityKind: 'user',
             latestCompletedReplyAt: null,
             lifecycleState: 'running',
-            lifecycleStateSince: 500
+            lifecycleStateSince: 500,
         })
 
         queryClient.setQueryData<SessionsResponse>(queryKeys.sessions, {
-            sessions: [session]
+            sessions: [session],
         })
 
         const controller = createRealtimeEventController({
             queryClient,
-            onEvent: vi.fn()
+            onEvent: vi.fn(),
         })
 
         controller.handleEvent({
@@ -426,11 +411,11 @@ describe('createRealtimeEventController', () => {
                         type: 'codex',
                         data: {
                             type: 'message',
-                            message: 'Normalized'
-                        }
-                    }
-                }
-            }
+                            message: 'Normalized',
+                        },
+                    },
+                },
+            },
         })
 
         const result = queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)
@@ -438,7 +423,7 @@ describe('createRealtimeEventController', () => {
             updatedAt: 1_000,
             latestActivityAt: replyAtMillis,
             latestActivityKind: 'reply',
-            latestCompletedReplyAt: null
+            latestCompletedReplyAt: null,
         })
     })
 
@@ -455,7 +440,7 @@ describe('createRealtimeEventController', () => {
                 latestActivityKind: 'ready',
                 latestCompletedReplyAt: 2_000,
                 lifecycleState: 'running',
-                lifecycleStateSince: 1_000
+                lifecycleStateSince: 1_000,
             }),
             createSessionSummary({
                 id: 'session-streaming',
@@ -466,17 +451,17 @@ describe('createRealtimeEventController', () => {
                 latestActivityKind: 'user',
                 latestCompletedReplyAt: null,
                 lifecycleState: 'running',
-                lifecycleStateSince: 500
-            })
+                lifecycleStateSince: 500,
+            }),
         ]
 
         queryClient.setQueryData<SessionsResponse>(queryKeys.sessions, {
-            sessions
+            sessions,
         })
 
         const controller = createRealtimeEventController({
             queryClient,
-            onEvent: vi.fn()
+            onEvent: vi.fn(),
         })
 
         controller.handleEvent({
@@ -493,11 +478,11 @@ describe('createRealtimeEventController', () => {
                         type: 'codex',
                         data: {
                             type: 'message',
-                            message: 'Still responding'
-                        }
-                    }
-                }
-            }
+                            message: 'Still responding',
+                        },
+                    },
+                },
+            },
         })
 
         let result = queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)
@@ -506,7 +491,7 @@ describe('createRealtimeEventController', () => {
             id: 'session-streaming',
             updatedAt: 1_000,
             latestActivityAt: replyAt,
-            latestActivityKind: 'reply'
+            latestActivityKind: 'reply',
         })
 
         controller.handleEvent({
@@ -522,11 +507,11 @@ describe('createRealtimeEventController', () => {
                     content: {
                         type: 'event',
                         data: {
-                            type: 'ready'
-                        }
-                    }
-                }
-            }
+                            type: 'ready',
+                        },
+                    },
+                },
+            },
         })
 
         result = queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)
@@ -534,7 +519,7 @@ describe('createRealtimeEventController', () => {
         expect(result?.sessions[1]).toMatchObject({
             id: 'session-streaming',
             updatedAt: replyAt + 1,
-            latestCompletedReplyAt: replyAt
+            latestCompletedReplyAt: replyAt,
         })
     })
 
@@ -551,7 +536,7 @@ describe('createRealtimeEventController', () => {
                     latestActivityKind: 'ready',
                     latestCompletedReplyAt: 2_000,
                     lifecycleState: 'running',
-                    lifecycleStateSince: 1_000
+                    lifecycleStateSince: 1_000,
                 }),
                 createSessionSummary({
                     id: 'session-awaiting-input',
@@ -561,14 +546,14 @@ describe('createRealtimeEventController', () => {
                     latestActivityKind: 'ready',
                     latestCompletedReplyAt: 1_000,
                     lifecycleState: 'running',
-                    lifecycleStateSince: 500
-                })
-            ]
+                    lifecycleStateSince: 500,
+                }),
+            ],
         })
 
         const controller = createRealtimeEventController({
             queryClient,
-            onEvent: vi.fn()
+            onEvent: vi.fn(),
         })
 
         controller.handleEvent({
@@ -583,7 +568,7 @@ describe('createRealtimeEventController', () => {
                     host: 'localhost',
                     driver: 'codex',
                     lifecycleState: 'running',
-                    lifecycleStateSince: 500
+                    lifecycleStateSince: 500,
                 },
                 agentState: {
                     controlledByUser: false,
@@ -591,12 +576,12 @@ describe('createRealtimeEventController', () => {
                         'request-1': {
                             tool: 'read_file',
                             arguments: {},
-                            createdAt: 1_500
-                        }
+                            createdAt: 1_500,
+                        },
                     },
-                    completedRequests: {}
-                }
-            })
+                    completedRequests: {},
+                },
+            }),
         } as SyncEvent)
 
         const result = queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)
@@ -604,7 +589,7 @@ describe('createRealtimeEventController', () => {
         expect(result?.sessions[1]).toMatchObject({
             id: 'session-awaiting-input',
             updatedAt: 9_000,
-            pendingRequestsCount: 1
+            pendingRequestsCount: 1,
         })
     })
 
@@ -612,31 +597,31 @@ describe('createRealtimeEventController', () => {
         const queryClient = new QueryClient()
         const controller = createRealtimeEventController({
             queryClient,
-            onEvent: vi.fn()
+            onEvent: vi.fn(),
         })
 
         controller.handleEvent({
             type: 'session-stream-updated',
             sessionId: 'session-stream',
             stream: {
-                streamId: 'stream-1',
+                assistantTurnId: 'stream-1',
                 startedAt: 10,
                 updatedAt: 20,
-                text: 'Hello'
-            }
+                text: 'Hello',
+            },
         })
 
         expect(getMessageWindowState('session-stream').stream).toEqual({
-            streamId: 'stream-1',
+            assistantTurnId: 'stream-1',
             startedAt: 10,
             updatedAt: 20,
-            text: 'Hello'
+            text: 'Hello',
         })
 
         controller.handleEvent({
             type: 'session-stream-cleared',
             sessionId: 'session-stream',
-            streamId: 'stream-1'
+            assistantTurnId: 'stream-1',
         } as SyncEvent)
 
         expect(getMessageWindowState('session-stream').stream).toBeNull()
@@ -649,11 +634,11 @@ describe('createRealtimeEventController', () => {
             active: false,
             updatedAt: 2_000,
             lifecycleState: 'closed',
-            lifecycleStateSince: 2_000
+            lifecycleStateSince: 2_000,
         })
 
         queryClient.setQueryData<SessionsResponse>(queryKeys.sessions, {
-            sessions: [session]
+            sessions: [session],
         })
         queryClient.setQueryData(queryKeys.session(session.id), {
             session: createSessionRecord({
@@ -665,33 +650,35 @@ describe('createRealtimeEventController', () => {
                     host: 'localhost',
                     driver: 'codex',
                     lifecycleState: 'closed',
-                    lifecycleStateSince: 2_000
-                }
-            })
+                    lifecycleStateSince: 2_000,
+                },
+            }),
         })
-        ingestIncomingMessages(session.id, [{
-            id: 'message-1',
-            seq: 1,
-            localId: null,
-            createdAt: 1_000,
-            content: {
-                role: 'user',
+        ingestIncomingMessages(session.id, [
+            {
+                id: 'message-1',
+                seq: 1,
+                localId: null,
+                createdAt: 1_000,
                 content: {
-                    type: 'text',
-                    text: 'hello'
-                }
-            }
-        }])
+                    role: 'user',
+                    content: {
+                        type: 'text',
+                        text: 'hello',
+                    },
+                },
+            },
+        ])
 
         const controller = createRealtimeEventController({
             queryClient,
-            onEvent: vi.fn()
+            onEvent: vi.fn(),
         })
 
         controller.handleEvent({
             type: 'session-removed',
             sessionId: session.id,
-            data: {}
+            data: {},
         } as SyncEvent)
 
         expect(queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)?.sessions).toEqual([])

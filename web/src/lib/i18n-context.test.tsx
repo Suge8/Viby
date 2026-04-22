@@ -1,7 +1,7 @@
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { type JSX } from 'react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
-import { I18nProvider, detectPreferredLocale } from './i18n-context'
+import { detectPreferredLocale, I18nProvider } from './i18n-context'
 import { useTranslation } from './use-translation'
 
 function LocaleProbe(): JSX.Element {
@@ -26,11 +26,11 @@ describe('i18n locale detection', () => {
         cleanup()
         Object.defineProperty(window.navigator, 'language', {
             configurable: true,
-            value: originalLanguage
+            value: originalLanguage,
         })
         Object.defineProperty(window.navigator, 'languages', {
             configurable: true,
-            value: originalLanguages
+            value: originalLanguages,
         })
         window.localStorage.clear()
     })
@@ -38,11 +38,11 @@ describe('i18n locale detection', () => {
     it('prefers zh-CN when browser language is Chinese', () => {
         Object.defineProperty(window.navigator, 'language', {
             configurable: true,
-            value: 'zh-CN'
+            value: 'zh-CN',
         })
         Object.defineProperty(window.navigator, 'languages', {
             configurable: true,
-            value: ['zh-CN', 'en-US']
+            value: ['zh-CN', 'en-US'],
         })
 
         expect(detectPreferredLocale()).toBe('zh-CN')
@@ -51,11 +51,11 @@ describe('i18n locale detection', () => {
     it('uses detected browser locale when no saved locale exists', () => {
         Object.defineProperty(window.navigator, 'language', {
             configurable: true,
-            value: 'zh-CN'
+            value: 'zh-CN',
         })
         Object.defineProperty(window.navigator, 'languages', {
             configurable: true,
-            value: ['zh-CN', 'en-US']
+            value: ['zh-CN', 'en-US'],
         })
 
         render(
@@ -71,11 +71,11 @@ describe('i18n locale detection', () => {
         window.localStorage.setItem('viby-lang-preference', 'en')
         Object.defineProperty(window.navigator, 'language', {
             configurable: true,
-            value: 'zh-CN'
+            value: 'zh-CN',
         })
         Object.defineProperty(window.navigator, 'languages', {
             configurable: true,
-            value: ['zh-CN', 'en-US']
+            value: ['zh-CN', 'en-US'],
         })
 
         render(
@@ -87,7 +87,7 @@ describe('i18n locale detection', () => {
         expect(screen.getByText('en')).toBeInTheDocument()
     })
 
-    it('supports migrating the legacy locale key', () => {
+    it('ignores removed legacy locale keys and falls back to current preference rules', () => {
         window.localStorage.setItem('viby-lang', 'zh-CN')
 
         render(
@@ -96,17 +96,17 @@ describe('i18n locale detection', () => {
             </I18nProvider>
         )
 
-        expect(screen.getByText('zh-CN')).toBeInTheDocument()
+        expect(screen.getByText('en')).toBeInTheDocument()
     })
 
     it('updates locale when browser language changes under system preference', async () => {
         Object.defineProperty(window.navigator, 'language', {
             configurable: true,
-            value: 'en-US'
+            value: 'en-US',
         })
         Object.defineProperty(window.navigator, 'languages', {
             configurable: true,
-            value: ['en-US']
+            value: ['en-US'],
         })
 
         render(
@@ -119,11 +119,11 @@ describe('i18n locale detection', () => {
 
         Object.defineProperty(window.navigator, 'language', {
             configurable: true,
-            value: 'zh-CN'
+            value: 'zh-CN',
         })
         Object.defineProperty(window.navigator, 'languages', {
             configurable: true,
-            value: ['zh-CN', 'en-US']
+            value: ['zh-CN', 'en-US'],
         })
         window.dispatchEvent(new Event('languagechange'))
 

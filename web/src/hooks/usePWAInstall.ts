@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useStandaloneDisplayMode } from '@/hooks/useStandaloneDisplayMode'
+import { readBrowserStorageItem, writeBrowserStorageItem } from '@/lib/browserStorage'
+import { LOCAL_STORAGE_KEYS } from '@/lib/storage/storageRegistry'
 
 interface BeforeInstallPromptEvent extends Event {
     prompt: () => Promise<void>
@@ -15,7 +17,7 @@ export type PWAInstallState = {
     dismissInstall: () => void
 }
 
-const INSTALL_DISMISSED_KEY = 'pwa_install_dismissed'
+const INSTALL_DISMISSED_KEY = LOCAL_STORAGE_KEYS.installDismissed
 const INSTALL_DISMISSED_VALUE = 'true'
 
 export function isIOSSafariBrowser(): boolean {
@@ -30,19 +32,11 @@ export function isIOSSafariBrowser(): boolean {
 }
 
 function getInstallDismissed(): boolean {
-    try {
-        return localStorage.getItem(INSTALL_DISMISSED_KEY) === INSTALL_DISMISSED_VALUE
-    } catch {
-        return false
-    }
+    return readBrowserStorageItem('local', INSTALL_DISMISSED_KEY) === INSTALL_DISMISSED_VALUE
 }
 
 function setInstallDismissed(): void {
-    try {
-        localStorage.setItem(INSTALL_DISMISSED_KEY, INSTALL_DISMISSED_VALUE)
-    } catch {
-        // Ignore storage errors
-    }
+    writeBrowserStorageItem('local', INSTALL_DISMISSED_KEY, INSTALL_DISMISSED_VALUE)
 }
 
 function resolveInstallPlatform(options: {
@@ -96,7 +90,7 @@ export function usePWAInstall(): PWAInstallState {
         }
     }, [isStandalone])
 
-    const promptInstall = useCallback(async (): Promise<boolean> => {
+    async function promptInstall(): Promise<boolean> {
         if (!deferredPrompt) {
             return false
         }
@@ -122,26 +116,24 @@ export function usePWAInstall(): PWAInstallState {
             setInstallState('idle')
             return false
         }
-    }, [deferredPrompt])
+    }
 
-    const dismissInstall = useCallback(() => {
+    function dismissInstall(): void {
         setDismissed(true)
         setInstallDismissed()
-    }, [])
+    }
 
-    const installPlatform = useMemo<InstallPlatform>(() => {
-        return resolveInstallPlatform({
-            dismissed,
-            installState,
-            isIOS,
-            isStandalone
-        })
-    }, [dismissed, installState, isIOS, isStandalone])
+    const installPlatform = resolveInstallPlatform({
+        dismissed,
+        installState,
+        isIOS,
+        isStandalone,
+    })
 
     return {
         installPlatform,
         isStandalone,
         promptInstall,
-        dismissInstall
+        dismissInstall,
     }
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { DecryptedMessage } from '@/types/api'
 import { runSendCatchup, shouldRunPostSwitchCatchup } from '@/lib/sendCatchup'
+import type { DecryptedMessage } from '@/types/api'
 
 function createUserMessage(createdAt: number): DecryptedMessage {
     return {
@@ -12,9 +12,9 @@ function createUserMessage(createdAt: number): DecryptedMessage {
             role: 'user',
             content: {
                 type: 'text',
-                text: 'hello'
-            }
-        }
+                text: 'hello',
+            },
+        },
     }
 }
 
@@ -30,10 +30,10 @@ function createAgentMessage(createdAt: number): DecryptedMessage {
                 type: 'codex',
                 data: {
                     type: 'message',
-                    message: 'hi'
-                }
-            }
-        }
+                    message: 'hi',
+                },
+            },
+        },
     }
 }
 
@@ -49,10 +49,10 @@ function createDriverSwitchedMessage(createdAt: number, targetDriver: 'claude' |
                 type: 'event',
                 data: {
                     type: 'driver-switched',
-                    targetDriver
-                }
-            }
-        }
+                    targetDriver,
+                },
+            },
+        },
     }
 }
 
@@ -71,10 +71,10 @@ function createDriverSwitchFailureMessage(
                 type: 'event',
                 data: {
                     type: 'driver-switch-send-failed',
-                    ...overrides
-                }
-            }
-        }
+                    ...overrides,
+                },
+            },
+        },
     }
 }
 
@@ -90,97 +90,91 @@ function createUnrelatedEventMessage(createdAt: number): DecryptedMessage {
                 type: 'event',
                 data: {
                     type: 'driver-switched',
-                    targetDriver: 'claude'
-                }
-            }
-        }
+                    targetDriver: 'claude',
+                },
+            },
+        },
     }
 }
 
 describe('runSendCatchup', () => {
     it('only arms post-switch catch-up for the first user turn after a driver-switched marker', () => {
-        expect(shouldRunPostSwitchCatchup([
-            createDriverSwitchedMessage(90),
-            createUserMessage(95)
-        ], 100)).toBe(false)
+        expect(shouldRunPostSwitchCatchup([createDriverSwitchedMessage(90), createUserMessage(95)], 100)).toBe(false)
 
-        expect(shouldRunPostSwitchCatchup([
-            createUserMessage(80),
-            createDriverSwitchedMessage(90)
-        ], 100)).toBe(true)
+        expect(shouldRunPostSwitchCatchup([createUserMessage(80), createDriverSwitchedMessage(90)], 100)).toBe(true)
 
-        expect(shouldRunPostSwitchCatchup([
-            createUserMessage(80),
-            createAgentMessage(90)
-        ], 100)).toBe(false)
+        expect(shouldRunPostSwitchCatchup([createUserMessage(80), createAgentMessage(90)], 100)).toBe(false)
     })
 
     it('stops once an agent reply appears after the sent message', async () => {
         const reply = createAgentMessage(101)
-        const syncOnce = vi
-            .fn<() => Promise<{ messages: DecryptedMessage[] }>>()
-            .mockResolvedValueOnce({
-                messages: [createUserMessage(100)]
-            })
-            .mockResolvedValueOnce({
-                messages: [createUserMessage(100), reply]
-            })
-        const sleep = vi.fn(async () => {})
+        let messages = [createUserMessage(100)]
+        let listener: (() => void) | null = null
+        const syncOnce = vi.fn(async () => {
+            messages = [createUserMessage(100), reply]
+            listener?.()
+        })
 
         const outcome = await runSendCatchup({
             createdAt: 100,
+            readSnapshot: () => ({ messages }),
             syncOnce,
-            sleep,
-            delayMs: 0
+            subscribe: (next) => {
+                listener = next
+                return () => {
+                    listener = null
+                }
+            },
         })
 
         expect(outcome).toEqual({
             type: 'reply-detected',
             reply,
-            attempt: 2
+            attempt: 2,
         })
-        expect(syncOnce).toHaveBeenCalledTimes(2)
-        expect(sleep).toHaveBeenCalledTimes(1)
+        expect(syncOnce).toHaveBeenCalledTimes(1)
     })
 
     it('reports the first detected agent reply', async () => {
         const reply = createAgentMessage(101)
         const onReplyDetected = vi.fn()
-        const syncOnce = vi.fn(async () => ({
-            messages: [createUserMessage(100), reply]
-        }))
+        const syncOnce = vi.fn(async () => undefined)
 
         const outcome = await runSendCatchup({
             createdAt: 100,
+            readSnapshot: () => ({
+                messages: [createUserMessage(100), reply],
+            }),
             syncOnce,
-            onReplyDetected
+            onReplyDetected,
         })
 
         expect(outcome).toEqual({
             type: 'reply-detected',
             reply,
-            attempt: 1
+            attempt: 1,
         })
         expect(onReplyDetected).toHaveBeenCalledWith({
             reply,
-            attempt: 1
+            attempt: 1,
         })
     })
 
     it('returns the typed driver-switch failure event when one appears after acceptance', async () => {
-        const syncOnce = vi.fn(async () => ({
-            messages: [
-                createUserMessage(100),
-                createDriverSwitchFailureMessage(101, {
-                    code: 'empty_first_turn',
-                    stage: 'callback_flush'
-                })
-            ]
-        }))
+        const syncOnce = vi.fn(async () => undefined)
 
         const outcome = await runSendCatchup({
             createdAt: 100,
-            syncOnce
+            readSnapshot: () => ({
+                messages: [
+                    createUserMessage(100),
+                    createDriverSwitchFailureMessage(101, {
+                        code: 'empty_first_turn',
+                        stage: 'callback_flush',
+                    }),
+                ],
+            }),
+            syncOnce,
         })
 
         expect(outcome).toEqual({
@@ -188,26 +182,27 @@ describe('runSendCatchup', () => {
             event: {
                 type: 'driver-switch-send-failed',
                 code: 'empty_first_turn',
-                stage: 'callback_flush'
+                stage: 'callback_flush',
             },
-            attempt: 1
+            attempt: 1,
         })
     })
 
     it('falls back to the generic failure shape when the failure payload is malformed', async () => {
-        const syncOnce = vi.fn(async () => ({
-            messages: [
-                createUserMessage(100),
-                createDriverSwitchFailureMessage(101, {
-                    code: 'bad-code',
-                    stage: 'bad-stage'
-                })
-            ]
-        }))
+        const syncOnce = vi.fn(async () => undefined)
 
         const outcome = await runSendCatchup({
             createdAt: 100,
-            syncOnce
+            readSnapshot: () => ({
+                messages: [
+                    createUserMessage(100),
+                    createDriverSwitchFailureMessage(101, {
+                        code: 'bad-code',
+                        stage: 'bad-stage',
+                    }),
+                ],
+            }),
+            syncOnce,
         })
 
         expect(outcome).toEqual({
@@ -215,31 +210,28 @@ describe('runSendCatchup', () => {
             event: {
                 type: 'driver-switch-send-failed',
                 code: undefined,
-                stage: undefined
+                stage: undefined,
             },
-            attempt: 1
+            attempt: 1,
         })
     })
 
-    it('ignores unrelated events and respects the bounded retry count when no reply arrives', async () => {
-        const syncOnce = vi.fn(async () => ({
-            messages: [createUserMessage(100), createUnrelatedEventMessage(101)]
-        }))
-        const sleep = vi.fn(async () => {})
+    it('ignores unrelated events and returns silently when the bounded wait expires', async () => {
+        const syncOnce = vi.fn(async () => undefined)
 
         const outcome = await runSendCatchup({
             createdAt: 100,
+            readSnapshot: () => ({
+                messages: [createUserMessage(100), createUnrelatedEventMessage(101)],
+            }),
             syncOnce,
-            sleep,
-            delayMs: 0,
-            maxAttempts: 3
+            timeoutMs: 0,
         })
 
         expect(outcome).toEqual({
-            type: 'no-reply',
-            attemptCount: 3
+            type: 'no-evidence',
+            attemptCount: 2,
         })
-        expect(syncOnce).toHaveBeenCalledTimes(3)
-        expect(sleep).toHaveBeenCalledTimes(2)
+        expect(syncOnce).toHaveBeenCalledTimes(1)
     })
 })

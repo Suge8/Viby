@@ -12,14 +12,17 @@ describe('runtimeNoticePresentation', () => {
             isOnline: true,
             t: createTranslationStub(),
             currentOrigin: 'https://app.viby.run',
-            hasPendingRuntimeUpdate: false
+            isDevRuntime: false,
+            hasPendingRuntimeUpdate: false,
+            localRuntimeUnavailableDescription: null,
         })
 
         expect(notice).toMatchObject({
             id: 'app:runtime',
             tone: 'info',
             title: 'runtime.recovering.title',
-            description: 'runtime.recovering.message'
+            description: 'runtime.recovering.message',
+            compact: true,
         })
     })
 
@@ -29,33 +32,54 @@ describe('runtimeNoticePresentation', () => {
         expect(notice).toMatchObject({
             id: 'app:offline',
             title: 'offline.title',
-            compact: true
+            compact: true,
         })
         expect(notice?.description).toBeUndefined()
     })
 
     it.each([
-        'build-assets-reset',
         'local-service-worker-reset',
         'vite-preload-error',
-        'runtime-asset-reload'
+        'runtime-asset-reload',
     ] as const)('collapses asset recovery reason %s into one unified local-dev notice', (reason) => {
         const notice = buildRuntimeNotice({
             banner: { kind: 'restoring', reason },
             isOnline: true,
             t: createTranslationStub(),
             currentOrigin: 'http://127.0.0.1:37173',
-            hasPendingRuntimeUpdate: false
+            isDevRuntime: false,
+            hasPendingRuntimeUpdate: false,
+            localRuntimeUnavailableDescription: null,
         })
 
         expect(notice).toMatchObject({
             id: 'app:runtime',
             title: 'recovery.runtimeAssets.title',
-            description: 'recovery.runtimeAssets.localDevMessage'
+            description: 'recovery.runtimeAssets.localStaticMessage',
+            compact: true,
         })
     })
 
-    it('shows a pending runtime update only on service-worker-backed origins', () => {
+    it('uses a dev-server-specific recovery message on local development origins', () => {
+        const notice = buildRuntimeNotice({
+            banner: { kind: 'restoring', reason: 'vite-preload-error' },
+            isOnline: true,
+            t: createTranslationStub(),
+            currentOrigin: 'http://127.0.0.1:5173',
+            isDevRuntime: true,
+            hasPendingRuntimeUpdate: false,
+            localRuntimeUnavailableDescription: null,
+        })
+
+        expect(notice).toMatchObject({
+            id: 'app:runtime',
+            title: 'recovery.runtimeAssets.title',
+            description: 'recovery.runtimeAssets.devMessage',
+            compact: true,
+        })
+    })
+
+    it('shows a pending runtime update through the single compact notice owner', () => {
         const applyRuntimeUpdate = vi.fn(async () => true)
 
         const notice = buildRuntimeNotice({
@@ -63,30 +87,38 @@ describe('runtimeNoticePresentation', () => {
             isOnline: true,
             t: createTranslationStub(),
             currentOrigin: 'https://app.viby.run',
+            isDevRuntime: false,
             hasPendingRuntimeUpdate: true,
-            applyRuntimeUpdate
+            applyRuntimeUpdate,
+            localRuntimeUnavailableDescription: null,
         })
 
         expect(notice).toMatchObject({
             id: 'app:runtime',
             title: 'updateReady.title',
-            compact: true
+            compact: true,
         })
         expect(notice?.description).toBeUndefined()
         expect(typeof notice?.onPress).toBe('function')
     })
 
-    it('suppresses update-ready notices on local static origins', () => {
+    it('keeps update-ready notices available on local static origins too', () => {
         const notice = buildRuntimeNotice({
             banner: { kind: 'hidden' },
             isOnline: true,
             t: createTranslationStub(),
             currentOrigin: 'http://192.168.1.5:37173',
+            isDevRuntime: false,
             hasPendingRuntimeUpdate: true,
-            applyRuntimeUpdate: async () => true
+            applyRuntimeUpdate: async () => true,
+            localRuntimeUnavailableDescription: null,
         })
 
-        expect(notice).toBeNull()
+        expect(notice).toMatchObject({
+            id: 'app:runtime',
+            title: 'updateReady.title',
+            compact: true,
+        })
     })
 
     it('keeps recovery higher priority than an available runtime update', () => {
@@ -95,13 +127,37 @@ describe('runtimeNoticePresentation', () => {
             isOnline: true,
             t: createTranslationStub(),
             currentOrigin: 'https://app.viby.run',
+            isDevRuntime: false,
             hasPendingRuntimeUpdate: true,
-            applyRuntimeUpdate: async () => true
+            applyRuntimeUpdate: async () => true,
+            localRuntimeUnavailableDescription: null,
         })
 
         expect(notice).toMatchObject({
             title: 'recovery.pageRestored.title',
-            description: 'recovery.pageRestored.message'
+            description: 'recovery.pageRestored.message',
+            compact: true,
+        })
+    })
+
+    it('shows runtime unavailable through the shared compact runtime notice owner', () => {
+        const notice = buildRuntimeNotice({
+            banner: { kind: 'busy' },
+            isOnline: true,
+            t: createTranslationStub(),
+            currentOrigin: 'https://app.viby.run',
+            isDevRuntime: false,
+            hasPendingRuntimeUpdate: true,
+            applyRuntimeUpdate: async () => true,
+            localRuntimeUnavailableDescription: 'runtime.unavailable.lastError',
+        })
+
+        expect(notice).toMatchObject({
+            id: 'app:runtime',
+            tone: 'warning',
+            title: 'runtime.unavailable.title',
+            description: 'runtime.unavailable.lastError',
+            compact: true,
         })
     })
 })

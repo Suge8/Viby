@@ -5,16 +5,7 @@ export const NAVIGATION_TRANSITION_ACTIVE_STATE = 'running'
 export const NAVIGATION_TRANSITION_EVENT_NAME = 'viby:navigation-transition-change'
 const NAVIGATION_TRANSITION_STATE_ATTRIBUTE = 'data-viby-navigation-transition'
 const NAVIGATION_TRANSITION_FALLBACK_RESET_FRAME_COUNT = 2
-const REDUCED_MOTION_MEDIA_QUERY = '(prefers-reduced-motion: reduce)'
-const NARROW_SCREEN_MEDIA_QUERY = '(max-width: 767px)'
-
-type ViewTransitionDocument = Document & {
-    startViewTransition?: (update: () => void) => {
-        finished: Promise<void>
-        ready: Promise<void>
-        updateCallbackDone: Promise<void>
-    }
-}
+const NAVIGATION_TRANSITION_FALLBACK_RESET_TIMEOUT_MS = 240
 
 type NavigationTransitionOptions = {
     enableViewTransition?: boolean
@@ -28,13 +19,75 @@ type PendingNavigationRecovery = {
     href: string
 }
 
+type NavigationSourceSnapshot = {
+    href: string | null
+    visitId: number
+}
+
+let hasInstalledNavigationSourceTracking = false
+let trackedNavigationHref: string | null = null
+let navigationSourceVisitId = 0
+
+function readNavigationSourceLocation(): string | null {
+    if (typeof window === 'undefined') {
+        return null
+    }
+
+    return `${window.location.pathname}${window.location.search}${window.location.hash}`
+}
+
+function updateNavigationSourceVisit(): void {
+    const nextHref = readNavigationSourceLocation()
+    if (nextHref === trackedNavigationHref) {
+        return
+    }
+
+    trackedNavigationHref = nextHref
+    navigationSourceVisitId += 1
+}
+
+function installNavigationSourceTracking(): void {
+    if (typeof window === 'undefined' || hasInstalledNavigationSourceTracking) {
+        return
+    }
+
+    hasInstalledNavigationSourceTracking = true
+    trackedNavigationHref = readNavigationSourceLocation()
+
+    const historyState = window.history
+    const originalPushState = historyState.pushState.bind(historyState)
+    const originalReplaceState = historyState.replaceState.bind(historyState)
+
+    historyState.pushState = ((...args: Parameters<History['pushState']>) => {
+        const result = originalPushState(...args)
+        updateNavigationSourceVisit()
+        return result
+    }) as History['pushState']
+
+    historyState.replaceState = ((...args: Parameters<History['replaceState']>) => {
+        const result = originalReplaceState(...args)
+        updateNavigationSourceVisit()
+        return result
+    }) as History['replaceState']
+
+    window.addEventListener('popstate', updateNavigationSourceVisit)
+    window.addEventListener('hashchange', updateNavigationSourceVisit)
+}
+
+function readNavigationSourceSnapshot(): NavigationSourceSnapshot {
+    installNavigationSourceTracking()
+
+    return {
+        href: readNavigationSourceLocation(),
+        visitId: navigationSourceVisitId,
+    }
+}
+
 export const VIEW_TRANSITION_NAVIGATION_OPTIONS: Readonly<NavigationTransitionOptions> = {
     enableViewTransition: true,
 }
 
-export function createNavigationTransitionOptions(
-    recoveryHref?: string
-): Readonly<NavigationTransitionOptions> {
+export function createNavigationTransitionOptions(recoveryHref?: string): Readonly<NavigationTransitionOptions> {
     const normalizedRecoveryHref = normalizeRecoveryHref(recoveryHref)
     if (!normalizedRecoveryHref) {
         return VIEW_TRANSITION_NAVIGATION_OPTIONS
@@ -42,74 +95,31 @@ export function createNavigationTransitionOptions(
 
     return {
         ...VIEW_TRANSITION_NAVIGATION_OPTIONS,
-        recoveryHref: normalizedRecoveryHref
+        recoveryHref: normalizedRecoveryHref,
     }
 }
 
 let pendingNavigationRecovery: PendingNavigationRecovery | null = null
+let latestPreloadedNavigationToken: symbol | null = null
 
 function toRuntimeAssetFailure(error: unknown): RuntimeAssetFailure {
     if (error instanceof Error) {
         return {
             message: error.message,
-            stack: error.stack
+            stack: error.stack,
         }
     }
 
     return {}
 }
 
-async function recordNavigationPreloadFailureRecovery(
-    error: unknown,
-    recoveryHref?: string
-): Promise<void> {
+async function recordNavigationPreloadFailureRecovery(error: unknown, recoveryHref?: string): Promise<void> {
     const module = await import('@/lib/runtimeAssetFailure')
     module.recordRuntimeAssetFailureRecovery({
         reason: 'vite-preload-error',
         failure: toRuntimeAssetFailure(error),
-        resumeHref: recoveryHref
+        resumeHref: recoveryHref,
     })
-}
-
-function canUseViewTransition(): boolean {
-    if (typeof document === 'undefined' || typeof window === 'undefined') {
-        return false
-    }
-
-    const viewTransitionDocument = document as ViewTransitionDocument
-    if (typeof viewTransitionDocument.startViewTransition !== 'function') {
-        return false
-    }
-
-    return !matchesMediaQuery(REDUCED_MOTION_MEDIA_QUERY)
-        && !matchesMediaQuery(NARROW_SCREEN_MEDIA_QUERY)
-        && !hasEditableFocus()
-}
-
-function matchesMediaQuery(query: string): boolean {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-        return false
-    }
-
-    return window.matchMedia(query).matches
-}
-
-function hasEditableFocus(): boolean {
-    if (typeof document === 'undefined') {
-        return false
-    }
-
-    const activeElement = document.activeElement
-    if (!(activeElement instanceof HTMLElement)) {
-        return false
-    }
-
-    if (activeElement.isContentEditable) {
-        return true
-    }
-
-    return activeElement instanceof HTMLInputElement
-        || activeElement instanceof HTMLTextAreaElement
 }
 
 function setNavigationTransitionActive(active: boolean): void {
@@ -124,11 +134,13 @@ function setNavigationTransitionActive(active: boolean): void {
         root.removeAttribute(NAVIGATION_TRANSITION_STATE_ATTRIBUTE)
     }
 
-    window.dispatchEvent(new CustomEvent(NAVIGATION_TRANSITION_EVENT_NAME, {
-        detail: {
-            active
-        }
-    }))
+    window.dispatchEvent(
+        new CustomEvent(NAVIGATION_TRANSITION_EVENT_NAME, {
+            detail: {
+                active,
+            },
+        })
+    )
 }
 
 function scheduleFallbackTransitionReset(): void {
@@ -137,17 +149,32 @@ function scheduleFallbackTransitionReset(): void {
         return
     }
 
+    let released = false
     let remainingFrames = NAVIGATION_TRANSITION_FALLBACK_RESET_FRAME_COUNT
+    const finish = () => {
+        if (released) {
+            return
+        }
+
+        released = true
+        window.clearTimeout(timeoutId)
+        setNavigationTransitionActive(false)
+    }
     const release = () => {
+        if (released) {
+            return
+        }
+
         remainingFrames -= 1
         if (remainingFrames > 0) {
             window.requestAnimationFrame(release)
             return
         }
 
-        setNavigationTransitionActive(false)
+        finish()
     }
 
+    const timeoutId = window.setTimeout(finish, NAVIGATION_TRANSITION_FALLBACK_RESET_TIMEOUT_MS)
     window.requestAnimationFrame(release)
 }
 
@@ -156,8 +183,10 @@ export function isNavigationTransitionActive(): boolean {
         return false
     }
 
-    return document.documentElement.getAttribute(NAVIGATION_TRANSITION_STATE_ATTRIBUTE)
-        === NAVIGATION_TRANSITION_ACTIVE_STATE
+    return (
+        document.documentElement.getAttribute(NAVIGATION_TRANSITION_STATE_ATTRIBUTE) ===
+        NAVIGATION_TRANSITION_ACTIVE_STATE
+    )
 }
 
 function normalizeRecoveryHref(value: string | undefined): string | null {
@@ -182,7 +211,7 @@ function registerPendingNavigationRecovery(href: string | undefined): symbol | n
     const token = Symbol('navigation-recovery')
     pendingNavigationRecovery = {
         token,
-        href: normalizedHref
+        href: normalizedHref,
     }
     return token
 }
@@ -199,22 +228,12 @@ export function readPendingNavigationRecoveryHref(): string | null {
     return pendingNavigationRecovery?.href ?? null
 }
 
-export function runNavigationTransition(
-    commit: () => void,
-    options: NavigationTransitionOptions = {}
-): void {
-    if (options.enableViewTransition && canUseViewTransition()) {
-        const viewTransitionDocument = document as ViewTransitionDocument
-        setNavigationTransitionActive(true)
-        const transition = viewTransitionDocument.startViewTransition?.(() => {
-            startTransition(commit)
-        })
-        void transition?.finished.finally(() => {
-            setNavigationTransitionActive(false)
-        })
-        return
-    }
-
+export function runNavigationTransition(commit: () => void, options: NavigationTransitionOptions = {}): void {
+    // TanStack route commits can suspend on lazy/module/data work. Letting the
+    // browser own the transition causes desktop navigations to stall with a
+    // stuck "running" state and frozen interactions, so this path stays under
+    // our single CSS/DOM owner until the router integration is proven safe.
+    void options
     setNavigationTransitionActive(true)
     startTransition(commit)
     scheduleFallbackTransitionReset()
@@ -225,7 +244,10 @@ export async function runNavigationTransitionAfterPreload(
     commit: () => void,
     options: NavigationTransitionOptions = {}
 ): Promise<void> {
+    const navigationToken = Symbol('preloaded-navigation')
+    latestPreloadedNavigationToken = navigationToken
     const recoveryToken = registerPendingNavigationRecovery(options.recoveryHref)
+    const sourceSnapshot = readNavigationSourceSnapshot()
 
     try {
         await (typeof preload === 'function' ? preload() : preload)
@@ -238,6 +260,19 @@ export async function runNavigationTransitionAfterPreload(
         clearPendingNavigationRecovery(recoveryToken)
     }
 
+    if (latestPreloadedNavigationToken !== navigationToken) {
+        return
+    }
+
+    const currentSourceSnapshot = readNavigationSourceSnapshot()
+    if (sourceSnapshot.visitId !== currentSourceSnapshot.visitId) {
+        return
+    }
+
+    if (sourceSnapshot.href !== currentSourceSnapshot.href) {
+        return
+    }
+
     runNavigationTransition(commit, options)
 }
 
@@ -246,9 +281,5 @@ export function runPreloadedNavigation(
     commit: () => void,
     recoveryHref: string
 ): void {
-    void runNavigationTransitionAfterPreload(
-        preload,
-        commit,
-        createNavigationTransitionOptions(recoveryHref)
-    )
+    void runNavigationTransitionAfterPreload(preload, commit, createNavigationTransitionOptions(recoveryHref))
 }

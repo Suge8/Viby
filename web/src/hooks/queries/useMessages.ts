@@ -1,18 +1,23 @@
 import { useCallback, useEffect, useSyncExternalStore } from 'react'
 import type { ApiClient } from '@/api/client'
-import type { DecryptedMessage, SessionStreamState } from '@/types/api'
-import type { MessageWindowWarningKey } from '@/lib/messageWindowWarnings'
+import { readSessionViewRuntimeLoad } from '@/hooks/queries/sessionViewRuntime'
+import {
+    ensureLatestMessagesLoaded,
+    fetchLatestMessages,
+    fetchOlderMessagesUntilPreviousUser,
+} from '@/lib/message-window-store'
 import {
     flushMessageWindowSnapshot,
     flushPendingMessages,
     getMessageWindowState,
+    type LoadMoreMessagesResult,
+    type MessageWindowState,
     type PendingReplyState,
     setAtBottom as setMessageWindowAtBottom,
     subscribeMessageWindow,
-    type LoadMoreMessagesResult,
-    type MessageWindowState,
 } from '@/lib/messageWindowStoreCore'
-import { loadMessageWindowStoreAsyncModule } from '@/lib/messageWindowStoreModule'
+import type { MessageWindowWarningKey } from '@/lib/messageWindowWarnings'
+import type { DecryptedMessage, SessionStreamState } from '@/types/api'
 
 const EMPTY_STATE: MessageWindowState = {
     sessionId: 'unknown',
@@ -35,31 +40,49 @@ const EMPTY_STATE: MessageWindowState = {
 }
 const DID_NOT_LOAD_OLDER_MESSAGES_RESULT: LoadMoreMessagesResult = { didLoadOlderMessages: false }
 
-export function useMessages(api: ApiClient | null, sessionId: string | null): {
+async function ensureSessionLatestWindow(api: ApiClient, sessionId: string): Promise<void> {
+    const pendingSessionViewLoad = readSessionViewRuntimeLoad(sessionId)
+    if (pendingSessionViewLoad) {
+        try {
+            await pendingSessionViewLoad
+        } catch {
+            // Session detail fetch failure must not block the message-window owner.
+        }
+    }
+
+    await ensureLatestMessagesLoaded(api, sessionId)
+}
+
+export function useMessages(
+    api: ApiClient | null,
+    sessionId: string | null
+): {
     messages: DecryptedMessage[]
     warning: MessageWindowWarningKey | null
     isLoading: boolean
     isLoadingMore: boolean
     hasMore: boolean
     pendingCount: number
+    atBottom: boolean
     hasLoadedLatest: boolean
     messagesVersion: number
     pendingReply: PendingReplyState | null
     stream: SessionStreamState | null
     streamVersion: number
-    loadMore: () => Promise<LoadMoreMessagesResult>
     loadHistoryUntilPreviousUser: () => Promise<LoadMoreMessagesResult>
-    refetch: () => Promise<unknown>
     flushPending: () => Promise<void>
     setAtBottom: (atBottom: boolean) => void
 } {
     const state = useSyncExternalStore(
-        useCallback((listener) => {
-            if (!sessionId) {
-                return () => {}
-            }
-            return subscribeMessageWindow(sessionId, listener)
-        }, [sessionId]),
+        useCallback(
+            (listener) => {
+                if (!sessionId) {
+                    return () => {}
+                }
+                return subscribeMessageWindow(sessionId, listener)
+            },
+            [sessionId]
+        ),
         useCallback(() => {
             if (!sessionId) {
                 return EMPTY_STATE
@@ -74,9 +97,7 @@ export function useMessages(api: ApiClient | null, sessionId: string | null): {
             return
         }
 
-        void loadMessageWindowStoreAsyncModule().then(({ ensureLatestMessagesLoaded }) => {
-            return ensureLatestMessagesLoaded(api, sessionId)
-        })
+        void ensureSessionLatestWindow(api, sessionId)
     }, [api, sessionId])
 
     useEffect(() => {
@@ -88,17 +109,6 @@ export function useMessages(api: ApiClient | null, sessionId: string | null): {
         }
     }, [sessionId])
 
-    const loadMore = useCallback(async () => {
-        if (!api || !sessionId) {
-            return DID_NOT_LOAD_OLDER_MESSAGES_RESULT
-        }
-        if (!state.hasMore || state.isLoadingMore) {
-            return DID_NOT_LOAD_OLDER_MESSAGES_RESULT
-        }
-        const { fetchOlderMessages } = await loadMessageWindowStoreAsyncModule()
-        return await fetchOlderMessages(api, sessionId)
-    }, [api, sessionId, state.hasMore, state.isLoadingMore])
-
     const loadHistoryUntilPreviousUser = useCallback(async () => {
         if (!api || !sessionId) {
             return DID_NOT_LOAD_OLDER_MESSAGES_RESULT
@@ -106,29 +116,24 @@ export function useMessages(api: ApiClient | null, sessionId: string | null): {
         if (!state.hasMore || state.isLoadingMore) {
             return DID_NOT_LOAD_OLDER_MESSAGES_RESULT
         }
-        const { fetchOlderMessagesUntilPreviousUser } = await loadMessageWindowStoreAsyncModule()
         return await fetchOlderMessagesUntilPreviousUser(api, sessionId)
     }, [api, sessionId, state.hasMore, state.isLoadingMore])
-
-    const refetch = useCallback(async () => {
-        if (!api || !sessionId) return
-        const { recoverLatestMessages } = await loadMessageWindowStoreAsyncModule()
-        await recoverLatestMessages(api, sessionId)
-    }, [api, sessionId])
 
     const flushPending = useCallback(async () => {
         if (!sessionId) return
         const needsRefresh = flushPendingMessages(sessionId)
         if (needsRefresh && api) {
-            const { fetchLatestMessages } = await loadMessageWindowStoreAsyncModule()
             await fetchLatestMessages(api, sessionId)
         }
     }, [api, sessionId])
 
-    const setAtBottom = useCallback((atBottom: boolean) => {
-        if (!sessionId) return
-        setMessageWindowAtBottom(sessionId, atBottom)
-    }, [sessionId])
+    const setAtBottom = useCallback(
+        (atBottom: boolean) => {
+            if (!sessionId) return
+            setMessageWindowAtBottom(sessionId, atBottom)
+        },
+        [sessionId]
+    )
 
     return {
         messages: state.messages,
@@ -137,14 +142,13 @@ export function useMessages(api: ApiClient | null, sessionId: string | null): {
         isLoadingMore: state.isLoadingMore,
         hasMore: state.hasMore,
         pendingCount: state.pendingCount,
+        atBottom: state.atBottom,
         hasLoadedLatest: state.hasLoadedLatest,
         messagesVersion: state.messagesVersion,
         pendingReply: state.pendingReply,
         stream: state.stream,
         streamVersion: state.streamVersion,
-        loadMore,
         loadHistoryUntilPreviousUser,
-        refetch,
         flushPending,
         setAtBottom,
     }

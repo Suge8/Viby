@@ -7,20 +7,35 @@ describe('recoverFromVitePreloadError', () => {
         window.sessionStorage.clear()
     })
 
-    it('reloads once when runtime asset recovery runs for the first time', async () => {
+    it('queues one explicit runtime update instead of reloading immediately on the first preload failure', async () => {
         const reload = vi.fn()
         const { recoverFromVitePreloadError } = await import('./installVitePreloadErrorHandler')
+        const { applyPendingRuntimeUpdate, readPendingRuntimeUpdate } = await import('./runtimeUpdateChannel')
 
-        await expect(recoverFromVitePreloadError(new Error('Failed to fetch dynamically imported module'), reload)).resolves.toBe(true)
+        await expect(
+            recoverFromVitePreloadError(new Error('Failed to fetch dynamically imported module'), reload)
+        ).resolves.toBe(true)
+        expect(reload).not.toHaveBeenCalled()
+        expect(readPendingRuntimeUpdate()).not.toBeNull()
+
+        await expect(applyPendingRuntimeUpdate()).resolves.toBe(true)
         expect(reload).toHaveBeenCalledTimes(1)
     })
 
     it('does not reload again when the same preload error already recovered in this tab', async () => {
         const reload = vi.fn()
         const { recoverFromVitePreloadError } = await import('./installVitePreloadErrorHandler')
+        const { applyPendingRuntimeUpdate } = await import('./runtimeUpdateChannel')
 
-        await expect(recoverFromVitePreloadError(new Error('Failed to fetch dynamically imported module'), reload)).resolves.toBe(true)
-        await expect(recoverFromVitePreloadError(new Error('Failed to fetch dynamically imported module'), reload)).resolves.toBe(false)
+        await expect(
+            recoverFromVitePreloadError(new Error('Failed to fetch dynamically imported module'), reload)
+        ).resolves.toBe(true)
+        await expect(
+            recoverFromVitePreloadError(new Error('Failed to fetch dynamically imported module'), reload)
+        ).resolves.toBe(false)
+        expect(reload).not.toHaveBeenCalled()
+
+        await expect(applyPendingRuntimeUpdate()).resolves.toBe(true)
         expect(reload).toHaveBeenCalledTimes(1)
     })
 
@@ -33,16 +48,26 @@ describe('recoverFromVitePreloadError', () => {
         const { runNavigationTransitionAfterPreload } = await import('./navigationTransition')
         const { recoverFromVitePreloadError } = await import('./installVitePreloadErrorHandler')
         const { consumePendingAppRecovery } = await import('./appRecovery')
+        const { applyPendingRuntimeUpdate, readPendingRuntimeUpdate } = await import('./runtimeUpdateChannel')
 
         const navigationTask = runNavigationTransitionAfterPreload(preload, vi.fn(), {
-            recoveryHref: '/sessions/session-1'
+            recoveryHref: '/sessions/session-1',
         })
 
-        await expect(recoverFromVitePreloadError(new Error('Failed to fetch dynamically imported module'), reload)).resolves.toBe(true)
+        await expect(
+            recoverFromVitePreloadError(new Error('Failed to fetch dynamically imported module'), reload)
+        ).resolves.toBe(true)
+        expect(reload).not.toHaveBeenCalled()
+        expect(readPendingRuntimeUpdate()).toMatchObject({
+            recoveryReason: 'vite-preload-error',
+            resumeHref: '/sessions/session-1',
+        })
+
+        await expect(applyPendingRuntimeUpdate()).resolves.toBe(true)
         expect(reload).toHaveBeenCalledTimes(1)
         expect(consumePendingAppRecovery()).toMatchObject({
             reason: 'vite-preload-error',
-            resumeHref: '/sessions/session-1'
+            resumeHref: '/sessions/session-1',
         })
 
         resolvePreload()
@@ -53,10 +78,9 @@ describe('recoverFromVitePreloadError', () => {
         const reload = vi.fn()
         const { recoverFromVitePreloadError } = await import('./installVitePreloadErrorHandler')
 
-        await expect(recoverFromVitePreloadError(
-            new ReferenceError("Cannot access 'tt' before initialization"),
-            reload
-        )).resolves.toBe(false)
+        await expect(
+            recoverFromVitePreloadError(new ReferenceError("Cannot access 'tt' before initialization"), reload)
+        ).resolves.toBe(false)
         expect(reload).not.toHaveBeenCalled()
     })
 })

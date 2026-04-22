@@ -1,23 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import type { PiModelCapability } from '@/types/api'
-import {
-    findPiModelCapability,
-    getPiLaunchModelOptions,
-    getPiLaunchReasoningEffortOptions,
-} from './sessionConfigOptions'
+import { getPiLaunchModelOptions, getPiLaunchReasoningEffortOptions } from './sessionConfigOptions'
+import { findPiModelCapability } from './sessionConfigPiSupport'
 
 describe('Pi launch config options', () => {
     const capabilities: PiModelCapability[] = [
         {
             id: 'openai/gpt-5.4',
             label: 'GPT-5.4',
-            supportedThinkingLevels: ['none', 'low', 'high']
+            supportedThinkingLevels: ['none', 'low', 'high'],
         },
         {
             id: 'anthropic/claude-sonnet-4',
             label: 'Claude Sonnet 4',
-            supportedThinkingLevels: ['none']
-        }
+            supportedThinkingLevels: ['none'],
+        },
     ]
 
     it('builds launch model options from Pi capabilities', () => {
@@ -25,16 +22,16 @@ describe('Pi launch config options', () => {
             {
                 value: 'auto',
                 label: 'Terminal default model',
-                labelKey: 'model.terminalDefault'
+                labelKey: 'model.terminalDefault',
             },
             {
                 value: 'openai/gpt-5.4',
-                label: 'GPT-5.4'
+                label: 'GPT-5.4',
             },
             {
                 value: 'anthropic/claude-sonnet-4',
-                label: 'Claude Sonnet 4'
-            }
+                label: 'Claude Sonnet 4',
+            },
         ])
     })
 
@@ -44,18 +41,18 @@ describe('Pi launch config options', () => {
             {
                 value: 'default',
                 label: 'Terminal default reasoning effort',
-                labelKey: 'reasoningEffort.terminalDefault'
+                labelKey: 'reasoningEffort.terminalDefault',
             },
             {
                 value: 'none',
                 label: 'None',
-                labelKey: 'reasoningEffort.none'
+                labelKey: 'reasoningEffort.none',
             },
             {
                 value: 'high',
                 label: 'High',
-                labelKey: 'reasoningEffort.high'
-            }
+                labelKey: 'reasoningEffort.high',
+            },
         ])
     })
 })

@@ -1,11 +1,12 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { resetForegroundPulseForTests } from '@/lib/foregroundPulse'
 import { usePushNotifications } from './usePushNotifications'
 
 const shouldRegisterServiceWorkerForOriginMock = vi.fn<(origin: string) => boolean>()
 
 vi.mock('@/lib/runtimeAssetPolicy', () => ({
-    shouldRegisterServiceWorkerForOrigin: (origin: string) => shouldRegisterServiceWorkerForOriginMock(origin)
+    shouldRegisterServiceWorkerForOrigin: (origin: string) => shouldRegisterServiceWorkerForOriginMock(origin),
 }))
 
 type MockNotification = {
@@ -25,11 +26,11 @@ function createApplicationServerKey(seed: number): Uint8Array {
 function installNotificationMock(permission: NotificationPermission): MockNotification {
     const notification = {
         permission,
-        requestPermission: vi.fn<() => Promise<NotificationPermission>>().mockResolvedValue(permission)
+        requestPermission: vi.fn<() => Promise<NotificationPermission>>().mockResolvedValue(permission),
     }
     Object.defineProperty(window, 'Notification', {
         configurable: true,
-        value: notification
+        value: notification,
     })
     return notification
 }
@@ -40,7 +41,7 @@ function installPushSupport(pushManager: {
 }): void {
     Object.defineProperty(window, 'PushManager', {
         configurable: true,
-        value: class PushManagerMock {}
+        value: class PushManagerMock {},
     })
     Object.defineProperty(navigator, 'serviceWorker', {
         configurable: true,
@@ -49,16 +50,13 @@ function installPushSupport(pushManager: {
                 pushManager: {
                     ...pushManager,
                     permissionState: vi.fn(),
-                }
-            } as unknown as ServiceWorkerRegistration)
-        }
+                },
+            } as unknown as ServiceWorkerRegistration),
+        },
     })
 }
 
-function createSubscription(options: {
-    endpoint: string
-    applicationServerKey: Uint8Array
-}): MockPushSubscription {
+function createSubscription(options: { endpoint: string; applicationServerKey: Uint8Array }): MockPushSubscription {
     return {
         endpoint: options.endpoint,
         expirationTime: null,
@@ -68,12 +66,12 @@ function createSubscription(options: {
             endpoint: options.endpoint,
             keys: {
                 p256dh: 'p256dh-key',
-                auth: 'auth-key'
-            }
+                auth: 'auth-key',
+            },
         })),
         options: {
-            applicationServerKey: options.applicationServerKey.buffer
-        }
+            applicationServerKey: options.applicationServerKey.buffer,
+        },
     } as unknown as MockPushSubscription
 }
 
@@ -90,54 +88,55 @@ describe('usePushNotifications', () => {
     afterEach(() => {
         Object.defineProperty(window, 'Notification', {
             configurable: true,
-            value: originalNotification
+            value: originalNotification,
         })
         if (originalPushManager === undefined) {
             Object.defineProperty(window, 'PushManager', {
                 configurable: true,
-                value: undefined
+                value: undefined,
             })
         } else {
             Object.defineProperty(window, 'PushManager', {
                 configurable: true,
-                value: originalPushManager
+                value: originalPushManager,
             })
         }
         if (originalServiceWorker === undefined) {
             Object.defineProperty(navigator, 'serviceWorker', {
                 configurable: true,
-                value: undefined
+                value: undefined,
             })
         } else {
             Object.defineProperty(navigator, 'serviceWorker', {
                 configurable: true,
-                value: originalServiceWorker
+                value: originalServiceWorker,
             })
         }
+        resetForegroundPulseForTests()
     })
 
     it('re-subscribes when the existing subscription uses a different VAPID public key', async () => {
         installNotificationMock('granted')
         const staleSubscription = createSubscription({
             endpoint: 'https://push.example.com/stale',
-            applicationServerKey: createApplicationServerKey(1)
+            applicationServerKey: createApplicationServerKey(1),
         })
         const freshSubscription = createSubscription({
             endpoint: 'https://push.example.com/fresh',
-            applicationServerKey: createApplicationServerKey(20)
+            applicationServerKey: createApplicationServerKey(20),
         })
         const pushManager = {
             getSubscription: vi.fn<() => Promise<PushSubscription | null>>().mockResolvedValue(staleSubscription),
-            subscribe: vi.fn<() => Promise<PushSubscription>>().mockResolvedValue(freshSubscription)
+            subscribe: vi.fn<() => Promise<PushSubscription>>().mockResolvedValue(freshSubscription),
         }
         installPushSupport(pushManager)
 
         const api = {
             getPushVapidPublicKey: vi.fn().mockResolvedValue({
-                publicKey: 'FBUfQ9n3eZxM4n1l7w2W5mM8i8IHbS7R0YjNfJ0W4yC4tJmJ8x4b1zU5p7uR2oH1rQ6gC5fK0dL2nP3sA4tB5cC'
+                publicKey: 'FBUfQ9n3eZxM4n1l7w2W5mM8i8IHbS7R0YjNfJ0W4yC4tJmJ8x4b1zU5p7uR2oH1rQ6gC5fK0dL2nP3sA4tB5cC',
             }),
             subscribePushNotifications: vi.fn().mockResolvedValue(undefined),
-            unsubscribePushNotifications: vi.fn().mockResolvedValue(undefined)
+            unsubscribePushNotifications: vi.fn().mockResolvedValue(undefined),
         }
 
         const { result } = renderHook(() => usePushNotifications(api as never))
@@ -153,15 +152,15 @@ describe('usePushNotifications', () => {
         expect(result.current.pushEndpoint).toBe('https://push.example.com/fresh')
         expect(staleSubscription.unsubscribe).toHaveBeenCalledTimes(1)
         expect(api.unsubscribePushNotifications).toHaveBeenCalledWith({
-            endpoint: 'https://push.example.com/stale'
+            endpoint: 'https://push.example.com/stale',
         })
         expect(pushManager.subscribe).toHaveBeenCalledTimes(1)
         expect(api.subscribePushNotifications).toHaveBeenCalledWith({
             endpoint: 'https://push.example.com/fresh',
             keys: {
                 p256dh: 'p256dh-key',
-                auth: 'auth-key'
-            }
+                auth: 'auth-key',
+            },
         })
     })
 

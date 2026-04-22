@@ -1,72 +1,20 @@
 import { normalizeSessionActivityTimestamp } from '@viby/protocol'
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { SessionSummary } from '@/types/api'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { subscribeForegroundPulse } from '@/lib/foregroundPulse'
 import {
-    readBrowserStorageJson,
-    writeBrowserStorageJson
-} from '@/lib/browserStorage'
+    applySessionAttentionSnapshot,
+    getNextSessionAttentionSeenSnapshot,
+    readSessionAttentionSnapshot,
+    type SessionAttentionSnapshot,
+    seedSessionAttentionSnapshotForTests,
+    subscribeSessionAttentionSnapshot,
+} from '@/lib/sessionAttentionStore'
+import type { SessionSummary } from '@/types/api'
 
-const SESSION_ATTENTION_STORAGE_KEY = 'viby:session-attention'
-const SESSION_ATTENTION_STORAGE = 'local' as const
-
-type SessionAttentionSnapshot = Record<string, number>
+export { seedSessionAttentionSnapshotForTests }
 
 function getSessionActivityTimestamp(session: SessionSummary): number {
     return normalizeSessionActivityTimestamp(session.latestCompletedReplyAt) ?? 0
-}
-
-function normalizeTimestamp(value: number | null | undefined): number {
-    return normalizeSessionActivityTimestamp(value) ?? 0
-}
-
-function parseSessionAttentionSnapshot(rawValue: string): SessionAttentionSnapshot | null {
-    try {
-        const parsed = JSON.parse(rawValue) as unknown
-        if (!parsed || typeof parsed !== 'object') {
-            return null
-        }
-
-        return Object.fromEntries(
-            Object.entries(parsed)
-                .filter(([sessionId, timestamp]) => typeof sessionId === 'string' && typeof timestamp === 'number')
-                .map(([sessionId, timestamp]) => [sessionId, normalizeTimestamp(timestamp)])
-        )
-    } catch {
-        return null
-    }
-}
-
-function readSessionAttentionSnapshot(): SessionAttentionSnapshot {
-    return readBrowserStorageJson({
-        storage: SESSION_ATTENTION_STORAGE,
-        key: SESSION_ATTENTION_STORAGE_KEY,
-        parse: parseSessionAttentionSnapshot
-    }) ?? {}
-}
-
-function writeSessionAttentionSnapshot(snapshot: SessionAttentionSnapshot): void {
-    writeBrowserStorageJson(SESSION_ATTENTION_STORAGE, SESSION_ATTENTION_STORAGE_KEY, snapshot)
-}
-
-function upsertSeenAt(
-    snapshot: SessionAttentionSnapshot,
-    sessionId: string,
-    seenAt: number
-): SessionAttentionSnapshot {
-    const normalizedSeenAt = normalizeTimestamp(seenAt)
-    if (normalizedSeenAt === 0) {
-        return snapshot
-    }
-
-    const currentSeenAt = snapshot[sessionId] ?? 0
-    if (normalizedSeenAt <= currentSeenAt) {
-        return snapshot
-    }
-
-    return {
-        ...snapshot,
-        [sessionId]: normalizedSeenAt
-    }
 }
 
 function isDocumentVisible(): boolean {
@@ -84,17 +32,34 @@ export function useSessionAttention(
     hasUnseenReply: (session: SessionSummary) => boolean
 } {
     const [snapshot, setSnapshot] = useState<SessionAttentionSnapshot>(() => readSessionAttentionSnapshot())
+    const snapshotRef = useRef(snapshot)
+    snapshotRef.current = snapshot
 
     const activityAtBySessionId = useMemo(() => {
         return new Map(sessions.map((session) => [session.id, getSessionActivityTimestamp(session)]))
     }, [sessions])
+
+    const commitSnapshot = useCallback(
+        (updater: (current: SessionAttentionSnapshot) => SessionAttentionSnapshot): void => {
+            const currentSnapshot = snapshotRef.current
+            const nextSnapshot = updater(currentSnapshot)
+            if (nextSnapshot === currentSnapshot) {
+                return
+            }
+
+            snapshotRef.current = nextSnapshot
+            setSnapshot(nextSnapshot)
+            applySessionAttentionSnapshot(nextSnapshot)
+        },
+        []
+    )
 
     useEffect(() => {
         if (sessions.length === 0) {
             return
         }
 
-        setSnapshot((currentSnapshot) => {
+        commitSnapshot((currentSnapshot) => {
             const additions = sessions
                 .filter((session) => currentSnapshot[session.id] === undefined)
                 .map((session) => [session.id, getSessionActivityTimestamp(session)] as const)
@@ -105,24 +70,20 @@ export function useSessionAttention(
 
             const nextSnapshot = {
                 ...currentSnapshot,
-                ...Object.fromEntries(additions)
+                ...Object.fromEntries(additions),
             }
-            writeSessionAttentionSnapshot(nextSnapshot)
             return nextSnapshot
         })
-    }, [sessions])
+    }, [commitSnapshot, sessions])
 
-    const markSeen = useCallback((sessionId: string, activityAt: number): void => {
-        setSnapshot((currentSnapshot) => {
-            const nextSnapshot = upsertSeenAt(currentSnapshot, sessionId, activityAt)
-            if (nextSnapshot === currentSnapshot) {
-                return currentSnapshot
-            }
-
-            writeSessionAttentionSnapshot(nextSnapshot)
-            return nextSnapshot
-        })
-    }, [])
+    const markSeen = useCallback(
+        (sessionId: string, activityAt: number): void => {
+            commitSnapshot((currentSnapshot) => {
+                return getNextSessionAttentionSeenSnapshot(currentSnapshot, sessionId, activityAt)
+            })
+        },
+        [commitSnapshot]
+    )
 
     const syncSelectedSession = useCallback((): void => {
         if (!selectedSessionId || !isDocumentVisible()) {
@@ -142,46 +103,39 @@ export function useSessionAttention(
     }, [syncSelectedSession])
 
     useEffect(() => {
-        function handleVisibilityChange(): void {
-            if (isDocumentVisible()) {
-                syncSelectedSession()
-            }
-        }
-
-        function handleStorage(event: StorageEvent): void {
-            if (event.key !== SESSION_ATTENTION_STORAGE_KEY) {
-                return
-            }
-
-            setSnapshot(readSessionAttentionSnapshot())
-        }
-
-        window.addEventListener('focus', syncSelectedSession)
-        document.addEventListener('visibilitychange', handleVisibilityChange)
-        window.addEventListener('storage', handleStorage)
+        const unsubscribeForegroundPulse = subscribeForegroundPulse(() => {
+            syncSelectedSession()
+        })
+        const unsubscribeSnapshot = subscribeSessionAttentionSnapshot(() => {
+            const nextSnapshot = readSessionAttentionSnapshot()
+            snapshotRef.current = nextSnapshot
+            setSnapshot(nextSnapshot)
+        })
 
         return () => {
-            window.removeEventListener('focus', syncSelectedSession)
-            document.removeEventListener('visibilitychange', handleVisibilityChange)
-            window.removeEventListener('storage', handleStorage)
+            unsubscribeForegroundPulse()
+            unsubscribeSnapshot()
         }
     }, [syncSelectedSession])
 
-    const hasUnseenReply = useCallback((session: SessionSummary): boolean => {
-        if (session.id === selectedSessionId) {
-            return false
-        }
+    const hasUnseenReply = useCallback(
+        (session: SessionSummary): boolean => {
+            if (session.id === selectedSessionId) {
+                return false
+            }
 
-        const seenAt = snapshot[session.id]
-        if (seenAt === undefined) {
-            return false
-        }
+            const seenAt = snapshot[session.id]
+            if (seenAt === undefined) {
+                return false
+            }
 
-        const activityAt = getSessionActivityTimestamp(session)
-        return activityAt > seenAt
-    }, [selectedSessionId, snapshot])
+            const activityAt = getSessionActivityTimestamp(session)
+            return activityAt > seenAt
+        },
+        [selectedSessionId, snapshot]
+    )
 
-    return useMemo(() => ({
-        hasUnseenReply
-    }), [hasUnseenReply])
+    return {
+        hasUnseenReply,
+    }
 }

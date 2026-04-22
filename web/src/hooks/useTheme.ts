@@ -1,46 +1,36 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
+import { readBrowserStorageItem, removeBrowserStorageItem, writeBrowserStorageItem } from '@/lib/browserStorage'
+import { type BrowserLocalStorageKey, LOCAL_STORAGE_KEYS } from '@/lib/storage/storageRegistry'
 
 type ColorScheme = 'light' | 'dark'
 
 export type AppearancePreference = 'system' | 'dark' | 'light'
 
-const APPEARANCE_KEY = 'viby-appearance'
+const APPEARANCE_KEY = LOCAL_STORAGE_KEYS.appearance
 
 function isBrowser(): boolean {
     return typeof window !== 'undefined' && typeof document !== 'undefined'
 }
 
-function safeGetItem(key: string): string | null {
+function safeGetItem(key: BrowserLocalStorageKey): string | null {
     if (!isBrowser()) {
         return null
     }
-    try {
-        return localStorage.getItem(key)
-    } catch {
-        return null
-    }
+    return readBrowserStorageItem('local', key)
 }
 
-function safeSetItem(key: string, value: string): void {
+function safeSetItem(key: BrowserLocalStorageKey, value: string): void {
     if (!isBrowser()) {
         return
     }
-    try {
-        localStorage.setItem(key, value)
-    } catch {
-        // Ignore storage errors
-    }
+    writeBrowserStorageItem('local', key, value)
 }
 
-function safeRemoveItem(key: string): void {
+function safeRemoveItem(key: BrowserLocalStorageKey): void {
     if (!isBrowser()) {
         return
     }
-    try {
-        localStorage.removeItem(key)
-    } catch {
-        // Ignore storage errors
-    }
+    removeBrowserStorageItem('local', key)
 }
 
 function parseAppearance(raw: string | null): AppearancePreference {
@@ -108,11 +98,14 @@ export function useTheme(): { colorScheme: ColorScheme; isDark: boolean } {
     const colorScheme = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
     return {
         colorScheme,
-        isDark: colorScheme === 'dark'
+        isDark: colorScheme === 'dark',
     }
 }
 
-export function useAppearance(): { appearance: AppearancePreference; setAppearance: (pref: AppearancePreference) => void } {
+export function useAppearance(): {
+    appearance: AppearancePreference
+    setAppearance: (pref: AppearancePreference) => void
+} {
     const [appearance, setAppearanceState] = useState<AppearancePreference>(getStoredAppearance)
 
     useEffect(() => {
@@ -131,7 +124,7 @@ export function useAppearance(): { appearance: AppearancePreference; setAppearan
         return () => window.removeEventListener('storage', onStorage)
     }, [])
 
-    const setAppearance = useCallback((pref: AppearancePreference) => {
+    function setAppearance(pref: AppearancePreference): void {
         setAppearanceState(pref)
 
         if (pref === 'system') {
@@ -141,11 +134,11 @@ export function useAppearance(): { appearance: AppearancePreference; setAppearan
         }
 
         updateScheme()
-    }, [])
+    }
 
     return {
         appearance,
-        setAppearance
+        setAppearance,
     }
 }
 

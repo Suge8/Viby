@@ -2,6 +2,7 @@ import { reloadWindowForRecovery } from '@/lib/appRecovery'
 import { readPendingNavigationRecoveryHref } from '@/lib/navigationTransition'
 import type { RuntimeAssetFailure } from '@/lib/runtimeAssetFailure'
 import { recoverRuntimeAssets } from '@/lib/runtimeAssetRecovery'
+import { publishRuntimeUpdateReady } from '@/lib/runtimeUpdateChannel'
 
 type VitePreloadErrorEvent = Event & {
     payload?: unknown
@@ -17,13 +18,13 @@ function extractRuntimeAssetFailure(payload: unknown): RuntimeAssetFailure {
         return {
             name: payload.name,
             message: payload.message,
-            stack: payload.stack
+            stack: payload.stack,
         }
     }
 
     if (!payload || typeof payload !== 'object') {
         return {
-            message: typeof payload === 'string' ? payload : null
+            message: typeof payload === 'string' ? payload : null,
         }
     }
 
@@ -32,14 +33,11 @@ function extractRuntimeAssetFailure(payload: unknown): RuntimeAssetFailure {
         name: typeof candidate.name === 'string' ? candidate.name : null,
         filename: typeof candidate.filename === 'string' ? candidate.filename : null,
         message: typeof candidate.message === 'string' ? candidate.message : null,
-        stack: typeof candidate.stack === 'string' ? candidate.stack : null
+        stack: typeof candidate.stack === 'string' ? candidate.stack : null,
     }
 }
 
-export async function recoverFromVitePreloadError(
-    payload?: unknown,
-    reload?: () => void
-): Promise<boolean> {
+export async function recoverFromVitePreloadError(payload?: unknown, reload?: () => void): Promise<boolean> {
     const failure = extractRuntimeAssetFailure(payload)
     const { isLikelyRuntimeAssetFailure } = await import('@/lib/runtimeAssetFailure')
     if (!isLikelyRuntimeAssetFailure(failure)) {
@@ -53,8 +51,27 @@ export async function recoverFromVitePreloadError(
         return false
     }
 
-    reloadWindowForRecovery('vite-preload-error', reload, {
-        resumeHref: readPendingNavigationRecoveryHref()
+    const resumeHref = readPendingNavigationRecoveryHref() ?? undefined
+    if (reload) {
+        publishRuntimeUpdateReady(
+            async () => {
+                reloadWindowForRecovery('vite-preload-error', reload, {
+                    resumeHref,
+                })
+            },
+            {
+                mode: 'custom',
+                recoveryReason: 'vite-preload-error',
+                resumeHref,
+            }
+        )
+        return true
+    }
+
+    publishRuntimeUpdateReady(undefined, {
+        mode: 'reload',
+        recoveryReason: 'vite-preload-error',
+        resumeHref,
     })
     return true
 }

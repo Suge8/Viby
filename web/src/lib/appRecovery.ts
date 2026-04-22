@@ -1,11 +1,15 @@
 import {
+    readBrowserStorageItem,
     readBrowserStorageJson,
     removeBrowserStorageItem,
-    writeBrowserStorageJson
+    writeBrowserStorageItem,
+    writeBrowserStorageJson,
 } from '@/lib/browserStorage'
 
 export const APP_RECOVERY_STORAGE_KEY = 'viby-pending-app-recovery'
+export const APP_BOOT_RECOVERY_SURFACE_OWNER_KEY = 'viby-boot-recovery-surface-owner'
 export const APP_BOOT_SHELL_ID = 'app-boot-shell'
+export const APP_SHELL_REVEALED_KEY = 'viby-app-shell-revealed'
 
 const BOOT_SHELL_EXIT_CLASS_NAME = 'is-hidden'
 const BOOT_SHELL_EXIT_DURATION_MS = 280
@@ -17,11 +21,9 @@ const APP_RECOVERY_REASONS = [
     'local-service-worker-reset',
     'runtime-asset-reload',
     'vite-preload-error',
-    'build-assets-reset'
 ] as const
 
-export type AppRecoveryReason =
-    (typeof APP_RECOVERY_REASONS)[number]
+export type AppRecoveryReason = (typeof APP_RECOVERY_REASONS)[number]
 
 export type AppRecoverySnapshot = {
     reason: AppRecoveryReason
@@ -57,14 +59,14 @@ function createRecoverySnapshot(
     const resumeHref = normalizeResumeHref(options.resumeHref)
     return resumeHref
         ? {
-            reason,
-            at: Date.now(),
-            resumeHref
-        }
+              reason,
+              at: Date.now(),
+              resumeHref,
+          }
         : {
-            reason,
-            at: Date.now()
-        }
+              reason,
+              at: Date.now(),
+          }
 }
 
 function parseSnapshot(rawValue: string): AppRecoverySnapshot | null {
@@ -76,17 +78,14 @@ function parseSnapshot(rawValue: string): AppRecoverySnapshot | null {
         return {
             reason: parsed.reason,
             at: parsed.at,
-            resumeHref: normalizeResumeHref(parsed.resumeHref)
+            resumeHref: normalizeResumeHref(parsed.resumeHref),
         }
     } catch {
         return null
     }
 }
 
-function isFreshSnapshot(
-    snapshot: AppRecoverySnapshot,
-    now: number = Date.now()
-): boolean {
+function isFreshSnapshot(snapshot: AppRecoverySnapshot, now: number = Date.now()): boolean {
     return now - snapshot.at <= APP_RECOVERY_MAX_AGE_MS
 }
 
@@ -98,19 +97,23 @@ export function recordPendingAppRecovery(
         storage: 'session',
         key: APP_RECOVERY_STORAGE_KEY,
         parse: parseSnapshot,
-        removeInvalid: false
+        removeInvalid: false,
     })
     const resumeHref = normalizeResumeHref(options.resumeHref) ?? existing?.resumeHref
-    writeBrowserStorageJson('session', APP_RECOVERY_STORAGE_KEY, createRecoverySnapshot(reason, {
-        resumeHref
-    }))
+    writeBrowserStorageJson(
+        'session',
+        APP_RECOVERY_STORAGE_KEY,
+        createRecoverySnapshot(reason, {
+            resumeHref,
+        })
+    )
 }
 
 export function consumePendingAppRecovery(): AppRecoverySnapshot | null {
     const snapshot = readBrowserStorageJson({
         storage: 'session',
         key: APP_RECOVERY_STORAGE_KEY,
-        parse: parseSnapshot
+        parse: parseSnapshot,
     })
     removeBrowserStorageItem('session', APP_RECOVERY_STORAGE_KEY)
     if (!snapshot || !isFreshSnapshot(snapshot)) {
@@ -120,6 +123,12 @@ export function consumePendingAppRecovery(): AppRecoverySnapshot | null {
     return snapshot
 }
 
+export function consumeBootRecoverySurfaceOwner(): boolean {
+    const owner = readBrowserStorageItem('session', APP_BOOT_RECOVERY_SURFACE_OWNER_KEY)
+    removeBrowserStorageItem('session', APP_BOOT_RECOVERY_SURFACE_OWNER_KEY)
+    return owner === 'boot-shell'
+}
+
 export function consumeDiscardedPageRecovery(): AppRecoverySnapshot | null {
     if (typeof document === 'undefined' || document.wasDiscarded !== true || hasConsumedDiscardedRecovery) {
         return null
@@ -127,7 +136,7 @@ export function consumeDiscardedPageRecovery(): AppRecoverySnapshot | null {
 
     hasConsumedDiscardedRecovery = true
     return {
-        ...createRecoverySnapshot('page-discarded')
+        ...createRecoverySnapshot('page-discarded'),
     }
 }
 
@@ -148,6 +157,8 @@ export function finalizeBootShell(): void {
     if (typeof document === 'undefined') {
         return
     }
+
+    writeBrowserStorageItem('session', APP_SHELL_REVEALED_KEY, 'done')
 
     const bootShell = document.getElementById(APP_BOOT_SHELL_ID)
     if (!bootShell || bootShell.classList.contains(BOOT_SHELL_EXIT_CLASS_NAME)) {

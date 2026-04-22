@@ -1,5 +1,6 @@
-import { recordPendingAppRecovery } from '@/lib/appRecovery'
+import { readBrowserStorageItem, removeBrowserStorageItem, writeBrowserStorageItem } from '@/lib/browserStorage'
 import { shouldRegisterServiceWorkerForOrigin } from '@/lib/runtimeAssetPolicy'
+import { publishRuntimeUpdateReady } from '@/lib/runtimeUpdateChannel'
 
 const APP_BUILD_ID_STORAGE_KEY = 'viby-app-build-id'
 const RUNTIME_ASSET_RECOVERY_KEY = 'viby-runtime-asset-recovery'
@@ -10,12 +11,12 @@ function markRuntimeAssetRecovery(reason: string): boolean {
         return true
     }
 
-    const existing = window.sessionStorage.getItem(RUNTIME_ASSET_RECOVERY_KEY)
+    const existing = readBrowserStorageItem('session', RUNTIME_ASSET_RECOVERY_KEY)
     if (existing === reason) {
         return false
     }
 
-    window.sessionStorage.setItem(RUNTIME_ASSET_RECOVERY_KEY, reason)
+    writeBrowserStorageItem('session', RUNTIME_ASSET_RECOVERY_KEY, reason)
     return true
 }
 
@@ -24,7 +25,7 @@ export function clearRuntimeAssetRecoveryMarker(): void {
         return
     }
 
-    window.sessionStorage.removeItem(RUNTIME_ASSET_RECOVERY_KEY)
+    removeBrowserStorageItem('session', RUNTIME_ASSET_RECOVERY_KEY)
 }
 
 async function unregisterServiceWorkers(): Promise<void> {
@@ -59,13 +60,12 @@ export async function disableServiceWorkerForCurrentOrigin(): Promise<boolean> {
         return false
     }
 
-    const hasController = typeof navigator !== 'undefined'
-        && 'serviceWorker' in navigator
-        && Boolean(navigator.serviceWorker.controller)
-    const hasResetMarker = window.sessionStorage.getItem(LOCAL_SERVICE_WORKER_RESET_KEY) === 'done'
+    const hasController =
+        typeof navigator !== 'undefined' && 'serviceWorker' in navigator && Boolean(navigator.serviceWorker.controller)
+    const hasResetMarker = readBrowserStorageItem('session', LOCAL_SERVICE_WORKER_RESET_KEY) === 'done'
 
     await resetRuntimeAssets()
-    window.sessionStorage.setItem(LOCAL_SERVICE_WORKER_RESET_KEY, 'done')
+    writeBrowserStorageItem('session', LOCAL_SERVICE_WORKER_RESET_KEY, 'done')
 
     return hasController && !hasResetMarker
 }
@@ -80,21 +80,20 @@ export async function recoverRuntimeAssets(reason: string): Promise<boolean> {
     return true
 }
 
-export async function invalidateRuntimeAssetsForBuild(buildId: string): Promise<boolean> {
+export function publishRuntimeUpdateForBuild(buildId: string): boolean {
     if (typeof window === 'undefined') {
         return false
     }
 
-    const previousBuildId = window.localStorage.getItem(APP_BUILD_ID_STORAGE_KEY)
-    window.localStorage.setItem(APP_BUILD_ID_STORAGE_KEY, buildId)
+    const previousBuildId = readBrowserStorageItem('local', APP_BUILD_ID_STORAGE_KEY)
+    writeBrowserStorageItem('local', APP_BUILD_ID_STORAGE_KEY, buildId)
 
     if (!previousBuildId || previousBuildId === buildId) {
         return false
     }
 
-    const recovered = await recoverRuntimeAssets(`build:${previousBuildId}->${buildId}`)
-    if (recovered) {
-        recordPendingAppRecovery('build-assets-reset')
-    }
-    return recovered
+    publishRuntimeUpdateReady(async () => {
+        window.location.reload()
+    })
+    return true
 }

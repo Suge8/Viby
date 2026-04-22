@@ -1,11 +1,11 @@
 import { useCallback, useMemo, useState } from 'react'
+import { readBrowserStorageItem, removeBrowserStorageItem, writeBrowserStorageItem } from '@/lib/browserStorage'
+import { LOCAL_STORAGE_KEYS } from '@/lib/storage/storageRegistry'
 
-const HUB_URL_KEY = 'viby_hub_url'
+const HUB_URL_KEY = LOCAL_STORAGE_KEYS.hubUrl
 const LOCALHOST_HOSTS = new Set(['localhost', '127.0.0.1', '0.0.0.0', '[::1]', '::1'])
 
-export type ServerUrlResult =
-    | { ok: true; value: string }
-    | { ok: false; error: string }
+export type ServerUrlResult = { ok: true; value: string } | { ok: false; error: string }
 
 export function normalizeServerUrl(input: string): ServerUrlResult {
     const trimmed = input.trim()
@@ -92,40 +92,29 @@ function getServerFromUrlParams(currentOrigin: string): string | null {
 }
 
 function readStoredServerUrl(currentOrigin: string): string | null {
-    try {
-        const stored = localStorage.getItem(HUB_URL_KEY)
-        if (!stored) {
-            return null
-        }
-        const normalized = normalizeServerUrl(stored)
-        if (!normalized.ok) {
-            localStorage.removeItem(HUB_URL_KEY)
-            return null
-        }
-        const resolved = resolveServerUrlForCurrentOrigin(normalized.value, currentOrigin)
-        if (resolved !== normalized.value) {
-            localStorage.setItem(HUB_URL_KEY, resolved)
-        }
-        return resolved
-    } catch {
+    const stored = readBrowserStorageItem('local', HUB_URL_KEY)
+    if (!stored) {
         return null
     }
+
+    const normalized = normalizeServerUrl(stored)
+    if (!normalized.ok) {
+        removeBrowserStorageItem('local', HUB_URL_KEY)
+        return null
+    }
+    const resolved = resolveServerUrlForCurrentOrigin(normalized.value, currentOrigin)
+    if (resolved !== normalized.value) {
+        writeBrowserStorageItem('local', HUB_URL_KEY, resolved)
+    }
+    return resolved
 }
 
 function writeStoredServerUrl(value: string): void {
-    try {
-        localStorage.setItem(HUB_URL_KEY, value)
-    } catch {
-        // Ignore storage errors
-    }
+    writeBrowserStorageItem('local', HUB_URL_KEY, value)
 }
 
 function clearStoredServerUrl(): void {
-    try {
-        localStorage.removeItem(HUB_URL_KEY)
-    } catch {
-        // Ignore storage errors
-    }
+    removeBrowserStorageItem('local', HUB_URL_KEY)
 }
 
 export function useServerUrl(): {
@@ -136,10 +125,10 @@ export function useServerUrl(): {
 } {
     const [serverUrl, setServerUrlState] = useState<string | null>(() => {
         const currentOrigin = getCurrentOrigin()
-        // Priority: URL params > localStorage
+        // Priority: URL params > persisted browser storage
         const fromUrl = getServerFromUrlParams(currentOrigin)
         if (fromUrl) {
-            writeStoredServerUrl(fromUrl) // Save to localStorage for refresh
+            writeStoredServerUrl(fromUrl) // Persist for refresh
             return fromUrl
         }
         return readStoredServerUrl(currentOrigin)
@@ -149,7 +138,10 @@ export function useServerUrl(): {
     const defaultServerUrl = useMemo(() => {
         return resolveRemoteDevHubUrl(fallbackOrigin, import.meta.env.VITE_HUB_PROXY)
     }, [fallbackOrigin])
-    const baseUrl = useMemo(() => serverUrl ?? defaultServerUrl ?? fallbackOrigin, [defaultServerUrl, fallbackOrigin, serverUrl])
+    const baseUrl = useMemo(
+        () => serverUrl ?? defaultServerUrl ?? fallbackOrigin,
+        [defaultServerUrl, fallbackOrigin, serverUrl]
+    )
 
     const setServerUrl = useCallback((input: string): ServerUrlResult => {
         const normalized = normalizeServerUrl(input)
@@ -171,6 +163,6 @@ export function useServerUrl(): {
         serverUrl,
         baseUrl,
         setServerUrl,
-        clearServerUrl
+        clearServerUrl,
     }
 }

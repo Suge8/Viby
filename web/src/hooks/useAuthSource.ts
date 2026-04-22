@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
+import { readBrowserStorageItem, removeBrowserStorageItem, writeBrowserStorageItem } from '@/lib/browserStorage'
+import { type BrowserLocalStorageKey, getAccessTokenStorageKey } from '@/lib/storage/storageRegistry'
 import type { AuthSource } from './useAuth'
-
-const ACCESS_TOKEN_PREFIX = 'viby_access_token::'
 
 function getTokenFromUrlParams(): string | null {
     if (typeof window === 'undefined') {
@@ -11,35 +11,19 @@ function getTokenFromUrlParams(): string | null {
     return query.get('token')
 }
 
-function getAccessTokenKey(baseUrl: string): string {
-    return `${ACCESS_TOKEN_PREFIX}${baseUrl}`
+function readStoredAccessToken(key: BrowserLocalStorageKey): string | null {
+    return readBrowserStorageItem('local', key)
 }
 
-function readStoredAccessToken(key: string): string | null {
-    try {
-        return localStorage.getItem(key)
-    } catch {
-        return null
-    }
+function writeStoredAccessToken(key: BrowserLocalStorageKey, token: string): void {
+    writeBrowserStorageItem('local', key, token)
 }
 
-function writeStoredAccessToken(key: string, token: string): void {
-    try {
-        localStorage.setItem(key, token)
-    } catch {
-        // Ignore storage errors
-    }
+function clearStoredAccessToken(key: BrowserLocalStorageKey): void {
+    removeBrowserStorageItem('local', key)
 }
 
-function clearStoredAccessToken(key: string): void {
-    try {
-        localStorage.removeItem(key)
-    } catch {
-        // Ignore storage errors
-    }
-}
-
-function resolveAuthSource(accessTokenKey: string): AuthSource | null {
+function resolveAuthSource(accessTokenKey: BrowserLocalStorageKey): AuthSource | null {
     const urlToken = getTokenFromUrlParams()
     if (urlToken) {
         writeStoredAccessToken(accessTokenKey, urlToken)
@@ -54,31 +38,49 @@ function resolveAuthSource(accessTokenKey: string): AuthSource | null {
     return null
 }
 
+type AuthSourceState = {
+    accessTokenKey: BrowserLocalStorageKey
+    authSource: AuthSource | null
+}
+
+function createAuthSourceState(accessTokenKey: BrowserLocalStorageKey): AuthSourceState {
+    return {
+        accessTokenKey,
+        authSource: resolveAuthSource(accessTokenKey),
+    }
+}
+
 export function useAuthSource(baseUrl: string): {
     authSource: AuthSource | null
     setAccessToken: (token: string) => void
     clearAuth: () => void
 } {
-    const accessTokenKey = useMemo(() => getAccessTokenKey(baseUrl), [baseUrl])
-    const [authSource, setAuthSource] = useState<AuthSource | null>(() => resolveAuthSource(accessTokenKey))
+    const accessTokenKey = useMemo(() => getAccessTokenStorageKey(baseUrl), [baseUrl])
+    const [state, setState] = useState<AuthSourceState>(() => createAuthSourceState(accessTokenKey))
+    const authSource = state.accessTokenKey === accessTokenKey ? state.authSource : resolveAuthSource(accessTokenKey)
 
-    useEffect(() => {
-        setAuthSource(resolveAuthSource(accessTokenKey))
-    }, [accessTokenKey])
-
-    const setAccessToken = useCallback((token: string) => {
-        writeStoredAccessToken(accessTokenKey, token)
-        setAuthSource({ type: 'accessToken', token })
-    }, [accessTokenKey])
+    const setAccessToken = useCallback(
+        (token: string) => {
+            writeStoredAccessToken(accessTokenKey, token)
+            setState({
+                accessTokenKey,
+                authSource: { type: 'accessToken', token },
+            })
+        },
+        [accessTokenKey]
+    )
 
     const clearAuth = useCallback(() => {
         clearStoredAccessToken(accessTokenKey)
-        setAuthSource(null)
+        setState({
+            accessTokenKey,
+            authSource: null,
+        })
     }, [accessTokenKey])
 
     return {
         authSource,
         setAccessToken,
-        clearAuth
+        clearAuth,
     }
 }

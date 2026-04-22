@@ -1,8 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const REDUCED_MOTION_MEDIA_QUERY = '(prefers-reduced-motion: reduce)'
-const NARROW_SCREEN_MEDIA_QUERY = '(max-width: 767px)'
-
 const startTransitionMock = vi.fn((callback: () => void) => {
     callback()
 })
@@ -15,57 +12,18 @@ vi.mock('react', async () => {
     }
 })
 
-type ViewTransitionHandle = {
-    finished: Promise<void>
-    ready: Promise<void>
-    updateCallbackDone: Promise<void>
-    skipTransition: () => void
-    types: Set<string>
-}
-
 type ViewTransitionDocument = Document & {
     startViewTransition?: Document['startViewTransition']
 }
 
 type ViewTransitionStarter = NonNullable<ViewTransitionDocument['startViewTransition']>
 
-function installStartViewTransition(
-    value?: (update: () => void) => ViewTransitionHandle
-): void {
+function installStartViewTransition(value?: ViewTransitionStarter): void {
     Object.defineProperty(document, 'startViewTransition', {
         configurable: true,
         writable: true,
         value: value as ViewTransitionStarter | undefined,
     })
-}
-
-function installMatchMedia(matches: boolean | Record<string, boolean>): void {
-    Object.defineProperty(window, 'matchMedia', {
-        configurable: true,
-        writable: true,
-        value: vi.fn().mockImplementation((query: string) => ({
-            matches: typeof matches === 'boolean'
-                ? matches
-                : Boolean(matches[query]),
-            media: '',
-            onchange: null,
-            addListener: vi.fn(),
-            removeListener: vi.fn(),
-            addEventListener: vi.fn(),
-            removeEventListener: vi.fn(),
-            dispatchEvent: vi.fn(),
-        })),
-    })
-}
-
-function createViewTransitionHandle(): ViewTransitionHandle {
-    return {
-        finished: Promise.resolve(),
-        ready: Promise.resolve(),
-        updateCallbackDone: Promise.resolve(),
-        skipTransition: vi.fn(),
-        types: new Set(),
-    }
 }
 
 describe('navigationTransition', () => {
@@ -76,11 +34,10 @@ describe('navigationTransition', () => {
     beforeEach(() => {
         vi.resetModules()
         startTransitionMock.mockClear()
-        installMatchMedia(false)
         installStartViewTransition()
     })
 
-    it('falls back to startTransition when View Transition is unavailable', async () => {
+    it('uses the fallback transition owner when browser View Transition is unavailable', async () => {
         const commit = vi.fn()
         const { runNavigationTransition } = await import('./navigationTransition')
 
@@ -90,15 +47,8 @@ describe('navigationTransition', () => {
         expect(commit).toHaveBeenCalledTimes(1)
     })
 
-    it('disables View Transition when an editable element is focused', async () => {
-        installMatchMedia(false)
-        const input = document.createElement('textarea')
-        document.body.appendChild(input)
-        input.focus()
-        const startViewTransitionMock = vi.fn((update: () => void) => {
-            update()
-            return createViewTransitionHandle()
-        })
+    it('keeps browser View Transition disabled even when the API exists', async () => {
+        const startViewTransitionMock = vi.fn()
         installStartViewTransition(startViewTransitionMock)
 
         const commit = vi.fn()
@@ -109,14 +59,12 @@ describe('navigationTransition', () => {
         expect(startViewTransitionMock).not.toHaveBeenCalled()
         expect(startTransitionMock).toHaveBeenCalledTimes(1)
         expect(commit).toHaveBeenCalledTimes(1)
-        input.remove()
     })
 
     it('reuses the shared default options when no recovery href is provided', async () => {
-        const {
-            VIEW_TRANSITION_NAVIGATION_OPTIONS,
-            createNavigationTransitionOptions
-        } = await import('./navigationTransition')
+        const { VIEW_TRANSITION_NAVIGATION_OPTIONS, createNavigationTransitionOptions } = await import(
+            './navigationTransition'
+        )
 
         expect(createNavigationTransitionOptions()).toBe(VIEW_TRANSITION_NAVIGATION_OPTIONS)
     })
@@ -126,105 +74,59 @@ describe('navigationTransition', () => {
 
         expect(createNavigationTransitionOptions('/sessions/session-1')).toEqual({
             enableViewTransition: true,
-            recoveryHref: '/sessions/session-1'
+            recoveryHref: '/sessions/session-1',
         })
     })
 
     it('drops invalid recovery hrefs when creating navigation options', async () => {
-        const {
-            VIEW_TRANSITION_NAVIGATION_OPTIONS,
-            createNavigationTransitionOptions
-        } = await import('./navigationTransition')
+        const { VIEW_TRANSITION_NAVIGATION_OPTIONS, createNavigationTransitionOptions } = await import(
+            './navigationTransition'
+        )
 
         expect(createNavigationTransitionOptions('https://bad.example')).toBe(VIEW_TRANSITION_NAVIGATION_OPTIONS)
         expect(createNavigationTransitionOptions('//bad.example')).toBe(VIEW_TRANSITION_NAVIGATION_OPTIONS)
     })
 
-    it('uses document.startViewTransition as a progressive enhancement when available', async () => {
-        const startViewTransitionMock = vi.fn((update: () => void) => {
-            update()
-            return createViewTransitionHandle()
-        })
-        installStartViewTransition(startViewTransitionMock)
-
+    it('clears the fallback transition flag after the scheduled frames', async () => {
         const commit = vi.fn()
-        const { runNavigationTransition } = await import('./navigationTransition')
+        const { isNavigationTransitionActive, runNavigationTransition } = await import('./navigationTransition')
+        const callbacks: FrameRequestCallback[] = []
+        const originalRequestAnimationFrame = window.requestAnimationFrame
+        window.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+            callbacks.push(callback)
+            return callbacks.length
+        })
 
         runNavigationTransition(commit, { enableViewTransition: true })
+        expect(isNavigationTransitionActive()).toBe(true)
+        expect(callbacks).toHaveLength(1)
 
-        expect(startViewTransitionMock).toHaveBeenCalledTimes(1)
-        expect(startTransitionMock).toHaveBeenCalledTimes(1)
-        expect(commit).toHaveBeenCalledTimes(1)
+        const firstFrame = callbacks.shift()
+        firstFrame?.(16)
+        expect(isNavigationTransitionActive()).toBe(true)
+        expect(callbacks).toHaveLength(1)
+
+        const secondFrame = callbacks.shift()
+        secondFrame?.(32)
+        expect(isNavigationTransitionActive()).toBe(false)
+        window.requestAnimationFrame = originalRequestAnimationFrame
     })
 
-    it('tracks whether a navigation transition is active while the view transition is in flight', async () => {
-        let resolveFinished!: () => void
-        const finished = new Promise<void>((resolve) => {
-            resolveFinished = resolve
-        })
-        const startViewTransitionMock = vi.fn((update: () => void) => {
-            update()
-            return {
-                ...createViewTransitionHandle(),
-                finished
-            }
-        })
-        installStartViewTransition(startViewTransitionMock)
-
+    it('clears the fallback transition flag when animation frames are throttled', async () => {
+        vi.useFakeTimers()
         const commit = vi.fn()
-        const {
-            isNavigationTransitionActive,
-            runNavigationTransition
-        } = await import('./navigationTransition')
+        const { isNavigationTransitionActive, runNavigationTransition } = await import('./navigationTransition')
+        const originalRequestAnimationFrame = window.requestAnimationFrame
+        window.requestAnimationFrame = vi.fn(() => 1)
 
         runNavigationTransition(commit, { enableViewTransition: true })
         expect(isNavigationTransitionActive()).toBe(true)
 
-        resolveFinished()
-        await Promise.resolve()
-        await Promise.resolve()
-
+        vi.advanceTimersByTime(240)
         expect(isNavigationTransitionActive()).toBe(false)
-    })
 
-    it('disables View Transition when reduced motion is preferred', async () => {
-        installMatchMedia({
-            [REDUCED_MOTION_MEDIA_QUERY]: true
-        })
-        const startViewTransitionMock = vi.fn((update: () => void) => {
-            update()
-            return createViewTransitionHandle()
-        })
-        installStartViewTransition(startViewTransitionMock)
-
-        const commit = vi.fn()
-        const { runNavigationTransition } = await import('./navigationTransition')
-
-        runNavigationTransition(commit, { enableViewTransition: true })
-
-        expect(startViewTransitionMock).not.toHaveBeenCalled()
-        expect(startTransitionMock).toHaveBeenCalledTimes(1)
-        expect(commit).toHaveBeenCalledTimes(1)
-    })
-
-    it('disables View Transition on narrow screens so mobile navigation stays on the retained path', async () => {
-        installMatchMedia({
-            [NARROW_SCREEN_MEDIA_QUERY]: true
-        })
-        const startViewTransitionMock = vi.fn((update: () => void) => {
-            update()
-            return createViewTransitionHandle()
-        })
-        installStartViewTransition(startViewTransitionMock)
-
-        const commit = vi.fn()
-        const { runNavigationTransition } = await import('./navigationTransition')
-
-        runNavigationTransition(commit, { enableViewTransition: true })
-
-        expect(startViewTransitionMock).not.toHaveBeenCalled()
-        expect(startTransitionMock).toHaveBeenCalledTimes(1)
-        expect(commit).toHaveBeenCalledTimes(1)
+        window.requestAnimationFrame = originalRequestAnimationFrame
+        vi.useRealTimers()
     })
 
     it('waits for preload to settle before committing navigation', async () => {
@@ -259,10 +161,9 @@ describe('navigationTransition', () => {
 
     it('records a recovery href when preload fails with a stale runtime asset error', async () => {
         const commit = vi.fn()
-        const {
-            runNavigationTransitionAfterPreload,
-            readPendingNavigationRecoveryHref
-        } = await import('./navigationTransition')
+        const { runNavigationTransitionAfterPreload, readPendingNavigationRecoveryHref } = await import(
+            './navigationTransition'
+        )
         const { consumePendingAppRecovery } = await import('./appRecovery')
 
         await runNavigationTransitionAfterPreload(
@@ -274,7 +175,7 @@ describe('navigationTransition', () => {
         expect(commit).toHaveBeenCalledTimes(1)
         expect(consumePendingAppRecovery()).toMatchObject({
             reason: 'vite-preload-error',
-            resumeHref: '/sessions/session-1'
+            resumeHref: '/sessions/session-1',
         })
         expect(readPendingNavigationRecoveryHref()).toBeNull()
     })
@@ -285,13 +186,12 @@ describe('navigationTransition', () => {
             resolvePreload = resolve
         })
         const commit = vi.fn()
-        const {
-            runNavigationTransitionAfterPreload,
-            readPendingNavigationRecoveryHref
-        } = await import('./navigationTransition')
+        const { runNavigationTransitionAfterPreload, readPendingNavigationRecoveryHref } = await import(
+            './navigationTransition'
+        )
 
         const task = runNavigationTransitionAfterPreload(preload, commit, {
-            recoveryHref: '/sessions/session-1'
+            recoveryHref: '/sessions/session-1',
         })
 
         expect(readPendingNavigationRecoveryHref()).toBe('/sessions/session-1')
@@ -308,10 +208,7 @@ describe('navigationTransition', () => {
             resolvePreload = resolve
         })
         const commit = vi.fn()
-        const {
-            runPreloadedNavigation,
-            readPendingNavigationRecoveryHref
-        } = await import('./navigationTransition')
+        const { runPreloadedNavigation, readPendingNavigationRecoveryHref } = await import('./navigationTransition')
 
         runPreloadedNavigation(preload, commit, '/sessions/session-1/files')
 
@@ -323,5 +220,78 @@ describe('navigationTransition', () => {
             expect(commit).toHaveBeenCalledTimes(1)
         })
         expect(readPendingNavigationRecoveryHref()).toBeNull()
+    })
+
+    it('lets only the latest preloaded navigation commit when multiple selections race', async () => {
+        let resolveFirst!: () => void
+        let resolveSecond!: () => void
+        const firstPreload = new Promise<void>((resolve) => {
+            resolveFirst = resolve
+        })
+        const secondPreload = new Promise<void>((resolve) => {
+            resolveSecond = resolve
+        })
+        const firstCommit = vi.fn()
+        const secondCommit = vi.fn()
+        const { runNavigationTransitionAfterPreload } = await import('./navigationTransition')
+
+        const firstTask = runNavigationTransitionAfterPreload(firstPreload, firstCommit, {
+            recoveryHref: '/sessions/session-a',
+        })
+        const secondTask = runNavigationTransitionAfterPreload(secondPreload, secondCommit, {
+            recoveryHref: '/sessions/session-b',
+        })
+
+        resolveSecond()
+        await secondTask
+
+        expect(secondCommit).toHaveBeenCalledTimes(1)
+        expect(firstCommit).not.toHaveBeenCalled()
+
+        resolveFirst()
+        await firstTask
+
+        expect(firstCommit).not.toHaveBeenCalled()
+    })
+
+    it('cancels a preloaded navigation commit after the user has already navigated away', async () => {
+        let resolvePreload!: () => void
+        const preload = new Promise<void>((resolve) => {
+            resolvePreload = resolve
+        })
+        const commit = vi.fn()
+        const { runNavigationTransitionAfterPreload } = await import('./navigationTransition')
+
+        window.history.replaceState({}, '', '/sessions')
+        const task = runNavigationTransitionAfterPreload(preload, commit, {
+            recoveryHref: '/sessions/fcb8b890-985a-4b4f-bf69-d437a7142d48',
+        })
+
+        window.history.replaceState({}, '', '/sessions/new')
+        resolvePreload()
+        await task
+
+        expect(commit).not.toHaveBeenCalled()
+    })
+
+    it('cancels a preloaded navigation commit after the user leaves and later returns to the same source location', async () => {
+        let resolvePreload!: () => void
+        const preload = new Promise<void>((resolve) => {
+            resolvePreload = resolve
+        })
+        const commit = vi.fn()
+        const { runNavigationTransitionAfterPreload } = await import('./navigationTransition')
+
+        window.history.replaceState({}, '', '/sessions')
+        const task = runNavigationTransitionAfterPreload(preload, commit, {
+            recoveryHref: '/sessions/fcb8b890-985a-4b4f-bf69-d437a7142d48',
+        })
+
+        window.history.pushState({}, '', '/sessions/new')
+        window.history.pushState({}, '', '/sessions')
+        resolvePreload()
+        await task
+
+        expect(commit).not.toHaveBeenCalled()
     })
 })

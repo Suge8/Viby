@@ -1,12 +1,13 @@
-import type { AttachmentAdapter, PendingAttachment, CompleteAttachment, Attachment } from '@assistant-ui/react'
+import type { Attachment, AttachmentAdapter, CompleteAttachment, PendingAttachment } from '@assistant-ui/react'
 import type { ApiClient } from '@/api/client'
 import { SUPPORTED_ATTACHMENT_ACCEPT } from '@/lib/attachmentAccept'
-import { createRandomId } from '@/lib/id'
-import type { AttachmentMetadata } from '@/types/api'
+import { createObjectPreviewUrl, revokeObjectPreviewUrl } from '@/lib/attachmentPreviews'
 import { isImageMimeType } from '@/lib/fileAttachments'
+import { createRandomId } from '@/lib/id'
+import { reportWebRuntimeError } from '@/lib/runtimeDiagnostics'
+import type { AttachmentMetadata } from '@/types/api'
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024
-const MAX_PREVIEW_BYTES = 5 * 1024 * 1024
 
 type PendingUploadAttachment = PendingAttachment & {
     path?: string
@@ -23,7 +24,7 @@ const IMAGE_EXTENSION_MIME_TYPES: Record<string, string> = {
     svg: 'image/svg+xml',
     heic: 'image/heic',
     heif: 'image/heif',
-    avif: 'image/avif'
+    avif: 'image/avif',
 }
 
 const DOCUMENT_EXTENSION_MIME_TYPES: Record<string, string> = {
@@ -35,13 +36,15 @@ const DOCUMENT_EXTENSION_MIME_TYPES: Record<string, string> = {
     toml: 'application/toml',
     xml: 'application/xml',
     csv: 'text/csv',
-    log: 'text/plain'
+    log: 'text/plain',
 }
+
+const sessionAttachmentAdapterCache = new WeakMap<ApiClient, Map<string, AttachmentAdapter>>()
 
 function getFileExtension(fileName: string): string {
     const lowerName = fileName.toLowerCase()
     const segments = lowerName.split('.')
-    return segments.length > 1 ? segments.at(-1) ?? '' : ''
+    return segments.length > 1 ? (segments.at(-1) ?? '') : ''
 }
 
 function guessAttachmentType(file: File): 'image' | 'document' | 'file' {
@@ -63,10 +66,7 @@ function guessAttachmentType(file: File): 'image' | 'document' | 'file' {
     return 'file'
 }
 
-function resolveAttachmentContentType(
-    file: File,
-    type: 'image' | 'document' | 'file'
-): string {
+function resolveAttachmentContentType(file: File, type: 'image' | 'document' | 'file'): string {
     const mimeType = file.type.trim()
     const extension = getFileExtension(file.name)
 
@@ -110,6 +110,7 @@ export function createAttachmentAdapter(api: ApiClient, sessionId: string): Atta
             const id = createRandomId()
             const type = guessAttachmentType(file)
             const contentType = resolveAttachmentContentType(file, type)
+            const previewUrl = type === 'image' ? createObjectPreviewUrl(file) : undefined
 
             yield {
                 id,
@@ -117,8 +118,9 @@ export function createAttachmentAdapter(api: ApiClient, sessionId: string): Atta
                 name: file.name,
                 contentType,
                 file,
-                status: { type: 'running', reason: 'uploading', progress: 0 }
-            }
+                previewUrl,
+                status: { type: 'running', reason: 'uploading', progress: 0 },
+            } as PendingUploadAttachment
 
             try {
                 if (cancelledAttachmentIds.has(id)) {
@@ -132,13 +134,9 @@ export function createAttachmentAdapter(api: ApiClient, sessionId: string): Atta
                         name: file.name,
                         contentType,
                         file,
-                        status: { type: 'incomplete', reason: 'error' }
-                    }
-                    return
-                }
-
-                const content = await fileToBase64(file)
-                if (cancelledAttachmentIds.has(id)) {
+                        previewUrl,
+                        status: { type: 'incomplete', reason: 'error' },
+                    } as PendingUploadAttachment
                     return
                 }
 
@@ -148,10 +146,11 @@ export function createAttachmentAdapter(api: ApiClient, sessionId: string): Atta
                     name: file.name,
                     contentType,
                     file,
-                    status: { type: 'running', reason: 'uploading', progress: 50 }
-                }
+                    previewUrl,
+                    status: { type: 'running', reason: 'uploading', progress: 50 },
+                } as PendingUploadAttachment
 
-                const result = await api.uploadFile(sessionId, file.name, content, contentType)
+                const result = await api.uploadFile(sessionId, file, contentType)
                 if (cancelledAttachmentIds.has(id)) {
                     if (result.success && result.path) {
                         await deleteUpload(result.path)
@@ -166,15 +165,10 @@ export function createAttachmentAdapter(api: ApiClient, sessionId: string): Atta
                         name: file.name,
                         contentType,
                         file,
-                        status: { type: 'incomplete', reason: 'error' }
-                    }
+                        previewUrl,
+                        status: { type: 'incomplete', reason: 'error' },
+                    } as PendingUploadAttachment
                     return
-                }
-
-                // 图片预览与图片发送共用同一套类型推断，避免移动端空 MIME 时前后语义分裂。
-                let previewUrl: string | undefined
-                if (type === 'image' && file.size <= MAX_PREVIEW_BYTES) {
-                    previewUrl = await fileToDataUrl(file)
                 }
 
                 yield {
@@ -185,23 +179,26 @@ export function createAttachmentAdapter(api: ApiClient, sessionId: string): Atta
                     file,
                     status: { type: 'requires-action', reason: 'composer-send' },
                     path: result.path,
-                    previewUrl
+                    previewUrl,
                 } as PendingUploadAttachment
-            } catch {
+            } catch (error) {
+                reportWebRuntimeError('Attachment upload failed.', error)
                 yield {
                     id,
                     type,
                     name: file.name,
                     contentType,
                     file,
-                    status: { type: 'incomplete', reason: 'error' }
-                }
+                    previewUrl,
+                    status: { type: 'incomplete', reason: 'error' },
+                } as PendingUploadAttachment
             }
         },
 
         async remove(attachment: Attachment): Promise<void> {
             cancelledAttachmentIds.add(attachment.id)
             const pendingAttachment = attachment as PendingUploadAttachment
+            revokeObjectPreviewUrl(pendingAttachment.previewUrl)
             await deleteUpload(pendingAttachment.path)
         },
 
@@ -209,24 +206,20 @@ export function createAttachmentAdapter(api: ApiClient, sessionId: string): Atta
             const pending = attachment as PendingUploadAttachment
             const path = pending.path
 
-            const metadata: AttachmentMetadata | undefined = path ? {
-                id: attachment.id,
-                filename: attachment.name,
-                mimeType: attachment.contentType ?? 'application/octet-stream',
-                size: attachment.file?.size ?? 0,
-                path,
-                previewUrl: pending.previewUrl
-            } : undefined
+            revokeObjectPreviewUrl(pending.previewUrl)
+
+            const metadata: AttachmentMetadata | undefined = path
+                ? {
+                      id: attachment.id,
+                      filename: attachment.name,
+                      mimeType: attachment.contentType ?? 'application/octet-stream',
+                      size: attachment.file?.size ?? 0,
+                      path,
+                  }
+                : undefined
 
             const metadataContent = metadata
                 ? [{ type: 'text' as const, text: JSON.stringify({ __attachmentMetadata: metadata }) }]
-                : []
-            const imageContent = attachment.type === 'image'
-                ? [{
-                    type: 'image' as const,
-                    image: pending.previewUrl ?? (attachment.file ? await fileToDataUrl(attachment.file) : ''),
-                    filename: attachment.name
-                }]
                 : []
 
             return {
@@ -235,38 +228,30 @@ export function createAttachmentAdapter(api: ApiClient, sessionId: string): Atta
                 name: attachment.name,
                 contentType: attachment.contentType,
                 status: { type: 'complete' },
-                // Keep a sidecar metadata text part for the Viby send pipeline,
-                // while exposing an image part so assistant-ui can treat photos as images.
-                content: [...imageContent, ...metadataContent]
+                // Durable transcript metadata must not carry inline data previews.
+                content: metadataContent,
             }
-        }
+        },
     }
 }
 
-async function fileToBase64(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => {
-            const result = reader.result as string
-            const base64 = result.split(',')[1]
-            if (!base64) {
-                reject(new Error('Failed to read file'))
-                return
-            }
-            resolve(base64)
-        }
-        reader.onerror = reject
-        reader.readAsDataURL(file)
-    })
+export function getCachedAttachmentAdapter(api: ApiClient, sessionId: string): AttachmentAdapter {
+    let sessionMap = sessionAttachmentAdapterCache.get(api)
+    if (!sessionMap) {
+        sessionMap = new Map()
+        sessionAttachmentAdapterCache.set(api, sessionMap)
+    }
+
+    const cachedAdapter = sessionMap.get(sessionId)
+    if (cachedAdapter) {
+        return cachedAdapter
+    }
+
+    const adapter = createAttachmentAdapter(api, sessionId)
+    sessionMap.set(sessionId, adapter)
+    return adapter
 }
 
-async function fileToDataUrl(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => {
-            resolve(reader.result as string)
-        }
-        reader.onerror = reject
-        reader.readAsDataURL(file)
-    })
+export type AttachmentAdapterModule = {
+    getCachedAttachmentAdapter: typeof getCachedAttachmentAdapter
 }

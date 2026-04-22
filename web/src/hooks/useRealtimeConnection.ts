@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useRef } from 'react'
-import { type WebSubscription, type WebVisibilityState } from '@viby/protocol'
 import { useQueryClient } from '@tanstack/react-query'
-import type { SyncEvent } from '@/types/api'
+import { type WebSubscription, type WebVisibilityState } from '@viby/protocol'
+import { useEffect, useMemo, useRef } from 'react'
+import type { Socket } from 'socket.io-client'
+import { enterControllerSurface } from '@/lib/controllerOwnershipProbe'
+import { subscribeForegroundPulse } from '@/lib/foregroundPulse'
 import { createRealtimeEventController, type ToastEvent } from '@/lib/realtimeEventController'
 import { createLazyRealtimeSocketOptions } from '@/lib/socketOptions'
-import type { Socket } from 'socket.io-client'
+import type { SyncEvent } from '@/types/api'
 
 const EMPTY_SUBSCRIPTION: WebSubscription = {}
 
@@ -65,19 +67,25 @@ export function useRealtimeConnection(options: {
     onToast?: (event: ToastEvent) => void
 }): void {
     const queryClient = useQueryClient()
+    useEffect(() => {
+        const leaveSurface = enterControllerSurface('realtime-connection', 'use-realtime-connection')
+        return () => {
+            leaveSurface()
+        }
+    }, [])
     const callbacksRef = useRef<RealtimeCallbacks>({
         onEvent: options.onEvent,
         onConnect: options.onConnect,
         onDisconnect: options.onDisconnect,
         onError: options.onError,
-        onToast: options.onToast
+        onToast: options.onToast,
     })
     const socketRef = useRef<Socket | null>(null)
     const tokenRef = useRef(options.token)
     const subscription = options.subscription ?? EMPTY_SUBSCRIPTION
     const subscriptionRef = useRef<WebSubscription>({
         ...subscription,
-        ...(options.pushEndpoint ? { pushEndpoint: options.pushEndpoint } : {})
+        ...(options.pushEndpoint ? { pushEndpoint: options.pushEndpoint } : {}),
     })
     const hasConnectedRef = useRef(false)
 
@@ -87,7 +95,7 @@ export function useRealtimeConnection(options: {
             onConnect: options.onConnect,
             onDisconnect: options.onDisconnect,
             onError: options.onError,
-            onToast: options.onToast
+            onToast: options.onToast,
         }
     }, [options.onConnect, options.onDisconnect, options.onError, options.onEvent, options.onToast])
 
@@ -103,7 +111,7 @@ export function useRealtimeConnection(options: {
     useEffect(() => {
         subscriptionRef.current = {
             ...subscription,
-            ...(options.pushEndpoint ? { pushEndpoint: options.pushEndpoint } : {})
+            ...(options.pushEndpoint ? { pushEndpoint: options.pushEndpoint } : {}),
         }
     }, [options.pushEndpoint, subscription])
 
@@ -121,20 +129,12 @@ export function useRealtimeConnection(options: {
         const eventController = createRealtimeEventController({
             queryClient,
             onEvent: (event) => callbacksRef.current.onEvent(event),
-            onToast: (event) => callbacksRef.current.onToast?.(event)
+            onToast: (event) => callbacksRef.current.onToast?.(event),
         })
         let isDisposed = false
         let cleanupSocket: Socket | null = null
 
-        function handleVisibilityChange(): void {
-            const socket = socketRef.current
-            if (!socket) {
-                return
-            }
-            refreshSocketVisibility(socket)
-        }
-
-        function handlePageShow(): void {
+        function handleForegroundPulse(): void {
             const socket = socketRef.current
             if (!socket) {
                 return
@@ -161,59 +161,59 @@ export function useRealtimeConnection(options: {
             refreshSocketVisibility(socket)
         }
 
-        void import('socket.io-client').then(({ io }) => {
-            if (isDisposed) {
-                return
-            }
-
-            const socket = io(`${options.baseUrl}/web`, {
-                auth: { token: tokenRef.current },
-                ...createLazyRealtimeSocketOptions()
-            })
-            cleanupSocket = socket
-            socketRef.current = socket
-
-            socket.on('sync:event', (event: SyncEvent) => {
-                eventController.handleEvent(event)
-            })
-            socket.on('connect', () => {
-                const initial = !hasConnectedRef.current
-                hasConnectedRef.current = true
-                applySubscription(socket, subscriptionRef.current)
-                applyVisibility(socket)
-                callbacksRef.current.onConnect?.({
-                    initial,
-                    recovered: socket.recovered,
-                    transport: socket.io.engine.transport.name ?? null
-                })
-            })
-            socket.on('disconnect', (reason) => {
-                if (reason === 'io client disconnect') {
+        void import('socket.io-client')
+            .then(({ io }) => {
+                if (isDisposed) {
                     return
                 }
-                callbacksRef.current.onDisconnect?.(normalizeDisconnectReason(reason))
+
+                const socket = io(`${options.baseUrl}/web`, {
+                    auth: { token: tokenRef.current },
+                    ...createLazyRealtimeSocketOptions(),
+                })
+                cleanupSocket = socket
+                socketRef.current = socket
+
+                socket.on('sync:event', (event: SyncEvent) => {
+                    eventController.handleEvent(event)
+                })
+                socket.on('connect', () => {
+                    const initial = !hasConnectedRef.current
+                    hasConnectedRef.current = true
+                    applySubscription(socket, subscriptionRef.current)
+                    applyVisibility(socket)
+                    callbacksRef.current.onConnect?.({
+                        initial,
+                        recovered: socket.recovered,
+                        transport: socket.io.engine.transport.name ?? null,
+                    })
+                })
+                socket.on('disconnect', (reason) => {
+                    if (reason === 'io client disconnect') {
+                        return
+                    }
+                    callbacksRef.current.onDisconnect?.(normalizeDisconnectReason(reason))
+                })
+                socket.on('connect_error', (error) => {
+                    callbacksRef.current.onError?.(error)
+                })
+
+                socket.connect()
             })
-            socket.on('connect_error', (error) => {
+            .catch((error) => {
+                if (isDisposed) {
+                    return
+                }
                 callbacksRef.current.onError?.(error)
             })
 
-            socket.connect()
-        }).catch((error) => {
-            if (isDisposed) {
-                return
-            }
-            callbacksRef.current.onError?.(error)
-        })
-
-        document.addEventListener('visibilitychange', handleVisibilityChange)
-        window.addEventListener('pageshow', handlePageShow)
+        const unsubscribeForegroundPulse = subscribeForegroundPulse(handleForegroundPulse)
         window.addEventListener('pagehide', handlePageHide)
         window.addEventListener('online', handleOnline)
 
         return () => {
             isDisposed = true
-            document.removeEventListener('visibilitychange', handleVisibilityChange)
-            window.removeEventListener('pageshow', handlePageShow)
+            unsubscribeForegroundPulse()
             window.removeEventListener('pagehide', handlePageHide)
             window.removeEventListener('online', handleOnline)
             eventController.dispose()
@@ -234,7 +234,7 @@ export function useRealtimeConnection(options: {
         }
         applySubscription(socket, {
             ...subscription,
-            ...(options.pushEndpoint ? { pushEndpoint: options.pushEndpoint } : {})
+            ...(options.pushEndpoint ? { pushEndpoint: options.pushEndpoint } : {}),
         })
     }, [options.enabled, options.pushEndpoint, subscription, subscriptionKey])
 }

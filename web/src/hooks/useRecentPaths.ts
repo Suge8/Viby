@@ -1,71 +1,62 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useState } from 'react'
+import { readBrowserStorageItem, writeBrowserStorageJson } from '@/lib/browserStorage'
+import { LOCAL_STORAGE_KEYS } from '@/lib/storage/storageRegistry'
 
-const STORAGE_KEY = 'viby:recentPaths'
-const MAX_PATHS_PER_MACHINE = 5
+const STORAGE_KEY = LOCAL_STORAGE_KEYS.recentPaths
+const MAX_RECENT_PATHS = 5
 
-type RecentPathsData = Record<string, string[]>
+function dedupeRecentPaths(paths: readonly string[]): string[] {
+    return [...new Set(paths.map((value) => value.trim()).filter(Boolean))].slice(0, MAX_RECENT_PATHS)
+}
 
-function loadRecentPaths(): RecentPathsData {
+function loadRecentPaths(): string[] {
+    const stored = readBrowserStorageItem('local', STORAGE_KEY)
+    if (!stored) {
+        return []
+    }
+
     try {
-        const stored = localStorage.getItem(STORAGE_KEY)
-        return stored ? JSON.parse(stored) : {}
+        const parsed = JSON.parse(stored) as unknown
+        if (Array.isArray(parsed)) {
+            return dedupeRecentPaths(parsed.filter((value): value is string => typeof value === 'string'))
+        }
+        if (parsed && typeof parsed === 'object') {
+            return dedupeRecentPaths(
+                Object.values(parsed)
+                    .flatMap((value) => (Array.isArray(value) ? value : []))
+                    .filter((value): value is string => typeof value === 'string')
+            )
+        }
+        return []
     } catch {
-        return {}
+        return []
     }
 }
 
-function saveRecentPaths(data: RecentPathsData): void {
-    try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
-    } catch {
-        // Ignore storage errors
-    }
+function saveRecentPaths(data: string[]): void {
+    writeBrowserStorageJson('local', STORAGE_KEY, data)
 }
 
 export function useRecentPaths() {
-    const [data, setData] = useState<RecentPathsData>(loadRecentPaths)
+    const [data, setData] = useState<string[]>(loadRecentPaths)
 
-    const getRecentPaths = useCallback((machineId: string | null): string[] => {
-        if (!machineId) return []
-        return data[machineId] ?? []
-    }, [data])
+    function getRecentPaths(): string[] {
+        return data
+    }
 
-    const addRecentPath = useCallback((machineId: string, path: string): void => {
+    function addRecentPath(path: string): void {
         const trimmed = path.trim()
         if (!trimmed) return
 
         setData((prev) => {
-            const existing = prev[machineId] ?? []
-            // Remove if already exists, then add to front
-            const filtered = existing.filter((p) => p !== trimmed)
-            const updated = [trimmed, ...filtered].slice(0, MAX_PATHS_PER_MACHINE)
-
-            const newData = { ...prev, [machineId]: updated }
-            saveRecentPaths(newData)
-            return newData
+            const updated = [trimmed, ...prev.filter((value) => value !== trimmed)].slice(0, MAX_RECENT_PATHS)
+            saveRecentPaths(updated)
+            return updated
         })
-    }, [])
+    }
 
-    const getLastUsedMachineId = useCallback((): string | null => {
-        try {
-            return localStorage.getItem('viby:lastMachineId')
-        } catch {
-            return null
-        }
-    }, [])
-
-    const setLastUsedMachineId = useCallback((machineId: string): void => {
-        try {
-            localStorage.setItem('viby:lastMachineId', machineId)
-        } catch {
-            // Ignore storage errors
-        }
-    }, [])
-
-    return useMemo(() => ({
+    return {
         getRecentPaths,
         addRecentPath,
-        getLastUsedMachineId,
-        setLastUsedMachineId,
-    }), [getRecentPaths, addRecentPath, getLastUsedMachineId, setLastUsedMachineId])
+    }
 }

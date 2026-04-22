@@ -4,69 +4,68 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import type { PropsWithChildren } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ApiError, type ApiClient } from '@/api/client'
+import { type ApiClient, ApiError } from '@/api/client'
 import { clearMessageWindow, getMessageWindowState } from '@/lib/message-window-store'
 import { queryKeys } from '@/lib/query-keys'
 import type { SessionsResponse } from '@/types/api'
 import { useSendMessage } from './useSendMessage'
 
 const harness = vi.hoisted(() => ({
-    notification: vi.fn()
+    notification: vi.fn(),
 }))
 
 vi.mock('@/hooks/usePlatform', () => ({
     usePlatform: () => ({
         haptic: {
-            notification: harness.notification
-        }
-    })
+            notification: harness.notification,
+        },
+    }),
 }))
 
 function createQueryClient(): QueryClient {
     return new QueryClient({
         defaultOptions: {
             queries: {
-                retry: false
-            }
-        }
+                retry: false,
+            },
+        },
     })
 }
 
 function createWrapper(queryClient: QueryClient): (props: PropsWithChildren) => React.JSX.Element {
     return function Wrapper(props: PropsWithChildren): React.JSX.Element {
-        return (
-            <QueryClientProvider client={queryClient}>
-                {props.children}
-            </QueryClientProvider>
-        )
+        return <QueryClientProvider client={queryClient}>{props.children}</QueryClientProvider>
     }
 }
 
 function seedSessionsSummary(queryClient: QueryClient): void {
     queryClient.setQueryData<SessionsResponse>(queryKeys.sessions, {
-        sessions: [{
-            id: 'session-1',
-            active: true,
-            thinking: false,
-            activeAt: 1_000,
-            updatedAt: 2_000,
-            latestActivityAt: 2_000,
-            latestActivityKind: 'ready',
-            latestCompletedReplyAt: 2_000,
-            lifecycleState: 'running',
-            lifecycleStateSince: 1_000,
-            metadata: {
-                path: '/tmp/project',
-                driver: 'codex'
+        sessions: [
+            {
+                id: 'session-1',
+                active: true,
+                thinking: false,
+                activeAt: 1_000,
+                updatedAt: 2_000,
+                latestActivityAt: 2_000,
+                latestActivityKind: 'ready',
+                latestCompletedReplyAt: 2_000,
+                lifecycleState: 'running',
+                lifecycleStateSince: 1_000,
+                metadata: {
+                    path: '/tmp/project',
+                    driver: 'codex',
+                },
+                todoProgress: null,
+                pendingRequestsCount: 0,
+                resumeAvailable: false,
+                resumeStrategy: 'none',
+                model: 'gpt-5.4',
+                modelReasoningEffort: null,
+                permissionMode: 'default',
+                collaborationMode: 'default',
             },
-            todoProgress: null,
-            pendingRequestsCount: 0,
-            resumeAvailable: false,
-            model: 'gpt-5.4',
-            modelReasoningEffort: null,
-            permissionMode: 'default',
-            collaborationMode: 'default'
-        }]
+        ],
     })
 }
 
@@ -85,7 +84,7 @@ function createDeferred(): {
     return {
         promise,
         resolve: resolvePromise,
-        reject: rejectPromise
+        reject: rejectPromise,
     }
 }
 
@@ -112,16 +111,13 @@ describe('useSendMessage', () => {
                     active: true,
                     metadata: {
                         driver: 'codex',
-                        codexSessionId: 'thread-1'
-                    }
+                        codexSessionId: 'thread-1',
+                    },
                 } as never
-            })
+            }),
         } as unknown as ApiClient
 
-        const { result } = renderHook(
-            () => useSendMessage(api, 'session-1'),
-            { wrapper: createWrapper(queryClient) }
-        )
+        const { result } = renderHook(() => useSendMessage(api, 'session-1'), { wrapper: createWrapper(queryClient) })
 
         act(() => {
             result.current.sendMessage('hello after resume')
@@ -136,14 +132,14 @@ describe('useSendMessage', () => {
                 role: 'user',
                 content: {
                     type: 'text',
-                    text: 'hello after resume'
-                }
-            }
+                    text: 'hello after resume',
+                },
+            },
         })
         expect(getMessageWindowState('session-1').pendingReply).toMatchObject({
             localId: optimistic[0]?.localId,
             phase: 'sending',
-            serverAcceptedAt: null
+            serverAcceptedAt: null,
         })
         await waitFor(() => {
             expect(api.sendMessage).toHaveBeenCalledTimes(1)
@@ -162,7 +158,7 @@ describe('useSendMessage', () => {
         expect(getMessageWindowState('session-1').pendingReply).toMatchObject({
             localId: optimistic[0]?.localId,
             phase: 'preparing',
-            serverAcceptedAt: expect.any(Number)
+            serverAcceptedAt: expect.any(Number),
         })
     })
 
@@ -172,13 +168,10 @@ describe('useSendMessage', () => {
         const api = {
             sendMessage: vi.fn(async () => {
                 throw new Error('send failed')
-            })
+            }),
         } as unknown as ApiClient
 
-        const { result } = renderHook(
-            () => useSendMessage(api, 'session-1'),
-            { wrapper: createWrapper(queryClient) }
-        )
+        const { result } = renderHook(() => useSendMessage(api, 'session-1'), { wrapper: createWrapper(queryClient) })
 
         act(() => {
             result.current.sendMessage('will fail to resume')
@@ -196,7 +189,7 @@ describe('useSendMessage', () => {
         expect(queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)?.sessions[0]).toMatchObject({
             latestActivityKind: 'ready',
             latestActivityAt: 2_000,
-            updatedAt: 2_000
+            updatedAt: 2_000,
         })
     })
 
@@ -208,13 +201,12 @@ describe('useSendMessage', () => {
         const api = {
             sendMessage: vi.fn(async () => {
                 throw new ApiError('HTTP 409 Conflict: No machine online', 409, 'no_machine_online')
-            })
+            }),
         } as unknown as ApiClient
 
-        const { result } = renderHook(
-            () => useSendMessage(api, 'session-1', { onSendError }),
-            { wrapper: createWrapper(queryClient) }
-        )
+        const { result } = renderHook(() => useSendMessage(api, 'session-1', { onSendError }), {
+            wrapper: createWrapper(queryClient),
+        })
 
         act(() => {
             result.current.sendMessage('hello after archive')
@@ -226,10 +218,12 @@ describe('useSendMessage', () => {
 
         expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: queryKeys.session('session-1') })
         expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: queryKeys.sessions })
-        expect(onSendError).toHaveBeenCalledWith(expect.objectContaining({
-            sessionId: 'session-1',
-            error: expect.objectContaining({ code: 'no_machine_online' })
-        }))
+        expect(onSendError).toHaveBeenCalledWith(
+            expect.objectContaining({
+                sessionId: 'session-1',
+                error: expect.objectContaining({ code: 'no_machine_online' }),
+            })
+        )
     })
 
     it('rebuilds pending reply state and preserves attachments when retrying a failed send', async () => {
@@ -240,25 +234,23 @@ describe('useSendMessage', () => {
             filename: 'image.png',
             mimeType: 'image/png',
             size: 123,
-            path: '/tmp/image.png'
+            path: '/tmp/image.png',
         }
         const api = {
-            sendMessage: vi.fn()
+            sendMessage: vi
+                .fn()
                 .mockRejectedValueOnce(new Error('send failed'))
                 .mockResolvedValueOnce({
                     id: 'session-1',
                     active: true,
                     metadata: {
                         driver: 'codex',
-                        codexSessionId: 'thread-1'
-                    }
-                } as never)
+                        codexSessionId: 'thread-1',
+                    },
+                } as never),
         } as unknown as ApiClient
 
-        const { result } = renderHook(
-            () => useSendMessage(api, 'session-1'),
-            { wrapper: createWrapper(queryClient) }
-        )
+        const { result } = renderHook(() => useSendMessage(api, 'session-1'), { wrapper: createWrapper(queryClient) })
 
         act(() => {
             result.current.sendMessage('retry with attachment', [attachment])
@@ -278,18 +270,13 @@ describe('useSendMessage', () => {
         expect(getMessageWindowState('session-1').messages[0]?.status).toBe('sending')
         expect(getMessageWindowState('session-1').pendingReply).toMatchObject({
             localId,
-            phase: 'sending'
+            phase: 'sending',
         })
 
         await waitFor(() => {
             expect(api.sendMessage).toHaveBeenCalledTimes(2)
         })
 
-        expect(api.sendMessage).toHaveBeenLastCalledWith(
-            'session-1',
-            'retry with attachment',
-            localId,
-            [attachment]
-        )
+        expect(api.sendMessage).toHaveBeenLastCalledWith('session-1', 'retry with attachment', localId, [attachment])
     })
 })
