@@ -21,6 +21,8 @@ describe('createPairingBrokerClient', () => {
                         updatedAt: 1,
                         expiresAt: 2,
                         ticketExpiresAt: 2,
+                        shortCode: null,
+                        approvalStatus: null,
                         host: {},
                         guest: null,
                     },

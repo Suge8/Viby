@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { getSessionLifecycleState, getSessionResumeToken, toSessionSummary } from '@viby/protocol'
+import { getSessionLifecycleState, getSessionResumeToken, type SessionDriver, toSessionSummary } from '@viby/protocol'
 import type { SyncEvent } from '@viby/protocol/types'
 import {
     createCachedSession,
@@ -11,6 +11,12 @@ import {
     Store,
     SyncEngine,
 } from './sessionModel.support.test'
+
+function allowDriverSwitchTarget(engine: SyncEngine, driver: SessionDriver): void {
+    ;(engine as any).rpcGateway.listAgentAvailability = async () => ({
+        agents: [{ driver, status: 'ready' }],
+    })
+}
 
 describe('session model', () => {
     it('includes explicit model and live config modes in session summaries', () => {
@@ -581,6 +587,7 @@ describe('session model', () => {
                 engine.handleSessionAlive({ sid: session.id, time: Date.now(), thinking: false })
                 return { type: 'success', sessionId: session.id }
             }
+            allowDriverSwitchTarget(engine, 'claude')
 
             const result = await engine.switchSessionDriver(session.id, 'claude')
 
@@ -674,6 +681,7 @@ describe('session model', () => {
                 engine.handleSessionAlive({ sid: session.id, time: Date.now(), thinking: false })
                 return { type: 'success', sessionId: session.id }
             }
+            allowDriverSwitchTarget(engine, 'cursor')
 
             const result = await engine.switchSessionDriver(session.id, 'cursor')
 
@@ -767,6 +775,7 @@ describe('session model', () => {
                 engine.handleSessionAlive({ sid: session.id, time: Date.now(), thinking: false })
                 return { type: 'success', sessionId: session.id }
             }
+            allowDriverSwitchTarget(engine, 'copilot')
 
             const result = await engine.switchSessionDriver(session.id, 'copilot')
 
@@ -943,6 +952,7 @@ describe('session model', () => {
                 engine.handleSessionAlive({ sid: session.id, time: Date.now(), thinking: false })
                 return { type: 'success', sessionId: session.id }
             }
+            allowDriverSwitchTarget(engine, 'claude')
 
             const originalAppendDriverSwitchedEvent = (engine as any).messageService.appendDriverSwitchedEvent.bind(
                 (engine as any).messageService
@@ -1012,6 +1022,7 @@ describe('session model', () => {
                     message: 'spawn failed',
                 }
             }
+            allowDriverSwitchTarget(engine, 'claude')
 
             const result = await engine.switchSessionDriver(session.id, 'claude')
             const switchedSnapshot = engine.getSession(session.id)
