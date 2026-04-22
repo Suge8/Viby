@@ -1,14 +1,19 @@
 {
     "name": "@viby/protocol",
     "private": true,
-    "version": "0.1.4",
+    "version": "0.2.0",
     "type": "module",
+    "scripts": {
+        "typecheck": "tsc --noEmit",
+        "test": "bun test"
+    },
     "main": "./src/index.ts",
     "types": "./src/index.ts",
     "exports": {
         ".": "./src/index.ts",
         "./localSettings": "./src/localSettings.ts",
         "./messages": "./src/messages.ts",
+        "./pairing": "./src/pairing/index.ts",
         "./runtimeDefaults": "./src/runtimeDefaults.ts",
         "./modes": "./src/modes.ts",
         "./agentLaunchConfig": "./src/agentLaunchConfig.ts",
@@ -20,5 +25,10 @@
     "sideEffects": false,
     "dependencies": {
         "zod": "^4.2.1"
+    },
+    "devDependencies": {
+        "@types/node": ">=25",
+        "bun-types": "^1.3.11",
+        "typescript": "^5.9.3"
     }
 }

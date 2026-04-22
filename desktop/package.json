@@ -1,26 +1,30 @@
 {
     "name": "viby-desktop",
     "private": true,
-    "version": "0.1.4",
+    "version": "0.2.0",
     "type": "module",
     "scripts": {
         "dev:web": "vite --host 127.0.0.1 --port 1420",
-        "build:web": "vite build",
+        "build:web": "VIBY_HARNESS_SCOPE=desktop bun run --cwd .. harness:check && vite build",
+        "test": "bun test src/lib/*.test.ts src/hooks/*.test.ts",
         "typecheck": "tsc --noEmit",
         "prepare:icons": "node ../scripts/generate-brand-assets.mjs",
         "prepare:sidecar": "node ./scripts/prepare-sidecar.mjs",
         "repair:tauri-target": "node ./scripts/repair-tauri-target.mjs",
         "tauri:dev": "bun run repair:tauri-target && bun run prepare:icons && tauri dev",
-        "tauri:build": "bun run repair:tauri-target && bun run prepare:icons && tauri build"
+        "tauri:build": "VIBY_HARNESS_SCOPE=desktop bun run --cwd .. harness:check && bun run repair:tauri-target && bun run prepare:icons && tauri build"
     },
     "dependencies": {
+        "@viby/protocol": "workspace:*",
         "@tauri-apps/api": "2.10.1",
+        "qrcode": "^1.5.4",
         "react": "^19.2.3",
         "react-dom": "^19.2.3"
     },
     "devDependencies": {
         "@tailwindcss/vite": "^4.2.2",
         "@tauri-apps/cli": "2.10.1",
+        "@types/qrcode": "^1.5.6",
         "@types/react": "^19.2.7",
         "@types/react-dom": "^19.2.3",
         "@vitejs/plugin-react": "^5.1.2",

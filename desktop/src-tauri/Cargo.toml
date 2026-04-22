@@ -1,6 +1,6 @@
 [package]
 name = "viby-desktop"
-version = "0.1.4"
+version = "0.2.0"
 description = "Native desktop shell for Viby hub"
 authors = ["OpenAI Codex"]
 license = "AGPL-3.0-only"
@@ -15,6 +15,7 @@ tauri-build = { version = "2.5.2", features = [] }
 
 [dependencies]
 arboard = "3.6.1"
+reqwest = { version = "0.12.24", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 notify = "8.2.0"
 open = "5.3.3"
 serde = { version = "1", features = ["derive"] }
