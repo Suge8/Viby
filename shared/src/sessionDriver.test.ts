@@ -4,7 +4,8 @@ import {
     getSessionDriverRuntimeHandle,
     getSessionDriverRuntimeHandles,
     resolveSessionDriver,
-    setSessionDriverRuntimeHandle
+    setSessionDriverRuntimeHandle,
+    supportsSessionContinuityResume,
 } from './sessionDriver'
 
 describe('sessionDriver', () => {
@@ -13,8 +14,8 @@ describe('sessionDriver', () => {
             driver: 'codex',
             runtimeHandles: {
                 claude: { sessionId: 'claude-session' },
-                codex: { sessionId: 'codex-session' }
-            }
+                codex: { sessionId: 'codex-session' },
+            },
         } as never
 
         expect(resolveSessionDriver(metadata)).toBe('codex')
@@ -22,15 +23,14 @@ describe('sessionDriver', () => {
         expect(getSessionDriverResumeToken(metadata)).toBe('codex-session')
     })
 
-    it('still reads legacy top-level session ids when runtime handles are absent', () => {
+    it('does not invent a resume token when runtime handles are absent', () => {
         const metadata = {
             driver: 'gemini',
-            geminiSessionId: 'legacy-gemini-session'
         } as never
 
         expect(resolveSessionDriver(metadata)).toBe('gemini')
-        expect(getSessionDriverRuntimeHandle(metadata)).toEqual({ sessionId: 'legacy-gemini-session' })
-        expect(getSessionDriverResumeToken(metadata)).toBe('legacy-gemini-session')
+        expect(getSessionDriverRuntimeHandle(metadata)).toBeUndefined()
+        expect(getSessionDriverResumeToken(metadata)).toBeUndefined()
     })
 
     it('treats malformed runtime handle maps as absent instead of guessing', () => {
@@ -38,8 +38,8 @@ describe('sessionDriver', () => {
             driver: 'codex',
             runtimeHandles: {
                 codex: { sessionId: 42 },
-                claude: 'bad-shape'
-            }
+                claude: 'bad-shape',
+            },
         } as never
 
         expect(getSessionDriverRuntimeHandles(metadata)).toBeUndefined()
@@ -52,13 +52,34 @@ describe('sessionDriver', () => {
         expect(resolveSessionDriver({ driver: 'unknown' } as never)).toBeNull()
     })
 
+    it('treats runner-managed Viby sessions as continuity-resumable even without provider handles', () => {
+        expect(
+            supportsSessionContinuityResume({
+                driver: 'codex',
+                startedBy: 'runner',
+            } as never)
+        ).toBe(true)
+        expect(
+            supportsSessionContinuityResume({
+                driver: 'codex',
+                startedBy: 'terminal',
+            } as never)
+        ).toBe(false)
+        expect(
+            supportsSessionContinuityResume({
+                driver: 'pi',
+                startedBy: 'runner',
+            } as never)
+        ).toBe(false)
+    })
+
     it('writes driver-scoped handles immutably and can clear one handle without mutating the input', () => {
         const metadata = {
             driver: 'claude',
             runtimeHandles: {
-                claude: { sessionId: 'claude-session' }
-            }
-        }
+                claude: { sessionId: 'claude-session' },
+            },
+        } as const
 
         const withCodexHandle = setSessionDriverRuntimeHandle(metadata, 'codex', { sessionId: 'codex-session' })
         const clearedCodexHandle = setSessionDriverRuntimeHandle(withCodexHandle, 'codex', undefined)
@@ -67,20 +88,20 @@ describe('sessionDriver', () => {
             driver: 'codex',
             runtimeHandles: {
                 claude: { sessionId: 'claude-session' },
-                codex: { sessionId: 'codex-session' }
-            }
+                codex: { sessionId: 'codex-session' },
+            },
         })
         expect(clearedCodexHandle).toEqual({
             driver: 'codex',
             runtimeHandles: {
-                claude: { sessionId: 'claude-session' }
-            }
+                claude: { sessionId: 'claude-session' },
+            },
         })
         expect(metadata).toEqual({
             driver: 'claude',
             runtimeHandles: {
-                claude: { sessionId: 'claude-session' }
-            }
+                claude: { sessionId: 'claude-session' },
+            },
         })
     })
 })

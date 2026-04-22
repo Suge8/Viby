@@ -7,7 +7,6 @@ export interface HubRuntimeStatus {
     phase: HubRuntimePhase
     pid: number
     launchSource?: HubLaunchSource
-    relayEnabled: boolean
     listenHost: string
     listenPort: number
     localHubUrl: string
@@ -17,7 +16,5 @@ export interface HubRuntimeStatus {
     dataDir: string
     startedAt: string
     updatedAt: string
-    publicHubUrl?: string
-    directAccessUrl?: string
     message?: string
 }

@@ -1,41 +1,17 @@
 import { AGENT_FLAVORS } from './modes'
-import type {
-    Metadata,
-    SessionDriver,
-    SessionDriverHandles,
-    SessionDriverRuntimeHandle
-} from './schemas'
+import type { Metadata, SessionDriver, SessionDriverHandles, SessionDriverRuntimeHandle } from './schemas'
 
 const SESSION_DRIVERS: readonly SessionDriver[] = AGENT_FLAVORS
+const HANDLELESS_RESUME_DRIVERS = new Set<SessionDriver>(['pi'])
+const CONTINUITY_RESUME_DRIVERS = new Set<SessionDriver>(['claude', 'codex', 'cursor', 'gemini', 'opencode', 'copilot'])
 
-const LEGACY_RESUME_TOKEN_FIELDS = {
-    claude: 'claudeSessionId',
-    codex: 'codexSessionId',
-    gemini: 'geminiSessionId',
-    opencode: 'opencodeSessionId',
-    cursor: 'cursorSessionId',
-    pi: 'piSessionId'
-} satisfies Record<SessionDriver, keyof SessionDriverMetadataSource>
-
-type SessionDriverMetadataSource = Partial<Pick<
-    Metadata,
-    | 'driver'
-    | 'runtimeHandles'
-    | 'claudeSessionId'
-    | 'codexSessionId'
-    | 'geminiSessionId'
-    | 'opencodeSessionId'
-    | 'cursorSessionId'
-    | 'piSessionId'
->>
+type SessionDriverMetadataSource = Partial<Pick<Metadata, 'driver' | 'runtimeHandles' | 'startedBy'>>
 
 type SessionDriverMetadataWritableSource = SessionDriverMetadataSource
 
 export type { SessionDriver, SessionDriverHandles, SessionDriverRuntimeHandle } from './schemas'
 
-export function resolveSessionDriver(
-    metadata: SessionDriverMetadataSource | null | undefined
-): SessionDriver | null {
+export function resolveSessionDriver(metadata: SessionDriverMetadataSource | null | undefined): SessionDriver | null {
     const driver = metadata?.driver
     return isSessionDriver(driver) ? driver : null
 }
@@ -68,18 +44,27 @@ export function getSessionDriverRuntimeHandle(
     }
 
     const runtimeHandle = getSessionDriverRuntimeHandles(metadata)?.[driver]
-    if (runtimeHandle) {
-        return runtimeHandle
-    }
-
-    const legacySessionId = readLegacySessionId(metadata, driver)
-    return legacySessionId ? { sessionId: legacySessionId } : undefined
+    return runtimeHandle
 }
 
 export function getSessionDriverResumeToken(
     metadata: SessionDriverMetadataSource | null | undefined
 ): string | undefined {
     return getSessionDriverRuntimeHandle(metadata)?.sessionId
+}
+
+export function supportsHandlelessSessionResume(metadata: SessionDriverMetadataSource | null | undefined): boolean {
+    const driver = resolveSessionDriver(metadata)
+    return driver ? HANDLELESS_RESUME_DRIVERS.has(driver) : false
+}
+
+export function supportsSessionContinuityResume(metadata: SessionDriverMetadataSource | null | undefined): boolean {
+    const driver = resolveSessionDriver(metadata)
+    if (!driver || !CONTINUITY_RESUME_DRIVERS.has(driver)) {
+        return false
+    }
+
+    return metadata?.startedBy === 'runner'
 }
 
 export function setSessionDriverRuntimeHandle(
@@ -89,7 +74,7 @@ export function setSessionDriverRuntimeHandle(
 ): SessionDriverMetadataWritableSource {
     const baseMetadata = metadata ? { ...metadata } : {}
     const nextRuntimeHandles = {
-        ...(getSessionDriverRuntimeHandles(metadata) ?? {})
+        ...(getSessionDriverRuntimeHandles(metadata) ?? {}),
     }
 
     if (handle?.sessionId) {
@@ -101,7 +86,7 @@ export function setSessionDriverRuntimeHandle(
     return {
         ...baseMetadata,
         driver,
-        runtimeHandles: Object.keys(nextRuntimeHandles).length > 0 ? nextRuntimeHandles : undefined
+        runtimeHandles: Object.keys(nextRuntimeHandles).length > 0 ? nextRuntimeHandles : undefined,
     }
 }
 
@@ -119,12 +104,4 @@ function readRuntimeHandle(value: unknown): SessionDriverRuntimeHandle | undefin
     }
 
     return { sessionId: value.sessionId }
-}
-
-function readLegacySessionId(
-    metadata: SessionDriverMetadataSource | null | undefined,
-    driver: SessionDriver
-): string | undefined {
-    const sessionId = metadata?.[LEGACY_RESUME_TOKEN_FIELDS[driver]]
-    return typeof sessionId === 'string' && sessionId.length > 0 ? sessionId : undefined
 }

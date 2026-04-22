@@ -1,149 +1,98 @@
-export const CLAUDE_PERMISSION_MODES = ['default', 'acceptEdits', 'bypassPermissions', 'plan'] as const
-export type ClaudePermissionMode = typeof CLAUDE_PERMISSION_MODES[number]
+export {
+    AGENT_FLAVORS,
+    type AgentFlavor,
+    CLAUDE_MODEL_LABELS,
+    CLAUDE_MODEL_PRESETS,
+    CLAUDE_PERMISSION_MODES,
+    CLAUDE_REASONING_EFFORT_LABELS,
+    CLAUDE_REASONING_EFFORTS,
+    CLAUDE_SELECTABLE_MODEL_PRESETS,
+    type ClaudeModelPreset,
+    type ClaudePermissionMode,
+    type ClaudeReasoningEffort,
+    type ClaudeReasoningEffortOption,
+    type ClaudeSelectableModelPreset,
+    CODEX_COLLABORATION_MODE_LABELS,
+    CODEX_COLLABORATION_MODES,
+    CODEX_MODEL_PRESETS,
+    CODEX_PERMISSION_MODES,
+    CODEX_REASONING_EFFORT_LABELS,
+    CODEX_REASONING_EFFORTS,
+    COPILOT_MODEL_PRESETS,
+    COPILOT_PERMISSION_MODES,
+    type CodexCollaborationMode,
+    type CodexCollaborationModeOption,
+    type CodexModelPreset,
+    type CodexPermissionMode,
+    type CodexReasoningEffort,
+    type CodexReasoningEffortOption,
+    type CopilotModelPreset,
+    type CopilotPermissionMode,
+    CURSOR_PERMISSION_MODES,
+    type CursorPermissionMode,
+    GEMINI_MODEL_LABELS,
+    GEMINI_MODEL_PRESETS,
+    GEMINI_PERMISSION_MODES,
+    type GeminiModelPreset,
+    type GeminiPermissionMode,
+    LIVE_MODEL_REASONING_EFFORT_DRIVERS,
+    LIVE_MODEL_SELECTION_DRIVERS,
+    MODEL_REASONING_EFFORTS,
+    type ModelReasoningEffort,
+    OPENCODE_PERMISSION_MODES,
+    type OpencodePermissionMode,
+    PERMISSION_MODE_LABELS,
+    PERMISSION_MODE_TONES,
+    PERMISSION_MODES,
+    type PermissionMode,
+    type PermissionModeOption,
+    type PermissionModeTone,
+    PI_PERMISSION_MODES,
+    PI_REASONING_EFFORTS,
+    type PiPermissionMode,
+    type PiReasoningEffort,
+} from './modeCatalog'
 
-export const CODEX_PERMISSION_MODES = ['default', 'read-only', 'safe-yolo', 'yolo'] as const
-export type CodexPermissionMode = typeof CODEX_PERMISSION_MODES[number]
-
-export const CODEX_COLLABORATION_MODES = ['default', 'plan'] as const
-export type CodexCollaborationMode = typeof CODEX_COLLABORATION_MODES[number]
-
-export const CODEX_REASONING_EFFORTS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const
-export type CodexReasoningEffort = typeof CODEX_REASONING_EFFORTS[number]
-
-export const CLAUDE_REASONING_EFFORTS = ['low', 'medium', 'high', 'max'] as const
-export type ClaudeReasoningEffort = typeof CLAUDE_REASONING_EFFORTS[number]
-
-export const PI_REASONING_EFFORTS = CODEX_REASONING_EFFORTS
-export type PiReasoningEffort = typeof PI_REASONING_EFFORTS[number]
-
-export const MODEL_REASONING_EFFORTS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const
-export type ModelReasoningEffort = typeof MODEL_REASONING_EFFORTS[number]
-
-export const GEMINI_PERMISSION_MODES = ['default', 'read-only', 'safe-yolo', 'yolo'] as const
-export type GeminiPermissionMode = typeof GEMINI_PERMISSION_MODES[number]
-
-export const PI_PERMISSION_MODES = ['default', 'read-only', 'safe-yolo', 'yolo'] as const
-export type PiPermissionMode = typeof PI_PERMISSION_MODES[number]
-
-export const OPENCODE_PERMISSION_MODES = ['default', 'yolo'] as const
-export type OpencodePermissionMode = typeof OPENCODE_PERMISSION_MODES[number]
-
-export const CURSOR_PERMISSION_MODES = ['default', 'plan', 'ask', 'yolo'] as const
-export type CursorPermissionMode = typeof CURSOR_PERMISSION_MODES[number]
-
-export const PERMISSION_MODES = [
-    'default',
-    'acceptEdits',
-    'bypassPermissions',
-    'plan',
-    'ask',
-    'read-only',
-    'safe-yolo',
-    'yolo'
-] as const
-export type PermissionMode = typeof PERMISSION_MODES[number]
-
-export const CLAUDE_MODEL_PRESETS = ['sonnet', 'sonnet[1m]', 'opus', 'opus[1m]'] as const
-export type ClaudeModelPreset = typeof CLAUDE_MODEL_PRESETS[number]
-
-export const CLAUDE_SELECTABLE_MODEL_PRESETS = ['sonnet', 'opus'] as const
-export type ClaudeSelectableModelPreset = typeof CLAUDE_SELECTABLE_MODEL_PRESETS[number]
-
-export const GEMINI_MODEL_PRESETS = [
-    'gemini-2.5-pro',
-    'gemini-2.5-flash',
-    'gemini-2.5-flash-lite',
-    'gemini-3-pro-preview',
-    'gemini-3-flash-preview'
-] as const
-export type GeminiModelPreset = typeof GEMINI_MODEL_PRESETS[number]
-
-export const AGENT_FLAVORS = ['claude', 'codex', 'gemini', 'opencode', 'cursor', 'pi'] as const
-export type AgentFlavor = typeof AGENT_FLAVORS[number]
-
-const LIVE_MODEL_SELECTION_DRIVERS = ['claude', 'codex', 'gemini', 'pi'] as const
-const LIVE_MODEL_REASONING_EFFORT_DRIVERS = ['claude', 'codex', 'pi'] as const
-
-export const PERMISSION_MODE_LABELS: Record<PermissionMode, string> = {
-    default: 'Default',
-    acceptEdits: 'Accept Edits',
-    plan: 'Plan Mode',
-    ask: 'Ask Mode',
-    bypassPermissions: 'Yolo',
-    'read-only': 'Read Only',
-    'safe-yolo': 'Safe Yolo',
-    yolo: 'Yolo'
-}
-
-export type PermissionModeTone = 'neutral' | 'info' | 'warning' | 'danger'
-
-export const PERMISSION_MODE_TONES: Record<PermissionMode, PermissionModeTone> = {
-    default: 'neutral',
-    acceptEdits: 'warning',
-    plan: 'info',
-    ask: 'info',
-    bypassPermissions: 'danger',
-    'read-only': 'warning',
-    'safe-yolo': 'warning',
-    yolo: 'danger'
-}
-
-export type PermissionModeOption = {
-    mode: PermissionMode
-    label: string
-    tone: PermissionModeTone
-}
-
-export type CodexCollaborationModeOption = {
-    mode: CodexCollaborationMode
-    label: string
-}
-
-export type CodexReasoningEffortOption = {
-    effort: CodexReasoningEffort
-    label: string
-}
-
-export type ClaudeReasoningEffortOption = {
-    effort: ClaudeReasoningEffort
-    label: string
-}
-
-export const CLAUDE_MODEL_LABELS: Record<ClaudeModelPreset, string> = {
-    sonnet: 'Sonnet',
-    'sonnet[1m]': 'Sonnet',
-    opus: 'Opus',
-    'opus[1m]': 'Opus'
-}
-
-export const GEMINI_MODEL_LABELS: Record<GeminiModelPreset, string> = {
-    'gemini-2.5-pro': 'Gemini 2.5 Pro',
-    'gemini-2.5-flash': 'Gemini 2.5 Flash',
-    'gemini-2.5-flash-lite': 'Gemini 2.5 Flash Lite',
-    'gemini-3-pro-preview': 'Gemini 3 Pro Preview',
-    'gemini-3-flash-preview': 'Gemini 3 Flash Preview'
-}
-
-export const CODEX_COLLABORATION_MODE_LABELS: Record<CodexCollaborationMode, string> = {
-    default: 'Default',
-    plan: 'Plan'
-}
-
-export const CODEX_REASONING_EFFORT_LABELS: Record<CodexReasoningEffort, string> = {
-    none: 'None',
-    minimal: 'Minimal',
-    low: 'Low',
-    medium: 'Medium',
-    high: 'High',
-    xhigh: 'XHigh'
-}
-
-export const CLAUDE_REASONING_EFFORT_LABELS: Record<ClaudeReasoningEffort, string> = {
-    low: 'Low',
-    medium: 'Medium',
-    high: 'High',
-    max: 'Max'
-}
+import {
+    CLAUDE_MODEL_LABELS,
+    CLAUDE_MODEL_PRESETS,
+    CLAUDE_PERMISSION_MODES,
+    CLAUDE_REASONING_EFFORT_LABELS,
+    CLAUDE_REASONING_EFFORTS,
+    CLAUDE_SELECTABLE_MODEL_PRESETS,
+    type ClaudeModelPreset,
+    type ClaudeReasoningEffort,
+    type ClaudeReasoningEffortOption,
+    CODEX_COLLABORATION_MODE_LABELS,
+    CODEX_COLLABORATION_MODES,
+    CODEX_MODEL_PRESETS,
+    CODEX_PERMISSION_MODES,
+    CODEX_REASONING_EFFORT_LABELS,
+    CODEX_REASONING_EFFORTS,
+    COPILOT_MODEL_PRESETS,
+    COPILOT_PERMISSION_MODES,
+    type CodexCollaborationMode,
+    type CodexCollaborationModeOption,
+    type CodexReasoningEffort,
+    type CodexReasoningEffortOption,
+    CURSOR_PERMISSION_MODES,
+    GEMINI_MODEL_LABELS,
+    GEMINI_MODEL_PRESETS,
+    GEMINI_PERMISSION_MODES,
+    LIVE_MODEL_REASONING_EFFORT_DRIVERS,
+    LIVE_MODEL_SELECTION_DRIVERS,
+    MODEL_REASONING_EFFORTS,
+    type ModelReasoningEffort,
+    OPENCODE_PERMISSION_MODES,
+    PERMISSION_MODE_LABELS,
+    PERMISSION_MODE_TONES,
+    PERMISSION_MODES,
+    type PermissionMode,
+    type PermissionModeOption,
+    type PermissionModeTone,
+    PI_PERMISSION_MODES,
+    PI_REASONING_EFFORTS,
+} from './modeCatalog'
 
 export function isClaudeModelPreset(model: string | null | undefined): model is ClaudeModelPreset {
     return typeof model === 'string' && CLAUDE_MODEL_PRESETS.includes(model as ClaudeModelPreset)
@@ -151,20 +100,12 @@ export function isClaudeModelPreset(model: string | null | undefined): model is 
 
 export function getClaudeModelLabel(model: string): string | null {
     const trimmedModel = model.trim()
-    if (!trimmedModel) {
-        return null
-    }
-
-    return CLAUDE_MODEL_LABELS[trimmedModel as ClaudeModelPreset] ?? null
+    return trimmedModel ? (CLAUDE_MODEL_LABELS[trimmedModel as ClaudeModelPreset] ?? null) : null
 }
 
 export function getGeminiModelLabel(model: string): string | null {
     const trimmedModel = model.trim()
-    if (!trimmedModel) {
-        return null
-    }
-
-    return GEMINI_MODEL_LABELS[trimmedModel as GeminiModelPreset] ?? null
+    return trimmedModel ? (GEMINI_MODEL_LABELS[trimmedModel as keyof typeof GEMINI_MODEL_LABELS] ?? null) : null
 }
 
 export function getPermissionModeLabel(mode: PermissionMode): string {
@@ -188,51 +129,60 @@ export function getClaudeReasoningEffortLabel(effort: ClaudeReasoningEffort): st
 }
 
 export function getPermissionModesForDriver(driver?: string | null): readonly PermissionMode[] {
-    if (driver === 'codex') {
-        return CODEX_PERMISSION_MODES
-    }
-    if (driver === 'gemini') {
-        return GEMINI_PERMISSION_MODES
-    }
-    if (driver === 'pi') {
-        return PI_PERMISSION_MODES
-    }
-    if (driver === 'opencode') {
-        return OPENCODE_PERMISSION_MODES
-    }
-    if (driver === 'cursor') {
-        return CURSOR_PERMISSION_MODES
-    }
+    if (driver === 'codex') return CODEX_PERMISSION_MODES
+    if (driver === 'gemini') return GEMINI_PERMISSION_MODES
+    if (driver === 'pi') return PI_PERMISSION_MODES
+    if (driver === 'opencode') return OPENCODE_PERMISSION_MODES
+    if (driver === 'cursor') return CURSOR_PERMISSION_MODES
+    if (driver === 'copilot') return COPILOT_PERMISSION_MODES
     return CLAUDE_PERMISSION_MODES
 }
 
 export function getModelReasoningEffortsForDriver(driver?: string | null): readonly ModelReasoningEffort[] {
-    if (driver === 'codex') {
-        return CODEX_REASONING_EFFORTS
-    }
-    if (driver === 'claude') {
-        return CLAUDE_REASONING_EFFORTS
-    }
-    if (driver === 'pi') {
-        return PI_REASONING_EFFORTS
-    }
-
+    if (driver === 'codex') return CODEX_REASONING_EFFORTS
+    if (driver === 'claude') return CLAUDE_REASONING_EFFORTS
+    if (driver === 'pi') return PI_REASONING_EFFORTS
     return []
 }
 
 export function supportsLiveModelSelectionForDriver(driver?: string | null): boolean {
-    return LIVE_MODEL_SELECTION_DRIVERS.includes(driver as typeof LIVE_MODEL_SELECTION_DRIVERS[number])
+    return LIVE_MODEL_SELECTION_DRIVERS.includes(driver as (typeof LIVE_MODEL_SELECTION_DRIVERS)[number])
 }
 
 export function supportsLiveModelReasoningEffortForDriver(driver?: string | null): boolean {
-    return LIVE_MODEL_REASONING_EFFORT_DRIVERS.includes(driver as typeof LIVE_MODEL_REASONING_EFFORT_DRIVERS[number])
+    return LIVE_MODEL_REASONING_EFFORT_DRIVERS.includes(driver as (typeof LIVE_MODEL_REASONING_EFFORT_DRIVERS)[number])
+}
+
+export function supportsDriverSwitchModelCarryover(driver?: string | null): boolean {
+    return driver === 'cursor' || supportsLiveModelSelectionForDriver(driver)
+}
+
+export function getSelectableModelPresetsForDriver(driver?: string | null): readonly string[] {
+    if (driver === 'claude') return CLAUDE_SELECTABLE_MODEL_PRESETS
+    if (driver === 'codex') return CODEX_MODEL_PRESETS
+    if (driver === 'gemini') return GEMINI_MODEL_PRESETS
+    if (driver === 'copilot') return COPILOT_MODEL_PRESETS
+    return []
+}
+
+export function isSelectableModelPresetForDriver(model: string, driver?: string | null): boolean {
+    const trimmedModel = model.trim()
+    return Boolean(trimmedModel) && getSelectableModelPresetsForDriver(driver).includes(trimmedModel)
+}
+
+export function isDriverSwitchCompatibleModelPresetForDriver(model: string, driver?: string | null): boolean {
+    const trimmedModel = model.trim()
+    if (!trimmedModel || !supportsDriverSwitchModelCarryover(driver)) {
+        return false
+    }
+    return driver === 'cursor' ? true : isSelectableModelPresetForDriver(trimmedModel, driver)
 }
 
 export function getPermissionModeOptionsForDriver(driver?: string | null): PermissionModeOption[] {
     return getPermissionModesForDriver(driver).map((mode) => ({
         mode,
         label: getPermissionModeLabel(mode),
-        tone: getPermissionModeTone(mode)
+        tone: getPermissionModeTone(mode),
     }))
 }
 
@@ -240,30 +190,18 @@ export function isPermissionModeAllowedForDriver(mode: PermissionMode, driver?: 
     return getPermissionModesForDriver(driver).includes(mode)
 }
 
-export function isModelReasoningEffortAllowedForDriver(
-    effort: ModelReasoningEffort,
-    driver?: string | null
-): boolean {
+export function isModelReasoningEffortAllowedForDriver(effort: ModelReasoningEffort, driver?: string | null): boolean {
     return getModelReasoningEffortsForDriver(driver).includes(effort)
 }
 
 export function getCodexCollaborationModeOptions(): CodexCollaborationModeOption[] {
-    return CODEX_COLLABORATION_MODES.map((mode) => ({
-        mode,
-        label: getCodexCollaborationModeLabel(mode)
-    }))
+    return CODEX_COLLABORATION_MODES.map((mode) => ({ mode, label: getCodexCollaborationModeLabel(mode) }))
 }
 
 export function getCodexReasoningEffortOptions(): CodexReasoningEffortOption[] {
-    return CODEX_REASONING_EFFORTS.map((effort) => ({
-        effort,
-        label: getCodexReasoningEffortLabel(effort)
-    }))
+    return CODEX_REASONING_EFFORTS.map((effort) => ({ effort, label: getCodexReasoningEffortLabel(effort) }))
 }
 
 export function getClaudeReasoningEffortOptions(): ClaudeReasoningEffortOption[] {
-    return CLAUDE_REASONING_EFFORTS.map((effort) => ({
-        effort,
-        label: getClaudeReasoningEffortLabel(effort)
-    }))
+    return CLAUDE_REASONING_EFFORTS.map((effort) => ({ effort, label: getClaudeReasoningEffortLabel(effort) }))
 }
