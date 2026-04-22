@@ -1,25 +1,23 @@
-import { ApiSessionClient } from "@/api/apiSession"
-import { MessageQueue2 } from "@/utils/MessageQueue2"
-import { logger } from "@/ui/logger"
-import { runLocalRemoteSession } from "@/agent/loopBase"
-import { Session } from "./session"
-import { claudeLocalLauncher } from "./claudeLocalLauncher"
-import { claudeRemoteLauncher } from "./claudeRemoteLauncher"
-import { ApiClient } from "@/lib"
-import type { ClaudeSessionModelReasoningEffort, SessionModel } from "@/api/types"
-import type { ClaudePermissionMode } from "@viby/protocol/types"
+import type { ClaudePermissionMode } from '@viby/protocol/types'
+import { ApiSessionClient } from '@/api/apiSession'
+import type { ClaudeSessionModelReasoningEffort, SessionModel } from '@/api/types'
+import { ApiClient } from '@/lib'
+import { logger } from '@/ui/logger'
+import { MessageQueue2 } from '@/utils/MessageQueue2'
+import { claudeRemoteLauncher } from './claudeRemoteLauncher'
+import { Session } from './session'
 
-export type PermissionMode = ClaudePermissionMode;
+export type PermissionMode = ClaudePermissionMode
 
 export interface EnhancedMode {
-    permissionMode: PermissionMode;
-    model?: string;
-    modelReasoningEffort?: ClaudeSessionModelReasoningEffort;
-    fallbackModel?: string;
-    customSystemPrompt?: string;
-    appendSystemPrompt?: string;
-    allowedTools?: string[];
-    disallowedTools?: string[];
+    permissionMode: PermissionMode
+    model?: string
+    modelReasoningEffort?: ClaudeSessionModelReasoningEffort
+    fallbackModel?: string
+    customSystemPrompt?: string
+    appendSystemPrompt?: string
+    allowedTools?: string[]
+    disallowedTools?: string[]
 }
 
 interface LoopOptions {
@@ -27,12 +25,10 @@ interface LoopOptions {
     model?: SessionModel
     modelReasoningEffort?: ClaudeSessionModelReasoningEffort
     permissionMode?: PermissionMode
-    startingMode?: 'local' | 'remote'
     startedBy?: 'runner' | 'terminal'
-    onModeChange: (mode: 'local' | 'remote') => void
-    mcpServers: Record<string, any>
+    mcpServers: Record<string, unknown>
     session: ApiSessionClient
-    api: ApiClient,
+    api: ApiClient
     claudeEnvVars?: Record<string, string>
     claudeArgs?: string[]
     messageQueue: MessageQueue2<EnhancedMode>
@@ -41,12 +37,7 @@ interface LoopOptions {
     hookSettingsPath: string
 }
 
-export async function loop(opts: LoopOptions) {
-
-    // Get log path for debug display
-    const logPath = logger.logFilePath;
-    const startedBy = opts.startedBy ?? 'terminal';
-    const startingMode = opts.startingMode ?? 'local';
+export async function loop(opts: LoopOptions): Promise<void> {
     const session = new Session({
         api: opts.api,
         client: opts.session,
@@ -55,25 +46,16 @@ export async function loop(opts: LoopOptions) {
         claudeEnvVars: opts.claudeEnvVars,
         claudeArgs: opts.claudeArgs,
         mcpServers: opts.mcpServers,
-        logPath: logPath,
+        logPath: logger.logFilePath,
         messageQueue: opts.messageQueue,
         allowedTools: opts.allowedTools,
-        onModeChange: opts.onModeChange,
-        mode: startingMode,
-        startedBy,
-        startingMode,
+        startedBy: opts.startedBy ?? 'terminal',
         hookSettingsPath: opts.hookSettingsPath,
         permissionMode: opts.permissionMode ?? 'default',
         model: opts.model,
-        modelReasoningEffort: opts.modelReasoningEffort
-    });
+        modelReasoningEffort: opts.modelReasoningEffort,
+    })
 
-    await runLocalRemoteSession({
-        session,
-        startingMode: opts.startingMode,
-        logTag: 'loop',
-        runLocal: claudeLocalLauncher,
-        runRemote: claudeRemoteLauncher,
-        onSessionReady: opts.onSessionReady
-    });
+    opts.onSessionReady?.(session)
+    await claudeRemoteLauncher(session)
 }

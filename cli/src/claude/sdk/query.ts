@@ -3,261 +3,24 @@
  * Handles spawning Claude process and managing message streams
  */
 
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
-import { createInterface } from 'node:readline'
+import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { Stream } from './stream'
-import {
-    type QueryOptions,
-    type QueryPrompt,
-    type SDKMessage,
-    type ControlResponseHandler,
-    type SDKControlRequest,
-    type ControlRequest,
-    type SDKControlResponse,
-    type CanCallToolCallback,
-    type CanUseToolControlRequest,
-    type CanUseToolControlResponse,
-    type ControlCancelRequest,
-    type PermissionResult,
-    AbortError
-} from './types'
-import { getDefaultClaudeCodePath, logDebug, streamToStdin } from './utils'
+import type { Writable } from 'node:stream'
+import { logger } from '@/ui/logger'
 import { withBunRuntimeEnv } from '@/utils/bunRuntime'
 import { killProcessByChildProcess } from '@/utils/process'
 import { stripNewlinesForWindowsShellArg } from '@/utils/shellEscape'
-import type { Writable } from 'node:stream'
-import { logger } from '@/ui/logger'
 import { appendMcpConfigArg } from '../utils/mcpConfig'
+import { logQueryTaskError, Query } from './QueryRuntime'
+import { AbortError, type CanCallToolCallback, type QueryOptions, type QueryPrompt, type SDKMessage } from './types'
+import { getDefaultClaudeCodePath, logDebug, streamToStdin } from './utils'
 
-/**
- * Query class manages Claude Code process interaction
- */
-export class Query implements AsyncIterableIterator<SDKMessage> {
-    private pendingControlResponses = new Map<string, ControlResponseHandler>()
-    private cancelControllers = new Map<string, AbortController>()
-    private sdkMessages: AsyncIterableIterator<SDKMessage>
-    private inputStream = new Stream<SDKMessage>()
-    private canCallTool?: CanCallToolCallback
-
-    constructor(
-        private childStdin: Writable | null,
-        private childStdout: NodeJS.ReadableStream,
-        private processExitPromise: Promise<void>,
-        canCallTool?: CanCallToolCallback
-    ) {
-        this.canCallTool = canCallTool
-        this.readMessages()
-        this.sdkMessages = this.readSdkMessages()
-    }
-
-    /**
-     * Set an error on the stream
-     */
-    setError(error: Error): void {
-        this.inputStream.error(error)
-    }
-
-    /**
-     * AsyncIterableIterator implementation
-     */
-    next(...args: [] | [undefined]): Promise<IteratorResult<SDKMessage>> {
-        return this.sdkMessages.next(...args)
-    }
-
-    return(value?: any): Promise<IteratorResult<SDKMessage>> {
-        if (this.sdkMessages.return) {
-            return this.sdkMessages.return(value)
-        }
-        return Promise.resolve({ done: true, value: undefined })
-    }
-
-    throw(e: any): Promise<IteratorResult<SDKMessage>> {
-        if (this.sdkMessages.throw) {
-            return this.sdkMessages.throw(e)
-        }
-        return Promise.reject(e)
-    }
-
-    [Symbol.asyncIterator](): AsyncIterableIterator<SDKMessage> {
-        return this.sdkMessages
-    }
-
-    /**
-     * Read messages from Claude process stdout
-     */
-    private async readMessages(): Promise<void> {
-        const rl = createInterface({ input: this.childStdout })
-
-        try {
-            for await (const line of rl) {
-                if (line.trim()) {
-                    try {
-                        const message = JSON.parse(line) as SDKMessage | SDKControlResponse
-
-                        if (message.type === 'control_response') {
-                            const controlResponse = message as SDKControlResponse
-                            const handler = this.pendingControlResponses.get(controlResponse.response.request_id)
-                            if (handler) {
-                                handler(controlResponse.response)
-                            }
-                            continue
-                        } else if (message.type === 'control_request') {
-                            await this.handleControlRequest(message as unknown as CanUseToolControlRequest)
-                            continue
-                        } else if (message.type === 'control_cancel_request') {
-                            this.handleControlCancelRequest(message as unknown as ControlCancelRequest)
-                            continue
-                        }
-
-                        this.inputStream.enqueue(message)
-                    } catch (e) {
-                        logger.debug(line)
-                    }
-                }
-            }
-            await this.processExitPromise
-        } catch (error) {
-            this.inputStream.error(error as Error)
-        } finally {
-            this.inputStream.done()
-            this.cleanupControllers()
-            rl.close()
-        }
-    }
-
-    /**
-     * Async generator for SDK messages
-     */
-    private async *readSdkMessages(): AsyncIterableIterator<SDKMessage> {
-        for await (const message of this.inputStream) {
-            yield message
-        }
-    }
-
-    /**
-     * Send interrupt request to Claude
-     */
-    async interrupt(): Promise<void> {
-        if (!this.childStdin) {
-            throw new Error('Interrupt requires --input-format stream-json')
-        }
-
-        await this.request({
-            subtype: 'interrupt'
-        }, this.childStdin)
-    }
-
-    /**
-     * Send control request to Claude process
-     */
-    private request(request: ControlRequest, childStdin: Writable): Promise<SDKControlResponse['response']> {
-        const requestId = Math.random().toString(36).substring(2, 15)
-        const sdkRequest: SDKControlRequest = {
-            request_id: requestId,
-            type: 'control_request',
-            request
-        }
-
-        return new Promise((resolve, reject) => {
-            this.pendingControlResponses.set(requestId, (response) => {
-                if (response.subtype === 'success') {
-                    resolve(response)
-                } else {
-                    reject(new Error(response.error))
-                }
-            })
-
-            childStdin.write(JSON.stringify(sdkRequest) + '\n')
-        })
-    }
-
-    /**
-     * Handle incoming control requests for tool permissions
-     * Replicates the exact logic from the SDK's handleControlRequest method
-     */
-    private async handleControlRequest(request: CanUseToolControlRequest): Promise<void> {
-        if (!this.childStdin) {
-            logDebug('Cannot handle control request - no stdin available')
-            return
-        }
-
-        const controller = new AbortController()
-        this.cancelControllers.set(request.request_id, controller)
-
-        try {
-            const response = await this.processControlRequest(request, controller.signal)
-            const controlResponse: CanUseToolControlResponse = {
-                type: 'control_response',
-                response: {
-                    subtype: 'success',
-                    request_id: request.request_id,
-                    response
-                }
-            }
-            this.childStdin.write(JSON.stringify(controlResponse) + '\n')
-        } catch (error) {
-            const controlErrorResponse: CanUseToolControlResponse = {
-                type: 'control_response',
-                response: {
-                    subtype: 'error',
-                    request_id: request.request_id,
-                    error: error instanceof Error ? error.message : String(error)
-                }
-            }
-            this.childStdin.write(JSON.stringify(controlErrorResponse) + '\n')
-        } finally {
-            this.cancelControllers.delete(request.request_id)
-        }
-    }
-
-    /**
-     * Handle control cancel requests
-     * Replicates the exact logic from the SDK's handleControlCancelRequest method
-     */
-    private handleControlCancelRequest(request: ControlCancelRequest): void {
-        const controller = this.cancelControllers.get(request.request_id)
-        if (controller) {
-            controller.abort()
-            this.cancelControllers.delete(request.request_id)
-        }
-    }
-
-    /**
-     * Process control requests based on subtype
-     * Replicates the exact logic from the SDK's processControlRequest method
-     */
-    private async processControlRequest(request: CanUseToolControlRequest, signal: AbortSignal): Promise<PermissionResult> {
-        if (request.request.subtype === 'can_use_tool') {
-            if (!this.canCallTool) {
-                throw new Error('canCallTool callback is not provided.')
-            }
-            return this.canCallTool(request.request.tool_name, request.request.input, {
-                signal
-            })
-        }
-        
-        throw new Error('Unsupported control request subtype: ' + request.request.subtype)
-    }
-
-    /**
-     * Cleanup method to abort all pending control requests
-     */
-    private cleanupControllers(): void {
-        for (const [requestId, controller] of this.cancelControllers.entries()) {
-            controller.abort()
-            this.cancelControllers.delete(requestId)
-        }
-    }
-}
+const DEFAULT_PROMPT_FAILURE_CLEANUP_TIMEOUT_MS = 3_000
 
 /**
  * Main query function to interact with Claude Code
  */
-export function query(config: {
-    prompt: QueryPrompt
-    options?: QueryOptions
-}): Query {
+export function query(config: { prompt: QueryPrompt; options?: QueryOptions }): Query {
     const {
         prompt,
         options: {
@@ -278,16 +41,16 @@ export function query(config: {
             fallbackModel,
             settingsPath,
             strictMcpConfig,
-            canCallTool
-        } = {}
+            canCallTool,
+            includePartialMessages = false,
+            promptFailureCleanupTimeoutMs = DEFAULT_PROMPT_FAILURE_CLEANUP_TIMEOUT_MS,
+        } = {},
     } = config
 
-    // Set entrypoint if not already set
     if (!process.env.CLAUDE_CODE_ENTRYPOINT) {
         process.env.CLAUDE_CODE_ENTRYPOINT = 'sdk-ts'
     }
 
-    // Build command arguments
     const args = ['--output-format', 'stream-json', '--verbose']
     let cleanupMcpConfig: (() => void) | null = null
 
@@ -298,7 +61,9 @@ export function query(config: {
     if (effort) args.push('--effort', effort)
     if (canCallTool) {
         if (typeof prompt === 'string') {
-            throw new Error('canCallTool callback requires --input-format stream-json. Please set prompt as an AsyncIterable.')
+            throw new Error(
+                'canCallTool callback requires --input-format stream-json. Please set prompt as an AsyncIterable.'
+            )
         }
         args.push('--permission-prompt-tool', 'stdio')
     }
@@ -310,29 +75,28 @@ export function query(config: {
     if (additionalDirectories.length > 0) args.push('--add-dir', ...additionalDirectories)
     if (strictMcpConfig) args.push('--strict-mcp-config')
     if (permissionMode) args.push('--permission-mode', permissionMode)
+    if (includePartialMessages) args.push('--include-partial-messages')
 
     if (fallbackModel) {
         if (model && fallbackModel === model) {
-            throw new Error('Fallback model cannot be the same as the main model. Please specify a different model for fallbackModel option.')
+            throw new Error(
+                'Fallback model cannot be the same as the main model. Please specify a different model for fallbackModel option.'
+            )
         }
         args.push('--fallback-model', fallbackModel)
     }
 
-    // Handle prompt input
     if (typeof prompt === 'string') {
         args.push('--print', stripNewlinesForWindowsShellArg(prompt.trim()))
     } else {
         args.push('--input-format', 'stream-json')
     }
 
-    // Determine how to spawn Claude Code
-    // - If it's just 'claude' command → spawn('claude', args) with shell on Windows
-    // - If it's a full path to binary or script → spawn(path, args)
     const isCommandOnly = pathToClaudeCodeExecutable === 'claude'
-    
-    // Validate executable path (skip for command-only mode)
     if (!isCommandOnly && !existsSync(pathToClaudeCodeExecutable)) {
-        throw new ReferenceError(`Claude Code executable not found at ${pathToClaudeCodeExecutable}. Is options.pathToClaudeCodeExecutable set?`)
+        throw new ReferenceError(
+            `Claude Code executable not found at ${pathToClaudeCodeExecutable}. Is options.pathToClaudeCodeExecutable set?`
+        )
     }
 
     const spawnCommand = pathToClaudeCodeExecutable
@@ -340,7 +104,6 @@ export function query(config: {
 
     cleanupMcpConfig = appendMcpConfigArg(spawnArgs, mcpServers)
 
-    // Spawn Claude Code process
     const spawnEnv = withBunRuntimeEnv(process.env, { allowBunBeBun: false })
     logDebug(`Spawning Claude Code process: ${spawnCommand} ${spawnArgs.join(' ')}`)
 
@@ -349,75 +112,127 @@ export function query(config: {
         stdio: ['pipe', 'pipe', 'pipe'],
         signal: config.options?.abort,
         env: spawnEnv,
-        // Use shell: false with absolute path from getDefaultClaudeCodePath()
-        // This avoids cmd.exe resolution issues on Windows
         shell: false,
-        // Hide transient console windows on Windows when spawning Claude Code
-        windowsHide: process.platform === 'win32'
+        windowsHide: process.platform === 'win32',
     }) as ChildProcessWithoutNullStreams
 
-    // Handle stdin
     let childStdin: Writable | null = null
     if (typeof prompt === 'string') {
         child.stdin.end()
     } else {
-        streamToStdin(prompt, child.stdin, config.options?.abort)
         childStdin = child.stdin
     }
 
-    // Handle stderr in debug mode
     if (process.env.DEBUG) {
         child.stderr.on('data', (data) => {
-            console.error('Claude Code stderr:', data.toString())
+            logger.warn('Claude Code stderr:', data.toString())
         })
     }
 
-    // Setup cleanup
-    const cleanup = () => {
-        if (!child.killed) {
-            void killProcessByChildProcess(child)
-        }
-    }
-
-    config.options?.abort?.addEventListener('abort', cleanup)
-    process.on('exit', cleanup)
-
-    // Handle process exit
-    const processExitPromise = new Promise<void>((resolve) => {
-        child.on('close', (code) => {
-            if (config.options?.abort?.aborted) {
-                query.setError(new AbortError('Claude Code process aborted by user'))
-            }
-            if (code !== 0) {
-                query.setError(new Error(`Claude Code process exited with code ${code}`))
-            } else {
-                resolve()
-            }
-        })
+    let resolveExit!: () => void
+    let rejectExit!: (error: Error) => void
+    const processExitPromise = new Promise<void>((resolve, reject) => {
+        resolveExit = resolve
+        rejectExit = reject
     })
 
-    // Create query instance
-    const query = new Query(childStdin, child.stdout, processExitPromise, canCallTool)
+    let cleanupPromise: Promise<void> | null = null
+    const cleanup = (): Promise<void> => {
+        if (cleanupPromise) {
+            return cleanupPromise
+        }
+        cleanupPromise = (async () => {
+            await killProcessByChildProcess(child)
+            child.stdin.destroy()
+            child.stdout.destroy()
+            child.stderr.destroy()
+        })()
+        return cleanupPromise
+    }
 
-    // Handle process errors
-    child.on('error', (error) => {
-        cleanupMcpConfig?.()
+    const handleAbort = () => {
+        cleanup().catch((error) => {
+            logQueryTaskError('abort cleanup failed', error)
+        })
+    }
+    const handleProcessExit = () => {
+        cleanup().catch((error) => {
+            logQueryTaskError('process exit cleanup failed', error)
+        })
+    }
+    config.options?.abort?.addEventListener('abort', handleAbort)
+    process.on('exit', handleProcessExit)
+
+    const queryInstance = new Query(childStdin, child.stdout, processExitPromise, canCallTool)
+
+    if (typeof prompt !== 'string') {
+        streamToStdin(prompt, child.stdin, config.options?.abort).catch(async (error) => {
+            const promptError = error instanceof Error ? error : new Error(String(error))
+            if (!queryInstance.registerPromptFailure(promptError)) {
+                return
+            }
+            await Promise.race([
+                cleanup(),
+                new Promise<void>((resolve) => setTimeout(resolve, promptFailureCleanupTimeoutMs)),
+            ])
+            queryInstance.setError(promptError)
+            rejectExit(promptError)
+        })
+    }
+
+    child.on('close', (code) => {
+        const promptFailure = queryInstance.getPromptFailure()
+        if (promptFailure) {
+            rejectExit(promptFailure)
+            return
+        }
         if (config.options?.abort?.aborted) {
-            query.setError(new AbortError('Claude Code process aborted by user'))
-        } else {
-            query.setError(new Error(`Failed to spawn Claude Code process: ${error.message}`))
+            const error = new AbortError('Claude Code process aborted by user')
+            queryInstance.setError(error)
+            rejectExit(error)
+            return
         }
+        if (code !== 0) {
+            const error = new Error(`Claude Code process exited with code ${code}`)
+            queryInstance.setError(error)
+            rejectExit(error)
+            return
+        }
+        resolveExit()
     })
 
-    // Cleanup on exit
-    processExitPromise.finally(() => {
-        cleanup()
-        config.options?.abort?.removeEventListener('abort', cleanup)
-        if (process.env.CLAUDE_SDK_MCP_SERVERS) {
-            delete process.env.CLAUDE_SDK_MCP_SERVERS
+    child.on('error', (error) => {
+        const promptFailure = queryInstance.getPromptFailure()
+        if (promptFailure) {
+            rejectExit(promptFailure)
+            return
         }
-        cleanupMcpConfig?.()
+        if (config.options?.abort?.aborted) {
+            const abortError = new AbortError('Claude Code process aborted by user')
+            queryInstance.setError(abortError)
+            rejectExit(abortError)
+            return
+        }
+        const spawnError = new Error(`Failed to spawn Claude Code process: ${error.message}`)
+        queryInstance.setError(spawnError)
+        rejectExit(spawnError)
     })
 
-    return query
+    processExitPromise
+        .finally(() => {
+            cleanup().catch((error) => {
+                logQueryTaskError('final cleanup failed', error)
+            })
+            process.removeListener('exit', handleProcessExit)
+            config.options?.abort?.removeEventListener('abort', handleAbort)
+            if (process.env.CLAUDE_SDK_MCP_SERVERS) {
+                delete process.env.CLAUDE_SDK_MCP_SERVERS
+            }
+            cleanupMcpConfig?.()
+        })
+        .catch((error) => {
+            logQueryTaskError('process exit promise rejected', error)
+        })
+
+    return queryInstance
 }

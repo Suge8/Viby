@@ -12,7 +12,7 @@ export class Stream<T> implements AsyncIterableIterator<T> {
     private readResolve?: (value: IteratorResult<T>) => void
     private readReject?: (error: Error) => void
     private isDone = false
-    private hasError?: Error
+    private terminalError?: Error
     private started = false
 
     constructor(private returned?: () => void) {}
@@ -32,24 +32,21 @@ export class Stream<T> implements AsyncIterableIterator<T> {
      * Gets the next value from the stream
      */
     async next(): Promise<IteratorResult<T>> {
-        // Return queued items first
+        if (this.terminalError) {
+            return Promise.reject(this.terminalError)
+        }
+
         if (this.queue.length > 0) {
             return Promise.resolve({
                 done: false,
-                value: this.queue.shift()!
+                value: this.queue.shift()!,
             })
         }
 
-        // Check terminal states
         if (this.isDone) {
             return Promise.resolve({ done: true, value: undefined })
         }
 
-        if (this.hasError) {
-            return Promise.reject(this.hasError)
-        }
-
-        // Wait for new data
         return new Promise((resolve, reject) => {
             this.readResolve = resolve
             this.readReject = reject
@@ -60,14 +57,16 @@ export class Stream<T> implements AsyncIterableIterator<T> {
      * Adds a value to the stream
      */
     enqueue(value: T): void {
+        if (this.isDone || this.terminalError) {
+            return
+        }
+
         if (this.readResolve) {
-            // Direct delivery to waiting consumer
             const resolve = this.readResolve
             this.readResolve = undefined
             this.readReject = undefined
             resolve({ done: false, value })
         } else {
-            // Queue for later consumption
             this.queue.push(value)
         }
     }
@@ -76,6 +75,10 @@ export class Stream<T> implements AsyncIterableIterator<T> {
      * Marks the stream as complete
      */
     done(): void {
+        if (this.isDone || this.terminalError) {
+            return
+        }
+
         this.isDone = true
         if (this.readResolve) {
             const resolve = this.readResolve
@@ -89,7 +92,12 @@ export class Stream<T> implements AsyncIterableIterator<T> {
      * Propagates an error through the stream
      */
     error(error: Error): void {
-        this.hasError = error
+        if (this.isDone || this.terminalError) {
+            return
+        }
+
+        this.terminalError = error
+        this.queue = []
         if (this.readReject) {
             const reject = this.readReject
             this.readResolve = undefined
@@ -107,5 +115,9 @@ export class Stream<T> implements AsyncIterableIterator<T> {
             this.returned()
         }
         return Promise.resolve({ done: true, value: undefined })
+    }
+
+    get hasTerminalError(): boolean {
+        return this.terminalError !== undefined
     }
 }

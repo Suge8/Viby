@@ -3,8 +3,8 @@
  * Provides helper functions for path resolution and logging
  */
 
-import { existsSync } from 'node:fs'
 import { execSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { logger } from '@/ui/logger'
 
@@ -20,7 +20,16 @@ function findWindowsClaudePath(): string | null {
     const candidates = [
         path.join(homeDir, '.local', 'bin', 'claude.exe'),
         path.join(homeDir, 'AppData', 'Local', 'Programs', 'claude', 'claude.exe'),
-        path.join(homeDir, 'AppData', 'Local', 'Microsoft', 'WinGet', 'Packages', 'Anthropic.claude-code_Microsoft.Winget.Source_8wekyb3d8bbwe', 'claude.exe'),
+        path.join(
+            homeDir,
+            'AppData',
+            'Local',
+            'Microsoft',
+            'WinGet',
+            'Packages',
+            'Anthropic.claude-code_Microsoft.Winget.Source_8wekyb3d8bbwe',
+            'claude.exe'
+        ),
     ]
 
     for (const candidate of candidates) {
@@ -35,8 +44,11 @@ function findWindowsClaudePath(): string | null {
         const result = execSync('where claude.exe', {
             encoding: 'utf8',
             stdio: ['pipe', 'pipe', 'pipe'],
-            cwd: homeDir
-        }).trim().split('\n')[0].trim()
+            cwd: homeDir,
+        })
+            .trim()
+            .split('\n')[0]
+            .trim()
         if (result && existsSync(result)) {
             logger.debug(`[Claude SDK] Found Windows claude.exe via where: ${result}`)
             return result
@@ -67,7 +79,7 @@ function findGlobalClaudePath(): string | null {
         execSync('claude --version', {
             encoding: 'utf8',
             stdio: ['pipe', 'pipe', 'pipe'],
-            cwd: homeDir
+            cwd: homeDir,
         })
         logger.debug('[Claude SDK] Global claude command available')
         return 'claude'
@@ -80,7 +92,7 @@ function findGlobalClaudePath(): string | null {
         const result = execSync('which claude', {
             encoding: 'utf8',
             stdio: ['pipe', 'pipe', 'pipe'],
-            cwd: homeDir
+            cwd: homeDir,
         }).trim()
         if (result && existsSync(result)) {
             logger.debug(`[Claude SDK] Found global claude path via which: ${result}`)
@@ -120,7 +132,6 @@ export function getDefaultClaudeCodePath(): string {
 export function logDebug(message: string): void {
     if (process.env.DEBUG) {
         logger.debug(message)
-        console.log(message)
     }
 }
 
