@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Viby Harness Smoke</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        background: #f5f1e8;
+        color: #172033;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+      }
+
+      main {
+        width: min(40rem, calc(100vw - 3rem));
+        border: 1px solid #172033;
+        padding: 1.5rem;
+        background: #fff9ef;
+        box-shadow: 12px 12px 0 #172033;
+      }
+
+      h1 {
+        margin: 0 0 0.75rem;
+        font-size: 1.5rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Harness Smoke OK</h1>
+      <p id="status">browser harness fixture is ready</p>
+    </main>
+    <script>
+      document.documentElement.dataset.harnessReady = "true";
+    </script>
+  </body>
+</html>
