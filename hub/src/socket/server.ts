@@ -1,30 +1,34 @@
 import { Server as Engine } from '@socket.io/bun-engine'
-import { Server, type DefaultEventsMap } from 'socket.io'
 import { jwtVerify } from 'jose'
+import { type DefaultEventsMap, Server } from 'socket.io'
 import { z } from 'zod'
-import type { Store } from '../store'
 import { configuration } from '../configuration'
-import { registerWebHandlers } from './handlers/web'
-import { constantTimeEquals } from '../utils/crypto'
+import { isLoopbackOrigin } from '../hubHelpers'
+import type { Store } from '../store'
+import { SessionStreamManager } from '../sync/sessionStreamManager'
+import type { SyncEvent } from '../sync/syncEngine'
 import { parseAccessToken } from '../utils/accessToken'
+import { constantTimeEquals } from '../utils/crypto'
 import { registerCliHandlers } from './handlers/cli'
 import { registerTerminalHandlers } from './handlers/terminal'
+import { registerWebHandlers } from './handlers/web'
 import { RpcRegistry } from './rpcRegistry'
-import type { SyncEvent } from '../sync/syncEngine'
-import { TerminalRegistry } from './terminalRegistry'
 import type { CliSocketWithData, SocketData, SocketServer } from './socketTypes'
+import { TerminalRegistry } from './terminalRegistry'
 import { WebRealtimeManager } from './webRealtimeManager'
-import { isLoopbackOrigin } from '../hubHelpers'
-import { SessionStreamManager } from '../sync/sessionStreamManager'
 
 const jwtPayloadSchema = z.object({
-    uid: z.number()
+    uid: z.number(),
 })
 
 const DEFAULT_IDLE_TIMEOUT_MS = 15 * 60_000
 const DEFAULT_MAX_TERMINALS = 4
+const DEFAULT_PING_INTERVAL_MS = 25_000
+const DEFAULT_PING_TIMEOUT_MS = 20_000
 export const SOCKET_CONNECTION_RECOVERY_WINDOW_MS = 10 * 60_000
 export const SOCKET_CONNECTION_RECOVERY_SKIP_MIDDLEWARES = true
+export const SOCKET_PING_INTERVAL_MS = resolveEnvNumber('VIBY_SOCKET_PING_INTERVAL_MS', DEFAULT_PING_INTERVAL_MS)
+export const SOCKET_PING_TIMEOUT_MS = resolveEnvNumber('VIBY_SOCKET_PING_TIMEOUT_MS', DEFAULT_PING_TIMEOUT_MS)
 
 function resolveEnvNumber(name: string, fallback: number): number {
     const raw = process.env[name]
@@ -112,30 +116,36 @@ export function createSocketServer(deps: SocketServerDeps): {
     const corsOptions = {
         origin: corsOriginOption,
         methods: ['GET', 'POST'],
-        credentials: false
+        credentials: false,
     }
 
     const io = new Server<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, SocketData>({
         cors: corsOptions,
+        pingInterval: SOCKET_PING_INTERVAL_MS,
+        pingTimeout: SOCKET_PING_TIMEOUT_MS,
         connectionStateRecovery: {
             maxDisconnectionDuration: SOCKET_CONNECTION_RECOVERY_WINDOW_MS,
-            skipMiddlewares: SOCKET_CONNECTION_RECOVERY_SKIP_MIDDLEWARES
-        }
+            skipMiddlewares: SOCKET_CONNECTION_RECOVERY_SKIP_MIDDLEWARES,
+        },
     })
 
     const engine = new Engine({
         path: '/socket.io/',
         cors: corsOptions,
+        pingInterval: SOCKET_PING_INTERVAL_MS,
+        pingTimeout: SOCKET_PING_TIMEOUT_MS,
         allowRequest: async (req) => {
-            if (isAllowedSocketOrigin({
-                origin: req.headers.get('origin'),
-                corsOrigins,
-                requestHost: resolveRequestHost(req.headers)
-            })) {
+            if (
+                isAllowedSocketOrigin({
+                    origin: req.headers.get('origin'),
+                    corsOrigins,
+                    requestHost: resolveRequestHost(req.headers),
+                })
+            ) {
                 return
             }
             throw 'Origin not allowed'
-        }
+        },
     })
     io.bind(engine)
 
@@ -154,14 +164,14 @@ export function createSocketServer(deps: SocketServerDeps): {
             const terminalSocket = terminalNs.sockets.get(entry.socketId)
             terminalSocket?.emit('terminal:error', {
                 terminalId: entry.terminalId,
-                message: 'Terminal closed due to inactivity.'
+                message: 'Terminal closed due to inactivity.',
             })
             const cliSocket = cliNs.sockets.get(entry.cliSocketId)
             cliSocket?.emit('terminal:close', {
                 sessionId: entry.sessionId,
-                terminalId: entry.terminalId
+                terminalId: entry.terminalId,
             })
-        }
+        },
     })
 
     cliNs.use((socket, next) => {
@@ -173,17 +183,19 @@ export function createSocketServer(deps: SocketServerDeps): {
         }
         next()
     })
-    cliNs.on('connection', (socket) => registerCliHandlers(socket as CliSocketWithData, {
-        io,
-        store: deps.store,
-        rpcRegistry,
-        terminalRegistry,
-        sessionStreamManager,
-        onSessionAlive: deps.onSessionAlive,
-        onSessionEnd: deps.onSessionEnd,
-        onMachineAlive: deps.onMachineAlive,
-        onWebappEvent: deps.onWebappEvent
-    }))
+    cliNs.on('connection', (socket) =>
+        registerCliHandlers(socket as CliSocketWithData, {
+            io,
+            store: deps.store,
+            rpcRegistry,
+            terminalRegistry,
+            sessionStreamManager,
+            onSessionAlive: deps.onSessionAlive,
+            onSessionEnd: deps.onSessionEnd,
+            onMachineAlive: deps.onMachineAlive,
+            onWebappEvent: deps.onWebappEvent,
+        })
+    )
 
     const authenticateJwtSocket = async (
         socket: Parameters<typeof terminalNs.use>[0] extends (socket: infer T, next: infer _N) => unknown ? T : never,
@@ -210,24 +222,25 @@ export function createSocketServer(deps: SocketServerDeps): {
     }
 
     terminalNs.use(authenticateJwtSocket)
-    terminalNs.on('connection', (socket) => registerTerminalHandlers(socket, {
-        io,
-        getSession: (sessionId) => {
-            return deps.getSession?.(sessionId) ?? deps.store.sessions.getSession(sessionId)
-        },
-        terminalRegistry,
-        maxTerminalsPerSocket,
-        maxTerminalsPerSession
-    }))
-
-    const webRealtimeManager = new WebRealtimeManager(
-        webNs,
-        (sessionId) => sessionStreamManager.getStream(sessionId)
+    terminalNs.on('connection', (socket) =>
+        registerTerminalHandlers(socket, {
+            io,
+            getSession: (sessionId) => {
+                return deps.getSession?.(sessionId) ?? deps.store.sessions.getSession(sessionId)
+            },
+            terminalRegistry,
+            maxTerminalsPerSocket,
+            maxTerminalsPerSession,
+        })
     )
+
+    const webRealtimeManager = new WebRealtimeManager(webNs, (sessionId) => sessionStreamManager.getStream(sessionId))
     webNs.use(authenticateJwtSocket)
-    webNs.on('connection', (socket) => registerWebHandlers(socket, {
-        realtimeManager: webRealtimeManager
-    }))
+    webNs.on('connection', (socket) =>
+        registerWebHandlers(socket, {
+            realtimeManager: webRealtimeManager,
+        })
+    )
 
     return { io, engine, rpcRegistry, webRealtimeManager }
 }

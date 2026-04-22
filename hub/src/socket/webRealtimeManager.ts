@@ -23,7 +23,7 @@ function normalizeSubscription(subscription: WebSubscription): NormalizedWebSubs
         all: subscription.all === true,
         sessionId: subscription.sessionId?.trim() || null,
         machineId: subscription.machineId?.trim() || null,
-        pushEndpoint: subscription.pushEndpoint?.trim() || null
+        pushEndpoint: subscription.pushEndpoint?.trim() || null,
     }
 }
 
@@ -40,7 +40,7 @@ export class WebRealtimeManager {
 
     constructor(
         private readonly namespace: Namespace<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, SocketData>,
-        private readonly getSessionStream?: (sessionId: string) => SessionStreamState | null
+        private readonly readSessionStream?: (sessionId: string) => SessionStreamState | null
     ) {}
 
     subscribe(socket: SocketWithData, subscription: WebSubscription): void {
@@ -64,6 +64,14 @@ export class WebRealtimeManager {
 
     clearSocket(socketId: string): void {
         this.visibleSocketIds.delete(socketId)
+    }
+
+    getSessionStream(sessionId: string): SessionStreamState | null {
+        if (!this.readSessionStream) {
+            return null
+        }
+
+        return this.readSessionStream(sessionId)
     }
 
     async sendToast(event: Extract<SyncEvent, { type: 'toast' }>): Promise<string[]> {
@@ -117,11 +125,11 @@ export class WebRealtimeManager {
     }
 
     private emitSessionStreamSnapshot(socket: SocketWithData, subscription: NormalizedWebSubscription): void {
-        if (!subscription.sessionId || !this.getSessionStream) {
+        if (!subscription.sessionId || !this.readSessionStream) {
             return
         }
 
-        const stream = this.getSessionStream(subscription.sessionId)
+        const stream = this.readSessionStream(subscription.sessionId)
         if (!stream) {
             return
         }
@@ -129,7 +137,7 @@ export class WebRealtimeManager {
         socket.emit('sync:event', {
             type: 'session-stream-updated',
             sessionId: subscription.sessionId,
-            stream
+            stream,
         })
     }
 

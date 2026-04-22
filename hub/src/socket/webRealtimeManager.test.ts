@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 import type { SyncEvent } from '@viby/protocol/types'
-import { WebRealtimeManager } from './webRealtimeManager'
 import type { SocketData, SocketWithData } from './socketTypes'
+import { WebRealtimeManager } from './webRealtimeManager'
 
 type EmittedEvent = {
     event: string
@@ -122,15 +122,15 @@ describe('WebRealtimeManager', () => {
 
         manager.subscribe(visible as unknown as SocketWithData, {
             sessionId: 's1',
-            pushEndpoint: 'endpoint-visible'
+            pushEndpoint: 'endpoint-visible',
         })
         manager.subscribe(hidden as unknown as SocketWithData, {
             sessionId: 's1',
-            pushEndpoint: 'endpoint-hidden'
+            pushEndpoint: 'endpoint-hidden',
         })
         manager.subscribe(otherSession as unknown as SocketWithData, {
             sessionId: 's2',
-            pushEndpoint: 'endpoint-other'
+            pushEndpoint: 'endpoint-other',
         })
         manager.setVisibility(visible as unknown as SocketWithData, 'visible')
         manager.setVisibility(hidden as unknown as SocketWithData, 'hidden')
@@ -142,8 +142,8 @@ describe('WebRealtimeManager', () => {
                 title: 'Ready',
                 body: 'Toast body',
                 sessionId: 's1',
-                url: '/sessions/s1'
-            }
+                url: '/sessions/s1',
+            },
         }
 
         const suppressedPushEndpoints = await manager.sendToast(event)
@@ -163,10 +163,10 @@ describe('WebRealtimeManager', () => {
             }
 
             return {
-                streamId: 'stream-1',
+                assistantTurnId: 'stream-1',
                 startedAt: 1,
                 updatedAt: 2,
-                text: 'Hello'
+                text: 'Hello',
             }
         })
         const alpha = new FakeSocket('alpha')
@@ -179,11 +179,11 @@ describe('WebRealtimeManager', () => {
             type: 'session-stream-updated',
             sessionId: 's1',
             stream: {
-                streamId: 'stream-1',
+                assistantTurnId: 'stream-1',
                 startedAt: 1,
                 updatedAt: 2,
-                text: 'Hello'
-            }
+                text: 'Hello',
+            },
         })
     })
 })

@@ -2,14 +2,13 @@ import { describe, expect, it } from 'bun:test'
 import type { ClientToServerEvents, Update } from '@viby/protocol'
 import type { SyncEvent } from '@viby/protocol/types'
 import { Store } from '../../../store'
-import type { CliSocketWithData } from '../../socketTypes'
 import { SessionStreamManager } from '../../../sync/sessionStreamManager'
-import {
-    mergeSessionMetadataPreservingLifecycle,
-    registerSessionHandlers
-} from './sessionHandlers'
+import type { CliSocketWithData } from '../../socketTypes'
+import { mergeSessionMetadataPreservingLifecycle, registerSessionHandlers } from './sessionHandlers'
 
-type RegisteredSessionHandlers = Partial<Pick<ClientToServerEvents, 'message' | 'update-metadata'>>
+type RegisteredSessionHandlers = Partial<
+    Pick<ClientToServerEvents, 'message' | 'update-metadata' | 'command-capabilities-invalidated'>
+>
 
 type MockSocket = {
     socket: CliSocketWithData
@@ -45,15 +44,15 @@ function createMockSocket(): MockSocket {
             return {
                 emit(event: 'update', payload: Update) {
                     emittedUpdates.push({ room, event, payload })
-                }
+                },
             }
-        }
+        },
     } as unknown as CliSocketWithData
 
     return {
         socket,
         handlers,
-        emittedUpdates
+        emittedUpdates,
     }
 }
 
@@ -67,9 +66,9 @@ function createSessionHandlersHarness(): SessionHandlersHarness {
             lifecycleState: 'archived',
             lifecycleStateSince: 1_000,
             archivedBy: 'web',
-            archiveReason: 'Archived by user'
+            archiveReason: 'Archived by user',
         },
-        agentState: null
+        agentState: null,
     })
     const onWebappEvents: SyncEvent[] = []
     const { socket, handlers, emittedUpdates } = createMockSocket()
@@ -87,11 +86,10 @@ function createSessionHandlersHarness(): SessionHandlersHarness {
 
             return { ok: true as const, value: storedSession }
         },
-        emitAccessError() {
-        },
+        emitAccessError() {},
         onWebappEvent(event) {
             onWebappEvents.push(event)
-        }
+        },
     })
 
     return {
@@ -100,7 +98,7 @@ function createSessionHandlersHarness(): SessionHandlersHarness {
         handlers,
         emittedUpdates,
         onWebappEvents,
-        sessionStreamManager
+        sessionStreamManager,
     }
 }
 
@@ -129,15 +127,15 @@ describe('mergeSessionMetadataPreservingLifecycle', () => {
                 lifecycleState: 'archived',
                 lifecycleStateSince: 1_000,
                 archivedBy: 'web',
-                archiveReason: 'Archived by user'
+                archiveReason: 'Archived by user',
             },
             {
                 path: '/tmp/project',
                 host: 'localhost',
                 summary: {
                     text: 'Auto title',
-                    updatedAt: 2_000
-                }
+                    updatedAt: 2_000,
+                },
             }
         )
 
@@ -146,12 +144,12 @@ describe('mergeSessionMetadataPreservingLifecycle', () => {
             host: 'localhost',
             summary: {
                 text: 'Auto title',
-                updatedAt: 2_000
+                updatedAt: 2_000,
             },
             lifecycleState: 'archived',
             lifecycleStateSince: 1_000,
             archivedBy: 'web',
-            archiveReason: 'Archived by user'
+            archiveReason: 'Archived by user',
         })
     })
 
@@ -163,13 +161,13 @@ describe('mergeSessionMetadataPreservingLifecycle', () => {
                 lifecycleState: 'archived',
                 lifecycleStateSince: 1_000,
                 archivedBy: 'web',
-                archiveReason: 'Archived by user'
+                archiveReason: 'Archived by user',
             },
             {
                 path: '/tmp/project',
                 host: 'localhost',
                 lifecycleState: 'closed',
-                lifecycleStateSince: 2_000
+                lifecycleStateSince: 2_000,
             }
         )
 
@@ -179,7 +177,7 @@ describe('mergeSessionMetadataPreservingLifecycle', () => {
             lifecycleState: 'archived',
             lifecycleStateSince: 1_000,
             archivedBy: 'web',
-            archiveReason: 'Archived by user'
+            archiveReason: 'Archived by user',
         })
     })
 
@@ -187,19 +185,19 @@ describe('mergeSessionMetadataPreservingLifecycle', () => {
         const merged = mergeSessionMetadataPreservingLifecycle(
             {
                 path: '/tmp/project',
-                host: 'localhost'
+                host: 'localhost',
             },
             {
                 path: '/tmp/project',
                 host: 'localhost',
                 lifecycleState: 'closed',
-                lifecycleStateSince: 2_000
+                lifecycleStateSince: 2_000,
             }
         )
 
         expect(merged).toEqual({
             path: '/tmp/project',
-            host: 'localhost'
+            host: 'localhost',
         })
     })
 })
@@ -212,14 +210,17 @@ describe('registerSessionHandlers message', () => {
 
         harness.sessionStreamManager.applyUpdate(harness.session.id, {
             kind: 'append',
-            streamId: 'pi-assistant-1000',
-            delta: 'Hello from Pi'
+            assistantTurnId: 'pi-assistant-1000',
+            delta: 'Hello from Pi',
         })
 
         messageHandler?.({
             sid: harness.session.id,
             message: {
                 role: 'agent',
+                meta: {
+                    assistantTurnId: 'pi-assistant-1000',
+                },
                 content: {
                     type: 'output',
                     data: {
@@ -240,21 +241,71 @@ describe('registerSessionHandlers message', () => {
                                     output: 0,
                                     cacheRead: 0,
                                     cacheWrite: 0,
-                                    total: 0
-                                }
+                                    total: 0,
+                                },
                             },
                             stopReason: 'stop',
                             timestamp: 1_000,
-                            content: [
-                                { type: 'text', text: 'Hello from Pi' }
-                            ]
-                        }
-                    }
-                }
-            }
+                            content: [{ type: 'text', text: 'Hello from Pi' }],
+                        },
+                    },
+                },
+            },
         })
 
         expect(harness.sessionStreamManager.getStream(harness.session.id)).toBeNull()
+    })
+
+    it('keeps the active assistant stream when a durable agent message has no assistant turn id', () => {
+        const harness = createSessionHandlersHarness()
+        const messageHandler = harness.handlers.message
+        expect(messageHandler).toBeDefined()
+
+        harness.sessionStreamManager.applyUpdate(harness.session.id, {
+            kind: 'append',
+            assistantTurnId: 'assistant-turn-1',
+            delta: 'streaming',
+        })
+
+        messageHandler?.({
+            sid: harness.session.id,
+            message: {
+                role: 'agent',
+                content: {
+                    type: 'codex',
+                    data: {
+                        type: 'tool-call',
+                        name: 'ReadFile',
+                        callId: 'tool-1',
+                        input: { path: '/tmp/project/README.md' },
+                    },
+                },
+            },
+        })
+
+        expect(harness.sessionStreamManager.getStream(harness.session.id)).toMatchObject({
+            assistantTurnId: 'assistant-turn-1',
+            text: 'streaming',
+        })
+    })
+})
+
+describe('registerSessionHandlers command-capabilities-invalidated', () => {
+    it('forwards session-scoped capability invalidation into the web realtime event stream', () => {
+        const harness = createSessionHandlersHarness()
+        const handler = harness.handlers['command-capabilities-invalidated']
+        expect(handler).toBeDefined()
+
+        handler?.({
+            sid: harness.session.id,
+        })
+
+        expect(harness.onWebappEvents).toEqual([
+            {
+                type: 'command-capabilities-invalidated',
+                sessionId: harness.session.id,
+            },
+        ])
     })
 })
 
@@ -268,12 +319,12 @@ describe('registerSessionHandlers update-metadata', () => {
             host: 'localhost',
             summary: {
                 text: 'Auto title',
-                updatedAt: 2_000
+                updatedAt: 2_000,
             },
             lifecycleState: 'archived',
             lifecycleStateSince: 1_000,
             archivedBy: 'web',
-            archiveReason: 'Archived by user'
+            archiveReason: 'Archived by user',
         }
 
         handler(
@@ -285,9 +336,9 @@ describe('registerSessionHandlers update-metadata', () => {
                     host: 'localhost',
                     summary: {
                         text: 'Auto title',
-                        updatedAt: 2_000
-                    }
-                }
+                        updatedAt: 2_000,
+                    },
+                },
             },
             (answer) => {
                 response = answer
@@ -299,7 +350,7 @@ describe('registerSessionHandlers update-metadata', () => {
         expect(successResponse).toEqual({
             result: 'success',
             version: 2,
-            metadata: expectedMetadata
+            metadata: expectedMetadata,
         })
         expect(harness.store.sessions.getSession(harness.session.id)?.metadata).toEqual(expectedMetadata)
         expect(harness.emittedUpdates).toHaveLength(1)
@@ -312,17 +363,17 @@ describe('registerSessionHandlers update-metadata', () => {
                     sid: harness.session.id,
                     metadata: {
                         version: 2,
-                        value: expectedMetadata
-                    }
-                }
-            }
+                        value: expectedMetadata,
+                    },
+                },
+            },
         })
         expect(harness.onWebappEvents).toEqual([
             {
                 type: 'session-updated',
                 sessionId: harness.session.id,
-                data: { sid: harness.session.id }
-            }
+                data: { sid: harness.session.id },
+            },
         ])
     })
 
@@ -336,7 +387,7 @@ describe('registerSessionHandlers update-metadata', () => {
             lifecycleState: 'archived',
             lifecycleStateSince: 1_000,
             archivedBy: 'web',
-            archiveReason: 'Archived by user'
+            archiveReason: 'Archived by user',
         }
 
         handler(
@@ -347,8 +398,8 @@ describe('registerSessionHandlers update-metadata', () => {
                     path: '/tmp/project',
                     host: 'localhost',
                     lifecycleState: 'closed',
-                    lifecycleStateSince: 2_000
-                }
+                    lifecycleStateSince: 2_000,
+                },
             },
             (answer) => {
                 response = answer
@@ -360,7 +411,7 @@ describe('registerSessionHandlers update-metadata', () => {
         expect(successResponse).toEqual({
             result: 'success',
             version: 2,
-            metadata: expectedMetadata
+            metadata: expectedMetadata,
         })
         expect(harness.store.sessions.getSession(harness.session.id)?.metadata).toEqual(expectedMetadata)
         expect(harness.emittedUpdates[0]?.payload.body).toMatchObject({
@@ -368,8 +419,8 @@ describe('registerSessionHandlers update-metadata', () => {
             sid: harness.session.id,
             metadata: {
                 version: 2,
-                value: expectedMetadata
-            }
+                value: expectedMetadata,
+            },
         })
     })
 })
@@ -388,13 +439,13 @@ describe('registerSessionHandlers message', () => {
                     type: 'codex',
                     data: {
                         type: 'tool-call',
-                        name: 'TeamCreate',
+                        name: 'Write',
                         input: {
-                            team_name: 'Alpha Team'
-                        }
-                    }
-                }
-            }
+                            file_path: '/tmp/output.txt',
+                        },
+                    },
+                },
+            },
         })
 
         expect(harness.onWebappEvents).toEqual([
@@ -403,10 +454,10 @@ describe('registerSessionHandlers message', () => {
                 sessionId: harness.session.id,
                 message: expect.objectContaining({
                     content: expect.objectContaining({
-                        role: 'agent'
-                    })
-                })
-            }
+                        role: 'agent',
+                    }),
+                }),
+            },
         ])
     })
 })
