@@ -1,12 +1,22 @@
 import { describe, expect, it } from 'bun:test'
 import {
+    buildPairingLinkPresentation,
+    classifyPairingLinkQuality,
+    describePairingLinkTransport,
+    formatPairingRoundTripTime,
+    PairingPeerBrowseDirectoryResultSchema,
+    PairingPeerCommandCapabilitiesResultSchema,
     PairingPeerEventSchema,
+    PairingPeerGitCommandResultSchema,
     PairingPeerListSessionsResultSchema,
     PairingPeerMessageSchema,
     PairingPeerOpenSessionResultSchema,
+    PairingPeerPathsExistResultSchema,
     PairingReconnectChallengeResponseSchema,
     PairingReconnectRequestSchema,
     PairingTelemetryRequestSchema,
+    readPairingSignalTransportId,
+    resolvePairingLinkTransport,
 } from './schema'
 
 describe('pairing peer rpc schema', () => {
@@ -22,6 +32,7 @@ describe('pairing peer rpc schema', () => {
                     lifecycleState: 'running',
                     resumeAvailable: true,
                     model: 'gpt-5.4',
+                    codexServiceTier: null,
                     metadata: {
                         path: '/tmp/project',
                         driver: 'codex',
@@ -57,6 +68,7 @@ describe('pairing peer rpc schema', () => {
                 thinking: false,
                 thinkingAt: 1,
                 model: 'gpt-5.4',
+                codexServiceTier: null,
                 modelReasoningEffort: 'high',
                 permissionMode: 'safe-yolo',
                 collaborationMode: 'default',
@@ -106,6 +118,99 @@ describe('pairing peer rpc schema', () => {
         expect(eventEnvelope.payload.type).toBe('session-updated')
     })
 
+    it('accepts remote runtime browse and path existence contracts', () => {
+        expect(
+            PairingPeerMessageSchema.parse({
+                kind: 'request',
+                id: 'req-browse',
+                method: 'runtime.browse-directory',
+                params: { path: '/tmp/project' },
+            }).kind
+        ).toBe('request')
+        expect(
+            PairingPeerBrowseDirectoryResultSchema.parse({
+                success: true,
+                currentPath: '/tmp/project',
+                parentPath: '/tmp',
+                entries: [{ name: 'src', path: '/tmp/project/src', type: 'directory' }],
+                roots: [{ kind: 'home', path: '/Users/example' }],
+            }).entries?.[0]?.name
+        ).toBe('src')
+        expect(PairingPeerPathsExistResultSchema.parse({ exists: { '/tmp/project': true } }).exists).toEqual({
+            '/tmp/project': true,
+        })
+    })
+
+    it('accepts mobile management and workspace peer contracts', () => {
+        expect(
+            PairingPeerMessageSchema.parse({
+                kind: 'request',
+                id: 'req-close',
+                method: 'session.close',
+                params: { sessionId: 'session-1' },
+            }).kind
+        ).toBe('request')
+        expect(
+            PairingPeerMessageSchema.parse({
+                kind: 'request',
+                id: 'req-read',
+                method: 'workspace.read-file',
+                params: { sessionId: 'session-1', path: 'src/index.ts' },
+            }).kind
+        ).toBe('request')
+        expect(PairingPeerGitCommandResultSchema.parse({ success: true, stdout: ' M file.ts' }).success).toBe(true)
+        expect(PairingPeerCommandCapabilitiesResultSchema.parse({ success: true, capabilities: [] }).success).toBe(true)
+    })
+
+    it('accepts mobile upload, terminal and push peer contracts', () => {
+        expect(
+            PairingPeerMessageSchema.parse({
+                kind: 'request',
+                id: 'upload-start',
+                method: 'session.upload-start',
+                params: {
+                    sessionId: 'session-1',
+                    transferId: '00000000-0000-4000-8000-000000000001',
+                    filename: 'image.png',
+                    mimeType: 'image/png',
+                    size: 12,
+                },
+            }).kind
+        ).toBe('request')
+        expect(
+            PairingPeerMessageSchema.parse({
+                kind: 'request',
+                id: 'terminal-open',
+                method: 'terminal.open',
+                params: { sessionId: 'session-1', terminalId: 'terminal-1', cols: 80, rows: 24 },
+            }).kind
+        ).toBe('request')
+        expect(
+            PairingPeerMessageSchema.parse({
+                kind: 'event',
+                event: 'terminal-event',
+                payload: { type: 'output', sessionId: 'session-1', terminalId: 'terminal-1', data: 'hello' },
+            }).kind
+        ).toBe('event')
+        expect(
+            PairingPeerMessageSchema.parse({
+                kind: 'request',
+                id: 'push-subscribe',
+                method: 'push.subscribe',
+                params: { endpoint: 'https://push.example', keys: { p256dh: 'p', auth: 'a' } },
+            }).kind
+        ).toBe('request')
+    })
+
+    it('reads optional signaling transport identity without trusting malformed payloads', () => {
+        expect(readPairingSignalTransportId({ transportId: 'guest-transport-1', pairing: {} })).toBe(
+            'guest-transport-1'
+        )
+        expect(readPairingSignalTransportId({ transportId: '' })).toBeNull()
+        expect(readPairingSignalTransportId({ transportId: 1 })).toBeNull()
+        expect(readPairingSignalTransportId(null)).toBeNull()
+    })
+
     it('accepts reconnect requests with an optional signed device proof', () => {
         const parsed = PairingReconnectRequestSchema.parse({
             token: 'guest-token',
@@ -135,7 +240,7 @@ describe('pairing peer rpc schema', () => {
                 source: 'desktop',
                 transport: 'relay',
                 localCandidateType: 'relay',
-                remoteCandidateType: 'relay',
+                remoteCandidateType: 'srflx',
                 currentRoundTripTimeMs: 92,
                 restartCount: 2,
                 sampledAt: 1_700_000_000_000,
@@ -144,5 +249,46 @@ describe('pairing peer rpc schema', () => {
 
         expect(challenge.challenge.nonce).toBe('nonce-1')
         expect(telemetry.sample.transport).toBe('relay')
+    })
+
+    it('classifies pairing link quality from transport and RTT', () => {
+        expect(classifyPairingLinkQuality({ transport: 'direct', currentRoundTripTimeMs: 38 })).toMatchObject({
+            tone: 'success',
+            latencyTier: 'fast',
+            roundTripTimeMs: 38,
+        })
+        expect(classifyPairingLinkQuality({ transport: 'relay', currentRoundTripTimeMs: 120 })).toMatchObject({
+            tone: 'warning',
+            latencyTier: 'steady',
+        })
+        expect(classifyPairingLinkQuality({ transport: 'unknown', currentRoundTripTimeMs: null })).toMatchObject({
+            tone: 'neutral',
+            latencyTier: 'unknown',
+        })
+        expect(formatPairingRoundTripTime(37.7)).toBe('38ms')
+        expect(describePairingLinkTransport({ transport: 'relay' })).toBe('安全中转')
+        expect(resolvePairingLinkTransport({ localCandidateType: 'host', remoteCandidateType: 'srflx' })).toBe('direct')
+        expect(resolvePairingLinkTransport({ localCandidateType: null, remoteCandidateType: 'srflx' })).toBe('unknown')
+        expect(resolvePairingLinkTransport({ localCandidateType: null, remoteCandidateType: 'relay' })).toBe('relay')
+        expect(buildPairingLinkPresentation({ transport: 'direct', currentRoundTripTimeMs: 38 })).toEqual({
+            title: '本机直连 · 延迟 38ms',
+            detail: '最快路线。延迟数字越小，手机操作越跟手。',
+            tone: 'success',
+        })
+        expect(buildPairingLinkPresentation({ transport: 'relay', currentRoundTripTimeMs: 120 })).toEqual({
+            title: '安全中转 · 延迟 120ms',
+            detail: '两边网络不能直连时自动绕路；能正常用，不用手动设置。',
+            tone: 'warning',
+        })
+        expect(buildPairingLinkPresentation({ transport: 'unknown', currentRoundTripTimeMs: null })).toEqual({
+            title: '已连接 · 正在检测链路',
+            detail: '不影响使用；Viby 正在确认是本机直连还是安全中转。',
+            tone: 'neutral',
+        })
+        expect(buildPairingLinkPresentation(null)).toEqual({
+            title: '正在检测链路',
+            detail: '已连接后会确认是本机直连还是安全中转。',
+            tone: 'neutral',
+        })
     })
 })

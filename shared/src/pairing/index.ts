@@ -1,3 +1,6 @@
 export * from './events'
+export * from './pairingLinkQuality'
+export * from './pairingTiming'
+export * from './pairingWorkspaceRoute'
 export * from './schema'
 export * from './ticket'

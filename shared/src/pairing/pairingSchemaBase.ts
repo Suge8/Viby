@@ -96,6 +96,12 @@ export const PairingClaimRequestSchema = z.object({
 })
 export type PairingClaimRequest = z.infer<typeof PairingClaimRequestSchema>
 
+export const PairingVerifyCodeRequestSchema = z.object({
+    token: z.string().min(1),
+    code: z.string().regex(/^\d{6}$/),
+})
+export type PairingVerifyCodeRequest = z.infer<typeof PairingVerifyCodeRequestSchema>
+
 export const PairingSignalSchema = z.object({
     id: z.string().min(1).optional(),
     pairingId: z.string().min(1),
@@ -107,6 +113,16 @@ export const PairingSignalSchema = z.object({
     at: z.number().int().nonnegative().optional(),
 })
 export type PairingSignal = z.infer<typeof PairingSignalSchema>
+
+export const PairingSignalTransportPayloadSchema = z.object({
+    transportId: z.string().trim().min(1).max(64).optional(),
+})
+export type PairingSignalTransportPayload = z.infer<typeof PairingSignalTransportPayloadSchema>
+
+export function readPairingSignalTransportId(payload: unknown): string | null {
+    const parsed = PairingSignalTransportPayloadSchema.safeParse(payload)
+    return parsed.success ? (parsed.data.transportId ?? null) : null
+}
 
 export const PairingErrorPayloadSchema = z.object({
     code: z.string().min(1),
@@ -182,6 +198,16 @@ export const PairingApproveResponseSchema = z.object({
 })
 export type PairingApproveResponse = z.infer<typeof PairingApproveResponseSchema>
 
+export const PairingVerifyCodeResponseSchema = z.object({
+    pairing: PairingSessionSnapshotSchema,
+})
+export type PairingVerifyCodeResponse = z.infer<typeof PairingVerifyCodeResponseSchema>
+
+export const PairingStatusResponseSchema = z.object({
+    pairing: PairingSessionSnapshotSchema,
+})
+export type PairingStatusResponse = z.infer<typeof PairingStatusResponseSchema>
+
 export const PairingTelemetryTransportSchema = z.enum(['direct', 'relay', 'unknown'])
 export type PairingTelemetryTransport = z.infer<typeof PairingTelemetryTransportSchema>
 
@@ -220,6 +246,18 @@ export function toPairingSessionSnapshot(session: PairingSessionRecord): Pairing
         host: toPairingParticipantSnapshot(session.host),
         guest: session.guest ? toPairingParticipantSnapshot(session.guest) : null,
     }
+}
+
+export function toPairingSessionSnapshotForRole(
+    session: PairingSessionRecord,
+    role: PairingRole
+): PairingSessionSnapshot {
+    const snapshot = toPairingSessionSnapshot(session)
+    if (role === 'guest' && snapshot.approvalStatus !== 'approved') {
+        return { ...snapshot, shortCode: null }
+    }
+
+    return snapshot
 }
 
 export function toPairingParticipantSnapshot(participant: PairingParticipantRecord): PairingParticipantSnapshot {
