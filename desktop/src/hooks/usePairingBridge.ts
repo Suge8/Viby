@@ -2,11 +2,23 @@ import { useEffect, useState } from 'react'
 import { startPairingBridge } from '@/lib/pairingBridgeController'
 import type { DesktopPairingSession, HubRuntimeStatus, PairingBridgeState } from '@/types'
 
+export function createPairingBridgeDependencyKey(
+    pairing: DesktopPairingSession | null,
+    status: HubRuntimeStatus | undefined
+): string {
+    if (!pairing || !status) {
+        return 'idle'
+    }
+
+    return [pairing.pairing.id, pairing.wsUrl, status.localHubUrl, status.cliApiToken].join('|')
+}
+
 export function usePairingBridge(options: {
     pairing: DesktopPairingSession | null
     status: HubRuntimeStatus | undefined
 }): PairingBridgeState {
     const [state, setState] = useState<PairingBridgeState>({ phase: 'idle', message: null, pairing: null, stats: null })
+    const dependencyKey = createPairingBridgeDependencyKey(options.pairing, options.status)
 
     useEffect(() => {
         if (!options.pairing || !options.status) {
@@ -19,7 +31,7 @@ export function usePairingBridge(options: {
             status: options.status,
             onStateChange: setState,
         })
-    }, [options.pairing, options.status])
+    }, [dependencyKey])
 
     return state
 }

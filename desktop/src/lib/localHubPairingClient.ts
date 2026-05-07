@@ -1,72 +1,93 @@
-import type { DecryptedMessage, Session, SessionSummary, SessionViewSnapshot, SyncEvent } from '@viby/protocol/types'
-
-type PairingEventStreamHeartbeat = {
-    type: 'heartbeat'
-    at: number
-}
-
-type PairingEventStreamEvent = {
-    type: 'event'
-    event: SyncEvent
-}
-
-export type PairingEventStreamPayload = PairingEventStreamHeartbeat | PairingEventStreamEvent
-
-type FetchLike = typeof fetch
-
-function trimBaseUrl(value: string): string {
-    return value.replace(/\/+$/, '')
-}
-
-function parseErrorMessage(status: number, bodyText: string): string {
-    if (!bodyText) {
-        return `Local Hub request failed with HTTP ${status}`
+import type {
+    PairingPeerPushSubscriptionParams,
+    PairingPeerPushUnsubscribeParams,
+    PairingPeerSpawnSessionParams,
+    PairingPeerSpawnSessionResult,
+    PairingPeerTerminalEventPayload,
+    PairingPeerUploadCompleteParams,
+    PairingPeerUploadResult,
+    PairingPeerUploadStartParams,
+} from '@viby/protocol/pairing'
+import type {
+    AgentAvailabilityResponse,
+    CodexCollaborationMode,
+    CodexServiceTier,
+    CommandCapabilitiesResponse,
+    DecryptedMessage,
+    ListAgentAvailabilityRequest,
+    LocalSessionCatalog,
+    LocalSessionExportRequest,
+    MachineDirectoryResponse,
+    ModelReasoningEffort,
+    PermissionMode,
+    ResolveAgentLaunchConfigRequest,
+    ResolveAgentLaunchConfigResponse,
+    Session,
+    SessionSummary,
+    SessionViewSnapshot,
+} from '@viby/protocol/types'
+import { LocalHubPairingClientCore, type LocalHubPairingClientOptions } from './localHubPairingClientCore'
+import type { LocalHubPairingRequestJson } from './localHubPairingRequest'
+import {
+    browseRuntimeDirectory,
+    checkRuntimePathsExists,
+    getRuntimeAgentAvailability,
+    importRuntimeLocalSession,
+    listRuntimeLocalSessions,
+    resolveAgentLaunchConfig,
+} from './localHubPairingRuntimeClient'
+import {
+    approvePermission,
+    deleteSession,
+    denyPermission,
+    getCommandCapabilities,
+    postSessionAction,
+    renameSession,
+    setCodexServiceTier,
+    setCollaborationMode,
+    setModel,
+    setModelReasoningEffort,
+    setPermissionMode,
+    switchSessionDriver,
+} from './localHubPairingSessionClient'
+import { LocalHubPairingTerminalClient } from './localHubPairingTerminalClient'
+import {
+    type FileReadResponse,
+    type FileSearchResponse,
+    type GitCommandResponse,
+    getGitDiffFile,
+    getGitDiffNumstat,
+    getGitStatus,
+    type ListDirectoryResponse,
+    listSessionDirectory,
+    readSessionFile,
+    searchSessionFiles,
+} from './localHubPairingWorkspaceClient'
+import { PairingBinaryUploadManager } from './pairingBinaryUpload'
+export class LocalHubPairingClient extends LocalHubPairingClientCore {
+    private readonly terminalClient: LocalHubPairingTerminalClient
+    private readonly uploadManager = new PairingBinaryUploadManager()
+    private readonly request: LocalHubPairingRequestJson = this.requestJson.bind(this)
+    constructor(options: LocalHubPairingClientOptions) {
+        super(options)
+        this.terminalClient = new LocalHubPairingTerminalClient({
+            baseUrl: this.baseUrl,
+            authenticate: () => this.authenticate(),
+        })
     }
-
-    try {
-        const parsed = JSON.parse(bodyText) as { error?: string }
-        if (typeof parsed.error === 'string' && parsed.error) {
-            return parsed.error
-        }
-    } catch {
-        // Ignore invalid JSON error payloads.
-    }
-
-    return `Local Hub request failed with HTTP ${status}: ${bodyText}`
-}
-
-export class LocalHubPairingClient {
-    private readonly baseUrl: string
-    private readonly cliApiToken: string
-    private readonly fetchImpl: FetchLike
-    private jwtToken: string | null = null
-
-    constructor(options: {
-        baseUrl: string
-        cliApiToken: string
-        fetchImpl?: FetchLike
-    }) {
-        this.baseUrl = trimBaseUrl(options.baseUrl)
-        this.cliApiToken = options.cliApiToken
-        this.fetchImpl = options.fetchImpl ?? fetch
-    }
-
     async listSessions(): Promise<SessionSummary[]> {
         const response = await this.requestJson<{ sessions: SessionSummary[] }>('/api/sessions')
         return response.sessions
     }
-
     async openSession(sessionId: string): Promise<SessionViewSnapshot> {
         return await this.requestJson<SessionViewSnapshot>(`/api/sessions/${encodeURIComponent(sessionId)}/view`)
     }
-
     async resumeSession(sessionId: string): Promise<SessionViewSnapshot> {
         await this.requestJson(`/api/sessions/${encodeURIComponent(sessionId)}/resume`, {
             method: 'POST',
         })
         return await this.openSession(sessionId)
     }
-
     async loadMessagesAfter(
         sessionId: string,
         afterSeq: number,
@@ -78,17 +99,14 @@ export class LocalHubPairingClient {
         const response = await this.requestJson<{ messages: DecryptedMessage[] }>(
             `/api/sessions/${encodeURIComponent(sessionId)}/messages?afterSeq=${afterSeq}&limit=${limit}`
         )
-
         const nextAfterSeq = response.messages.reduce((cursor, message) => {
             return typeof message.seq === 'number' && message.seq > cursor ? message.seq : cursor
         }, afterSeq)
-
         return {
             messages: response.messages,
             nextAfterSeq,
         }
     }
-
     async sendMessage(sessionId: string, text: string, localId?: string): Promise<Session> {
         const response = await this.requestJson<{ session: Session }>(
             `/api/sessions/${encodeURIComponent(sessionId)}/messages`,
@@ -100,129 +118,184 @@ export class LocalHubPairingClient {
                 }),
             }
         )
-
         return response.session
     }
-
-    async streamEvents(options: {
-        signal: AbortSignal
-        onPayload: (payload: PairingEventStreamPayload) => void
-    }): Promise<void> {
-        await this.streamEventsAttempt(options, true)
+    async abortSession(sessionId: string): Promise<Session> {
+        return await postSessionAction(this.request, sessionId, 'abort', {})
     }
-
-    private async streamEventsAttempt(
-        options: {
-            signal: AbortSignal
-            onPayload: (payload: PairingEventStreamPayload) => void
-        },
-        allowRetry: boolean
+    async archiveSession(sessionId: string): Promise<Session> {
+        return await postSessionAction(this.request, sessionId, 'archive', {})
+    }
+    async closeSession(sessionId: string): Promise<Session> {
+        return await postSessionAction(this.request, sessionId, 'close', {})
+    }
+    async unarchiveSession(sessionId: string): Promise<Session> {
+        return await postSessionAction(this.request, sessionId, 'unarchive', {})
+    }
+    async renameSession(sessionId: string, name: string): Promise<Session> {
+        return await renameSession(this.request, sessionId, name)
+    }
+    async deleteSession(sessionId: string): Promise<void> {
+        await deleteSession(this.request, sessionId)
+    }
+    async switchSessionDriver(sessionId: string, targetDriver: string): Promise<Session> {
+        return await switchSessionDriver(this.request, sessionId, targetDriver)
+    }
+    async setPermissionMode(sessionId: string, mode: PermissionMode): Promise<Session> {
+        return await setPermissionMode(this.request, sessionId, mode)
+    }
+    async setCollaborationMode(sessionId: string, mode: CodexCollaborationMode): Promise<Session> {
+        return await setCollaborationMode(this.request, sessionId, mode)
+    }
+    async setModel(sessionId: string, model: string | null): Promise<Session> {
+        return await setModel(this.request, sessionId, model)
+    }
+    async setModelReasoningEffort(
+        sessionId: string,
+        modelReasoningEffort: ModelReasoningEffort | null
+    ): Promise<Session> {
+        return await setModelReasoningEffort(this.request, sessionId, modelReasoningEffort)
+    }
+    async setCodexServiceTier(sessionId: string, codexServiceTier: CodexServiceTier | null): Promise<Session> {
+        return await setCodexServiceTier(this.request, sessionId, codexServiceTier)
+    }
+    async approvePermission(
+        sessionId: string,
+        requestId: string,
+        body: {
+            mode?: PermissionMode
+            allowTools?: string[]
+            decision?: 'approved' | 'approved_for_session' | 'denied' | 'abort'
+            answers?: unknown
+        }
     ): Promise<void> {
-        const token = await this.authenticate()
-        const response = await this.fetchImpl(`${this.baseUrl}/api/pairing/events`, {
-            method: 'GET',
-            headers: {
-                authorization: `Bearer ${token}`,
-            },
-            signal: options.signal,
-        })
-
-        if (response.status === 401 && allowRetry) {
-            this.jwtToken = null
-            await this.streamEventsAttempt(options, false)
-            return
-        }
-
-        if (!response.ok) {
-            const bodyText = await response.text().catch(() => '')
-            throw new Error(parseErrorMessage(response.status, bodyText))
-        }
-
-        const reader = response.body?.getReader()
-        if (!reader) {
-            throw new Error('Pairing event stream did not provide a readable body.')
-        }
-
-        const decoder = new TextDecoder()
-        let buffer = ''
-
-        try {
-            while (true) {
-                const chunk = await reader.read()
-                if (chunk.done) {
-                    return
-                }
-
-                buffer += decoder.decode(chunk.value, { stream: true })
-                let newlineIndex = buffer.indexOf('\n')
-                while (newlineIndex >= 0) {
-                    const rawLine = buffer.slice(0, newlineIndex).trim()
-                    buffer = buffer.slice(newlineIndex + 1)
-
-                    if (rawLine) {
-                        options.onPayload(JSON.parse(rawLine) as PairingEventStreamPayload)
-                    }
-
-                    newlineIndex = buffer.indexOf('\n')
-                }
+        await approvePermission(this.request, sessionId, requestId, body)
+    }
+    async denyPermission(
+        sessionId: string,
+        requestId: string,
+        decision?: 'approved' | 'approved_for_session' | 'denied' | 'abort'
+    ): Promise<void> {
+        await denyPermission(this.request, sessionId, requestId, decision)
+    }
+    async getCommandCapabilities(sessionId: string, revision?: string): Promise<CommandCapabilitiesResponse> {
+        return await getCommandCapabilities(this.request, sessionId, revision)
+    }
+    async getRuntimeAgentAvailability(input: ListAgentAvailabilityRequest = {}): Promise<AgentAvailabilityResponse> {
+        return await getRuntimeAgentAvailability(this.request, input)
+    }
+    async checkRuntimePathsExists(paths: string[]): Promise<{ exists: Record<string, boolean> }> {
+        return await checkRuntimePathsExists(this.request, paths)
+    }
+    async browseRuntimeDirectory(path?: string): Promise<MachineDirectoryResponse> {
+        return await browseRuntimeDirectory(this.request, path)
+    }
+    async resolveAgentLaunchConfig(input: ResolveAgentLaunchConfigRequest): Promise<ResolveAgentLaunchConfigResponse> {
+        return await resolveAgentLaunchConfig(this.request, input)
+    }
+    async listRuntimeLocalSessions(
+        path: string,
+        driver: LocalSessionExportRequest['driver']
+    ): Promise<LocalSessionCatalog> {
+        return await listRuntimeLocalSessions(this.request, path, driver)
+    }
+    async importRuntimeLocalSession(
+        input: LocalSessionExportRequest
+    ): Promise<{ session: Session; imported: boolean }> {
+        return await importRuntimeLocalSession(this.request, input)
+    }
+    async spawnSession(input: PairingPeerSpawnSessionParams): Promise<PairingPeerSpawnSessionResult> {
+        const response = await this.requestJson<PairingPeerSpawnSessionResult | { type: 'success'; sessionId: string }>(
+            '/api/runtime/spawn',
+            {
+                method: 'POST',
+                body: JSON.stringify(input),
             }
-        } finally {
-            await reader.cancel().catch(() => {})
+        )
+        if ('session' in response || response.type === 'error') {
+            return response
         }
+        const view = await this.openSession(response.sessionId)
+        return { type: 'success', session: view.session }
     }
-
-    private async requestJson<T>(path: string, init?: RequestInit, allowRetry: boolean = true): Promise<T> {
-        const token = await this.authenticate()
-        const headers = new Headers(init?.headers)
-        headers.set('authorization', `Bearer ${token}`)
-        if (init?.body && !headers.has('content-type')) {
-            headers.set('content-type', 'application/json')
-        }
-
-        const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
-            ...init,
-            headers,
-        })
-
-        if (response.status === 401 && allowRetry) {
-            this.jwtToken = null
-            return await this.requestJson<T>(path, init, false)
-        }
-
-        const bodyText = await response.text().catch(() => '')
-        if (!response.ok) {
-            throw new Error(parseErrorMessage(response.status, bodyText))
-        }
-
-        return bodyText ? (JSON.parse(bodyText) as T) : ({} as T)
+    async getGitStatus(sessionId: string): Promise<GitCommandResponse> {
+        return await getGitStatus(this.request, sessionId)
     }
-
-    private async authenticate(): Promise<string> {
-        if (this.jwtToken) {
-            return this.jwtToken
-        }
-
-        const response = await this.fetchImpl(`${this.baseUrl}/api/auth`, {
+    async getGitDiffNumstat(sessionId: string, staged: boolean): Promise<GitCommandResponse> {
+        return await getGitDiffNumstat(this.request, sessionId, staged)
+    }
+    async getGitDiffFile(sessionId: string, path: string, staged?: boolean): Promise<GitCommandResponse> {
+        return await getGitDiffFile(this.request, sessionId, path, staged)
+    }
+    async searchSessionFiles(sessionId: string, query: string, limit?: number): Promise<FileSearchResponse> {
+        return await searchSessionFiles(this.request, sessionId, query, limit)
+    }
+    async readSessionFile(sessionId: string, path: string): Promise<FileReadResponse> {
+        return await readSessionFile(this.request, sessionId, path)
+    }
+    async listSessionDirectory(sessionId: string, path?: string): Promise<ListDirectoryResponse> {
+        return await listSessionDirectory(this.request, sessionId, path)
+    }
+    async deleteUploadFile(sessionId: string, path: string): Promise<{ success: boolean; error?: string }> {
+        return await this.requestJson(`/api/sessions/${encodeURIComponent(sessionId)}/upload/delete`, {
             method: 'POST',
-            headers: {
-                'content-type': 'application/json',
-            },
-            body: JSON.stringify({
-                accessToken: this.cliApiToken,
-            }),
+            body: JSON.stringify({ path }),
         })
-
-        const bodyText = await response.text().catch(() => '')
-        if (!response.ok) {
-            throw new Error(parseErrorMessage(response.status, bodyText))
-        }
-
-        const parsed = JSON.parse(bodyText) as { token?: string }
-        if (!parsed.token) {
-            throw new Error('Local Hub auth response did not include a token.')
-        }
-
-        this.jwtToken = parsed.token
-        return parsed.token
+    }
+    async uploadFile(
+        sessionId: string,
+        file: Blob,
+        filename: string,
+        mimeType: string
+    ): Promise<PairingPeerUploadResult> {
+        const formData = new FormData()
+        formData.append('file', file, filename)
+        formData.append('mimeType', mimeType)
+        return await this.requestJson(`/api/sessions/${encodeURIComponent(sessionId)}/upload`, {
+            method: 'POST',
+            body: formData,
+        })
+    }
+    beginUpload(params: PairingPeerUploadStartParams): void {
+        this.uploadManager.begin(params)
+    }
+    cancelUpload(transferId: string): void {
+        this.uploadManager.cancel(transferId)
+    }
+    async acceptUploadChunk(data: unknown): Promise<boolean> {
+        return await this.uploadManager.accept(data)
+    }
+    async completeUpload(params: PairingPeerUploadCompleteParams): Promise<PairingPeerUploadResult> {
+        return await this.uploadManager.complete(
+            params,
+            async (file, filename, mimeType) => await this.uploadFile(params.sessionId, file, filename, mimeType)
+        )
+    }
+    async getPushVapidPublicKey(): Promise<{ publicKey: string }> {
+        return await this.requestJson('/api/push/vapid-public-key')
+    }
+    async subscribePushNotifications(params: PairingPeerPushSubscriptionParams): Promise<void> {
+        await this.requestJson('/api/push/subscribe', { method: 'POST', body: JSON.stringify(params) })
+    }
+    async unsubscribePushNotifications(params: PairingPeerPushUnsubscribeParams): Promise<void> {
+        await this.requestJson('/api/push/subscribe', { method: 'DELETE', body: JSON.stringify(params) })
+    }
+    async openTerminal(
+        params: { sessionId: string; terminalId: string; cols: number; rows: number },
+        emit: (payload: PairingPeerTerminalEventPayload) => void
+    ): Promise<void> {
+        await this.terminalClient.open(params, emit)
+    }
+    writeTerminal(sessionId: string, terminalId: string, data: string): void {
+        this.terminalClient.write(sessionId, terminalId, data)
+    }
+    resizeTerminal(sessionId: string, terminalId: string, cols: number, rows: number): void {
+        this.terminalClient.resize(sessionId, terminalId, cols, rows)
+    }
+    closeTerminal(_sessionId: string, terminalId: string): void {
+        this.terminalClient.close(terminalId)
+    }
+    closeAllTerminals(): void {
+        this.terminalClient.closeAll()
     }
 }

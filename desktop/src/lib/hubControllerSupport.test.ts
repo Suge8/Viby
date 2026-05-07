@@ -1,6 +1,15 @@
 import { describe, expect, it, mock } from 'bun:test'
-import type { DesktopEntryMode, DesktopPairingSession, HubSnapshot } from '@/types'
-import { applyHubSnapshot, createPairingAction, DESKTOP_PREVIEW_MESSAGE, runHubAction } from './hubControllerSupport'
+import type { DesktopPairingSession, HubSnapshot } from '@/types'
+import {
+    applyHubSnapshot,
+    createPairingAction,
+    DESKTOP_PREVIEW_MESSAGE,
+    deletePairingAction,
+    isExpiredUnclaimedPairing,
+    isStalePairingRefreshError,
+    recreatePairingAction,
+    runHubAction,
+} from './hubControllerSupport'
 
 const readySnapshot: HubSnapshot = {
     running: true,
@@ -47,63 +56,44 @@ function createSetterHarness() {
     return {
         snapshot: null as HubSnapshot | null,
         actionError: 'stale',
-        entryMode: 'local' as DesktopEntryMode,
         setSnapshot(next: HubSnapshot | null) {
             this.snapshot = next
         },
         setActionError(next: string | null) {
             this.actionError = next
         },
-        setEntryMode(next: DesktopEntryMode) {
-            this.entryMode = next
-        },
     }
 }
 
 describe('hubControllerSupport', () => {
-    it('applies the initial entry mode from the first snapshot only once', () => {
+    it('applies snapshots without deriving a second entry mode owner', () => {
         const harness = createSetterHarness()
 
         applyHubSnapshot(readySnapshot, {
             setSnapshot: harness.setSnapshot.bind(harness),
             setActionError: harness.setActionError.bind(harness),
-            setEntryMode: harness.setEntryMode.bind(harness),
-            useInitialEntryMode: true,
         })
 
         expect(harness.snapshot).toEqual(readySnapshot)
         expect(harness.actionError).toBeNull()
-        expect(harness.entryMode).toBe('lan')
-    })
-
-    it('updates the live entry mode from the running listen host', () => {
-        const harness = createSetterHarness()
-
-        applyHubSnapshot(readySnapshot, {
-            setSnapshot: harness.setSnapshot.bind(harness),
-            setActionError: harness.setActionError.bind(harness),
-            setEntryMode: harness.setEntryMode.bind(harness),
-        })
-
-        expect(harness.entryMode).toBe('lan')
     })
 
     it('blocks hub actions when the tauri runtime is unavailable', async () => {
         const setBusy = mock(() => undefined)
         const setActionError = mock(() => undefined)
 
-        await runHubAction({
+        const result = await runHubAction({
             tauriRuntimeAvailable: false,
             setBusy,
             setActionError,
             refresh: async () => undefined,
             applySnapshot: () => undefined,
-            clearPairing: () => undefined,
             action: async () => readySnapshot,
         })
 
         expect(setBusy).not.toHaveBeenCalled()
         expect(setActionError).toHaveBeenCalledWith(DESKTOP_PREVIEW_MESSAGE)
+        expect(result).toBe(false)
     })
 
     it('refreshes when a hub action does not return a new snapshot', async () => {
@@ -112,25 +102,24 @@ describe('hubControllerSupport', () => {
         const refresh = mock(async () => undefined)
         const applySnapshotMock = mock(() => undefined)
 
-        await runHubAction({
+        const result = await runHubAction({
             tauriRuntimeAvailable: true,
             setBusy,
             setActionError,
             refresh,
             applySnapshot: applySnapshotMock,
-            clearPairing: () => undefined,
             action: async () => undefined,
         })
 
         expect(refresh).toHaveBeenCalledTimes(1)
         expect(applySnapshotMock).not.toHaveBeenCalled()
         expect(setBusy.mock.calls).toEqual([[true], [false]])
+        expect(result).toBe(true)
     })
 
-    it('clears pairing when a hub action returns a stopped snapshot', async () => {
+    it('keeps pairing state durable when a hub action returns a stopped snapshot', async () => {
         const stoppedSnapshot = { ...readySnapshot, running: false }
         const applySnapshotMock = mock(() => undefined)
-        const clearPairing = mock(() => undefined)
 
         await runHubAction({
             tauriRuntimeAvailable: true,
@@ -138,12 +127,10 @@ describe('hubControllerSupport', () => {
             setActionError: () => undefined,
             refresh: async () => undefined,
             applySnapshot: applySnapshotMock,
-            clearPairing,
             action: async () => stoppedSnapshot,
         })
 
         expect(applySnapshotMock).toHaveBeenCalledWith(stoppedSnapshot)
-        expect(clearPairing).toHaveBeenCalledTimes(1)
     })
 
     it('reports pairing creation failures through the shared preview/error flow', async () => {
@@ -164,5 +151,104 @@ describe('hubControllerSupport', () => {
         expect(setActionError).toHaveBeenCalledWith('boom')
         expect(setPairing).not.toHaveBeenCalledWith(pairingFixture)
         expect(setBusy.mock.calls).toEqual([[true], [false]])
+    })
+
+    it('regenerates pairing when stale broker delete fails', async () => {
+        const setBusy = mock(() => undefined)
+        const setActionError = mock(() => undefined)
+        const setPairing = mock(() => undefined)
+        const nextPairing = { ...pairingFixture, hostToken: 'host-token-2' }
+
+        const regenerated = await recreatePairingAction({
+            tauriRuntimeAvailable: true,
+            pairing: pairingFixture,
+            setBusy,
+            setActionError,
+            setPairing,
+            deletePairingSession: async () => {
+                throw new Error('Invalid pairing token')
+            },
+            createPairingSession: async () => nextPairing,
+        })
+
+        expect(regenerated).toBe(true)
+        expect(setPairing).toHaveBeenCalledWith(nextPairing)
+        expect(setActionError).toHaveBeenCalledWith(null)
+        expect(setBusy.mock.calls).toEqual([[true], [false]])
+    })
+
+    it('clears local binding when explicit delete sees a stale broker session', async () => {
+        const clearPairing = mock(async () => undefined)
+
+        await deletePairingAction({
+            tauriRuntimeAvailable: true,
+            pairing: pairingFixture,
+            setBusy: () => undefined,
+            setActionError: () => undefined,
+            clearPairing,
+            deletePairingSession: async () => {
+                throw new Error('Pairing session not found')
+            },
+        })
+
+        expect(clearPairing).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not clear local binding when explicit delete hits an unknown failure', async () => {
+        const clearPairing = mock(async () => undefined)
+        const setActionError = mock(() => undefined)
+
+        await deletePairingAction({
+            tauriRuntimeAvailable: true,
+            pairing: pairingFixture,
+            setBusy: () => undefined,
+            setActionError,
+            clearPairing,
+            deletePairingSession: async () => {
+                throw new Error('network down')
+            },
+        })
+
+        expect(clearPairing).not.toHaveBeenCalled()
+        expect(setActionError).toHaveBeenCalledWith('network down')
+    })
+
+    it('detects expired unclaimed QR invites without killing claimed devices', () => {
+        expect(isExpiredUnclaimedPairing(pairingFixture, 3)).toBe(true)
+        expect(
+            isExpiredUnclaimedPairing(
+                {
+                    ...pairingFixture,
+                    pairing: { ...pairingFixture.pairing, guest: { label: 'Phone' } },
+                },
+                3
+            )
+        ).toBe(false)
+    })
+
+    it('classifies expired persisted pairing sessions as refresh-stale', () => {
+        expect(isStalePairingRefreshError(new Error('Pairing session no longer active'))).toBe(true)
+        expect(isStalePairingRefreshError(new Error('network down'))).toBe(false)
+    })
+
+    it('does not hide unexpected pairing delete failures', async () => {
+        const setPairing = mock(() => undefined)
+        const setActionError = mock(() => undefined)
+
+        const regenerated = await recreatePairingAction({
+            tauriRuntimeAvailable: true,
+            pairing: pairingFixture,
+            setBusy: () => undefined,
+            setActionError,
+            setPairing,
+            deletePairingSession: async () => {
+                throw new Error('network down')
+            },
+            createPairingSession: async () => pairingFixture,
+        })
+
+        expect(regenerated).toBe(false)
+        expect(setActionError).toHaveBeenCalledWith('network down')
+        expect(setPairing).not.toHaveBeenCalled()
     })
 })

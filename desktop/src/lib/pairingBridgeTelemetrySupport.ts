@@ -1,7 +1,8 @@
+import { PAIRING_TELEMETRY_REPORT_INTERVAL_MS } from '@viby/protocol/pairing'
 import type { DesktopPairingSession, PairingBridgeStats } from '@/types'
 import { postPairingTelemetry } from './pairingBridgeTransportSupport'
 
-const TELEMETRY_REPORT_INTERVAL_MS = 60_000
+const TELEMETRY_REPORT_INTERVAL_MS = PAIRING_TELEMETRY_REPORT_INTERVAL_MS
 
 export function createPairingTelemetryPublisher(pairing: DesktopPairingSession) {
     let lastTelemetrySignature: string | null = null

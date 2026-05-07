@@ -26,6 +26,7 @@ function createSessionRecord(id: string) {
         thinking: false,
         thinkingAt: 1,
         model: 'gpt-5.4',
+        codexServiceTier: null,
         modelReasoningEffort: 'high' as const,
         permissionMode: 'safe-yolo' as const,
         collaborationMode: 'default' as const,
@@ -221,6 +222,168 @@ describe('pairingBridgeCore extra request coverage', () => {
         })
     })
 
+    it('maps runtime project creation requests through the desktop Hub owner', async () => {
+        const createdSession = createSessionRecord('session-created')
+        const client = {
+            getRuntimeAgentAvailability: async (input: { directory?: string }) => {
+                expect(input).toEqual({ directory: '/repo' })
+                return { agents: [] }
+            },
+            checkRuntimePathsExists: async (paths: string[]) => {
+                expect(paths).toEqual(['/repo'])
+                return { exists: { '/repo': true } }
+            },
+            browseRuntimeDirectory: async (path?: string) => {
+                expect(path).toBe('/repo')
+                return {
+                    success: true,
+                    currentPath: '/repo',
+                    parentPath: null,
+                    entries: [{ name: 'app', path: '/repo/app', type: 'directory' as const }],
+                    roots: [],
+                }
+            },
+            resolveAgentLaunchConfig: async (input: { agent: string; directory: string }) => {
+                expect(input).toEqual({ agent: 'codex', directory: '/repo' })
+                return { type: 'error' as const, message: 'missing model' }
+            },
+            spawnSession: async (input: { agent?: string; directory: string }) => {
+                expect(input).toEqual({ agent: 'codex', directory: '/repo' })
+                return { type: 'success' as const, session: createdSession }
+            },
+        }
+
+        await expect(
+            executePairingPeerRequest(
+                client as never,
+                parseRequest({
+                    kind: 'request',
+                    id: 'runtime-availability',
+                    method: 'runtime.agent-availability',
+                    params: { directory: '/repo' },
+                })
+            )
+        ).resolves.toMatchObject({ ok: true, result: { agents: [] } })
+
+        await expect(
+            executePairingPeerRequest(
+                client as never,
+                parseRequest({
+                    kind: 'request',
+                    id: 'runtime-paths',
+                    method: 'runtime.paths-exists',
+                    params: { paths: ['/repo'] },
+                })
+            )
+        ).resolves.toMatchObject({ ok: true, result: { exists: { '/repo': true } } })
+
+        await expect(
+            executePairingPeerRequest(
+                client as never,
+                parseRequest({
+                    kind: 'request',
+                    id: 'runtime-browse',
+                    method: 'runtime.browse-directory',
+                    params: { path: '/repo' },
+                })
+            )
+        ).resolves.toMatchObject({ ok: true, result: { success: true, currentPath: '/repo' } })
+
+        await expect(
+            executePairingPeerRequest(
+                client as never,
+                parseRequest({
+                    kind: 'request',
+                    id: 'runtime-config',
+                    method: 'runtime.agent-launch-config',
+                    params: { agent: 'codex', directory: '/repo' },
+                })
+            )
+        ).resolves.toMatchObject({ ok: true, result: { type: 'error', message: 'missing model' } })
+
+        await expect(
+            executePairingPeerRequest(
+                client as never,
+                parseRequest({
+                    kind: 'request',
+                    id: 'runtime-spawn',
+                    method: 'runtime.spawn',
+                    params: { agent: 'codex', directory: '/repo' },
+                })
+            )
+        ).resolves.toMatchObject({ ok: true, result: { type: 'success', session: { id: 'session-created' } } })
+    })
+
+    it('maps mobile management and workspace requests through the local Hub owner', async () => {
+        const closedSession = { ...createSessionRecord('session-control'), active: false }
+        const client = {
+            closeSession: async (sessionId: string) => {
+                expect(sessionId).toBe('session-control')
+                return closedSession
+            },
+            renameSession: async (sessionId: string, name: string) => {
+                expect([sessionId, name]).toEqual(['session-control', 'Renamed'])
+                return { ...closedSession, metadata: { ...closedSession.metadata, name } }
+            },
+            getGitStatus: async (sessionId: string) => {
+                expect(sessionId).toBe('session-control')
+                return { success: true, stdout: ' M file.ts' }
+            },
+            readSessionFile: async (sessionId: string, path: string) => {
+                expect([sessionId, path]).toEqual(['session-control', 'file.ts'])
+                return { success: true, content: 'hello' }
+            },
+        }
+
+        await expect(
+            executePairingPeerRequest(
+                client as never,
+                parseRequest({
+                    kind: 'request',
+                    id: 'control-close',
+                    method: 'session.close',
+                    params: { sessionId: 'session-control' },
+                })
+            )
+        ).resolves.toMatchObject({ ok: true, result: { session: { id: 'session-control', active: false } } })
+
+        await expect(
+            executePairingPeerRequest(
+                client as never,
+                parseRequest({
+                    kind: 'request',
+                    id: 'control-rename',
+                    method: 'session.rename',
+                    params: { sessionId: 'session-control', name: 'Renamed' },
+                })
+            )
+        ).resolves.toMatchObject({ ok: true, result: { session: { metadata: { name: 'Renamed' } } } })
+
+        await expect(
+            executePairingPeerRequest(
+                client as never,
+                parseRequest({
+                    kind: 'request',
+                    id: 'workspace-status',
+                    method: 'workspace.git-status',
+                    params: { sessionId: 'session-control' },
+                })
+            )
+        ).resolves.toMatchObject({ ok: true, result: { success: true, stdout: ' M file.ts' } })
+
+        await expect(
+            executePairingPeerRequest(
+                client as never,
+                parseRequest({
+                    kind: 'request',
+                    id: 'workspace-read',
+                    method: 'workspace.read-file',
+                    params: { sessionId: 'session-control', path: 'file.ts' },
+                })
+            )
+        ).resolves.toMatchObject({ ok: true, result: { success: true, content: 'hello' } })
+    })
+
     it('returns a typed pairing error payload when the local Hub request fails', async () => {
         const client = {
             openSession: async () => {
@@ -268,5 +431,93 @@ describe('pairingBridgeCore extra request coverage', () => {
                 sessions: [],
             },
         })
+    })
+
+    it('routes upload, terminal and push requests to the desktop Local Hub owner', async () => {
+        const terminalEvents: unknown[] = []
+        const client = {
+            beginUpload: (params: { transferId: string }) => {
+                expect(params.transferId).toBe('00000000-0000-4000-8000-000000000001')
+            },
+            completeUpload: async () => ({ success: true, path: '/tmp/uploaded.png' }),
+            openTerminal: async (_params: unknown, emit: (event: unknown) => void) => {
+                emit({ type: 'ready', terminalId: 'terminal-1' })
+            },
+            writeTerminal: (sessionId: string, terminalId: string, data: string) => {
+                expect({ sessionId, terminalId, data }).toEqual({
+                    sessionId: 'session-1',
+                    terminalId: 'terminal-1',
+                    data: 'ls\n',
+                })
+            },
+            getPushVapidPublicKey: async () => ({ publicKey: 'vapid' }),
+            subscribePushNotifications: async (params: { endpoint: string }) => {
+                expect(params.endpoint).toBe('https://push.example')
+            },
+        }
+
+        await expect(
+            executePairingPeerRequest(
+                client as never,
+                parseRequest({
+                    kind: 'request',
+                    id: 'upload-start',
+                    method: 'session.upload-start',
+                    params: {
+                        sessionId: 'session-1',
+                        transferId: '00000000-0000-4000-8000-000000000001',
+                        filename: 'image.png',
+                        mimeType: 'image/png',
+                        size: 1,
+                    },
+                })
+            )
+        ).resolves.toMatchObject({ ok: true })
+        await expect(
+            executePairingPeerRequest(
+                client as never,
+                parseRequest({
+                    kind: 'request',
+                    id: 'upload-complete',
+                    method: 'session.upload-complete',
+                    params: { sessionId: 'session-1', transferId: '00000000-0000-4000-8000-000000000001' },
+                })
+            )
+        ).resolves.toMatchObject({ ok: true, result: { success: true } })
+        await executePairingPeerRequest(
+            client as never,
+            parseRequest({
+                kind: 'request',
+                id: 'terminal-open',
+                method: 'terminal.open',
+                params: { sessionId: 'session-1', terminalId: 'terminal-1', cols: 80, rows: 24 },
+            }),
+            { emitTerminalEvent: (event) => terminalEvents.push(event) }
+        )
+        await executePairingPeerRequest(
+            client as never,
+            parseRequest({
+                kind: 'request',
+                id: 'terminal-write',
+                method: 'terminal.write',
+                params: { sessionId: 'session-1', terminalId: 'terminal-1', data: 'ls\n' },
+            })
+        )
+        await expect(
+            executePairingPeerRequest(
+                client as never,
+                parseRequest({ kind: 'request', id: 'push-key', method: 'push.vapid-public-key', params: {} })
+            )
+        ).resolves.toMatchObject({ ok: true, result: { publicKey: 'vapid' } })
+        await executePairingPeerRequest(
+            client as never,
+            parseRequest({
+                kind: 'request',
+                id: 'push-subscribe',
+                method: 'push.subscribe',
+                params: { endpoint: 'https://push.example', keys: { p256dh: 'p', auth: 'a' } },
+            })
+        )
+        expect(terminalEvents).toEqual([{ type: 'ready', terminalId: 'terminal-1' }])
     })
 })

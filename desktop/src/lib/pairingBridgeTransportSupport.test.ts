@@ -21,10 +21,10 @@ const basePairing: DesktopPairingSession = {
     iceServers: [],
 }
 
-const relayStats: PairingBridgeStats = {
-    transport: 'relay',
-    localCandidateType: 'relay',
-    remoteCandidateType: 'relay',
+const directStats: PairingBridgeStats = {
+    transport: 'direct',
+    localCandidateType: 'host',
+    remoteCandidateType: 'srflx',
     currentRoundTripTimeMs: 85,
     restartCount: 2,
 }
@@ -45,7 +45,7 @@ describe('pairingBridgeTransportSupport', () => {
             expect(JSON.parse(String(init?.body))).toMatchObject({
                 sample: {
                     source: 'desktop',
-                    transport: 'relay',
+                    transport: 'direct',
                     restartCount: 2,
                     sampledAt: 1_700_000_000_000,
                 },
@@ -55,7 +55,7 @@ describe('pairingBridgeTransportSupport', () => {
         })
         globalThis.fetch = fetchMock as typeof fetch
 
-        await postPairingTelemetry(basePairing, relayStats, 1_700_000_000_000)
+        await postPairingTelemetry(basePairing, directStats, 1_700_000_000_000)
 
         expect(fetchMock).toHaveBeenCalledTimes(1)
     })

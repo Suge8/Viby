@@ -1,8 +1,9 @@
+import { PAIRING_STATS_POLL_INTERVAL_MS } from '@viby/protocol/pairing'
 import type { PairingBridgeState, PairingBridgeStats } from '@/types'
 import { runPairingBridgeTask } from './pairingBridgeRuntimeSupport'
 import { readPairingBridgeStats } from './pairingBridgeSupport'
 
-const STATS_POLL_INTERVAL_MS = 10_000
+const STATS_POLL_INTERVAL_MS = PAIRING_STATS_POLL_INTERVAL_MS
 
 type BridgeStateSetter = (
     state: Omit<PairingBridgeState, 'pairing'> & {
@@ -27,8 +28,10 @@ export function createPairingBridgeStatsController(options: {
     getSignalSocket: () => WebSocket | null
     getRestartCount: () => number
     incrementRestartCount: () => number
+    canRestartIce: () => boolean
     resetOfferState: () => void
     setBridgeState: BridgeStateSetter
+    setBridgeStats: (stats: PairingBridgeStats) => void
     ensureOffer: (activePeer: RTCPeerConnection) => Promise<void>
     publishPairingTelemetry: (stats: PairingBridgeStats) => Promise<void>
     scheduleReconnect: (message: string) => void
@@ -45,12 +48,7 @@ export function createPairingBridgeStatsController(options: {
 
     async function samplePairingStats(activePeer: RTCPeerConnection): Promise<void> {
         const stats = await readPairingBridgeStats(activePeer, options.getRestartCount())
-        const activeChannel = options.getChannel()
-        options.setBridgeState({
-            phase: activeChannel?.readyState === 'open' ? 'ready' : 'connecting',
-            message: activeChannel?.readyState === 'open' ? '手机链路已接通。' : '正在建立点对点链路。',
-            stats,
-        })
+        options.setBridgeStats(stats)
         try {
             await options.publishPairingTelemetry(stats)
         } catch {}
@@ -74,6 +72,9 @@ export function createPairingBridgeStatsController(options: {
         const activePeer = options.getPeer()
         const signalSocket = options.getSignalSocket()
         if (!activePeer || !signalSocket || signalSocket.readyState !== WebSocket.OPEN || options.isDisposed()) {
+            return false
+        }
+        if (!options.canRestartIce()) {
             return false
         }
 

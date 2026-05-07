@@ -27,6 +27,7 @@ describe('pairingBridgeCore', () => {
                     resumeStrategy: 'provider-handle',
                     model: 'gpt-5.4',
                     modelReasoningEffort: 'high',
+                    codexServiceTier: null,
                 },
             ],
         }

@@ -1,4 +1,24 @@
-import type { DesktopPairingSession, PairingBridgeStats, PairingSessionSnapshot } from '@/types'
+import {
+    buildPairingLinkPresentation,
+    describePairingLinkTransport,
+    formatPairingRoundTripTime,
+    resolvePairingLinkTransport,
+    resolvePairingSelectedCandidatePairStats,
+} from '@viby/protocol/pairing'
+import type { DesktopPairingSession, PairingBridgeState, PairingBridgeStats, PairingSessionSnapshot } from '@/types'
+import { PAIRING_PHONE_PAUSED_MESSAGE } from './pairingBridgeRecovery'
+
+export type PairingConnectionKind = 'empty' | 'invite' | 'bound'
+
+export interface PairingConnectionSummary {
+    connected: boolean
+    deviceCount: number
+    title: string
+    detail: string
+    kind: PairingConnectionKind
+    actionLabel: string
+    removable: boolean
+}
 
 export function toIceServers(servers: DesktopPairingSession['iceServers']): RTCIceServer[] {
     return servers.map((server) => ({
@@ -26,17 +46,119 @@ export function describePairingConnectionState(state: RTCPeerConnectionState): s
 }
 
 export function describePairingTransport(stats: PairingBridgeStats | null): string {
+    return describePairingLinkTransport(stats)
+}
+
+export function describePairingTransportBadge(stats: PairingBridgeStats | null): string | null {
     if (!stats) {
-        return '采样中'
+        return null
     }
 
-    switch (stats.transport) {
-        case 'relay':
-            return 'TURN Relay'
-        case 'direct':
-            return 'P2P Direct'
-        default:
-            return '未知'
+    const label = describePairingTransport(stats)
+    const latency = formatPairingRoundTripTime(stats.currentRoundTripTimeMs)
+    return latency ? `${label} · ${latency}` : label
+}
+
+export function buildPairingConnectionSummary(input: {
+    phase: PairingBridgeState['phase']
+    pairing: PairingSessionSnapshot | null
+    stats?: PairingBridgeStats | null
+}): PairingConnectionSummary {
+    if (input.phase === 'ready') {
+        const label = input.pairing?.guest?.label ?? '手机'
+        const stats = input.stats ?? null
+        const transport = buildPairingLinkPresentation(stats).title
+        return {
+            connected: true,
+            deviceCount: 1,
+            title: '已连接',
+            detail: `${label} · ${transport}`,
+            kind: 'bound',
+            actionLabel: '连接已就绪',
+            removable: true,
+        }
+    }
+
+    if (input.phase === 'paused' && input.pairing?.guest) {
+        return {
+            connected: false,
+            deviceCount: 1,
+            title: '手机在后台',
+            detail: PAIRING_PHONE_PAUSED_MESSAGE,
+            kind: 'bound',
+            actionLabel: '等待手机回来',
+            removable: true,
+        }
+    }
+
+    if (input.phase === 'connecting' && input.pairing?.guest) {
+        return {
+            connected: false,
+            deviceCount: 1,
+            title: '正在接回手机',
+            detail: `${input.pairing.guest.label ?? '手机'} · 安全链路重建中`,
+            kind: 'bound',
+            actionLabel: '正在接回',
+            removable: true,
+        }
+    }
+
+    if (input.phase === 'error' && input.pairing?.guest) {
+        return {
+            connected: false,
+            deviceCount: 1,
+            title: '手机暂时离线',
+            detail: '打开手机页面后会自动接回',
+            kind: 'bound',
+            actionLabel: '等待自动接回',
+            removable: true,
+        }
+    }
+
+    if (input.pairing?.guest && input.pairing.approvalStatus === 'approved') {
+        return {
+            connected: false,
+            deviceCount: 1,
+            title: '已绑定手机',
+            detail: `${input.pairing.guest.label ?? '手机'} · 打开 Viby 后自动接回`,
+            kind: 'bound',
+            actionLabel: '已绑定',
+            removable: true,
+        }
+    }
+
+    if (input.pairing) {
+        return {
+            connected: false,
+            deviceCount: 0,
+            title: input.pairing.guest ? '等待连接码' : '等待扫码',
+            detail: input.pairing.guest ? '手机已扫码，输入连接码完成绑定' : '二维码已准备好',
+            kind: 'invite',
+            actionLabel: '显示二维码',
+            removable: false,
+        }
+    }
+
+    if (input.phase === 'error') {
+        return {
+            connected: false,
+            deviceCount: 0,
+            title: '连接异常',
+            detail: '稍后再连接手机',
+            kind: 'empty',
+            actionLabel: '连接手机',
+            removable: false,
+        }
+    }
+
+    return {
+        connected: false,
+        deviceCount: 0,
+        title: '未连接',
+        detail: '等待手机扫码',
+        kind: 'empty',
+        actionLabel: '连接手机',
+        removable: false,
     }
 }
 
@@ -45,20 +167,9 @@ export async function readPairingBridgeStats(
     restartCount: number
 ): Promise<PairingBridgeStats> {
     const report = await peer.getStats()
-    let selectedPair: RTCStats | null = null
+    const selected = resolvePairingSelectedCandidatePairStats(report)
 
-    report.forEach((stat) => {
-        if (stat.type !== 'candidate-pair') {
-            return
-        }
-
-        const candidatePair = stat as RTCIceCandidatePairStats & { selected?: boolean }
-        if (candidatePair.selected === true || (candidatePair.nominated && candidatePair.state === 'succeeded')) {
-            selectedPair = candidatePair
-        }
-    })
-
-    if (!selectedPair) {
+    if (!selected) {
         return {
             transport: 'unknown',
             localCandidateType: null,
@@ -68,25 +179,13 @@ export async function readPairingBridgeStats(
         }
     }
 
-    const pairStats = selectedPair as RTCIceCandidatePairStats
-    const localStats = pairStats.localCandidateId ? report.get(pairStats.localCandidateId) : null
-    const remoteStats = pairStats.remoteCandidateId ? report.get(pairStats.remoteCandidateId) : null
-    const localCandidateType =
-        localStats && 'candidateType' in localStats && typeof localStats.candidateType === 'string'
-            ? localStats.candidateType
-            : null
-    const remoteCandidateType =
-        remoteStats && 'candidateType' in remoteStats && typeof remoteStats.candidateType === 'string'
-            ? remoteStats.candidateType
-            : null
-
     return {
-        transport: localCandidateType === 'relay' || remoteCandidateType === 'relay' ? 'relay' : 'direct',
-        localCandidateType,
-        remoteCandidateType,
+        transport: resolvePairingLinkTransport(selected),
+        localCandidateType: selected.localCandidateType,
+        remoteCandidateType: selected.remoteCandidateType,
         currentRoundTripTimeMs:
-            typeof pairStats.currentRoundTripTime === 'number'
-                ? Math.round(pairStats.currentRoundTripTime * 1000)
+            typeof selected.pair.currentRoundTripTime === 'number'
+                ? Math.round(selected.pair.currentRoundTripTime * 1000)
                 : null,
         restartCount,
     }
@@ -98,13 +197,11 @@ export function describePairingSnapshotMessage(pairing: PairingSessionSnapshot):
     }
 
     if (pairing.approvalStatus === 'pending') {
-        return pairing.shortCode
-            ? `手机已扫码，请核对确认码 ${pairing.shortCode} 后批准接入。`
-            : '手机已扫码，等待桌面批准接入。'
+        return pairing.shortCode ? `手机已扫码，等待输入连接码 ${pairing.shortCode}。` : '手机已扫码，等待输入连接码。'
     }
 
     if (pairing.approvalStatus === 'approved') {
-        return '桌面已批准接入，正在建立点对点链路。'
+        return '正在连接手机。'
     }
 
     return '等待手机接入。'

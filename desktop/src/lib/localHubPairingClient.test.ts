@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test'
+import { afterEach, describe, expect, it } from 'bun:test'
 import { LocalHubPairingClient } from './localHubPairingClient'
 
 function jsonResponse(body: unknown, init?: ResponseInit): Response {
@@ -11,6 +11,12 @@ function jsonResponse(body: unknown, init?: ResponseInit): Response {
 }
 
 describe('LocalHubPairingClient', () => {
+    const originalFetch = globalThis.fetch
+
+    afterEach(() => {
+        globalThis.fetch = originalFetch
+    })
+
     it('reauthenticates once after a 401 and retries the request', async () => {
         const calls: string[] = []
         const fetchImpl = async (input: string | URL, init?: RequestInit): Promise<Response> => {
@@ -78,5 +84,71 @@ describe('LocalHubPairingClient', () => {
             { type: 'heartbeat', at: 1 },
             { type: 'event', event: { type: 'session-removed', sessionId: 'session-1' } },
         ])
+    })
+
+    it('binds the default global fetch so browser runtimes do not throw illegal invocation', async () => {
+        globalThis.fetch = async function (
+            this: typeof globalThis | undefined,
+            input: string | URL
+        ): Promise<Response> {
+            if (this !== globalThis) {
+                throw new Error('illegal invocation')
+            }
+
+            const url = String(input)
+            if (url.endsWith('/api/auth')) {
+                return jsonResponse({ token: 'jwt-1' })
+            }
+
+            return jsonResponse({ sessions: [] })
+        } as typeof fetch
+
+        const client = new LocalHubPairingClient({
+            baseUrl: 'http://127.0.0.1:37173',
+            cliApiToken: 'cli-token',
+        })
+
+        await expect(client.listSessions()).resolves.toEqual([])
+    })
+
+    it('forwards runtime project requests to the authenticated local Hub API', async () => {
+        const calls: Array<{ url: string; body?: string }> = []
+        const fetchImpl = async (input: string | URL, init?: RequestInit): Promise<Response> => {
+            const url = String(input)
+            calls.push({ url, body: init?.body as string | undefined })
+            if (url.endsWith('/api/auth')) {
+                return jsonResponse({ token: 'jwt-1' })
+            }
+            if (url.includes('/api/runtime/directory')) {
+                return jsonResponse({ success: true, currentPath: '/repo', entries: [], roots: [] })
+            }
+            if (url.endsWith('/api/runtime/paths/exists')) {
+                return jsonResponse({ exists: { '/repo': true } })
+            }
+            if (url.endsWith('/api/runtime/spawn')) {
+                return jsonResponse({ type: 'success', sessionId: 'session-1' })
+            }
+            if (url.endsWith('/api/sessions/session-1/view')) {
+                return jsonResponse({ session: { id: 'session-1' }, latestWindow: { messages: [] } })
+            }
+            return jsonResponse({})
+        }
+        const client = new LocalHubPairingClient({
+            baseUrl: 'http://127.0.0.1:37173',
+            cliApiToken: 'cli-token',
+            fetchImpl: fetchImpl as typeof fetch,
+        })
+
+        await expect(client.browseRuntimeDirectory('/repo')).resolves.toMatchObject({ success: true })
+        await expect(client.checkRuntimePathsExists(['/repo'])).resolves.toEqual({ exists: { '/repo': true } })
+        await expect(client.spawnSession({ directory: '/repo', agent: 'codex' })).resolves.toEqual({
+            type: 'success',
+            session: { id: 'session-1' },
+        })
+
+        expect(calls.map((call) => call.url)).toContain('http://127.0.0.1:37173/api/runtime/directory?path=%2Frepo')
+        expect(calls.find((call) => call.url.endsWith('/api/runtime/paths/exists'))?.body).toBe(
+            JSON.stringify({ paths: ['/repo'] })
+        )
     })
 })
