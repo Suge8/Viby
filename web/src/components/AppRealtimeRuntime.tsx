@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useMatchRoute, useRouter } from '@tanstack/react-router'
 import { type JSX, lazy, Suspense, useCallback, useEffect, useMemo, useRef } from 'react'
 import type { ApiClient } from '@/api/client'
+import { AppInstallPromptLayer } from '@/components/AppInstallPromptLayer'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 import { useRealtimeConnection } from '@/hooks/useRealtimeConnection'
 import { type RealtimeBannerState, useRealtimeFeedback } from '@/hooks/useRealtimeFeedback'
@@ -28,13 +29,7 @@ async function loadAppFloatingNoticeLayerModule() {
     return { default: module.AppFloatingNoticeLayer }
 }
 
-async function loadInstallPromptModule() {
-    const module = await import('@/components/InstallPrompt')
-    return { default: module.InstallPrompt }
-}
-
 const LazyAppFloatingNoticeLayer = lazy(loadAppFloatingNoticeLayerModule)
-const LazyInstallPrompt = lazy(loadInstallPromptModule)
 
 type ToastEvent = Extract<SyncEvent, { type: 'toast' }>
 type RealtimeConnectDetails = {
@@ -263,11 +258,7 @@ export function AppRealtimeRuntime(props: AppRealtimeRuntimeProps): JSX.Element 
             <Suspense fallback={null}>
                 <LazyAppFloatingNoticeLayer api={props.api} banner={banner} />
             </Suspense>
-            {!installPromptSuppressed ? (
-                <Suspense fallback={null}>
-                    <LazyInstallPrompt suppressed={false} />
-                </Suspense>
-            ) : null}
+            {!installPromptSuppressed ? <AppInstallPromptLayer /> : null}
         </>
     )
 }

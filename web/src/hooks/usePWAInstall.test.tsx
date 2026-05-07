@@ -45,6 +45,8 @@ function createBeforeInstallPromptEvent(outcome: 'accepted' | 'dismissed' = 'acc
 
 describe('usePWAInstall', () => {
     const originalUserAgent = window.navigator.userAgent
+    const originalPlatform = window.navigator.platform
+    const originalMaxTouchPoints = window.navigator.maxTouchPoints
     const originalStandalone = (window.navigator as Navigator & { standalone?: boolean }).standalone
     const originalMatchMedia = window.matchMedia
 
@@ -55,6 +57,14 @@ describe('usePWAInstall', () => {
         Object.defineProperty(window.navigator, 'standalone', {
             configurable: true,
             value: false,
+        })
+        Object.defineProperty(window.navigator, 'platform', {
+            configurable: true,
+            value: 'MacIntel',
+        })
+        Object.defineProperty(window.navigator, 'maxTouchPoints', {
+            configurable: true,
+            value: 0,
         })
         Object.defineProperty(window.navigator, 'userAgent', {
             configurable: true,
@@ -72,6 +82,14 @@ describe('usePWAInstall', () => {
         Object.defineProperty(window.navigator, 'standalone', {
             configurable: true,
             value: originalStandalone,
+        })
+        Object.defineProperty(window.navigator, 'platform', {
+            configurable: true,
+            value: originalPlatform,
+        })
+        Object.defineProperty(window.navigator, 'maxTouchPoints', {
+            configurable: true,
+            value: originalMaxTouchPoints,
         })
         Object.defineProperty(window, 'matchMedia', {
             configurable: true,
@@ -108,10 +126,32 @@ describe('usePWAInstall', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'dismiss' }))
 
-        expect(window.localStorage.getItem('pwa_install_dismissed')).toBe('true')
+        expect(Number(window.localStorage.getItem('pwa_install_dismissed'))).toBeGreaterThan(0)
         await waitFor(() => {
             expect(screen.getByTestId('platform')).toHaveTextContent('none')
         })
+    })
+
+    it('expires dismissed install state after three days', async () => {
+        const fourDaysAgo = Date.now() - 4 * 24 * 60 * 60 * 1_000
+        window.localStorage.setItem('pwa_install_dismissed', String(fourDaysAgo))
+
+        render(<InstallProbe />)
+        window.dispatchEvent(createBeforeInstallPromptEvent('dismissed'))
+
+        await waitFor(() => {
+            expect(screen.getByTestId('platform')).toHaveTextContent('native')
+        })
+    })
+
+    it('migrates old dismissed install state to a three-day timestamp', async () => {
+        window.localStorage.setItem('pwa_install_dismissed', 'true')
+
+        render(<InstallProbe />)
+        window.dispatchEvent(createBeforeInstallPromptEvent('dismissed'))
+
+        expect(screen.getByTestId('platform')).toHaveTextContent('none')
+        expect(Number(window.localStorage.getItem('pwa_install_dismissed'))).toBeGreaterThan(0)
     })
 
     it('treats iOS Safari browser mode as manual install guidance', async () => {
@@ -125,6 +165,23 @@ describe('usePWAInstall', () => {
         await waitFor(() => {
             expect(screen.getByTestId('platform')).toHaveTextContent('ios')
             expect(screen.getByTestId('standalone')).toHaveTextContent('false')
+        })
+    })
+
+    it('treats iPadOS desktop browser mode as manual install guidance', async () => {
+        Object.defineProperty(window.navigator, 'userAgent', {
+            configurable: true,
+            value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+        })
+        Object.defineProperty(window.navigator, 'maxTouchPoints', {
+            configurable: true,
+            value: 5,
+        })
+
+        render(<InstallProbe />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId('platform')).toHaveTextContent('ios')
         })
     })
 

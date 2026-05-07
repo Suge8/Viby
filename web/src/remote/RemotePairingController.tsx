@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useLocation, useRouter } from '@tanstack/react-router'
 import { hasPairingWorkspaceIntent, withPairingWorkspaceIntent } from '@viby/protocol'
 import { type JSX, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { AppInstallPromptLayer } from '@/components/AppInstallPromptLayer'
 import { useFinalizeBootShell } from '@/hooks/useFinalizeBootShell'
 import { subscribeForegroundPulse } from '@/lib/foregroundPulse'
 import { type Notice, useNoticeCenter, usePersistentNotice } from '@/lib/notice-center'
@@ -11,13 +12,7 @@ import { useTranslation } from '@/lib/use-translation'
 import { type RemotePairingReadyConnection, RemotePairingReadyShell } from '@/remote/RemotePairingReadyShell'
 import { RemotePairingCodeScreen, RemotePairingStatusScreen } from '@/remote/RemotePairingScreens'
 import { isRemotePairingApproved, resolveRemotePairingAuth } from '@/remote/remotePairingAuthFlow'
-import {
-    clearStoredGuestToken,
-    getPairingTicketFromLocation,
-    type PairingRemoteAuth,
-    rememberRemotePairingId,
-    verifyRemotePairingCode,
-} from '@/remote/remotePairingHttp'
+import { type PairingRemoteAuth, rememberRemotePairingId, verifyRemotePairingCode } from '@/remote/remotePairingHttp'
 import { pauseRemotePairingQueries, resumeRemotePairingQueries } from '@/remote/remotePairingQueryOnlineState'
 import {
     createRemotePairingReconnectLoop,
@@ -46,11 +41,7 @@ type RemoteState =
     | { kind: 'error'; errorKey: RemotePairingErrorKey }
 
 type RemotePairingControllerProps = { pairingId: string }
-export function RemotePairingController(props: RemotePairingControllerProps): JSX.Element {
-    return <RemotePairingControllerInner pairingId={props.pairingId} />
-}
-
-function RemotePairingControllerInner(props: RemotePairingControllerProps): JSX.Element | null {
+export function RemotePairingController(props: RemotePairingControllerProps): JSX.Element | null {
     const router = useRouter()
     const queryClient = useQueryClient()
     const pathname = useLocation({ select: (location) => location.pathname })
@@ -191,9 +182,6 @@ function RemotePairingControllerInner(props: RemotePairingControllerProps): JSX.
                 scheduleReconnect()
                 return
             }
-            if (!getPairingTicketFromLocation()) {
-                clearStoredGuestToken(props.pairingId)
-            }
             clearRetainedReady()
             setState({ kind: 'error', errorKey: getRemotePairingErrorKeyOrFallback(error) })
         })
@@ -271,19 +259,29 @@ function RemotePairingControllerInner(props: RemotePairingControllerProps): JSX.
     )
 
     const displayReady = state.kind === 'ready' ? state.ready : retainedReady
+    const installPrompt = showReconnectNotice ? null : <AppInstallPromptLayer />
+
     if (displayReady && shouldRenderRemoteReadyShell({ state, hasRetainedReady, pathname })) {
         return (
-            <RemotePairingReadyShell
-                enableRuntime={state.kind === 'ready'}
-                interactionBlocked={shouldBlockRemoteReadyShellInteraction(state)}
-                pathname={pathname}
-                ready={displayReady}
-            />
+            <>
+                <RemotePairingReadyShell
+                    enableRuntime={state.kind === 'ready'}
+                    interactionBlocked={shouldBlockRemoteReadyShellInteraction(state)}
+                    pathname={pathname}
+                    ready={displayReady}
+                />
+                {installPrompt}
+            </>
         )
     }
 
     if (state.kind === 'approval') {
-        return <RemotePairingCodeScreen submitting={state.submitting} onSubmit={handleVerify} />
+        return (
+            <>
+                <RemotePairingCodeScreen submitting={state.submitting} onSubmit={handleVerify} />
+                {installPrompt}
+            </>
+        )
     }
 
     if (state.kind === 'booting' && !hasRetainedReady) {

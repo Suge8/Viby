@@ -1,8 +1,10 @@
 import { type JSX, useCallback, useEffect, useMemo, useState } from 'react'
-import { usePWAInstall } from '@/hooks/usePWAInstall'
+import { createPortal } from 'react-dom'
 import { usePlatform } from '@/hooks/usePlatform'
+import { usePWAInstall } from '@/hooks/usePWAInstall'
+import { ensureAppOverlayRoot } from '@/lib/overlayRoot'
 import { useTranslation } from '@/lib/use-translation'
-import { InstallBanner, InstallGuideDialog, createInstallPromptViewModel } from './InstallPromptContent'
+import { createInstallPromptViewModel, InstallBanner, InstallGuideDialog } from './InstallPromptContent'
 
 type InstallPromptProps = {
     suppressed?: boolean
@@ -50,20 +52,22 @@ export function InstallPrompt({ suppressed = false }: InstallPromptProps): JSX.E
         return null
     }
 
-    return (
+    const overlayRoot = ensureAppOverlayRoot()
+    if (!overlayRoot) {
+        return null
+    }
+
+    return createPortal(
         <>
             {showIOSGuide ? (
-                <InstallGuideDialog
-                    model={promptModel.guide}
-                    onClose={handleCloseGuide}
-                    onDismiss={handleDismiss}
-                />
+                <InstallGuideDialog model={promptModel.guide} onClose={handleCloseGuide} onDismiss={handleDismiss} />
             ) : null}
             <InstallBanner
                 model={promptModel.banner}
                 onPrimaryAction={() => void handlePrimaryAction()}
                 onDismiss={handleDismiss}
             />
-        </>
+        </>,
+        overlayRoot
     )
 }

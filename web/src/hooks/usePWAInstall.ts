@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useStandaloneDisplayMode } from '@/hooks/useStandaloneDisplayMode'
-import { readBrowserStorageItem, writeBrowserStorageItem } from '@/lib/browserStorage'
+import { readBrowserStorageItem, removeBrowserStorageItem, writeBrowserStorageItem } from '@/lib/browserStorage'
 import { LOCAL_STORAGE_KEYS } from '@/lib/storage/storageRegistry'
 
 interface BeforeInstallPromptEvent extends Event {
@@ -18,28 +18,38 @@ export type PWAInstallState = {
 }
 
 const INSTALL_DISMISSED_KEY = LOCAL_STORAGE_KEYS.installDismissed
-const INSTALL_DISMISSED_VALUE = 'true'
+const INSTALL_DISMISS_TTL_MS = 3 * 24 * 60 * 60 * 1_000
+const OLD_INSTALL_DISMISSED_VALUE = 'true'
 
 export function isIOSBrowser(): boolean {
     if (typeof window === 'undefined') return false
-    return /iPad|iPhone|iPod/.test(window.navigator.userAgent)
-}
-
-export function isIOSSafariBrowser(): boolean {
-    if (typeof window === 'undefined') return false
-    const ua = window.navigator.userAgent
-    const isWebkit = /WebKit/.test(ua)
-    const isChrome = /CriOS/.test(ua)
-    const isFirefox = /FxiOS/.test(ua)
-    return isIOSBrowser() && isWebkit && !isChrome && !isFirefox
+    const navigatorValue = window.navigator as Navigator & { maxTouchPoints?: number }
+    return (
+        /iPad|iPhone|iPod/.test(navigatorValue.userAgent) ||
+        (navigatorValue.platform === 'MacIntel' && (navigatorValue.maxTouchPoints ?? 0) > 1)
+    )
 }
 
 function getInstallDismissed(): boolean {
-    return readBrowserStorageItem('local', INSTALL_DISMISSED_KEY) === INSTALL_DISMISSED_VALUE
+    const rawValue = readBrowserStorageItem('local', INSTALL_DISMISSED_KEY)
+    if (!rawValue) return false
+
+    if (rawValue === OLD_INSTALL_DISMISSED_VALUE) {
+        setInstallDismissed()
+        return true
+    }
+
+    const dismissedAt = Number(rawValue)
+    if (!Number.isFinite(dismissedAt) || Date.now() - dismissedAt >= INSTALL_DISMISS_TTL_MS) {
+        removeBrowserStorageItem('local', INSTALL_DISMISSED_KEY)
+        return false
+    }
+
+    return true
 }
 
 function setInstallDismissed(): void {
-    writeBrowserStorageItem('local', INSTALL_DISMISSED_KEY, INSTALL_DISMISSED_VALUE)
+    writeBrowserStorageItem('local', INSTALL_DISMISSED_KEY, String(Date.now()))
 }
 
 function resolveInstallPlatform(options: {
