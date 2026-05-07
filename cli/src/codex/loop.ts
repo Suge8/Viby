@@ -1,4 +1,9 @@
-import type { CodexCollaborationMode, CodexPermissionMode, CodexReasoningEffort } from '@viby/protocol/types'
+import type {
+    CodexCollaborationMode,
+    CodexPermissionMode,
+    CodexReasoningEffort,
+    CodexServiceTier,
+} from '@viby/protocol/types'
 import { ApiClient, ApiSessionClient } from '@/lib'
 import { logger } from '@/ui/logger'
 import { MessageQueue2 } from '@/utils/MessageQueue2'
@@ -13,6 +18,7 @@ export interface EnhancedMode {
     model?: string
     collaborationMode: CodexCollaborationMode
     modelReasoningEffort?: CodexReasoningEffort | null
+    codexServiceTier?: CodexServiceTier | null
     developerInstructions?: string
 }
 
@@ -27,6 +33,7 @@ interface LoopOptions {
     permissionMode?: PermissionMode
     model?: string
     modelReasoningEffort?: CodexReasoningEffort | null
+    codexServiceTier?: CodexServiceTier | null
     collaborationMode?: CodexCollaborationMode
     resumeSessionId?: string
     onSessionReady?: (session: CodexSession) => void
@@ -46,6 +53,7 @@ export async function loop(opts: LoopOptions): Promise<void> {
         permissionMode: opts.permissionMode ?? 'default',
         model: opts.model,
         modelReasoningEffort: opts.modelReasoningEffort,
+        codexServiceTier: opts.codexServiceTier,
         collaborationMode: opts.collaborationMode ?? 'default',
     })
 

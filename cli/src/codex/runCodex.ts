@@ -1,6 +1,10 @@
 import type { SessionHandoffSnapshot } from '@viby/protocol'
-import { CodexCollaborationModeSchema, CodexReasoningEffortSchema } from '@viby/protocol/schemas'
-import type { CodexReasoningEffort } from '@viby/protocol/types'
+import {
+    CodexCollaborationModeSchema,
+    CodexReasoningEffortSchema,
+    CodexServiceTierSchema,
+} from '@viby/protocol/schemas'
+import type { CodexReasoningEffort, CodexServiceTier } from '@viby/protocol/types'
 import { createPendingSessionContinuityHandoffState } from '@/agent/driverSwitchHandoffState'
 import { mergePromptSegments } from '@/agent/promptInstructions'
 import { assertSessionConfigPayload, resolvePermissionModeForDriver } from '@/agent/providerConfig'
@@ -8,6 +12,7 @@ import { createRunnerLifecycle, createRuntimeStopRequestHandler, setControlledBy
 import { bootstrapSession } from '@/agent/sessionFactory'
 import type { AgentState } from '@/api/types'
 import { registerKillSessionHandler } from '@/claude/registerKillSessionHandler'
+import { parseSpecialCommand } from '@/parsers/specialCommands'
 import { logger } from '@/ui/logger'
 import { formatMessageWithAttachments } from '@/utils/attachmentFormatter'
 import { hashObject } from '@/utils/deterministicJson'
@@ -34,6 +39,7 @@ export async function runCodex(opts: {
     resumeSessionId?: string
     model?: string
     modelReasoningEffort?: CodexReasoningEffort | null
+    codexServiceTier?: CodexServiceTier | null
     collaborationMode?: EnhancedMode['collaborationMode']
     sessionContinuityHandoff?: SessionHandoffSnapshot
 }): Promise<void> {
@@ -58,6 +64,7 @@ export async function runCodex(opts: {
         permissionMode: opts.permissionMode ?? 'default',
         model: opts.model,
         modelReasoningEffort: opts.modelReasoningEffort,
+        codexServiceTier: opts.codexServiceTier,
         collaborationMode: opts.collaborationMode ?? 'default',
     })
     setControlledByUser(session, false)
@@ -67,6 +74,7 @@ export async function runCodex(opts: {
             permissionMode: mode.permissionMode,
             model: mode.model,
             modelReasoningEffort: mode.modelReasoningEffort,
+            codexServiceTier: mode.codexServiceTier,
             collaborationMode: mode.collaborationMode,
             developerInstructions: mode.developerInstructions,
         })
@@ -80,6 +88,7 @@ export async function runCodex(opts: {
         permissionMode: opts.permissionMode,
         model: opts.model,
         modelReasoningEffort: opts.modelReasoningEffort,
+        codexServiceTier: opts.codexServiceTier,
         collaborationMode: opts.collaborationMode,
     })
 
@@ -109,12 +118,13 @@ export async function runCodex(opts: {
         runtimeConfig = applyRuntimeConfigToSession(runtimeConfig, sessionInstance)
     }
 
-    session.onUserMessage((message) => {
+    session.onUserMessage((message, localId) => {
         runtimeConfig = syncRuntimeConfigFromSession(runtimeConfig, sessionWrapperRef.current)
 
         logger.debug(
             `[Codex] User message received with permission mode: ${runtimeConfig.permissionMode}, ` +
                 `model: ${runtimeConfig.model ?? 'auto'}, reasoningEffort: ${runtimeConfig.modelReasoningEffort ?? 'auto'}, ` +
+                `serviceTier: ${runtimeConfig.codexServiceTier ?? 'standard'}, ` +
                 `collaborationMode: ${runtimeConfig.collaborationMode}`
         )
 
@@ -124,7 +134,17 @@ export async function runCodex(opts: {
             logger.debug('[Codex] Consuming pending session continuity handoff on the first real user turn')
         }
         const enhancedMode = createQueuedCodexMode(runtimeConfig, mergePromptSegments(continuityInstructions))
-        messageQueue.push(formattedText, enhancedMode)
+        const specialCommand = parseSpecialCommand(message.content.text)
+        if (specialCommand.type === 'compact' || specialCommand.type === 'clear') {
+            messageQueue.pushIsolateAndClear(
+                specialCommand.originalMessage || message.content.text,
+                enhancedMode,
+                localId
+            )
+            return
+        }
+
+        messageQueue.push(formattedText, enhancedMode, localId)
     })
 
     const resolveCollaborationMode = (value: unknown): EnhancedMode['collaborationMode'] => {
@@ -163,11 +183,23 @@ export async function runCodex(opts: {
         return parsed.data
     }
 
+    const resolveCodexServiceTier = (value: unknown): CodexServiceTier | null => {
+        if (value === null) {
+            return null
+        }
+        const parsed = CodexServiceTierSchema.safeParse(value)
+        if (!parsed.success) {
+            throw new Error('Invalid Codex service tier')
+        }
+        return parsed.data
+    }
+
     session.rpcHandlerManager.registerHandler('set-session-config', async (payload: unknown) => {
         const config = assertSessionConfigPayload(payload) as {
             permissionMode?: unknown
             model?: unknown
             modelReasoningEffort?: unknown
+            codexServiceTier?: unknown
             collaborationMode?: unknown
         }
 
@@ -192,6 +224,13 @@ export async function runCodex(opts: {
             }
         }
 
+        if (config.codexServiceTier !== undefined) {
+            runtimeConfig = {
+                ...runtimeConfig,
+                codexServiceTier: resolveCodexServiceTier(config.codexServiceTier),
+            }
+        }
+
         if (config.collaborationMode !== undefined) {
             runtimeConfig = {
                 ...runtimeConfig,
@@ -205,6 +244,7 @@ export async function runCodex(opts: {
                 permissionMode: runtimeConfig.permissionMode,
                 model: runtimeConfig.model ?? null,
                 modelReasoningEffort: runtimeConfig.modelReasoningEffort,
+                codexServiceTier: runtimeConfig.codexServiceTier,
                 collaborationMode: runtimeConfig.collaborationMode,
             },
         }
@@ -223,6 +263,7 @@ export async function runCodex(opts: {
             permissionMode: runtimeConfig.permissionMode,
             model: runtimeConfig.model,
             modelReasoningEffort: runtimeConfig.modelReasoningEffort,
+            codexServiceTier: runtimeConfig.codexServiceTier,
             collaborationMode: runtimeConfig.collaborationMode,
             resumeSessionId: opts.resumeSessionId,
             onSessionReady: (instance) => {

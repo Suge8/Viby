@@ -33,6 +33,7 @@ export function getCodexThreadMode(session: CodexSession, fallback?: EnhancedMod
         permissionMode: normalizePermissionMode(session.getPermissionMode(), fallback?.permissionMode),
         model: session.getModel() ?? fallback?.model,
         modelReasoningEffort: session.getModelReasoningEffort() ?? fallback?.modelReasoningEffort,
+        codexServiceTier: session.getCodexServiceTier() ?? fallback?.codexServiceTier,
         collaborationMode: session.getCollaborationMode() ?? fallback?.collaborationMode ?? 'default',
         developerInstructions: fallback?.developerInstructions,
     }

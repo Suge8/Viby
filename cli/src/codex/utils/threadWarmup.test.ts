@@ -15,6 +15,7 @@ function createSessionStub(overrides?: {
     permissionMode?: 'default' | 'read-only' | 'safe-yolo' | 'yolo' | undefined
     model?: string | null
     modelReasoningEffort?: EnhancedMode['modelReasoningEffort']
+    codexServiceTier?: EnhancedMode['codexServiceTier']
     collaborationMode?: EnhancedMode['collaborationMode'] | undefined
 }) {
     const ensureRemoteBridge = vi.fn(async () => ({
@@ -43,6 +44,9 @@ function createSessionStub(overrides?: {
         },
         getModelReasoningEffort() {
             return overrides?.modelReasoningEffort
+        },
+        getCodexServiceTier() {
+            return overrides?.codexServiceTier
         },
         getCollaborationMode() {
             return overrides?.collaborationMode

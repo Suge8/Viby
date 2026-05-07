@@ -94,6 +94,27 @@ describe('appServerConfig', () => {
         })
     })
 
+    it('passes Codex fast service tier via thread config only when enabled', () => {
+        const params = buildThreadStartParams({
+            cwd: '/workspace/project',
+            mode: {
+                permissionMode: 'default',
+                model: 'gpt-5.4',
+                codexServiceTier: 'fast',
+                collaborationMode: 'default',
+            },
+            mcpServers,
+        })
+
+        expect(params.config).toEqual({
+            'mcp_servers.viby': {
+                command: 'node',
+                args: ['mcp'],
+            },
+            service_tier: 'fast',
+        })
+    })
+
     it('builds turn params with mode defaults', () => {
         const params = buildTurnStartParams({
             threadId: 'thread-1',
@@ -121,6 +142,22 @@ describe('appServerConfig', () => {
         })
         expect(params.effort).toBe('high')
         expect(params.model).toBeUndefined()
+    })
+
+    it('passes Codex fast service tier to every turn while enabled', () => {
+        const params = buildTurnStartParams({
+            threadId: 'thread-1',
+            message: 'hello',
+            cwd: '/workspace/project',
+            mode: {
+                permissionMode: 'default',
+                model: 'gpt-5.4',
+                codexServiceTier: 'fast',
+                collaborationMode: 'default',
+            },
+        })
+
+        expect(params.serviceTier).toBe('fast')
     })
 
     it('puts collaboration mode in turn params with model settings', () => {

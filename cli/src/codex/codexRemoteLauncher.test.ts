@@ -188,6 +188,9 @@ function createSessionStub(modes: EnhancedMode[] = [createMode()], options: { au
         getModelReasoningEffort() {
             return currentModelReasoningEffort
         },
+        getCodexServiceTier() {
+            return undefined
+        },
         onThinkingChange(nextThinking: boolean) {
             session.thinking = nextThinking
             thinkingChanges.push(nextThinking)

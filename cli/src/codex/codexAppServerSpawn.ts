@@ -16,5 +16,6 @@ export function spawnCodexAppServer(): ChildProcessWithoutNullStreams {
         ),
         stdio: ['pipe', 'pipe', 'pipe'],
         shell: process.platform === 'win32' && codexPath === 'codex',
+        windowsHide: process.platform === 'win32',
     })
 }

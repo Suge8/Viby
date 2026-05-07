@@ -1,4 +1,5 @@
 import { setSessionDriverRuntimeHandle } from '@viby/protocol'
+import type { CodexServiceTier } from '@viby/protocol/types'
 import { AgentSessionBase } from '@/agent/sessionBase'
 import type { CodexSessionModelReasoningEffort, SessionModel } from '@/api/types'
 import { ApiClient, ApiSessionClient } from '@/lib'
@@ -28,6 +29,7 @@ export class CodexSession extends AgentSessionBase<EnhancedMode> {
         permissionMode?: PermissionMode
         model?: SessionModel
         modelReasoningEffort?: CodexSessionModelReasoningEffort
+        codexServiceTier?: CodexServiceTier | null
         collaborationMode?: EnhancedMode['collaborationMode']
     }) {
         super({
@@ -46,6 +48,7 @@ export class CodexSession extends AgentSessionBase<EnhancedMode> {
             permissionMode: opts.permissionMode,
             model: opts.model,
             modelReasoningEffort: opts.modelReasoningEffort,
+            codexServiceTier: opts.codexServiceTier,
             collaborationMode: opts.collaborationMode,
         })
 
@@ -55,6 +58,7 @@ export class CodexSession extends AgentSessionBase<EnhancedMode> {
         this.permissionMode = opts.permissionMode
         this.model = opts.model
         this.modelReasoningEffort = opts.modelReasoningEffort
+        this.codexServiceTier = opts.codexServiceTier
         this.collaborationMode = opts.collaborationMode
     }
 
@@ -75,6 +79,15 @@ export class CodexSession extends AgentSessionBase<EnhancedMode> {
 
     getModelReasoningEffort(): CodexSessionModelReasoningEffort | undefined {
         return this.modelReasoningEffort as CodexSessionModelReasoningEffort | undefined
+    }
+
+    setCodexServiceTier = (codexServiceTier: CodexServiceTier | null): void => {
+        this.codexServiceTier = codexServiceTier
+        this.notifyKeepAliveRuntimeChanged()
+    }
+
+    getCodexServiceTier(): CodexServiceTier | null | undefined {
+        return this.codexServiceTier
     }
 
     setCollaborationMode = (mode: EnhancedMode['collaborationMode']): void => {

@@ -1,5 +1,6 @@
 import { AssistantStreamBridge } from '@/agent/assistantStreamBridge'
 import { reportDiscoveredSessionId } from '@/agent/sessionDiscoveryBridge'
+import { parseSpecialCommand } from '@/parsers/specialCommands'
 import type { MessageBuffer } from '@/ui/ink/messageBuffer'
 import { logger } from '@/ui/logger'
 import type { CodexAppServerClient } from './codexAppServerClient'
@@ -26,6 +27,8 @@ import { ReasoningProcessor } from './utils/reasoningProcessor'
 import { getCodexThreadMode } from './utils/threadWarmup'
 
 const READY_AFTER_TURN_DELAY_MS = 120
+const CODEX_COMPACT_SUCCESS_MESSAGE = 'Conversation compacted.'
+const CODEX_CLEAR_REDIRECT_MESSAGE = 'Open a new Viby session to clear Codex context.'
 
 export class CodexRemoteCoordinator {
     readonly session: CodexSession
@@ -132,6 +135,50 @@ export class CodexRemoteCoordinator {
         })
     }
 
+    private async handleQueuedSpecialCommand(message: QueuedMessage): Promise<boolean> {
+        const command = parseSpecialCommand(message.message)
+        if (!command.type) {
+            return false
+        }
+
+        this.messageBuffer.addMessage(message.message, 'user')
+        switch (command.type) {
+            case 'clear':
+                this.session.sendSessionEvent({ type: 'message', message: CODEX_CLEAR_REDIRECT_MESSAGE })
+                return true
+            case 'compact':
+                await this.compactThread(message.mode)
+                return true
+            default:
+                return false
+        }
+    }
+
+    private async compactThread(mode: EnhancedMode): Promise<void> {
+        this.session.onThinkingChange(true)
+        try {
+            const threadId = await this.ensureThreadReady(getCodexThreadMode(this.session, mode), {
+                logIfMissing: !this.state.currentThreadId,
+            })
+            const response = await this.appServerClient.compactThread(
+                { threadId },
+                { signal: this.abortController.signal }
+            )
+            const nextThreadId = response.thread?.id
+            if (nextThreadId) {
+                this.bindThreadId(nextThreadId)
+                this.hasThread = true
+            }
+            this.session.sendSessionEvent({ type: 'message', message: CODEX_COMPACT_SUCCESS_MESSAGE })
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Unknown compaction failure'
+            logger.debug('[Codex] Compact command failed', error)
+            this.session.sendSessionEvent({ type: 'message', message: `Compaction failed: ${message}` })
+        } finally {
+            this.session.onThinkingChange(false)
+        }
+    }
+
     async runMainLoop(shouldExit: () => boolean): Promise<void> {
         const permissionHandler = new CodexPermissionHandler(
             this.session.client,
@@ -231,6 +278,10 @@ export class CodexRemoteCoordinator {
                 continue
             }
 
+            if (await this.handleQueuedSpecialCommand(message)) {
+                continue
+            }
+
             this.messageBuffer.addMessage(message.message, 'user')
 
             try {
@@ -246,6 +297,7 @@ export class CodexRemoteCoordinator {
                     ...message.mode,
                     model: this.session.getModel() ?? message.mode.model,
                     modelReasoningEffort: this.session.getModelReasoningEffort() ?? message.mode.modelReasoningEffort,
+                    codexServiceTier: this.session.getCodexServiceTier() ?? message.mode.codexServiceTier,
                 }
                 this.state.turnInFlight = true
                 this.state.allowAnonymousTerminalEvent = false

@@ -28,6 +28,7 @@ const harness = vi.hoisted(() => {
             permissionMode: 'default' as EnhancedMode['permissionMode'],
             model: null as string | null,
             modelReasoningEffort: null as EnhancedMode['modelReasoningEffort'],
+            codexServiceTier: null as EnhancedMode['codexServiceTier'],
             collaborationMode: 'default' as EnhancedMode['collaborationMode'],
         },
     }
@@ -116,6 +117,8 @@ vi.mock('./loop', () => ({
             setModel(model: string | null): void
             getModelReasoningEffort(): EnhancedMode['modelReasoningEffort']
             setModelReasoningEffort(modelReasoningEffort: EnhancedMode['modelReasoningEffort']): void
+            getCodexServiceTier(): EnhancedMode['codexServiceTier']
+            setCodexServiceTier(codexServiceTier: EnhancedMode['codexServiceTier']): void
             getCollaborationMode(): EnhancedMode['collaborationMode']
             setCollaborationMode(mode: EnhancedMode['collaborationMode']): void
             localLaunchFailure: null
@@ -134,6 +137,10 @@ vi.mock('./loop', () => ({
             getModelReasoningEffort: () => harness.sessionState.modelReasoningEffort,
             setModelReasoningEffort(modelReasoningEffort: EnhancedMode['modelReasoningEffort']) {
                 harness.sessionState.modelReasoningEffort = modelReasoningEffort
+            },
+            getCodexServiceTier: () => harness.sessionState.codexServiceTier,
+            setCodexServiceTier(codexServiceTier: EnhancedMode['codexServiceTier']) {
+                harness.sessionState.codexServiceTier = codexServiceTier
             },
             getCollaborationMode: () => harness.sessionState.collaborationMode,
             setCollaborationMode(mode: EnhancedMode['collaborationMode']) {
@@ -161,6 +168,7 @@ vi.mock('./loop', () => ({
                       {
                           model: 'gpt-5.4',
                           modelReasoningEffort: 'high',
+                          codexServiceTier: 'fast',
                       },
                   ]
 
@@ -192,6 +200,7 @@ function createDriverSwitchHandoff(): SessionHandoffSnapshot {
         liveConfig: {
             model: 'sonnet',
             modelReasoningEffort: 'high',
+            codexServiceTier: null,
             permissionMode: 'default',
             collaborationMode: 'default',
         },
@@ -228,6 +237,7 @@ describe('runCodex live session config', () => {
         harness.sessionState.permissionMode = 'default'
         harness.sessionState.model = null
         harness.sessionState.modelReasoningEffort = null
+        harness.sessionState.codexServiceTier = null
         harness.sessionState.collaborationMode = 'default'
     })
 
@@ -240,11 +250,13 @@ describe('runCodex live session config', () => {
 
         expect(harness.sessionState.model).toBe('gpt-5.4')
         expect(harness.sessionState.modelReasoningEffort).toBe('high')
+        expect(harness.sessionState.codexServiceTier).toBe('fast')
         expect(harness.queueModes).toEqual([
             {
                 permissionMode: 'default',
                 model: 'gpt-5.4',
                 modelReasoningEffort: 'high',
+                codexServiceTier: 'fast',
                 collaborationMode: 'default',
             },
         ])
@@ -269,6 +281,7 @@ describe('runCodex live session config', () => {
             permissionMode: 'default',
             model: 'gpt-5.4',
             modelReasoningEffort: 'high',
+            codexServiceTier: 'fast',
             collaborationMode: 'default',
         })
         expect(harness.queueModes[0]?.developerInstructions).toContain(
@@ -305,6 +318,7 @@ describe('runCodex live session config', () => {
                 permissionMode: 'default',
                 model: 'gpt-5.4',
                 modelReasoningEffort: 'medium',
+                codexServiceTier: null,
                 collaborationMode: 'plan',
             },
         ])
