@@ -56,11 +56,13 @@
     }
 
     .desktop-agent-model-panel-shell {
+        display: grid;
         grid-column: 1 / -1;
         overflow: hidden;
     }
 
     .desktop-agent-model-panel {
+        min-height: 0;
         overflow: hidden;
         border: 1px solid var(--desktop-border);
         border-radius: 14px;

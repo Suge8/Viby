@@ -64,9 +64,9 @@ export function AgentModelPanel(props: AgentModelBaseProps): JSX.Element | null 
             {props.expanded ? (
                 <m.div
                     className="desktop-agent-model-panel-shell"
-                    initial={{ opacity: 0, marginTop: 0, y: -4 }}
-                    animate={{ opacity: 1, marginTop: 12, y: 0 }}
-                    exit={{ opacity: 0, marginTop: 0, y: -4 }}
+                    initial={{ opacity: 0, gridTemplateRows: '0fr', marginTop: 0, y: -4 }}
+                    animate={{ opacity: 1, gridTemplateRows: '1fr', marginTop: 12, y: 0 }}
+                    exit={{ opacity: 0, gridTemplateRows: '0fr', marginTop: 0, y: -4 }}
                     transition={PANEL_TRANSITION}
                 >
                     <div className="desktop-agent-model-panel">

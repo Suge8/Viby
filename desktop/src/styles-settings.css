@@ -220,20 +220,26 @@
         justify-content: center;
         gap: 8px;
         padding: 10px 15px;
-        border: 1px solid rgba(255, 255, 255, 0.18);
+        border: 1px solid color-mix(in srgb, var(--desktop-text) 12%, var(--desktop-border));
         border-radius: 999px;
-        background: rgba(255, 255, 255, 0.12);
-        color: #ffffff;
+        background: color-mix(in srgb, var(--desktop-surface-soft) 72%, rgba(255, 255, 255, 0.76));
+        color: var(--desktop-text);
         backdrop-filter: blur(14px);
         font-size: 13px;
         font-weight: 820;
         box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.22),
-            0 16px 34px rgba(0, 0, 0, 0.22);
+            inset 0 1px 0 rgba(255, 255, 255, 0.18),
+            0 14px 30px rgba(0, 0, 0, 0.18);
     }
 
     .desktop-settings-cta span,
     .desktop-settings-cta .desktop-icon {
+        color: currentColor;
+    }
+
+    .desktop-shell[data-theme="dark"] .desktop-settings-cta {
+        border-color: rgba(255, 255, 255, 0.18);
+        background: rgba(255, 255, 255, 0.12);
         color: #ffffff;
     }
 
@@ -303,10 +309,21 @@
 
     .desktop-settings-cta:hover {
         transform: translateY(var(--desktop-hover-lift));
-        background: rgba(255, 255, 255, 0.18);
+        background: color-mix(in srgb, var(--desktop-surface-soft) 82%, rgba(255, 255, 255, 0.86));
         box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.28),
-            0 20px 46px rgba(0, 0, 0, 0.28);
+            inset 0 1px 0 rgba(255, 255, 255, 0.22),
+            0 18px 40px rgba(0, 0, 0, 0.24);
+    }
+
+    .desktop-settings-github .desktop-settings-cta {
+        border-color: rgba(255, 255, 255, 0.18);
+        background: rgba(255, 255, 255, 0.12);
+        color: #ffffff;
+    }
+
+    .desktop-shell[data-theme="dark"] .desktop-settings-cta:hover,
+    .desktop-settings-github .desktop-settings-cta:hover {
+        background: rgba(255, 255, 255, 0.18);
     }
 
     @media (max-width: 720px) {
