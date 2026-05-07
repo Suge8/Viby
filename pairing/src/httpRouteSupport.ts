@@ -1,4 +1,4 @@
-import type { PairingRole } from '@viby/protocol/pairing'
+import { PAIRING_HTTP_ERROR_MESSAGES, type PairingHttpErrorCode, type PairingRole } from '@viby/protocol/pairing'
 import type { Context } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { hashPairingSecret } from './crypto'
@@ -22,10 +22,22 @@ export function rejectPairingRequest(
     metric: PairingMetricName,
     status: ContentfulStatusCode,
     error: string,
-    headers?: Record<string, string>
+    headers?: Record<string, string>,
+    code?: PairingHttpErrorCode
 ): Response {
     options.metrics?.increment(metric)
-    return c.json({ error }, status, headers)
+    return c.json({ error, ...(code ? { code } : {}) }, status, headers)
+}
+
+export function rejectPairingCode(
+    c: Context,
+    options: PairingHttpOptions,
+    metric: PairingMetricName,
+    status: ContentfulStatusCode,
+    code: PairingHttpErrorCode,
+    headers?: Record<string, string>
+): Response {
+    return rejectPairingRequest(c, options, metric, status, PAIRING_HTTP_ERROR_MESSAGES[code], headers, code)
 }
 
 export function enforcePairingRateLimit(

@@ -1,3 +1,4 @@
+export * from './pairingHttpErrorCode'
 export * from './pairingLinkQuality'
 export * from './pairingPeerBinaryUpload'
 export * from './pairingPeerMethod'

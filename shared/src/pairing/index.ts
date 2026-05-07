@@ -1,4 +1,5 @@
 export * from './events'
+export * from './pairingHttpErrorCode'
 export * from './pairingLinkQuality'
 export * from './pairingTiming'
 export * from './pairingWorkspaceRoute'

@@ -373,7 +373,7 @@ describe('pairing http routes', () => {
 
         expect(reconnectResponse.status).toBe(403)
         expect(await reconnectResponse.json()).toMatchObject({
-            error: 'Missing or invalid device proof',
+            code: 'pairing_invalid_device_proof',
         })
     })
 
@@ -417,7 +417,7 @@ describe('pairing http routes', () => {
 
         expect(reconnectResponse.status).toBe(403)
         expect(await reconnectResponse.json()).toMatchObject({
-            error: 'Missing or expired reconnect challenge',
+            code: 'pairing_reconnect_challenge_expired',
         })
     })
 
