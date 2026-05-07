@@ -50,6 +50,7 @@ async function main(): Promise<void> {
     let page: Page | null = null
     let fakeCliRuntime: FakeCliRuntime | null = null
     let smokeError: unknown = null
+    let targetUrl = ''
 
     const consoleErrors: BrowserConsoleEvent[] = []
     const runtimeExceptions: BrowserRuntimeException[] = []
@@ -66,7 +67,7 @@ async function main(): Promise<void> {
             repoRoot,
             webReadyTimeoutMs: WEB_READY_TIMEOUT_MS,
         })
-        const targetUrl = `${app.webUrl}/sessions?hub=${encodeURIComponent(app.hubUrl)}`
+        targetUrl = `${app.webUrl}/sessions?hub=${encodeURIComponent(app.hubUrl)}`
 
         const seededSessions = await seedRuntimeAndSessions({
             alphaSessionName: SESSION_ALPHA_NAME,

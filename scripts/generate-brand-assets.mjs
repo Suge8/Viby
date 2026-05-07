@@ -3,6 +3,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeF
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { deflateSync } from 'node:zlib'
 
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 const workspaceRoot = resolve(scriptDir, '..')
@@ -68,6 +69,15 @@ const WEB_APP_ICON_FRAME = {
     y: 8,
     size: 84,
 }
+const DESKTOP_LOGO_FRAME = {
+    x: 19,
+    y: 20,
+    size: 62,
+}
+const DESKTOP_ICON_FRAME = {
+    insetRatio: 0.1,
+    radiusRatio: 0.18,
+}
 
 function ensureDir(dirPath) {
     mkdirSync(dirPath, { recursive: true })
@@ -84,6 +94,62 @@ function capture(command, args, cwd = workspaceRoot, encoding = 'utf8', maxBuffe
 function captureBuffer(command, args, cwd = workspaceRoot, maxBuffer = 1024 * 1024 * 64) {
     return execFileSync(command, args, { cwd, maxBuffer })
 }
+
+function writePngRgba(filePath, width, height, pixels) {
+    const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
+    const raw = Buffer.alloc((width * 4 + 1) * height)
+
+    for (let y = 0; y < height; y += 1) {
+        const sourceOffset = y * width * 4
+        const targetOffset = y * (width * 4 + 1)
+        pixels.copy(raw, targetOffset + 1, sourceOffset, sourceOffset + width * 4)
+    }
+
+    ensureDir(dirname(filePath))
+    writeFileSync(
+        filePath,
+        Buffer.concat([
+            signature,
+            pngChunk('IHDR', pngHeader(width, height)),
+            pngChunk('IDAT', deflateSync(raw)),
+            pngChunk('IEND'),
+        ])
+    )
+}
+
+function pngHeader(width, height) {
+    const header = Buffer.alloc(13)
+    header.writeUInt32BE(width, 0)
+    header.writeUInt32BE(height, 4)
+    header[8] = 8
+    header[9] = 6
+    return header
+}
+
+function pngChunk(type, data = Buffer.alloc(0)) {
+    const typeBuffer = Buffer.from(type)
+    const length = Buffer.alloc(4)
+    const checksum = Buffer.alloc(4)
+    length.writeUInt32BE(data.length)
+    checksum.writeUInt32BE(crc32(Buffer.concat([typeBuffer, data])))
+    return Buffer.concat([length, typeBuffer, data, checksum])
+}
+
+function crc32(data) {
+    let crc = 0xffffffff
+    for (const byte of data) {
+        crc = (crc >>> 8) ^ CRC32_TABLE[(crc ^ byte) & 0xff]
+    }
+    return (crc ^ 0xffffffff) >>> 0
+}
+
+const CRC32_TABLE = Array.from({ length: 256 }, (_, index) => {
+    let value = index
+    for (let bit = 0; bit < 8; bit += 1) {
+        value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1
+    }
+    return value >>> 0
+})
 
 function writeText(filePath, contents) {
     ensureDir(dirname(filePath))
@@ -135,6 +201,49 @@ function rasterizeSvg(svgPath, outputPath, size) {
 
     resizeImage(thumbnailPath, outputPath, size)
     rmSync(thumbnailDir, { recursive: true, force: true })
+}
+
+function rasterizeDesktopIcon(svgPath, outputPath, size) {
+    rasterizeSvg(svgPath, outputPath, size)
+    applyDesktopIconAlphaMask(outputPath, size)
+}
+
+function applyDesktopIconAlphaMask(filePath, size) {
+    const pixels = captureBuffer(ffmpegPath, [
+        '-v',
+        'error',
+        '-i',
+        filePath,
+        '-f',
+        'rawvideo',
+        '-pix_fmt',
+        'rgba',
+        'pipe:1',
+    ])
+    const inset = size * DESKTOP_ICON_FRAME.insetRatio
+    const radius = size * DESKTOP_ICON_FRAME.radiusRatio
+    const max = size - inset
+
+    for (let y = 0; y < size; y += 1) {
+        for (let x = 0; x < size; x += 1) {
+            const alphaOffset = (y * size + x) * 4 + 3
+            pixels[alphaOffset] = isInsideRoundedRect(x + 0.5, y + 0.5, inset, max, radius) ? pixels[alphaOffset] : 0
+        }
+    }
+
+    writePngRgba(filePath, size, size, pixels)
+}
+
+function isInsideRoundedRect(x, y, min, max, radius) {
+    if (x < min || x > max || y < min || y > max) {
+        return false
+    }
+
+    const cornerX = x < min + radius ? min + radius : x > max - radius ? max - radius : x
+    const cornerY = y < min + radius ? min + radius : y > max - radius ? max - radius : y
+    const dx = x - cornerX
+    const dy = y - cornerY
+    return dx * dx + dy * dy <= radius * radius
 }
 
 function createTransparentSymbol(inputPath, outputPath) {
@@ -209,11 +318,7 @@ function clamp(value, min, max) {
 }
 
 function cropTransparentSquare(inputPath, outputPath, options = {}) {
-    const {
-        paddingRatio = 0.16,
-        verticalBias = 0.02,
-        resizeTo = 1024,
-    } = options
+    const { paddingRatio = 0.16, verticalBias = 0.02, resizeTo = 1024 } = options
 
     const bounds = findOpaqueBounds(inputPath)
     const side = Math.min(
@@ -255,58 +360,36 @@ function buildWebAppIconSvg(symbolHref) {
 }
 
 function buildDesktopTileIconSvg(symbolHref) {
-    return `
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
-            <defs>
-                <linearGradient id="web-tile-bg" x1="14" y1="10" x2="86" y2="92" gradientUnits="userSpaceOnUse">
-                    <stop stop-color="#fff8f3" />
-                    <stop offset="1" stop-color="#ffece0" />
-                </linearGradient>
-                <radialGradient id="web-tile-halo" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(76 18) rotate(140) scale(34 34)">
-                    <stop stop-color="${PALETTE.coral}" stop-opacity="0.26" />
-                    <stop offset="1" stop-color="${PALETTE.coral}" stop-opacity="0" />
-                </radialGradient>
-                <filter id="web-tile-shadow" x="10" y="10" width="80" height="82" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
-                    <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#111827" flood-opacity="0.18" />
-                </filter>
-            </defs>
-            <rect x="10" y="10" width="80" height="80" rx="24" fill="url(#web-tile-bg)" />
-            <rect x="10" y="10" width="80" height="80" rx="24" fill="url(#web-tile-halo)" />
-            <g filter="url(#web-tile-shadow)">
-                <rect x="10.75" y="10.75" width="78.5" height="78.5" rx="23.2" stroke="${PALETTE.line}" stroke-width="1.5" />
-            </g>
-            <image href="${symbolHref}" x="19" y="16" width="62" height="62" preserveAspectRatio="xMidYMid meet" />
-        </svg>
-    `.trim()
+    return buildMacAppIconSvg(symbolHref)
 }
 
 function buildMacAppIconSvg(symbolHref) {
     return `
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
             <defs>
-                <linearGradient id="mac-bg" x1="11" y1="6" x2="86" y2="95" gradientUnits="userSpaceOnUse">
-                    <stop stop-color="#253255" />
-                    <stop offset="0.58" stop-color="${PALETTE.navySoft}" />
-                    <stop offset="1" stop-color="#5a6784" />
+                <linearGradient id="mac-white" x1="50" y1="10" x2="50" y2="90" gradientUnits="userSpaceOnUse">
+                    <stop stop-color="#ffffff" />
+                    <stop offset="0.58" stop-color="#fffdf9" />
+                    <stop offset="1" stop-color="#f2eee8" />
                 </linearGradient>
-                <radialGradient id="mac-coral" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(77 16) rotate(140) scale(34 34)">
-                    <stop stop-color="${PALETTE.coral}" stop-opacity="0.42" />
-                    <stop offset="1" stop-color="${PALETTE.coral}" stop-opacity="0" />
-                </radialGradient>
-                <filter id="mac-card-shadow" x="8" y="10" width="84" height="84" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
-                    <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#0f172a" flood-opacity="0.2" />
+                <linearGradient id="mac-rim" x1="26" y1="12" x2="76" y2="88" gradientUnits="userSpaceOnUse">
+                    <stop stop-color="#ffffff" stop-opacity="0.88" />
+                    <stop offset="1" stop-color="#ded7cf" stop-opacity="0.76" />
+                </linearGradient>
+                <linearGradient id="mac-sheen" x1="50" y1="12" x2="50" y2="42" gradientUnits="userSpaceOnUse">
+                    <stop stop-color="#ffffff" stop-opacity="0.42" />
+                    <stop offset="1" stop-color="#ffffff" stop-opacity="0" />
+                </linearGradient>
+                <filter id="mac-depth" x="6" y="7" width="88" height="88" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+                    <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#2b2a28" flood-opacity="0.16" />
                 </filter>
             </defs>
-            <rect x="4" y="4" width="92" height="92" rx="27" fill="url(#mac-bg)" />
-            <rect x="4" y="4" width="92" height="92" rx="27" fill="url(#mac-coral)" />
-            <path d="M9 17C18.5 8.6 31 5 50 5c18.7 0 31 3.6 40.4 12v14.5c-8-5.3-21.2-8.6-40.4-8.6-19.8 0-33 3.3-41 8.6V17Z" fill="#ffffff" opacity="0.11" />
-            <g filter="url(#mac-card-shadow)">
-                <rect x="14" y="14" width="72" height="72" rx="23" fill="${PALETTE.warm}" />
-                <rect x="14.8" y="14.8" width="70.4" height="70.4" rx="22.2" stroke="${PALETTE.line}" stroke-width="1.6" />
+            <g filter="url(#mac-depth)">
+                <rect x="10" y="10" width="80" height="80" rx="18" fill="url(#mac-white)" />
+                <path d="M15 23C22.4 15.8 33.8 12.7 50 12.7S77.6 15.8 85 23v13.8C77.6 32.4 66.4 30.1 50 30.1s-27.6 2.3-35 6.7V23Z" fill="url(#mac-sheen)" />
+                <rect x="10.7" y="10.7" width="78.6" height="78.6" rx="17.3" stroke="url(#mac-rim)" stroke-width="1.4" />
+                <image href="${symbolHref}" x="${DESKTOP_LOGO_FRAME.x}" y="${DESKTOP_LOGO_FRAME.y}" width="${DESKTOP_LOGO_FRAME.size}" height="${DESKTOP_LOGO_FRAME.size}" preserveAspectRatio="xMidYMid meet" />
             </g>
-            <ellipse cx="50" cy="24" rx="30" ry="11" fill="#ffffff" opacity="0.16" />
-            <ellipse cx="50" cy="84" rx="26" ry="8.5" fill="#111827" opacity="0.12" />
-            <image href="${symbolHref}" x="21" y="18.5" width="58" height="58" preserveAspectRatio="xMidYMid meet" />
         </svg>
     `.trim()
 }
@@ -357,7 +440,7 @@ function buildMacIcns(sourceSvgPath, outputPath) {
 
     ensureDir(iconsetDir)
     for (const [fileName, size] of sizes) {
-        rasterizeSvg(sourceSvgPath, join(iconsetDir, fileName), size)
+        rasterizeDesktopIcon(sourceSvgPath, join(iconsetDir, fileName), size)
     }
 
     run('/usr/bin/iconutil', ['-c', 'icns', iconsetDir, '-o', outputPath])
@@ -422,7 +505,7 @@ function main() {
 
     ensureDir(desktopIconsDir)
     for (const [fileName, size] of DESKTOP_BASE_ICON_OUTPUTS) {
-        rasterizeSvg(desktopTileSvgPath, join(desktopIconsDir, fileName), size)
+        rasterizeDesktopIcon(desktopTileSvgPath, join(desktopIconsDir, fileName), size)
     }
 
     buildMacIcns(macSvgPath, join(desktopIconsDir, 'icon.icns'))
