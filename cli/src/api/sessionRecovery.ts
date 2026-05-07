@@ -24,13 +24,13 @@ type RecoveryState = {
 type RecoverSessionStateOptions = {
     state: RecoveryState
     fetchPage: (afterSeq: number) => Promise<CliSessionRecoveryResponse>
-    handleIncomingMessage: (message: { seq?: number | null; content: unknown }) => void
+    handleIncomingMessage: (message: { seq?: number | null; localId?: string | null; content: unknown }) => void
 }
 
 export function handleIncomingSessionMessage(
     state: RecoveryState,
-    message: { seq?: number | null; content: unknown },
-    enqueueUserMessage: (message: UserMessage) => void,
+    message: { seq?: number | null; localId?: string | null; content: unknown },
+    enqueueUserMessage: (message: UserMessage, localId?: string) => void,
     emitMessage: (content: unknown) => void,
     observeAutoSummary?: (summary: { text: string; updatedAt: number | null }) => void
 ): void {
@@ -51,7 +51,7 @@ export function handleIncomingSessionMessage(
     const userResult = UserMessageSchema.safeParse(message.content)
     if (userResult.success) {
         if (isExternalSessionUserMessage(userResult.data)) {
-            enqueueUserMessage(userResult.data)
+            enqueueUserMessage(userResult.data, message.localId ?? undefined)
         }
         return
     }

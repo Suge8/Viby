@@ -9,7 +9,7 @@ import {
 } from '@viby/protocol'
 import type { LocalSessionCatalog, LocalSessionExportRequest, LocalSessionExportSnapshot } from '@viby/protocol/types'
 import type { Socket } from 'socket.io-client'
-import { resolvePiAgentLaunchConfig } from '@/pi/launchConfig'
+import { resolveAgentLaunchConfig } from '@/agent/agentLaunchConfig'
 import { logger } from '@/ui/logger'
 import { RpcHandlerManager } from './rpc/RpcHandlerManager'
 import type { Machine, MachineMetadata, RunnerState } from './types'
@@ -122,6 +122,8 @@ export function registerMachineRpcHandlers(rpcHandlerManager: RpcHandlerManager,
             model: readOptionalString(request.model),
             modelReasoningEffort:
                 request.modelReasoningEffort as import('../modules/common/rpcTypes').SpawnSessionOptions['modelReasoningEffort'],
+            codexServiceTier:
+                request.codexServiceTier as import('../modules/common/rpcTypes').SpawnSessionOptions['codexServiceTier'],
             permissionMode:
                 request.permissionMode as import('../modules/common/rpcTypes').SpawnSessionOptions['permissionMode'],
             collaborationMode:
@@ -202,17 +204,10 @@ export function registerMachineRpcHandlers(rpcHandlerManager: RpcHandlerManager,
                 }
             }
 
-            if (parsed.data.agent !== 'pi') {
-                return {
-                    type: 'error',
-                    message: `Unsupported agent launch config request: ${parsed.data.agent}`,
-                }
-            }
-
             try {
                 return {
                     type: 'success',
-                    config: await resolvePiAgentLaunchConfig(parsed.data.directory),
+                    config: await resolveAgentLaunchConfig(parsed.data.agent, parsed.data.directory),
                 }
             } catch (error) {
                 logger.debug('[API MACHINE] Failed to resolve agent launch config', error)

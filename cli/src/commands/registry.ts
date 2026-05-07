@@ -1,12 +1,13 @@
 import { authCommand } from './auth'
 import { connectCommand } from './connect'
-import { runnerCommand } from './runner'
 import { doctorCommand } from './doctor'
 import { hookForwarderCommand } from './hookForwarder'
-import { mcpCommand } from './mcp'
 import { hubCommand } from './hub'
+import { internalAgentAvailabilityCommand } from './internalAgentAvailability'
 import { internalSessionCommand } from './internalSession'
+import { mcpCommand } from './mcp'
 import { rootCommand } from './root'
+import { runnerCommand } from './runner'
 import type { CommandContext, CommandDefinition } from './types'
 
 const COMMANDS: CommandDefinition[] = [
@@ -14,10 +15,11 @@ const COMMANDS: CommandDefinition[] = [
     connectCommand,
     mcpCommand,
     hubCommand,
+    internalAgentAvailabilityCommand,
     internalSessionCommand,
     hookForwarderCommand,
     doctorCommand,
-    runnerCommand
+    runnerCommand,
 ]
 
 const commandMap = new Map<string, CommandDefinition>()
@@ -34,8 +36,8 @@ export function resolveCommand(args: string[]): { command: CommandDefinition; co
             context: {
                 args,
                 subcommand,
-                commandArgs: subcommand ? args.slice(1) : args
-            }
+                commandArgs: subcommand ? args.slice(1) : args,
+            },
         }
     }
 
@@ -46,8 +48,8 @@ export function resolveCommand(args: string[]): { command: CommandDefinition; co
             context: {
                 args,
                 subcommand,
-                commandArgs: args.slice(1)
-            }
+                commandArgs: args.slice(1),
+            },
         }
     }
 
@@ -56,7 +58,7 @@ export function resolveCommand(args: string[]): { command: CommandDefinition; co
         context: {
             args,
             subcommand,
-            commandArgs: args.slice(1)
-        }
+            commandArgs: args.slice(1),
+        },
     }
 }

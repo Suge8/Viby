@@ -14,6 +14,8 @@ import type {
 } from './apiSessionState'
 import type { SessionSocketLike, SessionStreamClientUpdate, TransportContext } from './apiSessionTransport'
 import {
+    emitMessagesCanceled,
+    emitMessagesConsumed,
     emitSessionAlive,
     flushTransport,
     keepAlive,
@@ -60,6 +62,8 @@ export type ApiSessionPublicApi = {
     sendUserMessage(text: string, meta?: MessageMeta): void
     getMetadataSnapshot(): Metadata | null
     sendCodexMessage(body: unknown, meta?: MessageMeta): void
+    emitMessagesConsumed(localIds: string[]): void
+    emitMessagesCanceled(localIds: string[]): void
     sendStreamUpdate(update: SessionStreamClientUpdate): void
     sendSessionEvent(event: SessionEventPayload, id?: string): void
     keepAlive(thinking: boolean, mode: 'remote', runtime?: SessionKeepAliveRuntime): void
@@ -98,6 +102,8 @@ export function createApiSessionPublicApi(options: {
         sendUserMessage: (text, meta) => sendUserMessage(options.getTransportContext(), text, meta),
         getMetadataSnapshot: () => options.getRecoveryState().metadata,
         sendCodexMessage: (body, meta) => sendCodexMessage(options.getTransportContext(), body, meta),
+        emitMessagesConsumed: (localIds) => emitMessagesConsumed(options.getTransportContext(), localIds),
+        emitMessagesCanceled: (localIds) => emitMessagesCanceled(options.getTransportContext(), localIds),
         sendStreamUpdate: (update) => sendStreamUpdate(options.getTransportContext(), update),
         sendSessionEvent: (event, id) => sendSessionEvent(options.getTransportContext(), event, id),
         keepAlive: (thinking, mode, runtime) => keepAlive(options.getTransportContext(), thinking, mode, runtime),

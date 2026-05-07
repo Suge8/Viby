@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { handleBrowseMachineDirectoryRequest } from './machineDirectoryBrowser'
 
 async function createTempDir(prefix: string): Promise<string> {
@@ -48,7 +48,7 @@ describe('handleBrowseMachineDirectoryRequest', () => {
             expect.arrayContaining([
                 { kind: 'home', path: homeDir },
                 { kind: 'desktop', path: join(homeDir, 'Desktop') },
-                { kind: 'projects', path: join(homeDir, 'Projects') }
+                { kind: 'projects', path: join(homeDir, 'Projects') },
             ])
         )
     })
@@ -59,6 +59,21 @@ describe('handleBrowseMachineDirectoryRequest', () => {
         expect(response.success).toBe(true)
         expect(response.currentPath).toBe(join(homeDir, 'Projects'))
         expect(response.parentPath).toBe(homeDir)
+        expect(response.entries?.map((entry) => entry.name)).toEqual(['alpha'])
+    })
+
+    it('scopes workspace browsing to the requested workspace root', async () => {
+        const workspaceRoot = join(homeDir, 'Projects')
+        const response = await handleBrowseMachineDirectoryRequest({
+            path: homeDir,
+            workspaceRoot,
+        })
+
+        expect(response.success).toBe(true)
+        expect(response.currentPath).toBe(workspaceRoot)
+        expect(response.parentPath).toBeNull()
+        expect(response.scopeRoot).toBe(workspaceRoot)
+        expect(response.roots).toEqual([{ kind: 'workspace', path: workspaceRoot }])
         expect(response.entries?.map((entry) => entry.name)).toEqual(['alpha'])
     })
 

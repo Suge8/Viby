@@ -165,6 +165,28 @@ export function sendCodexMessage(context: TransportContext, body: unknown, meta?
     })
 }
 
+export function emitMessagesConsumed(context: TransportContext, localIds: string[]): void {
+    if (localIds.length === 0) {
+        return
+    }
+
+    context.socket.emit('messages-consumed', {
+        sid: context.sessionId,
+        localIds,
+    })
+}
+
+export function emitMessagesCanceled(context: TransportContext, localIds: string[]): void {
+    if (localIds.length === 0) {
+        return
+    }
+
+    context.socket.emit('messages-canceled', {
+        sid: context.sessionId,
+        localIds,
+    })
+}
+
 export function sendStreamUpdate(context: TransportContext, update: SessionStreamClientUpdate): void {
     context.socket.emit('stream-update', {
         sid: context.sessionId,
@@ -195,6 +217,7 @@ export function keepAlive(
         ...(runtime?.permissionMode !== undefined ? { permissionMode: runtime.permissionMode } : {}),
         ...(runtime?.model !== undefined ? { model: runtime.model } : {}),
         ...(runtime?.modelReasoningEffort !== undefined ? { modelReasoningEffort: runtime.modelReasoningEffort } : {}),
+        ...(runtime?.codexServiceTier !== undefined ? { codexServiceTier: runtime.codexServiceTier } : {}),
         ...(runtime?.collaborationMode !== undefined ? { collaborationMode: runtime.collaborationMode } : {}),
     }
     context.setLastKeepAliveSnapshot(snapshot)

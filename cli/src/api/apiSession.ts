@@ -138,7 +138,7 @@ export class ApiSessionClient extends EventEmitter {
             token,
             sessionId: this.sessionId,
             getRecoveryState: () => this.getRecoveryState(),
-            enqueueUserMessage: (message) => this.messageDelivery.enqueueUserMessage(message),
+            enqueueUserMessage: (message, localId) => this.messageDelivery.enqueueUserMessage(message, localId),
             emitMessage: (content) => this.emit('message', content),
             observeAutoSummary: (summary) => this.observeRecoveredAutoSummary(summary),
         })
@@ -206,6 +206,9 @@ export class ApiSessionClient extends EventEmitter {
             onHandleIncomingMessage: (message) => {
                 thisOwner.recoveryOwner.handleIncomingMessage(message)
             },
+            onCancelMessages: (localIds) => {
+                thisOwner.emit('cancel-messages', localIds)
+            },
             onMetadataUpdate: (value, version) => {
                 thisOwner.recoveryState.metadata = value as Metadata
                 thisOwner.recoveryState.metadataVersion = version
@@ -246,7 +249,7 @@ export class ApiSessionClient extends EventEmitter {
         this.socket.connect()
     }
 
-    onUserMessage(callback: (data: UserMessage) => void): void {
+    onUserMessage(callback: (data: UserMessage, localId?: string) => void): void {
         this.messageDelivery.onUserMessage(callback)
     }
 

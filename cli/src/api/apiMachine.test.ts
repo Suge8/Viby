@@ -170,6 +170,7 @@ describe('ApiMachineClient', () => {
                                 liveConfig: {
                                     model: 'claude-sonnet',
                                     modelReasoningEffort: 'high',
+                                    codexServiceTier: null,
                                     permissionMode: 'default',
                                 },
                                 history: [],

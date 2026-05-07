@@ -129,12 +129,6 @@ async function loadCopilotRunner(): Promise<typeof import('@/copilot/runCopilot'
 }
 
 async function runInternalPi(options: InternalSessionOptions): Promise<void> {
-    if (options.resumeSessionId) {
-        throw new Error(
-            'Pi does not support provider resume session ids; Viby transcript recovery is the only supported continuity path'
-        )
-    }
-
     const runPi = await measureInternalSessionPhase('pi', 'load-runner', async () => {
         const module = await import('@/pi/runPi')
         return module.runPi
@@ -148,6 +142,7 @@ async function runInternalPi(options: InternalSessionOptions): Promise<void> {
             permissionMode: resolvePermissionModeForAgent('pi', options.permissionMode) as PiPermissionMode | undefined,
             model: options.model,
             modelReasoningEffort: options.modelReasoningEffort,
+            resumeSessionId: options.resumeSessionId,
         })
     })
 }
@@ -188,6 +183,7 @@ export async function runInternalSession(options: InternalSessionOptions): Promi
                     resumeSessionId: options.resumeSessionId,
                     model: options.model,
                     modelReasoningEffort: resolveCodexReasoningEffort(options.modelReasoningEffort),
+                    codexServiceTier: options.codexServiceTier,
                     collaborationMode: resolveCollaborationMode('codex', options.collaborationMode),
                     sessionContinuityHandoff,
                 })

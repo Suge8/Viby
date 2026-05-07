@@ -7,18 +7,22 @@ type DriverSwitchSendFailurePayload = {
     stage: DriverSwitchSendFailureStage
     code: ReturnType<typeof resolveDriverSwitchSendFailureCode>
 }
-type UserMessageCallback = (message: UserMessage) => void
+type QueuedUserMessage = {
+    message: UserMessage
+    localId?: string
+}
+type UserMessageCallback = (message: UserMessage, localId?: string) => void
 
 export type ApiSessionMessageDelivery = {
     onUserMessage: (callback: UserMessageCallback) => void
-    enqueueUserMessage: (message: UserMessage) => void
+    enqueueUserMessage: (message: UserMessage, localId?: string) => void
 }
 
 export function createApiSessionMessageDelivery(options: {
     onDriverSwitchSendFailure: (payload: DriverSwitchSendFailurePayload) => void
     onUserMessageObserved?: (message: UserMessage) => void
 }): ApiSessionMessageDelivery {
-    let pendingMessages: UserMessage[] = []
+    let pendingMessages: QueuedUserMessage[] = []
     let pendingMessageCallback: UserMessageCallback | null = null
 
     const emitDriverSwitchSendFailure = (stage: DriverSwitchSendFailureStage, error: unknown): void => {
@@ -39,10 +43,11 @@ export function createApiSessionMessageDelivery(options: {
     const deliverUserMessage = (
         callback: UserMessageCallback,
         message: UserMessage,
+        localId: string | undefined,
         stage: DriverSwitchSendFailureStage
     ): void => {
         try {
-            callback(message)
+            callback(message, localId)
         } catch (error) {
             emitDriverSwitchSendFailure(stage, error)
         }
@@ -64,24 +69,24 @@ export function createApiSessionMessageDelivery(options: {
 
         const queuedMessages = pendingMessages
         pendingMessages = []
-        for (const message of queuedMessages) {
-            deliverUserMessage(callback, message, 'callback_flush')
+        for (const queued of queuedMessages) {
+            deliverUserMessage(callback, queued.message, queued.localId, 'callback_flush')
         }
     }
 
     return {
-        onUserMessage(callback: (message: UserMessage) => void): void {
+        onUserMessage(callback: UserMessageCallback): void {
             pendingMessageCallback = callback
             flushPendingMessages()
         },
-        enqueueUserMessage(message: UserMessage): void {
+        enqueueUserMessage(message: UserMessage, localId?: string): void {
             observeUserMessage(message)
             const callback = pendingMessageCallback
             if (callback) {
-                deliverUserMessage(callback, message, 'socket_update')
+                deliverUserMessage(callback, message, localId, 'socket_update')
                 return
             }
-            pendingMessages.push(message)
+            pendingMessages.push({ message, localId })
         },
     }
 }

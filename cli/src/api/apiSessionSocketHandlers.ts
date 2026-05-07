@@ -16,7 +16,8 @@ export function registerApiSessionSocketHandlers(options: {
     markNeedsBackfill: () => void
     onBackfillIfNeeded: () => Promise<void>
     emitSessionAlive: () => void
-    onHandleIncomingMessage: (message: { seq?: number | null; content: unknown }) => void
+    onHandleIncomingMessage: (message: { seq?: number | null; localId?: string | null; content: unknown }) => void
+    onCancelMessages: (localIds: string[]) => void
     onMetadataUpdate: (value: unknown, version: number) => void
     getMetadataVersion: () => number
     onAgentStateUpdate: (value: unknown | null, version: number) => void
@@ -39,6 +40,7 @@ export function registerApiSessionSocketHandlers(options: {
         onBackfillIfNeeded,
         emitSessionAlive,
         onHandleIncomingMessage,
+        onCancelMessages,
         onMetadataUpdate,
         getMetadataVersion,
         onAgentStateUpdate,
@@ -121,6 +123,11 @@ export function registerApiSessionSocketHandlers(options: {
 
             if (data.body.t === 'new-message') {
                 onHandleIncomingMessage(data.body.message)
+                return
+            }
+
+            if (data.body.t === 'cancel-messages' && data.body.sid === sessionId) {
+                onCancelMessages(data.body.localIds)
                 return
             }
 

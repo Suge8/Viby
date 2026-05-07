@@ -15,7 +15,7 @@ type ApiSessionRecoveryOwnerOptions = {
     token: string
     sessionId: string
     getRecoveryState: () => RecoveryState
-    enqueueUserMessage: (message: UserMessage) => void
+    enqueueUserMessage: (message: UserMessage, localId?: string) => void
     emitMessage: (content: unknown) => void
     observeAutoSummary?: (summary: { text: string; updatedAt: number | null }) => void
 }
@@ -24,7 +24,7 @@ export class ApiSessionRecoveryOwner {
     private readonly token: string
     private readonly sessionId: string
     private readonly getRecoveryState: () => RecoveryState
-    private readonly enqueueUserMessage: (message: UserMessage) => void
+    private readonly enqueueUserMessage: (message: UserMessage, localId?: string) => void
     private readonly emitMessage: (content: unknown) => void
     private readonly observeAutoSummary?: (summary: { text: string; updatedAt: number | null }) => void
 
@@ -37,7 +37,7 @@ export class ApiSessionRecoveryOwner {
         this.observeAutoSummary = options.observeAutoSummary
     }
 
-    handleIncomingMessage(message: { seq?: number | null; content: unknown }): void {
+    handleIncomingMessage(message: { seq?: number | null; localId?: string | null; content: unknown }): void {
         handleIncomingSessionMessage(
             this.getRecoveryState(),
             message,

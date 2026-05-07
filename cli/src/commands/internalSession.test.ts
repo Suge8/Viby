@@ -78,6 +78,7 @@ function createValidHandoffPayload(): string {
         liveConfig: {
             model: 'claude-sonnet',
             modelReasoningEffort: 'high',
+            codexServiceTier: null,
             permissionMode: 'default',
         },
         history: [],
@@ -167,6 +168,7 @@ describe('internalSession', () => {
                 liveConfig: {
                     model: 'claude-sonnet',
                     modelReasoningEffort: 'high',
+                    codexServiceTier: null,
                     permissionMode: 'default',
                 },
                 history: [],
@@ -309,6 +311,7 @@ describe('internalSession', () => {
             permissionMode: 'safe-yolo',
             model: 'openai/gpt-5.4-mini',
             modelReasoningEffort: 'high',
+            resumeSessionId: undefined,
         })
     })
 
@@ -354,12 +357,17 @@ describe('internalSession', () => {
         )
     })
 
-    it('rejects provider resume tokens for Pi sessions', async () => {
-        await expect(
-            internalSessionCommand.run({
-                args: [],
-                commandArgs: ['--agent', 'pi', '--started-by', 'runner', '--resume-session-id', 'pi-provider-session'],
+    it('forwards provider-native resume tokens for Pi sessions', async () => {
+        await internalSessionCommand.run({
+            args: [],
+            commandArgs: ['--agent', 'pi', '--started-by', 'runner', '--resume-session-id', 'pi-provider-session'],
+        })
+
+        expect(harness.runPi).toHaveBeenCalledWith(
+            expect.objectContaining({
+                startedBy: 'runner',
+                resumeSessionId: 'pi-provider-session',
             })
-        ).rejects.toThrow('Pi does not support provider resume session ids')
+        )
     })
 })

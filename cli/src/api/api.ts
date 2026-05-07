@@ -5,6 +5,7 @@ import { getAuthToken } from '@/api/auth'
 import type {
     AgentState,
     CliSessionRecoveryResponse,
+    CodexServiceTier,
     CreateMachineResponse,
     CreateSessionResponse,
     Machine,
@@ -69,6 +70,7 @@ export class ApiClient {
             todos: raw.todos,
             model: raw.model,
             modelReasoningEffort: raw.modelReasoningEffort,
+            codexServiceTier: raw.codexServiceTier ?? null,
             permissionMode: raw.permissionMode,
             collaborationMode: raw.collaborationMode,
         }
@@ -96,6 +98,7 @@ export class ApiClient {
         state: AgentState | null
         model?: string
         modelReasoningEffort?: SessionModelReasoningEffort
+        codexServiceTier?: CodexServiceTier | null
         permissionMode?: SessionPermissionMode
         collaborationMode?: SessionCollaborationMode
     }): Promise<Session> {
@@ -108,6 +111,7 @@ export class ApiClient {
                 agentState: opts.state,
                 model: opts.model,
                 modelReasoningEffort: opts.modelReasoningEffort,
+                codexServiceTier: opts.codexServiceTier,
                 permissionMode: opts.permissionMode,
                 collaborationMode: opts.collaborationMode,
             },

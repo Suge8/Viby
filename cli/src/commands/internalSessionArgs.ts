@@ -1,5 +1,10 @@
-import { CodexCollaborationModeSchema, ModelReasoningEffortSchema, PermissionModeSchema } from '@viby/protocol/schemas'
-import type { SessionHandoffSnapshot } from '@viby/protocol/types'
+import {
+    CodexCollaborationModeSchema,
+    CodexServiceTierSchema,
+    ModelReasoningEffortSchema,
+    PermissionModeSchema,
+} from '@viby/protocol/schemas'
+import type { CodexServiceTier, SessionHandoffSnapshot } from '@viby/protocol/types'
 import type { SessionCollaborationMode, SessionModelReasoningEffort, SessionPermissionMode } from '@/api/types'
 import { type DriverSwitchTarget, loadDriverSwitchHandoff, parseDriverSwitchTarget } from '@/runner/driverSwitchHandoff'
 
@@ -17,6 +22,7 @@ export type InternalSessionOptions = {
     resumeSessionId?: string
     model?: string
     modelReasoningEffort?: SessionModelReasoningEffort
+    codexServiceTier?: CodexServiceTier
     permissionMode?: SessionPermissionMode
     collaborationMode?: SessionCollaborationMode
     driverSwitch?: DriverSwitchBootstrap
@@ -64,6 +70,7 @@ export function parseInternalSessionArgs(args: string[]): ParsedInternalSessionA
     let resumeSessionId: string | undefined
     let model: string | undefined
     let modelReasoningEffort: SessionModelReasoningEffort | undefined
+    let codexServiceTier: CodexServiceTier | undefined
     let permissionMode: SessionPermissionMode | undefined
     let collaborationMode: SessionCollaborationMode | undefined
     let driverSwitchTarget: DriverSwitchTarget | undefined
@@ -103,6 +110,15 @@ export function parseInternalSessionArgs(args: string[]): ParsedInternalSessionA
                 throw new Error('Invalid --model-reasoning-effort value')
             }
             modelReasoningEffort = parsed.data
+            index += 1
+            continue
+        }
+        if (arg === '--codex-service-tier') {
+            const parsed = CodexServiceTierSchema.safeParse(readFlagValue(args, index, '--codex-service-tier'))
+            if (!parsed.success) {
+                throw new Error('Invalid --codex-service-tier value')
+            }
+            codexServiceTier = parsed.data
             index += 1
             continue
         }
@@ -149,6 +165,7 @@ export function parseInternalSessionArgs(args: string[]): ParsedInternalSessionA
         resumeSessionId,
         model,
         modelReasoningEffort,
+        codexServiceTier,
         permissionMode,
         collaborationMode,
         driverSwitchTarget,

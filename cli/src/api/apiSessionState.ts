@@ -2,6 +2,7 @@ import { isSystemInjectedPseudoUserText } from '@viby/protocol'
 import { EMPTY_SESSION_CONTINUITY_FIRST_TURN_ERROR } from '@/agent/driverSwitchHandoffState'
 import type { RawJSONLines } from '@/claude/types'
 import type {
+    CodexServiceTier,
     MessageContent,
     Metadata,
     Session,
@@ -23,6 +24,7 @@ export type SessionKeepAliveRuntime = {
     permissionMode?: SessionPermissionMode
     model?: SessionModel
     modelReasoningEffort?: SessionModelReasoningEffort
+    codexServiceTier?: CodexServiceTier | null
     collaborationMode?: SessionCollaborationMode
 }
 
@@ -93,6 +95,7 @@ export function createInitialKeepAliveSnapshot(session: Session): SessionKeepAli
         ...(session.permissionMode !== undefined ? { permissionMode: session.permissionMode } : {}),
         ...(session.model !== undefined ? { model: session.model } : {}),
         ...(session.modelReasoningEffort !== undefined ? { modelReasoningEffort: session.modelReasoningEffort } : {}),
+        ...(session.codexServiceTier !== undefined ? { codexServiceTier: session.codexServiceTier } : {}),
         ...(session.collaborationMode !== undefined ? { collaborationMode: session.collaborationMode } : {}),
     }
 }
@@ -108,6 +111,7 @@ export function toSessionAlivePayload(
     permissionMode?: SessionPermissionMode
     model?: SessionModel
     modelReasoningEffort?: SessionModelReasoningEffort
+    codexServiceTier?: CodexServiceTier | null
     collaborationMode?: SessionCollaborationMode
 } {
     return {
@@ -118,6 +122,7 @@ export function toSessionAlivePayload(
         ...(snapshot.permissionMode !== undefined ? { permissionMode: snapshot.permissionMode } : {}),
         ...(snapshot.model !== undefined ? { model: snapshot.model } : {}),
         ...(snapshot.modelReasoningEffort !== undefined ? { modelReasoningEffort: snapshot.modelReasoningEffort } : {}),
+        ...(snapshot.codexServiceTier !== undefined ? { codexServiceTier: snapshot.codexServiceTier } : {}),
         ...(snapshot.collaborationMode !== undefined ? { collaborationMode: snapshot.collaborationMode } : {}),
     }
 }
