@@ -24,7 +24,7 @@ export function SurfaceRouteHeader(props: SurfaceRouteHeaderProps): React.JSX.El
                 props.className
             )}
         >
-            <MotionStaggerGroup className="flex items-center gap-4" delay={0.02} stagger={0.08}>
+            <MotionStaggerGroup className="ds-stage-shell flex items-center gap-4 px-3" delay={0.02} stagger={0.08}>
                 <MotionStaggerItem x={-18} y={0}>
                     <Button
                         type="button"

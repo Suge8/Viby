@@ -1,6 +1,12 @@
 import type { QueryClient } from '@tanstack/react-query'
 import { resolveCommandCapabilityScopeKey } from '@viby/protocol'
-import { applySessionStream, clearSessionStream, ingestIncomingMessages } from '@/lib/message-window-store'
+import {
+    applySessionStream,
+    clearSessionStream,
+    ingestIncomingMessages,
+    markMessagesConsumed,
+    removeQueuedMessages,
+} from '@/lib/message-window-store'
 import { queryKeys } from '@/lib/query-keys'
 import {
     getSessionPatch,
@@ -130,6 +136,14 @@ export function createRealtimeEventController(options: RealtimeEventControllerOp
 
         if (event.type === 'session-stream-cleared') {
             clearSessionStream(event.sessionId, event.assistantTurnId)
+        }
+
+        if (event.type === 'messages-consumed') {
+            markMessagesConsumed(event.sessionId, event.localIds, event.invokedAt ?? Date.now())
+        }
+
+        if (event.type === 'messages-canceled') {
+            removeQueuedMessages(event.sessionId, event.localIds)
         }
 
         if (event.type === 'command-capabilities-invalidated') {

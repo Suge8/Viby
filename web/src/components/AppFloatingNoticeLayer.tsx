@@ -1,13 +1,13 @@
 import { useLocation } from '@tanstack/react-router'
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import type { ApiClient } from '@/api/client'
-import { FloatingNoticeViewport } from '@/components/FloatingNoticeViewport'
 import { useRuntime } from '@/hooks/queries/useRuntime'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import type { RealtimeBannerState } from '@/hooks/useRealtimeFeedback'
 import { useRuntimeUpdateState } from '@/hooks/useRuntimeUpdateState'
 import { type Notice, usePersistentNotices } from '@/lib/notice-center'
 import { getNoticePreset } from '@/lib/noticePresets'
+import { buildCompactPersistentNotice, PERSISTENT_NOTICE_IDS } from '@/lib/persistentNoticePresentation'
 import { getRuntimeAvailabilityCopy, getRuntimeAvailabilityPresentation } from '@/lib/runtimeAvailabilityPresentation'
 import { buildOfflineNotice, buildRuntimeNotice } from '@/lib/runtimeNoticePresentation'
 import { useTranslation } from '@/lib/use-translation'
@@ -42,6 +42,9 @@ export function AppFloatingNoticeLayer(props: { api: ApiClient; banner: Realtime
         [loadRuntimeErrorPreset.title, runtimeAvailability, t]
     )
     const suppressRouteOwnedRuntimeNotice = pathname === NEW_SESSION_ROUTE
+    const handleRuntimeUpdatePress = useCallback(async () => {
+        await applyUpdate()
+    }, [applyUpdate])
 
     const persistentNotices = useMemo(() => {
         const notices: Notice[] = []
@@ -57,8 +60,6 @@ export function AppFloatingNoticeLayer(props: { api: ApiClient; banner: Realtime
             t,
             currentOrigin,
             isDevRuntime: import.meta.env.DEV,
-            hasPendingRuntimeUpdate: pendingRuntimeUpdate !== null,
-            applyRuntimeUpdate: applyUpdate,
             localRuntimeUnavailableTitle: suppressRouteOwnedRuntimeNotice
                 ? null
                 : (runtimeAvailabilityCopy?.noticeTitle ?? null),
@@ -71,10 +72,21 @@ export function AppFloatingNoticeLayer(props: { api: ApiClient; banner: Realtime
             notices.push(runtimeNotice)
         }
 
+        if (pendingRuntimeUpdate) {
+            notices.push(
+                buildCompactPersistentNotice({
+                    id: PERSISTENT_NOTICE_IDS.runtimeUpdate,
+                    title: t('updateReady.title'),
+                    tone: 'info',
+                    onPress: handleRuntimeUpdatePress,
+                })
+            )
+        }
+
         return notices
     }, [
-        applyUpdate,
         currentOrigin,
+        handleRuntimeUpdatePress,
         isOnline,
         pendingRuntimeUpdate,
         props.banner,
@@ -85,5 +97,5 @@ export function AppFloatingNoticeLayer(props: { api: ApiClient; banner: Realtime
 
     usePersistentNotices(persistentNotices)
 
-    return <FloatingNoticeViewport />
+    return null
 }

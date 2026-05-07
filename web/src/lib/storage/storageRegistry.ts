@@ -10,6 +10,9 @@ export const LOCAL_STORAGE_KEYS = {
     newSessionLastUsed: 'viby:newSession:last-used',
     recentPaths: 'viby:recentPaths',
     recentSkills: 'viby-recent-skills',
+    remoteActivePairing: 'viby:remote:active-pairing-id',
+    pairingDevicePrefix: 'viby:pairing:',
+    pairingGuestTokenPrefix: 'viby:pairing:',
     accessTokenPrefix: 'viby_access_token::',
     sessionTokenPrefix: 'viby_session_token::',
     testPrefix: 'viby:test-',
@@ -45,6 +48,8 @@ export type BrowserLocalStorageKey =
     | ValueOf<typeof LOCAL_STORAGE_KEYS>
     | `${typeof LOCAL_STORAGE_KEYS.accessTokenPrefix}${string}`
     | `${typeof LOCAL_STORAGE_KEYS.sessionTokenPrefix}${string}`
+    | `${typeof LOCAL_STORAGE_KEYS.pairingDevicePrefix}${string}:device-key`
+    | `${typeof LOCAL_STORAGE_KEYS.pairingGuestTokenPrefix}${string}:guest-token`
     | `${typeof LOCAL_STORAGE_KEYS.testPrefix}${string}`
 
 export type BrowserSessionStorageKey =
@@ -62,4 +67,12 @@ export function getAccessTokenStorageKey(baseUrl: string): BrowserLocalStorageKe
 
 export function getSessionTokenStorageKey(baseUrl: string): BrowserLocalStorageKey {
     return `${LOCAL_STORAGE_KEYS.sessionTokenPrefix}${baseUrl}`
+}
+
+export function getPairingDeviceStorageKey(pairingId: string): BrowserLocalStorageKey {
+    return `${LOCAL_STORAGE_KEYS.pairingDevicePrefix}${pairingId}:device-key`
+}
+
+export function getPairingGuestTokenStorageKey(pairingId: string): BrowserLocalStorageKey {
+    return `${LOCAL_STORAGE_KEYS.pairingGuestTokenPrefix}${pairingId}:guest-token`
 }

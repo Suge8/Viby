@@ -4,7 +4,6 @@ import { MotionRouteOutlet } from '@/components/motion/motionPrimitives'
 import type { AuthSource } from '@/hooks/useAuth'
 import { AppContextProvider } from '@/lib/app-context'
 import type { AppViewportRoute } from '@/lib/appShellPresentation'
-import { NoticeProvider } from '@/lib/notice-center'
 
 export type ReadyAppSession = {
     api: ApiClient
@@ -36,18 +35,16 @@ type AppReadyShellProps = {
 
 export function AppReadyShell(props: AppReadyShellProps): JSX.Element {
     return (
-        <NoticeProvider>
-            <AppContextProvider
-                value={{
-                    api: props.session.api,
-                    token: props.session.token,
-                    baseUrl: props.session.baseUrl,
-                }}
-            >
-                <AppViewportShell appViewportRoute={props.appViewportRoute} />
-                {props.children}
-            </AppContextProvider>
-        </NoticeProvider>
+        <AppContextProvider
+            value={{
+                api: props.session.api,
+                token: props.session.token,
+                baseUrl: props.session.baseUrl,
+            }}
+        >
+            <AppViewportShell appViewportRoute={props.appViewportRoute} />
+            {props.children}
+        </AppContextProvider>
     )
 }
 

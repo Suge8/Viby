@@ -1,6 +1,7 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { AppNoticeTone } from '@/components/AppNotice'
 import { createRandomId } from '@/lib/id'
+import { compareNoticePriority } from '@/lib/persistentNoticePresentation'
 
 export type Notice = {
     id: string
@@ -9,6 +10,7 @@ export type Notice = {
     tone?: AppNoticeTone
     icon?: ReactNode
     compact?: boolean
+    priority?: number
     href?: string
     onPress?: () => void | Promise<void>
 }
@@ -25,20 +27,24 @@ type NoticeCenterValue = {
     dismissNotice: (id: string) => void
 }
 
-const NOTICE_DURATION_MS = 6_000
+export const NOTICE_TOAST_DURATION_MS = 6_000
+export const NOTICE_TOAST_LIMIT = 3
 const EMPTY_NOTICES: readonly Notice[] = Object.freeze([])
 const EMPTY_NOTICE_IDS: readonly string[] = Object.freeze([])
 const NoticeCenterContext = createContext<NoticeCenterValue | null>(null)
 
 function areNoticesEquivalent(left: Notice, right: Notice): boolean {
-    return left.id === right.id
-        && left.tone === right.tone
-        && left.href === right.href
-        && typeof left.onPress === typeof right.onPress
-        && typeof left.icon === typeof right.icon
-        && left.compact === right.compact
-        && left.title === right.title
-        && left.description === right.description
+    return (
+        left.id === right.id &&
+        left.tone === right.tone &&
+        left.href === right.href &&
+        left.onPress === right.onPress &&
+        typeof left.icon === typeof right.icon &&
+        left.compact === right.compact &&
+        left.priority === right.priority &&
+        left.title === right.title &&
+        left.description === right.description
+    )
 }
 
 function upsertById(items: Notice[], nextItem: Notice): Notice[] {
@@ -84,48 +90,59 @@ export function NoticeProvider(props: { children: ReactNode }) {
         setPersistentNotices((prev) => prev.filter((notice) => notice.id !== id))
     }, [])
 
-    const dismissNotice = useCallback((id: string) => {
-        clearToastTimer(id)
-        setPersistentNotices((prev) => prev.filter((notice) => notice.id !== id))
-        setToastNotices((prev) => prev.filter((notice) => notice.id !== id))
-    }, [clearToastTimer])
+    const dismissNotice = useCallback(
+        (id: string) => {
+            clearToastTimer(id)
+            setPersistentNotices((prev) => prev.filter((notice) => notice.id !== id))
+            setToastNotices((prev) => prev.filter((notice) => notice.id !== id))
+        },
+        [clearToastTimer]
+    )
 
     const upsertNotice = useCallback((notice: Notice) => {
         setPersistentNotices((prev) => upsertById(prev, notice))
     }, [])
 
-    const addToast = useCallback((toast: ToastInput) => {
-        const { dismissAfterMs = NOTICE_DURATION_MS, ...notice } = toast
-        const id = createRandomId()
+    const addToast = useCallback(
+        (toast: ToastInput) => {
+            const { dismissAfterMs = NOTICE_TOAST_DURATION_MS, ...notice } = toast
+            const id = createRandomId()
 
-        setToastNotices((prev) => [...prev, { id, ...notice }])
-        if (dismissAfterMs > 0) {
-            const timer = setTimeout(() => {
-                dismissNotice(id)
-            }, dismissAfterMs)
-            timersRef.current.set(id, timer)
-        }
+            setToastNotices((prev) => {
+                const overflowCount = Math.max(prev.length + 1 - NOTICE_TOAST_LIMIT, 0)
+                for (const notice of prev.slice(0, overflowCount)) {
+                    clearToastTimer(notice.id)
+                }
+                return [...prev.slice(overflowCount), { id, ...notice }]
+            })
+            if (dismissAfterMs > 0) {
+                const timer = setTimeout(() => {
+                    dismissNotice(id)
+                }, dismissAfterMs)
+                timersRef.current.set(id, timer)
+            }
 
-        return id
-    }, [dismissNotice])
+            return id
+        },
+        [clearToastTimer, dismissNotice]
+    )
 
     const notices = useMemo(() => {
-        return [...persistentNotices, ...toastNotices]
+        return [...persistentNotices].sort(compareNoticePriority).concat(toastNotices)
     }, [persistentNotices, toastNotices])
 
-    const value = useMemo<NoticeCenterValue>(() => ({
-        notices,
-        addToast,
-        upsertNotice,
-        clearPersistentNotice,
-        dismissNotice
-    }), [addToast, clearPersistentNotice, dismissNotice, notices, upsertNotice])
-
-    return (
-        <NoticeCenterContext.Provider value={value}>
-            {props.children}
-        </NoticeCenterContext.Provider>
+    const value = useMemo<NoticeCenterValue>(
+        () => ({
+            notices,
+            addToast,
+            upsertNotice,
+            clearPersistentNotice,
+            dismissNotice,
+        }),
+        [addToast, clearPersistentNotice, dismissNotice, notices, upsertNotice]
     )
+
+    return <NoticeCenterContext.Provider value={value}>{props.children}</NoticeCenterContext.Provider>
 }
 
 export function useNoticeCenter(): NoticeCenterValue {

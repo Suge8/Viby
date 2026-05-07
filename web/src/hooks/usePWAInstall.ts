@@ -20,15 +20,18 @@ export type PWAInstallState = {
 const INSTALL_DISMISSED_KEY = LOCAL_STORAGE_KEYS.installDismissed
 const INSTALL_DISMISSED_VALUE = 'true'
 
+export function isIOSBrowser(): boolean {
+    if (typeof window === 'undefined') return false
+    return /iPad|iPhone|iPod/.test(window.navigator.userAgent)
+}
+
 export function isIOSSafariBrowser(): boolean {
     if (typeof window === 'undefined') return false
     const ua = window.navigator.userAgent
-    const isIOS = /iPad|iPhone|iPod/.test(ua)
     const isWebkit = /WebKit/.test(ua)
     const isChrome = /CriOS/.test(ua)
     const isFirefox = /FxiOS/.test(ua)
-    // iOS Safari is WebKit-based but not Chrome or Firefox
-    return isIOS && isWebkit && !isChrome && !isFirefox
+    return isIOSBrowser() && isWebkit && !isChrome && !isFirefox
 }
 
 function getInstallDismissed(): boolean {
@@ -61,7 +64,7 @@ export function usePWAInstall(): PWAInstallState {
     const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
     const [dismissed, setDismissed] = useState(() => getInstallDismissed())
 
-    const isIOS = typeof window !== 'undefined' && isIOSSafariBrowser()
+    const isIOS = isIOSBrowser()
     const isStandalone = useStandaloneDisplayMode()
 
     useEffect(() => {

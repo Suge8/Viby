@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
     applyPendingRuntimeUpdate,
-    readPendingRuntimeUpdate,
     RUNTIME_UPDATE_READY_EVENT,
-    type RuntimeUpdateSnapshot
+    type RuntimeUpdateSnapshot,
+    readPendingRuntimeUpdate,
 } from '@/lib/runtimeUpdateChannel'
 
 type RuntimeUpdateState = {
@@ -36,6 +36,6 @@ export function useRuntimeUpdateState(): RuntimeUpdateState {
 
     return {
         snapshot,
-        applyUpdate
+        applyUpdate,
     }
 }

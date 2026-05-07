@@ -164,6 +164,19 @@ describe('usePushNotifications', () => {
         })
     })
 
+    it('exposes push support synchronously to avoid an unavailable status flash', () => {
+        installNotificationMock('granted')
+        installPushSupport({
+            getSubscription: vi.fn<() => Promise<PushSubscription | null>>().mockResolvedValue(null),
+            subscribe: vi.fn<() => Promise<PushSubscription>>(),
+        })
+
+        const { result } = renderHook(() => usePushNotifications(null))
+
+        expect(result.current.isSupported).toBe(true)
+        expect(result.current.permission).toBe('granted')
+    })
+
     it('does not expose push support on origins where service workers are intentionally disabled', async () => {
         installNotificationMock('default')
         shouldRegisterServiceWorkerForOriginMock.mockReturnValue(false)

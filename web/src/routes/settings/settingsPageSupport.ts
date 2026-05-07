@@ -5,13 +5,6 @@ import type { SettingsActionCardAction } from './components/SettingsActionCard'
 import type { SettingsSelectOption } from './components/SettingsSelectCard'
 import { localeOptions } from './settingsData'
 
-export const SETTINGS_SECTION_DELAYS = {
-    language: 0.02,
-    display: 0.08,
-    notifications: 0.14,
-    about: 0.2,
-} as const
-
 export function getLocaleOptionLabel(
     option: Readonly<{ nativeLabel?: string; labelKey?: string }>,
     t: (key: string) => string

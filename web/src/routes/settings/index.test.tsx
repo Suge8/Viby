@@ -50,12 +50,16 @@ vi.mock('@/hooks/usePushNotifications', () => ({
     usePushNotifications: () => usePushNotificationsMock(),
 }))
 
+const useStandaloneDisplayModeMock = vi.fn(() => true)
+
 vi.mock('@/hooks/useStandaloneDisplayMode', () => ({
-    useStandaloneDisplayMode: () => true,
+    useStandaloneDisplayMode: () => useStandaloneDisplayModeMock(),
 }))
 
+const isIOSBrowserMock = vi.fn(() => false)
+
 vi.mock('@/hooks/usePWAInstall', () => ({
-    isIOSSafariBrowser: () => false,
+    isIOSBrowser: () => isIOSBrowserMock(),
 }))
 
 vi.mock('@/lib/runtimeAssetPolicy', () => ({
@@ -80,6 +84,8 @@ function renderWithSpyT(ui: React.ReactElement) {
 describe('SettingsPage', () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        isIOSBrowserMock.mockReturnValue(false)
+        useStandaloneDisplayModeMock.mockReturnValue(true)
         window.localStorage.clear()
         window.localStorage.setItem('viby-lang-preference', 'system')
         usePushNotificationsMock.mockReturnValue({
@@ -135,12 +141,12 @@ describe('SettingsPage', () => {
         expect(calledKeys).toContain('settings.display.appearance.system')
     })
 
-    it('uses the stage shell layout for full-width settings content', () => {
-        const { container } = renderWithProviders(<SettingsPage />)
-        expect(container.firstElementChild).toHaveAttribute('data-testid', 'session-route-page-surface')
-        expect(container.firstElementChild).toHaveClass('overflow-y-auto')
-        expect(container.firstElementChild?.firstElementChild).toHaveClass('ds-stage-shell')
-        expect(container.firstElementChild?.firstElementChild).not.toHaveClass('ds-page-shell')
+    it('uses the route scroll area as the single scroll owner inside the stage shell', () => {
+        renderWithProviders(<SettingsPage />)
+        const scrollArea = screen.getByTestId('route-scroll-area')
+        expect(scrollArea).toHaveClass('overflow-y-auto')
+        expect(scrollArea.firstElementChild).toHaveClass('ds-stage-shell')
+        expect(scrollArea.firstElementChild).not.toHaveClass('ds-page-shell')
     })
 
     it('does not render the old settings subtitle hero copy', () => {
@@ -156,5 +162,45 @@ describe('SettingsPage', () => {
         expect((await screen.findAllByText('Notifications')).length).toBeGreaterThanOrEqual(1)
         expect((await screen.findAllByText('Push Notifications')).length).toBeGreaterThanOrEqual(1)
         expect((await screen.findAllByRole('button', { name: 'Turn On' })).length).toBeGreaterThanOrEqual(1)
+    })
+
+    it('asks iOS browser users to install before showing unsupported push status', async () => {
+        isIOSBrowserMock.mockReturnValue(true)
+        useStandaloneDisplayModeMock.mockReturnValue(false)
+        usePushNotificationsMock.mockReturnValue({
+            isSupported: false,
+            isSubscribed: false,
+            permission: 'default',
+            isPending: false,
+            enableNotifications: vi.fn(),
+            disableNotifications: vi.fn(),
+            refreshSubscription: vi.fn(),
+        })
+
+        renderWithProviders(<SettingsPage />)
+
+        expect(await screen.findByText('Install first')).toBeInTheDocument()
+        expect(screen.getByText('On iPhone and iPad, add Viby to your Home Screen first.')).toBeInTheDocument()
+    })
+
+    it('uses concise product copy when notifications are not supported on this entry', async () => {
+        usePushNotificationsMock.mockReturnValue({
+            isSupported: false,
+            isSubscribed: false,
+            permission: 'default',
+            isPending: false,
+            enableNotifications: vi.fn(),
+            disableNotifications: vi.fn(),
+            refreshSubscription: vi.fn(),
+        })
+
+        renderWithProviders(<SettingsPage />)
+
+        expect(await screen.findByText('Not supported here')).toBeInTheDocument()
+        expect(
+            screen.getByText('This entry does not support system notifications. Chat still works normally.')
+        ).toBeInTheDocument()
+        expect(screen.queryByText(/service workers?/i)).not.toBeInTheDocument()
+        expect(screen.queryByText(/secure production app/i)).not.toBeInTheDocument()
     })
 })

@@ -60,7 +60,6 @@ export function buildNotificationSummaryModel(availability: NotificationAvailabi
         case 'unavailable':
             return {
                 descriptionKey: 'settings.notifications.description.unavailable',
-                detailKey: 'settings.notifications.detail.unavailable',
                 statusLabelKey: 'unavailable',
             }
         case 'disabled':

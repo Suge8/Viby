@@ -5,7 +5,6 @@ import { SettingsIcon } from '@/components/icons'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { LoginExperienceShell } from '@/components/login/LoginExperienceShell'
 import { Spinner } from '@/components/Spinner'
-import { STAGE_BRAND_MARK_NEUTRAL_TONE_CLASS_NAME, StageBrandMark } from '@/components/StageBrandMark'
 import { Button } from '@/components/ui/button'
 import {
     Dialog,
@@ -24,6 +23,7 @@ import { formatUserFacingErrorMessage } from '@/lib/userFacingError'
 
 const ACCESS_TOKEN_AUTOCOMPLETE = 'new-password'
 const ACCESS_TOKEN_INPUT_NAME = 'accessToken'
+const ACCESS_TOKEN_TITLE_ID = 'login-access-key-title'
 const ACCESS_TOKEN_INPUT_CLASS_NAME = 'ds-field-control-elevated py-4 text-base'
 const HUB_TRIGGER_CLASS_NAME = 'viby-login-server-trigger rounded-full px-2 py-1'
 const HUB_INPUT_CLASS_NAME = 'ds-field-control-elevated'
@@ -146,28 +146,18 @@ export function LoginPrompt(props: LoginPromptProps): JSX.Element {
 
     const displayError = error || externalError
     const serverSummary = buildServerSummary(server, t('login.server.default'))
+    const showServerSettings = Boolean(server.requireServerUrl || server.serverUrl)
     const loginPanel = (
         <div className="viby-login-login-panel">
-            <div className="viby-login-login-panel__header">
-                <div>
-                    <div className="viby-login-login-panel__badge">{t('login.panel.badge')}</div>
-                    <div className="viby-login-login-panel__title">{t('login.panel.title')}</div>
-                    <div className="viby-login-login-panel__subtitle">{t('login.panel.body')}</div>
-                </div>
-                <StageBrandMark
-                    className={`h-14 w-14 ${STAGE_BRAND_MARK_NEUTRAL_TONE_CLASS_NAME}`}
-                    markClassName="h-9 w-9"
-                />
-            </div>
-
             <form onSubmit={handleSubmit} autoComplete="off" className="viby-login-login-panel__form">
-                <div className="viby-login-login-panel__meta">
-                    <span>{t('login.panel.inputLabel')}</span>
-                    <span>{t('login.panel.inputHint')}</span>
+                <div className="viby-login-login-panel__header">
+                    <h1 id={ACCESS_TOKEN_TITLE_ID}>{t('login.panel.inputLabel')}</h1>
                 </div>
                 <Input
+                    id={ACCESS_TOKEN_INPUT_NAME}
                     type="password"
                     name={ACCESS_TOKEN_INPUT_NAME}
+                    aria-labelledby={ACCESS_TOKEN_TITLE_ID}
                     value={accessToken}
                     onChange={handleAccessTokenChange}
                     placeholder={t('login.placeholder')}
@@ -179,7 +169,7 @@ export function LoginPrompt(props: LoginPromptProps): JSX.Element {
                     data-1p-ignore="true"
                     data-lpignore="true"
                     disabled={isLoading}
-                    className={ACCESS_TOKEN_INPUT_CLASS_NAME}
+                    className={`${ACCESS_TOKEN_INPUT_CLASS_NAME} viby-login-access-key-input`}
                 />
 
                 {displayError && (
@@ -196,7 +186,7 @@ export function LoginPrompt(props: LoginPromptProps): JSX.Element {
                     disabled={isLoading || !accessToken.trim()}
                     aria-busy={isLoading}
                     size="lg"
-                    className="w-full"
+                    className="viby-login-submit"
                 >
                     {isLoading ? (
                         <>
@@ -209,57 +199,59 @@ export function LoginPrompt(props: LoginPromptProps): JSX.Element {
                 </Button>
             </form>
 
-            <div className="viby-login-login-panel__footer">
-                <Dialog open={isServerDialogOpen} onOpenChange={handleServerDialogOpenChange}>
-                    <DialogTrigger asChild>
-                        <Button type="button" variant="ghost" size="sm" className={HUB_TRIGGER_CLASS_NAME}>
-                            <SettingsIcon className="h-4 w-4" />
-                            Hub {server.serverUrl ? t('login.server.custom') : t('login.server.default')}
-                        </Button>
-                    </DialogTrigger>
-                    <DialogContent className="max-w-md">
-                        <DialogHeader>
-                            <DialogTitle>{t('login.server.title')}</DialogTitle>
-                            <DialogDescription>{t('login.server.description')}</DialogDescription>
-                        </DialogHeader>
-                        <form onSubmit={handleSaveServer} className="space-y-4">
-                            <div className="text-xs text-[var(--app-hint)]">
-                                {t('login.server.current')} {serverSummary}
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-xs font-medium">{t('login.server.origin')}</label>
-                                <Input
-                                    type="url"
-                                    value={serverInput}
-                                    onChange={handleServerInputChange}
-                                    placeholder={t('login.server.placeholder')}
-                                    className={HUB_INPUT_CLASS_NAME}
-                                />
-                                <div className="ds-login-server-hint text-[var(--app-hint)]">
-                                    {t('login.server.hint')}
+            {showServerSettings ? (
+                <div className="viby-login-login-panel__footer">
+                    <Dialog open={isServerDialogOpen} onOpenChange={handleServerDialogOpenChange}>
+                        <DialogTrigger asChild>
+                            <Button type="button" variant="ghost" size="sm" className={HUB_TRIGGER_CLASS_NAME}>
+                                <SettingsIcon className="h-4 w-4" />
+                                Hub {server.serverUrl ? t('login.server.custom') : t('login.server.default')}
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-md">
+                            <DialogHeader>
+                                <DialogTitle>{t('login.server.title')}</DialogTitle>
+                                <DialogDescription>{t('login.server.description')}</DialogDescription>
+                            </DialogHeader>
+                            <form onSubmit={handleSaveServer} className="space-y-4">
+                                <div className="text-xs text-[var(--app-hint)]">
+                                    {t('login.server.current')} {serverSummary}
                                 </div>
-                            </div>
+                                <div className="space-y-2">
+                                    <label className="text-xs font-medium">{t('login.server.origin')}</label>
+                                    <Input
+                                        type="url"
+                                        value={serverInput}
+                                        onChange={handleServerInputChange}
+                                        placeholder={t('login.server.placeholder')}
+                                        className={HUB_INPUT_CLASS_NAME}
+                                    />
+                                    <div className="ds-login-server-hint text-[var(--app-hint)]">
+                                        {t('login.server.hint')}
+                                    </div>
+                                </div>
 
-                            {serverError && (
-                                <InlineNotice
-                                    tone={loginServerErrorPreset.tone}
-                                    title={loginServerErrorPreset.title}
-                                    description={serverError}
-                                />
-                            )}
-
-                            <div className="flex items-center justify-end gap-2">
-                                {server.serverUrl && (
-                                    <Button type="button" variant="outline" onClick={handleClearServer}>
-                                        {t('login.server.useSameOrigin')}
-                                    </Button>
+                                {serverError && (
+                                    <InlineNotice
+                                        tone={loginServerErrorPreset.tone}
+                                        title={loginServerErrorPreset.title}
+                                        description={serverError}
+                                    />
                                 )}
-                                <Button type="submit">{t('login.server.save')}</Button>
-                            </div>
-                        </form>
-                    </DialogContent>
-                </Dialog>
-            </div>
+
+                                <div className="flex items-center justify-end gap-2">
+                                    {server.serverUrl && (
+                                        <Button type="button" variant="outline" onClick={handleClearServer}>
+                                            {t('login.server.useSameOrigin')}
+                                        </Button>
+                                    )}
+                                    <Button type="submit">{t('login.server.save')}</Button>
+                                </div>
+                            </form>
+                        </DialogContent>
+                    </Dialog>
+                </div>
+            ) : null}
         </div>
     )
 
@@ -269,14 +261,9 @@ export function LoginPrompt(props: LoginPromptProps): JSX.Element {
             languageSwitcher={<LanguageSwitcher />}
             loginPanel={loginPanel}
             footer={
-                <>
-                    <div>
-                        {t('login.footer')} {t('login.footer.for')}
-                    </div>
-                    <div>
-                        {t('login.footer.copyright')} {new Date().getFullYear()} Viby
-                    </div>
-                </>
+                <div>
+                    {t('login.footer.copyright')} {new Date().getFullYear()} Viby
+                </div>
             }
         />
     )

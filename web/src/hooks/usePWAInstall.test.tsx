@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { usePWAInstall } from './usePWAInstall'
 
 type MockBeforeInstallPromptEvent = Event & {
@@ -31,8 +31,8 @@ function installMatchMediaMock(standalone: boolean): void {
             removeEventListener: vi.fn(),
             addListener: vi.fn(),
             removeListener: vi.fn(),
-            dispatchEvent: vi.fn()
-        }))
+            dispatchEvent: vi.fn(),
+        })),
     })
 }
 
@@ -54,11 +54,11 @@ describe('usePWAInstall', () => {
         installMatchMediaMock(false)
         Object.defineProperty(window.navigator, 'standalone', {
             configurable: true,
-            value: false
+            value: false,
         })
         Object.defineProperty(window.navigator, 'userAgent', {
             configurable: true,
-            value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36'
+            value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36',
         })
     })
 
@@ -67,15 +67,15 @@ describe('usePWAInstall', () => {
         window.localStorage.clear()
         Object.defineProperty(window.navigator, 'userAgent', {
             configurable: true,
-            value: originalUserAgent
+            value: originalUserAgent,
         })
         Object.defineProperty(window.navigator, 'standalone', {
             configurable: true,
-            value: originalStandalone
+            value: originalStandalone,
         })
         Object.defineProperty(window, 'matchMedia', {
             configurable: true,
-            value: originalMatchMedia
+            value: originalMatchMedia,
         })
     })
 
@@ -117,7 +117,7 @@ describe('usePWAInstall', () => {
     it('treats iOS Safari browser mode as manual install guidance', async () => {
         Object.defineProperty(window.navigator, 'userAgent', {
             configurable: true,
-            value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+            value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
         })
 
         render(<InstallProbe />)
@@ -125,6 +125,19 @@ describe('usePWAInstall', () => {
         await waitFor(() => {
             expect(screen.getByTestId('platform')).toHaveTextContent('ios')
             expect(screen.getByTestId('standalone')).toHaveTextContent('false')
+        })
+    })
+
+    it('treats iOS Chrome browser mode as manual install guidance', async () => {
+        Object.defineProperty(window.navigator, 'userAgent', {
+            configurable: true,
+            value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 26_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/144.0.7559.95 Mobile/15E148 Safari/604.1',
+        })
+
+        render(<InstallProbe />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId('platform')).toHaveTextContent('ios')
         })
     })
 })

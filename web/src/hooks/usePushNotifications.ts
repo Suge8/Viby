@@ -68,8 +68,10 @@ async function getPushRegistration(): Promise<ServiceWorkerRegistration | null> 
 }
 
 export function usePushNotifications(api: ApiClient | null) {
-    const [isSupported, setIsSupported] = useState(false)
-    const [permission, setPermission] = useState<NotificationPermission>('default')
+    const [isSupported, setIsSupported] = useState(isPushSupported)
+    const [permission, setPermission] = useState<NotificationPermission>(() =>
+        isPushSupported() ? Notification.permission : 'default'
+    )
     const [isSubscribed, setIsSubscribed] = useState(false)
     const [pushEndpoint, setPushEndpoint] = useState<string | null>(null)
     const [isPending, setIsPending] = useState(false)

@@ -10,7 +10,7 @@ const SEEN_AT = 1_700_000_000_000
 const REPLY_AT = 1_700_000_060_000
 
 function createSessionSummary(overrides: Partial<SessionSummary> & Pick<SessionSummary, 'id'>): SessionSummary {
-    const { id, ...rest } = overrides
+    const { id, codexServiceTier = null, ...rest } = overrides
 
     return {
         active: false,
@@ -33,6 +33,7 @@ function createSessionSummary(overrides: Partial<SessionSummary> & Pick<SessionS
         resumeStrategy: 'none',
         model: null,
         modelReasoningEffort: null,
+        codexServiceTier,
         ...rest,
         id,
     }

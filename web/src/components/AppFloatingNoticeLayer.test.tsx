@@ -35,24 +35,27 @@ vi.mock('@/lib/use-translation', () => ({
     }),
 }))
 
-vi.mock('@/components/FloatingNoticeViewport', () => ({
-    FloatingNoticeViewport: () => {
-        const { notices } = useNoticeCenter()
-        return (
-            <div>
-                {notices.map((notice) => (
-                    <div key={notice.id}>
-                        <span>{notice.title}</span>
-                        {notice.description ? <span>{notice.description}</span> : null}
-                    </div>
-                ))}
-            </div>
-        )
-    },
-}))
-
 function renderWithNotices(node: ReactNode) {
-    return render(<NoticeProvider>{node}</NoticeProvider>)
+    return render(
+        <NoticeProvider>
+            {node}
+            <NoticeProbe />
+        </NoticeProvider>
+    )
+}
+
+function NoticeProbe() {
+    const { notices } = useNoticeCenter()
+    return (
+        <div>
+            {notices.map((notice) => (
+                <div key={notice.id}>
+                    <span>{notice.title}</span>
+                    {notice.description ? <span>{notice.description}</span> : null}
+                </div>
+            ))}
+        </div>
+    )
 }
 
 describe('AppFloatingNoticeLayer', () => {
@@ -106,6 +109,24 @@ describe('AppFloatingNoticeLayer', () => {
 
         expect(screen.getByText('newSession.error.loadRuntimeTitle')).toBeInTheDocument()
         expect(screen.getByText('runtime query failed')).toBeInTheDocument()
+    })
+
+    it('publishes pending runtime updates through the persistent floating notice owner', () => {
+        useLocationMock.mockReturnValue('/sessions')
+        useRuntimeMock.mockReturnValue({
+            runtime: null,
+            isLoading: false,
+            error: null,
+        })
+        useOnlineStatusMock.mockReturnValue(true)
+        useRuntimeUpdateStateMock.mockReturnValue({
+            snapshot: { availableAt: 1, mode: 'reload' },
+            applyUpdate: async () => true,
+        })
+
+        renderWithNotices(<AppFloatingNoticeLayer api={{} as never} banner={{ kind: 'hidden' }} />)
+
+        expect(screen.getByText('updateReady.title')).toBeInTheDocument()
     })
 
     it('suppresses the floating runtime unavailable notice on the new-session route', () => {

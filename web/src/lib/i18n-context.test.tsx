@@ -142,7 +142,7 @@ describe('i18n locale detection', () => {
         )
 
         await waitFor(() => {
-            expect(screen.getByText('登录')).toBeInTheDocument()
+            expect(screen.getByText('进入')).toBeInTheDocument()
         })
     })
 
@@ -154,7 +154,7 @@ describe('i18n locale detection', () => {
         )
 
         await waitFor(() => {
-            expect(screen.getByText('Sign In')).toBeInTheDocument()
+            expect(screen.getByText('Enter')).toBeInTheDocument()
         })
     })
 })

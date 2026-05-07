@@ -23,7 +23,20 @@ const installPromptPropsMock = vi.fn()
 vi.mock('@tanstack/react-router', () => ({
     Outlet: () => <div data-testid="outlet" />,
     useMatchRoute: () => useMatchRouteMock(),
-    useLocation: () => useLocationMock(),
+    useLocation: (options?: {
+        select?: (location: { pathname: string; search: string; hash: string; href: string }) => unknown
+    }) => {
+        const value = useLocationMock()
+        const location =
+            typeof value === 'string'
+                ? { pathname: value, search: '', hash: '', href: value }
+                : (value as { pathname: string; search: string; hash: string; href?: string })
+        const normalizedLocation = {
+            ...location,
+            href: location.href ?? `${location.pathname}${location.search}${location.hash}`,
+        }
+        return options?.select ? options.select(normalizedLocation) : normalizedLocation
+    },
     useRouter: () => useRouterMock(),
 }))
 
@@ -80,6 +93,10 @@ vi.mock('@/lib/notice-center', () => ({
     useNoticeCenter: () => ({ addToast: addToastMock }),
 }))
 
+vi.mock('@/components/FloatingNoticeViewport', () => ({
+    FloatingNoticeViewport: () => null,
+}))
+
 vi.mock('@/components/LoginPrompt', () => ({
     LoginPrompt: (props: { error?: string | null }) => (
         <div data-testid="login-prompt">{props.error ?? 'no-error'}</div>
@@ -121,11 +138,13 @@ describe('App', () => {
     afterEach(() => {
         cleanup()
         resetPendingRuntimeUpdate()
+        window.localStorage.clear()
         window.sessionStorage.clear()
         document.documentElement.removeAttribute('data-boot-mode')
     })
 
     beforeEach(() => {
+        window.localStorage.clear()
         window.sessionStorage.clear()
         document.documentElement.removeAttribute('data-boot-mode')
         useMatchRouteMock.mockReturnValue(() => null)
@@ -185,6 +204,16 @@ describe('App', () => {
 
         expect(await screen.findByTestId('login-prompt')).toHaveTextContent('Session expired. Please login again.')
         expect(screen.queryByTestId('loading-state')).not.toBeInTheDocument()
+    })
+
+    it('shows a rescan path for installed remote PWA launches without stored pairing', async () => {
+        useLocationMock.mockReturnValue({ pathname: '/sessions', search: '?remote=1', hash: '' })
+        useAuthMock.mockReturnValue({ token: null, api: null, isLoading: false, error: null })
+
+        render(<App />)
+
+        expect(await screen.findByText('remotePairing.error.scanAgain')).toBeInTheDocument()
+        expect(screen.queryByTestId('login-prompt')).not.toBeInTheDocument()
     })
 
     it('retains the ready app shell while auth refresh temporarily drops token and api but keeps authSource alive', async () => {

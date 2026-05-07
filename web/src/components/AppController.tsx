@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useLocation, useRouter } from '@tanstack/react-router'
-import { type ComponentProps, type JSX, lazy, Suspense, useEffect, useMemo, useRef } from 'react'
+import { hasPairingWorkspaceIntent } from '@viby/protocol'
+import { type ComponentProps, type JSX, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import {
     AppReadyShell,
     createReadyAppSession,
@@ -16,9 +17,12 @@ import { initializeTheme } from '@/hooks/useTheme'
 import { useViewportInteractionGuards } from '@/hooks/useViewportInteractionGuards'
 import { getAppViewportRoute, isUnauthorizedAuthError } from '@/lib/appShellPresentation'
 import { requireHubUrlForLogin } from '@/lib/runtime-config'
+import { RemotePairingController } from '@/remote/RemotePairingController'
+import { RemotePairingMissingScreen } from '@/remote/RemotePairingScreens'
+import { readRemotePairingId } from '@/remote/remotePairingHttp'
 
 const REQUIRE_SERVER_URL = requireHubUrlForLogin()
-const AUTH_QUERY_PARAM_KEYS = ['server', 'hub', 'token'] as const
+const AUTH_QUERY_PARAM_KEYS = ['hub', 'token'] as const
 
 async function loadLoginPromptModule(): Promise<{
     default: (props: ComponentProps<typeof import('@/components/LoginPrompt').LoginPrompt>) => JSX.Element
@@ -41,12 +45,23 @@ export function AppController(): JSX.Element | null {
     const { authSource, setAccessToken, clearAuth } = useAuthSource(baseUrl)
     const { token, api, error: authError } = useAuth(authSource, baseUrl)
     const pathname = useLocation({ select: (location) => location.pathname })
+    const locationHref = useLocation({ select: (location) => location.href })
     const router = useRouter()
+    const locationSearch = new URL(locationHref, 'https://viby.local').search
+    const [remotePairingId, setRemotePairingId] = useState(() => readRemotePairingId(pathname, locationSearch))
+    const hasRemoteWorkspaceIntent = hasPairingWorkspaceIntent(pathname, locationSearch)
 
     useEffect(() => {
         initializeTheme()
     }, [])
     useViewportInteractionGuards()
+
+    useEffect(() => {
+        const nextPairingId = readRemotePairingId(pathname, locationSearch)
+        if (nextPairingId) {
+            setRemotePairingId(nextPairingId)
+        }
+    }, [locationSearch, pathname])
 
     const queryClient = useQueryClient()
     const appViewportRoute = getAppViewportRoute(pathname)
@@ -72,7 +87,10 @@ export function AppController(): JSX.Element | null {
     })
     const rootSurface = displayAppSession ? 'app' : !authSource || Boolean(authError) ? 'login' : 'pending'
     const shouldFinalizeRootBootShell =
-        rootSurface === 'login' || (rootSurface === 'app' && appViewportRoute !== 'session-chat')
+        !remotePairingId &&
+        (hasRemoteWorkspaceIntent ||
+            rootSurface === 'login' ||
+            (rootSurface === 'app' && appViewportRoute !== 'session-chat'))
 
     useFinalizeBootShell(shouldFinalizeRootBootShell)
 
@@ -110,6 +128,14 @@ export function AppController(): JSX.Element | null {
         const nextHref = `${pathname}${nextSearch ? `?${nextSearch}` : ''}${hash}`
         router.history.replace(nextHref, state)
     }, [readyAppSession, router])
+
+    if (remotePairingId) {
+        return <RemotePairingController pairingId={remotePairingId} />
+    }
+
+    if (hasRemoteWorkspaceIntent) {
+        return <RemotePairingMissingScreen />
+    }
 
     if (displayAppSession) {
         return (

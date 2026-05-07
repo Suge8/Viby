@@ -1,16 +1,18 @@
 import { useNavigate } from '@tanstack/react-router'
 import { memo, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { AppNotice } from '@/components/AppNotice'
 import { getNoticeToneIcon } from '@/components/InlineNotice'
 import { AnimatedList } from '@/components/ui/animated-list'
 import { BlurFade } from '@/components/ui/blur-fade'
 import { Button } from '@/components/ui/button'
 import { type Notice, useNoticeCenter } from '@/lib/notice-center'
+import { ensureAppOverlayRoot } from '@/lib/overlayRoot'
 import { reportWebRuntimeError } from '@/lib/runtimeDiagnostics'
 
 const NOTICE_STACK_DELAY_MS = 120
 const VIEWPORT_BASE_CLASS_NAME =
-    'pointer-events-none fixed left-1/2 top-[calc(env(safe-area-inset-top)+0.75rem)] z-50 -translate-x-1/2 sm:left-auto sm:right-3 sm:translate-x-0 md:right-4'
+    'pointer-events-none fixed top-[calc(var(--app-safe-area-inset-top)+var(--app-overlay-edge-offset))] right-[calc(var(--app-safe-area-inset-right)+var(--app-overlay-edge-offset))] z-50'
 const DEFAULT_VIEWPORT_WIDTH_CLASS_NAME = 'w-[min(calc(100vw-2.5rem),20rem)] sm:w-[min(calc(100vw-1.5rem),24rem)]'
 const COMPACT_VIEWPORT_WIDTH_CLASS_NAME = 'w-[min(calc(100vw-4.25rem),14rem)] sm:w-[min(calc(100vw-2rem),16rem)]'
 const NOTICE_BUTTON_CLASS_NAME =
@@ -124,7 +126,12 @@ export function FloatingNoticeViewport() {
         />
     ))
 
-    return (
+    const overlayRoot = ensureAppOverlayRoot()
+    if (!overlayRoot) {
+        return null
+    }
+
+    return createPortal(
         <div className={getViewportClassName(hasOnlyCompactNotices)} aria-live="polite">
             {hasOnlyCompactNotices ? (
                 <div className="w-full space-y-2.5">{cards}</div>
@@ -135,6 +142,7 @@ export function FloatingNoticeViewport() {
                     </AnimatedList>
                 </BlurFade>
             )}
-        </div>
+        </div>,
+        overlayRoot
     )
 }

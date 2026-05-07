@@ -12,6 +12,7 @@ export function LanguageSwitcher() {
     const { locale, setLocale, t } = useTranslation()
     const [isOpen, setIsOpen] = useState(false)
     const containerRef = useRef<HTMLDivElement>(null)
+    const currentLabel = t(locale === 'zh-CN' ? 'language.chinese' : 'language.english')
 
     useEffect(() => {
         if (!isOpen) {
@@ -49,16 +50,17 @@ export function LanguageSwitcher() {
         <div ref={containerRef} className="relative">
             <Button
                 type="button"
-                size="iconSm"
+                size="sm"
                 variant="secondary"
                 onClick={() => setIsOpen((open) => !open)}
-                className="h-10 w-10 text-[var(--app-hint)] hover:text-[var(--app-fg)]"
+                className="h-10 rounded-full px-3 text-[var(--app-hint)] hover:text-[var(--app-fg)]"
                 title={t('language.title')}
                 aria-label={t('language.title')}
                 aria-expanded={isOpen}
                 aria-haspopup="listbox"
             >
-                <TranslateIcon className="h-5 w-5 text-[var(--ds-accent-lime)]" />
+                <TranslateIcon className="h-4 w-4 text-[var(--ds-accent-lime)]" />
+                <span className="text-sm">{currentLabel}</span>
             </Button>
 
             {isOpen ? (
@@ -76,6 +78,7 @@ export function LanguageSwitcher() {
                                 type="button"
                                 size="sm"
                                 variant={isSelected ? 'secondary' : 'ghost'}
+                                pressStyle="list-row"
                                 role="option"
                                 aria-selected={isSelected}
                                 onClick={() => handleLocaleChange(option.value)}

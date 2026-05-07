@@ -22,7 +22,7 @@ function createServerConfig(): LoginPromptServerConfig {
     }
 }
 
-function renderPrompt() {
+function renderPrompt(server: LoginPromptServerConfig = createServerConfig()) {
     const translations = zhCN as Record<string, string>
     return render(
         <I18nContext.Provider
@@ -33,24 +33,27 @@ function renderPrompt() {
                 t: (key: string) => translations[key] ?? key,
             }}
         >
-            <LoginPrompt server={createServerConfig()} onLogin={vi.fn()} />
+            <LoginPrompt server={server} onLogin={vi.fn()} />
         </I18nContext.Provider>
     )
 }
 
 describe('LoginPrompt', () => {
-    it('renders the product-style landing shell around the sign-in form', () => {
+    it('renders the operational access shell around the sign-in form', () => {
         renderPrompt()
 
-        expect(screen.getByTestId('login-marketing-shell')).toBeInTheDocument()
-        expect(screen.getByText('Agent 留在你的机器上。')).toBeInTheDocument()
-        expect(screen.getAllByText('把访问令牌贴进来，直接接上你电脑上正在运行的会话。').length).toBeGreaterThanOrEqual(
-            1
-        )
-        expect(screen.getByRole('link', { name: '查看 GitHub 项目' })).toHaveAttribute(
-            'href',
-            'https://github.com/Suge8/Viby'
-        )
-        expect(screen.getByRole('button', { name: '登录' })).toBeInTheDocument()
+        expect(screen.getByTestId('login-access-shell')).toBeInTheDocument()
+        expect(screen.queryByText('Agent 留在你的机器上。')).not.toBeInTheDocument()
+        expect(screen.queryByText(/Vibe Coding/)).not.toBeInTheDocument()
+        expect(screen.queryByRole('link', { name: '查看 GitHub 项目' })).not.toBeInTheDocument()
+        expect(screen.getByLabelText('访问密钥')).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: '进入' })).toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: /Hub/ })).not.toBeInTheDocument()
+    })
+
+    it('shows hub settings only when a separate hub origin is required', () => {
+        renderPrompt({ ...createServerConfig(), requireServerUrl: true })
+
+        expect(screen.getByRole('button', { name: /Hub/ })).toBeInTheDocument()
     })
 })

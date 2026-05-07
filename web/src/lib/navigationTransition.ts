@@ -280,6 +280,6 @@ export function runPreloadedNavigation(
     preload: PreloadedNavigationTask,
     commit: () => void,
     recoveryHref: string
-): void {
-    void runNavigationTransitionAfterPreload(preload, commit, createNavigationTransitionOptions(recoveryHref))
+): Promise<void> {
+    return runNavigationTransitionAfterPreload(preload, commit, createNavigationTransitionOptions(recoveryHref))
 }

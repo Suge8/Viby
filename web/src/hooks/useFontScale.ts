@@ -4,6 +4,8 @@ import { type BrowserLocalStorageKey, LOCAL_STORAGE_KEYS } from '@/lib/storage/s
 
 export type FontScale = 0.8 | 0.9 | 1 | 1.1 | 1.2
 
+export const DEFAULT_FONT_SCALE: FontScale = 0.9
+
 export function getFontScaleOptions(): ReadonlyArray<{ value: FontScale; label: string }> {
     return [
         { value: 0.8, label: '80%' },
@@ -50,7 +52,7 @@ function parseFontScale(raw: string | null): FontScale {
     if (value === 0.8 || value === 0.9 || value === 1 || value === 1.1 || value === 1.2) {
         return value
     }
-    return 1
+    return DEFAULT_FONT_SCALE
 }
 
 function applyFontScale(scale: FontScale): void {
@@ -95,11 +97,12 @@ export function useFontScale(): { fontScale: FontScale; setFontScale: (scale: Fo
     function setFontScale(scale: FontScale): void {
         setFontScaleState(scale)
 
-        if (scale === 1) {
+        if (scale === DEFAULT_FONT_SCALE) {
             safeRemoveItem(getFontScaleStorageKey())
-        } else {
-            safeSetItem(getFontScaleStorageKey(), String(scale))
+            return
         }
+
+        safeSetItem(getFontScaleStorageKey(), String(scale))
     }
 
     return { fontScale, setFontScale }
