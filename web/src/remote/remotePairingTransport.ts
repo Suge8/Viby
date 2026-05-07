@@ -11,25 +11,20 @@ import type { RemotePeerBridge } from './remotePairingBridgeTypes'
 import { handleRemotePeerChannelMessage } from './remotePairingChannelMessages'
 import { createRemotePairingCodedError } from './remotePairingErrors'
 import { createRemoteForegroundSignalAck } from './remotePairingForegroundSignalAck'
+import { createRemotePairingNegotiation } from './remotePairingNegotiation'
 import { createPeerDisconnectGrace } from './remotePairingPeerDisconnect'
 import { createRemotePeerPendingRequests } from './remotePairingPendingRequests'
 import {
     buildTimeoutError,
     CONNECT_TIMEOUT_MS,
-    getSignalPayload,
     hasRelayIceServer,
     RemotePeerConnectError,
-    SIGNAL_PING_INTERVAL_MS,
-    SIGNAL_RECONNECT_DELAY_MS,
     serializeSignal,
 } from './remotePairingSignal'
+import { createRemotePairingSignalTimers } from './remotePairingSignalTimers'
 import { readRemotePeerTransportStats } from './remotePairingStats'
 import { createRemotePeerTransportBridge } from './remotePairingTransportBridge'
-import {
-    buildTransportSocketUrl,
-    createRemoteTransportId,
-    readPeerSignalingState,
-} from './remotePairingTransportSupport'
+import { buildTransportSocketUrl, createRemoteTransportId } from './remotePairingTransportSupport'
 export type RemotePeerConnectOptions = { pairingId: string; wsUrl: string; iceServers: PairingIceServer[] }
 
 export async function connectRemotePeer(options: RemotePeerConnectOptions): Promise<RemotePeerBridge> {
@@ -41,9 +36,8 @@ export async function connectRemotePeer(options: RemotePeerConnectOptions): Prom
     const pendingRequests = createRemotePeerPendingRequests()
     let socket: WebSocket | null = null
     let dataChannel: RTCDataChannel | null = null
-    let signalReconnectTimer: number | null = null
-    let signalPingTimer: number | null = null
     let foregroundSignalAck: ReturnType<typeof createRemoteForegroundSignalAck> | null = null
+    let signalTimers: ReturnType<typeof createRemotePairingSignalTimers> | null = null
     let closedByClient = false
     let openedChannel = false
     let receivedOffer = false
@@ -52,7 +46,6 @@ export async function connectRemotePeer(options: RemotePeerConnectOptions): Prom
     let closedError: Error | null = null
     let signalMessageQueue = Promise.resolve()
     let removeWakeListeners = (): void => {}
-    const pendingRemoteCandidates: RTCIceCandidateInit[] = []
     const relayAvailable = hasRelayIceServer(options.iceServers)
     const peerDisconnectGrace = createPeerDisconnectGrace({
         getConnectionState: () => peer.connectionState,
@@ -75,14 +68,7 @@ export async function connectRemotePeer(options: RemotePeerConnectOptions): Prom
         }
     }
     function stopSignalTimers(): void {
-        if (signalReconnectTimer !== null) {
-            window.clearTimeout(signalReconnectTimer)
-            signalReconnectTimer = null
-        }
-        if (signalPingTimer !== null) {
-            window.clearInterval(signalPingTimer)
-            signalPingTimer = null
-        }
+        signalTimers?.clear()
         foregroundSignalAck?.clear()
     }
     function requestPeer<T>(request: PairingPeerRequest, parse: (value: unknown) => T): Promise<T> {
@@ -114,27 +100,15 @@ export async function connectRemotePeer(options: RemotePeerConnectOptions): Prom
         function sendJoin(): void {
             sendSignal({ type: 'join', payload: { transportId } })
         }
-        function startSignalPing(): void {
-            if (signalPingTimer !== null) {
-                window.clearInterval(signalPingTimer)
-            }
-            signalPingTimer = window.setInterval(() => sendSignal({ type: 'ping' }), SIGNAL_PING_INTERVAL_MS)
-        }
-        function scheduleSignalReconnect(): void {
-            if (closedByClient || signalReconnectTimer !== null) return
-            signalReconnectTimer = window.setTimeout(() => {
-                signalReconnectTimer = null
-                openSignalSocket()
-            }, SIGNAL_RECONNECT_DELAY_MS)
-        }
-
+        signalTimers = createRemotePairingSignalTimers({
+            openSignalSocket,
+            sendPing: () => sendSignal({ type: 'ping' }),
+            shouldReconnect: () => !closedByClient,
+        })
         function openSignalSocketNow(): void {
             if (closedByClient || socket?.readyState === WebSocket.OPEN) return
             const staleSocket = socket?.readyState === WebSocket.CONNECTING ? socket : null
-            if (signalReconnectTimer !== null) {
-                window.clearTimeout(signalReconnectTimer)
-                signalReconnectTimer = null
-            }
+            signalTimers?.clearReconnect()
             if (staleSocket) socket = null
             openSignalSocket()
             staleSocket?.close()
@@ -144,7 +118,7 @@ export async function connectRemotePeer(options: RemotePeerConnectOptions): Prom
                 finish(() => reject(new RemotePeerConnectError('closed', 'remotePairing.error.closedScanAgain')))
                 return
             }
-            scheduleSignalReconnect()
+            signalTimers?.scheduleReconnect()
         }
 
         function handlePageWake(): void {
@@ -159,7 +133,6 @@ export async function connectRemotePeer(options: RemotePeerConnectOptions): Prom
                 emitRemoteClose(new RemotePeerConnectError('closed', 'remotePairing.error.closedRetrying'))
             }
         }
-
         function openSignalSocket(): void {
             const nextSocket = new WebSocket(buildTransportSocketUrl(options.wsUrl, transportId))
             socket = nextSocket
@@ -167,7 +140,7 @@ export async function connectRemotePeer(options: RemotePeerConnectOptions): Prom
             nextSocket.addEventListener('open', () => {
                 if (socket !== nextSocket) return
                 sendJoin()
-                startSignalPing()
+                signalTimers?.startPing()
             })
 
             nextSocket.addEventListener('message', (event) => {
@@ -180,10 +153,7 @@ export async function connectRemotePeer(options: RemotePeerConnectOptions): Prom
 
             nextSocket.addEventListener('close', () => {
                 if (socket !== nextSocket) return
-                if (signalPingTimer !== null) {
-                    window.clearInterval(signalPingTimer)
-                    signalPingTimer = null
-                }
+                signalTimers?.clearPing()
                 foregroundSignalAck?.clear()
                 handleSignalClose()
             })
@@ -195,32 +165,7 @@ export async function connectRemotePeer(options: RemotePeerConnectOptions): Prom
             })
         }
 
-        async function addRemoteCandidate(candidate: RTCIceCandidateInit): Promise<void> {
-            if (!peer.remoteDescription) {
-                pendingRemoteCandidates.push(candidate)
-                return
-            }
-            await peer.addIceCandidate(candidate)
-        }
-
-        async function flushRemoteCandidates(): Promise<void> {
-            while (pendingRemoteCandidates.length > 0 && peer.remoteDescription) {
-                const candidate = pendingRemoteCandidates.shift()
-                if (candidate) await peer.addIceCandidate(candidate)
-            }
-        }
-
-        async function answerOffer(payload: unknown): Promise<void> {
-            if (readPeerSignalingState(peer) !== 'stable') return
-            await peer.setRemoteDescription(payload as RTCSessionDescriptionInit)
-            await flushRemoteCandidates()
-            const answer = await peer.createAnswer()
-            const answerState = readPeerSignalingState(peer)
-            if (answerState !== 'have-remote-offer') return
-            await peer.setLocalDescription(answer)
-            sendSignal({ type: 'answer', to: 'host', payload: answer })
-        }
-
+        const negotiation = createRemotePairingNegotiation({ peer, sendSignal })
         async function handleSignalMessage(event: MessageEvent): Promise<void> {
             let signal: PairingSignal
             try {
@@ -231,15 +176,11 @@ export async function connectRemotePeer(options: RemotePeerConnectOptions): Prom
             if (signal.pairingId !== options.pairingId) return
             if (signal.type === 'offer') {
                 receivedOffer = true
-                await answerOffer(signal.payload)
+                await negotiation.answerOffer(signal.payload)
                 return
             }
             if (signal.type === 'candidate') {
-                const payload = getSignalPayload(signal.payload)
-                const candidate = payload?.candidate ?? (signal.payload as RTCIceCandidateInit | undefined)
-                if (candidate) {
-                    await addRemoteCandidate(candidate)
-                }
+                await negotiation.addCandidatePayload(signal.payload)
                 return
             }
             if (signal.type === 'expire') {

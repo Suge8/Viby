@@ -2,6 +2,7 @@ import {
     hasPairingWorkspaceIntent,
     type PairingClaimResponse,
     PairingClaimResponseSchema,
+    type PairingHttpErrorCode,
     PairingReconnectChallengeResponseSchema,
     type PairingReconnectResponse,
     PairingReconnectResponseSchema,
@@ -18,14 +19,31 @@ export type PairingRemoteAuth = PairingClaimResponse | PairingReconnectResponse
 
 type PairingHttpContext = 'claim' | 'reconnect' | 'verifyCode'
 
+const PAIRING_HTTP_TIMEOUT_MS = 8_000
+
 export class RemotePairingHttpError extends Error {
     constructor(
         readonly status: number,
-        readonly code: RemotePairingErrorKey
+        readonly code: RemotePairingErrorKey,
+        readonly serverError: string | null = null,
+        readonly serverCode: PairingHttpErrorCode | null = null
     ) {
         super(code)
         this.name = 'RemotePairingHttpError'
     }
+}
+
+export function isInvalidStoredPairingCredential(error: RemotePairingHttpError): boolean {
+    return (
+        error.status === 410 ||
+        (error.status === 403 &&
+            (error.serverCode === 'pairing_invalid_token' ||
+                error.serverCode === 'pairing_invalid_device_proof' ||
+                (!error.serverCode &&
+                    (error.serverError === 'Invalid pairing token' ||
+                        error.serverError === 'Missing or invalid device proof' ||
+                        error.serverError === 'Device proof verification failed'))))
+    )
 }
 
 export function readRemotePairingId(pathname: string, search = ''): string | null {
@@ -77,14 +95,28 @@ async function postJson<T>(
     body: unknown,
     parse: (value: unknown) => T
 ): Promise<T> {
-    const response = await fetch(path, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-    })
+    let response: Response
+    try {
+        response = await fetch(path, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(PAIRING_HTTP_TIMEOUT_MS),
+        })
+    } catch (error) {
+        if (error instanceof DOMException && error.name === 'TimeoutError') {
+            throw new RemotePairingHttpError(408, resolvePairingHttpErrorKey(context, 408, null))
+        }
+        throw error
+    }
     const payload = await readJsonPayload(response)
     if (!response.ok) {
-        throw new RemotePairingHttpError(response.status, resolvePairingHttpErrorKey(context, response.status, payload))
+        throw new RemotePairingHttpError(
+            response.status,
+            resolvePairingHttpErrorKey(context, response.status, payload),
+            readPayloadField(payload, 'error'),
+            readPairingHttpErrorCode(payload)
+        )
     }
     return parse(payload)
 }
@@ -93,6 +125,20 @@ function readPayloadField(payload: unknown, field: 'code' | 'error' | 'message')
     if (!payload || typeof payload !== 'object') return null
     const value = (payload as Record<string, unknown>)[field]
     return typeof value === 'string' ? value : null
+}
+
+function readPairingHttpErrorCode(payload: unknown): PairingHttpErrorCode | null {
+    const code = readPayloadField(payload, 'code')
+    switch (code) {
+        case 'pairing_invalid_token':
+        case 'pairing_unavailable':
+        case 'pairing_invalid_device_proof':
+        case 'pairing_reconnect_challenge_expired':
+        case 'pairing_rate_limited':
+            return code
+        default:
+            return null
+    }
 }
 
 function isInvalidVerificationCode(status: number, payload: unknown): boolean {
@@ -164,7 +210,7 @@ export async function reconnectRemotePairing(pairingId: string): Promise<Pairing
         await requestRemotePairingPersistentStorage()
         return response
     } catch (error) {
-        if (error instanceof RemotePairingHttpError && (error.status === 403 || error.status === 410)) {
+        if (error instanceof RemotePairingHttpError && isInvalidStoredPairingCredential(error)) {
             clearStoredGuestToken(pairingId)
         }
         throw error

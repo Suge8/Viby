@@ -23,12 +23,16 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
     return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
 }
 
+function isPrivateKeyJwk(value: unknown): value is JsonWebKey {
+    if (!value || typeof value !== 'object') return false
+    const jwk = value as JsonWebKey
+    return jwk.kty === 'EC' && jwk.crv === 'P-256' && typeof jwk.d === 'string'
+}
+
 function isStoredIdentity(value: unknown): value is PairingDeviceIdentity {
-    if (!value || typeof value !== 'object') {
-        return false
-    }
+    if (!value || typeof value !== 'object') return false
     const candidate = value as { publicKey?: unknown; privateKeyJwk?: unknown }
-    return typeof candidate.publicKey === 'string' && typeof candidate.privateKeyJwk === 'object'
+    return typeof candidate.publicKey === 'string' && isPrivateKeyJwk(candidate.privateKeyJwk)
 }
 
 async function createIdentity(pairingId: string): Promise<PairingDeviceIdentity> {

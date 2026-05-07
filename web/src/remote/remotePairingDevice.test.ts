@@ -90,6 +90,20 @@ describe('remotePairingDevice', () => {
         expect(cryptoMocks.generateKey).toHaveBeenCalledTimes(1)
     })
 
+    it('replaces cached identities that cannot sign reconnect proofs', async () => {
+        writeBrowserStorageItem(
+            'local',
+            getPairingDeviceStorageKey('pairing-1'),
+            JSON.stringify({ publicKey: 'cached-public-key', privateKeyJwk: {} })
+        )
+        const cryptoMocks = installCrypto()
+
+        const identity = await loadPairingDeviceIdentity('pairing-1')
+
+        expect(identity).toEqual({ publicKey: 'AQID', privateKeyJwk })
+        expect(cryptoMocks.generateKey).toHaveBeenCalledTimes(1)
+    })
+
     it('signs reconnect challenges with the stored private key and canonical payload', async () => {
         const cryptoMocks = installCrypto()
         const identity = {

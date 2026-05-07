@@ -24,6 +24,16 @@ describe('remotePairingRecovery', () => {
         expect(isRecoverableRemotePairingError(new RemotePairingHttpError(503, 'remotePairing.error.fallback'))).toBe(
             true
         )
+        expect(
+            isRecoverableRemotePairingError(
+                new RemotePairingHttpError(
+                    403,
+                    'remotePairing.error.scanAgain',
+                    'Missing or expired reconnect challenge',
+                    'pairing_reconnect_challenge_expired'
+                )
+            )
+        ).toBe(true)
         expect(isRecoverableRemotePairingError(new TypeError('network'))).toBe(true)
     })
 
@@ -33,10 +43,17 @@ describe('remotePairingRecovery', () => {
         ).toBe(false)
         expect(
             isRecoverableRemotePairingError(new RemotePeerConnectError('host-closed', 'remotePairing.error.hostClosed'))
+        ).toBe(true)
+        expect(
+            isRecoverableRemotePairingError(
+                new RemotePairingHttpError(
+                    403,
+                    'remotePairing.error.scanAgain',
+                    'Invalid pairing token',
+                    'pairing_invalid_token'
+                )
+            )
         ).toBe(false)
-        expect(isRecoverableRemotePairingError(new RemotePairingHttpError(403, 'remotePairing.error.scanAgain'))).toBe(
-            false
-        )
         expect(isRecoverableRemotePairingError(new Error('missing token'))).toBe(false)
     })
 })

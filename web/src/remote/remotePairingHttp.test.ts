@@ -109,11 +109,15 @@ describe('remotePairingHttp', () => {
 
         expect(response.guestToken).toBe('guest-token-1')
         expect(readBrowserStorageItem('local', getPairingGuestTokenStorageKey('pairing-1'))).toBe('guest-token-1')
-        expect(fetchMock).toHaveBeenCalledWith('/pairings/pairing-1/claim', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ ticket: 'ticket-1', label: 'Phone', publicKey: 'phone-public-key' }),
-        })
+        expect(fetchMock).toHaveBeenCalledWith(
+            '/pairings/pairing-1/claim',
+            expect.objectContaining({
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ ticket: 'ticket-1', label: 'Phone', publicKey: 'phone-public-key' }),
+                signal: expect.any(AbortSignal),
+            })
+        )
     })
 
     it('verifies the desktop code and returns the approved pairing snapshot', async () => {
@@ -153,16 +157,26 @@ describe('remotePairingHttp', () => {
         const response = await reconnectRemotePairing('pairing-1')
 
         expect(response?.role).toBe('guest')
-        expect(fetchMock).toHaveBeenNthCalledWith(1, '/pairings/pairing-1/reconnect-challenge', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ token: 'guest-token-1' }),
-        })
-        expect(fetchMock).toHaveBeenNthCalledWith(2, '/pairings/pairing-1/reconnect', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ token: 'guest-token-1', deviceProof }),
-        })
+        expect(fetchMock).toHaveBeenNthCalledWith(
+            1,
+            '/pairings/pairing-1/reconnect-challenge',
+            expect.objectContaining({
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ token: 'guest-token-1' }),
+                signal: expect.any(AbortSignal),
+            })
+        )
+        expect(fetchMock).toHaveBeenNthCalledWith(
+            2,
+            '/pairings/pairing-1/reconnect',
+            expect.objectContaining({
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ token: 'guest-token-1', deviceProof }),
+                signal: expect.any(AbortSignal),
+            })
+        )
     })
 
     it('clears stale guest tokens only when reconnect proves the token is invalid', async () => {
@@ -182,6 +196,25 @@ describe('remotePairingHttp', () => {
 
         await expect(reconnectRemotePairing('pairing-1')).rejects.toMatchObject({
             code: 'remotePairing.error.fallback',
+        })
+
+        expect(readBrowserStorageItem('local', getPairingGuestTokenStorageKey('pairing-1'))).toBe('guest-token-1')
+    })
+
+    it('keeps the guest token when a reconnect challenge races or expires', async () => {
+        window.localStorage.setItem(getPairingGuestTokenStorageKey('pairing-1'), 'guest-token-1')
+        installFetch([
+            jsonResponse({ role: 'guest', challenge: { nonce: 'nonce-1', issuedAt: 1, expiresAt: 2 } }),
+            jsonResponse(
+                { code: 'pairing_reconnect_challenge_expired', error: 'Missing or expired reconnect challenge' },
+                403
+            ),
+        ])
+
+        await expect(reconnectRemotePairing('pairing-1')).rejects.toMatchObject({
+            code: 'remotePairing.error.scanAgain',
+            serverError: 'Missing or expired reconnect challenge',
+            serverCode: 'pairing_reconnect_challenge_expired',
         })
 
         expect(readBrowserStorageItem('local', getPairingGuestTokenStorageKey('pairing-1'))).toBe('guest-token-1')
