@@ -193,6 +193,7 @@ export function FloatingActionMenu(props: FloatingActionMenuProps): React.JSX.El
                         key={item.id}
                         type="button"
                         variant="ghost"
+                        pressStyle="list-row"
                         role="menuitem"
                         className={getMenuItemClassName(item.tone, MENU_ITEM_CLASS_NAME)}
                         onClick={item.onSelect}

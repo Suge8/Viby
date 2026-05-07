@@ -3,12 +3,17 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 
-const BUTTON_PRESS_STYLE_SCALE = {
-    button: 0.86,
-    card: 0.96,
+const BUTTON_PRESS_STYLE_SCALE_VAR = {
+    button: 'var(--ds-press-scale-button)',
+    cta: 'var(--ds-press-scale-cta)',
+    card: 'var(--ds-press-scale-card)',
+    'list-row': 'var(--ds-press-scale-list-row)',
+    segmented: 'var(--ds-press-scale-segmented)',
+    chip: 'var(--ds-press-scale-chip)',
+    icon: 'var(--ds-press-scale-icon)',
 } as const
 
-type ButtonPressStyle = keyof typeof BUTTON_PRESS_STYLE_SCALE
+type ButtonPressStyle = keyof typeof BUTTON_PRESS_STYLE_SCALE_VAR
 type ButtonPointerEffect = 'default' | 'none'
 
 const buttonVariants = cva(
@@ -80,27 +85,27 @@ function getButtonAppearance(variant: ButtonProps['variant']): 'solid' | 'surfac
     return 'surface'
 }
 
-function getButtonPressScale(pressStyle: ButtonPressStyle | undefined): number {
-    if (pressStyle !== undefined) {
-        return BUTTON_PRESS_STYLE_SCALE[pressStyle]
+function getDefaultButtonPressStyle(size: ButtonProps['size']): ButtonPressStyle {
+    if (size === 'icon' || size === 'iconXs' || size === 'iconSm' || size === 'iconLg') {
+        return 'icon'
     }
 
-    return BUTTON_PRESS_STYLE_SCALE.button
+    return 'button'
+}
+
+function getButtonPressScale(pressStyle: ButtonPressStyle): string {
+    return BUTTON_PRESS_STYLE_SCALE_VAR[pressStyle]
 }
 
 function getButtonPointerEffect(
-    pressStyle: ButtonPressStyle | undefined,
+    pressStyle: ButtonPressStyle,
     pointerEffect: ButtonPointerEffect | undefined
 ): ButtonPointerEffect {
     if (pointerEffect !== undefined) {
         return pointerEffect
     }
 
-    if (pressStyle === 'card') {
-        return 'none'
-    }
-
-    return 'default'
+    return pressStyle === 'button' || pressStyle === 'cta' ? 'default' : 'none'
 }
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function Button(
@@ -125,9 +130,9 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function 
     ref
 ) {
     const resolvedVariant = variant ?? 'default'
-    const resolvedPressStyle = pressStyle ?? 'button'
-    const resolvedPressScale = getButtonPressScale(pressStyle)
-    const resolvedPointerEffect = getButtonPointerEffect(pressStyle, pointerEffect)
+    const resolvedPressStyle = pressStyle ?? getDefaultButtonPressStyle(size)
+    const resolvedPressScale = getButtonPressScale(resolvedPressStyle)
+    const resolvedPointerEffect = getButtonPointerEffect(resolvedPressStyle, pointerEffect)
     const Comp = asChild ? Slot : 'button'
     const classNames = cn(buttonVariants({ variant: resolvedVariant, size, className }))
     const resolvedStyle = React.useMemo<React.CSSProperties>(

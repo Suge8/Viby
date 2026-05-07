@@ -24,6 +24,7 @@ export function ToolQuestionOptionRow(props: {
             type="button"
             variant={props.checked ? 'secondary' : 'plain'}
             size="sm"
+            pressStyle="list-row"
             className={cn(
                 'w-full gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors hover:bg-[var(--app-subtle-bg)] disabled:pointer-events-none disabled:opacity-50 [&>[data-button-content]]:w-full [&>[data-button-content]]:items-start [&>[data-button-content]]:justify-start',
                 props.checked ? 'bg-[var(--app-subtle-bg)]' : null

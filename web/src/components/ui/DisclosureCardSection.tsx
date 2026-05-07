@@ -72,6 +72,7 @@ export function DisclosureCardSection(props: DisclosureCardSectionProps): React.
                 type="button"
                 variant="plain"
                 size="sm"
+                pressStyle="card"
                 disabled={props.disabled}
                 className={cn(
                     getInteractiveCardClassName('disclosure-trigger'),

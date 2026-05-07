@@ -3,8 +3,9 @@
 @config "../tailwind.config.ts";
 
 :root {
-    --app-font-scale: 1;
+    --app-font-scale: 0.9;
     --app-overlay-edge-offset: 0.75rem;
+    --app-safe-area-inset-top: env(safe-area-inset-top, 0px);
     --app-safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
     --app-safe-area-inset-right: env(safe-area-inset-right, 0px);
     --app-interactive-request-max-width: 30rem;

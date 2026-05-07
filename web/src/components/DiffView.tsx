@@ -49,6 +49,7 @@ export function DiffView(props: {
                     type="button"
                     variant="plain"
                     size="sm"
+                    pressStyle="card"
                     className={cn(
                         'w-full px-0 py-0 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)] [&>[data-button-content]]:w-full [&>[data-button-content]]:justify-start',
                         suppressFocusRing && 'focus-visible:ring-0'

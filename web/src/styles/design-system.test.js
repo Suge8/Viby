@@ -24,6 +24,16 @@ function readCssWithImports(filePath, seen = new Set()) {
 }
 
 describe('design-system mobile chat route layout', () => {
+    it('keeps cold connection pages centered on the viewport', () => {
+        const css = readDesignSystemCss()
+
+        expect(css).toContain('.ds-connection-page')
+        expect(css).toContain('align-items: center;')
+        expect(css).toContain('justify-content: center;')
+        expect(css).toContain('.ds-connection-panel')
+        expect(css).toContain('text-align: center;')
+    })
+
     it('keeps mobile chat routes on the internal thread viewport while the composer stays fixed', () => {
         const css = readDesignSystemCss()
 
@@ -143,7 +153,7 @@ describe('design-system mobile chat route layout', () => {
     it('anchors the desktop history control to the page header clear zone instead of the thread root', () => {
         const css = readDesignSystemCss()
 
-        expect(css).toContain('--ds-session-chat-header-layer: 20;')
+        expect(css).toContain('--ds-session-chat-header-layer: 30;')
         expect(css).toContain('--chat-header-visual-clearance: 0.5rem;')
         expect(css).toContain(
             '--chat-header-anchor-space: calc(var(--ds-session-chat-header-clearance) + var(--chat-header-visual-clearance));'

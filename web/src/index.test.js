@@ -31,6 +31,15 @@ describe('index.css route ownership constraints', () => {
         expect(css).not.toContain('#root {\n        height: auto;')
     })
 
+    it('sets the first-run app font scale to 90%', () => {
+        const css = readIndexCss()
+        const html = readIndexHtml()
+
+        expect(css).toContain('--app-font-scale: 0.9;')
+        expect(html).toContain('--app-font-scale: 0.9;')
+        expect(html).toContain('font-size: calc(100% * var(--app-font-scale, 0.9));')
+    })
+
     it('keeps the desktop session list scrollbar gutter stable so tab switches do not shift the header layout', () => {
         const css = readIndexCss()
 

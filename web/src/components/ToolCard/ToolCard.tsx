@@ -89,6 +89,7 @@ function ToolCardInner(props: ToolCardProps): React.JSX.Element {
                         block={props.block}
                         inputLabel={t('tool.input')}
                         resultLabel={t('tool.result')}
+                        traceLabel={t('tool.trace')}
                     />
                 </Dialog>
             </div>

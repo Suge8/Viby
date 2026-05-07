@@ -19,6 +19,7 @@ describe('Button', () => {
 
         expect(button).toHaveAttribute('data-button-press-style', 'card')
         expect(button).toHaveAttribute('data-button-pointer-effect', 'none')
+        expect(button).toHaveStyle({ '--ds-button-press-scale': 'var(--ds-press-scale-card)' })
 
         fireEvent.pointerDown(button, { clientX: 20, clientY: 24, pointerType: 'touch' })
         expect(button).toHaveAttribute('data-pressed', 'true')
@@ -83,6 +84,8 @@ describe('Button', () => {
             </>
         )
 
+        expect(screen.getByRole('button', { name: 'Icon' })).toHaveAttribute('data-button-press-style', 'icon')
+        expect(screen.getByRole('button', { name: 'Icon' })).toHaveAttribute('data-button-pointer-effect', 'none')
         expect(screen.getByRole('button', { name: 'Icon' }).className).toContain('rounded-full')
         expect(screen.getByRole('button', { name: 'Icon' }).className).toContain('min-h-0')
         expect(screen.getByRole('button', { name: 'Icon extra small' }).className).toContain('h-8')

@@ -72,8 +72,10 @@
     --ds-button-pointer-y: 50%;
     --ds-button-pointer-opacity: 0;
     --ds-button-sheen-opacity: 0;
-    --ds-button-sheen-shift: -140%;
+    --ds-button-sheen-shift: var(--ds-button-sheen-shift-start);
     --ds-button-press-scale: 1;
+    --ds-button-hover-lift: var(--ds-hover-lift-button);
+    --ds-button-hover-scale: var(--ds-hover-scale-button);
     letter-spacing: 0.01em;
     position: relative;
     isolation: isolate;
@@ -96,8 +98,13 @@
     inset: 1px;
     border-radius: inherit;
     background: radial-gradient(
-        140px circle at var(--ds-button-pointer-x) var(--ds-button-pointer-y),
-        color-mix(in srgb, var(--ds-button-pointer-color, var(--ds-brand)) 18%, transparent) 0%,
+        var(--ds-button-state-layer-size) circle at var(--ds-button-pointer-x) var(--ds-button-pointer-y),
+        color-mix(
+                in srgb,
+                var(--ds-button-pointer-color, var(--ds-brand)) var(--ds-button-state-layer-color-mix),
+                transparent
+            )
+            0%,
         transparent 72%
     );
     opacity: var(--ds-button-pointer-opacity);
@@ -128,9 +135,41 @@
     z-index: 0;
 }
 
+.ds-button[data-button-press-style="cta"] {
+    --ds-button-hover-scale: var(--ds-hover-scale-button);
+}
+
+.ds-button[data-button-press-style="card"] {
+    --ds-button-hover-lift: var(--ds-hover-lift-card);
+    --ds-button-hover-scale: var(--ds-hover-scale-card);
+}
+
+.ds-button[data-button-press-style="list-row"],
+.ds-button[data-button-press-style="segmented"],
+.ds-button[data-button-press-style="chip"] {
+    --ds-button-hover-lift: var(--ds-hover-lift-flat);
+}
+
+.ds-button[data-button-press-style="list-row"] {
+    --ds-button-hover-scale: var(--ds-hover-scale-list-row);
+}
+
+.ds-button[data-button-press-style="segmented"] {
+    --ds-button-hover-scale: var(--ds-hover-scale-segmented);
+}
+
+.ds-button[data-button-press-style="chip"] {
+    --ds-button-hover-scale: var(--ds-hover-scale-chip);
+}
+
+.ds-button[data-button-press-style="icon"] {
+    --ds-button-hover-lift: var(--ds-hover-lift-flat);
+    --ds-button-hover-scale: var(--ds-hover-scale-icon);
+}
+
 .ds-button[data-pressed="true"] {
-    --ds-button-pointer-opacity: 1;
-    --ds-button-sheen-opacity: 0.42;
+    --ds-button-pointer-opacity: var(--ds-button-state-layer-opacity-press);
+    --ds-button-sheen-opacity: var(--ds-button-sheen-opacity-press);
     --ds-button-sheen-shift: 0%;
     transform: translateZ(0) scale(var(--ds-button-press-scale));
 }
@@ -272,14 +311,14 @@ label {
 
 @media (hover: hover) and (pointer: fine) {
     .ds-button:not([data-button-pointer-effect="none"]):hover {
-        --ds-button-pointer-opacity: 1;
-        --ds-button-sheen-opacity: 1;
-        --ds-button-sheen-shift: 140%;
-        transform: translateZ(0) translateY(-1px) scale(1.01);
+        --ds-button-pointer-opacity: var(--ds-button-state-layer-opacity-hover);
+        --ds-button-sheen-opacity: var(--ds-button-sheen-opacity-hover);
+        --ds-button-sheen-shift: var(--ds-button-sheen-shift-end);
+        transform: translateZ(0) translateY(var(--ds-button-hover-lift)) scale(var(--ds-button-hover-scale));
     }
 
-    .ds-button[data-button-press-style="card"]:hover {
-        transform: translateZ(0) translateY(-2px) scale(1.01);
+    .ds-button[data-button-pointer-effect="none"]:hover {
+        transform: translateZ(0) translateY(var(--ds-button-hover-lift)) scale(var(--ds-button-hover-scale));
     }
 }
 

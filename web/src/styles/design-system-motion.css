@@ -67,7 +67,7 @@
 @keyframes composer-overlay-enter {
     from {
         opacity: 0;
-        transform: translateY(10px) scale(0.985);
+        transform: translateY(var(--ds-composer-overlay-enter-y)) scale(var(--ds-composer-overlay-enter-scale));
     }
 
     to {

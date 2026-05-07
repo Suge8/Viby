@@ -103,6 +103,7 @@ export function CliOutputBlock(props: { text: string }) {
                             type="button"
                             variant="plain"
                             size="sm"
+                            pressStyle="card"
                             className="w-full px-0 py-0 text-left [&>[data-button-content]]:w-full [&>[data-button-content]]:flex-col [&>[data-button-content]]:items-stretch"
                         >
                             <div className="flex flex-col gap-1">

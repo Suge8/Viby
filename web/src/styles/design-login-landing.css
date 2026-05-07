@@ -1,623 +1,165 @@
 .viby-login-page {
-    --login-bg: #000000;
-    --login-fg: #f0f0f0;
-    --login-muted: #a1a4a5;
-    --login-border: rgba(214, 235, 253, 0.19);
-    --login-border-soft: rgba(217, 237, 254, 0.145);
-    --login-shell-width: min(100%, 76rem);
-    --login-header-height: 5rem;
-    --login-panel-bg: rgba(8, 9, 11, 0.86);
-    --login-glow: rgba(0, 117, 255, 0.18);
-    position: relative;
-    height: 100%;
-    overflow: hidden;
-    background:
-        radial-gradient(circle at 18% 18%, rgba(0, 117, 255, 0.12), transparent 24%),
-        radial-gradient(circle at 80% 14%, rgba(255, 89, 0, 0.12), transparent 20%), var(--login-bg);
-    color: var(--login-fg);
+    --login-canvas:
+        radial-gradient(circle at 50% 8%, color-mix(in srgb, var(--ds-brand) 8%, transparent), transparent 36%),
+        linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--ds-canvas) 96%, var(--ds-panel-strong)) 0%,
+            color-mix(in srgb, var(--ds-panel) 72%, var(--ds-canvas)) 100%
+        );
+    --login-panel: color-mix(in srgb, var(--ds-panel-strong) 88%, transparent);
+    --login-panel-shadow: 0 24px 76px color-mix(in srgb, var(--ds-brand) 10%, transparent);
+    --login-trigger: color-mix(in srgb, var(--ds-text-secondary) 82%, var(--ds-text-muted));
+    --login-access-width: 34rem;
+    --login-access-gap: 1.35rem;
+    --login-access-padding: clamp(1rem, 4vw, 2rem);
+    --login-brand-gap: 0.95rem;
+    --login-brand-font-size: clamp(1.22rem, 3vw, 1.55rem);
+    --login-brand-mark-size: clamp(3.1rem, 8vw, 3.8rem);
+    --login-brand-glyph-size: clamp(2.25rem, 6vw, 2.75rem);
+    --login-panel-gap: 1.45rem;
+    --login-panel-padding: clamp(1.55rem, 4.5vw, 2.35rem);
+    --login-title-input-gap: 1rem;
+    --login-title-font-size: clamp(2.15rem, 7vw, 2.75rem);
+    --login-form-gap: 1.45rem;
+    --login-input-width: 28rem;
+    --login-submit-width: 15.5rem;
+    --login-footer-min-height: 2rem;
+    --login-footer-gap: 1rem;
+
+    min-height: 100dvh;
+    display: grid;
+    place-items: center;
+    overflow: auto;
+    background: var(--login-canvas);
+    color: var(--ds-text-primary);
+    color-scheme: light;
 }
 
-.viby-login-page__noise {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background-image:
-        linear-gradient(to right, rgba(214, 235, 253, 0.06) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(214, 235, 253, 0.06) 1px, transparent 1px);
-    background-size: 5rem 5rem;
-    mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.7), transparent 88%);
-    opacity: 0.28;
+[data-theme="dark"] .viby-login-page {
+    --login-canvas:
+        radial-gradient(circle at 50% 8%, color-mix(in srgb, var(--ds-brand) 10%, transparent), transparent 34%),
+        linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--ds-canvas) 92%, #25210f) 0%,
+            color-mix(in srgb, var(--ds-panel-strong) 86%, #0a0a0a) 100%
+        );
+    --login-panel: color-mix(in srgb, var(--ds-panel-strong) 82%, transparent);
+    --login-panel-shadow: 0 28px 86px rgba(0, 0, 0, 0.38);
+    --login-trigger: color-mix(in srgb, var(--ds-text-secondary) 76%, var(--ds-text-muted));
+
+    color-scheme: dark;
 }
 
-.viby-login-page__scroller {
-    position: relative;
-    z-index: 1;
-    height: 100%;
-    overflow-y: auto;
+.viby-login-access {
+    width: min(100%, var(--login-access-width));
+    display: grid;
+    gap: var(--login-access-gap);
+    padding: var(--login-access-padding);
 }
 
-.viby-login-header {
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    border-bottom: 1px solid var(--login-border-soft);
-    background: rgba(0, 0, 0, 0.72);
-    backdrop-filter: blur(14px);
-}
-
-.viby-login-header__inner,
-.viby-login-main,
-.viby-login-footer {
-    width: var(--login-shell-width);
-    margin: 0 auto;
-}
-
-.viby-login-header__inner {
-    min-height: var(--login-header-height);
+.viby-login-access__header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    padding: 1rem 1.25rem;
 }
 
-.viby-login-header__brand {
+.viby-login-access__brand {
     display: flex;
     align-items: center;
-    gap: 0.875rem;
-}
-
-.viby-login-header__brand-name {
+    gap: var(--login-brand-gap);
+    color: var(--ds-text-primary);
     font-family: var(--ds-font-brand);
-    font-size: 1rem;
-    font-weight: 500;
+    font-size: var(--login-brand-font-size);
+    font-weight: 780;
     letter-spacing: -0.04em;
-    color: var(--login-fg);
 }
 
-.viby-login-header__brand-copy,
-.viby-login-hero__body,
-.viby-login-hero__meta,
-.viby-login-footer {
-    color: var(--login-muted);
+.viby-login-access__brand [aria-hidden="true"] {
+    width: var(--login-brand-mark-size);
+    height: var(--login-brand-mark-size);
 }
 
-.viby-login-header__brand-copy {
-    font-size: 0.78rem;
-}
-
-.viby-login-header__actions {
-    display: flex;
-    align-items: center;
-    gap: 0.65rem;
-}
-
-.viby-login-header__repo {
-    border: 1px solid var(--login-border-soft) !important;
-    background: rgba(255, 255, 255, 0.03) !important;
-    color: var(--login-fg) !important;
-}
-
-.viby-login-main {
-    padding: 2rem 1.25rem 3rem;
-}
-
-.viby-login-hero {
-    min-height: calc(100svh - var(--login-header-height) - 2rem);
-    display: grid;
-    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
-    align-items: center;
-    gap: clamp(2rem, 4vw, 4.5rem);
-}
-
-.viby-login-hero__copy {
-    max-width: 30rem;
-}
-
-.viby-login-hero__eyebrow,
-.viby-login-dock__label,
-.viby-login-stage__badge {
-    display: inline-flex;
-    align-items: center;
-    min-height: 2rem;
-    padding: 0.25rem 0.78rem;
-    border-radius: var(--ds-radius-pill);
-    border: 1px solid var(--login-border);
-    background: rgba(255, 255, 255, 0.02);
-    color: var(--login-muted);
-    font-size: 0.74rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-}
-
-.viby-login-hero h1,
-.viby-login-dock__intro h2 {
-    margin-top: 1rem;
-    font-family: var(--ds-font-brand);
-    font-weight: 500;
-    text-wrap: balance;
-    color: var(--login-fg);
-}
-
-.viby-login-hero h1 {
-    font-size: clamp(3.3rem, 8vw, 6rem);
-    line-height: 0.94;
-    letter-spacing: -0.07em;
-    text-shadow: 0 8px 40px rgba(255, 255, 255, 0.06);
-}
-
-.viby-login-dock__intro h2 {
-    font-size: clamp(1.4rem, 3vw, 2rem);
-    line-height: 1;
-    letter-spacing: -0.05em;
-}
-
-.viby-login-dock__body {
-    max-width: 26rem;
-    margin-top: 0.9rem;
-    color: var(--login-muted);
-    font-size: 0.92rem;
-    line-height: 1.65;
-}
-
-.viby-login-hero__body {
-    max-width: 25rem;
-    margin-top: 1.15rem;
-    font-size: 1rem;
-    line-height: 1.7;
-}
-
-.viby-login-hero__actions {
-    margin-top: 1.6rem;
-}
-
-.viby-login-hero__primary {
-    border-color: var(--login-border) !important;
-    background: transparent !important;
-    color: var(--login-fg) !important;
-    box-shadow: 0 0 0 1px rgba(176, 199, 217, 0.145) !important;
-}
-
-.viby-login-signal-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.65rem;
-    margin-top: 1.4rem;
-}
-
-.viby-login-signal-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
-    min-height: 2.25rem;
-    padding: 0.35rem 0.78rem;
-    border-radius: var(--ds-radius-pill);
-    border: 1px solid var(--login-border-soft);
-    background: rgba(255, 255, 255, 0.02);
-    color: var(--login-fg);
-    font-size: 0.84rem;
-}
-
-.viby-login-hero__side {
-    display: grid;
-    gap: 1rem;
-}
-
-.viby-login-stage,
-.viby-login-dock__panel,
-.viby-login-login-panel,
-.viby-login-capability-row,
-.viby-login-proof-row,
-.viby-login-flow-row {
-    border: 1px solid var(--login-border);
-    background: var(--login-panel-bg);
-    box-shadow: rgba(176, 199, 217, 0.145) 0 0 0 1px;
-}
-
-.viby-login-stage {
-    position: relative;
-    min-height: 32rem;
-    padding: 1.2rem;
-    border-radius: 1.75rem;
-    overflow: hidden;
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 18%),
-        radial-gradient(circle at top left, rgba(59, 158, 255, 0.16), transparent 28%), var(--login-panel-bg);
-}
-
-.viby-login-stage::before {
-    content: "";
-    position: absolute;
-    inset: auto auto -18% -14%;
-    width: 22rem;
-    height: 22rem;
-    border-radius: 999px;
-    background: radial-gradient(circle, var(--login-glow), transparent 66%);
-}
-
-.viby-login-stage::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 22%);
-    pointer-events: none;
-}
-
-.viby-login-stage__frame {
-    position: absolute;
-    border: 1px solid var(--login-border-soft);
-    background: rgba(255, 255, 255, 0.02);
-}
-
-.viby-login-stage__frame--desktop {
-    left: 1.1rem;
-    right: 6rem;
-    top: 4.3rem;
-    padding: 1rem;
-    border-radius: 1.5rem;
-}
-
-.viby-login-stage__frame--mobile {
-    right: 1.1rem;
-    bottom: 1.1rem;
-    width: min(12rem, 34vw);
-    padding: 0.9rem;
-    border-radius: 1.8rem;
-}
-
-.viby-login-stage__frame-bar,
-.viby-login-login-panel__header,
-.viby-login-login-panel__meta,
-.viby-login-login-panel__footer,
-.viby-login-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-}
-
-.viby-login-stage__frame-bar {
-    color: var(--login-muted);
-    font-size: 0.78rem;
-}
-
-.viby-login-stage__frame-bar strong {
-    color: var(--login-fg);
-    font-weight: 500;
-}
-
-.viby-login-stage__code {
-    margin-top: 1rem;
-    display: grid;
-    gap: 0.6rem;
-    font-family: var(--ds-font-mono);
-    font-size: 0.82rem;
-}
-
-.viby-login-stage__desktop-footer {
-    display: flex;
-    justify-content: space-between;
-    gap: 0.75rem;
-    margin-top: 1rem;
-    padding-top: 0.85rem;
-    border-top: 1px solid var(--login-border-soft);
-    color: var(--login-muted);
-    font-size: 0.74rem;
-}
-
-.viby-login-stage__code-line {
-    color: var(--login-fg);
-}
-
-.viby-login-stage__code-line--muted {
-    color: var(--login-muted);
-}
-
-.viby-login-stage__phone-top {
-    width: 34%;
-    height: 0.34rem;
-    margin: 0 auto 0.85rem;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.14);
-}
-
-.viby-login-stage__message {
-    margin-top: 0.7rem;
-    padding: 0.75rem;
-    border-radius: 1rem;
-    background: rgba(255, 255, 255, 0.05);
-    color: var(--login-fg);
-    font-size: 0.82rem;
-    line-height: 1.5;
-}
-
-.viby-login-stage__message--subtle {
-    color: var(--login-muted);
-}
-
-.viby-login-stage__mobile-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    margin-top: 0.8rem;
-}
-
-.viby-login-stage__mobile-actions span {
-    display: inline-flex;
-    align-items: center;
-    min-height: 1.9rem;
-    padding: 0.2rem 0.65rem;
-    border-radius: var(--ds-radius-pill);
-    border: 1px solid var(--login-border-soft);
-    color: var(--login-muted);
-    font-size: 0.74rem;
-}
-
-.viby-login-stage__badge {
-    position: absolute;
-}
-
-.viby-login-stage__badge--top {
-    top: 1.1rem;
-    right: 1.1rem;
-}
-
-.viby-login-stage__badge--bottom {
-    left: 1.1rem;
-    bottom: 1.1rem;
-}
-
-.viby-login-hero__meta {
-    display: flex;
-    justify-content: space-between;
-    gap: 1rem;
-    font-size: 0.82rem;
-}
-
-.viby-login-dock {
-    margin-top: 1rem;
-    display: grid;
-    grid-template-columns: minmax(0, 0.48fr) minmax(0, 0.52fr);
-    gap: 1rem;
-    align-items: start;
-}
-
-.viby-login-dock__intro {
-    padding: 1.25rem 0;
-}
-
-.viby-login-dock__panel {
-    border-radius: 1.75rem;
-    padding: 1rem;
-}
-
-.viby-login-capabilities {
-    margin-top: 1rem;
-}
-
-.viby-login-proof,
-.viby-login-flow {
-    margin-top: 1rem;
-}
-
-.viby-login-proof__grid,
-.viby-login-capabilities__grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 1rem;
-}
-
-.viby-login-proof-row,
-.viby-login-capability-row,
-.viby-login-flow-row {
-    position: relative;
-    min-height: 9.25rem;
-    padding: 1.05rem 1rem;
-    border-radius: 1.35rem;
-}
-
-.viby-login-proof-card__value {
-    color: var(--login-fg);
-    font-family: var(--ds-font-brand);
-    font-size: clamp(1.55rem, 3vw, 2.2rem);
-    line-height: 0.95;
-    letter-spacing: -0.05em;
-}
-
-.viby-login-proof-card__label {
-    margin-top: 0.45rem;
-    color: var(--login-muted);
-    font-size: 0.84rem;
-    line-height: 1.5;
-}
-
-.viby-login-capability-row h3 {
-    color: var(--login-fg);
-    font-size: 1rem;
-    font-weight: 500;
-    letter-spacing: -0.03em;
-}
-
-.viby-login-capability-row p {
-    margin-top: 0.55rem;
-    color: var(--login-muted);
-    font-size: 0.88rem;
-    line-height: 1.65;
-}
-
-.viby-login-flow__intro {
-    max-width: 28rem;
-}
-
-.viby-login-flow__intro h2 {
-    margin-top: 0.9rem;
-    color: var(--login-fg);
-    font-family: var(--ds-font-brand);
-    font-size: clamp(1.5rem, 3vw, 2.2rem);
-    line-height: 1;
-    letter-spacing: -0.05em;
-}
-
-.viby-login-flow__grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 1rem;
-    margin-top: 1rem;
-}
-
-.viby-login-flow-card__index {
-    color: var(--login-muted);
-    font-family: var(--ds-font-mono);
-    font-size: 0.8rem;
-}
-
-.viby-login-flow-row h3 {
-    margin-top: 1rem;
-    color: var(--login-fg);
-    font-size: 1rem;
-    font-weight: 500;
-    letter-spacing: -0.03em;
-}
-
-.viby-login-flow-row p {
-    margin-top: 0.5rem;
-    color: var(--login-muted);
-    font-size: 0.88rem;
-    line-height: 1.65;
+.viby-login-access__brand .ds-stage-brand-mark-glyph {
+    width: var(--login-brand-glyph-size);
+    height: var(--login-brand-glyph-size);
 }
 
 .viby-login-login-panel {
-    border-radius: 1.35rem;
-    padding: 1.1rem;
+    display: grid;
+    gap: var(--login-panel-gap);
+    padding: var(--login-panel-padding);
+    border: 1px solid var(--ds-border-subtle);
+    border-radius: 2rem;
+    background: var(--login-panel);
+    box-shadow: var(--login-panel-shadow);
+    backdrop-filter: blur(18px);
 }
 
-.viby-login-login-panel__badge {
-    display: inline-flex;
-    align-items: center;
-    min-height: 1.85rem;
-    padding: 0.2rem 0.65rem;
-    border-radius: var(--ds-radius-pill);
-    border: 1px solid var(--login-border-soft);
-    color: var(--login-muted);
-    font-size: 0.72rem;
+.viby-login-login-panel__header {
+    display: block;
+    width: 100%;
+    justify-self: stretch;
+    padding-bottom: var(--login-title-input-gap);
+    text-align: center;
 }
 
-.viby-login-login-panel__title {
-    margin-top: 0.7rem;
-    color: var(--login-fg);
-    font-size: 1.1rem;
-    font-weight: 500;
-    letter-spacing: -0.03em;
-}
-
-.viby-login-login-panel__subtitle {
-    margin-top: 0.35rem;
-    color: var(--login-muted);
-    font-size: 0.9rem;
-    line-height: 1.6;
+.viby-login-login-panel__header h1 {
+    margin: 0;
+    color: var(--ds-text-primary);
+    font-size: var(--login-title-font-size);
+    font-weight: 820;
+    line-height: 1.02;
+    letter-spacing: -0.075em;
+    cursor: default;
+    user-select: none;
 }
 
 .viby-login-login-panel__form {
     display: grid;
-    gap: 0.95rem;
-    margin-top: 1rem;
+    justify-items: center;
+    gap: var(--login-form-gap);
 }
 
-.viby-login-login-panel__meta {
-    color: var(--login-muted);
-    font-size: 0.78rem;
+.viby-login-access-key-input {
+    width: min(100%, var(--login-input-width)) !important;
+}
+
+.viby-login-submit {
+    width: min(100%, var(--login-submit-width)) !important;
+    justify-self: center;
 }
 
 .viby-login-login-panel__footer {
-    margin-top: 0.9rem;
-    padding-top: 0.85rem;
-    border-top: 1px solid var(--login-border-soft);
+    display: flex;
     justify-content: flex-end;
+    min-height: var(--login-footer-min-height);
 }
 
 .viby-login-server-trigger {
-    color: var(--login-muted);
+    color: var(--login-trigger) !important;
 }
 
 .viby-login-footer {
-    padding: 1rem 1.25rem 2rem;
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--login-footer-gap);
+    color: var(--ds-text-muted);
     font-size: 0.78rem;
-    border-top: 1px solid var(--login-border-soft);
 }
 
-@media (max-width: 960px) {
-    .viby-login-hero,
-    .viby-login-dock,
-    .viby-login-proof__grid,
-    .viby-login-capabilities__grid,
-    .viby-login-flow__grid {
-        grid-template-columns: minmax(0, 1fr);
+@media (max-width: 520px) {
+    .viby-login-page {
+        place-items: start center;
     }
-}
 
-@media (max-width: 720px) {
-    .viby-login-header__inner,
-    .viby-login-main,
+    .viby-login-access {
+        min-height: 100dvh;
+        align-content: center;
+    }
+
     .viby-login-footer {
-        width: 100%;
-    }
-
-    .viby-login-main {
-        padding-top: 1.25rem;
-    }
-
-    .viby-login-hero {
-        min-height: auto;
-    }
-
-    .viby-login-stage {
-        min-height: auto;
-        display: grid;
-        gap: 0.85rem;
-    }
-
-    .viby-login-stage__frame {
-        position: relative;
-        inset: auto;
-        width: auto;
-    }
-
-    .viby-login-stage__frame--mobile,
-    .viby-login-stage__frame--desktop {
-        right: auto;
-        top: auto;
-        bottom: auto;
-        left: auto;
-    }
-
-    .viby-login-stage__frame--mobile {
-        width: 100%;
-    }
-
-    .viby-login-stage__badge {
-        position: relative;
-        inset: auto;
-        width: fit-content;
-    }
-
-    .viby-login-hero__meta,
-    .viby-login-login-panel__footer,
-    .viby-login-footer {
-        justify-content: flex-start;
-        flex-wrap: wrap;
-    }
-
-    .viby-login-header__actions {
-        gap: 0.5rem;
-    }
-
-    .viby-login-header__repo {
-        padding-inline: 0.75rem !important;
-    }
-
-    .viby-login-proof-row,
-    .viby-login-capability-row,
-    .viby-login-flow-row {
-        min-height: auto;
+        flex-direction: column;
+        gap: 0.25rem;
     }
 }

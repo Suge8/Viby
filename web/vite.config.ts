@@ -12,7 +12,7 @@ const require = createRequire(import.meta.url)
 const base = process.env.VITE_BASE_URL || '/'
 const sharedSrcDir = resolve(__dirname, '../shared/src')
 const appVersion = require('../cli/package.json').version as string
-const appBuildId = process.env.VIBY_APP_BUILD_ID || `${appVersion}-${new Date().toISOString()}`
+const appBuildId = process.env.VIBY_APP_BUILD_ID || appVersion
 
 function normalizeProxyHost(host: string): string {
     if (host === '0.0.0.0' || host === '::') {
@@ -50,7 +50,7 @@ function readConfiguredHubTarget(): string {
         }
     }
 
-    return `http://${DEFAULT_VIBY_LISTEN_HOST}:${DEFAULT_VIBY_LISTEN_PORT}`
+    return `http://${normalizeProxyHost(DEFAULT_VIBY_LISTEN_HOST)}:${DEFAULT_VIBY_LISTEN_PORT}`
 }
 
 const hubTarget = readConfiguredHubTarget()
@@ -185,6 +185,7 @@ export default defineConfig({
             { find: '@', replacement: resolve(__dirname, 'src') },
             { find: '@viby/protocol/messages', replacement: resolveProtocolModule('messages.ts') },
             { find: '@viby/protocol/modes', replacement: resolveProtocolModule('modes.ts') },
+            { find: '@viby/protocol/pairing', replacement: resolveProtocolModule('pairing/index.ts') },
             { find: '@viby/protocol/schemas', replacement: resolveProtocolModule('schemas.ts') },
             { find: '@viby/protocol/types', replacement: resolveProtocolModule('types.ts') },
             { find: '@viby/protocol/utils', replacement: resolveProtocolModule('utils.ts') },

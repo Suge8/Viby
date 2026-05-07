@@ -10,8 +10,9 @@ import { CopyActionButton } from '@/components/CopyActionButton'
 import { useCopyAction } from '@/hooks/useCopyAction'
 import { joinClassNames } from '@/lib/joinClassNames'
 import { useTranslation } from '@/lib/use-translation'
+import { remarkDisableIndentedCode, remarkStripCjkAutolinkPunctuation } from './markdownPlugins'
 
-export const MARKDOWN_PLUGINS = [remarkGfm]
+export const MARKDOWN_PLUGINS = [remarkDisableIndentedCode, remarkGfm, remarkStripCjkAutolinkPunctuation]
 
 function CodeHeader(props: CodeHeaderProps) {
     const { t } = useTranslation()

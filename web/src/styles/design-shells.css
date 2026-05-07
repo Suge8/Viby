@@ -261,8 +261,50 @@
     border-radius: var(--ds-radius-2xl);
 }
 
+.ds-project-picker-dialog-content {
+    height: min(88dvh, 46rem);
+}
+
 .ds-project-picker-dialog-body {
-    max-height: min(78vh, 45rem);
+    height: 100%;
+    max-height: min(88dvh, 46rem);
+}
+
+.ds-project-picker-skeleton-mark {
+    height: 1rem;
+    width: 1rem;
+    border-radius: var(--ds-radius-sm);
+    background: color-mix(in srgb, var(--ds-brand) 12%, transparent);
+}
+
+.ds-project-picker-skeleton-line {
+    height: 0.875rem;
+    border-radius: var(--ds-radius-full);
+    background: color-mix(in srgb, var(--ds-brand) 12%, transparent);
+}
+
+.ds-project-picker-skeleton-line-0 {
+    width: 48%;
+}
+
+.ds-project-picker-skeleton-line-1 {
+    width: 57%;
+}
+
+.ds-project-picker-skeleton-line-2 {
+    width: 66%;
+}
+
+.ds-project-picker-skeleton-line-3 {
+    width: 75%;
+}
+
+@media (min-width: 640px) {
+    .ds-project-picker-dialog-content,
+    .ds-project-picker-dialog-body {
+        height: min(82vh, 44rem);
+        max-height: min(82vh, 44rem);
+    }
 }
 
 .ds-settings-info-value {
@@ -281,11 +323,29 @@
     min-width: 7.75rem;
 }
 
-.ds-directory-recent-label,
 .ds-session-type-worktree-label {
     letter-spacing: 0.14em;
 }
 
+.ds-project-picker-x-strip {
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+}
+
+.ds-project-picker-x-strip::-webkit-scrollbar {
+    display: none;
+}
+
 .ds-session-type-worktree-card {
     border-radius: 1.125rem;
+}
+
+.ds-recover-local-scroller {
+    max-height: var(--app-recover-list-max-h);
+    overscroll-behavior: contain;
+}
+
+.ds-new-session-choice-options {
+    max-height: var(--app-choice-list-max-h);
+    overscroll-behavior: contain;
 }

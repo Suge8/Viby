@@ -74,4 +74,16 @@ describe('DisclosureCardSection', () => {
         expect(trigger).toHaveClass('rounded-2xl')
         expect(trigger).not.toHaveClass('ds-interactive-card-inherit-radius')
     })
+
+    it('uses card press feedback without pointer glow', () => {
+        render(
+            <DisclosureCardSection triggerContent={<span>Toggle</span>}>
+                <div>Panel body</div>
+            </DisclosureCardSection>
+        )
+
+        const trigger = screen.getByRole('button', { name: /toggle/i })
+        expect(trigger).toHaveAttribute('data-button-press-style', 'card')
+        expect(trigger).toHaveAttribute('data-button-pointer-effect', 'none')
+    })
 })

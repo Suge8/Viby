@@ -234,17 +234,3 @@
         color var(--ds-motion-fast) var(--ds-ease-standard),
         opacity var(--ds-motion-fast) var(--ds-ease-standard);
 }
-
-.ds-recent-path-chip {
-    max-width: 15rem;
-    border-radius: 999px;
-    padding: 0.375rem 0.75rem;
-    font-size: 0.6875rem;
-    font-weight: 500;
-    color: var(--ds-text-secondary);
-}
-
-.ds-recent-path-chip:hover {
-    border-color: var(--ds-border-strong);
-    color: var(--ds-text-primary);
-}

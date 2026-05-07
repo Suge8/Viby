@@ -18,6 +18,32 @@
     --ds-ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
     --ds-ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
     --ds-ease-decelerate: cubic-bezier(0.12, 0.72, 0.08, 1);
+    --ds-press-scale-button: 0.96;
+    --ds-press-scale-cta: 0.955;
+    --ds-press-scale-card: 0.976;
+    --ds-press-scale-list-row: 0.978;
+    --ds-press-scale-segmented: 0.978;
+    --ds-press-scale-chip: 0.98;
+    --ds-press-scale-icon: 0.94;
+    --ds-hover-scale-button: 1.006;
+    --ds-hover-scale-card: 1.004;
+    --ds-hover-scale-list-row: 1.002;
+    --ds-hover-scale-segmented: 1;
+    --ds-hover-scale-chip: 1.002;
+    --ds-hover-scale-icon: 1.004;
+    --ds-hover-lift-button: -1px;
+    --ds-hover-lift-card: -1px;
+    --ds-hover-lift-flat: 0px;
+    --ds-button-state-layer-size: 132px;
+    --ds-button-state-layer-opacity-hover: 0.11;
+    --ds-button-state-layer-opacity-press: 0.14;
+    --ds-button-state-layer-color-mix: 18%;
+    --ds-button-sheen-opacity-hover: 0.5;
+    --ds-button-sheen-opacity-press: 0.24;
+    --ds-button-sheen-shift-start: -140%;
+    --ds-button-sheen-shift-end: 140%;
+    --ds-composer-overlay-enter-y: 10px;
+    --ds-composer-overlay-enter-scale: 0.985;
     --ds-session-detail-transition-duration: 220ms;
     --ds-session-detail-transition-old-opacity: 0.94;
     --ds-session-detail-transition-new-opacity: 0.88;
@@ -131,6 +157,9 @@
     --app-attention-text: #fafafa;
     --app-attention-shadow: rgba(17, 17, 17, 0.22);
     --app-attention-card-shadow: rgba(17, 17, 17, 0.14);
+
+    --app-recover-list-max-h: clamp(14rem, 38dvh, 24rem);
+    --app-choice-list-max-h: clamp(12rem, 34dvh, 20rem);
 }
 
 [data-theme="dark"] {

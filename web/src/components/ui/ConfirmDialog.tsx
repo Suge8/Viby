@@ -1,15 +1,10 @@
-import { useState, useEffect } from 'react'
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogDescription
-} from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
+import { useEffect, useState } from 'react'
 import { InlineNotice } from '@/components/InlineNotice'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { getNoticePreset } from '@/lib/noticePresets'
 import { useTranslation } from '@/lib/use-translation'
+import { formatUserFacingErrorMessage } from '@/lib/userFacingError'
 
 type ConfirmDialogProps = {
     dialog: {
@@ -28,20 +23,8 @@ type ConfirmDialogProps = {
 export function ConfirmDialog(props: ConfirmDialogProps) {
     const { t } = useTranslation()
     const dialogErrorPreset = getNoticePreset('dialogError', t)
-    const {
-        dialog,
-        onConfirm,
-        isPending
-    } = props
-    const {
-        isOpen,
-        onClose,
-        title,
-        description,
-        confirmLabel,
-        confirmingLabel,
-        destructive = false
-    } = dialog
+    const { dialog, onConfirm, isPending } = props
+    const { isOpen, onClose, title, description, confirmLabel, confirmingLabel, destructive = false } = dialog
 
     const [error, setError] = useState<string | null>(null)
 
@@ -58,11 +41,9 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
             await onConfirm()
             onClose()
         } catch (err) {
-            const message =
-                err instanceof Error && err.message
-                    ? err.message
-                    : t('dialog.error.default')
-            setError(message)
+            setError(
+                formatUserFacingErrorMessage(err, { t, fallbackKey: 'dialog.error.default', allowPassthrough: true })
+            )
         }
     }
 
@@ -71,9 +52,7 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
             <DialogContent className="max-w-sm">
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
-                    <DialogDescription className="mt-2">
-                        {description}
-                    </DialogDescription>
+                    <DialogDescription className="mt-2">{description}</DialogDescription>
                 </DialogHeader>
 
                 {error ? (
@@ -87,12 +66,7 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
                 ) : null}
 
                 <div className="mt-4 flex gap-2 justify-end">
-                    <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={onClose}
-                        disabled={isPending}
-                    >
+                    <Button type="button" variant="secondary" onClick={onClose} disabled={isPending}>
                         {t('button.cancel')}
                     </Button>
                     <Button

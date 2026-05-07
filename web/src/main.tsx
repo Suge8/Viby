@@ -35,9 +35,13 @@ async function bootstrap(): Promise<void> {
         return
     }
 
+    const shouldUseServiceWorker = shouldRegisterServiceWorkerForOrigin(currentOrigin)
+
     if (import.meta.env.PROD) {
         installVitePreloadErrorHandler()
-        publishRuntimeUpdateForBuild(__APP_BUILD_ID__)
+        if (shouldUseServiceWorker) {
+            publishRuntimeUpdateForBuild(__APP_BUILD_ID__)
+        }
     }
 
     const rootElement = document.getElementById(APP_ROOT_ELEMENT_ID)
@@ -47,7 +51,7 @@ async function bootstrap(): Promise<void> {
 
     renderApplication(rootElement)
 
-    if (import.meta.env.PROD && shouldRegisterServiceWorkerForOrigin(currentOrigin)) {
+    if (import.meta.env.PROD && shouldUseServiceWorker) {
         const { scheduleRuntimeServiceWorkerRegistration } = await import('@/boot/registerRuntimeServiceWorker')
         scheduleRuntimeServiceWorkerRegistration()
     }

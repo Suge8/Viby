@@ -31,8 +31,10 @@
         <!-- Prevent flash of white background on dark mode -->
         <style>
             html {
+                --app-font-scale: 0.9;
                 background: #fff;
                 font-family: "Manrope", "Avenir Next", "SF Pro Display", "Segoe UI Variable Text", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+                font-size: calc(100% * var(--app-font-scale, 0.9));
             }
 
             body {

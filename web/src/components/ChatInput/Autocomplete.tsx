@@ -191,6 +191,7 @@ export const Autocomplete = memo(function Autocomplete(props: AutocompleteProps)
                             type="button"
                             variant={isSelected ? 'secondary' : 'plain'}
                             size="sm"
+                            pressStyle="list-row"
                             data-suggestion-index={index}
                             className={`w-full rounded-2xl border px-3 py-2 text-left text-sm shadow-none [&>[data-button-content]]:w-full [&>[data-button-content]]:flex-col [&>[data-button-content]]:items-start ${
                                 isSelected
