@@ -35,6 +35,7 @@ export type SessionBootstrapOptions = {
     agentState?: AgentState | null
     model?: string
     modelReasoningEffort?: SessionModelReasoningEffort
+    codexServiceTier?: Session['codexServiceTier']
     permissionMode?: SessionPermissionMode
     collaborationMode?: SessionCollaborationMode
     metadataOverrides?: Partial<Metadata>
@@ -77,7 +78,7 @@ export function buildSessionMetadata(options: {
 
     return {
         path: options.workingDirectory,
-        host: os.hostname(),
+        host: process.env.VIBY_HOSTNAME || os.hostname(),
         version: packageJson.version,
         os: os.platform(),
         machineId: options.machineId,
@@ -202,6 +203,7 @@ export async function bootstrapSession(options: SessionBootstrapOptions): Promis
         state: agentState,
         model: options.model,
         modelReasoningEffort: options.modelReasoningEffort,
+        codexServiceTier: options.codexServiceTier,
         permissionMode: options.permissionMode,
         collaborationMode: options.collaborationMode,
     })

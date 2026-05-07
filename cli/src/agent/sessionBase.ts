@@ -1,4 +1,5 @@
 import type {
+    CodexServiceTier,
     SessionCollaborationMode,
     SessionModel,
     SessionModelReasoningEffort,
@@ -28,6 +29,7 @@ export type AgentSessionBaseOptions<Mode> = {
     model?: SessionModel
     modelReasoningEffort?: SessionModelReasoningEffort
     collaborationMode?: SessionCollaborationMode
+    codexServiceTier?: CodexServiceTier | null
 }
 
 export class AgentSessionBase<Mode> {
@@ -55,6 +57,7 @@ export class AgentSessionBase<Mode> {
     protected model?: SessionModel
     protected modelReasoningEffort?: SessionModelReasoningEffort
     protected collaborationMode?: SessionCollaborationMode
+    protected codexServiceTier?: CodexServiceTier | null
     private runtimeStopHandler: RuntimeStopHandler = null
     private runtimeStopInFlight: Promise<void> | null = null
 
@@ -72,6 +75,12 @@ export class AgentSessionBase<Mode> {
         this.model = opts.model
         this.modelReasoningEffort = opts.modelReasoningEffort
         this.collaborationMode = opts.collaborationMode
+        this.codexServiceTier = opts.codexServiceTier
+        this.queue.onBatchConsumed = (localIds) => this.client.emitMessagesConsumed(localIds)
+        this.queue.onMessagesCanceled = (localIds) => this.client.emitMessagesCanceled(localIds)
+        this.client.on('cancel-messages', (localIds: string[]) => {
+            this.queue.removeByLocalIds(localIds)
+        })
 
         this.flushKeepAlive()
     }
@@ -259,13 +268,15 @@ export class AgentSessionBase<Mode> {
               model?: SessionModel
               modelReasoningEffort?: SessionModelReasoningEffort
               collaborationMode?: SessionCollaborationMode
+              codexServiceTier?: CodexServiceTier | null
           }
         | undefined {
         if (
             this.permissionMode === undefined &&
             this.model === undefined &&
             this.modelReasoningEffort === undefined &&
-            this.collaborationMode === undefined
+            this.collaborationMode === undefined &&
+            this.codexServiceTier === undefined
         ) {
             return undefined
         }
@@ -274,6 +285,7 @@ export class AgentSessionBase<Mode> {
             model: this.model,
             modelReasoningEffort: this.modelReasoningEffort,
             collaborationMode: this.collaborationMode,
+            codexServiceTier: this.codexServiceTier,
         }
     }
 

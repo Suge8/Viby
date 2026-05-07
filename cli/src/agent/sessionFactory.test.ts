@@ -106,6 +106,7 @@ import { bootstrapSession } from './sessionFactory'
 describe('bootstrapSession', () => {
     beforeEach(() => {
         delete process.env.VIBY_MACHINE_ID
+        delete process.env.VIBY_HOSTNAME
         sessionClientState.metadata = null
         sessionClientState.updateMetadataAndWait.mockClear()
         sessionClientState.getMetadataSnapshot.mockClear()
@@ -148,6 +149,23 @@ describe('bootstrapSession', () => {
             expect.objectContaining({
                 metadata: expect.objectContaining({
                     machineId: 'machine-from-runner-env',
+                }),
+            })
+        )
+    })
+
+    it('uses the configured Viby hostname for session metadata', async () => {
+        process.env.VIBY_HOSTNAME = 'custom-session-host'
+
+        await bootstrapSession({
+            driver: 'codex',
+            startedBy: 'runner',
+        })
+
+        expect(harness.getOrCreateSession).toHaveBeenCalledWith(
+            expect.objectContaining({
+                metadata: expect.objectContaining({
+                    host: 'custom-session-host',
                 }),
             })
         )

@@ -31,6 +31,7 @@ describe('AgentSessionBase', () => {
             api: {} as never,
             client: {
                 keepAlive,
+                on: vi.fn(),
                 updateMetadataAndWait,
                 getMetadataSnapshot: () => ({
                     path: '/tmp/project',
@@ -89,6 +90,7 @@ describe('AgentSessionBase', () => {
             api: {} as never,
             client: {
                 keepAlive,
+                on: vi.fn(),
                 updateMetadataAndWait,
                 getMetadataSnapshot: () => metadata,
             } as never,
@@ -123,6 +125,7 @@ describe('AgentSessionBase', () => {
             api: {} as never,
             client: {
                 keepAlive,
+                on: vi.fn(),
                 updateMetadataAndWait,
                 getMetadataSnapshot: () => ({
                     path: '/tmp/project',
@@ -167,6 +170,7 @@ describe('AgentSessionBase', () => {
             api: {} as never,
             client: {
                 keepAlive,
+                on: vi.fn(),
                 updateMetadataAndWait,
                 getMetadataSnapshot: () => null,
             } as never,
@@ -205,6 +209,7 @@ describe('AgentSessionBase', () => {
             api: {} as never,
             client: {
                 keepAlive,
+                on: vi.fn(),
                 updateMetadataAndWait: vi.fn(async () => undefined),
                 getMetadataSnapshot: () => null,
             } as never,
@@ -252,6 +257,7 @@ describe('AgentSessionBase', () => {
             api: {} as never,
             client: {
                 keepAlive,
+                on: vi.fn(),
                 updateMetadataAndWait,
                 getMetadataSnapshot: () => ({
                     path: '/tmp/project',
@@ -316,6 +322,7 @@ describe('AgentSessionBase', () => {
             api: {} as never,
             client: {
                 keepAlive,
+                on: vi.fn(),
                 updateMetadataAndWait,
                 getMetadataSnapshot: () => ({
                     path: '/tmp/project',
@@ -356,6 +363,7 @@ describe('AgentSessionBase', () => {
             api: {} as never,
             client: {
                 keepAlive,
+                on: vi.fn(),
                 updateMetadataAndWait,
                 getMetadataSnapshot: () => ({
                     path: '/tmp/project',
