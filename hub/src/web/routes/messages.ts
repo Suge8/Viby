@@ -24,6 +24,10 @@ const sendMessageBodyBaseSchema = z.object({
     attachments: z.array(z.unknown()).optional(),
 })
 
+const cancelQueuedMessageBodySchema = z.object({
+    localIds: z.array(z.string().min(1)).min(1).max(100),
+})
+
 type SendMessageBody = {
     text: string
     localId?: string
@@ -150,6 +154,24 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null): Ho
 
             throw error
         }
+    })
+
+    app.post('/sessions/:id/messages/cancel', createJsonBodyValidator(cancelQueuedMessageBodySchema), async (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) {
+            return engine
+        }
+
+        const sessionResult = requireSessionFromParam(c, engine)
+        if (sessionResult instanceof Response) {
+            return sessionResult
+        }
+
+        const canceledLocalIds = await engine.cancelQueuedMessages(
+            sessionResult.sessionId,
+            c.req.valid('json').localIds
+        )
+        return c.json({ ok: true, localIds: canceledLocalIds })
     })
 
     return app

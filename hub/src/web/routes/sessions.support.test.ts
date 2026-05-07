@@ -32,6 +32,7 @@ export function createSession(overrides?: Partial<Session>): Session {
         thinkingAt: 1,
         model: 'gpt-5.4',
         modelReasoningEffort: null,
+        codexServiceTier: null,
         permissionMode: 'default',
         collaborationMode: 'default',
     }
@@ -90,7 +91,7 @@ export function createApp(
     const denyPermissionCalls: Array<[string, string, string | undefined]> = []
     const listCommandCapabilitiesCalls: Array<[string, string, string | undefined]> = []
     const recoveryCalls: Array<[string, { afterSeq: number; limit: number }]> = []
-    const resumeSessionCalls: string[] = []
+    const resumeSessionCalls: Array<[string, { permissionMode?: string } | undefined]> = []
     const switchDriverCalls: Array<[string, SessionDriver]> = []
     let currentSession = session
     let sessionSnapshotAvailable = true
@@ -105,6 +106,10 @@ export function createApp(
                 'modelReasoningEffort' in config
                     ? ((config.modelReasoningEffort as Session['modelReasoningEffort']) ?? null)
                     : currentSession.modelReasoningEffort,
+            codexServiceTier:
+                'codexServiceTier' in config
+                    ? ((config.codexServiceTier as Session['codexServiceTier']) ?? null)
+                    : currentSession.codexServiceTier,
             permissionMode:
                 'permissionMode' in config
                     ? (config.permissionMode as Session['permissionMode'])
@@ -224,8 +229,8 @@ export function createApp(
             }
             return currentSession
         },
-        resumeSession: async (sessionId: string) => {
-            resumeSessionCalls.push(sessionId)
+        resumeSession: async (sessionId: string, opts?: { permissionMode?: string }) => {
+            resumeSessionCalls.push([sessionId, opts])
             const result = options?.resumeResult ?? {
                 type: 'success',
                 sessionId,

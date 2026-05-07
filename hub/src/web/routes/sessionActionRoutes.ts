@@ -1,4 +1,10 @@
-import { resolveSessionDriver, SAME_SESSION_SWITCH_TARGET_DRIVERS, SESSION_RECOVERY_PAGE_SIZE } from '@viby/protocol'
+import {
+    isPermissionModeAllowedForDriver,
+    resolveSessionDriver,
+    SAME_SESSION_SWITCH_TARGET_DRIVERS,
+    SESSION_RECOVERY_PAGE_SIZE,
+} from '@viby/protocol'
+import { PermissionModeSchema } from '@viby/protocol/schemas'
 import type { Context, Hono } from 'hono'
 import { z } from 'zod'
 import type { SyncEngine } from '../../sync/syncEngine'
@@ -8,6 +14,7 @@ import {
     type GetSyncEngine,
     getErrorMessage,
     getErrorStatus,
+    parseJsonBody,
     presentSessionSnapshot,
     resolveSessionRouteContext,
 } from './sessionRouteSupport'
@@ -28,6 +35,9 @@ const commandCapabilitiesQuerySchema = z.object({
 
 const driverSwitchSchema = z.object({
     targetDriver: z.enum(SAME_SESSION_SWITCH_TARGET_DRIVERS),
+})
+const resumeBodySchema = z.object({
+    permissionMode: PermissionModeSchema.optional(),
 })
 
 type SessionLifecycleAction = 'archiveSession' | 'closeSession' | 'unarchiveSession'
@@ -97,7 +107,23 @@ export function registerSessionActionRoutes(app: Hono<WebAppEnv>, getSyncEngine:
             return sessionContext
         }
 
-        const result = await sessionContext.engine.resumeSession(sessionContext.sessionId)
+        const body = await parseJsonBody(c, resumeBodySchema, 'Invalid body', {})
+        if (!body.ok) {
+            return body.response
+        }
+
+        const permissionMode = body.data.permissionMode
+        if (permissionMode !== undefined) {
+            const driver = resolveSessionDriver(sessionContext.session.metadata)
+            if (!driver || !isPermissionModeAllowedForDriver(permissionMode, driver)) {
+                return c.json({ error: 'Invalid permission mode for session driver' }, 400)
+            }
+        }
+
+        const result = await sessionContext.engine.resumeSession(
+            sessionContext.sessionId,
+            permissionMode === undefined ? undefined : { permissionMode }
+        )
         if (result.type === 'error') {
             return c.json({ error: result.message, code: result.code }, getResumeErrorStatus(result.code))
         }

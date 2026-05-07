@@ -1,3 +1,4 @@
+import { formatSessionAttachmentMaxUploadError, SESSION_ATTACHMENT_MAX_UPLOAD_BYTES } from '@viby/protocol'
 import type { Context } from 'hono'
 import { z } from 'zod'
 import type { WebAppEnv } from '../middleware/auth'
@@ -7,8 +8,6 @@ export type AttachmentUploadPayload = {
     content: string
     mimeType: string
 }
-
-const MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 
 const multipartUploadSchema = z.object({
     mimeType: z.string().trim().min(1).max(255),
@@ -41,10 +40,13 @@ export async function parseMultipartUploadBody(
         }
     }
 
-    if (file.size > MAX_UPLOAD_BYTES) {
+    if (file.size > SESSION_ATTACHMENT_MAX_UPLOAD_BYTES) {
         return {
             ok: false,
-            response: Response.json({ success: false, error: 'File too large (max 50MB)' }, { status: 413 }),
+            response: Response.json(
+                { success: false, error: formatSessionAttachmentMaxUploadError() },
+                { status: 413 }
+            ),
         }
     }
 

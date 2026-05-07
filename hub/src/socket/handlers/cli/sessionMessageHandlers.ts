@@ -2,8 +2,18 @@ import { randomUUID } from 'node:crypto'
 import { extractAssistantTurnId, SessionStreamUpdatePayloadSchema } from '@viby/protocol'
 import { extractTodoWriteTodosFromMessageContent } from '../../../sync/todos'
 import type { CliSocketWithData } from '../../socketTypes'
-import type { CommandCapabilitiesInvalidatedHandler, SessionHandlersDeps } from './sessionHandlerSupport'
-import { commandCapabilitiesInvalidatedSchema, messageSchema, parseMessageContent } from './sessionHandlerSupport'
+import type {
+    CommandCapabilitiesInvalidatedHandler,
+    MessagesCanceledHandler,
+    MessagesConsumedHandler,
+    SessionHandlersDeps,
+} from './sessionHandlerSupport'
+import {
+    commandCapabilitiesInvalidatedSchema,
+    messageSchema,
+    parseMessageContent,
+    queuedMessageLocalIdsSchema,
+} from './sessionHandlerSupport'
 
 export function registerSessionMessageHandlers(socket: CliSocketWithData, deps: SessionHandlersDeps): void {
     const { store, sessionStreamManager, resolveSessionAccess, emitAccessError, onWebappEvent } = deps
@@ -48,6 +58,7 @@ export function registerSessionMessageHandlers(socket: CliSocketWithData, deps: 
                     seq: storedMessage.seq,
                     createdAt: storedMessage.createdAt,
                     localId: storedMessage.localId,
+                    invokedAt: storedMessage.invokedAt,
                     content: storedMessage.content,
                 },
             },
@@ -62,6 +73,7 @@ export function registerSessionMessageHandlers(socket: CliSocketWithData, deps: 
                 localId: storedMessage.localId,
                 content: storedMessage.content,
                 createdAt: storedMessage.createdAt,
+                invokedAt: storedMessage.invokedAt,
             },
         })
     })
@@ -115,4 +127,63 @@ export function registerSessionMessageHandlers(socket: CliSocketWithData, deps: 
     }
 
     socket.on('command-capabilities-invalidated', handleCommandCapabilitiesInvalidated)
+
+    const handleMessagesConsumed: MessagesConsumedHandler = (data) => {
+        const parsed = queuedMessageLocalIdsSchema.safeParse(data)
+        if (!parsed.success) {
+            return
+        }
+
+        const localIds = parsed.data.localIds.filter((localId) => localId.length > 0)
+        if (localIds.length === 0) {
+            return
+        }
+
+        const sessionAccess = resolveSessionAccess(parsed.data.sid)
+        if (!sessionAccess.ok) {
+            emitAccessError('session', parsed.data.sid, sessionAccess.reason)
+            return
+        }
+
+        const invokedAt = Date.now()
+        store.messages.markMessagesInvoked(parsed.data.sid, localIds, invokedAt)
+        onWebappEvent?.({
+            type: 'messages-consumed',
+            sessionId: parsed.data.sid,
+            localIds,
+            invokedAt,
+        })
+    }
+
+    const handleMessagesCanceled: MessagesCanceledHandler = (data) => {
+        const parsed = queuedMessageLocalIdsSchema.safeParse(data)
+        if (!parsed.success) {
+            return
+        }
+
+        const localIds = parsed.data.localIds.filter((localId) => localId.length > 0)
+        if (localIds.length === 0) {
+            return
+        }
+
+        const sessionAccess = resolveSessionAccess(parsed.data.sid)
+        if (!sessionAccess.ok) {
+            emitAccessError('session', parsed.data.sid, sessionAccess.reason)
+            return
+        }
+
+        const canceledLocalIds = store.messages.cancelQueuedMessages(parsed.data.sid, localIds)
+        if (canceledLocalIds.length === 0) {
+            return
+        }
+
+        onWebappEvent?.({
+            type: 'messages-canceled',
+            sessionId: parsed.data.sid,
+            localIds: canceledLocalIds,
+        })
+    }
+
+    socket.on('messages-consumed', handleMessagesConsumed)
+    socket.on('messages-canceled', handleMessagesCanceled)
 }

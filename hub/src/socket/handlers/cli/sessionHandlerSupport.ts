@@ -29,6 +29,8 @@ export type EmitAccessError = (scope: 'session' | 'machine', id: string, reason:
 export type UpdateMetadataHandler = ClientToServerEvents['update-metadata']
 export type UpdateStateHandler = ClientToServerEvents['update-state']
 export type CommandCapabilitiesInvalidatedHandler = ClientToServerEvents['command-capabilities-invalidated']
+export type MessagesConsumedHandler = ClientToServerEvents['messages-consumed']
+export type MessagesCanceledHandler = ClientToServerEvents['messages-canceled']
 
 export const messageSchema = z.object({
     sid: z.string(),
@@ -51,6 +53,11 @@ export const updateStateSchema = z.object({
 
 export const commandCapabilitiesInvalidatedSchema = z.object({
     sid: z.string(),
+})
+
+export const queuedMessageLocalIdsSchema = z.object({
+    sid: z.string(),
+    localIds: z.array(z.string()),
 })
 
 type SessionLifecycleMetadataField = 'lifecycleState' | 'lifecycleStateSince' | 'archivedBy' | 'archiveReason'

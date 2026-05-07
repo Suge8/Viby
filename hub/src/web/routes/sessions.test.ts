@@ -691,7 +691,7 @@ describe('sessions routes', () => {
                 resumeAvailable: false,
             },
         })
-        expect(resumeSessionCalls).toEqual(['session-1'])
+        expect(resumeSessionCalls).toEqual([['session-1', undefined]])
     })
 
     it('returns 409 when resuming an archived session is rejected', async () => {
@@ -712,7 +712,7 @@ describe('sessions routes', () => {
             error: 'Archived sessions must be restored before resuming',
             code: 'session_archived',
         })
-        expect(resumeSessionCalls).toEqual(['session-1'])
+        expect(resumeSessionCalls).toEqual([['session-1', undefined]])
     })
 
     it('returns 500 when the previous agent session does not reattach', async () => {
@@ -733,7 +733,7 @@ describe('sessions routes', () => {
             error: 'Session failed to reattach to the previous agent session',
             code: 'resume_failed',
         })
-        expect(resumeSessionCalls).toEqual(['session-1'])
+        expect(resumeSessionCalls).toEqual([['session-1', undefined]])
     })
 
     it('keeps handleless closed Codex detail snapshots read-only on the session snapshot route', async () => {

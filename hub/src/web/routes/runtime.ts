@@ -7,6 +7,7 @@ import {
 } from '@viby/protocol'
 import {
     CodexCollaborationModeSchema,
+    CodexServiceTierSchema,
     ModelReasoningEffortSchema,
     PermissionModeSchema,
     SessionDriverSchema,
@@ -24,6 +25,7 @@ const spawnBodySchema = z.object({
     agent: SessionDriverSchema.optional(),
     model: z.string().optional(),
     modelReasoningEffort: ModelReasoningEffortSchema.optional(),
+    codexServiceTier: CodexServiceTierSchema.optional(),
     permissionMode: PermissionModeSchema.optional(),
     collaborationMode: CodexCollaborationModeSchema.optional(),
     sessionType: z.enum(['simple', 'worktree']).optional(),
@@ -36,6 +38,7 @@ const pathsExistsSchema = z.object({
 
 const browseDirectoryQuerySchema = z.object({
     path: z.string().optional(),
+    workspaceRoot: z.string().optional(),
 })
 
 function getLocalRuntime(engine: SyncEngine): Machine | null {
@@ -120,6 +123,9 @@ export function createRuntimeRoutes(getSyncEngine: () => SyncEngine | null): Hon
         if (body.collaborationMode && agent !== 'codex') {
             return c.json({ error: 'Collaboration mode is only supported for Codex sessions' }, 400)
         }
+        if (body.codexServiceTier && agent !== 'codex') {
+            return c.json({ error: 'Codex fast mode is only supported for Codex sessions' }, 400)
+        }
 
         const availability = await getRuntimeAgentAvailability({
             engine,
@@ -145,6 +151,7 @@ export function createRuntimeRoutes(getSyncEngine: () => SyncEngine | null): Hon
             agent,
             model: body.model,
             modelReasoningEffort: body.modelReasoningEffort,
+            codexServiceTier: body.codexServiceTier,
             permissionMode: body.permissionMode,
             sessionType: body.sessionType,
             worktreeName: body.worktreeName,
@@ -156,6 +163,7 @@ export function createRuntimeRoutes(getSyncEngine: () => SyncEngine | null): Hon
 
         const session = await engine.ensureSessionDriver(result.sessionId, agent, {
             model: body.model ?? null,
+            codexServiceTier: body.codexServiceTier ?? null,
         })
         if (!session) {
             return c.json(
@@ -263,7 +271,11 @@ export function createRuntimeRoutes(getSyncEngine: () => SyncEngine | null): Hon
         }
 
         try {
-            return c.json(await engine.browseMachineDirectory(runtime.id, parsed.data.path))
+            return c.json(
+                await engine.browseMachineDirectory(runtime.id, parsed.data.path, {
+                    workspaceRoot: parsed.data.workspaceRoot,
+                })
+            )
         } catch (error) {
             return c.json(
                 { success: false, error: error instanceof Error ? error.message : 'Failed to browse directory' },

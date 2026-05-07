@@ -1,5 +1,10 @@
 import { PROTOCOL_VERSION, SESSION_RECOVERY_PAGE_SIZE } from '@viby/protocol'
-import { CodexCollaborationModeSchema, ModelReasoningEffortSchema, PermissionModeSchema } from '@viby/protocol/schemas'
+import {
+    CodexCollaborationModeSchema,
+    CodexServiceTierSchema,
+    ModelReasoningEffortSchema,
+    PermissionModeSchema,
+} from '@viby/protocol/schemas'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { configuration } from '../../configuration'
@@ -18,6 +23,7 @@ const createOrLoadSessionSchema = z.object({
     agentState: z.unknown().nullable().optional(),
     model: z.string().optional(),
     modelReasoningEffort: ModelReasoningEffortSchema.optional(),
+    codexServiceTier: CodexServiceTierSchema.nullable().optional(),
     permissionMode: PermissionModeSchema.optional(),
     collaborationMode: CodexCollaborationModeSchema.optional(),
 })
@@ -97,6 +103,7 @@ export function createCliRoutes(getSyncEngine: () => SyncEngine | null): Hono<Cl
             agentState: body.agentState ?? null,
             model: body.model,
             modelReasoningEffort: body.modelReasoningEffort,
+            codexServiceTier: body.codexServiceTier,
             permissionMode: body.permissionMode,
             collaborationMode: body.collaborationMode,
             sessionId: body.sessionId,

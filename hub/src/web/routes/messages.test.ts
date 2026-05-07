@@ -7,6 +7,7 @@ import { createMessagesRoutes } from './messages'
 function createApp(engineOverrides?: Partial<SyncEngine>) {
     const getMessagesAfterCalls: Array<{ sessionId: string; afterSeq: number; limit: number }> = []
     const getMessagesPageCalls: Array<{ sessionId: string; beforeSeq: number | null; limit: number }> = []
+    const cancelQueuedMessagesCalls: Array<{ sessionId: string; localIds: string[] }> = []
     const sendMessageCalls: Array<{
         sessionId: string
         payload: {
@@ -83,6 +84,10 @@ function createApp(engineOverrides?: Partial<SyncEngine>) {
                 },
             } as never
         },
+        cancelQueuedMessages: async (sessionId: string, localIds: string[]) => {
+            cancelQueuedMessagesCalls.push({ sessionId, localIds })
+            return localIds
+        },
     }
 
     const engine = {
@@ -96,7 +101,7 @@ function createApp(engineOverrides?: Partial<SyncEngine>) {
         createMessagesRoutes(() => engine)
     )
 
-    return { app, getMessagesAfterCalls, getMessagesPageCalls, sendMessageCalls }
+    return { app, getMessagesAfterCalls, getMessagesPageCalls, sendMessageCalls, cancelQueuedMessagesCalls }
 }
 
 describe('messages routes', () => {
@@ -231,6 +236,29 @@ describe('messages routes', () => {
                     attachments: [attachment],
                     sentFrom: 'webapp',
                 },
+            },
+        ])
+    })
+
+    it('cancels queued local messages through the Hub-owned cancel route', async () => {
+        const { app, cancelQueuedMessagesCalls } = createApp()
+
+        const response = await app.request('/api/sessions/session-1/messages/cancel', {
+            method: 'POST',
+            body: JSON.stringify({
+                localIds: ['local-queued'],
+            }),
+        })
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toEqual({
+            ok: true,
+            localIds: ['local-queued'],
+        })
+        expect(cancelQueuedMessagesCalls).toEqual([
+            {
+                sessionId: 'session-1',
+                localIds: ['local-queued'],
             },
         ])
     })

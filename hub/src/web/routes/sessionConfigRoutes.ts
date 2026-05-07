@@ -8,7 +8,12 @@ import {
     supportsLiveModelReasoningEffortForDriver,
     supportsLiveModelSelectionForDriver,
 } from '@viby/protocol'
-import { CodexCollaborationModeSchema, ModelReasoningEffortSchema, PermissionModeSchema } from '@viby/protocol/schemas'
+import {
+    CodexCollaborationModeSchema,
+    CodexServiceTierSchema,
+    ModelReasoningEffortSchema,
+    PermissionModeSchema,
+} from '@viby/protocol/schemas'
 import type { Hono } from 'hono'
 import { z } from 'zod'
 import type { WebAppEnv } from '../middleware/auth'
@@ -35,6 +40,10 @@ const modelSchema = z.object({
 
 const modelReasoningEffortSchema = z.object({
     modelReasoningEffort: ModelReasoningEffortSchema.nullable(),
+})
+
+const codexServiceTierSchema = z.object({
+    codexServiceTier: CodexServiceTierSchema.nullable(),
 })
 
 type SessionConfigSnapshotError = Error & {
@@ -73,14 +82,14 @@ function isSessionConfigSnapshotError(error: unknown): error is SessionConfigSna
 
 export function registerSessionConfigRoutes(app: Hono<WebAppEnv>, getSyncEngine: GetSyncEngine): void {
     app.post('/sessions/:id/permission-mode', createJsonBodyValidator(permissionModeSchema), async (c) => {
-        const sessionContext = resolveSessionRouteContext(c, getSyncEngine, { requireActive: true })
+        const sessionContext = resolveSessionRouteContext(c, getSyncEngine)
         if (sessionContext instanceof Response) {
             return sessionContext
         }
 
         const driver = getSessionDriver(sessionContext.session)
         const liveConfigSupport = getLiveSessionConfigSupport(sessionContext.session)
-        if (!liveConfigSupport.canChangePermissionMode) {
+        if (sessionContext.session.active && !liveConfigSupport.canChangePermissionMode) {
             return c.json({ error: 'Permission mode can only be changed for Viby-managed active sessions' }, 409)
         }
 
@@ -211,6 +220,35 @@ export function registerSessionConfigRoutes(app: Hono<WebAppEnv>, getSyncEngine:
                 return c.json({ error: error.message, code: error.code }, 500)
             }
             return c.json({ error: getErrorMessage(error, 'Failed to apply model reasoning effort') }, 409)
+        }
+    })
+
+    app.post('/sessions/:id/codex-service-tier', createJsonBodyValidator(codexServiceTierSchema), async (c) => {
+        const sessionContext = resolveSessionRouteContext(c, getSyncEngine, { requireActive: true })
+        if (sessionContext instanceof Response) {
+            return sessionContext
+        }
+
+        const driver = getSessionDriver(sessionContext.session)
+        const liveConfigSupport = getLiveSessionConfigSupport(sessionContext.session)
+        if (driver !== 'codex') {
+            return c.json({ error: 'Codex fast mode is only supported for Codex sessions' }, 400)
+        }
+        if (!liveConfigSupport.canChangeCodexServiceTier) {
+            return c.json({ error: 'Codex fast mode can only be changed for Viby-managed Codex sessions' }, 409)
+        }
+
+        const body = c.req.valid('json')
+        try {
+            const session = await applySessionConfigAndReturnSnapshot(sessionContext, {
+                codexServiceTier: body.codexServiceTier,
+            })
+            return c.json({ ok: true, session: presentSessionSnapshot(session) })
+        } catch (error) {
+            if (isSessionConfigSnapshotError(error)) {
+                return c.json({ error: error.message, code: error.code }, 500)
+            }
+            return c.json({ error: getErrorMessage(error, 'Failed to apply Codex fast mode') }, 409)
         }
     })
 }

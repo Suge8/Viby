@@ -89,6 +89,7 @@ describe('runtime routes', () => {
             thinkingAt: 1_000,
             model: 'gpt-5.4',
             modelReasoningEffort: 'high',
+            codexServiceTier: null,
             permissionMode: 'safe-yolo',
             collaborationMode: 'plan',
             todos: undefined,
@@ -463,6 +464,7 @@ describe('runtime routes', () => {
             thinkingAt: 2_000,
             model: null,
             modelReasoningEffort: null,
+            codexServiceTier: null,
             todos: undefined,
         }
         const engine = {
