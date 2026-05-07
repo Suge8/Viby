@@ -1,5 +1,6 @@
 import type { Session, SyncEvent } from '@viby/protocol/types'
 import type { Server } from 'socket.io'
+import { RuntimeCapabilityCache } from '../runtime/runtimeCapabilityCache'
 import type { RpcRegistry } from '../socket/rpcRegistry'
 import type { Store } from '../store'
 import { EventPublisher, type SyncEventBroadcaster } from './eventPublisher'
@@ -58,6 +59,7 @@ export function createSyncEngineServices(options: SyncEngineServiceFactoryOption
     const sessionRpcFacade = new SessionRpcFacade(rpcGateway, (sessionId, config) =>
         sessionCache.applySessionConfig(sessionId, config)
     )
+    const runtimeCapabilityCache = new RuntimeCapabilityCache(sessionRpcFacade, eventPublisher)
     const sessionLifecycleService = new SessionLifecycleService(sessionCache, machineCache, rpcGateway)
     const sessionBootstrapConfigService = new SessionBootstrapConfigService(
         options.getSession,
@@ -103,6 +105,7 @@ export function createSyncEngineServices(options: SyncEngineServiceFactoryOption
         messageService,
         localSessionRecoveryService,
         rpcGateway,
+        runtimeCapabilityCache,
         sessionBootstrapConfigService,
         sessionCache,
         sessionHandoffService,

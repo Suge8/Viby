@@ -25,6 +25,10 @@ export class EventPublisher {
             }
         }
 
-        this.broadcaster.broadcast(event)
+        try {
+            this.broadcaster.broadcast(event)
+        } catch (error) {
+            reportHubRuntimeError('Sync broadcaster threw unexpectedly.', error)
+        }
     }
 }

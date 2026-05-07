@@ -96,7 +96,7 @@ describe('runtime routes', () => {
         }
         const engine = {
             getMachines: () => localRuntime(),
-            listAgentAvailability: async () => readyAgentAvailability(),
+            validateRuntimeSpawnCapability: async () => ({ ok: true }),
             spawnSession: async (options: Record<string, unknown>) => {
                 spawnCalls.push(options)
                 return { type: 'success', sessionId: 'session-1' }
@@ -145,7 +145,7 @@ describe('runtime routes', () => {
     it('returns 500 when spawn succeeds but the session snapshot is unavailable', async () => {
         const engine = {
             getMachines: () => localRuntime(),
-            listAgentAvailability: async () => readyAgentAvailability(),
+            validateRuntimeSpawnCapability: async () => ({ ok: true }),
             spawnSession: async () => ({ type: 'success', sessionId: 'session-1' }),
             ensureSessionDriver: async () => null,
             getSession: () => undefined,
@@ -174,7 +174,7 @@ describe('runtime routes', () => {
         const spawnCalls: Array<Record<string, unknown>> = []
         const engine = {
             getMachines: () => localRuntime(),
-            listAgentAvailability: async () => readyAgentAvailability(),
+            validateRuntimeSpawnCapability: async () => ({ ok: true }),
             spawnSession: async (options: Record<string, unknown>) => {
                 spawnCalls.push(options)
                 return { type: 'error', errorMessage: 'expected test stop' }
@@ -199,6 +199,47 @@ describe('runtime routes', () => {
 
         expect(response.status).toBe(200)
         expect(spawnCalls[0]?.agent).toBe('pi')
+    })
+
+    it('returns stale runtime capability snapshot and lets Hub refresh in background', async () => {
+        const capabilityCalls: Array<Record<string, unknown>> = []
+        const engine = {
+            getMachines: () => localRuntime(),
+            getRuntimeCapabilitySnapshot: (machineId: string, request: Record<string, unknown>) => {
+                capabilityCalls.push({ machineId, ...request })
+                return {
+                    machineId,
+                    directory: request.directory,
+                    detectedAt: null,
+                    expiresAt: null,
+                    refreshing: true,
+                    error: null,
+                    agents: [],
+                }
+            },
+        } as unknown as Partial<SyncEngine>
+
+        const app = new Hono<WebAppEnv>()
+        app.route(
+            '/api',
+            createRuntimeRoutes(() => engine as SyncEngine)
+        )
+
+        const response = await app.request('/api/runtime/capabilities?directory=%2Ftmp%2Fproject&depth=launch_config')
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toEqual({
+            snapshot: {
+                machineId: 'machine-1',
+                directory: '/tmp/project',
+                detectedAt: null,
+                expiresAt: null,
+                refreshing: true,
+                error: null,
+                agents: [],
+            },
+        })
+        expect(capabilityCalls).toEqual([{ machineId: 'machine-1', directory: '/tmp/project', depth: 'launch_config' }])
     })
 
     it('returns authoritative runtime agent availability from the local runtime owner', async () => {
@@ -277,16 +318,21 @@ describe('runtime routes', () => {
     it('rejects spawn when the selected agent is unavailable on this machine', async () => {
         const engine = {
             getMachines: () => localRuntime(),
-            listAgentAvailability: async () => ({
-                agents: [
-                    {
+            validateRuntimeSpawnCapability: async () => ({
+                ok: false,
+                status: 409,
+                body: {
+                    error: 'Selected agent is unavailable on this machine',
+                    code: 'agent_unavailable',
+                    agent: 'claude',
+                    availability: {
                         driver: 'claude',
                         status: 'not_installed',
                         resolution: 'install',
                         code: 'command_missing',
                         detectedAt: 1,
                     },
-                ],
+                },
             }),
             spawnSession: async () => ({ type: 'success', sessionId: 'should-not-run' }),
         } as unknown as Partial<SyncEngine>

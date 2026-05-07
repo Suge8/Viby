@@ -4,6 +4,7 @@ import {
     LocalSessionCatalogRequestSchema,
     LocalSessionExportRequestSchema,
     ResolveAgentLaunchConfigRequestSchema,
+    RuntimeCapabilityRequestSchema,
 } from '@viby/protocol'
 import {
     CodexCollaborationModeSchema,
@@ -45,18 +46,6 @@ function getLocalRuntime(engine: SyncEngine): Machine | null {
     return resolveLocalRuntime(engine.getMachines())
 }
 
-async function getRuntimeAgentAvailability(options: {
-    engine: SyncEngine
-    machineId: string
-    directory?: string
-    forceRefresh?: boolean
-}) {
-    return await options.engine.listAgentAvailability(options.machineId, {
-        directory: options.directory,
-        forceRefresh: options.forceRefresh,
-    })
-}
-
 function requireActiveLocalRuntime(c: Context<WebAppEnv>, engine: SyncEngine): Machine | Response {
     const runtime = getLocalRuntime(engine)
     if (!runtime?.active) {
@@ -77,6 +66,25 @@ export function createRuntimeRoutes(getSyncEngine: () => SyncEngine | null): Hon
         return c.json({ runtime: getLocalRuntime(engine) })
     })
 
+    app.get('/runtime/capabilities', async (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) {
+            return engine
+        }
+
+        const runtime = requireActiveLocalRuntime(c, engine)
+        if (runtime instanceof Response) {
+            return runtime
+        }
+
+        const parsed = RuntimeCapabilityRequestSchema.safeParse(c.req.query())
+        if (!parsed.success) {
+            return c.json({ error: 'Invalid query' }, 400)
+        }
+
+        return c.json({ snapshot: engine.getRuntimeCapabilitySnapshot(runtime.id, parsed.data) })
+    })
+
     app.get('/runtime/agent-availability', async (c) => {
         const engine = requireSyncEngine(c, getSyncEngine)
         if (engine instanceof Response) {
@@ -93,14 +101,7 @@ export function createRuntimeRoutes(getSyncEngine: () => SyncEngine | null): Hon
             return c.json({ error: 'Invalid query' }, 400)
         }
 
-        return c.json(
-            await getRuntimeAgentAvailability({
-                engine,
-                machineId: runtime.id,
-                directory: parsed.data.directory,
-                forceRefresh: parsed.data.forceRefresh,
-            })
-        )
+        return c.json(await engine.listAgentAvailability(runtime.id, parsed.data))
     })
 
     app.post('/runtime/spawn', createJsonBodyValidator(spawnBodySchema), async (c) => {
@@ -127,22 +128,14 @@ export function createRuntimeRoutes(getSyncEngine: () => SyncEngine | null): Hon
             return c.json({ error: 'Codex fast mode is only supported for Codex sessions' }, 400)
         }
 
-        const availability = await getRuntimeAgentAvailability({
-            engine,
-            machineId: runtime.id,
+        const capability = await engine.validateRuntimeSpawnCapability(runtime.id, {
             directory: body.directory,
+            agent,
+            model: body.model,
+            modelReasoningEffort: body.modelReasoningEffort,
         })
-        const selectedAgentAvailability = availability.agents.find((candidate) => candidate.driver === agent)
-        if (!selectedAgentAvailability || selectedAgentAvailability.status !== 'ready') {
-            return c.json(
-                {
-                    error: selectedAgentAvailability?.reason ?? 'Selected agent is unavailable on this machine',
-                    code: 'agent_unavailable',
-                    agent,
-                    availability: selectedAgentAvailability ?? null,
-                },
-                409
-            )
+        if (!capability.ok) {
+            return c.json(capability.body, capability.status)
         }
 
         const result = await engine.spawnSession({

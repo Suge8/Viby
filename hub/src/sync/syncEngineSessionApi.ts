@@ -1,16 +1,16 @@
 import { resolveSessionDriver } from '@viby/protocol'
 import type {
-    AgentAvailabilityResponse,
     AgentFlavor,
-    CommandCapabilitiesResponse,
     ListAgentAvailabilityRequest,
     LocalSessionCatalogRequest,
     LocalSessionExportRequest,
     PermissionMode,
     ResolveAgentLaunchConfigRequest,
-    ResolveAgentLaunchConfigResponse,
+    RuntimeCapabilityRequest,
+    RuntimeCapabilitySnapshot,
     Session,
 } from '@viby/protocol/types'
+import type { RuntimeSpawnValidationOptions } from '../runtime/runtimeCapabilityValidation'
 import type { DriverSwitchResult, ResumeContractState, ResumeSessionResult } from './sessionLifecycleService'
 import type {
     InternalSessionMessagePayload,
@@ -164,18 +164,20 @@ export abstract class SyncEngineSessionApi extends SyncEngineReadApi {
         return await this.syncServices.sessionRpcFacade.browseMachineDirectory(machineId, path, options)
     }
 
-    async resolveAgentLaunchConfig(
-        machineId: string,
-        request: ResolveAgentLaunchConfigRequest
-    ): Promise<ResolveAgentLaunchConfigResponse> {
-        return await this.syncServices.sessionRpcFacade.resolveAgentLaunchConfig(machineId, request)
+    async resolveAgentLaunchConfig(machineId: string, request: ResolveAgentLaunchConfigRequest) {
+        return await this.syncServices.runtimeCapabilityCache.resolveAgentLaunchConfig(machineId, request)
     }
 
-    async listAgentAvailability(
-        machineId: string,
-        request: ListAgentAvailabilityRequest
-    ): Promise<AgentAvailabilityResponse> {
-        return await this.syncServices.sessionRpcFacade.listAgentAvailability(machineId, request)
+    getRuntimeCapabilitySnapshot(machineId: string, request: RuntimeCapabilityRequest): RuntimeCapabilitySnapshot {
+        return this.syncServices.runtimeCapabilityCache.getSnapshot(machineId, request)
+    }
+
+    async listAgentAvailability(machineId: string, request: ListAgentAvailabilityRequest) {
+        return await this.syncServices.runtimeCapabilityCache.getAgentAvailability(machineId, request)
+    }
+
+    async validateRuntimeSpawnCapability(machineId: string, options: RuntimeSpawnValidationOptions) {
+        return await this.syncServices.runtimeCapabilityCache.validateSpawn(machineId, options)
     }
 
     async listLocalSessions(machineId: string, request: LocalSessionCatalogRequest) {
@@ -223,11 +225,7 @@ export abstract class SyncEngineSessionApi extends SyncEngineReadApi {
         return await this.syncServices.sessionRpcFacade.runRipgrep(sessionId, args, cwd)
     }
 
-    async listCommandCapabilities(
-        sessionId: string,
-        agent: string,
-        revision?: string
-    ): Promise<CommandCapabilitiesResponse> {
+    async listCommandCapabilities(sessionId: string, agent: string, revision?: string) {
         return await this.syncServices.sessionRpcFacade.listCommandCapabilities(sessionId, agent, revision)
     }
 
