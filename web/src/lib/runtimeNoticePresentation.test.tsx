@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
+import { PERSISTENT_NOTICE_IDS } from '@/lib/persistentNoticePresentation'
 import { buildOfflineNotice, buildRuntimeNotice } from '@/lib/runtimeNoticePresentation'
 
 function createTranslationStub(): (key: string) => string {
@@ -13,12 +14,11 @@ describe('runtimeNoticePresentation', () => {
             t: createTranslationStub(),
             currentOrigin: 'https://app.viby.run',
             isDevRuntime: false,
-            hasPendingRuntimeUpdate: false,
             localRuntimeUnavailableDescription: null,
         })
 
         expect(notice).toMatchObject({
-            id: 'app:runtime',
+            id: PERSISTENT_NOTICE_IDS.runtime,
             tone: 'info',
             title: 'runtime.recovering.title',
             description: 'runtime.recovering.message',
@@ -30,7 +30,7 @@ describe('runtimeNoticePresentation', () => {
         const notice = buildOfflineNotice(false, createTranslationStub())
 
         expect(notice).toMatchObject({
-            id: 'app:offline',
+            id: PERSISTENT_NOTICE_IDS.offline,
             title: 'offline.title',
             compact: true,
         })
@@ -48,12 +48,11 @@ describe('runtimeNoticePresentation', () => {
             t: createTranslationStub(),
             currentOrigin: 'http://127.0.0.1:37173',
             isDevRuntime: false,
-            hasPendingRuntimeUpdate: false,
             localRuntimeUnavailableDescription: null,
         })
 
         expect(notice).toMatchObject({
-            id: 'app:runtime',
+            id: PERSISTENT_NOTICE_IDS.runtime,
             title: 'recovery.runtimeAssets.title',
             description: 'recovery.runtimeAssets.localStaticMessage',
             compact: true,
@@ -67,58 +66,28 @@ describe('runtimeNoticePresentation', () => {
             t: createTranslationStub(),
             currentOrigin: 'http://127.0.0.1:5173',
             isDevRuntime: true,
-            hasPendingRuntimeUpdate: false,
             localRuntimeUnavailableDescription: null,
         })
 
         expect(notice).toMatchObject({
-            id: 'app:runtime',
+            id: PERSISTENT_NOTICE_IDS.runtime,
             title: 'recovery.runtimeAssets.title',
             description: 'recovery.runtimeAssets.devMessage',
             compact: true,
         })
     })
 
-    it('shows a pending runtime update through the single compact notice owner', () => {
-        const applyRuntimeUpdate = vi.fn(async () => true)
-
+    it('keeps prepared updates out of persistent runtime notices', () => {
         const notice = buildRuntimeNotice({
             banner: { kind: 'hidden' },
             isOnline: true,
             t: createTranslationStub(),
             currentOrigin: 'https://app.viby.run',
             isDevRuntime: false,
-            hasPendingRuntimeUpdate: true,
-            applyRuntimeUpdate,
             localRuntimeUnavailableDescription: null,
         })
 
-        expect(notice).toMatchObject({
-            id: 'app:runtime',
-            title: 'updateReady.title',
-            compact: true,
-        })
-        expect(notice?.description).toBeUndefined()
-        expect(typeof notice?.onPress).toBe('function')
-    })
-
-    it('keeps update-ready notices available on local static origins too', () => {
-        const notice = buildRuntimeNotice({
-            banner: { kind: 'hidden' },
-            isOnline: true,
-            t: createTranslationStub(),
-            currentOrigin: 'http://192.168.1.5:37173',
-            isDevRuntime: false,
-            hasPendingRuntimeUpdate: true,
-            applyRuntimeUpdate: async () => true,
-            localRuntimeUnavailableDescription: null,
-        })
-
-        expect(notice).toMatchObject({
-            id: 'app:runtime',
-            title: 'updateReady.title',
-            compact: true,
-        })
+        expect(notice).toBeNull()
     })
 
     it('keeps recovery higher priority than an available runtime update', () => {
@@ -128,8 +97,6 @@ describe('runtimeNoticePresentation', () => {
             t: createTranslationStub(),
             currentOrigin: 'https://app.viby.run',
             isDevRuntime: false,
-            hasPendingRuntimeUpdate: true,
-            applyRuntimeUpdate: async () => true,
             localRuntimeUnavailableDescription: null,
         })
 
@@ -147,13 +114,11 @@ describe('runtimeNoticePresentation', () => {
             t: createTranslationStub(),
             currentOrigin: 'https://app.viby.run',
             isDevRuntime: false,
-            hasPendingRuntimeUpdate: true,
-            applyRuntimeUpdate: async () => true,
             localRuntimeUnavailableDescription: 'runtime.unavailable.lastError',
         })
 
         expect(notice).toMatchObject({
-            id: 'app:runtime',
+            id: PERSISTENT_NOTICE_IDS.runtime,
             tone: 'warning',
             title: 'runtime.unavailable.title',
             description: 'runtime.unavailable.lastError',

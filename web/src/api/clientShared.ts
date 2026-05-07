@@ -20,11 +20,43 @@ export function parseErrorPayload(bodyText: string): { message?: string; code?: 
         const parsed = JSON.parse(bodyText) as ErrorPayload
         return {
             message: typeof parsed.error === 'string' ? parsed.error : undefined,
-            code: typeof parsed.code === 'string' ? parsed.code : undefined
+            code: typeof parsed.code === 'string' ? parsed.code : undefined,
         }
     } catch {
         return {}
     }
+}
+
+function getAbortError(signal: AbortSignal): Error {
+    return signal.reason instanceof Error ? signal.reason : new Error('Request aborted')
+}
+
+export async function withAbortSignal<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+    if (!signal) return await promise
+    if (signal.aborted) {
+        promise.catch(() => undefined)
+        throw getAbortError(signal)
+    }
+
+    return await new Promise<T>((resolve, reject) => {
+        const cleanup = (): void => signal.removeEventListener('abort', abort)
+        const abort = (): void => {
+            cleanup()
+            promise.catch(() => undefined)
+            reject(getAbortError(signal))
+        }
+        signal.addEventListener('abort', abort, { once: true })
+        promise.then(
+            (value) => {
+                cleanup()
+                resolve(value)
+            },
+            (error) => {
+                cleanup()
+                reject(error)
+            }
+        )
+    })
 }
 
 export class ApiError extends Error {

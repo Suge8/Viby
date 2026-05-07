@@ -21,6 +21,16 @@ describe('formatUserFacingErrorMessage', () => {
         ).toBe('chat.resumeFailed.sessionNotFound')
     })
 
+    it('translates remote pairing error codes before raw-message passthrough', () => {
+        expect(
+            formatUserFacingErrorMessage(new Error('remotePairing.error.peerTimeout'), {
+                t: (key) => (key === 'remotePairing.error.peerTimeout' ? 'Computer timed out' : key),
+                fallbackKey: 'fallback',
+                allowPassthrough: true,
+            })
+        ).toBe('Computer timed out')
+    })
+
     it('maps known raw messages to translated copy', () => {
         expect(
             formatUserFacingErrorMessage(new Error('Resume session ID unavailable'), {

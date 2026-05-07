@@ -80,6 +80,10 @@ export async function recoverRuntimeAssets(reason: string): Promise<boolean> {
     return true
 }
 
+function isSameVersionLegacyBuildId(previousBuildId: string, buildId: string): boolean {
+    return previousBuildId.startsWith(`${buildId}-`)
+}
+
 export function publishRuntimeUpdateForBuild(buildId: string): boolean {
     if (typeof window === 'undefined') {
         return false
@@ -88,7 +92,7 @@ export function publishRuntimeUpdateForBuild(buildId: string): boolean {
     const previousBuildId = readBrowserStorageItem('local', APP_BUILD_ID_STORAGE_KEY)
     writeBrowserStorageItem('local', APP_BUILD_ID_STORAGE_KEY, buildId)
 
-    if (!previousBuildId || previousBuildId === buildId) {
+    if (!previousBuildId || previousBuildId === buildId || isSameVersionLegacyBuildId(previousBuildId, buildId)) {
         return false
     }
 

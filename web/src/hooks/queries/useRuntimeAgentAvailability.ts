@@ -1,12 +1,14 @@
 import { useQuery } from '@tanstack/react-query'
 import { useCallback, useRef } from 'react'
 import type { ApiClient } from '@/api/client'
+import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { queryKeys } from '@/lib/query-keys'
 import { useTranslation } from '@/lib/use-translation'
 import { formatOptionalUserFacingErrorMessage } from '@/lib/userFacingError'
 import type { AgentAvailability } from '@/types/api'
 
 const AGENT_AVAILABILITY_STALE_TIME_MS = 15_000
+const AGENT_AVAILABILITY_DIRECTORY_DEBOUNCE_MS = 200
 
 export function useRuntimeAgentAvailability(
     api: ApiClient | null,
@@ -14,11 +16,13 @@ export function useRuntimeAgentAvailability(
 ): {
     agents: readonly AgentAvailability[]
     isLoading: boolean
+    isRefreshing: boolean
     error: string | null
     refetch: () => Promise<unknown>
 } {
     const { t } = useTranslation()
-    const normalizedDirectory = directory?.trim() ?? ''
+    const rawDirectory = directory?.trim() ?? ''
+    const normalizedDirectory = useDebouncedValue(rawDirectory, AGENT_AVAILABILITY_DIRECTORY_DEBOUNCE_MS)
     const forceRefreshRef = useRef(false)
     const queryFn = useCallback(
         async ({ signal }: { signal: AbortSignal }) => {
@@ -59,6 +63,7 @@ export function useRuntimeAgentAvailability(
     return {
         agents: query.data?.agents ?? [],
         isLoading: query.isLoading,
+        isRefreshing: query.isFetching,
         error: formatOptionalUserFacingErrorMessage(query.error, {
             t,
             fallbackKey: 'error.runtime.load',

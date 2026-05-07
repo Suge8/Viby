@@ -3,6 +3,7 @@ import type {
     AgentFlavor,
     AgentLaunchConfigResponse,
     CodexCollaborationMode,
+    CodexServiceTier,
     LocalSessionExportRequest,
     ModelReasoningEffort,
     PermissionMode,
@@ -92,11 +93,15 @@ export async function checkRuntimePathsExists(
 
 export async function browseRuntimeDirectory(
     request: ApiClientRequest,
-    path?: string
+    path?: string,
+    options?: { workspaceRoot?: string | null }
 ): Promise<RuntimeBrowseDirectoryResponse> {
     const params = new URLSearchParams()
     if (path) {
         params.set('path', path)
+    }
+    if (options?.workspaceRoot) {
+        params.set('workspaceRoot', options.workspaceRoot)
     }
 
     const queryString = params.toString()
@@ -110,11 +115,14 @@ export async function resolveAgentLaunchConfig(
     input: {
         agent: AgentFlavor
         directory: string
+        signal?: AbortSignal
     }
 ): Promise<AgentLaunchConfigResponse> {
+    const { signal, ...body } = input
     return await request<AgentLaunchConfigResponse>('/api/runtime/agent-launch-config', {
         method: 'POST',
-        body: JSON.stringify(input),
+        body: JSON.stringify(body),
+        signal,
     })
 }
 
@@ -150,6 +158,7 @@ export async function spawnSession(
         agent?: AgentFlavor
         model?: string
         modelReasoningEffort?: ModelReasoningEffort
+        codexServiceTier?: CodexServiceTier
         permissionMode?: PermissionMode
         sessionType?: 'simple' | 'worktree'
         worktreeName?: string
@@ -163,6 +172,7 @@ export async function spawnSession(
             agent: input.agent,
             model: input.model,
             modelReasoningEffort: input.modelReasoningEffort,
+            codexServiceTier: input.codexServiceTier,
             permissionMode: input.permissionMode,
             sessionType: input.sessionType,
             worktreeName: input.worktreeName,

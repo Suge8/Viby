@@ -11,7 +11,7 @@ import {
 import { ApiError, buildApiUrl, parseErrorPayload } from './clientShared'
 import { createApiClientWorkspaceMethods } from './clientWorkspaceMethods'
 
-export { ApiError } from './clientShared'
+export { ApiError, withAbortSignal } from './clientShared'
 
 const API_REQUEST_TIMEOUT_MS = 15_000
 const API_UPLOAD_REQUEST_TIMEOUT_MS = 60_000

@@ -34,6 +34,7 @@ function createSession(id: string = 'session-1'): Session {
         thinkingAt: 1_000,
         model: 'gpt-5.4',
         modelReasoningEffort: 'high',
+        codexServiceTier: null,
         permissionMode: 'safe-yolo',
         collaborationMode: 'default',
         todos: undefined,

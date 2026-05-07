@@ -51,9 +51,7 @@ function extractErrorCode(error: unknown): string | null {
         return null
     }
 
-    return typeof (error as { code?: unknown }).code === 'string'
-        ? (error as { code: string }).code
-        : null
+    return typeof (error as { code?: unknown }).code === 'string' ? (error as { code: string }).code : null
 }
 
 function extractErrorMessage(error: unknown): string | null {
@@ -75,15 +73,16 @@ function extractErrorMessage(error: unknown): string | null {
     }
 
     const nestedError = (error as { error?: unknown }).error
-    return typeof nestedError === 'string' && nestedError.trim()
-        ? nestedError.trim()
-        : null
+    return typeof nestedError === 'string' && nestedError.trim() ? nestedError.trim() : null
 }
 
-function resolveMessageRule(
-    message: string,
-    rules: readonly UserFacingErrorRule[] | undefined
-): string | null {
+function translateKnownErrorKey(key: string, t: TranslationFn): string | null {
+    if (!key.startsWith('remotePairing.error.')) return null
+    const translated = t(key)
+    return translated === key ? null : translated
+}
+
+function resolveMessageRule(message: string, rules: readonly UserFacingErrorRule[] | undefined): string | null {
     if (!rules) {
         return null
     }
@@ -102,23 +101,28 @@ function shouldHideRawMessage(message: string): boolean {
         return true
     }
 
-    return GENERATED_MESSAGE_PATTERNS.some((pattern) => pattern.test(message))
-        || TECHNICAL_ERROR_PATTERNS.some((pattern) => pattern.test(message))
+    return (
+        GENERATED_MESSAGE_PATTERNS.some((pattern) => pattern.test(message)) ||
+        TECHNICAL_ERROR_PATTERNS.some((pattern) => pattern.test(message))
+    )
 }
 
-export function formatUserFacingErrorMessage(
-    error: unknown,
-    options: UserFacingErrorOptions
-): string {
+export function formatUserFacingErrorMessage(error: unknown, options: UserFacingErrorOptions): string {
     const code = extractErrorCode(error)
     if (code && options.codeMap?.[code]) {
         return options.t(options.codeMap[code])
     }
 
+    const translatedCode = code ? translateKnownErrorKey(code, options.t) : null
+    if (translatedCode) return translatedCode
+
     const message = extractErrorMessage(error)
     if (!message) {
         return options.t(options.fallbackKey)
     }
+
+    const translatedMessage = translateKnownErrorKey(message, options.t)
+    if (translatedMessage) return translatedMessage
 
     const matchedKey = resolveMessageRule(message, options.messageMap)
     if (matchedKey) {
@@ -132,10 +136,7 @@ export function formatUserFacingErrorMessage(
     return message
 }
 
-export function formatOptionalUserFacingErrorMessage(
-    error: unknown,
-    options: UserFacingErrorOptions
-): string | null {
+export function formatOptionalUserFacingErrorMessage(error: unknown, options: UserFacingErrorOptions): string | null {
     if (!error) {
         return null
     }

@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ApiClient } from '@/api/client'
 import { queryKeys } from '@/lib/query-keys'
@@ -11,6 +11,7 @@ const RUNTIME_DIRECTORY_STALE_TIME_MS = 30_000
 type UseRuntimeDirectoryBrowserOptions = {
     api: ApiClient
     initialPath?: string | null
+    workspaceRoot?: string | null
     enabled?: boolean
 }
 
@@ -22,6 +23,7 @@ type RuntimeDirectoryBrowserState = {
     error: string | null
     hasCurrentDirectory: boolean
     isLoading: boolean
+    isNavigating: boolean
     isRefreshing: boolean
     browseTo: (path?: string | null) => void
     refresh: () => Promise<unknown>
@@ -29,7 +31,7 @@ type RuntimeDirectoryBrowserState = {
 
 export function useRuntimeDirectoryBrowser(options: UseRuntimeDirectoryBrowserOptions): RuntimeDirectoryBrowserState {
     const { t } = useTranslation()
-    const { api, initialPath, enabled = true } = options
+    const { api, initialPath, workspaceRoot, enabled = true } = options
     const [requestedPath, setRequestedPath] = useState<string | null>(initialPath?.trim() || null)
 
     useEffect(() => {
@@ -41,10 +43,15 @@ export function useRuntimeDirectoryBrowser(options: UseRuntimeDirectoryBrowserOp
     }, [enabled, initialPath])
 
     const queryPath = requestedPath ?? ''
+    const queryScope = workspaceRoot?.trim() || ''
     const query = useQuery({
-        queryKey: queryKeys.runtimeDirectory(queryPath),
-        queryFn: async () => await api.browseRuntimeDirectory(requestedPath ?? undefined),
+        queryKey: queryKeys.runtimeDirectory(queryPath, queryScope),
+        queryFn: async () =>
+            await api.browseRuntimeDirectory(requestedPath ?? undefined, {
+                workspaceRoot: queryScope || null,
+            }),
         enabled,
+        placeholderData: keepPreviousData,
         staleTime: RUNTIME_DIRECTORY_STALE_TIME_MS,
     })
 
@@ -55,6 +62,9 @@ export function useRuntimeDirectoryBrowser(options: UseRuntimeDirectoryBrowserOp
     const currentPath = useMemo(
         () => query.data?.currentPath ?? requestedPath ?? '',
         [query.data?.currentPath, requestedPath]
+    )
+    const isNavigating = Boolean(
+        query.isFetching && query.data?.currentPath && requestedPath && query.data.currentPath !== requestedPath
     )
     const queryError = formatOptionalUserFacingErrorMessage(query.error, {
         t,
@@ -73,8 +83,9 @@ export function useRuntimeDirectoryBrowser(options: UseRuntimeDirectoryBrowserOp
                 fallbackKey: 'error.runtime.directory',
             }),
         hasCurrentDirectory: query.data?.success === true && Boolean(query.data.currentPath),
-        isLoading: query.isLoading,
-        isRefreshing: query.isFetching && !query.isLoading,
+        isLoading: query.isPending && !query.data,
+        isNavigating,
+        isRefreshing: query.isFetching && !query.isPending && !isNavigating,
         browseTo,
         refresh: query.refetch,
     }

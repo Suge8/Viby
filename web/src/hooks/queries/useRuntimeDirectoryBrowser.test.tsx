@@ -1,11 +1,19 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import type { PropsWithChildren } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import type { ApiClient } from '@/api/client'
 import { I18nProvider } from '@/lib/i18n-context'
 import { TEST_RUNTIME_HOME_PATH, TEST_RUNTIME_PROJECT_PATH, TEST_RUNTIME_PROJECTS_PATH } from '@/test/sessionFactories'
 import { useRuntimeDirectoryBrowser } from './useRuntimeDirectoryBrowser'
+
+function createDeferred<T>() {
+    let resolve!: (value: T) => void
+    const promise = new Promise<T>((promiseResolve) => {
+        resolve = promiseResolve
+    })
+    return { promise, resolve }
+}
 
 function createWrapper(): (props: PropsWithChildren) => React.JSX.Element {
     const queryClient = new QueryClient({
@@ -53,7 +61,7 @@ describe('useRuntimeDirectoryBrowser', () => {
             expect(result.current.isLoading).toBe(false)
         })
 
-        expect(api.browseRuntimeDirectory).toHaveBeenCalledWith(TEST_RUNTIME_PROJECTS_PATH)
+        expect(api.browseRuntimeDirectory).toHaveBeenCalledWith(TEST_RUNTIME_PROJECTS_PATH, { workspaceRoot: null })
         expect(result.current.currentPath).toBe(TEST_RUNTIME_PROJECTS_PATH)
         expect(result.current.parentPath).toBe(TEST_RUNTIME_HOME_PATH)
         expect(result.current.entries).toEqual([{ name: 'viby', path: TEST_RUNTIME_PROJECT_PATH, type: 'directory' }])
@@ -89,5 +97,91 @@ describe('useRuntimeDirectoryBrowser', () => {
         expect(result.current.error).toBe('Could not browse local folders right now. Please try again.')
         expect(result.current.roots).toEqual([{ kind: 'home', path: TEST_RUNTIME_HOME_PATH }])
         expect(result.current.hasCurrentDirectory).toBe(false)
+    })
+
+    it('keeps previous directory visible while navigation fetches the next path', async () => {
+        const nextDirectory = createDeferred<{
+            success: boolean
+            currentPath: string
+            parentPath: string
+            entries: { name: string; path: string; type: 'directory' }[]
+            roots: { kind: 'home'; path: string }[]
+        }>()
+        const api = {
+            browseRuntimeDirectory: vi
+                .fn()
+                .mockResolvedValueOnce({
+                    success: true,
+                    currentPath: TEST_RUNTIME_PROJECTS_PATH,
+                    parentPath: TEST_RUNTIME_HOME_PATH,
+                    entries: [{ name: 'viby', path: TEST_RUNTIME_PROJECT_PATH, type: 'directory' }],
+                    roots: [{ kind: 'home', path: TEST_RUNTIME_HOME_PATH }],
+                })
+                .mockReturnValueOnce(nextDirectory.promise),
+        } as unknown as ApiClient
+
+        const { result } = renderHook(
+            () =>
+                useRuntimeDirectoryBrowser({
+                    api,
+                    initialPath: TEST_RUNTIME_PROJECTS_PATH,
+                    enabled: true,
+                }),
+            { wrapper: createWrapper() }
+        )
+
+        await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+        act(() => result.current.browseTo(TEST_RUNTIME_HOME_PATH))
+
+        await waitFor(() => expect(result.current.isNavigating).toBe(true))
+        expect(result.current.currentPath).toBe(TEST_RUNTIME_PROJECTS_PATH)
+        expect(result.current.entries).toEqual([{ name: 'viby', path: TEST_RUNTIME_PROJECT_PATH, type: 'directory' }])
+        expect(result.current.isLoading).toBe(false)
+
+        act(() => {
+            nextDirectory.resolve({
+                success: true,
+                currentPath: TEST_RUNTIME_HOME_PATH,
+                parentPath: '/',
+                entries: [],
+                roots: [{ kind: 'home', path: TEST_RUNTIME_HOME_PATH }],
+            })
+        })
+
+        await waitFor(() => expect(result.current.isNavigating).toBe(false))
+        expect(result.current.currentPath).toBe(TEST_RUNTIME_HOME_PATH)
+    })
+
+    it('passes workspace-root scope through the single directory browser owner', async () => {
+        const api = {
+            browseRuntimeDirectory: vi.fn().mockResolvedValue({
+                success: true,
+                currentPath: TEST_RUNTIME_PROJECT_PATH,
+                parentPath: null,
+                scopeRoot: TEST_RUNTIME_PROJECTS_PATH,
+                entries: [],
+                roots: [{ kind: 'workspace', path: TEST_RUNTIME_PROJECTS_PATH }],
+            }),
+        } as unknown as ApiClient
+
+        renderHook(
+            () =>
+                useRuntimeDirectoryBrowser({
+                    api,
+                    initialPath: TEST_RUNTIME_HOME_PATH,
+                    workspaceRoot: TEST_RUNTIME_PROJECTS_PATH,
+                    enabled: true,
+                }),
+            {
+                wrapper: createWrapper(),
+            }
+        )
+
+        await waitFor(() => {
+            expect(api.browseRuntimeDirectory).toHaveBeenCalledWith(TEST_RUNTIME_HOME_PATH, {
+                workspaceRoot: TEST_RUNTIME_PROJECTS_PATH,
+            })
+        })
     })
 })

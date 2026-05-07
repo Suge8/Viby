@@ -2,6 +2,7 @@ import type {
     AgentAvailabilityResponse,
     AgentFlavor,
     AgentLaunchConfig,
+    AgentModelCapability,
     CommandCapabilitiesResponse,
     CommandCapability,
     CommandCapabilityActionType,
@@ -39,11 +40,13 @@ export type {
     AgentAvailabilityStatus,
     AgentFlavor,
     AgentLaunchConfig,
+    AgentModelCapability,
     AgentState,
     AttachmentMetadata,
     ClaudeReasoningEffort,
     CodexCollaborationMode,
     CodexReasoningEffort,
+    CodexServiceTier,
     CommandCapabilitiesResponse,
     CommandCapability,
     CommandCapabilityActionType,
@@ -91,7 +94,7 @@ export type SessionMetadataSummary = {
     worktree?: WorktreeMetadata
 }
 
-export type MessageStatus = 'sending' | 'sent' | 'failed'
+export type MessageStatus = 'queued' | 'sending' | 'sent' | 'failed'
 
 export type DecryptedMessage = ProtocolDecryptedMessage & {
     status?: MessageStatus

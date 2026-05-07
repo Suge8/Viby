@@ -2,6 +2,7 @@ import { assertSameSessionSwitchTargetDriver, type SameSessionSwitchTargetDriver
 import type {
     AttachmentMetadata,
     CodexCollaborationMode,
+    CodexServiceTier,
     MessagesResponse,
     ModelReasoningEffort,
     PermissionMode,
@@ -123,9 +124,12 @@ export function createApiClientSessionMethods(core: {
             )
         },
 
-        async resumeSession(sessionId: string): Promise<Session> {
+        async resumeSession(sessionId: string, opts?: { permissionMode?: string }): Promise<Session> {
             const response = await core.requestUnknown(`/api/sessions/${encodeURIComponent(sessionId)}/resume`, {
                 method: 'POST',
+                ...(opts?.permissionMode !== undefined
+                    ? { body: JSON.stringify({ permissionMode: opts.permissionMode }) }
+                    : {}),
             })
             if (isResumeSessionResponse(response)) {
                 return response.session
@@ -160,6 +164,17 @@ export function createApiClientSessionMethods(core: {
             }
 
             throw new Error('Invalid send message response')
+        },
+
+        async cancelQueuedMessages(sessionId: string, localIds: string[]): Promise<string[]> {
+            const response = await core.request<{ ok: true; localIds: string[] }>(
+                `/api/sessions/${encodeURIComponent(sessionId)}/messages/cancel`,
+                {
+                    method: 'POST',
+                    body: JSON.stringify({ localIds }),
+                }
+            )
+            return response.localIds
         },
 
         async abortSession(sessionId: string): Promise<Session> {
@@ -215,6 +230,10 @@ export function createApiClientSessionMethods(core: {
             return await postSessionSnapshotAction(core, sessionId, 'model-reasoning-effort', {
                 modelReasoningEffort,
             })
+        },
+
+        async setCodexServiceTier(sessionId: string, codexServiceTier: CodexServiceTier | null): Promise<Session> {
+            return await postSessionSnapshotAction(core, sessionId, 'codex-service-tier', { codexServiceTier })
         },
 
         async approvePermission(

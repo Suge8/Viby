@@ -149,6 +149,13 @@ describe('runtimeAssetRecovery', () => {
         await expect(recoverRuntimeAssets('runtime:error')).resolves.toBe(false)
     })
 
+    it('does not publish when migrating from legacy timestamp build ids of the same version', () => {
+        window.localStorage.setItem('viby-app-build-id', '0.1.0-2026-05-06T00:00:00.000Z')
+
+        expect(publishRuntimeUpdateForBuild('0.1.0')).toBe(false)
+        expect(readPendingRuntimeUpdate()).toBeNull()
+    })
+
     it('publishes a one-shot runtime update when app build id changes', async () => {
         const reload = vi.fn()
         const location = window.location

@@ -27,7 +27,9 @@ export const queryKeys = {
     messages: (sessionId: string) => ['messages', sessionId] as const,
     runtime: ['runtime'] as const,
     runtimeAgentAvailability: (directory: string) => ['runtime-agent-availability', directory] as const,
-    runtimeDirectory: (path: string) => ['runtime-directory', path] as const,
+    runtimeAgentLaunchConfig: (agent: string, directory: string) =>
+        ['runtime-agent-launch-config', agent, directory] as const,
+    runtimeDirectory: (path: string, workspaceRoot: string = '') => ['runtime-directory', path, workspaceRoot] as const,
     gitStatus: (sessionId: string) => ['git-status', sessionId] as const,
     sessionFiles: (sessionId: string, query: string) => ['session-files', sessionId, query] as const,
     sessionDirectory: (sessionId: string, path: string) => ['session-directory', sessionId, path] as const,

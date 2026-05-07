@@ -1,6 +1,7 @@
 import type {
     AgentFlavor,
     CodexCollaborationMode,
+    CodexServiceTier,
     LocalSessionExportRequest,
     ModelReasoningEffort,
     PermissionMode,
@@ -35,10 +36,10 @@ export function createApiClientRuntimeMethods(
         async checkRuntimePathsExists(paths: string[]) {
             return await checkRuntimePathsExists(request, paths)
         },
-        async browseRuntimeDirectory(path?: string) {
-            return await browseRuntimeDirectory(request, path)
+        async browseRuntimeDirectory(path?: string, options?: { workspaceRoot?: string | null }) {
+            return await browseRuntimeDirectory(request, path, options)
         },
-        async resolveAgentLaunchConfig(input: { agent: AgentFlavor; directory: string }) {
+        async resolveAgentLaunchConfig(input: { agent: AgentFlavor; directory: string; signal?: AbortSignal }) {
             return await resolveAgentLaunchConfig(request, input)
         },
         async listRuntimeLocalSessions(
@@ -56,6 +57,7 @@ export function createApiClientRuntimeMethods(
             agent?: AgentFlavor
             model?: string
             modelReasoningEffort?: ModelReasoningEffort
+            codexServiceTier?: CodexServiceTier
             permissionMode?: PermissionMode
             sessionType?: 'simple' | 'worktree'
             worktreeName?: string

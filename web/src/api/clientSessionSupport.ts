@@ -1,5 +1,11 @@
 import { isSameSessionSwitchTargetDriver, type SameSessionSwitchTargetDriver } from '@viby/protocol'
-import type { CodexCollaborationMode, ModelReasoningEffort, PermissionMode, Session } from '@/types/api'
+import type {
+    CodexCollaborationMode,
+    CodexServiceTier,
+    ModelReasoningEffort,
+    PermissionMode,
+    Session,
+} from '@/types/api'
 
 type SessionActionResponse = {
     ok: true
@@ -34,6 +40,7 @@ export type SessionSnapshotAction =
     | 'collaboration-mode'
     | 'model'
     | 'model-reasoning-effort'
+    | 'codex-service-tier'
 
 export type ApprovePermissionOptions = {
     mode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan'
@@ -89,4 +96,5 @@ export type SessionSnapshotBody = {
     mode?: PermissionMode | CodexCollaborationMode
     model?: string | null
     modelReasoningEffort?: ModelReasoningEffort | null
+    codexServiceTier?: CodexServiceTier | null
 }
