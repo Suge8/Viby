@@ -7,11 +7,11 @@
 - 创建一次性配对会话
 - 生成扫码 URL
 - 交换 WebRTC signaling
-- 下发短时 TURN / ICE 配置
+- 下发 STUN + TURN ICE 配置；浏览器默认先走直连，打不通时才用中转
 - 维护可重连的会话令牌
-- guest claim 后生成 short code，并要求桌面明确批准
+- guest claim 后生成连接码；桌面显示，手机输入正确后自动批准
 - guest reconnect 默认要求同设备签名证明，不再只靠裸 token
-- 提供 claim / reconnect 后的最小手机远程壳，并通过 DataChannel 接回桌面本地 Hub
+- 托管手机端正常 Viby Web，并通过 DataChannel 接回桌面本地 Hub
 - 提供基础限流与受控 counters
 - desktop bridge 优先尝试 ICE restart，并采样链路 stats 供恢复与观测使用
 
@@ -35,12 +35,6 @@ bun run --cwd pairing dev
 bun run build:pairing
 ```
 
-或在模块内执行：
-
-```bash
-bun run --cwd pairing build
-```
-
 产物目录：
 
 ```text
@@ -57,11 +51,15 @@ pairing/deploy-bundle.sha256
 其中最关键的是：
 
 - `pairing/deploy-bundle/index.js`
+- `pairing/deploy-bundle/web-index.html`
+- `pairing/deploy-bundle/assets` 目录
+- `pairing/deploy-bundle/brand-logo-tight.png`
 - `pairing/deploy-bundle/pairing.env.example`
 - `pairing/deploy-bundle/run-pairing.sh`
 - `pairing/deploy-bundle/viby-pairing.service`
+- `pairing/deploy-bundle/viby-pairing.logrotate`
+- `pairing/deploy-bundle/viby-pairing-health-check.sh`
 - `pairing/deploy-bundle/Caddyfile.pairing`
-- `pairing/deploy-bundle/coturn.conf.example`
 - `pairing/deploy-bundle/DEPLOY.md`
 
 默认配置可通过环境变量覆盖：
@@ -75,13 +73,15 @@ pairing/deploy-bundle.sha256
 - `PAIRING_TICKET_TTL_SECONDS`
 - `PAIRING_STUN_URLS`
 - `PAIRING_TURN_URLS`
-- `PAIRING_TURN_SECRET`
-- `PAIRING_TURN_REALM`
+- `PAIRING_TURN_STATIC_AUTH_SECRET`
+- `PAIRING_TURN_CREDENTIAL_TTL_SECONDS`
 - `PAIRING_RECONNECT_CHALLENGE_TTL_SECONDS`
 - `PAIRING_CREATE_LIMIT_PER_MINUTE`
 - `PAIRING_CLAIM_LIMIT_PER_MINUTE`
 - `PAIRING_RECONNECT_LIMIT_PER_MINUTE`
 - `PAIRING_APPROVE_LIMIT_PER_MINUTE`
+
+TURN 建议按 `UDP 3478 -> TCP 3478 -> TLS 5349` 排列；多地区就把最近 TURN 节点排在 `PAIRING_TURN_URLS` 最前。
 
 建议生产环境至少配置：
 
@@ -90,20 +90,22 @@ pairing/deploy-bundle.sha256
 - `PAIRING_CREATE_TOKEN`
 - `PAIRING_STUN_URLS`
 - `PAIRING_TURN_URLS`
-- `PAIRING_TURN_SECRET`
+- `PAIRING_TURN_STATIC_AUTH_SECRET`
 
 ## HTTP / WS
 
 - `POST /pairings`：创建配对会话，返回 `pairingUrl`、`hostToken`、`wsUrl`
 - `POST /pairings/:id/claim`：消费一次性 ticket，返回 `guestToken`
-- `POST /pairings/:id/approve`：host 核对 short code 后批准 guest 接入
+- `POST /pairings/:id/verify-code`：guest 输入桌面显示的 6 位连接码，正确后自动批准接入
+- `POST /pairings/:id/approve`：host 侧保留调试批准接口；产品 UI 默认不暴露
 - `POST /pairings/:id/reconnect-challenge`：为设备绑定过的 guest 发放一次性 reconnect nonce
 - `POST /pairings/:id/reconnect`：使用已保存设备 token + 一次性 nonce 签名证明自动重连
 - `POST /pairings/:id/telemetry`：host 上报链路 transport / RTT / restart 聚合样本
 - `DELETE /pairings/:id`：删除配对
-- `GET /metrics`：返回 broker counters + transport telemetry 聚合；若配置了 `PAIRING_CREATE_TOKEN`，同样需要 Bearer 鉴权
+- `GET /ready`：返回 broker readiness，并通过 store owner 检查 Redis / memory store
+- `GET /metrics`：返回 broker counters、websocket pressure 与 transport telemetry 聚合；若配置了 `PAIRING_CREATE_TOKEN`，同样需要 Bearer 鉴权
 - `GET /pairings/:id/ws?token=...`：signaling WebSocket
-- `GET /p/:id#ticket=...`：扫码落地页；首次 claim，后续自动重连
+- `GET /p/:id#ticket=...`：手机端正常 Viby Web 入口；首次 claim，后续自动重连
 
 ## 协议
 

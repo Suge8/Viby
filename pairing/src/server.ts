@@ -28,6 +28,7 @@ export async function createPairingRuntime(options: CreatePairingRuntimeOptions)
         store: storeLease.store,
         now: options.now,
         logger: options.logger ?? console,
+        disconnectGraceMs: options.disconnectGraceMs,
     })
     const { upgradeWebSocket, websocket } = createBunWebSocket()
     const rateLimiter = new PairingRateLimiter()
@@ -41,7 +42,9 @@ export async function createPairingRuntime(options: CreatePairingRuntimeOptions)
         ticketTtlSeconds: options.ticketTtlSeconds,
         reconnectChallengeTtlSeconds: options.reconnectChallengeTtlSeconds,
         stunUrls: options.stunUrls,
-        turnGenerator: options.turnGenerator,
+        turnUrls: options.turnUrls,
+        turnStaticAuthSecret: options.turnStaticAuthSecret,
+        turnCredentialTtlSeconds: options.turnCredentialTtlSeconds,
         createToken: options.createToken,
         upgradeWebSocket,
         logger: options.logger,

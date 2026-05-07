@@ -1,5 +1,12 @@
+import {
+    PAIRING_MOBILE_DISCONNECT_GRACE_SECONDS,
+    PAIRING_RECONNECT_CHALLENGE_TTL_SECONDS,
+    PAIRING_SESSION_TTL_SECONDS,
+    PAIRING_TICKET_TTL_SECONDS,
+    PAIRING_TURN_CREDENTIAL_TTL_SECONDS,
+} from '@viby/protocol/pairing'
 import { z } from 'zod'
-import { createStaticTurnCredentialGenerator, parseCsvUrls, type TurnCredentialGenerator } from './turn'
+import { parseCsvUrls } from './iceServers'
 
 const envSchema = z.object({
     PAIRING_HOST: z.string().optional(),
@@ -8,11 +15,11 @@ const envSchema = z.object({
     PAIRING_SESSION_TTL_SECONDS: z.string().optional(),
     PAIRING_TICKET_TTL_SECONDS: z.string().optional(),
     PAIRING_RECONNECT_CHALLENGE_TTL_SECONDS: z.string().optional(),
+    PAIRING_DISCONNECT_GRACE_SECONDS: z.string().optional(),
     PAIRING_STUN_URLS: z.string().optional(),
     PAIRING_TURN_URLS: z.string().optional(),
-    PAIRING_TURN_SECRET: z.string().optional(),
-    PAIRING_TURN_REALM: z.string().optional(),
-    PAIRING_TURN_TTL_SECONDS: z.string().optional(),
+    PAIRING_TURN_STATIC_AUTH_SECRET: z.string().optional(),
+    PAIRING_TURN_CREDENTIAL_TTL_SECONDS: z.string().optional(),
     PAIRING_REDIS_URL: z.string().optional(),
     PAIRING_CREATE_TOKEN: z.string().optional(),
     PAIRING_CREATE_LIMIT_PER_MINUTE: z.string().optional(),
@@ -28,8 +35,11 @@ export interface PairingBrokerConfig {
     sessionTtlSeconds: number
     ticketTtlSeconds: number
     reconnectChallengeTtlSeconds: number
+    disconnectGraceMs: number
     stunUrls: string[]
-    turnGenerator: TurnCredentialGenerator | null
+    turnUrls: string[]
+    turnStaticAuthSecret: string | null
+    turnCredentialTtlSeconds: number
     redisUrl: string | null
     createToken: string | null
     createLimitPerMinute: number
@@ -66,25 +76,16 @@ export function readPairingBrokerConfig(env: Record<string, string | undefined> 
     const port = parsePositiveInt(parsed.PAIRING_PORT, 8787)
     const defaultPublicHost = host === '0.0.0.0' ? '127.0.0.1' : host
     const publicUrl = (parsed.PAIRING_PUBLIC_URL?.trim() || `http://${defaultPublicHost}:${port}`).replace(/\/+$/, '')
-    const sessionTtlSeconds = parsePositiveInt(parsed.PAIRING_SESSION_TTL_SECONDS, 30 * 24 * 60 * 60)
-    const ticketTtlSeconds = parsePositiveInt(parsed.PAIRING_TICKET_TTL_SECONDS, 10 * 60)
-    const reconnectChallengeTtlSeconds = parsePositiveInt(parsed.PAIRING_RECONNECT_CHALLENGE_TTL_SECONDS, 60)
+    const sessionTtlSeconds = parsePositiveInt(parsed.PAIRING_SESSION_TTL_SECONDS, PAIRING_SESSION_TTL_SECONDS)
+    const ticketTtlSeconds = parsePositiveInt(parsed.PAIRING_TICKET_TTL_SECONDS, PAIRING_TICKET_TTL_SECONDS)
+    const reconnectChallengeTtlSeconds = parsePositiveInt(
+        parsed.PAIRING_RECONNECT_CHALLENGE_TTL_SECONDS,
+        PAIRING_RECONNECT_CHALLENGE_TTL_SECONDS
+    )
+    const disconnectGraceMs =
+        parsePositiveInt(parsed.PAIRING_DISCONNECT_GRACE_SECONDS, PAIRING_MOBILE_DISCONNECT_GRACE_SECONDS) * 1000
     const stunUrls = parseCsvUrls(parsed.PAIRING_STUN_URLS)
     const turnUrls = parseCsvUrls(parsed.PAIRING_TURN_URLS)
-    const turnSecret = trimNullable(parsed.PAIRING_TURN_SECRET)
-    const turnRealm = parsed.PAIRING_TURN_REALM?.trim() || new URL(publicUrl).host
-    const turnTtlSeconds = parsePositiveInt(parsed.PAIRING_TURN_TTL_SECONDS, 10 * 60)
-
-    const turnGenerator =
-        turnUrls.length > 0 && turnSecret
-            ? createStaticTurnCredentialGenerator({
-                  urls: turnUrls,
-                  secret: turnSecret,
-                  realm: turnRealm,
-                  ttlSeconds: turnTtlSeconds,
-              })
-            : null
-
     return {
         host,
         port,
@@ -92,8 +93,14 @@ export function readPairingBrokerConfig(env: Record<string, string | undefined> 
         sessionTtlSeconds,
         ticketTtlSeconds,
         reconnectChallengeTtlSeconds,
+        disconnectGraceMs,
         stunUrls,
-        turnGenerator,
+        turnUrls,
+        turnStaticAuthSecret: trimNullable(parsed.PAIRING_TURN_STATIC_AUTH_SECRET),
+        turnCredentialTtlSeconds: parsePositiveInt(
+            parsed.PAIRING_TURN_CREDENTIAL_TTL_SECONDS,
+            PAIRING_TURN_CREDENTIAL_TTL_SECONDS
+        ),
         redisUrl: trimNullable(parsed.PAIRING_REDIS_URL),
         createToken: trimNullable(parsed.PAIRING_CREATE_TOKEN),
         createLimitPerMinute: parsePositiveInt(parsed.PAIRING_CREATE_LIMIT_PER_MINUTE, 30),
