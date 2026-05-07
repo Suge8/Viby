@@ -2,7 +2,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import type { ApiClientRequest } from './client'
-import { getRuntimeAgentAvailability, resolveAgentLaunchConfig } from './clientRuntime'
+import { getRuntimeAgentAvailability, getRuntimeCapabilities, resolveAgentLaunchConfig } from './clientRuntime'
 
 describe('clientRuntime', () => {
     it('passes agent launch config cancellation without serializing the signal', async () => {
@@ -17,9 +17,27 @@ describe('clientRuntime', () => {
         await resolveAgentLaunchConfig(request, { agent: 'codex', directory: '/tmp/project', signal })
     })
 
-    it('includes forceRefresh in the runtime agent availability query when requested', async () => {
+    it('includes depth and drivers in the runtime capability query when requested', async () => {
         const request = vi.fn(async (path: string) => {
-            expect(path).toBe('/api/runtime/agent-availability?directory=%2Ftmp%2Fproject&forceRefresh=true')
+            expect(path).toBe(
+                '/api/runtime/capabilities?directory=%2Ftmp%2Fproject&forceRefresh=true&drivers=claude%2Cpi&depth=launch_config'
+            )
+            return { snapshot: { machineId: 'machine-1', directory: '/tmp/project', agents: [] } }
+        }) as ApiClientRequest
+
+        await getRuntimeCapabilities(request, {
+            directory: '/tmp/project',
+            forceRefresh: true,
+            drivers: ['claude', 'pi'],
+            depth: 'launch_config',
+        })
+    })
+
+    it('includes forceRefresh and drivers in the runtime agent availability query when requested', async () => {
+        const request = vi.fn(async (path: string) => {
+            expect(path).toBe(
+                '/api/runtime/agent-availability?directory=%2Ftmp%2Fproject&forceRefresh=true&drivers=claude'
+            )
             return { agents: [] }
         }) as ApiClientRequest
 
@@ -27,6 +45,7 @@ describe('clientRuntime', () => {
             getRuntimeAgentAvailability(request, {
                 directory: '/tmp/project',
                 forceRefresh: true,
+                drivers: ['claude'],
             })
         ).resolves.toEqual({ agents: [] })
     })

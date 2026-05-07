@@ -251,6 +251,23 @@ describe('createRealtimeEventController', () => {
         })
     })
 
+    it('invalidates runtime capability queries from the Hub read-model owner', async () => {
+        const queryClient = new QueryClient()
+        const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
+        const controller = createRealtimeEventController({ queryClient, onEvent: vi.fn() })
+
+        controller.handleEvent({
+            type: 'runtime-capability-updated',
+            machineId: 'machine-1',
+            directory: '/repo',
+            drivers: ['claude'],
+        } as SyncEvent)
+
+        await waitFor(() => {
+            expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: queryKeys.runtimeCapability })
+        })
+    })
+
     it('keeps sessions summary live config fields in sync when a realtime patch arrives', () => {
         const queryClient = new QueryClient()
         const session = createSessionSummary({

@@ -4,10 +4,13 @@ import type {
     AgentLaunchConfigResponse,
     CodexCollaborationMode,
     CodexServiceTier,
+    ListAgentAvailabilityRequest,
     LocalSessionExportRequest,
     ModelReasoningEffort,
     PermissionMode,
     RuntimeBrowseDirectoryResponse,
+    RuntimeCapabilityRequest,
+    RuntimeCapabilityResponse,
     RuntimeImportLocalSessionResponse,
     RuntimeLocalSessionsResponse,
     RuntimePathsExistsResponse,
@@ -60,18 +63,36 @@ export async function getRuntime(request: ApiClientRequest): Promise<RuntimeResp
     return await request<RuntimeResponse>('/api/runtime')
 }
 
+function appendRuntimeCapabilityParams(params: URLSearchParams, input?: RuntimeCapabilityRequest): void {
+    if (input?.directory) params.set('directory', input.directory)
+    if (input?.forceRefresh) params.set('forceRefresh', 'true')
+    if (input?.drivers?.length) params.set('drivers', input.drivers.join(','))
+    if (input?.depth) params.set('depth', input.depth)
+}
+
+export async function getRuntimeCapabilities(
+    request: ApiClientRequest,
+    input?: RuntimeCapabilityRequest & { signal?: AbortSignal }
+): Promise<RuntimeCapabilityResponse> {
+    const params = new URLSearchParams()
+    appendRuntimeCapabilityParams(params, input)
+    const queryString = params.toString()
+    return await request<RuntimeCapabilityResponse>(
+        `/api/runtime/capabilities${queryString ? `?${queryString}` : ''}`,
+        {
+            signal: input?.signal,
+        }
+    )
+}
+
 export async function getRuntimeAgentAvailability(
     request: ApiClientRequest,
-    input?: { directory?: string; forceRefresh?: boolean; signal?: AbortSignal }
+    input?: ListAgentAvailabilityRequest & { signal?: AbortSignal }
 ): Promise<AgentAvailabilityResponse> {
     const params = new URLSearchParams()
-    if (input?.directory) {
-        params.set('directory', input.directory)
-    }
-    if (input?.forceRefresh) {
-        params.set('forceRefresh', 'true')
-    }
-
+    if (input?.directory) params.set('directory', input.directory)
+    if (input?.forceRefresh) params.set('forceRefresh', 'true')
+    if (input?.drivers?.length) params.set('drivers', input.drivers.join(','))
     const queryString = params.toString()
     return await request<AgentAvailabilityResponse>(
         `/api/runtime/agent-availability${queryString ? `?${queryString}` : ''}`,

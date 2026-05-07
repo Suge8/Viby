@@ -6,6 +6,7 @@ const INVALIDATION_BATCH_MS = 16
 type PendingInvalidations = {
     sessions: boolean
     runtime: boolean
+    runtimeCapability: boolean
     sessionIds: Set<string>
     commandCapabilitySessionIds: Set<string>
 }
@@ -13,6 +14,7 @@ type PendingInvalidations = {
 export type RealtimeInvalidationBatch = {
     queueSessions: () => void
     queueRuntime: () => void
+    queueRuntimeCapability: () => void
     queueSession: (sessionId: string) => void
     queueCommandCapabilities: (sessionId: string) => void
     dispose: () => void
@@ -60,6 +62,7 @@ export function createRealtimeInvalidationBatch(options: {
     const pending: PendingInvalidations = {
         sessions: false,
         runtime: false,
+        runtimeCapability: false,
         sessionIds: new Set<string>(),
         commandCapabilitySessionIds: new Set<string>(),
     }
@@ -67,6 +70,7 @@ export function createRealtimeInvalidationBatch(options: {
     const clearPending = (): void => {
         pending.sessions = false
         pending.runtime = false
+        pending.runtimeCapability = false
         pending.sessionIds.clear()
         pending.commandCapabilitySessionIds.clear()
     }
@@ -75,6 +79,7 @@ export function createRealtimeInvalidationBatch(options: {
         if (
             !pending.sessions &&
             !pending.runtime &&
+            !pending.runtimeCapability &&
             pending.sessionIds.size === 0 &&
             pending.commandCapabilitySessionIds.size === 0
         ) {
@@ -93,6 +98,9 @@ export function createRealtimeInvalidationBatch(options: {
         }
         if (pending.runtime) {
             tasks.push(options.queryClient.invalidateQueries({ queryKey: queryKeys.runtime }))
+        }
+        if (pending.runtimeCapability) {
+            tasks.push(options.queryClient.invalidateQueries({ queryKey: queryKeys.runtimeCapability }))
         }
 
         clearPending()
@@ -120,6 +128,10 @@ export function createRealtimeInvalidationBatch(options: {
         },
         queueRuntime: () => {
             pending.runtime = true
+            schedule()
+        },
+        queueRuntimeCapability: () => {
+            pending.runtimeCapability = true
             schedule()
         },
         queueSession: (sessionId: string) => {

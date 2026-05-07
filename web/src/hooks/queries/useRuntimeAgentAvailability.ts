@@ -7,8 +7,8 @@ import { useTranslation } from '@/lib/use-translation'
 import { formatOptionalUserFacingErrorMessage } from '@/lib/userFacingError'
 import type { AgentAvailability } from '@/types/api'
 
-const AGENT_AVAILABILITY_STALE_TIME_MS = 15_000
 const AGENT_AVAILABILITY_DIRECTORY_DEBOUNCE_MS = 200
+const AGENT_AVAILABILITY_DRIVER_KEY = 'all'
 
 export function useRuntimeAgentAvailability(
     api: ApiClient | null,
@@ -24,50 +24,37 @@ export function useRuntimeAgentAvailability(
     const rawDirectory = directory?.trim() ?? ''
     const normalizedDirectory = useDebouncedValue(rawDirectory, AGENT_AVAILABILITY_DIRECTORY_DEBOUNCE_MS)
     const forceRefreshRef = useRef(false)
-    const queryFn = useCallback(
-        async ({ signal }: { signal: AbortSignal }) => {
-            if (!api) {
-                throw new Error('API unavailable')
-            }
-
-            const shouldForceRefresh = forceRefreshRef.current
-            forceRefreshRef.current = false
-
-            return await api.getRuntimeAgentAvailability({
-                ...(normalizedDirectory ? { directory: normalizedDirectory } : {}),
-                ...(shouldForceRefresh ? { forceRefresh: true } : {}),
-                signal,
-            })
-        },
-        [api, normalizedDirectory]
-    )
     const query = useQuery({
-        queryKey: queryKeys.runtimeAgentAvailability(normalizedDirectory),
-        queryFn,
+        queryKey: queryKeys.runtimeCapabilities(normalizedDirectory, AGENT_AVAILABILITY_DRIVER_KEY, 'availability'),
         enabled: Boolean(api),
-        staleTime: AGENT_AVAILABILITY_STALE_TIME_MS,
         refetchOnWindowFocus: true,
         refetchOnReconnect: true,
         refetchOnMount: true,
+        queryFn: async ({ signal }) => {
+            if (!api) throw new Error('API unavailable')
+            const forceRefresh = forceRefreshRef.current
+            forceRefreshRef.current = false
+            return await api.getRuntimeCapabilities({
+                ...(normalizedDirectory ? { directory: normalizedDirectory } : {}),
+                ...(forceRefresh ? { forceRefresh: true } : {}),
+                depth: 'availability',
+                signal,
+            })
+        },
     })
 
     const refresh = useCallback(async () => {
-        if (!api) {
-            throw new Error('API unavailable')
-        }
-
+        if (!api) throw new Error('API unavailable')
         forceRefreshRef.current = true
         return await query.refetch()
-    }, [api, query])
+    }, [api, query.refetch])
 
+    const snapshot = query.data?.snapshot
     return {
-        agents: query.data?.agents ?? [],
+        agents: snapshot?.agents.flatMap((agent) => (agent.availability.value ? [agent.availability.value] : [])) ?? [],
         isLoading: query.isLoading,
-        isRefreshing: query.isFetching,
-        error: formatOptionalUserFacingErrorMessage(query.error, {
-            t,
-            fallbackKey: 'error.runtime.load',
-        }),
+        isRefreshing: query.isFetching || snapshot?.refreshing === true,
+        error: formatOptionalUserFacingErrorMessage(query.error, { t, fallbackKey: 'error.runtime.load' }),
         refetch: refresh,
     }
 }

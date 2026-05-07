@@ -181,6 +181,11 @@ export function createRealtimeEventController(options: RealtimeEventControllerOp
 
         if (event.type === 'machine-updated') {
             invalidationBatch.queueRuntime()
+            invalidationBatch.queueRuntimeCapability()
+        }
+
+        if (event.type === 'runtime-capability-updated') {
+            invalidationBatch.queueRuntimeCapability()
         }
 
         options.onEvent(event)

@@ -110,7 +110,11 @@ export function NewSession(props: {
         handleReasoningEffortChange,
     })
 
-    const { config: agentLaunchConfig, error: agentLaunchConfigError } = useRuntimeAgentLaunchConfig({
+    const {
+        config: agentLaunchConfig,
+        error: agentLaunchConfigError,
+        refetch: refetchAgentLaunchConfig,
+    } = useRuntimeAgentLaunchConfig({
         api: props.api,
         agent: effectiveAgentSelection.effectiveAgent,
         directory: trimmedDirectory,
@@ -199,8 +203,8 @@ export function NewSession(props: {
           ? t('newSession.opening')
           : undefined
     const handleRefreshAgentAvailability = useCallback((): void => {
-        void refetchAgentAvailability()
-    }, [refetchAgentAvailability])
+        void Promise.all([refetchAgentAvailability(), refetchAgentLaunchConfig()])
+    }, [refetchAgentAvailability, refetchAgentLaunchConfig])
 
     return (
         <MotionStaggerGroup className="flex flex-col gap-3" delay={0.03} stagger={0.07}>

@@ -2,9 +2,11 @@ import type {
     AgentFlavor,
     CodexCollaborationMode,
     CodexServiceTier,
+    ListAgentAvailabilityRequest,
     LocalSessionExportRequest,
     ModelReasoningEffort,
     PermissionMode,
+    RuntimeCapabilityRequest,
 } from '@/types/api'
 import type { ApiClientFetchSessionSnapshot, ApiClientRequest } from './client'
 import {
@@ -12,6 +14,7 @@ import {
     checkRuntimePathsExists,
     getRuntime,
     getRuntimeAgentAvailability,
+    getRuntimeCapabilities,
     importRuntimeLocalSession,
     listRuntimeLocalSessions,
     resolveAgentLaunchConfig,
@@ -26,11 +29,10 @@ export function createApiClientRuntimeMethods(
         async getRuntime() {
             return await getRuntime(request)
         },
-        async getRuntimeAgentAvailability(input?: {
-            directory?: string
-            forceRefresh?: boolean
-            signal?: AbortSignal
-        }) {
+        async getRuntimeCapabilities(input?: RuntimeCapabilityRequest & { signal?: AbortSignal }) {
+            return await getRuntimeCapabilities(request, input)
+        },
+        async getRuntimeAgentAvailability(input?: ListAgentAvailabilityRequest & { signal?: AbortSignal }) {
             return await getRuntimeAgentAvailability(request, input)
         },
         async checkRuntimePathsExists(paths: string[]) {
