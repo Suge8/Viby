@@ -1,6 +1,6 @@
-import { memo, useCallback, type PointerEvent, type ReactNode } from 'react'
-import { useLongPress } from '@/hooks/useLongPress'
+import { memo, type PointerEvent, type ReactNode, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
+import { useLongPress } from '@/hooks/useLongPress'
 
 export type QuickInput = {
     label: string
@@ -134,18 +134,22 @@ const QuickKeyButton = memo(function QuickKeyButton(props: QuickKeyButtonProps):
         disabled: longPressDisabled,
     })
 
-    const handleButtonPointerDown = useCallback((event: PointerEvent<HTMLButtonElement>) => {
-        longPressHandlers.onPointerDown(event)
+    const handleButtonPointerDown = useCallback(
+        (event: PointerEvent<HTMLButtonElement>) => {
+            longPressHandlers.onPointerDown(event)
 
-        if (event.pointerType === 'touch') {
-            event.preventDefault()
-        }
-    }, [longPressHandlers])
+            if (event.pointerType === 'touch') {
+                event.preventDefault()
+            }
+        },
+        [longPressHandlers]
+    )
 
     return (
         <Button
             {...longPressHandlers}
             variant="plain"
+            pressStyle="segmented"
             onPointerDown={handleButtonPointerDown}
             disabled={disabled}
             aria-pressed={modifier ? isActive : undefined}

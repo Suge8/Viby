@@ -1,38 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { io, type Socket } from 'socket.io-client'
-import { createLazyRealtimeSocketOptions } from '@/lib/socketOptions'
-
-type TerminalConnectionState =
-    | { status: 'idle' }
-    | { status: 'connecting' }
-    | { status: 'connected' }
-    | { status: 'error'; error: string }
+import type { Socket } from 'socket.io-client'
+import { useTranslation } from '@/lib/use-translation'
+import { formatUserFacingErrorMessage } from '@/lib/userFacingError'
+import { useRemotePeerBridge } from '@/remote/remoteBridgeContext'
+import { createLocalTerminalSocket, type TerminalConnectionState, type TerminalSize } from './terminalSocketSupport'
 
 type UseTerminalSocketOptions = {
     baseUrl: string
     token: string
     sessionId: string
     terminalId: string
-}
-
-type TerminalReadyPayload = {
-    terminalId: string
-}
-
-type TerminalOutputPayload = {
-    terminalId: string
-    data: string
-}
-
-type TerminalExitPayload = {
-    terminalId: string
-    code: number | null
-    signal: string | null
-}
-
-type TerminalErrorPayload = {
-    terminalId: string
-    message: string
 }
 
 export function useTerminalSocket(options: UseTerminalSocketOptions): {
@@ -45,6 +22,8 @@ export function useTerminalSocket(options: UseTerminalSocketOptions): {
     onExit: (handler: (code: number | null, signal: string | null) => void) => void
 } {
     const [state, setState] = useState<TerminalConnectionState>({ status: 'idle' })
+    const { t } = useTranslation()
+    const bridge = useRemotePeerBridge()
     const socketRef = useRef<Socket | null>(null)
     const outputHandlerRef = useRef<(data: string) => void>(() => {})
     const exitHandlerRef = useRef<(code: number | null, signal: string | null) => void>(() => {})
@@ -52,7 +31,8 @@ export function useTerminalSocket(options: UseTerminalSocketOptions): {
     const terminalIdRef = useRef(options.terminalId)
     const tokenRef = useRef(options.token)
     const baseUrlRef = useRef(options.baseUrl)
-    const lastSizeRef = useRef<{ cols: number; rows: number } | null>(null)
+    const lastSizeRef = useRef<TerminalSize | null>(null)
+    const remoteConnectedRef = useRef(false)
 
     useEffect(() => {
         sessionIdRef.current = options.sessionId
@@ -81,12 +61,12 @@ export function useTerminalSocket(options: UseTerminalSocketOptions): {
 
     const isCurrentTerminal = useCallback((terminalId: string) => terminalId === terminalIdRef.current, [])
 
-    const emitCreate = useCallback((socket: Socket, size: { cols: number; rows: number }) => {
+    const emitCreate = useCallback((socket: Socket, size: TerminalSize) => {
         socket.emit('terminal:create', {
             sessionId: sessionIdRef.current,
             terminalId: terminalIdRef.current,
             cols: size.cols,
-            rows: size.rows
+            rows: size.rows,
         })
     }, [])
 
@@ -94,106 +74,141 @@ export function useTerminalSocket(options: UseTerminalSocketOptions): {
         setState({ status: 'error', error: message })
     }, [])
 
-    const connect = useCallback((cols: number, rows: number) => {
-        lastSizeRef.current = { cols, rows }
-        const token = tokenRef.current
-        const sessionId = sessionIdRef.current
-        const terminalId = terminalIdRef.current
+    const formatTerminalError = useCallback(
+        (error: unknown, fallbackKey: string): string =>
+            formatUserFacingErrorMessage(error, { t, fallbackKey, allowPassthrough: true }),
+        [t]
+    )
 
-        if (!token || !sessionId || !terminalId) {
-            setErrorState('Missing terminal credentials.')
-            return
-        }
+    const runRemoteTerminalCommand = useCallback(
+        (command: Promise<void>) => {
+            command.catch((error: unknown) => {
+                setErrorState(formatTerminalError(error, 'terminal.error.commandFailed'))
+            })
+        },
+        [formatTerminalError, setErrorState]
+    )
 
-        if (socketRef.current) {
+    const connect = useCallback(
+        (cols: number, rows: number) => {
+            lastSizeRef.current = { cols, rows }
+            const token = tokenRef.current
+            const sessionId = sessionIdRef.current
+            const terminalId = terminalIdRef.current
+
+            if (!sessionId || !terminalId || (!token && !bridge)) {
+                setErrorState(t('terminal.error.missingCredentials'))
+                return
+            }
+
+            if (bridge) {
+                setState({ status: 'connecting' })
+                void bridge
+                    .openTerminal({ sessionId, terminalId, cols, rows })
+                    .then(() => {
+                        remoteConnectedRef.current = true
+                        setState({ status: 'connected' })
+                    })
+                    .catch((error: unknown) => {
+                        setErrorState(formatTerminalError(error, 'terminal.error.connection'))
+                    })
+                return
+            }
+
+            if (socketRef.current) {
+                const socket = socketRef.current
+                socket.auth = { token }
+                if (socket.connected) {
+                    emitCreate(socket, { cols, rows })
+                } else {
+                    socket.connect()
+                }
+                setState({ status: 'connecting' })
+                return
+            }
+
+            const socket = createLocalTerminalSocket({
+                baseUrl: baseUrlRef.current,
+                token,
+                getSize: () => lastSizeRef.current ?? { cols, rows },
+                emitCreate,
+                isCurrentTerminal,
+                setIdle: () => setState({ status: 'idle' }),
+                setConnecting: () => setState({ status: 'connecting' }),
+                setConnected: () => setState({ status: 'connected' }),
+                setError: setErrorState,
+                formatError: formatTerminalError,
+                formatDisconnectReason: (reason) => t('terminal.error.disconnected', { reason }),
+                terminalExitedMessage: t('terminal.error.exited'),
+                handleOutput: (data) => outputHandlerRef.current(data),
+                handleExit: (code, signal) => exitHandlerRef.current(code, signal),
+            })
+            socketRef.current = socket
+            setState({ status: 'connecting' })
+            socket.connect()
+        },
+        [bridge, emitCreate, formatTerminalError, setErrorState, isCurrentTerminal, t]
+    )
+
+    const write = useCallback(
+        (data: string) => {
+            if (bridge) {
+                if (remoteConnectedRef.current) {
+                    runRemoteTerminalCommand(
+                        bridge.writeTerminal({
+                            sessionId: sessionIdRef.current,
+                            terminalId: terminalIdRef.current,
+                            data,
+                        })
+                    )
+                }
+                return
+            }
             const socket = socketRef.current
-            socket.auth = { token }
-            if (socket.connected) {
-                emitCreate(socket, { cols, rows })
-            } else {
-                socket.connect()
-            }
-            setState({ status: 'connecting' })
-            return
-        }
-
-        const socket = io(`${baseUrlRef.current}/terminal`, {
-            auth: { token },
-            ...createLazyRealtimeSocketOptions()
-        })
-
-        socketRef.current = socket
-        setState({ status: 'connecting' })
-
-        socket.on('connect', () => {
-            const size = lastSizeRef.current ?? { cols, rows }
-            setState({ status: 'connecting' })
-            emitCreate(socket, size)
-        })
-
-        socket.on('terminal:ready', (payload: TerminalReadyPayload) => {
-            if (!isCurrentTerminal(payload.terminalId)) {
+            if (!socket || !socket.connected) {
                 return
             }
-            setState({ status: 'connected' })
-        })
+            socket.emit('terminal:write', { terminalId: terminalIdRef.current, data })
+        },
+        [bridge, runRemoteTerminalCommand]
+    )
 
-        socket.on('terminal:output', (payload: TerminalOutputPayload) => {
-            if (!isCurrentTerminal(payload.terminalId)) {
+    const resize = useCallback(
+        (cols: number, rows: number) => {
+            lastSizeRef.current = { cols, rows }
+            if (bridge) {
+                if (remoteConnectedRef.current) {
+                    runRemoteTerminalCommand(
+                        bridge.resizeTerminal({
+                            sessionId: sessionIdRef.current,
+                            terminalId: terminalIdRef.current,
+                            cols,
+                            rows,
+                        })
+                    )
+                }
                 return
             }
-            outputHandlerRef.current(payload.data)
-        })
-
-        socket.on('terminal:exit', (payload: TerminalExitPayload) => {
-            if (!isCurrentTerminal(payload.terminalId)) {
+            const socket = socketRef.current
+            if (!socket || !socket.connected) {
                 return
             }
-            exitHandlerRef.current(payload.code, payload.signal)
-            setErrorState('Terminal exited.')
-        })
-
-        socket.on('terminal:error', (payload: TerminalErrorPayload) => {
-            if (!isCurrentTerminal(payload.terminalId)) {
-                return
-            }
-            setErrorState(payload.message)
-        })
-
-        socket.on('connect_error', (error) => {
-            const message = error instanceof Error ? error.message : 'Connection error'
-            setErrorState(message)
-        })
-
-        socket.on('disconnect', (reason) => {
-            if (reason === 'io client disconnect') {
-                setState({ status: 'idle' })
-                return
-            }
-            setErrorState(`Disconnected: ${reason}`)
-        })
-
-        socket.connect()
-    }, [emitCreate, setErrorState, isCurrentTerminal])
-
-    const write = useCallback((data: string) => {
-        const socket = socketRef.current
-        if (!socket || !socket.connected) {
-            return
-        }
-        socket.emit('terminal:write', { terminalId: terminalIdRef.current, data })
-    }, [])
-
-    const resize = useCallback((cols: number, rows: number) => {
-        lastSizeRef.current = { cols, rows }
-        const socket = socketRef.current
-        if (!socket || !socket.connected) {
-            return
-        }
-        socket.emit('terminal:resize', { terminalId: terminalIdRef.current, cols, rows })
-    }, [])
+            socket.emit('terminal:resize', { terminalId: terminalIdRef.current, cols, rows })
+        },
+        [bridge, runRemoteTerminalCommand]
+    )
 
     const disconnect = useCallback(() => {
+        if (bridge) {
+            if (remoteConnectedRef.current) {
+                runRemoteTerminalCommand(
+                    bridge.closeTerminal({ sessionId: sessionIdRef.current, terminalId: terminalIdRef.current })
+                )
+            }
+            remoteConnectedRef.current = false
+            setState({ status: 'idle' })
+            return
+        }
         const socket = socketRef.current
         if (!socket) {
             return
@@ -202,7 +217,35 @@ export function useTerminalSocket(options: UseTerminalSocketOptions): {
         socket.disconnect()
         socketRef.current = null
         setState({ status: 'idle' })
-    }, [])
+    }, [bridge, runRemoteTerminalCommand])
+
+    useEffect(() => {
+        if (!bridge) {
+            return
+        }
+        return bridge.subscribeTerminal((payload) => {
+            if (!isCurrentTerminal(payload.terminalId)) {
+                return
+            }
+            if (payload.type === 'ready') {
+                remoteConnectedRef.current = true
+                setState({ status: 'connected' })
+                return
+            }
+            if (payload.type === 'output') {
+                outputHandlerRef.current(payload.data)
+                return
+            }
+            if (payload.type === 'exit') {
+                exitHandlerRef.current(payload.code, payload.signal)
+                remoteConnectedRef.current = false
+                setErrorState(t('terminal.error.exited'))
+                return
+            }
+            remoteConnectedRef.current = false
+            setErrorState(formatTerminalError(new Error(payload.message), 'terminal.error.connection'))
+        })
+    }, [bridge, formatTerminalError, isCurrentTerminal, setErrorState, t])
 
     const onOutput = useCallback((handler: (data: string) => void) => {
         outputHandlerRef.current = handler
@@ -219,6 +262,6 @@ export function useTerminalSocket(options: UseTerminalSocketOptions): {
         resize,
         disconnect,
         onOutput,
-        onExit
+        onExit,
     }
 }

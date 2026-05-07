@@ -65,6 +65,7 @@ function DirectoryNode(props: {
                 type="button"
                 variant="plain"
                 size="sm"
+                pressStyle="list-row"
                 onClick={() => props.onToggle(props.path)}
                 className="w-full gap-3 px-3 py-2 text-left hover:bg-[var(--app-subtle-bg)] [&>[data-button-content]]:w-full [&>[data-button-content]]:justify-start"
                 style={{ paddingLeft: indent }}
@@ -112,6 +113,7 @@ function DirectoryNode(props: {
                                     type="button"
                                     variant="plain"
                                     size="sm"
+                                    pressStyle="list-row"
                                     onClick={() => props.onOpenFile(filePath)}
                                     className="w-full gap-3 px-3 py-2 text-left hover:bg-[var(--app-subtle-bg)] [&>[data-button-content]]:w-full [&>[data-button-content]]:justify-start"
                                     style={{ paddingLeft: childIndent }}

@@ -3,6 +3,7 @@ import { SessionListAnimatedItem } from '@/components/session-list/SessionListAn
 import { SessionListSectionHeader } from '@/components/session-list/SessionListSectionHeader'
 import type { SessionListRenderContext } from '@/components/session-list/sessionListContracts'
 import type { SessionListSection } from '@/components/session-list/sessionListUtils'
+import { Button } from '@/components/ui/button'
 
 const SESSION_LIST_SECTION_STACK_CLASS_NAME = 'flex flex-col gap-4 px-3 pb-4 pt-1'
 const SESSION_LIST_SECTION_CARD_STACK_CLASS_NAME = 'flex flex-col gap-2'
@@ -11,6 +12,8 @@ type SessionListViewProps = {
     activeSection: SessionListSection | null
     renderContext: SessionListRenderContext
     emptyLabel: string
+    onShowAll: () => void
+    showAllLabel: string
     t: (key: string, params?: Record<string, string | number>) => string
 }
 
@@ -48,6 +51,20 @@ export function SessionListView(props: SessionListViewProps): React.JSX.Element 
                         </MotionStaggerItem>
                     ))}
                 </div>
+                {props.activeSection.hiddenCount > 0 ? (
+                    <MotionStaggerItem y={8}>
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            pressStyle="chip"
+                            onClick={props.onShowAll}
+                            className="w-full rounded-[var(--ds-radius-lg)] text-xs text-[var(--ds-text-secondary)]"
+                        >
+                            {props.showAllLabel}
+                        </Button>
+                    </MotionStaggerItem>
+                ) : null}
             </MotionStaggerGroup>
         </div>
     )

@@ -70,6 +70,7 @@ export function useSessionChatRouteModel(options: SessionChatRouteModelOptions):
     const { api, session, sessionId } = options
     const {
         messages,
+        pending,
         warning: messagesWarning,
         isLoading: messagesLoading,
         isLoadingMore: messagesLoadingMore,
@@ -103,6 +104,7 @@ export function useSessionChatRouteModel(options: SessionChatRouteModelOptions):
         api,
         queryClient,
         sessionId,
+        isSessionThinking: () => session.thinking,
     })
     const { autocompleteRefreshKey, getSuggestions: autocompleteSuggestions } = useSessionAutocompleteSuggestions({
         api,
@@ -118,6 +120,7 @@ export function useSessionChatRouteModel(options: SessionChatRouteModelOptions):
     const messageState = useMemo<SessionChatWorkspaceMessageState>(
         () => ({
             messages,
+            pending,
             warning: messagesWarning,
             hasMore: messagesHasMore,
             isLoading: messagesLoading,
@@ -134,6 +137,7 @@ export function useSessionChatRouteModel(options: SessionChatRouteModelOptions):
             atBottom,
             isSending,
             messages,
+            pending,
             messagesHasMore,
             messagesLoading,
             messagesLoadingMore,

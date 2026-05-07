@@ -91,6 +91,12 @@ vi.mock('@/lib/use-translation', () => ({
                     return `Show ${values?.count ?? 0} members`
                 case 'sessions.group.hideMembers':
                     return 'Hide members'
+                case 'sessions.search.label':
+                    return 'Search sessions'
+                case 'sessions.search.placeholder':
+                    return 'Search history, project, agent…'
+                case 'sessions.preview.showAll':
+                    return `Show ${values?.count ?? 0} more`
                 case 'sessions.empty.sessions':
                     return 'No sessions'
                 case 'sessions.new':

@@ -27,6 +27,7 @@ export function SessionRouteTabs(props: SessionRouteTabsProps): ReactNode {
                             type="button"
                             variant="plain"
                             size="sm"
+                            pressStyle="segmented"
                             role="tab"
                             aria-selected={active}
                             onClick={() => props.onChange(item.id)}

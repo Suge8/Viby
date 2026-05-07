@@ -54,6 +54,7 @@ type LoadMoreResult = {
 
 type MessagesState = {
     messages: DecryptedMessage[]
+    pending: DecryptedMessage[]
     warning: MessageWindowWarningKey | null
     isLoading: boolean
     isLoadingMore: boolean
@@ -71,6 +72,7 @@ type MessagesState = {
 
 const messagesState: MessagesState = {
     messages: [] as DecryptedMessage[],
+    pending: [] as DecryptedMessage[],
     warning: null as MessageWindowWarningKey | null,
     isLoading: false,
     isLoadingMore: false,
@@ -180,6 +182,7 @@ function createSession(): Session {
         thinkingAt: 120,
         model: 'gpt-5.4',
         modelReasoningEffort: 'high',
+        codexServiceTier: null,
         permissionMode: 'default',
         collaborationMode: 'default',
     }

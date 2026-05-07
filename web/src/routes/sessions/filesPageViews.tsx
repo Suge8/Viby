@@ -89,6 +89,7 @@ const FileListRow = memo(function FileListRow(props: FileListRowProps): ReactNod
             type="button"
             variant="plain"
             size="sm"
+            pressStyle="list-row"
             onClick={props.onOpen}
             className={`w-full gap-3 px-3 py-2 text-left hover:bg-[var(--app-subtle-bg)] [&>[data-button-content]]:w-full [&>[data-button-content]]:justify-start ${props.showDivider ? 'border-b border-[var(--app-divider)]' : ''}`}
         >

@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
 import type { ApiClient } from '@/api/client'
 import { MotionStaggerGroup, MotionStaggerItem } from '@/components/motion/motionPrimitives'
 import { SessionListActionController } from '@/components/session-list/SessionListActionController'
@@ -53,10 +53,21 @@ function SessionListComponent(props: SessionListProps): React.JSX.Element {
         sessions,
     } = props
     const [actionTarget, setActionTarget] = useState<SessionActionTarget>(createClosedActionTarget)
+    const [searchQuery, setSearchQuery] = useState('')
+    const [expandedSectionIds, setExpandedSectionIds] = useState<ReadonlySet<SessionListSectionId>>(() => new Set())
+    const deferredSearchQuery = useDeferredValue(searchQuery)
     const { selectedSession, actionSession } = useMemo(() => {
         return findSessionTargets(sessions, selectedSessionId, actionTarget.sessionId)
     }, [actionTarget.sessionId, selectedSessionId, sessions])
-    const sections = useMemo(() => buildSessionSections(sessions), [sessions])
+    const sections = useMemo(
+        () =>
+            buildSessionSections(sessions, {
+                expandedSectionIds,
+                searchQuery: deferredSearchQuery,
+                selectedSessionId,
+            }),
+        [deferredSearchQuery, expandedSectionIds, selectedSessionId, sessions]
+    )
     const selectedSectionId = useMemo(() => getSessionListSectionId(selectedSession), [selectedSession])
     const { activeSectionId, setActiveSectionId } = useSessionListActiveSection({
         activeSectionId: controlledActiveSectionId,
@@ -72,18 +83,22 @@ function SessionListComponent(props: SessionListProps): React.JSX.Element {
             activeTab: activeSectionId,
             ariaLabel: `${t('sessions.section.running')} / ${t('sessions.section.history')}`,
             createLabel: t('sessions.new'),
+            searchLabel: t('sessions.search.label'),
+            searchPlaceholder: t('sessions.search.placeholder'),
+            searchValue: searchQuery,
             tabs: controlTabs.map((section) => ({
                 id: section.id,
                 label: t(section.titleKey),
                 count: section.count,
             })),
         }),
-        [activeSectionId, controlTabs, t]
+        [activeSectionId, controlTabs, searchQuery, t]
     )
     const controlsActions = useMemo(
         () => ({
             onChange: setActiveSectionId,
             onCreate: actions.onNewSession,
+            onSearchChange: setSearchQuery,
         }),
         [actions.onNewSession, setActiveSectionId]
     )
@@ -119,6 +134,16 @@ function SessionListComponent(props: SessionListProps): React.JSX.Element {
     const handleDismissActionController = useCallback(() => {
         setActionTarget(createClosedActionTarget())
     }, [])
+    const handleShowAllActiveSection = useCallback(() => {
+        setExpandedSectionIds((current) => {
+            if (current.has(activeSectionId)) {
+                return current
+            }
+            const next = new Set(current)
+            next.add(activeSectionId)
+            return next
+        })
+    }, [activeSectionId])
     const renderContext = useMemo<SessionListRenderContext>(
         () => ({
             selection,
@@ -140,6 +165,12 @@ function SessionListComponent(props: SessionListProps): React.JSX.Element {
                         activeSection={activeSection}
                         renderContext={renderContext}
                         emptyLabel={t('sessions.empty.sessions')}
+                        onShowAll={handleShowAllActiveSection}
+                        showAllLabel={
+                            activeSection?.hiddenCount
+                                ? t('sessions.preview.showAll', { count: activeSection.hiddenCount })
+                                : ''
+                        }
                         t={t}
                     />
                 </MotionStaggerItem>

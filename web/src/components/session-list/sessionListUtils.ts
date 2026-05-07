@@ -1,8 +1,10 @@
 import { compareSessionSummaries, isSessionRunningSectionLifecycleState } from '@viby/protocol'
+import { getSessionListContextLabel, getSessionListTitle } from '@/lib/sessionPresentation'
 import type { SessionSummary } from '@/types/api'
 
 export const SESSION_ACTION_LONG_PRESS_MS = 500
 export const DEFAULT_SESSION_LIST_SECTION_ID = 'running'
+export const SESSION_LIST_HISTORY_PREVIEW_LIMIT = 8
 export const SESSION_LIST_SECTION_IDS = ['running', 'history'] as const
 export type SessionListSectionId = (typeof SESSION_LIST_SECTION_IDS)[number]
 
@@ -10,6 +12,7 @@ export type SessionListSection = {
     id: SessionListSectionId
     titleKey: 'sessions.section.history' | 'sessions.section.running'
     count: number
+    hiddenCount: number
     rows: readonly SessionListRow[]
 }
 
@@ -77,6 +80,40 @@ function sortSessions(sessions: readonly SessionSummary[]): SessionSummary[] {
     return [...sessions].sort(compareSessionSummaries)
 }
 
+export function normalizeSessionListSearchQuery(query: string): string {
+    return query.trim().replace(/\s+/g, ' ').toLowerCase()
+}
+
+function getSessionSearchText(session: SessionSummary): string {
+    const metadata = session.metadata
+    return [
+        session.id,
+        getSessionListTitle(session),
+        getSessionListContextLabel(session),
+        metadata?.name,
+        metadata?.summary?.text,
+        metadata?.path,
+        metadata?.worktree?.basePath,
+        metadata?.host,
+        metadata?.machineId,
+        metadata?.driver,
+        session.model,
+        session.modelReasoningEffort,
+    ]
+        .filter((value): value is string => typeof value === 'string' && value.length > 0)
+        .join('\n')
+        .toLowerCase()
+}
+
+export function sessionMatchesListQuery(session: SessionSummary, normalizedQuery: string): boolean {
+    if (!normalizedQuery) {
+        return true
+    }
+
+    const haystack = getSessionSearchText(session)
+    return normalizedQuery.split(' ').every((term) => haystack.includes(term))
+}
+
 export function getLikelyNextSessionId(
     sessions: readonly SessionSummary[],
     options: Readonly<{ preferredSessionId?: string | null }> = {}
@@ -91,21 +128,33 @@ export function getLikelyNextSessionId(
     return candidates[0]?.id ?? null
 }
 
-export function buildSessionSections(sessions: readonly SessionSummary[]): SessionListSection[] {
+export function buildSessionSections(
+    sessions: readonly SessionSummary[],
+    options: {
+        expandedSectionIds?: ReadonlySet<SessionListSectionId>
+        searchQuery?: string
+        selectedSessionId?: string | null
+    } = {}
+): SessionListSection[] {
     const running: SessionListRow[] = []
     const history: SessionListRow[] = []
     let runningCount = 0
     let historyCount = 0
+    const normalizedQuery = normalizeSessionListSearchQuery(options.searchQuery ?? '')
 
     for (const row of buildSessionRows(sessions)) {
+        if (!sessionMatchesListQuery(row.session, normalizedQuery)) {
+            continue
+        }
+
         if (isSessionRunningSectionLifecycleState(row.anchorSession.lifecycleState)) {
             running.push(row)
-            runningCount += getSessionListRowCount(row)
+            runningCount += 1
             continue
         }
 
         history.push(row)
-        historyCount += getSessionListRowCount(row)
+        historyCount += 1
     }
 
     const sections: SessionListSection[] = []
@@ -115,16 +164,23 @@ export function buildSessionSections(sessions: readonly SessionSummary[]): Sessi
             id: 'running',
             titleKey: 'sessions.section.running',
             count: runningCount,
+            hiddenCount: 0,
             rows: running,
         })
     }
 
     if (history.length > 0) {
+        const historyRows = getVisibleHistoryRows(history, {
+            expanded: Boolean(options.expandedSectionIds?.has('history')),
+            searchActive: normalizedQuery.length > 0,
+            selectedSessionId: options.selectedSessionId ?? null,
+        })
         sections.push({
             id: 'history',
             titleKey: 'sessions.section.history',
             count: historyCount,
-            rows: history,
+            hiddenCount: history.length - historyRows.length,
+            rows: historyRows,
         })
     }
 
@@ -144,6 +200,24 @@ function createSessionRow(session: SessionSummary): SessionListSessionRow {
     }
 }
 
-function getSessionListRowCount(row: SessionListRow): number {
-    return 1
+function getVisibleHistoryRows(
+    rows: readonly SessionListRow[],
+    options: { expanded: boolean; searchActive: boolean; selectedSessionId: string | null }
+): SessionListRow[] {
+    if (options.expanded || options.searchActive || rows.length <= SESSION_LIST_HISTORY_PREVIEW_LIMIT) {
+        return [...rows]
+    }
+
+    const visibleRows = rows.slice(0, SESSION_LIST_HISTORY_PREVIEW_LIMIT)
+    if (!options.selectedSessionId || visibleRows.some((row) => row.id === options.selectedSessionId)) {
+        return visibleRows
+    }
+
+    const selectedIndex = rows.findIndex((row) => row.id === options.selectedSessionId)
+    if (selectedIndex < 0) {
+        return visibleRows
+    }
+
+    const selectedRow = rows[selectedIndex]
+    return [...visibleRows.slice(0, SESSION_LIST_HISTORY_PREVIEW_LIMIT - 1), selectedRow]
 }

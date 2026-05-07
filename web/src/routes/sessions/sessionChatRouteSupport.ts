@@ -3,7 +3,7 @@ import { resolveSessionDriver } from '@viby/protocol'
 import { useCallback, useMemo } from 'react'
 import type { ApiClient } from '@/api/client'
 import { clearComposerDraft } from '@/components/AssistantChat/useComposerDraftPersistence'
-import { useSendMessage } from '@/hooks/mutations/useSendMessage'
+import { type SendErrorInfo, type SendStartInfo, useSendMessage } from '@/hooks/mutations/useSendMessage'
 import type { Suggestion } from '@/hooks/useActiveSuggestions'
 import { useNoticeCenter } from '@/lib/notice-center'
 import { appendRealtimeTrace } from '@/lib/realtimeTrace'
@@ -20,6 +20,7 @@ type SessionSendActionsOptions = {
     api: ApiClient
     queryClient: QueryClient
     sessionId: string
+    isSessionThinking: () => boolean
 }
 
 type SessionAutocompleteSuggestionsOptions = {
@@ -41,6 +42,7 @@ type SessionAutocompleteSuggestionsModel = {
 }
 
 export function useSessionChatSendActions(options: SessionSendActionsOptions): ReturnType<typeof useSendMessage> {
+    const { api, isSessionThinking, queryClient, sessionId } = options
     const { t } = useTranslation()
     const { addToast } = useNoticeCenter()
 
@@ -54,27 +56,14 @@ export function useSessionChatSendActions(options: SessionSendActionsOptions): R
                 title: t('send.blocked.title'),
                 description: t('send.blocked.noConnection'),
                 tone: 'warning',
-                href: buildSessionHref(options.sessionId),
+                href: buildSessionHref(sessionId),
             })
         },
-        [addToast, options.sessionId, t]
+        [addToast, sessionId, t]
     )
 
-    const handleAfterServerAccepted = useCallback(
-        async (acceptedSend: AcceptedSend) => {
-            clearComposerDraft(acceptedSend.sessionId, 'send-accepted')
-            await handleAcceptedSend({
-                acceptedSend,
-                api: options.api,
-                queryClient: options.queryClient,
-            })
-        },
-        [options.api, options.queryClient]
-    )
-
-    return useSendMessage(options.api, options.sessionId, {
-        onBlocked: handleSendBlocked,
-        onSendStart: ({ sessionId: sendingSessionId, localId, createdAt, attachmentsCount }) => {
+    const handleSendStart = useCallback(
+        ({ sessionId: sendingSessionId, localId, createdAt, attachmentsCount }: SendStartInfo) => {
             appendRealtimeTrace({
                 at: Date.now(),
                 type: 'message_send_start',
@@ -86,8 +75,23 @@ export function useSessionChatSendActions(options: SessionSendActionsOptions): R
                 },
             })
         },
-        afterServerAccepted: handleAfterServerAccepted,
-        onSendError: ({ sessionId: failedSessionId, error }) => {
+        []
+    )
+
+    const handleAfterServerAccepted = useCallback(
+        async (acceptedSend: AcceptedSend) => {
+            clearComposerDraft(acceptedSend.sessionId, 'send-accepted')
+            await handleAcceptedSend({
+                acceptedSend,
+                api,
+                queryClient,
+            })
+        },
+        [api, queryClient]
+    )
+
+    const handleSendError = useCallback(
+        ({ sessionId: failedSessionId, error }: SendErrorInfo) => {
             addToast({
                 title: t('chat.resumeFailed.title'),
                 description: formatSessionRecoveryErrorMessage(error, t),
@@ -95,16 +99,26 @@ export function useSessionChatSendActions(options: SessionSendActionsOptions): R
                 href: buildSessionHref(failedSessionId),
             })
         },
+        [addToast, t]
+    )
+
+    return useSendMessage(api, sessionId, {
+        isSessionThinking,
+        onBlocked: handleSendBlocked,
+        onSendStart: handleSendStart,
+        afterServerAccepted: handleAfterServerAccepted,
+        onSendError: handleSendError,
     })
 }
 
 export function useSessionAutocompleteSuggestions(
     options: SessionAutocompleteSuggestionsOptions
 ): SessionAutocompleteSuggestionsModel {
-    const sessionDriver = resolveSessionDriver(options.session.metadata)
+    const { api, queryClient, session, sessionId } = options
+    const sessionDriver = resolveSessionDriver(session.metadata)
     const autocompleteRefreshKey = useCommandCapabilityRefreshKey({
-        queryClient: options.queryClient,
-        sessionId: options.sessionId,
+        queryClient,
+        sessionId,
     })
 
     return useMemo(
@@ -112,21 +126,22 @@ export function useSessionAutocompleteSuggestions(
             autocompleteRefreshKey,
             getSuggestions: createSessionAutocompleteSuggestions({
                 driver: sessionDriver,
-                api: options.api,
-                queryClient: options.queryClient,
-                sessionId: options.sessionId,
+                api,
+                queryClient,
+                sessionId,
             }),
         }),
-        [autocompleteRefreshKey, options.api, options.queryClient, options.sessionId, sessionDriver]
+        [api, autocompleteRefreshKey, queryClient, sessionDriver, sessionId]
     )
 }
 
 export function useRefreshSelectedSession(options: RefreshSelectedSessionOptions): () => Promise<void> {
+    const { api, queryClient, sessionId } = options
     return useCallback(async () => {
         await reconcileSessionView({
-            queryClient: options.queryClient,
-            api: options.api,
-            selectedSessionId: options.sessionId,
+            queryClient,
+            api,
+            selectedSessionId: sessionId,
         })
-    }, [options.api, options.queryClient, options.sessionId])
+    }, [api, queryClient, sessionId])
 }

@@ -132,6 +132,7 @@ function createSessionSummary(): SessionSummary {
         resumeStrategy: 'none',
         model: null,
         modelReasoningEffort: null,
+        codexServiceTier: null,
     }
 }
 
