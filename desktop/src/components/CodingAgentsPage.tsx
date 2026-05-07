@@ -6,17 +6,16 @@ import {
     getAgentSupportLink,
     type RuntimeAgentCapabilitySnapshot,
 } from '@viby/protocol'
-import { AnimatePresence, m } from 'motion/react'
-import { type JSX, useMemo, useState } from 'react'
-import { AgentModelPanel, AgentModelToggle } from '@/components/AgentModelDropdown'
-import { CheckIcon, LinkIcon, RefreshIcon, SpinnerIcon } from '@/components/icons'
+import { AnimatePresence, LayoutGroup, m } from 'motion/react'
+import { type JSX, useEffect, useMemo, useState } from 'react'
+import { AgentModelPanel, AgentModelToggle, shouldShowAgentModels } from '@/components/AgentModelDropdown'
+import { AGENT_ITEM_MOTION, AgentStatusIcon, AgentStatusText } from '@/components/AgentPresenceMotion'
+import { LinkIcon, RefreshIcon, SpinnerIcon } from '@/components/icons'
 import type { AgentAvailabilityErrorCode } from '@/hooks/useAgentAvailability'
 import { AGENT_DESCRIPTION_KEYS, AGENT_ICONS, AGENT_LABELS } from '@/lib/agentPresentation'
 import type { DesktopCopy } from '@/lib/desktopCopy'
 
-const STATUS_TRANSITION = { type: 'spring', stiffness: 420, damping: 34, mass: 0.72 } as const
-const STATUS_TEXT_TRANSITION = { duration: 0.24, ease: [0.22, 1, 0.36, 1] } as const
-
+const STATUS_TRANSITION = { duration: 0.22, ease: [0.22, 1, 0.36, 1] } as const
 type CodingAgentsPageProps = {
     agents: readonly AgentAvailability[]
     capabilities: readonly RuntimeAgentCapabilitySnapshot[]
@@ -28,7 +27,6 @@ type CodingAgentsPageProps = {
     onOpenUrl(url: string): void
     onRefresh(): void
 }
-
 function getStatusLabel(copy: DesktopCopy, status: AgentAvailability['status']): string {
     switch (status) {
         case 'ready':
@@ -43,7 +41,6 @@ function getStatusLabel(copy: DesktopCopy, status: AgentAvailability['status']):
             return copy.agentUnavailable
     }
 }
-
 function getReasonLabel(copy: DesktopCopy, code: AgentAvailabilityCode): string | null {
     switch (code) {
         case 'command_missing':
@@ -62,11 +59,9 @@ function getReasonLabel(copy: DesktopCopy, code: AgentAvailabilityCode): string 
             return null
     }
 }
-
 function getErrorLabel(copy: DesktopCopy, error: AgentAvailabilityErrorCode): string {
     return error === 'hub_unavailable' ? copy.agentsHubUnavailable : copy.agentsCheckFailed
 }
-
 function getActionLabel(copy: DesktopCopy, resolution: AgentAvailability['resolution']): string {
     switch (resolution) {
         case 'install':
@@ -79,7 +74,6 @@ function getActionLabel(copy: DesktopCopy, resolution: AgentAvailability['resolu
             return copy.agentReadyAction
     }
 }
-
 function getAvailabilityRank(agent: AgentAvailability | null, loading: boolean): number {
     switch (agent?.status) {
         case 'ready':
@@ -95,7 +89,6 @@ function getAvailabilityRank(agent: AgentAvailability | null, loading: boolean):
             return 4
     }
 }
-
 function getOrderedDrivers(
     agentsByDriver: ReadonlyMap<AgentFlavor, AgentAvailability>,
     loading: boolean
@@ -107,22 +100,24 @@ function getOrderedDrivers(
         return rankDelta || AGENT_FLAVORS.indexOf(left) - AGENT_FLAVORS.indexOf(right)
     })
 }
-
 function getStatusTone(agent: AgentAvailability | null, detecting: boolean): string {
     if (detecting) return 'is-actionable'
     if (!agent) return 'is-muted'
     return agent.status === 'ready' ? 'is-ready' : 'is-actionable'
 }
-
 function shouldShowStatus(agent: AgentAvailability | null, detecting: boolean): boolean {
     if (!agent) return detecting
     return agent.status !== 'not_installed'
 }
-
 function shouldShowSideReason(agent: AgentAvailability | null, detecting: boolean): boolean {
     return !detecting && agent?.status === 'not_installed'
 }
-
+function getSideMode(options: { action: boolean; install: boolean; models: boolean; status: boolean }): string {
+    if (options.install) return 'install'
+    return [options.models ? 'models' : null, options.action ? 'action' : null, options.status ? 'status' : null]
+        .filter(Boolean)
+        .join('-')
+}
 function AgentRow(props: {
     agent: AgentAvailability | null
     capability: RuntimeAgentCapabilitySnapshot | null
@@ -145,6 +140,10 @@ function AgentRow(props: {
     const logoClassName = props.driver === 'pi' ? 'is-template' : props.driver
     const showStatus = shouldShowStatus(props.agent, detecting)
     const showSideReason = shouldShowSideReason(props.agent, detecting)
+    const showModels = shouldShowAgentModels(props.agent)
+    const showAction = Boolean(href)
+    const showInstall = showSideReason && Boolean(reason) && showAction
+    const sideMode = getSideMode({ action: showAction, install: showInstall, models: showModels, status: showStatus })
 
     return (
         <m.div className="desktop-agent-row" role="listitem" layout transition={STATUS_TRANSITION}>
@@ -161,63 +160,53 @@ function AgentRow(props: {
                 </div>
             </div>
             <div className="desktop-agent-side">
-                {showSideReason && reason ? <span className="desktop-agent-side-reason">{reason}</span> : null}
-                <AgentModelToggle
-                    agent={props.agent}
-                    capability={props.capability}
-                    copy={props.copy}
-                    expanded={props.expanded}
-                    onToggle={() => {
-                        if (!props.expanded) props.onLoadAgentCapability(props.driver)
-                        props.onToggleModels(props.driver)
-                    }}
-                />
-                {href ? (
-                    <m.button
-                        type="button"
-                        className="desktop-agent-action"
-                        layout
-                        whileTap={{ scale: 0.985 }}
-                        onClick={() => props.onOpenUrl(href)}
-                    >
-                        <LinkIcon />
-                        <span>{getActionLabel(props.copy, props.agent?.resolution ?? 'learn_more')}</span>
-                    </m.button>
-                ) : null}
-                {showStatus ? (
-                    <m.span
-                        className={`desktop-agent-status ${getStatusTone(props.agent, detecting)}`}
-                        layout
-                        transition={STATUS_TRANSITION}
-                    >
-                        <AnimatePresence initial={false}>
-                            {detecting || ready ? (
-                                <m.span
-                                    key={detecting ? 'spinner' : 'ready'}
-                                    className="desktop-agent-status-icon"
-                                    initial={{ opacity: 0, scale: 0.72, width: 0 }}
-                                    animate={{ opacity: 1, scale: 1, width: 18 }}
-                                    exit={{ opacity: 0, scale: 0.72, width: 0 }}
-                                    transition={STATUS_TEXT_TRANSITION}
+                <AnimatePresence initial={false} mode="wait">
+                    <m.div key={sideMode} className="desktop-agent-side-content" {...AGENT_ITEM_MOTION}>
+                        {showInstall && reason && href ? (
+                            <span className="desktop-agent-install-group">
+                                <span className="desktop-agent-side-reason">{reason}</span>
+                                <button
+                                    type="button"
+                                    className="desktop-agent-action"
+                                    onClick={() => props.onOpenUrl(href)}
                                 >
-                                    {detecting ? <SpinnerIcon /> : <CheckIcon />}
-                                </m.span>
-                            ) : null}
-                        </AnimatePresence>
-                        <AnimatePresence mode="popLayout" initial={false}>
-                            <m.span
-                                key={status}
-                                layout
-                                initial={{ opacity: 0, y: 5, filter: 'blur(3px)' }}
-                                animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-                                exit={{ opacity: 0, y: -5, filter: 'blur(3px)' }}
-                                transition={STATUS_TEXT_TRANSITION}
+                                    <LinkIcon />
+                                    <span>{getActionLabel(props.copy, props.agent?.resolution ?? 'learn_more')}</span>
+                                </button>
+                            </span>
+                        ) : null}
+                        {showModels ? (
+                            <span className="desktop-agent-model-toggle-slot">
+                                <AgentModelToggle
+                                    agent={props.agent}
+                                    capability={props.capability}
+                                    copy={props.copy}
+                                    expanded={props.expanded}
+                                    onToggle={() => {
+                                        if (!props.expanded) props.onLoadAgentCapability(props.driver)
+                                        props.onToggleModels(props.driver)
+                                    }}
+                                />
+                            </span>
+                        ) : null}
+                        {href && !showSideReason ? (
+                            <button
+                                type="button"
+                                className="desktop-agent-action"
+                                onClick={() => props.onOpenUrl(href)}
                             >
-                                {status}
-                            </m.span>
-                        </AnimatePresence>
-                    </m.span>
-                ) : null}
+                                <LinkIcon />
+                                <span>{getActionLabel(props.copy, props.agent?.resolution ?? 'learn_more')}</span>
+                            </button>
+                        ) : null}
+                        {showStatus ? (
+                            <span className={`desktop-agent-status ${getStatusTone(props.agent, detecting)}`}>
+                                <AgentStatusIcon detecting={detecting} ready={ready} />
+                                <AgentStatusText value={status} />
+                            </span>
+                        ) : null}
+                    </m.div>
+                </AnimatePresence>
             </div>
             <AgentModelPanel
                 agent={props.agent}
@@ -240,47 +229,72 @@ export function CodingAgentsPage(props: CodingAgentsPageProps): JSX.Element {
         () => getOrderedDrivers(agentsByDriver, props.loading),
         [agentsByDriver, props.loading]
     )
+    const [displayDrivers, setDisplayDrivers] = useState<AgentFlavor[]>(() => [...AGENT_FLAVORS])
+    const hasRuntimeSnapshot = props.agents.length > 0 || props.capabilities.length > 0
+    const showRefresh = props.error === 'check_failed' || props.loading || props.refreshing || hasRuntimeSnapshot
+
+    useEffect(() => {
+        if (hasRuntimeSnapshot && !props.loading && !props.refreshing) setDisplayDrivers(orderedDrivers)
+    }, [hasRuntimeSnapshot, orderedDrivers, props.loading, props.refreshing])
 
     return (
         <div className="desktop-page desktop-agents-page" aria-busy={props.loading || props.refreshing}>
             <div className="desktop-page-toolbar desktop-agent-toolbar">
-                {props.error ? (
-                    <div className="desktop-inline-notice is-error">{getErrorLabel(props.copy, props.error)}</div>
-                ) : null}
-                <button
-                    type="button"
-                    className="desktop-page-action desktop-agent-refresh"
-                    disabled={props.loading}
-                    onClick={() => {
-                        setExpandedDriver(null)
-                        props.onRefresh()
-                    }}
-                >
-                    {props.loading || props.refreshing ? <SpinnerIcon /> : <RefreshIcon />}
-                    <span>
-                        {props.loading || props.refreshing ? props.copy.agentsRefreshing : props.copy.agentsRefresh}
-                    </span>
-                </button>
+                <div className="desktop-agent-toolbar-left">
+                    <AnimatePresence initial={false}>
+                        {props.error ? (
+                            <m.div key="notice" className="desktop-inline-notice is-error" {...AGENT_ITEM_MOTION}>
+                                {getErrorLabel(props.copy, props.error)}
+                            </m.div>
+                        ) : null}
+                    </AnimatePresence>
+                </div>
+                <div className="desktop-agent-toolbar-right">
+                    <AnimatePresence initial={false}>
+                        {showRefresh ? (
+                            <m.button
+                                key="refresh"
+                                type="button"
+                                className="desktop-page-action desktop-agent-refresh"
+                                disabled={props.loading}
+                                onClick={() => {
+                                    setExpandedDriver(null)
+                                    props.onRefresh()
+                                }}
+                                {...AGENT_ITEM_MOTION}
+                            >
+                                {props.loading || props.refreshing ? <SpinnerIcon /> : <RefreshIcon />}
+                                <span>
+                                    {props.loading || props.refreshing
+                                        ? props.copy.agentsRefreshing
+                                        : props.copy.agentsRefresh}
+                                </span>
+                            </m.button>
+                        ) : null}
+                    </AnimatePresence>
+                </div>
             </div>
 
-            <div className="desktop-agent-list" role="list" aria-label={props.copy.agentsListLabel}>
-                {orderedDrivers.map((driver) => (
-                    <AgentRow
-                        key={driver}
-                        agent={agentsByDriver.get(driver) ?? null}
-                        capability={capabilitiesByDriver.get(driver) ?? null}
-                        copy={props.copy}
-                        driver={driver}
-                        expanded={expandedDriver === driver}
-                        loading={props.loading}
-                        onLoadAgentCapability={props.onLoadAgentCapability}
-                        onOpenUrl={props.onOpenUrl}
-                        onToggleModels={(nextDriver) =>
-                            setExpandedDriver((current) => (current === nextDriver ? null : nextDriver))
-                        }
-                    />
-                ))}
-            </div>
+            <LayoutGroup>
+                <m.div className="desktop-agent-list" role="list" aria-label={props.copy.agentsListLabel} layout>
+                    {displayDrivers.map((driver) => (
+                        <AgentRow
+                            key={driver}
+                            agent={agentsByDriver.get(driver) ?? null}
+                            capability={capabilitiesByDriver.get(driver) ?? null}
+                            copy={props.copy}
+                            driver={driver}
+                            expanded={expandedDriver === driver}
+                            loading={props.loading}
+                            onLoadAgentCapability={props.onLoadAgentCapability}
+                            onOpenUrl={props.onOpenUrl}
+                            onToggleModels={(nextDriver) =>
+                                setExpandedDriver((current) => (current === nextDriver ? null : nextDriver))
+                            }
+                        />
+                    ))}
+                </m.div>
+            </LayoutGroup>
         </div>
     )
 }

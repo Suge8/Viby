@@ -7,9 +7,23 @@
     }
 
     .desktop-agent-toolbar {
+        display: grid;
         width: min(100%, 980px);
-        justify-content: space-between;
+        min-height: var(--desktop-control-min);
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
         max-width: 980px;
+    }
+
+    .desktop-agent-toolbar-left,
+    .desktop-agent-toolbar-right {
+        display: inline-flex;
+        min-width: 0;
+        align-items: center;
+    }
+
+    .desktop-agent-toolbar-right {
+        justify-content: flex-end;
     }
 
     .desktop-agent-toolbar .desktop-inline-notice {
@@ -173,6 +187,13 @@
         flex: 0 0 auto;
         align-items: center;
         justify-content: flex-end;
+    }
+
+    .desktop-agent-side-content,
+    .desktop-agent-install-group {
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-end;
         gap: 10px;
     }
 
@@ -196,8 +217,8 @@
         flex: 0 0 var(--desktop-agent-pill-width);
         align-items: center;
         justify-content: center;
-        gap: 7px;
-        padding: 8px 12px;
+        gap: 6px;
+        padding: 8px 10px;
         border-radius: 999px;
         font-size: 13px;
         font-weight: 760;
@@ -209,11 +230,32 @@
             transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
     }
 
-    .desktop-agent-status-icon {
+    .desktop-agent-status-icon,
+    .desktop-agent-status-text {
+        position: relative;
         display: inline-grid;
-        width: 18px;
         place-items: center;
-        overflow: visible;
+        overflow: hidden;
+    }
+
+    .desktop-agent-status-icon {
+        width: 18px;
+        min-width: 18px;
+        height: 18px;
+    }
+
+    .desktop-agent-status-text {
+        width: 42px;
+        height: 18px;
+        text-align: center;
+    }
+
+    .desktop-agent-status-icon > span,
+    .desktop-agent-status-text > span {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
     }
 
     .desktop-agent-status .desktop-icon {
