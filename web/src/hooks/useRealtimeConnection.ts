@@ -238,3 +238,41 @@ export function useRealtimeConnection(options: {
         })
     }, [options.enabled, options.pushEndpoint, subscription, subscriptionKey])
 }
+
+export function useRealtimeEventBridge(options: {
+    enabled: boolean
+    subscribe: (listener: (event: SyncEvent) => void) => () => void
+    onEvent: (event: SyncEvent) => void
+    onToast?: (event: ToastEvent) => void
+}): void {
+    const queryClient = useQueryClient()
+    const callbacksRef = useRef<Pick<RealtimeCallbacks, 'onEvent' | 'onToast'>>({
+        onEvent: options.onEvent,
+        onToast: options.onToast,
+    })
+
+    useEffect(() => {
+        callbacksRef.current = {
+            onEvent: options.onEvent,
+            onToast: options.onToast,
+        }
+    }, [options.onEvent, options.onToast])
+
+    useEffect(() => {
+        if (!options.enabled) {
+            return
+        }
+        const eventController = createRealtimeEventController({
+            queryClient,
+            onEvent: (event) => callbacksRef.current.onEvent(event),
+            onToast: (event) => callbacksRef.current.onToast?.(event),
+        })
+        const unsubscribe = options.subscribe((event) => {
+            eventController.handleEvent(event)
+        })
+        return () => {
+            unsubscribe()
+            eventController.dispose()
+        }
+    }, [options.enabled, options.subscribe, queryClient])
+}

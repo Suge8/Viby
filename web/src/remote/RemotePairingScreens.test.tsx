@@ -1,0 +1,48 @@
+import { fireEvent, render, screen } from '@testing-library/react'
+import type { ReactElement } from 'react'
+import { describe, expect, it, vi } from 'vitest'
+import { I18nProvider } from '@/lib/i18n-context'
+import { RemotePairingCodeScreen, RemotePairingStatusScreen } from './RemotePairingScreens'
+
+function renderWithI18n(element: ReactElement): void {
+    render(<I18nProvider>{element}</I18nProvider>)
+}
+
+describe('RemotePairingScreens', () => {
+    it('renders the cold connection surface as a centered busy status', async () => {
+        renderWithI18n(<RemotePairingStatusScreen message={null} onRetry={vi.fn()} />)
+
+        await screen.findByText('Connecting to your computer')
+        const status = screen.getByRole('status')
+        expect(status).toHaveTextContent('Connecting to your computer')
+        expect(status).toHaveTextContent('Rebuilding the secure link')
+        expect(screen.queryByRole('button', { name: 'Reconnect' })).not.toBeInTheDocument()
+    })
+
+    it('renders retryable errors with one explicit retry action', async () => {
+        const onRetry = vi.fn()
+        renderWithI18n(<RemotePairingStatusScreen message="Computer offline" onRetry={onRetry} />)
+
+        expect(await screen.findByRole('heading', { name: 'Reconnect your computer' })).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Reconnect' }))
+        expect(onRetry).toHaveBeenCalledTimes(1)
+    })
+
+    it('renders final scan-again errors without a dead-end retry action', async () => {
+        renderWithI18n(<RemotePairingStatusScreen message="Scan the QR code again" />)
+
+        expect(await screen.findByText('Scan the QR code again')).toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Reconnect' })).not.toBeInTheDocument()
+    })
+
+    it('submits only the normalized six digit code', async () => {
+        const onSubmit = vi.fn()
+        renderWithI18n(<RemotePairingCodeScreen submitting={false} onSubmit={onSubmit} />)
+
+        const input = await screen.findByLabelText('6-digit code from your computer')
+        fireEvent.change(input, { target: { value: '12a3456' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+
+        expect(onSubmit).toHaveBeenCalledWith('123456')
+    })
+})

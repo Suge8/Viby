@@ -1,0 +1,217 @@
+import type { PairingSessionSnapshot } from '@viby/protocol'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { readBrowserStorageItem } from '@/lib/browserStorage'
+import { getPairingGuestTokenStorageKey, LOCAL_STORAGE_KEYS } from '@/lib/storage/storageRegistry'
+import {
+    claimRemotePairing,
+    clearRemotePairingId,
+    clearStoredGuestToken,
+    getGuestToken,
+    getPairingTicketFromLocation,
+    readRemotePairingId,
+    reconnectRemotePairing,
+    rememberRemotePairingId,
+    scrubPairingTicketFromUrl,
+    verifyRemotePairingCode,
+} from './remotePairingHttp'
+
+const deviceProof = {
+    publicKey: 'phone-public-key',
+    challengeNonce: 'nonce-1',
+    signedAt: 1_700_000_000_000,
+    signature: 'signature-1',
+}
+
+vi.mock('@/remote/remotePairingDevice', () => ({
+    loadPairingDeviceIdentity: vi.fn(async () => ({ publicKey: 'phone-public-key', privateKeyJwk: {} })),
+    createReconnectDeviceProof: vi.fn(async () => deviceProof),
+}))
+
+function pairingSnapshot(overrides: Partial<PairingSessionSnapshot> = {}): PairingSessionSnapshot {
+    return {
+        id: 'pairing-1',
+        state: 'claimed' as const,
+        createdAt: 1,
+        updatedAt: 2,
+        expiresAt: 3,
+        ticketExpiresAt: 4,
+        shortCode: null,
+        approvalStatus: 'pending' as const,
+        host: { label: 'Desktop' },
+        guest: { label: 'Phone' },
+        ...overrides,
+    }
+}
+
+function jsonResponse(body: unknown, status = 200): Response {
+    return new Response(JSON.stringify(body), {
+        status,
+        headers: { 'content-type': 'application/json' },
+    })
+}
+
+function installFetch(responses: Response[]): ReturnType<typeof vi.fn> {
+    const fetchMock = vi.fn(async () => {
+        const response = responses.shift()
+        if (!response) {
+            throw new Error('unexpected fetch')
+        }
+        return response
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    return fetchMock
+}
+
+beforeEach(() => {
+    window.localStorage.clear()
+    window.sessionStorage.clear()
+    window.history.replaceState({}, '', '/p/pairing-1#ticket=ticket-1')
+})
+
+afterEach(() => {
+    vi.unstubAllGlobals()
+})
+
+describe('remotePairingHttp', () => {
+    it('reads and removes the one-time ticket from the QR URL without touching the path', () => {
+        expect(getPairingTicketFromLocation()).toBe('ticket-1')
+
+        scrubPairingTicketFromUrl()
+
+        expect(window.location.pathname).toBe('/p/pairing-1')
+        expect(window.location.hash).toBe('')
+    })
+
+    it('persists the active pairing id but only restores from explicit remote workspace URLs', () => {
+        expect(readRemotePairingId('/p/pairing-2')).toBe('pairing-2')
+
+        rememberRemotePairingId('pairing-3')
+        expect(readRemotePairingId('/sessions')).toBeNull()
+        expect(readRemotePairingId('/sessions', '?remote=1')).toBe('pairing-3')
+        expect(readBrowserStorageItem('local', LOCAL_STORAGE_KEYS.remoteActivePairing)).toBe('pairing-3')
+
+        clearRemotePairingId()
+        expect(readRemotePairingId('/sessions', '?remote=1')).toBeNull()
+        expect(readBrowserStorageItem('local', LOCAL_STORAGE_KEYS.remoteActivePairing)).toBeNull()
+    })
+
+    it('claims a fresh ticket, sends the device public key, and stores the guest token', async () => {
+        const fetchMock = installFetch([
+            jsonResponse({
+                pairing: pairingSnapshot(),
+                guestToken: 'guest-token-1',
+                wsUrl: 'wss://pair.example/ws',
+                iceServers: [{ urls: 'stun:stun.example.com:3478' }],
+            }),
+        ])
+
+        const response = await claimRemotePairing('pairing-1', 'ticket-1')
+
+        expect(response.guestToken).toBe('guest-token-1')
+        expect(readBrowserStorageItem('local', getPairingGuestTokenStorageKey('pairing-1'))).toBe('guest-token-1')
+        expect(fetchMock).toHaveBeenCalledWith('/pairings/pairing-1/claim', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ ticket: 'ticket-1', label: 'Phone', publicKey: 'phone-public-key' }),
+        })
+    })
+
+    it('verifies the desktop code and returns the approved pairing snapshot', async () => {
+        installFetch([
+            jsonResponse({
+                pairing: pairingSnapshot({ approvalStatus: 'approved', shortCode: '123456' }),
+            }),
+        ])
+
+        const response = await verifyRemotePairingCode('pairing-1', 'guest-token-1', '123456')
+
+        expect(response.pairing.approvalStatus).toBe('approved')
+        expect(response.pairing.shortCode).toBe('123456')
+    })
+
+    it('converts broker error payloads into local presentation codes', async () => {
+        installFetch([jsonResponse({ code: 'pairing_invalid_code', error: 'server copy is ignored' }, 403)])
+
+        await expect(verifyRemotePairingCode('pairing-1', 'guest-token-1', '000000')).rejects.toMatchObject({
+            code: 'remotePairing.error.invalidCode',
+            message: 'remotePairing.error.invalidCode',
+        })
+    })
+
+    it('reconnects with a one-time challenge and signed device proof', async () => {
+        window.localStorage.setItem(getPairingGuestTokenStorageKey('pairing-1'), 'guest-token-1')
+        const fetchMock = installFetch([
+            jsonResponse({ role: 'guest', challenge: { nonce: 'nonce-1', issuedAt: 1, expiresAt: 2 } }),
+            jsonResponse({
+                pairing: pairingSnapshot({ approvalStatus: 'approved' }),
+                role: 'guest',
+                wsUrl: 'wss://pair.example/ws',
+                iceServers: [{ urls: 'stun:stun.example.com:3478' }],
+            }),
+        ])
+
+        const response = await reconnectRemotePairing('pairing-1')
+
+        expect(response?.role).toBe('guest')
+        expect(fetchMock).toHaveBeenNthCalledWith(1, '/pairings/pairing-1/reconnect-challenge', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ token: 'guest-token-1' }),
+        })
+        expect(fetchMock).toHaveBeenNthCalledWith(2, '/pairings/pairing-1/reconnect', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ token: 'guest-token-1', deviceProof }),
+        })
+    })
+
+    it('clears stale guest tokens only when reconnect proves the token is invalid', async () => {
+        window.localStorage.setItem(getPairingGuestTokenStorageKey('pairing-1'), 'guest-token-1')
+        installFetch([jsonResponse({ message: 'expired' }, 410)])
+
+        await expect(reconnectRemotePairing('pairing-1')).rejects.toMatchObject({
+            code: 'remotePairing.error.scanAgain',
+        })
+
+        expect(readBrowserStorageItem('local', getPairingGuestTokenStorageKey('pairing-1'))).toBeNull()
+    })
+
+    it('keeps the guest token after transient reconnect failures', async () => {
+        window.localStorage.setItem(getPairingGuestTokenStorageKey('pairing-1'), 'guest-token-1')
+        installFetch([jsonResponse({ message: 'try again' }, 503)])
+
+        await expect(reconnectRemotePairing('pairing-1')).rejects.toMatchObject({
+            code: 'remotePairing.error.fallback',
+        })
+
+        expect(readBrowserStorageItem('local', getPairingGuestTokenStorageKey('pairing-1'))).toBe('guest-token-1')
+    })
+
+    it('returns null when the device has not claimed the pairing yet', async () => {
+        expect(await reconnectRemotePairing('pairing-1')).toBeNull()
+    })
+
+    it('exposes the live guest token for both claim and reconnect auth payloads', () => {
+        window.localStorage.setItem(getPairingGuestTokenStorageKey('pairing-1'), 'stored-token')
+
+        expect(
+            getGuestToken({
+                pairing: pairingSnapshot(),
+                guestToken: 'claim-token',
+                wsUrl: 'wss://pair.example/ws',
+                iceServers: [],
+            })
+        ).toBe('claim-token')
+        expect(
+            getGuestToken({
+                pairing: pairingSnapshot(),
+                role: 'guest',
+                wsUrl: 'wss://pair.example/ws',
+                iceServers: [],
+            })
+        ).toBe('stored-token')
+
+        clearStoredGuestToken('pairing-1')
+        expect(readBrowserStorageItem('local', getPairingGuestTokenStorageKey('pairing-1'))).toBeNull()
+    })
+})

@@ -1,0 +1,36 @@
+import { PairingPeerEventSchema, type PairingPeerTerminalEventPayload } from '@viby/protocol'
+import type { SyncEvent } from '@/types/api'
+import type { RemotePeerPendingRequests } from './remotePairingPendingRequests'
+import { parsePeerMessage } from './remotePairingRpc'
+
+export function handleRemotePeerChannelMessage(options: {
+    data: unknown
+    pendingRequests: RemotePeerPendingRequests
+    syncListeners: ReadonlySet<(event: SyncEvent) => void>
+    terminalListeners: ReadonlySet<(event: PairingPeerTerminalEventPayload) => void>
+}): void {
+    if (typeof options.data !== 'string') {
+        return
+    }
+
+    const message = parsePeerMessage(options.data)
+    if (!message) {
+        return
+    }
+    if (message.kind === 'event') {
+        const parsed = PairingPeerEventSchema.parse(message)
+        if (parsed.event === 'sync-event') {
+            for (const listener of options.syncListeners) {
+                listener(parsed.payload)
+            }
+            return
+        }
+        for (const listener of options.terminalListeners) {
+            listener(parsed.payload)
+        }
+        return
+    }
+    if (message.kind === 'response') {
+        options.pendingRequests.resolveResponse(message)
+    }
+}
