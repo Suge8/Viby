@@ -1,11 +1,22 @@
 import type { JSX, ReactNode } from 'react'
 import { DesktopSegmentedControl } from '@/components/DesktopSegmentedControl'
-import { DownloadIcon, LanguageIcon, LinkIcon, RefreshIcon, SpinnerIcon, ThemeLightIcon } from '@/components/icons'
+import {
+    DoorIcon,
+    DownloadIcon,
+    GithubIcon,
+    LanguageIcon,
+    LinkIcon,
+    RefreshIcon,
+    SpinnerIcon,
+    ThemeLightIcon,
+} from '@/components/icons'
 import { StaggerGroup, StaggerItem } from '@/components/motion'
 import type { DesktopUpdateActions, DesktopUpdateState } from '@/hooks/useDesktopUpdates'
 import type { DesktopCopy } from '@/lib/desktopCopy'
 import type { LanguagePreference, ThemePreference } from '@/lib/desktopPreferences'
 import type { DesktopEntryMode } from '@/types'
+
+const PROJECT_URL = 'https://github.com/Suge8/Viby'
 
 interface SettingsPanelProps {
     updates: DesktopUpdateState & DesktopUpdateActions
@@ -16,6 +27,7 @@ interface SettingsPanelProps {
     themePreference: ThemePreference
     onEntryModeChange(value: DesktopEntryMode): void
     onLanguagePreferenceChange(value: LanguagePreference): void
+    onOpenUrl(url: string): void
     onThemePreferenceChange(value: ThemePreference): void
 }
 
@@ -62,6 +74,36 @@ function SettingHeader(props: { icon: ReactNode; title: string; hint?: string })
     )
 }
 
+function SettingsCta(props: { disabled?: boolean; icon: ReactNode; label: string; onClick(): void }): JSX.Element {
+    return (
+        <button type="button" className="desktop-settings-cta" disabled={props.disabled} onClick={props.onClick}>
+            {props.icon}
+            <span>{props.label}</span>
+        </button>
+    )
+}
+
+function SettingsToggle(props: {
+    checked: boolean
+    disabled?: boolean
+    labelId?: string
+    onClick(): void
+}): JSX.Element {
+    return (
+        <button
+            type="button"
+            className={`desktop-settings-toggle ${props.checked ? 'is-on' : ''}`}
+            role="switch"
+            aria-checked={props.checked}
+            aria-labelledby={props.labelId}
+            disabled={props.disabled}
+            onClick={props.onClick}
+        >
+            <span />
+        </button>
+    )
+}
+
 export function SettingsPanel({
     updates,
     copy,
@@ -71,6 +113,7 @@ export function SettingsPanel({
     themePreference,
     onEntryModeChange,
     onLanguagePreferenceChange,
+    onOpenUrl,
     onThemePreferenceChange,
 }: SettingsPanelProps): JSX.Element {
     const busy = updates.phase === 'checking' || updates.phase === 'installing'
@@ -106,16 +149,11 @@ export function SettingsPanel({
                         title={copy.settingsLanTitle}
                         hint={entryModeDisabled ? copy.settingsLanLocked : copy.settingsLanHint}
                     />
-                    <button
-                        type="button"
-                        className={`desktop-settings-toggle ${entryMode === 'lan' ? 'is-on' : ''}`}
-                        role="switch"
-                        aria-checked={entryMode === 'lan'}
+                    <SettingsToggle
+                        checked={entryMode === 'lan'}
                         disabled={entryModeDisabled}
                         onClick={() => onEntryModeChange(entryMode === 'lan' ? 'local' : 'lan')}
-                    >
-                        <span />
-                    </button>
+                    />
                 </StaggerItem>
 
                 <StaggerItem className="desktop-settings-update">
@@ -127,27 +165,32 @@ export function SettingsPanel({
                     <div className="desktop-settings-update-actions">
                         <div className="desktop-settings-inline-toggle">
                             <span id="desktop-auto-update-label">{copy.settingsAutoUpdateTitle}</span>
-                            <button
-                                type="button"
-                                className={`desktop-settings-toggle ${updates.autoCheckEnabled ? 'is-on' : ''}`}
-                                role="switch"
-                                aria-labelledby="desktop-auto-update-label"
-                                aria-checked={updates.autoCheckEnabled}
+                            <SettingsToggle
+                                checked={updates.autoCheckEnabled}
+                                labelId="desktop-auto-update-label"
                                 onClick={() => updates.setAutoCheckEnabled(!updates.autoCheckEnabled)}
-                            >
-                                <span />
-                            </button>
+                            />
                         </div>
-                        <button
-                            type="button"
-                            className="desktop-settings-action"
+                        <SettingsCta
                             disabled={busy}
+                            icon={updateActionIcon}
+                            label={getPrimaryAction(updates, copy)}
                             onClick={() => void primaryAction()}
-                        >
-                            {updateActionIcon}
-                            <span>{getPrimaryAction(updates, copy)}</span>
-                        </button>
+                        />
                     </div>
+                </StaggerItem>
+
+                <StaggerItem className="desktop-settings-github">
+                    <SettingHeader
+                        icon={<GithubIcon />}
+                        title={copy.settingsGithubTitle}
+                        hint={copy.settingsGithubHint}
+                    />
+                    <SettingsCta
+                        icon={<DoorIcon />}
+                        label={copy.settingsGithubAction}
+                        onClick={() => onOpenUrl(PROJECT_URL)}
+                    />
                 </StaggerItem>
             </StaggerGroup>
         </div>

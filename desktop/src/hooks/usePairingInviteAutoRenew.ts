@@ -29,8 +29,14 @@ export function usePairingInviteAutoRenew(
         let retryTimer: number | null = null
         const renewTimer = window.setTimeout(async () => {
             pendingPairingId.current = pairingId
-            const renewed = await onRenewRef.current()
-            pendingPairingId.current = null
+            let renewed = false
+            try {
+                renewed = await onRenewRef.current()
+            } catch {
+                renewed = false
+            } finally {
+                pendingPairingId.current = null
+            }
             if (!active) return
             if (renewed) {
                 renewedPairingId.current = pairingId

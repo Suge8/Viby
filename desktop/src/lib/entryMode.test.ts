@@ -63,7 +63,7 @@ describe('entryMode', () => {
 
         expect(model.isPreview).toBe(true)
         expect(model.mode).toBe('lan')
-        expect(model.displayValue).toBe('http://127.0.0.1:37173')
+        expect(model.displayValue).toBe('127.0.0.1:37173')
         expect(model.openUrl).toBeUndefined()
     })
 
@@ -90,9 +90,9 @@ describe('entryMode', () => {
         expect(model.isPreview).toBe(false)
         expect(model.mode).toBe('lan')
         expect(model.displayLabel).toBe('局域网地址')
-        expect(model.displayValue).toBe('https://hub.example.test')
+        expect(model.displayValue).toBe('hub.example.test')
         expect(model.secondaryLabel).toBe('本机地址')
-        expect(model.secondaryValue).toBe('http://127.0.0.1:4567')
+        expect(model.secondaryValue).toBe('127.0.0.1:4567')
         expect(model.openUrl).toBe('https://hub.example.test')
         expect(model.secondaryOpenUrl).toBe('http://127.0.0.1:4567')
     })

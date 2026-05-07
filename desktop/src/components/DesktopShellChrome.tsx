@@ -4,7 +4,7 @@ import type { JSX, MouseEvent, ReactNode } from 'react'
 export function BrandMark(): JSX.Element {
     return (
         <div className="desktop-brand" aria-label="Viby">
-            <img alt="" src="/brand-logo-tight.png" />
+            <span className="desktop-brand-mark" aria-hidden="true" />
             <span>Viby</span>
         </div>
     )

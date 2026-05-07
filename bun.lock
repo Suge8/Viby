@@ -58,6 +58,7 @@
       "name": "viby-desktop",
       "version": "0.2.0",
       "dependencies": {
+        "@lottiefiles/dotlottie-web": "^0.72.0",
         "@tauri-apps/api": "2.10.1",
         "@tauri-apps/plugin-updater": "2.10.1",
         "@viby/protocol": "workspace:*",
@@ -525,6 +526,8 @@
     "@jridgewell/sourcemap-codec": ["@jridgewell/sourcemap-codec@1.5.5", "", {}, "sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og=="],
 
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
+
+    "@lottiefiles/dotlottie-web": ["@lottiefiles/dotlottie-web@0.72.0", "", {}, "sha512-CllhCIWWcCrUN71RCwyj9vbSQGE8H465m2Efudizfe5CIitQly7TO7DS2f6juBr5VZVy/r5AqQPUcbvz2uoxtQ=="],
 
     "@lucide/lab": ["@lucide/lab@0.1.2", "", {}, "sha512-VprF2BJa7ZuTGOhUd5cf8tHJXyL63wdxcGieAiVVoR9hO0YmPsnZO0AGqDiX2/br+/MC6n8BoJcmPilltOXIJA=="],
 

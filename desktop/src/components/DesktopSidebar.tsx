@@ -21,16 +21,18 @@ export function DesktopSidebar(props: {
                 type="button"
                 className={`desktop-hub-action is-${props.switchModel.tone}`}
                 disabled={props.switchModel.disabled}
-                aria-label={props.hubReady ? props.copy.hubStopAction : props.copy.hubStart}
+                aria-label={props.switchModel.actionLabel}
                 onClick={props.onHubSwitch}
             >
-                {props.switchModel.tone === 'busy' ? <SpinnerIcon /> : <PowerIcon />}
-                <span>
-                    {props.hubReady
-                        ? props.copy.hubReadyStop
-                        : props.switchModel.tone === 'busy'
-                          ? props.copy.hubStarting
-                          : props.copy.hubStart}
+                <span className="desktop-hub-action-icon" key={`icon-${props.switchModel.tone}`} aria-hidden="true">
+                    {props.switchModel.tone === 'busy' || props.switchModel.tone === 'stopping' ? (
+                        <SpinnerIcon />
+                    ) : (
+                        <PowerIcon />
+                    )}
+                </span>
+                <span className="desktop-hub-action-label" key={`label-${props.switchModel.label}`}>
+                    {props.switchModel.label}
                 </span>
             </button>
             <nav className="desktop-nav" aria-label={props.copy.navAria}>

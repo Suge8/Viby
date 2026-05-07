@@ -1,0 +1,141 @@
+@layer components {
+    .desktop-agent-side {
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    .desktop-agent-model-toggle {
+        display: inline-flex;
+        min-width: 82px;
+        min-height: 38px;
+        flex: 0 0 auto;
+        align-items: center;
+        justify-content: center;
+        padding: 8px 12px;
+        border: 1px solid var(--desktop-border);
+        border-radius: 16px;
+        background: color-mix(in srgb, var(--desktop-surface) 90%, transparent);
+        color: var(--desktop-muted);
+        cursor: pointer;
+        font-size: 12.5px;
+        font-weight: 760;
+        letter-spacing: -0.01em;
+        box-shadow: var(--desktop-shadow-sm);
+        transition:
+            background 180ms ease,
+            border-color 180ms ease,
+            box-shadow 180ms ease,
+            transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    .desktop-agent-model-toggle:hover,
+    .desktop-agent-model-toggle:focus-visible {
+        border-color: var(--desktop-border-strong);
+        background: var(--desktop-surface-soft);
+        transform: translateY(var(--desktop-hover-lift));
+        box-shadow: var(--desktop-shadow);
+    }
+
+    .desktop-agent-model-toggle:focus-visible {
+        outline: 2px solid color-mix(in srgb, var(--desktop-warning) 45%, transparent);
+        outline-offset: 2px;
+    }
+
+    .desktop-agent-model-toggle-main {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        line-height: 1.05;
+    }
+
+    .desktop-agent-model-toggle .desktop-icon {
+        width: 15px;
+        height: 15px;
+        flex: 0 0 auto;
+    }
+
+    .desktop-agent-model-panel-shell {
+        grid-column: 1 / -1;
+        overflow: hidden;
+    }
+
+    .desktop-agent-model-panel {
+        overflow: hidden;
+        border: 1px solid var(--desktop-border);
+        border-radius: 14px;
+        background: color-mix(in srgb, var(--desktop-surface) 92%, transparent);
+    }
+
+    .desktop-agent-model-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        padding: 10px 12px;
+    }
+
+    .desktop-agent-model-item {
+        display: inline-flex;
+        min-width: 0;
+        align-items: center;
+        gap: 9px;
+        padding: 8px 12px;
+        border-inline-start: 1px dashed var(--desktop-border);
+    }
+
+    .desktop-agent-model-item:nth-child(3n + 1) {
+        border-inline-start: 0;
+    }
+
+    .desktop-agent-model-item.is-default {
+        color: var(--desktop-text);
+    }
+
+    .desktop-agent-model-item > .desktop-icon {
+        width: 17px;
+        height: 17px;
+        flex: 0 0 auto;
+        color: var(--desktop-muted);
+    }
+
+    .desktop-agent-model-item > span {
+        display: grid;
+        min-width: 0;
+        gap: 3px;
+    }
+
+    .desktop-agent-model-item strong,
+    .desktop-agent-model-item small {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .desktop-agent-model-item strong {
+        color: var(--desktop-text);
+        font-size: 12.5px;
+        font-weight: 780;
+    }
+
+    .desktop-agent-model-item small,
+    .desktop-agent-model-empty {
+        color: var(--desktop-muted);
+        font-size: 12px;
+        font-weight: 650;
+    }
+
+    .desktop-agent-model-item small {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .desktop-agent-model-item small .desktop-icon {
+        width: 13px;
+        height: 13px;
+    }
+
+    .desktop-agent-model-empty {
+        display: block;
+        padding: 12px 14px;
+    }
+}

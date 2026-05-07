@@ -29,6 +29,7 @@ import {
 import {
     buildHubSwitchModel,
     COPY_FEEDBACK_DURATION_MS,
+    isExpiredUnclaimedPairing,
     PAIRING_SUCCESS_DISMISS_MS,
     shouldPollPairingSnapshot,
 } from '@/lib/desktopShellModel'
@@ -43,6 +44,7 @@ export function App(): JSX.Element {
         snapshot,
         busy,
         hubBusy,
+        hubAction,
         entryMode,
         actionError,
         pairing,
@@ -67,19 +69,23 @@ export function App(): JSX.Element {
     const [systemLanguage] = useState(() => getSystemLanguage(globalThis.navigator?.language))
     const [pairingDialogOpen, setPairingDialogOpen] = useState(false)
     const [pairingDialogRequested, setPairingDialogRequested] = useState(false)
-    const [pairingSuccessAutoDismissArmed, setPairingSuccessAutoDismissArmed] = useState(false)
     const { message: toastMessage, tone: toastTone, showToast } = useDesktopToast()
     const updates = useDesktopUpdates()
 
     const status = snapshot?.status
     const viewState = deriveHubViewState(snapshot)
-    const agentAvailability = useAgentAvailability(status, viewState.ready)
+    const agentAvailability = useAgentAvailability(status, viewState.ready, activePage === 'agents')
     const pairingBridge = usePairingBridge({
         pairing: shouldStartPairingBridge(pairing) ? pairing : null,
         status,
     })
     const entryPreview = buildEntryPreviewModel(snapshot)
-    const switchModel = buildHubSwitchModel({ busy: hubBusy, running: viewState.running, ready: viewState.ready })
+    const switchModel = buildHubSwitchModel({
+        action: hubAction,
+        busy: hubBusy,
+        running: viewState.running,
+        ready: viewState.ready,
+    })
     const themeMode = resolveThemePreference(themePreference, systemTheme)
     const language = resolveLanguagePreference(languagePreference, systemLanguage)
     const copy = DESKTOP_COPY[language]
@@ -114,10 +120,7 @@ export function App(): JSX.Element {
     }, [pairing, pairingDialogRequested])
 
     useEffect(() => {
-        if (!notice) {
-            return
-        }
-        showToast(notice)
+        if (notice) showToast(notice)
     }, [notice, showToast])
 
     useEffect(() => {
@@ -131,10 +134,19 @@ export function App(): JSX.Element {
         if (!shouldPollPairingSnapshot(pairing, pairingBridge.phase, pairingDialogOpen)) {
             return
         }
-        const intervalId = window.setInterval(() => {
-            void refreshPairing()
-        }, 1000)
-        return () => window.clearInterval(intervalId)
+        let stopped = false
+        let timerId: number | null = null
+
+        async function poll(): Promise<void> {
+            await refreshPairing()
+            if (!stopped) timerId = window.setTimeout(() => void poll(), 1000)
+        }
+
+        timerId = window.setTimeout(() => void poll(), 1000)
+        return () => {
+            stopped = true
+            if (timerId !== null) window.clearTimeout(timerId)
+        }
     }, [pairing, pairingBridge.phase, pairingDialogOpen, refreshPairing])
 
     useEffect(() => {
@@ -146,24 +158,17 @@ export function App(): JSX.Element {
         void deletePairing()
     }, [deletePairing, pairing, pairingBridge, showToast])
 
-    usePairingInviteAutoRenew(pairing, pairingDialogOpen, async () => {
-        setPairingSuccessAutoDismissArmed(false)
-        return await recreatePairing()
-    })
+    usePairingInviteAutoRenew(pairing, Boolean(pairing), recreatePairing)
 
     useEffect(() => {
         if (!pairingDialogOpen || pairingBridge.phase !== 'ready') {
             return
         }
-        if (!pairingSuccessAutoDismissArmed) {
-            return
-        }
         const timeoutId = window.setTimeout(() => {
             setPairingDialogOpen(false)
-            setPairingSuccessAutoDismissArmed(false)
         }, PAIRING_SUCCESS_DISMISS_MS)
         return () => window.clearTimeout(timeoutId)
-    }, [pairingBridge.phase, pairingDialogOpen, pairingSuccessAutoDismissArmed])
+    }, [pairingBridge.phase, pairingDialogOpen])
 
     const handleHubSwitch = (): void => {
         if (viewState.ready) {
@@ -187,22 +192,15 @@ export function App(): JSX.Element {
 
     const handlePairingAction = (): void => {
         if (pairing) {
-            setPairingSuccessAutoDismissArmed(false)
             setPairingDialogOpen(true)
+            if (isExpiredUnclaimedPairing(pairing)) {
+                void recreatePairing()
+            }
             return
         }
         if (viewState.ready) {
-            setPairingSuccessAutoDismissArmed(true)
             setPairingDialogRequested(true)
             void createPairing()
-        }
-    }
-
-    const handleRemovePairing = (): void => {
-        const confirmed = globalThis.confirm?.('解除绑定后，这台手机需要重新扫码才能连接。继续？') ?? true
-        if (confirmed) {
-            setPairingDialogOpen(false)
-            void deletePairing()
         }
     }
 
@@ -239,16 +237,19 @@ export function App(): JSX.Element {
                                 onCopyToken={() => void handleCopyToken()}
                                 onOpenEntry={(url) => void openUrl(url)}
                                 onPairingAction={handlePairingAction}
-                                onRemovePairing={handleRemovePairing}
                             />
                         ) : null}
 
                         {activePage === 'agents' ? (
                             <CodingAgentsPage
                                 agents={agentAvailability.agents}
+                                capabilities={agentAvailability.capabilities}
                                 copy={copy}
                                 error={agentAvailability.error}
                                 loading={agentAvailability.loading}
+                                refreshing={agentAvailability.refreshing}
+                                onLoadAgentCapability={agentAvailability.loadAgentCapability}
+                                onOpenUrl={(url) => void openUrl(url)}
                                 onRefresh={agentAvailability.refresh}
                             />
                         ) : null}
@@ -262,6 +263,7 @@ export function App(): JSX.Element {
                                 themePreference={themePreference}
                                 onEntryModeChange={setEntryMode}
                                 onLanguagePreferenceChange={setLanguagePreference}
+                                onOpenUrl={(url) => void openUrl(url)}
                                 onThemePreferenceChange={setThemePreference}
                                 updates={updates}
                             />

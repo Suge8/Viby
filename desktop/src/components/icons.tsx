@@ -1,13 +1,17 @@
 // Desktop icon owner: lucide-react. Mirrors web's icon pattern.
 // Do not introduce other icon packs for product UI.
 import {
+    BadgeCheck,
     BotMessageSquare,
+    Boxes,
+    Brain,
     CheckCircle2,
     ChevronRight,
     Circle,
     Copy,
+    DoorOpen,
     Download,
-    ExternalLink,
+    Github,
     KeyRound,
     Languages,
     Link2,
@@ -58,16 +62,20 @@ export function PhoneIcon(props: DesktopIconProps) {
     return <Smartphone {...props} className={withClass(props.className)} strokeWidth={strokeFor(props)} />
 }
 
+export function ModelIcon(props: DesktopIconProps) {
+    return <Boxes {...props} className={withClass(props.className)} strokeWidth={strokeFor(props)} />
+}
+
+export function ThinkingIcon(props: DesktopIconProps) {
+    return <Brain {...props} className={withClass(props.className)} strokeWidth={strokeFor(props)} />
+}
+
 export function QrIcon(props: DesktopIconProps) {
     return <QrCode {...props} className={withClass(props.className)} strokeWidth={strokeFor(props)} />
 }
 
 export function CopyIcon(props: DesktopIconProps) {
     return <Copy {...props} className={withClass(props.className)} strokeWidth={strokeFor(props)} />
-}
-
-export function OpenIcon(props: DesktopIconProps) {
-    return <ExternalLink {...props} className={withClass(props.className)} strokeWidth={strokeFor(props)} />
 }
 
 export function KeyIcon(props: DesktopIconProps) {
@@ -78,8 +86,20 @@ export function LinkIcon(props: DesktopIconProps) {
     return <Link2 {...props} className={withClass(props.className)} strokeWidth={strokeFor(props)} />
 }
 
+export function GithubIcon(props: DesktopIconProps) {
+    return <Github {...props} className={withClass(props.className)} strokeWidth={strokeFor(props)} />
+}
+
+export function DoorIcon(props: DesktopIconProps) {
+    return <DoorOpen {...props} className={withClass(props.className)} strokeWidth={strokeFor(props)} />
+}
+
 export function CheckIcon(props: DesktopIconProps) {
     return <CheckCircle2 {...props} className={withClass(props.className)} strokeWidth={strokeFor(props)} />
+}
+
+export function PairedIcon(props: DesktopIconProps) {
+    return <BadgeCheck {...props} className={withClass(props.className)} strokeWidth={strokeFor(props)} />
 }
 
 export function CircleIcon(props: DesktopIconProps) {

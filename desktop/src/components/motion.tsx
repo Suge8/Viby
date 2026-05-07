@@ -3,20 +3,22 @@
 import { AnimatePresence, LazyMotion, MotionConfig, m, type Transition, type Variants } from 'motion/react'
 import { type CSSProperties, type ReactNode } from 'react'
 
-const EASE_EMPHASIZED: [number, number, number, number] = [0.22, 1, 0.36, 1]
+export const MOTION_EASE_EMPHASIZED: [number, number, number, number] = [0.22, 1, 0.36, 1]
 
-const DURATION = {
+export const MOTION_DURATIONS = {
     page: 0.36,
+    pageExit: 0.25,
     reveal: 0.4,
     stagger: 0.07,
     item: 0.32,
     modal: 0.28,
     toast: 0.24,
+    overlay: 0.52,
 } as const
 
 const PAGE_TRANSITION: Transition = {
-    duration: DURATION.page,
-    ease: EASE_EMPHASIZED,
+    duration: MOTION_DURATIONS.page,
+    ease: MOTION_EASE_EMPHASIZED,
 }
 
 const loadFeatures = async () => {
@@ -39,7 +41,7 @@ const PAGE_VARIANTS: Variants = {
         opacity: 0,
         y: -6,
         scale: 0.998,
-        transition: { duration: DURATION.page * 0.7, ease: EASE_EMPHASIZED },
+        transition: { duration: MOTION_DURATIONS.pageExit, ease: MOTION_EASE_EMPHASIZED },
     },
 }
 
@@ -61,6 +63,43 @@ export function PageTransition(props: { transitionKey: string; children: ReactNo
     )
 }
 
+const OVERLAY_VARIANTS: Variants = {
+    initial: { opacity: 0, filter: 'blur(1.5px)', y: 10, scale: 0.985 },
+    animate: {
+        opacity: 1,
+        filter: 'blur(0px)',
+        y: 0,
+        scale: 1,
+        transition: { duration: MOTION_DURATIONS.overlay, ease: MOTION_EASE_EMPHASIZED },
+    },
+    exit: {
+        opacity: 0,
+        filter: 'blur(1.5px)',
+        y: 10,
+        scale: 0.985,
+        transition: { duration: MOTION_DURATIONS.overlay, ease: MOTION_EASE_EMPHASIZED },
+    },
+}
+
+export function OverlayTransition(props: { visible: boolean; children: ReactNode; className?: string }) {
+    return (
+        <AnimatePresence>
+            {props.visible ? (
+                <m.div
+                    className={props.className}
+                    variants={OVERLAY_VARIANTS}
+                    initial="initial"
+                    animate="animate"
+                    exit="exit"
+                    style={{ willChange: 'opacity, filter, transform' }}
+                >
+                    {props.children}
+                </m.div>
+            ) : null}
+        </AnimatePresence>
+    )
+}
+
 export function StaggerGroup(props: {
     children: ReactNode
     className?: string
@@ -77,7 +116,7 @@ export function StaggerGroup(props: {
                 animate: {
                     transition: {
                         delayChildren: props.delay ?? 0,
-                        staggerChildren: props.stagger ?? DURATION.stagger,
+                        staggerChildren: props.stagger ?? MOTION_DURATIONS.stagger,
                     },
                 },
             }}
@@ -95,7 +134,7 @@ const ITEM_VARIANTS: Variants = {
         opacity: 1,
         y: 0,
         scale: 1,
-        transition: { duration: DURATION.item, ease: EASE_EMPHASIZED },
+        transition: { duration: MOTION_DURATIONS.item, ease: MOTION_EASE_EMPHASIZED },
     },
 }
 
@@ -113,20 +152,20 @@ const MODAL_VARIANTS: Variants = {
         opacity: 1,
         scale: 1,
         y: 0,
-        transition: { duration: DURATION.modal, ease: EASE_EMPHASIZED },
+        transition: { duration: MOTION_DURATIONS.modal, ease: MOTION_EASE_EMPHASIZED },
     },
     exit: {
         opacity: 0,
         scale: 0.97,
         y: 6,
-        transition: { duration: DURATION.modal * 0.8, ease: EASE_EMPHASIZED },
+        transition: { duration: MOTION_DURATIONS.modal * 0.8, ease: MOTION_EASE_EMPHASIZED },
     },
 }
 
 const BACKDROP_VARIANTS: Variants = {
     initial: { opacity: 0 },
-    animate: { opacity: 1, transition: { duration: DURATION.modal, ease: 'easeOut' } },
-    exit: { opacity: 0, transition: { duration: DURATION.modal * 0.6, ease: 'easeIn' } },
+    animate: { opacity: 1, transition: { duration: MOTION_DURATIONS.modal, ease: 'easeOut' } },
+    exit: { opacity: 0, transition: { duration: MOTION_DURATIONS.modal * 0.6, ease: 'easeIn' } },
 }
 
 export function ModalLayer(props: {
@@ -174,13 +213,13 @@ const TOAST_VARIANTS: Variants = {
         opacity: 1,
         y: 0,
         scale: 1,
-        transition: { duration: DURATION.toast, ease: EASE_EMPHASIZED },
+        transition: { duration: MOTION_DURATIONS.toast, ease: MOTION_EASE_EMPHASIZED },
     },
     exit: {
         opacity: 0,
         y: -6,
         scale: 0.99,
-        transition: { duration: DURATION.toast * 0.8, ease: EASE_EMPHASIZED },
+        transition: { duration: MOTION_DURATIONS.toast * 0.8, ease: MOTION_EASE_EMPHASIZED },
     },
 }
 

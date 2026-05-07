@@ -9,17 +9,18 @@
         --desktop-faint: #96938b;
         --desktop-border: #e4e0d8;
         --desktop-border-strong: #d2ccc0;
-        --desktop-success: #2f8f5b;
-        --desktop-success-soft: #e5f2ea;
-        --desktop-warning: #c0841a;
-        --desktop-warning-soft: #f8ead8;
-        --desktop-danger: #b84732;
-        --desktop-danger-soft: #fff3ef;
+        --desktop-success: #22a95a;
+        --desktop-success-soft: #e1f8e9;
+        --desktop-warning: #eba21a;
+        --desktop-warning-soft: #fbefcf;
+        --desktop-danger: #ef4444;
+        --desktop-danger-soft: #fee2e2;
         --desktop-shadow-sm: 0 6px 18px rgba(31, 27, 20, 0.05);
         --desktop-shadow: 0 18px 56px rgba(31, 27, 20, 0.08);
         --desktop-shadow-lg: 0 32px 96px rgba(29, 24, 18, 0.16);
         --desktop-radius: 22px;
         --desktop-radius-lg: 30px;
+        --desktop-radius-full: 999px;
         --desktop-ease-emphasized: cubic-bezier(0.2, 0.8, 0.2, 1);
         --desktop-motion-fast: 160ms;
         --desktop-motion-base: 180ms;
@@ -29,6 +30,13 @@
         --desktop-control-min: 44px;
         --desktop-action-bg: #111312;
         --desktop-action-bg-hover: #1d201d;
+        --desktop-hub-action-text: #ffffff;
+        --desktop-hub-action-strong-text: #ffffff;
+        --desktop-hub-action-off: #111312;
+        --desktop-hub-action-on: var(--desktop-success);
+        --desktop-hub-action-busy: var(--desktop-warning);
+        --desktop-hub-action-border: rgba(255, 255, 255, 0.16);
+        --desktop-hub-action-glow: 0 18px 42px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.18);
         display: flex;
         width: 100vw;
         height: 100vh;
@@ -47,15 +55,19 @@
         --desktop-faint: #817d72;
         --desktop-border: #2f3129;
         --desktop-border-strong: #444638;
-        --desktop-success: #64c98d;
-        --desktop-success-soft: #183224;
-        --desktop-warning: #e8b765;
-        --desktop-warning-soft: #3a2a15;
-        --desktop-danger: #f08a72;
-        --desktop-danger-soft: #351e1a;
+        --desktop-success: #35bd69;
+        --desktop-success-soft: #153421;
+        --desktop-warning: #f0b63a;
+        --desktop-warning-soft: #37290d;
+        --desktop-danger: #f87171;
+        --desktop-danger-soft: #3f1616;
         --desktop-shadow-sm: 0 6px 18px rgba(0, 0, 0, 0.32);
         --desktop-shadow: 0 22px 70px rgba(0, 0, 0, 0.34);
         --desktop-shadow-lg: 0 36px 120px rgba(0, 0, 0, 0.42);
+        --desktop-hub-action-text: #151712;
+        --desktop-hub-action-off: var(--desktop-text);
+        --desktop-hub-action-border: rgba(255, 255, 255, 0.46);
+        --desktop-hub-action-glow: 0 20px 54px rgba(244, 241, 233, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.72);
         color-scheme: dark;
     }
 
@@ -100,19 +112,25 @@
     }
 
     .desktop-brand {
-        display: inline-flex;
+        display: flex;
         align-items: center;
+        justify-content: center;
         gap: 12px;
+        width: 100%;
         color: var(--desktop-text);
-        font-size: 24px;
-        font-weight: 820;
+        font-size: 26px;
+        font-weight: 900;
+        line-height: 1;
         letter-spacing: -0.06em;
     }
 
-    .desktop-brand img {
-        width: 34px;
-        height: 34px;
-        object-fit: contain;
+    .desktop-brand-mark {
+        width: 38px;
+        height: 38px;
+        flex: 0 0 auto;
+        background: currentColor;
+        mask: url("/brand-logo-tight.png") center / contain no-repeat;
+        -webkit-mask: url("/brand-logo-tight.png") center / contain no-repeat;
     }
 
     .desktop-nav {
@@ -177,7 +195,7 @@
     }
 
     .desktop-page-toolbar > span,
-    .desktop-card-heading span,
+    .desktop-card-heading > span:not(.desktop-card-heading-icon),
     .desktop-entry-copy span {
         color: var(--desktop-faint);
         font-size: 11px;
@@ -217,52 +235,9 @@
     .desktop-connection-grid {
         display: grid;
         min-height: min(520px, 100%);
-        grid-template-columns: minmax(340px, 0.96fr) minmax(360px, 1.04fr);
-        gap: 22px;
+        grid-template-columns: minmax(0, 0.96fr) minmax(0, 1.04fr);
+        gap: 34px;
         align-content: center;
-    }
-
-    .desktop-connection-empty {
-        display: grid;
-        min-height: min(360px, 60vh);
-        width: min(100%, 720px);
-        place-items: center;
-        gap: 18px;
-        padding: 48px;
-        border: 1px solid var(--desktop-border);
-        border-radius: var(--desktop-radius-lg);
-        background: rgba(255, 255, 255, 0.6);
-        box-shadow: var(--desktop-shadow);
-        color: var(--desktop-muted);
-        text-align: center;
-        backdrop-filter: blur(18px);
-    }
-
-    .desktop-shell[data-theme="dark"] .desktop-connection-empty {
-        background: rgba(255, 255, 255, 0.035);
-    }
-
-    .desktop-connection-empty-icon {
-        display: grid;
-        width: 72px;
-        height: 72px;
-        place-items: center;
-        border: 1px solid var(--desktop-border);
-        border-radius: 22px;
-        background: var(--desktop-surface);
-        box-shadow: var(--desktop-shadow-sm);
-        color: var(--desktop-muted);
-    }
-
-    .desktop-connection-empty-icon .desktop-icon {
-        font-size: 30px;
-    }
-
-    .desktop-connection-empty strong {
-        color: var(--desktop-text);
-        font-size: clamp(1.1rem, 2.2vw, 1.5rem);
-        font-weight: 820;
-        letter-spacing: -0.04em;
     }
 
     .desktop-toast {
@@ -319,9 +294,28 @@
             width: 232px;
             flex-basis: 232px;
         }
+    }
 
-        .desktop-connection-grid {
-            grid-template-columns: 1fr;
+    @media (max-width: 720px) {
+        .desktop-sidebar {
+            width: 208px;
+            flex-basis: 208px;
+            gap: 22px;
+            padding: 54px 14px 22px;
+        }
+
+        .desktop-brand {
+            gap: 9px;
+            font-size: 22px;
+        }
+
+        .desktop-brand-mark {
+            width: 32px;
+            height: 32px;
+        }
+
+        .desktop-page {
+            padding: clamp(20px, 4vw, 32px);
         }
     }
 }

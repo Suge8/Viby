@@ -23,19 +23,24 @@ const pairingFixture: DesktopPairingSession = {
 
 describe('desktopShellModel', () => {
     it('keeps the hub switch as a clear start/stop control', () => {
-        expect(buildHubSwitchModel({ busy: false, running: false, ready: false })).toMatchObject({
+        expect(buildHubSwitchModel({ action: null, busy: false, running: false, ready: false })).toMatchObject({
             tone: 'off',
             label: '开启中枢',
             disabled: false,
         })
-        expect(buildHubSwitchModel({ busy: false, running: true, ready: true })).toMatchObject({
+        expect(buildHubSwitchModel({ action: null, busy: false, running: true, ready: true })).toMatchObject({
             tone: 'on',
-            label: '中枢已开',
+            label: '运行中',
             actionLabel: '关闭中枢',
         })
-        expect(buildHubSwitchModel({ busy: false, running: true, ready: false })).toMatchObject({
+        expect(buildHubSwitchModel({ action: null, busy: false, running: true, ready: false })).toMatchObject({
             tone: 'busy',
             label: '启动中',
+            disabled: true,
+        })
+        expect(buildHubSwitchModel({ action: 'stop', busy: true, running: true, ready: true })).toMatchObject({
+            tone: 'stopping',
+            label: '关闭中',
             disabled: true,
         })
     })

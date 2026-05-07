@@ -5,7 +5,6 @@ fn main() {
             "start_hub",
             "stop_hub",
             "open_preferred_url",
-            "list_agent_availability",
             "copy_text",
             "get_pairing_session",
             "clear_pairing_session",

@@ -14,6 +14,7 @@ import {
     stopHub,
 } from '@/lib/desktopApi'
 import { readEntryModePreference, writeEntryModePreference } from '@/lib/desktopPreferences'
+import type { HubAction } from '@/lib/desktopShellModel'
 import { deriveInitialEntryMode } from '@/lib/entryMode'
 import {
     applyHubSnapshot,
@@ -31,6 +32,7 @@ interface HubControllerState {
     snapshot: HubSnapshot | null
     busy: boolean
     hubBusy: boolean
+    hubAction: HubAction
     entryMode: DesktopEntryMode
     actionError: string | null
     pairing: DesktopPairingSession | null
@@ -50,6 +52,7 @@ export function useHubController(): HubControllerState {
     const [snapshot, setSnapshot] = useState<HubSnapshot | null>(null)
     const [busy, setBusy] = useState<boolean>(false)
     const [hubBusy, setHubBusy] = useState<boolean>(false)
+    const [hubAction, setHubAction] = useState<HubAction>(null)
     const [entryMode, setEntryModeState] = useState<DesktopEntryMode>(() =>
         readEntryModePreference(globalThis.localStorage)
     )
@@ -161,19 +164,23 @@ export function useHubController(): HubControllerState {
 
     const start = useCallback(async (): Promise<void> => {
         setHubBusy(true)
+        setHubAction('start')
         try {
             await runAction(() => startHub({ entryMode }))
         } finally {
             setHubBusy(false)
+            setHubAction(null)
         }
     }, [entryMode, runAction])
 
     const stop = useCallback(async (): Promise<void> => {
         setHubBusy(true)
+        setHubAction('stop')
         try {
             await runAction(() => stopHub())
         } finally {
             setHubBusy(false)
+            setHubAction(null)
         }
     }, [runAction])
 
@@ -263,6 +270,7 @@ export function useHubController(): HubControllerState {
         snapshot,
         busy,
         hubBusy,
+        hubAction,
         entryMode,
         actionError,
         pairing,

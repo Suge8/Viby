@@ -1,7 +1,10 @@
-import type { JSX } from 'react'
+import { type JSX } from 'react'
+import hubBootAnimationUrl from '@/assets/hub-boot.lottie?url'
+import monkeySeeAnimationUrl from '@/assets/monkey-see.lottie?url'
 import { ControlPill } from '@/components/ControlPill'
-import { KeyIcon, LinkIcon, OpenIcon, PhoneIcon, QrIcon } from '@/components/icons'
-import { StaggerGroup, StaggerItem } from '@/components/motion'
+import { DoorIcon, KeyIcon, LinkIcon, PhoneIcon, PowerIcon, QrIcon } from '@/components/icons'
+import { LottiePlayer } from '@/components/LottiePlayer'
+import { OverlayTransition, PageTransition, StaggerGroup, StaggerItem } from '@/components/motion'
 import type { DesktopCopy } from '@/lib/desktopCopy'
 import type { EntryPreviewModel } from '@/lib/entryMode'
 import type { HubViewState } from '@/lib/hubSnapshot'
@@ -17,31 +20,16 @@ type ConnectionPageProps = {
     onCopyToken(): void
     onOpenEntry(url: string): void
     onPairingAction(): void
-    onRemovePairing(): void
 }
 
-function DeviceSummary(props: { busy: boolean; summary: PairingConnectionSummary; onRemove(): void }): JSX.Element {
+function DeviceSummary(props: { summary: PairingConnectionSummary }): JSX.Element {
     return (
-        <div className={`desktop-device-summary ${props.summary.connected ? 'is-connected' : ''}`}>
-            <span>
-                <strong>{props.summary.deviceCount}</strong>
-                <span>台设备</span>
-            </span>
-            <div>
+        <div className={`desktop-device-summary is-${props.summary.tone}`}>
+            <span className="desktop-device-status" aria-hidden="true" />
+            <div className="desktop-device-copy">
                 <strong>{props.summary.title}</strong>
-                <small>{props.summary.detail}</small>
+                {props.summary.detail ? <small>{props.summary.detail}</small> : null}
             </div>
-            {props.summary.removable ? (
-                <button
-                    aria-label="解除手机绑定"
-                    className="desktop-device-remove"
-                    disabled={props.busy}
-                    onClick={props.onRemove}
-                    type="button"
-                >
-                    解除绑定
-                </button>
-            ) : null}
         </div>
     )
 }
@@ -67,99 +55,146 @@ function EntryAddress(props: {
                 aria-label={`${props.openLabel}: ${props.value}`}
                 onClick={() => props.url && props.onOpen(props.url)}
             >
-                <OpenIcon />
+                <LinkIcon />
             </button>
         </div>
     )
 }
 
-export function ConnectionPage(props: ConnectionPageProps): JSX.Element {
-    if (!props.viewState.ready) {
-        return (
-            <div className="desktop-page desktop-page-centered">
-                <section className="desktop-connection-empty" aria-label={props.copy.navConnection}>
-                    <span className="desktop-connection-empty-icon" aria-hidden="true">
-                        <PhoneIcon />
-                    </span>
-                    <strong>{props.copy.connectionNeedsHub}</strong>
-                    {props.pairingConnection.kind !== 'empty' ? (
-                        <DeviceSummary
-                            busy={props.busy}
-                            summary={props.pairingConnection}
-                            onRemove={props.onRemovePairing}
+function HubBootState(props: { visible: boolean }): JSX.Element {
+    return (
+        <OverlayTransition visible={props.visible} className="desktop-page desktop-page-centered desktop-hub-boot-page">
+            <section className="desktop-hub-boot-card" aria-busy={props.visible} aria-label="中枢正在启动">
+                <div className="desktop-hub-boot-glow" aria-hidden="true" />
+                <LottiePlayer
+                    active={props.visible}
+                    src={hubBootAnimationUrl}
+                    className="desktop-hub-boot-lottie"
+                    label="中枢启动动画"
+                />
+            </section>
+        </OverlayTransition>
+    )
+}
+
+function ConnectionUnavailable(props: ConnectionPageProps): JSX.Element {
+    return (
+        <div className="desktop-page desktop-page-centered">
+            <StaggerGroup>
+                <StaggerItem>
+                    <section className="desktop-connection-empty" aria-label={props.copy.navConnection}>
+                        <span className="desktop-connection-empty-icon" aria-hidden="true">
+                            <LottiePlayer
+                                active
+                                src={monkeySeeAnimationUrl}
+                                className="desktop-connection-empty-lottie"
+                                label="待启动动画"
+                            />
+                        </span>
+                        <strong className="desktop-connection-empty-title">
+                            <PowerIcon />
+                            {props.copy.connectionNeedsHub}
+                        </strong>
+                        {props.pairingConnection.kind !== 'empty' ? (
+                            <DeviceSummary summary={props.pairingConnection} />
+                        ) : null}
+                    </section>
+                </StaggerItem>
+            </StaggerGroup>
+        </div>
+    )
+}
+
+function MobileCard(props: ConnectionPageProps): JSX.Element {
+    return (
+        <StaggerItem className="desktop-feature-card desktop-mobile-card">
+            <div className="desktop-card-heading">
+                <span className="desktop-card-heading-icon" aria-hidden="true">
+                    <PhoneIcon />
+                </span>
+                <h2>{props.copy.phoneTitle}</h2>
+            </div>
+            <button
+                type="button"
+                className="desktop-mobile-action"
+                disabled={!props.viewState.ready || props.busy}
+                onClick={props.onPairingAction}
+            >
+                <span className="desktop-mobile-action-icon" aria-hidden="true">
+                    <QrIcon />
+                </span>
+                {!props.viewState.ready ? (
+                    <span className="desktop-mobile-action-label">{props.copy.phoneWaiting}</span>
+                ) : null}
+            </button>
+            <DeviceSummary summary={props.pairingConnection} />
+        </StaggerItem>
+    )
+}
+
+function AccessCard(props: ConnectionPageProps): JSX.Element {
+    return (
+        <StaggerItem className="desktop-feature-card desktop-access-card">
+            <div className="desktop-card-heading">
+                <span className="desktop-card-heading-icon" aria-hidden="true">
+                    <DoorIcon />
+                </span>
+                <h2>{props.copy.accessTitle}</h2>
+            </div>
+            <div className="desktop-entry-row">
+                <div className="desktop-entry-copy">
+                    <EntryAddress
+                        disabled={props.busy}
+                        label={props.entryPreview.displayLabel}
+                        openLabel={props.copy.openEntry}
+                        url={props.entryPreview.openUrl}
+                        value={props.entryPreview.displayValue}
+                        onOpen={props.onOpenEntry}
+                    />
+                    {props.entryPreview.secondaryValue ? (
+                        <EntryAddress
+                            disabled={props.busy}
+                            label={props.entryPreview.secondaryLabel}
+                            openLabel={props.copy.openEntry}
+                            url={props.entryPreview.secondaryOpenUrl}
+                            value={props.entryPreview.secondaryValue}
+                            onOpen={props.onOpenEntry}
                         />
                     ) : null}
-                </section>
+                </div>
             </div>
-        )
-    }
+            <ControlPill
+                disabled={props.busy || !props.canCopyToken}
+                icon={<KeyIcon />}
+                label={props.copy.copyToken}
+                onClick={props.onCopyToken}
+            />
+        </StaggerItem>
+    )
+}
 
+function ConnectionReady(props: ConnectionPageProps): JSX.Element {
     return (
         <div className="desktop-page">
             <StaggerGroup className="desktop-connection-grid" stagger={0.08}>
-                <StaggerItem className="desktop-feature-card desktop-mobile-card">
-                    <div className="desktop-card-heading">
-                        <span>{props.copy.phoneKicker}</span>
-                        <h2>{props.copy.phoneTitle}</h2>
-                    </div>
-                    <button
-                        type="button"
-                        className="desktop-mobile-action"
-                        disabled={!props.viewState.ready || props.busy}
-                        onClick={props.onPairingAction}
-                    >
-                        <span className="desktop-mobile-action-icon" aria-hidden="true">
-                            <QrIcon />
-                        </span>
-                        <span>
-                            {props.viewState.ready ? props.pairingConnection.actionLabel : props.copy.phoneWaiting}
-                        </span>
-                    </button>
-                    <DeviceSummary
-                        busy={props.busy}
-                        summary={props.pairingConnection}
-                        onRemove={props.onRemovePairing}
-                    />
-                </StaggerItem>
-
-                <StaggerItem className="desktop-feature-card desktop-access-card">
-                    <div className="desktop-card-heading">
-                        <span>{props.copy.accessKicker}</span>
-                        <h2>{props.copy.accessTitle}</h2>
-                    </div>
-                    <div className="desktop-entry-row">
-                        <span className="desktop-entry-icon" aria-hidden="true">
-                            <LinkIcon />
-                        </span>
-                        <div className="desktop-entry-copy">
-                            <EntryAddress
-                                disabled={props.busy}
-                                label={props.entryPreview.displayLabel}
-                                openLabel={props.copy.openEntry}
-                                url={props.entryPreview.openUrl}
-                                value={props.entryPreview.displayValue}
-                                onOpen={props.onOpenEntry}
-                            />
-                            {props.entryPreview.secondaryValue ? (
-                                <EntryAddress
-                                    disabled={props.busy}
-                                    label={props.entryPreview.secondaryLabel}
-                                    openLabel={props.copy.openEntry}
-                                    url={props.entryPreview.secondaryOpenUrl}
-                                    value={props.entryPreview.secondaryValue}
-                                    onOpen={props.onOpenEntry}
-                                />
-                            ) : null}
-                        </div>
-                    </div>
-                    <ControlPill
-                        disabled={props.busy || !props.canCopyToken}
-                        icon={<KeyIcon />}
-                        label={props.copy.copyToken}
-                        onClick={props.onCopyToken}
-                    />
-                </StaggerItem>
+                <MobileCard {...props} />
+                <AccessCard {...props} />
             </StaggerGroup>
+        </div>
+    )
+}
+
+export function ConnectionPage(props: ConnectionPageProps): JSX.Element {
+    const contentTransitionKey = props.viewState.ready ? 'ready' : 'offline'
+
+    return (
+        <div className="desktop-connection-stage">
+            <HubBootState visible={props.viewState.booting} />
+            {props.viewState.booting ? null : (
+                <PageTransition transitionKey={contentTransitionKey}>
+                    {props.viewState.ready ? <ConnectionReady {...props} /> : <ConnectionUnavailable {...props} />}
+                </PageTransition>
+            )}
         </div>
     )
 }

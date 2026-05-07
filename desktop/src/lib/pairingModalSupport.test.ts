@@ -82,9 +82,10 @@ describe('pairingModalSupport', () => {
                 },
             })
         ).toMatchObject({
-            codeHint: '手机入口',
+            codeHint: '',
             codeValue: '已配对',
-            statusHint: '打开已配对手机页面后自动连接',
+            guidance: '用已配对手机打开 Viby，即可自动接回。',
+            statusHint: null,
             stage: 'bound',
         })
     })

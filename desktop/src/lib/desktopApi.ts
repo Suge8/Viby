@@ -1,7 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { check, type Update } from '@tauri-apps/plugin-updater'
-import type { AgentAvailabilityResponse, ListAgentAvailabilityRequest } from '@viby/protocol'
 import type { DesktopEntryMode, DesktopPairingSession, HubSnapshot } from '@/types'
 
 interface StartHubOptions {
@@ -85,12 +84,6 @@ export async function openPreferredUrl(): Promise<void> {
 
 export async function openUrl(url: string): Promise<void> {
     await invokeDesktopCommand('open_url', { url })
-}
-
-export async function listAgentAvailability(
-    request: ListAgentAvailabilityRequest = {}
-): Promise<AgentAvailabilityResponse> {
-    return await invokeDesktopCommand<AgentAvailabilityResponse>('list_agent_availability', { request })
 }
 
 export async function copyText(text: string): Promise<void> {

@@ -1,7 +1,7 @@
 import QRCode from 'qrcode'
 
-const QR_ERROR_CORRECTION_LEVEL = 'M'
-const QR_QUIET_ZONE_MODULES = 1
+const QR_ERROR_CORRECTION_LEVEL = 'Q'
+const QR_QUIET_ZONE_MODULES = 2
 const QR_MODULE_PATH = 'h1v1H'
 
 export interface PairingQrCodeModel {

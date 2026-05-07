@@ -24,7 +24,8 @@
     }
 
     .desktop-settings-row,
-    .desktop-settings-update {
+    .desktop-settings-update,
+    .desktop-settings-github {
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -42,12 +43,14 @@
     }
 
     .desktop-shell[data-theme="dark"] .desktop-settings-row,
-    .desktop-shell[data-theme="dark"] .desktop-settings-update {
+    .desktop-shell[data-theme="dark"] .desktop-settings-update,
+    .desktop-shell[data-theme="dark"] .desktop-settings-github {
         background: rgba(255, 255, 255, 0.045);
     }
 
     .desktop-settings-row:hover,
-    .desktop-settings-update:hover {
+    .desktop-settings-update:hover,
+    .desktop-settings-github:hover {
         border-color: var(--desktop-border-strong);
         box-shadow: var(--desktop-shadow);
         transform: translateX(2px);
@@ -77,7 +80,8 @@
     }
 
     .desktop-settings-row:hover .desktop-settings-heading-icon,
-    .desktop-settings-update:hover .desktop-settings-heading-icon {
+    .desktop-settings-update:hover .desktop-settings-heading-icon,
+    .desktop-settings-github:hover .desktop-settings-heading-icon {
         color: var(--desktop-text);
     }
 
@@ -88,7 +92,8 @@
     }
 
     .desktop-settings-row strong,
-    .desktop-settings-update strong {
+    .desktop-settings-update strong,
+    .desktop-settings-github strong {
         color: var(--desktop-text);
         font-size: 15px;
         font-weight: 800;
@@ -96,7 +101,8 @@
     }
 
     .desktop-settings-row span,
-    .desktop-settings-update span {
+    .desktop-settings-update span,
+    .desktop-settings-github span {
         color: var(--desktop-muted);
         font-size: 13px;
         line-height: 1.45;
@@ -147,6 +153,7 @@
         padding: var(--desktop-settings-toggle-padding);
         border-radius: 999px;
         background: #d9d6ce;
+        box-shadow: inset 0 1px 2px rgba(31, 27, 20, 0.12);
         touch-action: manipulation;
     }
 
@@ -158,20 +165,29 @@
         opacity: 0.44;
     }
 
+    .desktop-settings-toggle.is-on:disabled {
+        opacity: 1;
+    }
+
     .desktop-settings-toggle span {
         width: var(--desktop-settings-toggle-thumb);
         height: var(--desktop-settings-toggle-thumb);
         border-radius: 999px;
         background: #ffffff;
         box-shadow: 0 4px 12px rgba(29, 24, 18, 0.18);
-        transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+        transition:
+            box-shadow 180ms ease,
+            transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
     }
 
-    .desktop-settings-toggle.is-on {
+    .desktop-settings-toggle.is-on,
+    .desktop-shell[data-theme="dark"] .desktop-settings-toggle.is-on {
         background: var(--desktop-success);
+        box-shadow: inset 0 1px 2px rgba(18, 77, 45, 0.18);
     }
 
     .desktop-settings-toggle.is-on span {
+        box-shadow: 0 4px 12px rgba(18, 77, 45, 0.2);
         transform: translateX(var(--desktop-settings-toggle-travel));
     }
 
@@ -195,32 +211,117 @@
         white-space: nowrap;
     }
 
-    .desktop-settings-action {
+    .desktop-settings-cta {
         display: inline-flex;
+        min-width: 82px;
+        min-height: 42px;
         flex: 0 0 auto;
         align-items: center;
+        justify-content: center;
         gap: 8px;
-        min-height: 40px;
-        padding: 9px 14px;
+        padding: 10px 15px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
         border-radius: 999px;
-        background: #111312;
+        background: rgba(255, 255, 255, 0.12);
         color: #ffffff;
+        backdrop-filter: blur(14px);
         font-size: 13px;
-        font-weight: 760;
+        font-weight: 820;
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.22),
+            0 16px 34px rgba(0, 0, 0, 0.22);
     }
 
-    .desktop-settings-action .desktop-icon {
-        font-size: 15px;
+    .desktop-settings-cta span,
+    .desktop-settings-cta .desktop-icon {
+        color: #ffffff;
     }
 
-    .desktop-settings-action:hover {
-        transform: translateY(var(--desktop-hover-lift));
-        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+    .desktop-settings-cta .desktop-icon {
+        width: 16px;
+        height: 16px;
     }
 
-    .desktop-settings-action:disabled {
+    .desktop-settings-cta:disabled {
         opacity: 0.5;
         transform: none;
         box-shadow: none;
+    }
+
+    .desktop-settings-github {
+        position: relative;
+        overflow: hidden;
+        background:
+            radial-gradient(circle at 82% 12%, rgba(255, 255, 255, 0.26), transparent 24%),
+            radial-gradient(circle at 14% 82%, rgba(100, 201, 141, 0.24), transparent 34%),
+            radial-gradient(circle at 56% 118%, rgba(232, 183, 101, 0.22), transparent 36%),
+            linear-gradient(135deg, #1b1814, #29231d 54%, #3a2f1d);
+        color: #ffffff;
+    }
+
+    .desktop-settings-github::before,
+    .desktop-settings-github::after {
+        position: absolute;
+        pointer-events: none;
+        content: "";
+    }
+
+    .desktop-settings-github::before {
+        inset: -42% auto auto 42%;
+        width: 300px;
+        height: 300px;
+        background: radial-gradient(circle, rgba(232, 183, 101, 0.32), transparent 64%);
+        transform: rotate(18deg);
+    }
+
+    .desktop-settings-github::after {
+        inset: auto auto -70% -8%;
+        width: 260px;
+        height: 260px;
+        background: radial-gradient(circle, rgba(100, 201, 141, 0.24), transparent 62%);
+    }
+
+    .desktop-settings-github .desktop-settings-heading,
+    .desktop-settings-github .desktop-settings-cta {
+        position: relative;
+        z-index: 1;
+    }
+
+    .desktop-settings-github .desktop-settings-heading-icon {
+        background: rgba(255, 255, 255, 0.13);
+        color: #ffffff;
+    }
+
+    .desktop-settings-github strong,
+    .desktop-settings-github span {
+        color: #ffffff;
+    }
+
+    .desktop-settings-github .desktop-settings-heading > div > span {
+        color: rgba(255, 255, 255, 0.74);
+    }
+
+    .desktop-settings-cta:hover {
+        transform: translateY(var(--desktop-hover-lift));
+        background: rgba(255, 255, 255, 0.18);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.28),
+            0 20px 46px rgba(0, 0, 0, 0.28);
+    }
+
+    @media (max-width: 720px) {
+        .desktop-settings-row,
+        .desktop-settings-update,
+        .desktop-settings-github {
+            align-items: flex-start;
+            flex-direction: column;
+            gap: 14px;
+            padding: 14px 16px;
+        }
+
+        .desktop-segmented-control,
+        .desktop-settings-update-actions {
+            flex-wrap: wrap;
+        }
     }
 }

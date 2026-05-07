@@ -6,35 +6,53 @@ import {
     resolvePairingSelectedCandidatePairStats,
 } from '@viby/protocol/pairing'
 import type { DesktopPairingSession, PairingBridgeState, PairingBridgeStats, PairingSessionSnapshot } from '@/types'
-import { PAIRING_PHONE_PAUSED_MESSAGE, PAIRING_STALE_MESSAGE } from './pairingBridgeRecovery'
+import { PAIRING_STALE_MESSAGE } from './pairingBridgeRecovery'
 
 export type PairingConnectionKind = 'empty' | 'invite' | 'bound'
+export type PairingConnectionTone = 'neutral' | 'pending' | 'active' | 'danger'
 
 export interface PairingConnectionSummary {
-    connected: boolean
-    deviceCount: number
     title: string
     detail: string
     kind: PairingConnectionKind
+    tone: PairingConnectionTone
     actionLabel: string
-    removable: boolean
 }
 
-const BOUND_ACTION_LABEL = '显示手机入口'
+const BOUND_ACTION_LABEL = '二维码'
 
 function buildBoundPairingSummary(input: {
-    connected?: boolean
+    tone: PairingConnectionTone
     title: string
     detail: string
 }): PairingConnectionSummary {
     return {
-        connected: input.connected ?? false,
-        deviceCount: 1,
         title: input.title,
         detail: input.detail,
         kind: 'bound',
+        tone: input.tone,
         actionLabel: BOUND_ACTION_LABEL,
-        removable: true,
+    }
+}
+
+function buildInvitePairingSummary(pairing: PairingSessionSnapshot): PairingConnectionSummary {
+    const claimed = Boolean(pairing.guest)
+    return {
+        title: claimed ? '等待连接码' : '等待扫码',
+        detail: claimed ? '手机已扫码，输入连接码完成绑定' : '二维码已准备好',
+        kind: 'invite',
+        tone: claimed ? 'pending' : 'neutral',
+        actionLabel: '显示二维码',
+    }
+}
+
+function buildEmptyPairingSummary(error: boolean): PairingConnectionSummary {
+    return {
+        title: error ? '连接异常' : '未连接',
+        detail: error ? '稍后再连接手机' : '等待手机扫码',
+        kind: 'empty',
+        tone: error ? 'danger' : 'neutral',
+        actionLabel: '连接手机',
     }
 }
 
@@ -84,84 +102,52 @@ export function describePairingTransportBadge(stats: PairingBridgeStats | null):
     return latency ? `${label} · ${latency}` : label
 }
 
-export function buildPairingConnectionSummary(input: {
+type PairingConnectionInput = {
     message?: string | null
     phase: PairingBridgeState['phase']
     pairing: PairingSessionSnapshot | null
     stats?: PairingBridgeStats | null
-}): PairingConnectionSummary {
+}
+
+function buildBoundPairingConnectionSummary(input: PairingConnectionInput): PairingConnectionSummary | null {
     if (input.phase === 'ready') {
         const label = input.pairing?.guest?.label ?? '手机'
-        const stats = input.stats ?? null
-        const transport = buildPairingLinkPresentation(stats).title
-        return buildBoundPairingSummary({
-            connected: true,
-            title: '已连接',
-            detail: `${label} · ${transport}`,
-        })
+        const transport = buildPairingLinkPresentation(input.stats ?? null).title
+        return buildBoundPairingSummary({ tone: 'active', title: '手机已连接', detail: `${label} · ${transport}` })
     }
 
-    if (input.phase === 'paused' && input.pairing?.guest) {
-        return buildBoundPairingSummary({
-            title: '手机在后台',
-            detail: PAIRING_PHONE_PAUSED_MESSAGE,
-        })
+    if (!input.pairing?.guest) {
+        return null
     }
 
-    if (isStalePairingBridgeState(input) && input.pairing?.guest) {
-        return buildBoundPairingSummary({
-            title: '绑定已失效',
-            detail: '请重新扫码',
-        })
+    if (input.phase === 'paused') {
+        return buildBoundPairingSummary({ tone: 'pending', title: '手机在后台', detail: '回来后自动接回' })
     }
 
-    if ((input.phase === 'connecting' || input.phase === 'error') && input.pairing?.guest) {
-        return buildBoundPairingSummary({
-            title: '已绑定',
-            detail: '打开手机页面后自动连接',
-        })
-    }
-
-    if (input.pairing?.guest && input.pairing.approvalStatus === 'approved') {
-        return buildBoundPairingSummary({
-            title: '已绑定',
-            detail: '开启中枢后自动连接',
-        })
-    }
-
-    if (input.pairing) {
-        return {
-            connected: false,
-            deviceCount: 0,
-            title: input.pairing.guest ? '等待连接码' : '等待扫码',
-            detail: input.pairing.guest ? '手机已扫码，输入连接码完成绑定' : '二维码已准备好',
-            kind: 'invite',
-            actionLabel: '显示二维码',
-            removable: false,
-        }
+    if (isStalePairingBridgeState(input)) {
+        return buildBoundPairingSummary({ tone: 'danger', title: '绑定已失效', detail: '请重新扫码' })
     }
 
     if (input.phase === 'error') {
-        return {
-            connected: false,
-            deviceCount: 0,
-            title: '连接异常',
-            detail: '稍后再连接手机',
-            kind: 'empty',
-            actionLabel: '连接手机',
-            removable: false,
-        }
+        return buildBoundPairingSummary({ tone: 'danger', title: '连接异常', detail: '请重新打开手机页面' })
     }
 
-    return {
-        connected: false,
-        deviceCount: 0,
-        title: '未连接',
-        detail: '等待手机扫码',
-        kind: 'empty',
-        actionLabel: '连接手机',
-        removable: false,
+    if (input.phase === 'connecting') {
+        return buildBoundPairingSummary({ tone: 'pending', title: '待手机打开页面', detail: '' })
     }
+
+    return input.pairing.approvalStatus === 'approved'
+        ? buildBoundPairingSummary({ tone: 'pending', title: '手机已配对', detail: '' })
+        : null
+}
+
+export function buildPairingConnectionSummary(input: PairingConnectionInput): PairingConnectionSummary {
+    const bound = buildBoundPairingConnectionSummary(input)
+    if (bound) {
+        return bound
+    }
+
+    return input.pairing ? buildInvitePairingSummary(input.pairing) : buildEmptyPairingSummary(input.phase === 'error')
 }
 
 export async function readPairingBridgeStats(

@@ -15,6 +15,7 @@
         "tauri:build": "VIBY_HARNESS_SCOPE=desktop bun run --cwd .. harness:check && bun run repair:tauri-target && bun run prepare:icons && tauri build"
     },
     "dependencies": {
+        "@lottiefiles/dotlottie-web": "^0.72.0",
         "@tauri-apps/api": "2.10.1",
         "@tauri-apps/plugin-updater": "2.10.1",
         "@viby/protocol": "workspace:*",

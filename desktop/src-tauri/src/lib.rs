@@ -1,4 +1,3 @@
-mod agent_availability;
 mod commands;
 mod launch;
 mod lifecycle;
@@ -34,7 +33,6 @@ pub fn run() {
             commands::stop_hub,
             commands::open_preferred_url,
             commands::open_url,
-            commands::list_agent_availability,
             commands::copy_text,
             commands::get_pairing_session,
             commands::clear_pairing_session,

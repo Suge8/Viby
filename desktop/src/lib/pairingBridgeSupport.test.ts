@@ -12,11 +12,14 @@ import {
 } from './pairingBridgeSupport'
 
 const BOUND_BASE = {
-    connected: false,
-    deviceCount: 1,
     kind: 'bound' as const,
-    actionLabel: '显示手机入口',
-    removable: true,
+    tone: 'pending' as const,
+    actionLabel: '二维码',
+}
+
+const INVITE_BASE = {
+    kind: 'invite' as const,
+    actionLabel: '显示二维码',
 }
 
 function pairingSnapshot(overrides: Partial<PairingSessionSnapshot> = {}): PairingSessionSnapshot {
@@ -144,33 +147,50 @@ describe('pairingBridgeSupport', () => {
         })
 
         expect(buildPairingConnectionSummary({ phase: 'idle', pairing: null, stats: null })).toEqual({
-            connected: false,
-            deviceCount: 0,
             title: '未连接',
             detail: '等待手机扫码',
             kind: 'empty',
+            tone: 'neutral',
             actionLabel: '连接手机',
-            removable: false,
+        })
+        expect(buildPairingConnectionSummary({ phase: 'idle', pairing: pairingSnapshot(), stats: null })).toEqual({
+            ...INVITE_BASE,
+            title: '等待扫码',
+            detail: '二维码已准备好',
+            tone: 'neutral',
+        })
+        expect(
+            buildPairingConnectionSummary({
+                phase: 'idle',
+                pairing: pairingSnapshot({ state: 'claimed', approvalStatus: 'pending', guest: { label: 'iPhone' } }),
+                stats: null,
+            })
+        ).toEqual({
+            ...INVITE_BASE,
+            title: '等待连接码',
+            detail: '手机已扫码，输入连接码完成绑定',
+            tone: 'pending',
         })
         expect(buildPairingConnectionSummary({ phase: 'connecting', pairing: paired, stats: null })).toEqual({
             ...BOUND_BASE,
-            title: '已绑定',
-            detail: '打开手机页面后自动连接',
+            title: '待手机打开页面',
+            detail: '',
         })
         expect(buildPairingConnectionSummary({ phase: 'paused', pairing: paired, stats: null })).toEqual({
             ...BOUND_BASE,
             title: '手机在后台',
-            detail: '手机在后台，回来后会自动接回。',
+            detail: '回来后自动接回',
         })
         expect(buildPairingConnectionSummary({ phase: 'idle', pairing: paired, stats: null })).toEqual({
             ...BOUND_BASE,
-            title: '已绑定',
-            detail: '开启中枢后自动连接',
+            title: '手机已配对',
+            detail: '',
         })
         expect(buildPairingConnectionSummary({ phase: 'error', pairing: paired, stats: null })).toEqual({
             ...BOUND_BASE,
-            title: '已绑定',
-            detail: '打开手机页面后自动连接',
+            tone: 'danger',
+            title: '连接异常',
+            detail: '请重新打开手机页面',
         })
         expect(
             buildPairingConnectionSummary({
@@ -179,7 +199,7 @@ describe('pairingBridgeSupport', () => {
                 pairing: paired,
                 stats: null,
             })
-        ).toEqual({ ...BOUND_BASE, title: '绑定已失效', detail: '请重新扫码' })
+        ).toEqual({ ...BOUND_BASE, tone: 'danger', title: '绑定已失效', detail: '请重新扫码' })
         expect(
             buildPairingConnectionSummary({
                 phase: 'ready',
@@ -193,8 +213,8 @@ describe('pairingBridgeSupport', () => {
             })
         ).toEqual({
             ...BOUND_BASE,
-            connected: true,
-            title: '已连接',
+            tone: 'active',
+            title: '手机已连接',
             detail: 'iPhone · 本机直连 · 延迟 28ms',
         })
     })

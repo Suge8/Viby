@@ -127,13 +127,6 @@ pub struct HubSnapshot {
     pub status: Option<HubRuntimeStatus>,
 }
 
-#[derive(Debug, Deserialize, Clone, Default, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct ListAgentAvailabilityRequest {
-    pub directory: Option<String>,
-    pub force_refresh: Option<bool>,
-}
-
 pub struct ManagedHubState {
     pub managed_pid: Option<u32>,
     pub last_error: Option<String>,

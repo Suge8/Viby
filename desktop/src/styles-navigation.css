@@ -3,11 +3,12 @@
     .desktop-hub-action {
         cursor: pointer;
         transition:
-            transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
-            border-color 160ms ease,
-            background-color 160ms ease,
-            color 160ms ease,
-            box-shadow 180ms ease;
+            transform var(--desktop-motion-base) var(--desktop-ease-emphasized),
+            border-color var(--desktop-motion-base) ease,
+            background-color 260ms ease,
+            color 220ms ease,
+            box-shadow 280ms ease,
+            filter 260ms ease;
     }
 
     .desktop-nav-link {
@@ -67,47 +68,81 @@
     }
 
     .desktop-hub-action {
+        --hub-action-bg: var(--desktop-action-bg);
+        --hub-action-lift: 0;
+        position: relative;
         display: flex;
+        width: 100%;
         min-height: 60px;
         align-items: center;
         justify-content: center;
         gap: 10px;
         padding: 0 18px;
-        border-radius: 22px;
-        background: #111312;
-        color: #ffffff;
+        overflow: hidden;
+        border: 0;
+        border-radius: var(--desktop-radius-full);
+        background-color: var(--hub-action-bg);
+        color: var(--desktop-hub-action-text);
         font-size: 15.5px;
         font-weight: 820;
         letter-spacing: -0.035em;
-        box-shadow: 0 18px 42px rgba(0, 0, 0, 0.18);
+        box-shadow: none;
+        transform: translateY(var(--hub-action-lift));
     }
 
     .desktop-hub-action .desktop-icon {
         font-size: 19px;
     }
 
+    .desktop-hub-action-icon,
+    .desktop-hub-action-label {
+        display: inline-grid;
+        place-items: center;
+        animation: desktop-hub-action-content-in 260ms var(--desktop-ease-emphasized) both;
+    }
+
     .desktop-hub-action:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 22px 50px rgba(0, 0, 0, 0.24);
+        --hub-action-lift: var(--desktop-hover-lift);
+        filter: saturate(1.04) brightness(1.02);
+    }
+
+    .desktop-hub-action:active:not(:disabled) {
+        --hub-action-lift: var(--desktop-press-lift);
+        transform: translateY(var(--hub-action-lift)) scale(var(--desktop-press-scale));
     }
 
     .desktop-hub-action.is-off {
-        background: linear-gradient(140deg, #1d1f1c, #111312);
+        --hub-action-bg: var(--desktop-hub-action-off);
+    }
+
+    .desktop-hub-action.is-off:hover {
+        --hub-action-bg: var(--desktop-success);
+        color: var(--desktop-hub-action-strong-text);
     }
 
     .desktop-hub-action.is-on {
-        background: linear-gradient(135deg, #1f6f47, #2f8f5b);
-        box-shadow: 0 20px 44px rgba(47, 143, 91, 0.28);
+        --hub-action-bg: var(--desktop-hub-action-on);
+        color: var(--desktop-hub-action-strong-text);
+    }
+
+    .desktop-hub-action.is-on:hover {
+        --hub-action-bg: var(--desktop-danger);
     }
 
     .desktop-hub-action.is-busy {
-        background: linear-gradient(135deg, #b7791f, #d99a2b);
-        box-shadow: 0 20px 44px rgba(185, 118, 30, 0.28);
-        animation: desktop-busy-breathe 1100ms ease-in-out infinite;
+        --hub-action-bg: var(--desktop-hub-action-busy);
+        color: var(--desktop-hub-action-strong-text);
+        animation: desktop-busy-breathe 1200ms ease-in-out infinite;
+    }
+
+    .desktop-hub-action.is-stopping {
+        --hub-action-bg: var(--desktop-danger);
+        color: var(--desktop-hub-action-strong-text);
+        animation: desktop-busy-breathe 1200ms ease-in-out infinite;
     }
 
     .desktop-hub-action:disabled {
-        cursor: wait;
+        cursor: default;
         transform: none;
     }
 
@@ -134,7 +169,28 @@
             filter: saturate(1);
         }
         50% {
-            filter: saturate(1.18) brightness(1.04);
+            filter: saturate(1.14) brightness(1.035);
+        }
+    }
+
+    @keyframes desktop-hub-action-content-in {
+        from {
+            opacity: 0;
+            transform: translateY(4px) scale(0.98);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .desktop-hub-action,
+        .desktop-hub-action::before,
+        .desktop-hub-action-icon,
+        .desktop-hub-action-label {
+            transition: none;
+            animation: none;
         }
     }
 }

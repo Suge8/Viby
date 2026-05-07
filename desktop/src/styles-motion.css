@@ -1,5 +1,21 @@
 @layer components {
-    /* Page entry, card reveal, stagger and modal motion are owned by motion.tsx.
-       Only retain CSS keyframes for purely decorative state pulses that motion
-       primitives do not cover. */
+    /* Structural motion is owned by motion.tsx. CSS only keeps decorative loops. */
+    @keyframes desktop-hub-boot-glow {
+        0%,
+        100% {
+            opacity: 0.58;
+            transform: scale(0.96);
+        }
+
+        50% {
+            opacity: 0.95;
+            transform: scale(1.04);
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .desktop-hub-boot-glow {
+            animation: none;
+        }
+    }
 }

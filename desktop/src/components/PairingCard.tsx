@@ -1,6 +1,6 @@
 import { buildPairingLinkPresentation } from '@viby/protocol/pairing'
 import { type JSX, useEffect } from 'react'
-import { CheckIcon, CloseIcon } from '@/components/icons'
+import { CheckIcon, CloseIcon, PairedIcon } from '@/components/icons'
 import { buildDesktopPairingPresentation } from '@/lib/pairingModalSupport'
 import { buildPairingQrCodeModel } from '@/lib/pairingQrCode'
 import type { DesktopPairingSession, PairingBridgeState, PairingSessionSnapshot } from '@/types'
@@ -47,13 +47,20 @@ export function PairingCard({ pairing, bridgeState, onDismiss }: PairingCardProp
                     </div>
                 </div>
                 <div className="desktop-pairing-side">
-                    <div className="desktop-pairing-side-top">
-                        <span>{presentation.codeHint}</span>
+                    {presentation.codeHint ? (
+                        <div className="desktop-pairing-side-top">
+                            <span>{presentation.codeHint}</span>
+                        </div>
+                    ) : null}
+                    <div className={`desktop-pairing-code is-${presentation.stage}`}>
+                        {presentation.stage === 'bound' || presentation.stage === 'paused' ? <PairedIcon /> : null}
+                        <strong>{presentation.codeValue}</strong>
                     </div>
-                    <strong>{presentation.codeValue}</strong>
-                    <small className={linkGuidance ? `is-ready is-${linkGuidance.tone}` : ''}>
-                        {linkGuidance?.title ?? presentation.statusHint}
-                    </small>
+                    {linkGuidance || presentation.statusHint ? (
+                        <small className={linkGuidance ? `is-ready is-${linkGuidance.tone}` : ''}>
+                            {linkGuidance?.title ?? presentation.statusHint}
+                        </small>
+                    ) : null}
                     <p className="desktop-pairing-guidance">{linkGuidance?.detail ?? presentation.guidance}</p>
                 </div>
             </div>

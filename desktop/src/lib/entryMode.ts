@@ -22,6 +22,10 @@ function formatHttpOrigin(host: string, port: number): string {
     return `http://${host}:${port}`
 }
 
+function stripHttpScheme(url: string): string {
+    return url.replace(/^https?:\/\//, '')
+}
+
 function getStartupConfig(snapshot: HubSnapshot | null): HubStartupConfig {
     return (
         snapshot?.startupConfig ?? {
@@ -52,9 +56,9 @@ export function buildEntryPreviewModel(snapshot: HubSnapshot | null): EntryPrevi
         return {
             mode,
             displayLabel: hasLanAddress ? LAN_ADDRESS_LABEL : LOCAL_ADDRESS_LABEL,
-            displayValue: hasLanAddress ? status.preferredBrowserUrl : status.localHubUrl,
+            displayValue: stripHttpScheme(hasLanAddress ? status.preferredBrowserUrl : status.localHubUrl),
             secondaryLabel: hasLanAddress ? LOCAL_ADDRESS_LABEL : undefined,
-            secondaryValue: hasLanAddress ? status.localHubUrl : undefined,
+            secondaryValue: hasLanAddress ? stripHttpScheme(status.localHubUrl) : undefined,
             secondaryOpenUrl: hasLanAddress ? status.localHubUrl : undefined,
             openUrl: status.preferredBrowserUrl,
             isPreview: false,
@@ -67,7 +71,7 @@ export function buildEntryPreviewModel(snapshot: HubSnapshot | null): EntryPrevi
     return {
         mode: deriveEntryModeFromListenHost(startupConfig.listenHost),
         displayLabel: PREVIEW_ADDRESS_LABEL,
-        displayValue,
+        displayValue: stripHttpScheme(displayValue),
         isPreview: true,
     }
 }

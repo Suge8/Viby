@@ -106,16 +106,6 @@ describe('desktopApi', () => {
         expect(invokeMock).toHaveBeenCalledWith('start_hub', { options: { entryMode: 'lan' } })
     })
 
-    it('checks local agent availability through the desktop CLI bridge', async () => {
-        const response = { agents: [] }
-        invokeMock.mockResolvedValueOnce(response)
-
-        await expect(desktopApi.listAgentAvailability({ forceRefresh: true })).resolves.toBe(response)
-        expect(invokeMock).toHaveBeenCalledWith('list_agent_availability', {
-            request: { forceRefresh: true },
-        })
-    })
-
     it('loads the durable pairing session through the dedicated desktop command', async () => {
         invokeMock.mockResolvedValueOnce(pairingFixture)
 

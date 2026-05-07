@@ -1,11 +1,8 @@
 use arboard::Clipboard;
 use tauri::AppHandle;
 
-use crate::agent_availability;
 use crate::pairing;
-use crate::state::{
-    DesktopPairingSession, HubSnapshot, ListAgentAvailabilityRequest, StartHubOptions,
-};
+use crate::state::{DesktopPairingSession, HubSnapshot, StartHubOptions};
 use crate::supervisor;
 
 async fn run_blocking<T>(
@@ -42,14 +39,6 @@ pub async fn open_preferred_url(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub async fn open_url(url: String) -> Result<(), String> {
     run_blocking(move || supervisor::open_url(&url)).await
-}
-
-#[tauri::command]
-pub async fn list_agent_availability(
-    app: AppHandle,
-    request: ListAgentAvailabilityRequest,
-) -> Result<serde_json::Value, String> {
-    run_blocking(move || agent_availability::list_agent_availability(&app, request)).await
 }
 
 #[tauri::command]

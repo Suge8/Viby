@@ -7,12 +7,12 @@ export interface DesktopPairingPresentation {
     codeHint: string
     guidance: string
     qrUrl: string
-    statusHint: string
+    statusHint: string | null
     stage: DesktopPairingStage
 }
 
 const INVITE_GUIDANCE = '二维码会自动保持可用。手机扫码后，输入这里显示的 6 位数字。'
-const BOUND_GUIDANCE = '用已配对手机扫码打开。换手机或浏览器数据已清空，请先解除绑定后重新扫码。'
+const BOUND_GUIDANCE = '用已配对手机打开 Viby，即可自动接回。'
 
 export function shouldStartPairingBridge(pairing: DesktopPairingSession | null): boolean {
     return pairing?.pairing.approvalStatus === 'approved'
@@ -93,10 +93,10 @@ export function buildDesktopPairingPresentation(
     if (snapshot.approvalStatus === 'approved') {
         return {
             codeValue: '已配对',
-            codeHint: '手机入口',
+            codeHint: '',
             guidance: BOUND_GUIDANCE,
             qrUrl,
-            statusHint: '打开已配对手机页面后自动连接',
+            statusHint: null,
             stage: 'bound',
         }
     }

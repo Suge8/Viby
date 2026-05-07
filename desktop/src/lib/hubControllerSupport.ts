@@ -83,9 +83,7 @@ export function isStalePairingRefreshError(error: unknown): boolean {
     return hasKnownPairingError(error, STALE_PAIRING_REFRESH_MESSAGES)
 }
 
-export function isExpiredUnclaimedPairing(pairing: DesktopPairingSession, now: number = Date.now()): boolean {
-    return !pairing.pairing.guest && now > pairing.pairing.ticketExpiresAt
-}
+export { isExpiredUnclaimedPairing } from './desktopShellModel'
 
 async function deleteRemotePairingIfExists(
     pairing: DesktopPairingSession,

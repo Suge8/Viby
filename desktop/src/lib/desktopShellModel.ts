@@ -4,7 +4,8 @@ export const COPY_FEEDBACK_DURATION_MS = 1_600
 export const PAIRING_SUCCESS_DISMISS_MS = 1_250
 const PAIRING_INVITE_RENEW_LEAD_MS = 30_000
 
-export type HubSwitchTone = 'off' | 'busy' | 'on'
+export type HubAction = 'start' | 'stop' | null
+export type HubSwitchTone = 'off' | 'busy' | 'on' | 'stopping'
 
 export interface HubSwitchModel {
     tone: HubSwitchTone
@@ -13,7 +14,21 @@ export interface HubSwitchModel {
     disabled: boolean
 }
 
-export function buildHubSwitchModel(input: { busy: boolean; running: boolean; ready: boolean }): HubSwitchModel {
+export function buildHubSwitchModel(input: {
+    action: HubAction
+    busy: boolean
+    running: boolean
+    ready: boolean
+}): HubSwitchModel {
+    if (input.action === 'stop') {
+        return {
+            tone: 'stopping',
+            label: '关闭中',
+            actionLabel: '中枢正在关闭',
+            disabled: true,
+        }
+    }
+
     if (input.busy || (input.running && !input.ready)) {
         return {
             tone: 'busy',
@@ -26,7 +41,7 @@ export function buildHubSwitchModel(input: { busy: boolean; running: boolean; re
     if (input.ready) {
         return {
             tone: 'on',
-            label: '中枢已开',
+            label: '运行中',
             actionLabel: '关闭中枢',
             disabled: false,
         }
@@ -38,6 +53,10 @@ export function buildHubSwitchModel(input: { busy: boolean; running: boolean; re
         actionLabel: '开启中枢',
         disabled: false,
     }
+}
+
+export function isExpiredUnclaimedPairing(pairing: DesktopPairingSession, now = Date.now()): boolean {
+    return !pairing.pairing.guest && now > pairing.pairing.ticketExpiresAt
 }
 
 export function shouldPollPairingSnapshot(
@@ -55,5 +74,7 @@ export function getPairingInviteRenewDelay(pairing: DesktopPairingSession | null
     if (!pairing || pairing.pairing.guest || pairing.pairing.approvalStatus === 'approved') {
         return null
     }
-    return Math.max(0, pairing.pairing.ticketExpiresAt - now - PAIRING_INVITE_RENEW_LEAD_MS)
+    return isExpiredUnclaimedPairing(pairing, now)
+        ? 0
+        : Math.max(0, pairing.pairing.ticketExpiresAt - now - PAIRING_INVITE_RENEW_LEAD_MS)
 }

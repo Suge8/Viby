@@ -1,0 +1,107 @@
+@layer components {
+    .desktop-connection-stage {
+        position: relative;
+        height: 100%;
+    }
+
+    .desktop-connection-empty {
+        --desktop-empty-monkey-size: clamp(280px, 38vw, 400px);
+        --desktop-empty-monkey-stage-height: calc(var(--desktop-empty-monkey-size) * 0.84);
+        --desktop-empty-gap: clamp(28px, 3.6vh, 36px);
+        --desktop-empty-optical-x: -6px;
+        display: grid;
+        min-height: clamp(440px, 66vh, 640px);
+        width: min(100%, clamp(360px, 46vw, 560px));
+        justify-items: center;
+        align-content: center;
+        padding: clamp(28px, 5vw, 48px);
+        color: var(--desktop-muted);
+        text-align: center;
+    }
+
+    .desktop-connection-empty-icon {
+        display: grid;
+        width: var(--desktop-empty-monkey-size);
+        height: var(--desktop-empty-monkey-stage-height);
+        place-items: center;
+        overflow: visible;
+    }
+
+    .desktop-connection-empty-lottie {
+        width: var(--desktop-empty-monkey-size);
+        height: var(--desktop-empty-monkey-size);
+        transform: translateX(var(--desktop-empty-optical-x));
+    }
+
+    .desktop-connection-empty-title {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        margin-top: var(--desktop-empty-gap);
+        color: var(--desktop-text);
+        font-size: clamp(2rem, 3.2vw, 2.7rem);
+        font-weight: 900;
+        line-height: 1.04;
+        letter-spacing: -0.045em;
+    }
+
+    .desktop-connection-empty-title .desktop-icon {
+        font-size: 0.72em;
+        stroke-width: 2.35;
+    }
+
+    .desktop-connection-empty .desktop-device-summary {
+        margin-top: var(--desktop-empty-gap);
+    }
+
+    .desktop-hub-boot-page {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        overflow: hidden;
+        pointer-events: none;
+        transform-origin: 50% 52%;
+    }
+
+    .desktop-hub-boot-card {
+        position: relative;
+        display: grid;
+        width: min(100%, 720px);
+        min-height: min(78vh, 680px);
+        place-items: center;
+        padding: clamp(8px, 2vw, 22px);
+        overflow: visible;
+        background: transparent;
+    }
+
+    .desktop-hub-boot-card::before {
+        position: absolute;
+        inset: 10% 5% 2%;
+        pointer-events: none;
+        content: "";
+        border-radius: 999px;
+        background:
+            radial-gradient(circle at 48% 42%, rgba(96, 100, 108, 0.14), transparent 44%),
+            radial-gradient(circle at 64% 52%, rgba(190, 170, 132, 0.12), transparent 38%);
+        filter: blur(30px);
+    }
+
+    .desktop-hub-boot-glow {
+        position: absolute;
+        inset: 2% 0 auto;
+        height: 68%;
+        border-radius: 999px;
+        background: radial-gradient(circle, rgba(112, 116, 124, 0.14), transparent 62%);
+        filter: blur(36px);
+        animation: desktop-hub-boot-glow 3000ms ease-in-out infinite;
+    }
+
+    .desktop-hub-boot-lottie {
+        position: relative;
+        z-index: 1;
+        width: min(88vw, 620px);
+        aspect-ratio: 1;
+        transform: translateY(-1%);
+    }
+}
