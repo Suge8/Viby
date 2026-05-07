@@ -4,19 +4,15 @@ import { runPiPromptLoop, subscribeToPiSessionEvents } from './runPiSupport'
 
 describe('subscribeToPiSessionEvents', () => {
     it('attaches the Pi assistant turn id to the durable assistant message meta', () => {
-        let handler: ((event: unknown) => void) | null = null
+        let handler: ((event: Record<string, unknown>) => void) | null = null
         const sendOutputMessage = vi.fn()
         const sendStreamUpdate = vi.fn()
         const onThinkingChange = vi.fn()
 
         const unsubscribe = subscribeToPiSessionEvents({
-            piSession: {
-                sendOutputMessage,
-                sendStreamUpdate,
-                onThinkingChange,
-            } as never,
-            sdkSession: {
-                subscribe(next: (event: unknown) => void) {
+            piSession: { sendOutputMessage, sendStreamUpdate, onThinkingChange } as never,
+            rpcClient: {
+                onEvent(next: (event: Record<string, unknown>) => void) {
                     handler = next
                     return vi.fn()
                 },
@@ -24,7 +20,6 @@ describe('subscribeToPiSessionEvents', () => {
         })
 
         expect(handler).not.toBeNull()
-
         const assistantMessage = {
             role: 'assistant',
             api: 'pi',
@@ -36,13 +31,7 @@ describe('subscribeToPiSessionEvents', () => {
                 cacheRead: 0,
                 cacheWrite: 0,
                 totalTokens: 2,
-                cost: {
-                    input: 0,
-                    output: 0,
-                    cacheRead: 0,
-                    cacheWrite: 0,
-                    total: 0,
-                },
+                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
             },
             stopReason: 'stop',
             timestamp: 1_000,
@@ -50,13 +39,7 @@ describe('subscribeToPiSessionEvents', () => {
         }
 
         handler?.({ type: 'message_start', message: assistantMessage })
-        handler?.({
-            type: 'message_update',
-            assistantMessageEvent: {
-                type: 'text_delta',
-                delta: 'done',
-            },
-        })
+        handler?.({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: 'done' } })
         handler?.({ type: 'message_end', message: assistantMessage })
 
         expect(sendStreamUpdate).toHaveBeenCalledWith({
@@ -64,16 +47,9 @@ describe('subscribeToPiSessionEvents', () => {
             assistantTurnId: 'pi-assistant-1000',
             delta: 'done',
         })
-        expect(sendOutputMessage).toHaveBeenCalledWith(
-            expect.objectContaining({
-                type: 'assistant',
-                uuid: 'pi-assistant-1000',
-            }),
-            {
-                assistantTurnId: 'pi-assistant-1000',
-            }
-        )
-
+        expect(sendOutputMessage).toHaveBeenCalledWith(expect.objectContaining({ uuid: 'pi-assistant-1000' }), {
+            assistantTurnId: 'pi-assistant-1000',
+        })
         unsubscribe()
     })
 
@@ -92,19 +68,13 @@ describe('subscribeToPiSessionEvents', () => {
                 onThinkingChange: vi.fn(),
             } as never,
             messageQueue: queue,
-            sdkSession: {
+            rpcClient: {
                 prompt: vi.fn(async () => {
                     throw new Error('quota exceeded')
                 }),
             } as never,
-            permissionHandler: {
-                hasPendingRequests() {
-                    return false
-                },
-                cancelAll: vi.fn(async () => {}),
-            } as never,
-            applyRuntimeState: vi.fn(),
-            restoreSelectedRuntimeState: vi.fn(),
+            applyRuntimeState: vi.fn(async () => {}),
+            restoreSelectedRuntimeState: vi.fn(async () => {}),
             getAbortRequested: () => false,
             resetAbortRequested: vi.fn(),
         })

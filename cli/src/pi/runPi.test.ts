@@ -1,60 +1,50 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const harness = vi.hoisted(() => {
-    let resolveCreateAgentSession: ((value: { session: PiSdkSessionStub }) => void) | null = null
-    const createAgentSessionPromise = new Promise<{ session: PiSdkSessionStub }>((resolve) => {
-        resolveCreateAgentSession = resolve
-    })
+const harness = vi.hoisted(() => ({
+    cleanupAndExit: vi.fn(async () => {}),
+    killSessionHandler: null as null | (() => Promise<unknown> | unknown),
+    abortCalls: 0,
+    stopCalls: 0,
+    rpcClientOptions: [] as Array<Record<string, unknown>>,
+}))
 
-    return {
-        cleanupAndExit: vi.fn(async () => {}),
-        killSessionHandler: null as null | (() => Promise<unknown> | unknown),
-        createAgentSessionPromise,
-        resolveCreateAgentSession,
-        abortCalls: 0,
-        disposeCalls: 0,
-        permissionCancelCalls: 0,
-    }
-})
-
-type PiSdkSessionStub = {
-    model: string
-    thinkingLevel: string
-    abort: () => Promise<void>
-    dispose: () => void
-}
-
-vi.mock('@mariozechner/pi-coding-agent', () => ({
-    getAgentDir: () => '/tmp/pi-agent',
-    AuthStorage: {
-        create: () => ({}),
+vi.mock('./piRpcClient', () => ({
+    resolvePiExecutable: () => 'pi',
+    PiRpcClient: class {
+        constructor(options: Record<string, unknown>) {
+            harness.rpcClientOptions.push(options)
+        }
+        async start(): Promise<void> {}
+        async getAvailableModels(): Promise<unknown[]> {
+            return [{ provider: 'openai-codex', id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini', reasoning: true }]
+        }
+        async getState(): Promise<unknown> {
+            return {
+                model: { provider: 'openai-codex', id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini', reasoning: true },
+                thinkingLevel: 'off',
+                isStreaming: false,
+                sessionId: 'pi-session',
+            }
+        }
+        async setModel(): Promise<void> {}
+        async setThinkingLevel(): Promise<void> {}
+        async abort(): Promise<void> {
+            harness.abortCalls += 1
+        }
+        async stop(): Promise<void> {
+            harness.stopCalls += 1
+        }
+        onEvent(): () => void {
+            return () => {}
+        }
     },
-    ModelRegistry: {
-        create: () => ({
-            getAvailable: () => [],
-        }),
-    },
-    SettingsManager: {
-        create: () => ({
-            getEnabledModels: () => [],
-        }),
-    },
-    SessionManager: {
-        inMemory: () => ({}),
-    },
-    DefaultResourceLoader: class {
-        async reload(): Promise<void> {}
-    },
-    createAgentSession: vi.fn(async () => harness.createAgentSessionPromise),
 }))
 
 vi.mock('@/agent/sessionFactory', () => ({
     bootstrapSession: async () => ({
         api: {},
         session: {
-            rpcHandlerManager: {
-                registerHandler() {},
-            },
+            rpcHandlerManager: { registerHandler() {} },
             onUserMessage() {},
         },
     }),
@@ -64,8 +54,6 @@ vi.mock('@/agent/runnerLifecycle', () => ({
     createRunnerLifecycle: () => ({
         registerProcessHandlers() {},
         markCrash() {},
-        setExitCode() {},
-        cleanup: async () => {},
         cleanupAndExit: harness.cleanupAndExit,
     }),
     setControlledByUser() {},
@@ -77,76 +65,24 @@ vi.mock('@/claude/registerKillSessionHandler', () => ({
     },
 }))
 
-vi.mock('@/utils/invokedCwd', () => ({
-    getInvokedCwd: () => '/tmp/viby-pi',
-}))
-
-vi.mock('@/ui/logger', () => ({
-    logger: {
-        debug() {},
-    },
-}))
-
-vi.mock('@/utils/attachmentFormatter', () => ({
-    formatMessageWithAttachments: (text: string) => text,
-}))
-
-vi.mock('./launchConfig', () => ({
-    normalizePiModelSelection: (model: string | undefined) => model,
-    resolvePiModel: () => 'pi-model',
-    resolvePiScopedModelContext: () => ({
-        effectiveSelectablePiModels: [],
-        piModelCapabilities: [],
-        scopedPiModels: [],
-        scopeEnabled: false,
-    }),
-}))
-
-vi.mock('./messageCodec', () => ({
-    formatPiModel: () => 'pi-model',
-    fromPiThinkingLevel: () => null,
-    toPiThinkingLevel: () => null,
-}))
-
-vi.mock('./runPiSupport', () => ({
-    applyModel() {},
-    applyThinkingLevel() {},
-    bindPermissionGate() {},
-    createModeHash: (mode: unknown) => JSON.stringify(mode),
-    getRuntimeStateFromPiSession: () => ({
-        permissionMode: 'default',
-        model: 'pi-model',
-        modelReasoningEffort: null,
-    }),
-    preloadRecoveredMessages() {},
+vi.mock('@/utils/invokedCwd', () => ({ getInvokedCwd: () => '/tmp/viby-pi' }))
+vi.mock('@/ui/logger', () => ({ logger: { debug() {} } }))
+vi.mock('@/utils/attachmentFormatter', () => ({ formatMessageWithAttachments: (text: string) => text }))
+vi.mock('./runPiSupport', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('./runPiSupport')>()),
     recoverPiMessages: async () => [],
-    registerPiSessionConfigHandler() {},
     runPiPromptLoop: async () => {},
     subscribeToPiSessionEvents: () => () => {},
-    syncRuntimeSnapshot() {},
 }))
-
-vi.mock('./permissionHandler', () => ({
-    PiPermissionHandler: class {
-        async cancelAll(): Promise<void> {
-            harness.permissionCancelCalls += 1
-        }
-    },
-}))
-
 vi.mock('./session', () => ({
     PiSession: class {
-        getPermissionMode(): string {
-            return 'default'
-        }
-
         stopKeepAlive(): void {}
+        onSessionFound(): void {}
+        setRuntimeStopHandler(): void {}
+        setPermissionMode(): void {}
+        setModel(): void {}
+        setModelReasoningEffort(): void {}
     },
-}))
-
-vi.mock('./vibyTeamIntegration', () => ({
-    buildPiTeamPromptContract: () => null,
-    buildPiVibyCustomTools: () => [],
 }))
 
 import { runPi } from './runPi'
@@ -156,37 +92,32 @@ describe('runPi', () => {
         harness.cleanupAndExit.mockClear()
         harness.killSessionHandler = null
         harness.abortCalls = 0
-        harness.disposeCalls = 0
-        harness.permissionCancelCalls = 0
+        harness.stopCalls = 0
+        harness.rpcClientOptions = []
     })
 
-    it('handles killSession before the Pi SDK session is ready', async () => {
-        const runPromise = runPi({ startedBy: 'runner' })
+    it('runs Pi through the external RPC client lifecycle', async () => {
+        await runPi({ startedBy: 'runner' })
 
-        await vi.waitFor(() => {
-            expect(harness.killSessionHandler).toBeTypeOf('function')
+        expect(harness.killSessionHandler).toBeTypeOf('function')
+        expect(harness.stopCalls).toBe(1)
+        expect(harness.cleanupAndExit).toHaveBeenCalledTimes(1)
+    })
+
+    it('passes provider-native resume handles into the external Pi RPC client', async () => {
+        await runPi({ startedBy: 'runner', resumeSessionId: 'pi-provider-session' })
+
+        expect(harness.rpcClientOptions[0]).toMatchObject({
+            cwd: '/tmp/viby-pi',
+            command: 'pi',
+            resumeSessionId: 'pi-provider-session',
         })
+    })
 
+    it('routes killSession to the external Pi RPC abort command', async () => {
+        await runPi({ startedBy: 'runner' })
         await expect(harness.killSessionHandler?.()).resolves.toBeUndefined()
 
-        harness.resolveCreateAgentSession?.({
-            session: {
-                model: 'pi-model',
-                thinkingLevel: 'default',
-                abort: async () => {
-                    harness.abortCalls += 1
-                },
-                dispose: () => {
-                    harness.disposeCalls += 1
-                },
-            },
-        })
-
-        await runPromise
-
-        expect(harness.abortCalls).toBeGreaterThanOrEqual(1)
-        expect(harness.disposeCalls).toBe(1)
-        expect(harness.permissionCancelCalls).toBe(1)
-        expect(harness.cleanupAndExit).toHaveBeenCalledTimes(1)
+        expect(harness.abortCalls).toBe(1)
     })
 })

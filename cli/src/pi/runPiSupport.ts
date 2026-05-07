@@ -7,54 +7,29 @@ import type { PiPermissionMode, SessionModel, SessionModelReasoningEffort } from
 import type { ApiSessionClient } from '@/lib'
 import { logger } from '@/ui/logger'
 import type { MessageQueue2 } from '@/utils/MessageQueue2'
-import { resolvePiModel } from './launchConfig'
+import { formatPiModel, resolvePiModel } from './launchConfig'
 import {
     buildPiAssistantOutputRecord,
     buildPiToolResultOutputRecord,
-    formatPiModel,
-    fromPiThinkingLevel,
     getPiAssistantTurnId,
     type PiAssistantMessage,
-    type PiMessage,
     type PiThinkingLevel,
     type PiToolResultMessage,
     toPiThinkingLevel,
 } from './messageCodec'
-import { PiPermissionHandler } from './permissionHandler'
+import type { PiRpcClient, PiRpcModel } from './piRpcClient'
 import {
-    applyModel,
-    applyThinkingLevel,
     createModeHash,
-    getRuntimeStateFromPiSession,
+    getRuntimeStateFromPiState,
     type PiRuntimeState,
-    preloadRecoveredMessages,
     recoverPiMessages,
     syncRuntimeSnapshot,
 } from './runPiRuntimeState'
-
-export type { PiRuntimeState } from './runPiRuntimeState'
-export {
-    applyModel,
-    applyThinkingLevel,
-    createModeHash,
-    getRuntimeStateFromPiSession,
-    preloadRecoveredMessages,
-    recoverPiMessages,
-    syncRuntimeSnapshot,
-}
-
-import {
-    isConfiguredPiReasoningEffort,
-    type PiBeforeToolCallContext,
-    type PiBeforeToolCallHook,
-    type PiBeforeToolCallResult,
-    type PiSdkModel,
-    type PiSdkSession,
-    type PiSdkSessionEvent,
-    type PiSdkSessionManager,
-} from './runPiSupportTypes'
 import type { PiSession } from './session'
 import type { PiMode } from './types'
+
+export type { PiRuntimeState } from './runPiRuntimeState'
+export { createModeHash, getRuntimeStateFromPiState, recoverPiMessages, syncRuntimeSnapshot }
 
 type SetSessionConfigPayload = {
     permissionMode?: unknown
@@ -62,9 +37,21 @@ type SetSessionConfigPayload = {
     modelReasoningEffort?: unknown
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null
+}
+
+function isAssistantMessage(message: unknown): message is PiAssistantMessage {
+    return isRecord(message) && message.role === 'assistant'
+}
+
+function isToolResultMessage(message: unknown): message is PiToolResultMessage {
+    return isRecord(message) && message.role === 'toolResult'
+}
+
 function resolvePiConfigModel(options: {
-    defaultModel: PiSdkModel
-    effectiveSelectablePiModels: Parameters<typeof resolvePiModel>[0]
+    defaultModel: PiRpcModel | null | undefined
+    selectableModels: readonly PiRpcModel[]
     model: unknown
 }): SessionModel {
     if (options.model === null) {
@@ -73,69 +60,33 @@ function resolvePiConfigModel(options: {
     if (typeof options.model !== 'string') {
         throw new Error('Invalid Pi model')
     }
-
-    return (
-        formatPiModel(resolvePiModel(options.effectiveSelectablePiModels, options.model)) ??
-        formatPiModel(options.defaultModel)
-    )
+    return formatPiModel(resolvePiModel(options.selectableModels, options.model)) ?? formatPiModel(options.defaultModel)
 }
 
-function resolvePiConfigReasoningEffort(options: {
-    defaultThinkingLevel: PiThinkingLevel
-    modelReasoningEffort: unknown
-}): SessionModelReasoningEffort {
-    if (options.modelReasoningEffort === null) {
-        return fromPiThinkingLevel(options.defaultThinkingLevel)
+function resolvePiConfigReasoningEffort(value: unknown): SessionModelReasoningEffort {
+    if (value === null) {
+        return null
     }
-    if (!isConfiguredPiReasoningEffort(options.modelReasoningEffort)) {
+    if (typeof value !== 'string') {
         throw new Error('Invalid Pi model reasoning effort')
     }
-
-    const nextThinkingLevel = toPiThinkingLevel(options.modelReasoningEffort)
-    if (!nextThinkingLevel) {
+    const thinkingLevel = toPiThinkingLevel(value as SessionModelReasoningEffort)
+    if (!thinkingLevel) {
         throw new Error('Invalid Pi model reasoning effort')
     }
-
-    return fromPiThinkingLevel(nextThinkingLevel)
-}
-
-export function bindPermissionGate(piSession: PiSdkSession, permissionHandler: PiPermissionHandler): void {
-    const previousBeforeToolCall = (piSession.agent as unknown as { _beforeToolCall?: PiBeforeToolCallHook })
-        ._beforeToolCall
-    piSession.agent.setBeforeToolCall(
-        async (context: PiBeforeToolCallContext, signal?: AbortSignal): Promise<PiBeforeToolCallResult> => {
-            const vibyDecision = await permissionHandler.handleToolCall(
-                context.toolCall.id,
-                context.toolCall.name,
-                context.args
-            )
-            if (vibyDecision?.block) {
-                return vibyDecision
-            }
-            return previousBeforeToolCall ? await previousBeforeToolCall(context, signal) : undefined
-        }
-    )
-}
-
-function isAssistantMessage(message: unknown): message is PiAssistantMessage {
-    return typeof message === 'object' && message !== null && 'role' in message && message.role === 'assistant'
-}
-
-function isToolResultMessage(message: unknown): message is PiToolResultMessage {
-    return typeof message === 'object' && message !== null && 'role' in message && message.role === 'toolResult'
+    return thinkingLevel === 'off' ? 'none' : thinkingLevel
 }
 
 export function registerPiSessionConfigHandler(options: {
     session: ApiSessionClient
-    effectiveSelectablePiModels: Parameters<typeof resolvePiModel>[0]
-    defaultModel: PiSdkModel
-    defaultThinkingLevel: PiThinkingLevel
+    rpcClient: PiRpcClient
+    selectableModels: readonly PiRpcModel[]
+    defaultModel: PiRpcModel | null | undefined
     getSelectedRuntimeState: () => PiRuntimeState
-    applyRuntimeState: (runtimeState: PiRuntimeState, options?: { persistSelection?: boolean }) => void
+    applyRuntimeState: (runtimeState: PiRuntimeState, options?: { persistSelection?: boolean }) => Promise<void>
 }): void {
     options.session.rpcHandlerManager.registerHandler('set-session-config', async (payload: unknown) => {
         const config = assertSessionConfigPayload(payload) as SetSessionConfigPayload
-
         const nextRuntimeState: PiRuntimeState = { ...options.getSelectedRuntimeState() }
         if (config.permissionMode !== undefined) {
             nextRuntimeState.permissionMode = resolvePermissionModeForDriver(
@@ -146,43 +97,28 @@ export function registerPiSessionConfigHandler(options: {
         if (config.model !== undefined) {
             nextRuntimeState.model = resolvePiConfigModel({
                 defaultModel: options.defaultModel,
-                effectiveSelectablePiModels: options.effectiveSelectablePiModels,
+                selectableModels: options.selectableModels,
                 model: config.model,
             })
         }
         if (config.modelReasoningEffort !== undefined) {
-            nextRuntimeState.modelReasoningEffort = resolvePiConfigReasoningEffort({
-                defaultThinkingLevel: options.defaultThinkingLevel,
-                modelReasoningEffort: config.modelReasoningEffort,
-            })
+            nextRuntimeState.modelReasoningEffort = resolvePiConfigReasoningEffort(config.modelReasoningEffort)
         }
-
-        options.applyRuntimeState(nextRuntimeState, { persistSelection: true })
-        const selectedRuntimeState = options.getSelectedRuntimeState()
-        return {
-            applied: {
-                permissionMode: selectedRuntimeState.permissionMode,
-                model: selectedRuntimeState.model,
-                modelReasoningEffort: selectedRuntimeState.modelReasoningEffort,
-            },
-        }
+        await options.applyRuntimeState(nextRuntimeState, { persistSelection: true })
+        return { applied: options.getSelectedRuntimeState() }
     })
 }
 
-export function subscribeToPiSessionEvents(options: { piSession: PiSession; sdkSession: PiSdkSession }): () => void {
+export function subscribeToPiSessionEvents(options: { piSession: PiSession; rpcClient: PiRpcClient }): () => void {
     const assistantStream = new AssistantStreamBridge({
         append: ({ assistantTurnId, delta }) =>
-            options.piSession.sendStreamUpdate({
-                kind: 'append',
-                assistantTurnId,
-                delta,
-            }),
+            options.piSession.sendStreamUpdate({ kind: 'append', assistantTurnId, delta }),
         clear: ({ assistantTurnId }) =>
             options.piSession.sendStreamUpdate(
                 assistantTurnId ? { kind: 'clear', assistantTurnId } : { kind: 'clear' }
             ),
     })
-    return options.sdkSession.subscribe((event: PiSdkSessionEvent) => {
+    return options.rpcClient.onEvent((event) => {
         switch (event.type) {
             case 'agent_start':
                 options.piSession.onThinkingChange(true)
@@ -196,11 +132,13 @@ export function subscribeToPiSessionEvents(options: { piSession: PiSession; sdkS
                     assistantStream.beginAssistantTurn(getPiAssistantTurnId(event.message))
                 }
                 return
-            case 'message_update':
-                if (event.assistantMessageEvent.type === 'text_delta' && event.assistantMessageEvent.delta) {
-                    assistantStream.appendTextDelta(event.assistantMessageEvent.delta)
+            case 'message_update': {
+                const update = event.assistantMessageEvent
+                if (isRecord(update) && update.type === 'text_delta' && typeof update.delta === 'string') {
+                    assistantStream.appendTextDelta(update.delta)
                 }
                 return
+            }
             case 'message_end':
                 if (isAssistantMessage(event.message)) {
                     const assistantTurnId = getPiAssistantTurnId(event.message)
@@ -224,17 +162,16 @@ export async function runPiPromptLoop(options: {
     session: ApiSessionClient
     piSession: PiSession
     messageQueue: MessageQueue2<PiMode>
-    sdkSession: PiSdkSession
-    permissionHandler: PiPermissionHandler
-    applyRuntimeState: (runtimeState: PiRuntimeState, options?: { persistSelection?: boolean }) => void
-    restoreSelectedRuntimeState: () => void
+    rpcClient: PiRpcClient
+    applyRuntimeState: (runtimeState: PiRuntimeState, options?: { persistSelection?: boolean }) => Promise<void>
+    restoreSelectedRuntimeState: () => Promise<void>
     getAbortRequested: () => boolean
     resetAbortRequested: () => void
 }): Promise<void> {
     options.piSession.sendSessionEvent({ type: 'ready' })
     const readyScheduler = createReadyEventScheduler({
         label: '[pi]',
-        hasPending: () => options.permissionHandler.hasPendingRequests(),
+        hasPending: () => false,
         queueSize: () => options.messageQueue.size(),
         shouldExit: () => false,
         flushBeforeReady: () => flushReadyStateBeforeReady(options.session),
@@ -242,14 +179,12 @@ export async function runPiPromptLoop(options: {
     })
     while (true) {
         const batch = await options.messageQueue.waitForMessagesAndGetAsString()
-        if (!batch) {
-            break
-        }
+        if (!batch) break
 
-        options.applyRuntimeState(batch.mode)
+        await options.applyRuntimeState(batch.mode)
         options.piSession.onThinkingChange(true)
         try {
-            await options.sdkSession.prompt(batch.message)
+            await options.rpcClient.prompt(batch.message)
         } catch (error) {
             if (options.getAbortRequested()) {
                 logger.debug('[pi] Prompt aborted')
@@ -259,11 +194,7 @@ export async function runPiPromptLoop(options: {
                     error,
                     fallbackMessage: 'Pi prompt failed. Check logs for details.',
                     detailPrefix: 'Pi prompt failed',
-                    sendSessionMessage: (message) =>
-                        options.piSession.sendSessionEvent({
-                            type: 'message',
-                            message,
-                        }),
+                    sendSessionMessage: (message) => options.piSession.sendSessionEvent({ type: 'message', message }),
                 })
             }
         } finally {
@@ -271,15 +202,13 @@ export async function runPiPromptLoop(options: {
             await settleTerminalTurn({
                 setThinking: (thinking) => options.piSession.onThinkingChange(thinking),
                 afterThinkingCleared: async () => {
-                    await options.permissionHandler.cancelAll('Prompt finished')
                     if (options.messageQueue.size() === 0) {
-                        options.restoreSelectedRuntimeState()
+                        await options.restoreSelectedRuntimeState()
                     }
                 },
                 emitReady: async () => await readyScheduler.emitNow(),
             })
         }
     }
-
     readyScheduler.dispose()
 }

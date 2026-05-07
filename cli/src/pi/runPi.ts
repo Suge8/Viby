@@ -1,23 +1,19 @@
 import { join } from 'node:path'
 import { createRunnerLifecycle, setControlledByUser } from '@/agent/runnerLifecycle'
+import { reportDiscoveredSessionId } from '@/agent/sessionDiscoveryBridge'
 import { bootstrapSession } from '@/agent/sessionFactory'
-import type { AgentState, PiPermissionMode, SessionModel, SessionModelReasoningEffort } from '@/api/types'
+import type { AgentState, PiPermissionMode, SessionModelReasoningEffort } from '@/api/types'
 import { registerKillSessionHandler } from '@/claude/registerKillSessionHandler'
 import { logger } from '@/ui/logger'
 import { formatMessageWithAttachments } from '@/utils/attachmentFormatter'
 import { getInvokedCwd } from '@/utils/invokedCwd'
 import { MessageQueue2 } from '@/utils/MessageQueue2'
-import { normalizePiModelSelection, resolvePiModel, resolvePiScopedModelContext } from './launchConfig'
-import { formatPiModel, fromPiThinkingLevel, type PiThinkingLevel, toPiThinkingLevel } from './messageCodec'
-import { PiPermissionHandler } from './permissionHandler'
+import { formatPiModel, normalizePiModelSelection, resolvePiModel, toPiModelCapabilities } from './launchConfig'
+import { PiRpcClient, resolvePiExecutable } from './piRpcClient'
 import {
-    applyModel,
-    applyThinkingLevel,
-    bindPermissionGate,
     createModeHash,
-    getRuntimeStateFromPiSession,
+    getRuntimeStateFromPiState,
     type PiRuntimeState,
-    preloadRecoveredMessages,
     recoverPiMessages,
     registerPiSessionConfigHandler,
     runPiPromptLoop,
@@ -27,11 +23,6 @@ import {
 import { PiSession } from './session'
 import type { PiMode } from './types'
 
-type PiSdkModule = typeof import('@mariozechner/pi-coding-agent')
-type PiSdkSession = Awaited<ReturnType<PiSdkModule['createAgentSession']>>['session']
-type PiSdkModel = NonNullable<PiSdkSession['model']>
-type PiSdkSettingsManager = ReturnType<PiSdkModule['SettingsManager']['create']>
-
 export async function runPi(
     opts: {
         startedBy?: 'runner' | 'terminal'
@@ -40,28 +31,27 @@ export async function runPi(
         permissionMode?: PiPermissionMode
         model?: string
         modelReasoningEffort?: SessionModelReasoningEffort
+        resumeSessionId?: string
     } = {}
 ): Promise<void> {
     const workingDirectory = getInvokedCwd()
     const startedBy = opts.startedBy ?? 'terminal'
+    logger.debug(`[pi] Starting external RPC runtime: startedBy=${startedBy}`)
 
-    logger.debug(`[pi] Starting with options: startedBy=${startedBy}`)
+    const piCommand = resolvePiExecutable()
+    const rpcClient = new PiRpcClient({
+        cwd: workingDirectory,
+        command: piCommand,
+        model: opts.model,
+        resumeSessionId: opts.resumeSessionId,
+    })
+    await rpcClient.start()
+    const selectableModels = await rpcClient.getAvailableModels()
+    const state = await rpcClient.getState()
+    const defaultModel = state.model ?? resolvePiModel(selectableModels, opts.model)
+    const piModelCapabilities = toPiModelCapabilities(selectableModels)
 
-    const piSdk = (await import('@mariozechner/pi-coding-agent')) as PiSdkModule
-    const agentDir = piSdk.getAgentDir()
-    const authStorage = piSdk.AuthStorage.create(join(agentDir, 'auth.json'))
-    const modelRegistry = piSdk.ModelRegistry.create(authStorage, join(agentDir, 'models.json'))
-    const settingsManager = piSdk.SettingsManager.create(workingDirectory, agentDir) as PiSdkSettingsManager
-    const selectableModels = modelRegistry.getAvailable()
-    const enabledModelPatterns = settingsManager.getEnabledModels()
-    const scopedModelContext = resolvePiScopedModelContext(selectableModels, enabledModelPatterns)
-    const effectiveSelectablePiModels = scopedModelContext.effectiveSelectablePiModels
-    const piModelCapabilities = scopedModelContext.piModelCapabilities
-
-    const initialState: AgentState = {
-        controlledByUser: false,
-    }
-
+    const initialState: AgentState = { controlledByUser: false }
     const { api, session } = await bootstrapSession({
         driver: 'pi',
         sessionId: opts.vibySessionId,
@@ -70,15 +60,10 @@ export async function runPi(
         workingDirectory,
         agentState: initialState,
         permissionMode: opts.permissionMode ?? 'default',
-        model: normalizePiModelSelection(opts.model),
+        model: normalizePiModelSelection(opts.model) ?? formatPiModel(defaultModel) ?? undefined,
         modelReasoningEffort: opts.modelReasoningEffort,
-        metadataOverrides: {
-            piModelScope: {
-                models: piModelCapabilities,
-            },
-        },
+        metadataOverrides: { piModelScope: { models: piModelCapabilities } },
     })
-
     setControlledByUser(session, false)
 
     const messageQueue = new MessageQueue2<PiMode>(createModeHash)
@@ -87,22 +72,17 @@ export async function runPi(
         client: session,
         path: workingDirectory,
         logPath: join(workingDirectory, '.pi', 'viby-pi.log'),
-        sessionId: null,
+        sessionId: state.sessionId ?? null,
         messageQueue,
         startedBy,
     })
+    reportDiscoveredSessionId(piSession.onSessionFound, state.sessionId)
     let abortRequested = false
-    let piAgentSession: PiSdkSession | null = null
 
     async function requestPiShutdown(): Promise<void> {
         messageQueue.close()
         abortRequested = true
-        if (!piAgentSession) {
-            return
-        }
-        try {
-            await piAgentSession.abort()
-        } catch {}
+        await rpcClient.abort().catch(() => undefined)
     }
 
     const lifecycle = createRunnerLifecycle({
@@ -115,67 +95,28 @@ export async function runPi(
         },
     })
     lifecycle.registerProcessHandlers()
+    piSession.setRuntimeStopHandler(requestPiShutdown)
     registerKillSessionHandler(session.rpcHandlerManager, requestPiShutdown)
 
-    const recoveredMessages = await recoverPiMessages(api, opts.vibySessionId)
-    const sessionManager = piSdk.SessionManager.inMemory(workingDirectory)
-    preloadRecoveredMessages(sessionManager, recoveredMessages)
-
-    const resourceLoader = new piSdk.DefaultResourceLoader({})
-    await resourceLoader.reload()
-
-    const requestedModel = resolvePiModel(effectiveSelectablePiModels, opts.model)
-    const requestedThinkingLevel = toPiThinkingLevel(opts.modelReasoningEffort)
-    const { session: createdPiAgentSession } = await piSdk.createAgentSession({
-        cwd: workingDirectory,
-        agentDir,
-        authStorage,
-        modelRegistry,
-        settingsManager,
-        sessionManager,
-        resourceLoader,
-        scopedModels: scopedModelContext.scopeEnabled ? scopedModelContext.scopedPiModels : undefined,
-        model: requestedModel,
-        thinkingLevel: requestedThinkingLevel,
-    })
-    piAgentSession = createdPiAgentSession
-
-    if (!piAgentSession.model) {
-        throw new Error('Pi did not resolve an authenticated model. Configure Pi first.')
-    }
-
-    if (abortRequested) {
-        await requestPiShutdown()
-    }
-
-    const defaultModel = piAgentSession.model
-    const defaultThinkingLevel = piAgentSession.thinkingLevel as PiThinkingLevel
-    let selectedRuntimeState = getRuntimeStateFromPiSession(opts.permissionMode ?? 'default', piAgentSession)
+    await recoverPiMessages(api, opts.vibySessionId)
+    let selectedRuntimeState = getRuntimeStateFromPiState(opts.permissionMode ?? 'default', state)
     let activeRuntimeHash = createModeHash(selectedRuntimeState)
-    let currentAssistantStreamId: string | null = null
 
-    const permissionHandler = new PiPermissionHandler(
-        session,
-        () => piSession.getPermissionMode() as PiPermissionMode | undefined,
-        async () => {
-            abortRequested = true
-            await piAgentSession.abort()
+    const applyRuntimeState = async (
+        runtimeState: PiRuntimeState,
+        options?: { persistSelection?: boolean }
+    ): Promise<void> => {
+        const nextModel = resolvePiModel(selectableModels, runtimeState.model ?? undefined) ?? defaultModel
+        if (nextModel) {
+            await rpcClient.setModel(nextModel)
         }
-    )
-
-    bindPermissionGate(piAgentSession, permissionHandler)
-    const applyRuntimeState = (runtimeState: PiRuntimeState, options?: { persistSelection?: boolean }): void => {
-        applyModel(
-            piAgentSession,
-            resolvePiModel(effectiveSelectablePiModels, runtimeState.model ?? undefined) ?? defaultModel
-        )
-        applyThinkingLevel(piAgentSession, toPiThinkingLevel(runtimeState.modelReasoningEffort) ?? defaultThinkingLevel)
-
-        const nextRuntimeState: PiRuntimeState = {
-            permissionMode: runtimeState.permissionMode,
-            model: formatPiModel(piAgentSession.model),
-            modelReasoningEffort: fromPiThinkingLevel(piAgentSession.thinkingLevel),
+        if (runtimeState.modelReasoningEffort && runtimeState.modelReasoningEffort !== 'max') {
+            await rpcClient.setThinkingLevel(
+                runtimeState.modelReasoningEffort === 'none' ? 'off' : runtimeState.modelReasoningEffort
+            )
         }
+        const nextState = await rpcClient.getState()
+        const nextRuntimeState = getRuntimeStateFromPiState(runtimeState.permissionMode, nextState)
         activeRuntimeHash = createModeHash(nextRuntimeState)
         if (options?.persistSelection) {
             selectedRuntimeState = nextRuntimeState
@@ -183,47 +124,40 @@ export async function runPi(
         syncRuntimeSnapshot(piSession, nextRuntimeState)
     }
 
-    const restoreSelectedRuntimeState = (): void => {
-        if (activeRuntimeHash === createModeHash(selectedRuntimeState)) {
-            return
+    const restoreSelectedRuntimeState = async (): Promise<void> => {
+        if (activeRuntimeHash !== createModeHash(selectedRuntimeState)) {
+            await applyRuntimeState(selectedRuntimeState)
         }
-        applyRuntimeState(selectedRuntimeState)
     }
 
-    applyRuntimeState(selectedRuntimeState, { persistSelection: true })
-
-    session.onUserMessage((message) => {
-        const formattedText = formatMessageWithAttachments(message.content.text, message.content.attachments)
-        messageQueue.push(formattedText, selectedRuntimeState)
+    await applyRuntimeState(selectedRuntimeState, { persistSelection: true })
+    session.onUserMessage((message, localId) => {
+        messageQueue.push(
+            formatMessageWithAttachments(message.content.text, message.content.attachments),
+            selectedRuntimeState,
+            localId
+        )
     })
-
     session.rpcHandlerManager.registerHandler('abort', async () => {
         abortRequested = true
-        await piAgentSession.abort()
-        await permissionHandler.cancelAll('User aborted')
+        await rpcClient.abort()
     })
-
     registerPiSessionConfigHandler({
         session,
-        effectiveSelectablePiModels,
+        rpcClient,
+        selectableModels,
         defaultModel,
-        defaultThinkingLevel,
         getSelectedRuntimeState: () => selectedRuntimeState,
         applyRuntimeState,
     })
-
-    const unsubscribe = subscribeToPiSessionEvents({
-        piSession,
-        sdkSession: piAgentSession,
-    })
+    const unsubscribe = subscribeToPiSessionEvents({ piSession, rpcClient })
 
     try {
         await runPiPromptLoop({
             session,
             piSession,
             messageQueue,
-            sdkSession: piAgentSession,
-            permissionHandler,
+            rpcClient,
             applyRuntimeState,
             restoreSelectedRuntimeState,
             getAbortRequested: () => abortRequested,
@@ -236,11 +170,7 @@ export async function runPi(
         throw error
     } finally {
         unsubscribe()
-        await permissionHandler.cancelAll('Session ended')
-        try {
-            await piAgentSession.abort()
-        } catch {}
-        piAgentSession.dispose()
+        await rpcClient.stop()
         await lifecycle.cleanupAndExit()
     }
 }
