@@ -61,21 +61,16 @@ describe('listAgentAvailability', () => {
         expect(response.agents.every((agent) => agent.status === 'ready')).toBe(true)
     })
 
-    it('downgrades Gemini and Pi to setup-required when auth or models are missing', async () => {
+    it('keeps Pi availability lightweight while Gemini checks auth config', async () => {
         harness.geminiRuntimeConfig.mockReturnValue({ token: undefined, modelSource: 'terminal-default' })
-        harness.piLaunchConfig.mockResolvedValue({
-            agent: 'pi',
-            defaultModel: null,
-            defaultModelReasoningEffort: null,
-            availableModels: [],
-        })
 
         const response = await listAgentAvailability({ directory: '/tmp/project-2', forceRefresh: true })
         const gemini = response.agents.find((agent) => agent.driver === 'gemini')
         const pi = response.agents.find((agent) => agent.driver === 'pi')
 
         expect(gemini).toMatchObject({ status: 'setup_required', resolution: 'configure' })
-        expect(pi).toMatchObject({ status: 'setup_required', resolution: 'configure' })
+        expect(pi).toMatchObject({ status: 'ready', resolution: 'none' })
+        expect(harness.piLaunchConfig).not.toHaveBeenCalled()
     })
 
     it('reports missing CLIs as install-required without affecting other drivers', async () => {
@@ -102,6 +97,15 @@ describe('listAgentAvailability', () => {
         })
     })
 
+    it('checks only requested drivers', async () => {
+        const response = await listAgentAvailability({ drivers: ['codex'], forceRefresh: true })
+
+        expect(response.agents.map((agent) => agent.driver)).toEqual(['codex'])
+        expect(harness.codexPath).toHaveBeenCalledTimes(1)
+        expect(harness.claudePath).not.toHaveBeenCalled()
+        expect(harness.piLaunchConfig).not.toHaveBeenCalled()
+    })
+
     it('bypasses cached availability when a force refresh is requested', async () => {
         const initialResponse = await listAgentAvailability({ directory: '/tmp/project-4', forceRefresh: true })
         expect(initialResponse.agents.find((agent) => agent.driver === 'opencode')).toMatchObject({
@@ -126,20 +130,19 @@ describe('listAgentAvailability', () => {
         })
     })
 
-    it('bounds a hung directory-aware detector without hiding ready static agents', async () => {
-        vi.useFakeTimers()
-        harness.piLaunchConfig.mockReturnValue(new Promise(() => undefined))
+    it('reports Pi missing from command discovery without deep model probing', async () => {
+        harness.commandAvailability.mockImplementation((candidates: readonly string[]) =>
+            candidates[0] === 'pi' ? null : (candidates[0] ?? null)
+        )
 
-        const pending = listAgentAvailability({ directory: '/tmp/project-slow', forceRefresh: true })
-        await vi.advanceTimersByTimeAsync(2_500)
-        const response = await pending
+        const response = await listAgentAvailability({ directory: '/tmp/project-slow', forceRefresh: true })
 
         expect(response.agents.find((agent) => agent.driver === 'claude')).toMatchObject({ status: 'ready' })
         expect(response.agents.find((agent) => agent.driver === 'pi')).toMatchObject({
-            status: 'unavailable',
-            resolution: 'learn_more',
-            code: 'unknown',
+            status: 'not_installed',
+            resolution: 'install',
+            code: 'command_missing',
         })
-        vi.useRealTimers()
+        expect(harness.piLaunchConfig).not.toHaveBeenCalled()
     })
 })

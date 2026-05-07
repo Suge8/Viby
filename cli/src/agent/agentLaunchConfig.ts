@@ -4,6 +4,7 @@ import { dirname, join, parse, resolve } from 'node:path'
 import {
     type AgentFlavor,
     type AgentLaunchConfig,
+    type AgentLaunchConfigErrorCode,
     type AgentModelCapability,
     CLAUDE_REASONING_EFFORTS,
     CLAUDE_SELECTABLE_MODEL_PRESETS,
@@ -271,6 +272,16 @@ function resolveCopilotLaunchConfig(): AgentLaunchConfig {
 
 function resolveStaticLaunchConfig(agent: 'cursor' | 'opencode'): AgentLaunchConfig {
     return { agent, defaultModel: null, defaultModelReasoningEffort: null, availableModels: [] }
+}
+
+export function classifyAgentLaunchConfigError(error: unknown): AgentLaunchConfigErrorCode {
+    const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase()
+    if (/auth|token|api[_ -]?key|login|credential/.test(message)) return 'auth_missing'
+    if (/config|settings|toml|json|profile/.test(message)) return 'config_missing'
+    if (/model.*not found|unknown model|invalid model/.test(message)) return 'model_unavailable'
+    if (/reasoning|thinking|effort/.test(message)) return 'reasoning_unsupported'
+    if (/timeout|unavailable|spawn|connect|econn|enoent|failed/.test(message)) return 'provider_unavailable'
+    return 'unknown'
 }
 
 export async function resolveAgentLaunchConfig(agent: AgentFlavor, directory: string): Promise<AgentLaunchConfig> {

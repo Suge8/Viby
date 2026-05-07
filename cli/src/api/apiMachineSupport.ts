@@ -1,6 +1,7 @@
 import type { Update, UpdateMachineBody } from '@viby/protocol'
 import {
     type AgentAvailabilityResponse,
+    type ListAgentAvailabilityRequest,
     ListAgentAvailabilityRequestSchema,
     LocalSessionCatalogRequestSchema,
     LocalSessionExportRequestSchema,
@@ -9,7 +10,7 @@ import {
 } from '@viby/protocol'
 import type { LocalSessionCatalog, LocalSessionExportRequest, LocalSessionExportSnapshot } from '@viby/protocol/types'
 import type { Socket } from 'socket.io-client'
-import { resolveAgentLaunchConfig } from '@/agent/agentLaunchConfig'
+import { classifyAgentLaunchConfigError, resolveAgentLaunchConfig } from '@/agent/agentLaunchConfig'
 import { logger } from '@/ui/logger'
 import { RpcHandlerManager } from './rpc/RpcHandlerManager'
 import type { Machine, MachineMetadata, RunnerState } from './types'
@@ -52,10 +53,7 @@ export type MachineRpcHandlers = {
         request: import('@viby/protocol/types').LocalSessionCatalogRequest
     ) => Promise<LocalSessionCatalog>
     exportLocalSession: (request: LocalSessionExportRequest) => Promise<LocalSessionExportSnapshot>
-    listAgentAvailability: (request: {
-        directory?: string
-        forceRefresh?: boolean
-    }) => Promise<AgentAvailabilityResponse>
+    listAgentAvailability: (request: ListAgentAvailabilityRequest) => Promise<AgentAvailabilityResponse>
     stopSession: (sessionId: string) => boolean
     requestShutdown: () => void
 }
@@ -200,6 +198,7 @@ export function registerMachineRpcHandlers(rpcHandlerManager: RpcHandlerManager,
             if (!parsed.success) {
                 return {
                     type: 'error',
+                    code: 'config_missing',
                     message: 'Invalid agent launch config request',
                 }
             }
@@ -207,12 +206,13 @@ export function registerMachineRpcHandlers(rpcHandlerManager: RpcHandlerManager,
             try {
                 return {
                     type: 'success',
-                    config: await resolveAgentLaunchConfig(parsed.data.agent, parsed.data.directory),
+                    config: await resolveAgentLaunchConfig(parsed.data.agent, parsed.data.directory ?? process.cwd()),
                 }
             } catch (error) {
                 logger.debug('[API MACHINE] Failed to resolve agent launch config', error)
                 return {
                     type: 'error',
+                    code: classifyAgentLaunchConfigError(error),
                     message: error instanceof Error ? error.message : 'Failed to resolve agent launch config',
                 }
             }

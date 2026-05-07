@@ -2,10 +2,19 @@ import { describe, expect, it } from 'vitest'
 import { parseInternalAgentAvailabilityArgs } from './internalAgentAvailability'
 
 describe('internalAgentAvailability', () => {
-    it('parses force refresh and directory flags', () => {
-        expect(parseInternalAgentAvailabilityArgs(['--force-refresh', '--directory', '/tmp/viby'])).toEqual({
+    it('parses force refresh, directory, and driver flags', () => {
+        expect(
+            parseInternalAgentAvailabilityArgs([
+                '--force-refresh',
+                '--directory',
+                '/tmp/viby',
+                '--drivers',
+                'codex,claude,codex',
+            ])
+        ).toEqual({
             directory: '/tmp/viby',
             forceRefresh: true,
+            drivers: ['claude', 'codex'],
         })
     })
 

@@ -29,6 +29,16 @@ export function parseInternalAgentAvailabilityArgs(args: readonly string[]): Lis
             continue
         }
 
+        if (arg === '--drivers') {
+            const drivers = args[index + 1]
+            if (!drivers) {
+                throw new Error('--drivers requires a value.')
+            }
+            request.drivers = drivers
+            index += 1
+            continue
+        }
+
         throw new Error(`Unknown ${INTERNAL_AGENT_AVAILABILITY_COMMAND} argument: ${arg}`)
     }
 
