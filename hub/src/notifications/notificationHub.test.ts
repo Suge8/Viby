@@ -1,8 +1,12 @@
-import { createEmptySessionMessageActivity, mergeSessionMessageActivity, type SessionMessageActivity } from '@viby/protocol'
 import { describe, expect, it } from 'bun:test'
-import type { Session, SyncEvent, SyncEventListener, SyncEngine } from '../sync/syncEngine'
-import type { NotificationChannel } from './notificationTypes'
+import {
+    createEmptySessionMessageActivity,
+    mergeSessionMessageActivity,
+    type SessionMessageActivity,
+} from '@viby/protocol'
+import type { Session, SyncEngine, SyncEvent, SyncEventListener } from '../sync/syncEngine'
 import { NotificationHub } from './notificationHub'
+import type { NotificationChannel } from './notificationTypes'
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -25,10 +29,12 @@ class FakeSyncEngine {
     }
 
     getSessionMessageActivities(sessionIds: string[]): Record<string, SessionMessageActivity> {
-        return Object.fromEntries(sessionIds.map((sessionId) => [
-            sessionId,
-            this.messageActivities.get(sessionId) ?? createEmptySessionMessageActivity()
-        ]))
+        return Object.fromEntries(
+            sessionIds.map((sessionId) => [
+                sessionId,
+                this.messageActivities.get(sessionId) ?? createEmptySessionMessageActivity(),
+            ])
+        )
     }
 
     emit(event: SyncEvent): void {
@@ -72,7 +78,8 @@ function createSession(overrides: Partial<Session> = {}): Session {
         thinkingAt: 0,
         model: null,
         modelReasoningEffort: null,
-        ...overrides
+        codexServiceTier: null,
+        ...overrides,
     }
 }
 
@@ -82,15 +89,15 @@ describe('NotificationHub', () => {
         const channel = new StubChannel()
         const hub = new NotificationHub(engine as unknown as SyncEngine, [channel], {
             permissionDebounceMs: 5,
-            readyCooldownMs: 5
+            readyCooldownMs: 5,
         })
 
         const firstSession = createSession({
             agentState: {
                 requests: {
-                    req1: { tool: 'Edit', arguments: {}, createdAt: 1 }
-                }
-            }
+                    req1: { tool: 'Edit', arguments: {}, createdAt: 1 },
+                },
+            },
         })
 
         engine.setSession(firstSession)
@@ -108,9 +115,9 @@ describe('NotificationHub', () => {
             id: firstSession.id,
             agentState: {
                 requests: {
-                    req2: { tool: 'Read', arguments: {}, createdAt: 2 }
-                }
-            }
+                    req2: { tool: 'Read', arguments: {}, createdAt: 2 },
+                },
+            },
         })
 
         engine.setSession(secondSession)
@@ -127,7 +134,7 @@ describe('NotificationHub', () => {
         const channel = new StubChannel()
         const hub = new NotificationHub(engine as unknown as SyncEngine, [channel], {
             permissionDebounceMs: 1,
-            readyCooldownMs: 20
+            readyCooldownMs: 20,
         })
 
         const session = createSession({ thinking: true })
@@ -146,10 +153,10 @@ describe('NotificationHub', () => {
                     content: {
                         id: 'event-1',
                         type: 'event',
-                        data: { type: 'ready' }
-                    }
-                }
-            }
+                        data: { type: 'ready' },
+                    },
+                },
+            },
         }
 
         engine.emit(readyEvent)

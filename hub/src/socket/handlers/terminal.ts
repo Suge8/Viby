@@ -1,23 +1,23 @@
 import { TerminalOpenPayloadSchema } from '@viby/protocol'
 import { z } from 'zod'
-import type { TerminalRegistry, TerminalRegistryEntry } from '../terminalRegistry'
 import type { SocketServer, SocketWithData } from '../socketTypes'
+import type { TerminalRegistry, TerminalRegistryEntry } from '../terminalRegistry'
 
 const terminalCreateSchema = TerminalOpenPayloadSchema
 
 const terminalWriteSchema = z.object({
     terminalId: z.string().min(1),
-    data: z.string()
+    data: z.string(),
 })
 
 const terminalResizeSchema = z.object({
     terminalId: z.string().min(1),
     cols: z.number().int().positive(),
-    rows: z.number().int().positive()
+    rows: z.number().int().positive(),
 })
 
 const terminalCloseSchema = z.object({
-    terminalId: z.string().min(1)
+    terminalId: z.string().min(1),
 })
 
 export type TerminalHandlersDeps = {
@@ -63,7 +63,7 @@ export function registerTerminalHandlers(socket: SocketWithData, deps: TerminalH
         }
         cliSocket.emit('terminal:close', {
             sessionId: entry.sessionId,
-            terminalId: entry.terminalId
+            terminalId: entry.terminalId,
         })
     }
 
@@ -94,12 +94,15 @@ export function registerTerminalHandlers(socket: SocketWithData, deps: TerminalH
             return
         }
 
-        if (terminalRegistry.countForSocket(socket.id) >= maxTerminalsPerSocket) {
+        const existingEntry = terminalRegistry.get(terminalId)
+        const isReconnect = existingEntry?.sessionId === sessionId
+
+        if (!isReconnect && terminalRegistry.countForSocket(socket.id) >= maxTerminalsPerSocket) {
             emitTerminalError(terminalId, `Too many terminals open (max ${maxTerminalsPerSocket}).`)
             return
         }
 
-        if (terminalRegistry.countForSession(sessionId) >= maxTerminalsPerSession) {
+        if (!isReconnect && terminalRegistry.countForSession(sessionId) >= maxTerminalsPerSession) {
             emitTerminalError(terminalId, `Too many terminals open for this session (max ${maxTerminalsPerSession}).`)
             return
         }
@@ -127,7 +130,7 @@ export function registerTerminalHandlers(socket: SocketWithData, deps: TerminalH
             sessionId,
             terminalId,
             cols,
-            rows
+            rows,
         })
         terminalRegistry.markActivity(terminalId)
     })
@@ -151,7 +154,7 @@ export function registerTerminalHandlers(socket: SocketWithData, deps: TerminalH
         cliSocket.emit('terminal:write', {
             sessionId: entry.sessionId,
             terminalId,
-            data: payload
+            data: payload,
         })
         terminalRegistry.markActivity(terminalId)
     })
@@ -176,7 +179,7 @@ export function registerTerminalHandlers(socket: SocketWithData, deps: TerminalH
             sessionId: entry.sessionId,
             terminalId,
             cols,
-            rows
+            rows,
         })
         terminalRegistry.markActivity(terminalId)
     })

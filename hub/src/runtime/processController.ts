@@ -152,11 +152,10 @@ export function createHubProcessController(): HubProcessController {
 
             runtimeListenPort = await findAvailablePort(config.listenHost)
             localHubUrl = resolveLocalApiUrl(config.listenHost, runtimeListenPort)
-            runtimePublicUrl = localHubUrl
             portFallbackMessage = `默认端口 ${config.listenPort} 已被占用，已自动切换到 ${runtimeListenPort}。`
             console.warn(`[Web] ${portFallbackMessage}`)
 
-            await persistResolvedListenPort({
+            runtimePublicUrl = await persistResolvedListenPort({
                 dataDir: config.dataDir,
                 listenHost: config.listenHost,
                 previousPort: config.listenPort,
@@ -177,7 +176,7 @@ export function createHubProcessController(): HubProcessController {
         })
         await activeRuntimeStatus.write({
             phase: 'starting',
-            preferredBrowserUrl: localHubUrl,
+            preferredBrowserUrl: runtimePublicUrl,
             message: buildStartingStatusMessage(buildStartupMessage()),
         })
     }
@@ -204,6 +203,7 @@ export function createHubProcessController(): HubProcessController {
         const managedRunner = createManagedRunnerController({
             dataDir: getConfig().dataDir,
             localHubUrl,
+            preferredBrowserUrl: runtimePublicUrl,
             getSyncEngine: () => runtimeAccessor.getSyncEngine(),
             isShuttingDown: () => shuttingDown,
             writeRuntimeStatus: async (update) => {
@@ -220,7 +220,7 @@ export function createHubProcessController(): HubProcessController {
             webServer,
             runtimeStatus: activeRuntimeStatus,
             managedRunner,
-            localHubUrl,
+            preferredBrowserUrl: runtimePublicUrl,
             portFallbackMessage,
         })
     }
@@ -243,7 +243,7 @@ export function createHubProcessController(): HubProcessController {
         if (activeRuntimeStatus) {
             await activeRuntimeStatus.write({
                 phase: options.statusPhase ?? 'stopped',
-                preferredBrowserUrl: localHubUrl,
+                preferredBrowserUrl: runtimePublicUrl,
                 message: options.statusMessage ?? 'Hub stopped.',
             })
         }

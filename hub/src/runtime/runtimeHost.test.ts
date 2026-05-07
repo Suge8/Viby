@@ -49,7 +49,7 @@ describe('createHubRuntimeHost', () => {
                 onRuntimeReload,
                 stop: stopManagedRunner,
             },
-            localHubUrl: 'http://127.0.0.1:37173',
+            preferredBrowserUrl: 'https://hub.example.test',
             portFallbackMessage: null,
         })
 
@@ -79,7 +79,7 @@ describe('createHubRuntimeHost', () => {
                 onRuntimeReload,
                 stop: stopManagedRunner,
             },
-            localHubUrl: 'http://127.0.0.1:37173',
+            preferredBrowserUrl: 'https://hub.example.test',
             portFallbackMessage: null,
         })
 
@@ -87,7 +87,7 @@ describe('createHubRuntimeHost', () => {
 
         expect(write).toHaveBeenCalledWith({
             phase: 'starting',
-            preferredBrowserUrl: 'http://127.0.0.1:37173',
+            preferredBrowserUrl: 'https://hub.example.test',
             message: '本地中枢已启动，正在连接这台机器。',
         })
         expect(startStartupRecovery).toHaveBeenCalledTimes(1)
@@ -110,7 +110,7 @@ describe('createHubRuntimeHost', () => {
                 onRuntimeReload,
                 stop: stopManagedRunner,
             },
-            localHubUrl: 'http://127.0.0.1:37173',
+            preferredBrowserUrl: 'https://hub.example.test',
             portFallbackMessage: null,
         })
 

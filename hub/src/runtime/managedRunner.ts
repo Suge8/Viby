@@ -39,6 +39,7 @@ export type ManagedRunnerController = {
 type CreateManagedRunnerControllerOptions = {
     dataDir: string
     localHubUrl: string
+    preferredBrowserUrl: string
     getSyncEngine: () => SyncEngine | null
     isShuttingDown: () => boolean
     writeRuntimeStatus: ManagedRunnerStatusWriter
@@ -175,7 +176,7 @@ export function createManagedRunnerController(options: CreateManagedRunnerContro
         logRunnerRetry(context)
         await writeRuntimeStatus({
             phase: 'starting',
-            preferredBrowserUrl: options.localHubUrl,
+            preferredBrowserUrl: options.preferredBrowserUrl,
             message: options.buildStartingStatusMessage(buildRunnerRetryStatusMessage(context)),
         })
     }
@@ -187,7 +188,7 @@ export function createManagedRunnerController(options: CreateManagedRunnerContro
 
         await writeRuntimeStatus({
             phase: 'ready',
-            preferredBrowserUrl: options.localHubUrl,
+            preferredBrowserUrl: options.preferredBrowserUrl,
             message: options.buildReadyStatusMessage(mode === 'restart' ? ['本机连接已重新接通。'] : undefined),
         })
     }

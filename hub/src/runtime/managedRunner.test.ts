@@ -1,20 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test'
 import type { ChildProcess } from 'node:child_process'
-
-import { createManagedRunnerController } from './managedRunner'
 import { recoverManagedRunner as recoverManagedRunnerImpl } from '../runner/supervisor'
 import type { Machine, SyncEngine } from '../sync/syncEngine'
+import { createManagedRunnerController } from './managedRunner'
 
 type FakeSyncEngine = Pick<SyncEngine, 'getMachine' | 'subscribe'>
 type ManagedRunnerControllerOptions = Parameters<typeof createManagedRunnerController>[0]
 
 const writeRuntimeStatus = vi.fn(async () => {})
-const startRunnerProcess = vi.fn(() => ({ pid: 123, on: vi.fn() } as unknown as ChildProcess))
+const startRunnerProcess = vi.fn(() => ({ pid: 123, on: vi.fn() }) as unknown as ChildProcess)
 const stopRunnerProcess = vi.fn(async () => {})
 const stopRunnerPid = vi.fn(async () => {})
 const waitForRunnerOnline = vi.fn(async () => ({
     machineId: 'machine-1',
-    ownership: 'reused' as const
+    ownership: 'reused' as const,
 }))
 const recoverManagedRunner = vi.fn(async (options: Parameters<typeof recoverManagedRunnerImpl>[0]) => {
     await options.startRunner()
@@ -33,21 +32,21 @@ function createMachine(pid: number): Machine {
             host: 'host',
             platform: 'darwin',
             vibyCliVersion: '1.0.0',
-            vibyHomeDir: '/tmp/viby'
+            vibyHomeDir: '/tmp/viby',
         },
         metadataVersion: 1,
         runnerState: {
             pid,
-            status: 'running'
+            status: 'running',
         },
-        runnerStateVersion: 1
+        runnerStateVersion: 1,
     }
 }
 
 function createSyncEngine(subscribeSpy: ReturnType<typeof vi.fn>): FakeSyncEngine {
     return {
         getMachine: () => createMachine(321),
-        subscribe: subscribeSpy
+        subscribe: subscribeSpy,
     }
 }
 
@@ -57,6 +56,7 @@ function createController(
     return createManagedRunnerController({
         dataDir: '/tmp/viby',
         localHubUrl: 'http://127.0.0.1:37173',
+        preferredBrowserUrl: 'https://hub.example.test',
         getSyncEngine: () => createSyncEngine(vi.fn(() => vi.fn())) as SyncEngine,
         isShuttingDown: () => false,
         writeRuntimeStatus,
@@ -67,7 +67,7 @@ function createController(
         stopRunnerPid,
         waitForRunnerOnline,
         recoverManagedRunner,
-        ...overrides
+        ...overrides,
     })
 }
 
@@ -95,7 +95,7 @@ describe('createManagedRunnerController', () => {
 
         const controller = createController({
             getSyncEngine: () => currentSyncEngine as SyncEngine,
-            recoverManagedRunner
+            recoverManagedRunner,
         })
 
         await controller.startStartupRecovery()
@@ -118,6 +118,19 @@ describe('createManagedRunnerController', () => {
         expect(stopRunnerPid).toHaveBeenCalledWith(321)
     })
 
+    it('keeps runner API local while publishing the preferred browser URL', async () => {
+        const controller = createController()
+
+        await controller.startStartupRecovery()
+
+        expect(startRunnerProcess).toHaveBeenCalledWith({ apiUrl: 'http://127.0.0.1:37173' })
+        expect(writeRuntimeStatus).toHaveBeenCalledWith({
+            phase: 'ready',
+            preferredBrowserUrl: 'https://hub.example.test',
+            message: 'ready',
+        })
+    })
+
     it('restarts a reused runner when pid polling finds the process is gone', async () => {
         vi.useFakeTimers()
 
@@ -132,12 +145,13 @@ describe('createManagedRunnerController', () => {
         })
 
         const controller = createController({
-            getSyncEngine: () => ({
-                getMachine: () => machine,
-                subscribe
-            } as unknown as SyncEngine),
+            getSyncEngine: () =>
+                ({
+                    getMachine: () => machine,
+                    subscribe,
+                }) as unknown as SyncEngine,
             isLocalProcessAlive: () => processAlive,
-            recoverManagedRunner
+            recoverManagedRunner,
         })
 
         await controller.startStartupRecovery()

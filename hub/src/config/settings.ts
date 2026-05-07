@@ -18,6 +18,8 @@ export interface Settings {
     listenPort?: number
     publicUrl?: string
     corsOrigins?: string[]
+    pairingBrokerUrl?: string
+    pairingCreateToken?: string
 }
 
 export function getSettingsFile(dataDir: string): string {

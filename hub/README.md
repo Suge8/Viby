@@ -32,6 +32,8 @@ PAIRING_CREATE_TOKEN=replace-me
 viby hub
 ```
 
+首次用环境变量启动后会写入 `settings.toml`；之后桌面端启动 Hub 时会直接复用同一份配置。
+
 ## 继续阅读
 
 - 仓库入口：`README.md`

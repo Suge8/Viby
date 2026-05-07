@@ -1,6 +1,15 @@
+import { type NetworkInterfaceInfo, networkInterfaces } from 'node:os'
 import type { ConfigSource } from './configuration'
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '0.0.0.0', '::', '::1'])
+const WILDCARD_HOSTS = new Set(['0.0.0.0', '::'])
+const DESKTOP_LOOPBACK_ORIGINS = [
+    'http://127.0.0.1:1420',
+    'http://localhost:1420',
+    'http://[::1]:1420',
+    'tauri://localhost',
+    'https://tauri.localhost',
+] as const
 
 export function formatSource(source: ConfigSource | 'generated'): string {
     switch (source) {
@@ -22,7 +31,8 @@ export function normalizeOrigin(value: string): string {
     }
 
     try {
-        return new URL(trimmed).origin
+        const origin = new URL(trimmed).origin
+        return origin === 'null' && trimmed !== 'null' ? trimmed : origin
     } catch {
         return trimmed
     }
@@ -82,6 +92,25 @@ export function resolveLocalApiUrl(listenHost: string, listenPort: number): stri
     return `http://${formatApiHost(host)}:${listenPort}`
 }
 
+export function resolveWildcardPublicHost(
+    interfaces: NodeJS.Dict<NetworkInterfaceInfo[]> = networkInterfaces()
+): string | null {
+    for (const entries of Object.values(interfaces)) {
+        const address = entries?.find((entry) => entry.family === 'IPv4' && !entry.internal)?.address
+        if (address) {
+            return address
+        }
+    }
+
+    return null
+}
+
+export function resolveDefaultPublicApiUrl(listenHost: string, listenPort: number): string {
+    const normalizedHost = normalizeHostname(listenHost)
+    const host = WILDCARD_HOSTS.has(normalizedHost) ? resolveWildcardPublicHost() : normalizedHost
+    return host ? `http://${formatApiHost(host)}:${listenPort}` : resolveLocalApiUrl(listenHost, listenPort)
+}
+
 export function buildLocalOriginAliases(listenHost: string, listenPort: number): string[] {
     if (!isLoopbackHost(listenHost)) {
         return [resolveLocalApiUrl(listenHost, listenPort)]
@@ -92,6 +121,7 @@ export function buildLocalOriginAliases(listenHost: string, listenPort: number):
         `http://localhost:${listenPort}`,
         `http://127.0.0.1:${listenPort}`,
         `http://[::1]:${listenPort}`,
+        ...DESKTOP_LOOPBACK_ORIGINS,
     ])
 }
 

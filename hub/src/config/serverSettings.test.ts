@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { loadServerSettings } from './serverSettings'
 
 const tempDirs: string[] = []
@@ -9,7 +9,9 @@ const SERVER_SETTINGS_ENV_KEYS = [
     'VIBY_LISTEN_HOST',
     'VIBY_LISTEN_PORT',
     'VIBY_PUBLIC_URL',
-    'CORS_ORIGINS'
+    'CORS_ORIGINS',
+    'PAIRING_BROKER_URL',
+    'PAIRING_CREATE_TOKEN',
 ] as const
 const serverSettingsEnvSnapshot = new Map<string, string | undefined>()
 
@@ -48,6 +50,8 @@ function createSettingsToml(port: number): string {
         `listen_port = ${port}`,
         'public_url = ""',
         'cors_origins = []',
+        'pairing_broker_url = "https://pair.example.com"',
+        'pairing_create_token = "pair-secret"',
         '',
         '[system]',
         'machine_id = ""',
@@ -72,11 +76,50 @@ describe('loadServerSettings', () => {
 
         expect(result.settings.listenPort).toBe(3007)
         expect(result.settings.publicUrl).toBe('http://127.0.0.1:3007')
+        expect(result.settings.pairingBrokerUrl).toBe('https://pair.example.com')
+        expect(result.settings.pairingCreateToken).toBe('pair-secret')
         expect(result.settings.corsOrigins).toEqual([
             'http://127.0.0.1:3007',
             'http://localhost:3007',
-            'http://[::1]:3007'
+            'http://[::1]:3007',
+            'http://127.0.0.1:1420',
+            'http://localhost:1420',
+            'http://[::1]:1420',
+            'tauri://localhost',
+            'https://tauri.localhost',
         ])
         expect(result.savedToFile).toBe(false)
+    })
+
+    it('persists pairing env values so desktop launches do not need shell env', async () => {
+        const dataDir = await mkdtemp(join(tmpdir(), 'viby-server-settings-'))
+        tempDirs.push(dataDir)
+        process.env.PAIRING_BROKER_URL = 'https://pair.viby.run/'
+        process.env.PAIRING_CREATE_TOKEN = 'pair-token'
+
+        const result = await loadServerSettings(dataDir)
+
+        expect(result.settings.pairingBrokerUrl).toBe('https://pair.viby.run/')
+        expect(result.settings.pairingCreateToken).toBe('pair-token')
+        expect(result.sources.pairingBrokerUrl).toBe('env')
+        expect(result.sources.pairingCreateToken).toBe('env')
+        expect(result.savedToFile).toBe(true)
+    })
+
+    it('derives the browser entry from an env listen host instead of stale file public URL', async () => {
+        const dataDir = await mkdtemp(join(tmpdir(), 'viby-server-settings-'))
+        tempDirs.push(dataDir)
+        const settingsFile = join(dataDir, 'settings.toml')
+        await writeFile(
+            settingsFile,
+            createSettingsToml(37173).replace('public_url = ""', 'public_url = "http://127.0.0.1:37173"')
+        )
+        process.env.VIBY_LISTEN_HOST = '192.168.12.34'
+
+        const result = await loadServerSettings(dataDir)
+
+        expect(result.settings.listenHost).toBe('192.168.12.34')
+        expect(result.settings.publicUrl).toBe('http://192.168.12.34:37173')
+        expect(result.sources.publicUrl).toBe('default')
     })
 })

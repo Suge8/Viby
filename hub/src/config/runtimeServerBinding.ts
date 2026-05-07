@@ -1,6 +1,6 @@
 import { createServer } from 'node:net'
-import { resolveLocalApiUrl } from '../hubHelpers'
-import { getSettingsFile, readSettingsOrThrow, writeSettings, type Settings } from './settings'
+import { resolveDefaultPublicApiUrl, resolveLocalApiUrl } from '../hubHelpers'
+import { getSettingsFile, readSettingsOrThrow, type Settings, writeSettings } from './settings'
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '0.0.0.0', '::', '::1', '[::1]'])
 
@@ -28,10 +28,7 @@ function shouldRewritePublicUrl(settings: Settings, previousPort: number): boole
 
 export function isAddressInUseError(error: unknown): boolean {
     return Boolean(
-        error
-        && typeof error === 'object'
-        && 'code' in error
-        && (error as { code?: unknown }).code === 'EADDRINUSE'
+        error && typeof error === 'object' && 'code' in error && (error as { code?: unknown }).code === 'EADDRINUSE'
     )
 }
 
@@ -64,22 +61,24 @@ export async function persistResolvedListenPort(options: {
     listenHost: string
     previousPort: number
     resolvedPort: number
-}): Promise<void> {
+}): Promise<string> {
+    const localHubUrl = resolveLocalApiUrl(options.listenHost, options.resolvedPort)
+
     if (options.previousPort === options.resolvedPort) {
-        return
+        return localHubUrl
     }
 
     const settingsFile = getSettingsFile(options.dataDir)
     const settings = await readSettingsOrThrow(settingsFile)
-    const localHubUrl = resolveLocalApiUrl(options.listenHost, options.resolvedPort)
 
     settings.listenHost = options.listenHost
     settings.listenPort = options.resolvedPort
     settings.apiUrl = localHubUrl
 
     if (shouldRewritePublicUrl(settings, options.previousPort)) {
-        settings.publicUrl = localHubUrl
+        settings.publicUrl = resolveDefaultPublicApiUrl(options.listenHost, options.resolvedPort)
     }
 
     await writeSettings(settingsFile, settings)
+    return settings.publicUrl ?? localHubUrl
 }

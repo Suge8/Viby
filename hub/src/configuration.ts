@@ -32,6 +32,8 @@ export interface ConfigSources {
     listenPort: ConfigSource
     publicUrl: ConfigSource
     corsOrigins: ConfigSource
+    pairingBrokerUrl: ConfigSource
+    pairingCreateToken: ConfigSource
     cliApiToken: 'env' | 'file' | 'generated'
 }
 
@@ -91,8 +93,8 @@ class Configuration {
         this.listenPort = serverSettings.listenPort
         this.publicUrl = serverSettings.publicUrl
         this.corsOrigins = serverSettings.corsOrigins
-        this.pairingBrokerUrl = process.env.PAIRING_BROKER_URL?.trim() || null
-        this.pairingCreateToken = process.env.PAIRING_CREATE_TOKEN?.trim() || null
+        this.pairingBrokerUrl = serverSettings.pairingBrokerUrl
+        this.pairingCreateToken = serverSettings.pairingCreateToken
 
         // CLI API token - will be set by _setCliApiToken() before create() returns
         this.cliApiToken = ''

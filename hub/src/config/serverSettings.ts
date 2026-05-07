@@ -8,11 +8,14 @@
  * it will be saved to settings.toml for future use
  */
 
+import { DEFAULT_VIBY_LISTEN_HOST, DEFAULT_VIBY_LISTEN_PORT } from '@viby/protocol/runtimeDefaults'
 import {
-    DEFAULT_VIBY_LISTEN_HOST,
-    DEFAULT_VIBY_LISTEN_PORT,
-} from '@viby/protocol/runtimeDefaults'
-import { buildLocalOriginAliases, isLoopbackOrigin, normalizeOrigins, resolveLocalApiUrl } from '../hubHelpers'
+    buildLocalOriginAliases,
+    isLoopbackOrigin,
+    normalizeOrigins,
+    resolveDefaultPublicApiUrl,
+    resolveLocalApiUrl,
+} from '../hubHelpers'
 import { getSettingsFile, readSettings, writeSettings } from './settings'
 
 export interface ServerSettings {
@@ -20,6 +23,8 @@ export interface ServerSettings {
     listenPort: number
     publicUrl: string
     corsOrigins: string[]
+    pairingBrokerUrl: string | null
+    pairingCreateToken: string | null
 }
 
 export interface ServerSettingsResult {
@@ -29,6 +34,8 @@ export interface ServerSettingsResult {
         listenPort: 'env' | 'file' | 'default'
         publicUrl: 'env' | 'file' | 'default'
         corsOrigins: 'env' | 'file' | 'default'
+        pairingBrokerUrl: 'env' | 'file' | 'default'
+        pairingCreateToken: 'env' | 'file' | 'default'
     }
     savedToFile: boolean
 }
@@ -39,7 +46,7 @@ export interface ServerSettingsResult {
 function parseCorsOrigins(str: string): string[] {
     const entries = str
         .split(',')
-        .map(origin => origin.trim())
+        .map((origin) => origin.trim())
         .filter(Boolean)
 
     if (entries.includes('*')) {
@@ -66,15 +73,22 @@ function deriveCorsOrigins(listenHost: string, listenPort: number, publicUrl: st
         return buildLocalOriginAliases(listenHost, listenPort)
     }
 
-    return normalizeOrigins([publicUrl])
+    return normalizeOrigins([...buildLocalOriginAliases(listenHost, listenPort), publicUrl])
 }
 
 function getDefaultPublicUrl(listenHost: string, listenPort: number): string {
-    return resolveLocalApiUrl(listenHost, listenPort)
+    return resolveDefaultPublicApiUrl(listenHost, listenPort)
 }
 
 function hasConfiguredCorsOrigins(origins: string[] | undefined): origins is [string, ...string[]] {
     return Array.isArray(origins) && origins.length > 0
+}
+
+function shouldReadPublicUrlFromFile(
+    listenHostSource: ServerSettingsResult['sources']['listenHost'],
+    publicUrl: string | undefined
+): publicUrl is string {
+    return listenHostSource !== 'env' && publicUrl !== undefined
 }
 
 /**
@@ -87,9 +101,7 @@ export async function loadServerSettings(dataDir: string): Promise<ServerSetting
 
     // If settings file exists but couldn't be parsed, fail fast
     if (settings === null) {
-        throw new Error(
-            `Cannot read ${settingsFile}. Please fix or remove the file and restart.`
-        )
+        throw new Error(`Cannot read ${settingsFile}. Please fix or remove the file and restart.`)
     }
 
     let needsSave = false
@@ -98,6 +110,8 @@ export async function loadServerSettings(dataDir: string): Promise<ServerSetting
         listenPort: 'default',
         publicUrl: 'default',
         corsOrigins: 'default',
+        pairingBrokerUrl: 'default',
+        pairingCreateToken: 'default',
     }
 
     // listenHost: env > file > default
@@ -141,7 +155,7 @@ export async function loadServerSettings(dataDir: string): Promise<ServerSetting
             settings.publicUrl = publicUrl
             needsSave = true
         }
-    } else if (settings.publicUrl !== undefined) {
+    } else if (shouldReadPublicUrlFromFile(sources.listenHost, settings.publicUrl)) {
         publicUrl = settings.publicUrl
         sources.publicUrl = 'file'
     }
@@ -162,6 +176,32 @@ export async function loadServerSettings(dataDir: string): Promise<ServerSetting
         corsOrigins = deriveCorsOrigins(listenHost, listenPort, publicUrl)
     }
 
+    let pairingBrokerUrl: string | null = null
+    if (process.env.PAIRING_BROKER_URL?.trim()) {
+        pairingBrokerUrl = process.env.PAIRING_BROKER_URL.trim()
+        sources.pairingBrokerUrl = 'env'
+        if (settings.pairingBrokerUrl === undefined) {
+            settings.pairingBrokerUrl = pairingBrokerUrl
+            needsSave = true
+        }
+    } else if (settings.pairingBrokerUrl !== undefined) {
+        pairingBrokerUrl = settings.pairingBrokerUrl || null
+        sources.pairingBrokerUrl = 'file'
+    }
+
+    let pairingCreateToken: string | null = null
+    if (process.env.PAIRING_CREATE_TOKEN?.trim()) {
+        pairingCreateToken = process.env.PAIRING_CREATE_TOKEN.trim()
+        sources.pairingCreateToken = 'env'
+        if (settings.pairingCreateToken === undefined) {
+            settings.pairingCreateToken = pairingCreateToken
+            needsSave = true
+        }
+    } else if (settings.pairingCreateToken !== undefined) {
+        pairingCreateToken = settings.pairingCreateToken || null
+        sources.pairingCreateToken = 'file'
+    }
+
     // Save settings if any new values were added
     if (needsSave) {
         await writeSettings(settingsFile, settings)
@@ -173,6 +213,8 @@ export async function loadServerSettings(dataDir: string): Promise<ServerSetting
             listenPort,
             publicUrl,
             corsOrigins,
+            pairingBrokerUrl,
+            pairingCreateToken,
         },
         sources,
         savedToFile: needsSave,

@@ -29,7 +29,7 @@ type CreateHubRuntimeHostOptions = {
     webServer: BunServer<WebSocketData>
     runtimeStatus: HubRuntimeStatusWriter
     managedRunner: ManagedRunnerController
-    localHubUrl: string
+    preferredBrowserUrl: string
     portFallbackMessage: string | null
 }
 
@@ -56,7 +56,7 @@ export function createHubRuntimeHost(options: CreateHubRuntimeHostOptions): HubR
 
         await writeRuntimeStatus({
             phase: 'starting',
-            preferredBrowserUrl: options.localHubUrl,
+            preferredBrowserUrl: options.preferredBrowserUrl,
             message: buildStartingStatusMessage(options.portFallbackMessage, buildConnectingMessage()),
         })
 
@@ -68,7 +68,7 @@ export function createHubRuntimeHost(options: CreateHubRuntimeHostOptions): HubR
 
         await writeRuntimeStatus({
             phase: shutdownOptions.statusPhase ?? 'stopped',
-            preferredBrowserUrl: options.localHubUrl,
+            preferredBrowserUrl: options.preferredBrowserUrl,
             message: shutdownOptions.statusMessage ?? 'Hub stopped.',
         })
 
