@@ -26,6 +26,8 @@ export class MemoryPairingStore implements PairingStore {
 
     constructor(private readonly now: () => number = Date.now) {}
 
+    async healthCheck(): Promise<void> {}
+
     private clearReconnectChallenges(pairingId: string): void {
         for (const role of RECONNECT_CHALLENGE_ROLES) {
             this.reconnectChallenges.delete(reconnectChallengeKey(pairingId, role))
@@ -134,6 +136,23 @@ export class MemoryPairingStore implements PairingStore {
 
     async markDisconnected(pairingId: string, role: PairingRole, at: number): Promise<PairingSessionRecord | null> {
         return this.updateConnection(pairingId, role, at, 'disconnected')
+    }
+
+    async renewSession(pairingId: string, expiresAt: number, at: number): Promise<PairingSessionRecord | null> {
+        const session = this.sessions.get(pairingId)
+        if (!session) {
+            return null
+        }
+
+        const normalized = expireIfNeeded(session, this.now(), this.tokenIndex)
+        if (!isActiveState(normalized.state)) {
+            this.sessions.set(pairingId, normalized)
+            return null
+        }
+
+        const renewed = { ...normalized, expiresAt: Math.max(normalized.expiresAt, expiresAt), updatedAt: at }
+        this.sessions.set(pairingId, renewed)
+        return cloneSession(renewed)
     }
 
     async issueReconnectChallenge(

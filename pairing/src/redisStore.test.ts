@@ -40,6 +40,8 @@ class FakeRedisAdapter implements RedisPairingAdapter {
         this.failCounts.set(key, times)
     }
 
+    async ping(): Promise<void> {}
+
     async get(key: string): Promise<string | null> {
         return this.values.get(key) ?? null
     }
@@ -118,6 +120,32 @@ describe('RedisPairingStore', () => {
         ).toBeGreaterThanOrEqual(3)
     })
 
+    it('claims sessions using the exact stored payload instead of schema-reordered JSON', async () => {
+        const now = 1_000
+        const adapter = new FakeRedisAdapter()
+        const { session } = createSessionRecord(now)
+        const store = new RedisPairingStore(adapter, () => now)
+        const guest = createParticipantRecord({ token: 'guest-secret', label: 'Phone' })
+        const hostWithRuntimeFieldsFirst = {
+            tokenHint: session.host.tokenHint,
+            label: session.host.label,
+            tokenHash: session.host.tokenHash,
+            connectedAt: now,
+            lastSeenAt: now,
+        }
+        const raw = JSON.stringify({
+            ...session,
+            updatedAt: now,
+            host: hostWithRuntimeFieldsFirst,
+        })
+        adapter.values.set(sessionKey(session.id), raw)
+
+        const claimed = await store.claimSession(session.id, guest, '123456')
+
+        expect(claimed?.guest?.tokenHash).toBe(guest.tokenHash)
+        expect(adapter.compareAndSetCalls.at(-1)?.expected).toBe(raw)
+    })
+
     it('expires sessions and clears both token indexes during redis-backed reads', async () => {
         let now = 1_000
         const adapter = new FakeRedisAdapter()
@@ -151,6 +179,25 @@ describe('RedisPairingStore', () => {
         expect(adapter.values.get(tokenIndexKey(guest.tokenHash))).toBeUndefined()
         expect(adapter.values.get(reconnectChallengeKey(session.id, 'host'))).toBeUndefined()
         expect(adapter.values.get(reconnectChallengeKey(session.id, 'guest'))).toBeUndefined()
+    })
+
+    it('renews session and token index TTLs for reconnecting paired devices', async () => {
+        const now = 1_000
+        const adapter = new FakeRedisAdapter()
+        const { session } = createSessionRecord(now)
+        const store = new RedisPairingStore(adapter, () => now)
+        const guest = createParticipantRecord({ token: 'guest-secret', label: 'Phone' })
+
+        await store.createSession(session)
+        await store.claimSession(session.id, guest, '123456')
+
+        await expect(store.renewSession(session.id, now + 10_000, now + 5)).resolves.toMatchObject({
+            expiresAt: now + 10_000,
+            updatedAt: now + 5,
+        })
+        expect(adapter.ttlByKey.get(sessionKey(session.id))).toBe(10)
+        expect(adapter.ttlByKey.get(tokenIndexKey(session.host.tokenHash))).toBe(10)
+        expect(adapter.ttlByKey.get(tokenIndexKey(guest.tokenHash))).toBe(10)
     })
 
     it('stores reconnect challenges in redis and consumes them once', async () => {

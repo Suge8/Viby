@@ -16,6 +16,8 @@ import type { RedisPairingAdapter } from './storeTypes'
 class FakeRedisAdapter implements RedisPairingAdapter {
     readonly values = new Map<string, string>()
 
+    async ping(): Promise<void> {}
+
     async get(key: string): Promise<string | null> {
         return this.values.get(key) ?? null
     }

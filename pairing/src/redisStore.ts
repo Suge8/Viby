@@ -12,7 +12,13 @@ import {
     setTokenIndex,
     storeReconnectChallenge,
 } from './redisStoreIndexSupport'
-import { loadStoredSession, replaceStoredSession, ttlSecondsFromExpiry } from './redisStoreSessionSupport'
+import { renewRedisPairingSession } from './redisStoreRenewal'
+import {
+    loadStoredSession,
+    loadStoredSessionEntry,
+    replaceStoredSession,
+    ttlSecondsFromExpiry,
+} from './redisStoreSessionSupport'
 import {
     cloneSession,
     expireIfNeeded,
@@ -33,6 +39,10 @@ export class RedisPairingStore implements PairingStore {
         private readonly adapter: RedisPairingAdapter,
         private readonly now: () => number = Date.now
     ) {}
+
+    async healthCheck(): Promise<void> {
+        await this.adapter.ping()
+    }
 
     async createSession(session: PairingSessionRecord): Promise<PairingSessionRecord> {
         const stored = PairingSessionRecordSchema.parse(session)
@@ -156,6 +166,17 @@ export class RedisPairingStore implements PairingStore {
         return this.updateParticipantState(pairingId, role, at, { connectedAt: undefined, lastSeenAt: at })
     }
 
+    async renewSession(pairingId: string, expiresAt: number, at: number): Promise<PairingSessionRecord | null> {
+        return await renewRedisPairingSession({
+            adapter: this.adapter,
+            pairingId,
+            expiresAt,
+            at,
+            ttlSeconds: (expiresAt) => this.ttlSeconds(expiresAt),
+            updateSession: (pairingId, mutate) => this.updateSession(pairingId, mutate),
+        })
+    }
+
     async issueReconnectChallenge(
         pairingId: string,
         role: PairingRole,
@@ -226,8 +247,23 @@ export class RedisPairingStore implements PairingStore {
         mutate: (session: PairingSessionRecord) => Promise<PairingSessionRecord | null>
     ): Promise<PairingSessionRecord | null> {
         for (let attempt = 0; attempt < SESSION_UPDATE_RETRY_LIMIT; attempt += 1) {
-            const current = await this.getSession(pairingId)
-            if (!current) {
+            const entry = await loadStoredSessionEntry(this.adapter, pairingId)
+            if (!entry) {
+                return null
+            }
+
+            const current = expireIfNeeded(entry.session, this.now(), new Map())
+            if (current !== entry.session) {
+                if (current.state === 'expired') {
+                    await clearSessionSideKeys(this.adapter, entry.session)
+                }
+                await replaceStoredSession({
+                    adapter: this.adapter,
+                    pairingId,
+                    expectedRaw: entry.raw,
+                    next: current,
+                    ttlSeconds: this.ttlSeconds(current.expiresAt),
+                })
                 return null
             }
 
@@ -240,7 +276,7 @@ export class RedisPairingStore implements PairingStore {
             const replaced = await replaceStoredSession({
                 adapter: this.adapter,
                 pairingId,
-                current,
+                expectedRaw: entry.raw,
                 next,
                 ttlSeconds,
             })

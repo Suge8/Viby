@@ -5,7 +5,7 @@ import {
     PairingReconnectResponseSchema,
     PairingTelemetryRequestSchema,
     PairingTelemetryResponseSchema,
-    toPairingSessionSnapshot,
+    toPairingSessionSnapshotForRole,
 } from '@viby/protocol/pairing'
 import type { Hono } from 'hono'
 import { generatePairingSecret, hashPairingSecret, verifyPairingDeviceProof } from './crypto'
@@ -143,6 +143,15 @@ export function registerPairingReconnectRoutes(app: Hono, options: PairingHttpOp
                 }
             }
 
+            const renewedSession = await options.store.renewSession(
+                pairingId,
+                now + options.sessionTtlSeconds * 1000,
+                now
+            )
+            if (!renewedSession) {
+                return rejectPairingRequest(c, options, 'reconnect_rejected', 410, 'Pairing session no longer active')
+            }
+
             logPairingAudit(options, 'reconnect', {
                 ip: getClientAddress(c),
                 pairingId,
@@ -151,7 +160,7 @@ export function registerPairingReconnectRoutes(app: Hono, options: PairingHttpOp
 
             return c.json(
                 PairingReconnectResponseSchema.parse({
-                    pairing: toPairingSessionSnapshot(identity.session),
+                    pairing: toPairingSessionSnapshotForRole(renewedSession, identity.role),
                     role: identity.role,
                     wsUrl: buildPairingUrls(options.publicUrl, pairingId, '', body.token).wsUrl,
                     iceServers: createIceServers(options, pairingId, now),

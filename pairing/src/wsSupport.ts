@@ -2,13 +2,17 @@ import {
     type PairingRole,
     type PairingSessionRecord,
     type PairingSignal,
-    toPairingSessionSnapshot,
+    toPairingSessionSnapshotForRole,
 } from '@viby/protocol/pairing'
 import { isApprovedSession } from './storeSupport'
 import type { ConnectionState, PairingConnection, PairingSocketLike } from './wsTypes'
 
 const READY_STATE_OPEN = 1
-const PENDING_SIGNAL_LIMIT = 64
+
+type ReadySource = {
+    role?: PairingRole
+    transportId?: string | null
+}
 
 export const CLIENT_MESSAGE_TYPES = new Set(['join', 'offer', 'answer', 'candidate', 'ping'])
 
@@ -23,10 +27,7 @@ export function sendSignal(socket: PairingSocketLike, signal: PairingSignal): vo
 export function createEmptyState(): ConnectionState {
     return {
         sockets: new Map<PairingRole, PairingSocketLike>(),
-        pending: new Map<PairingRole, PairingSignal[]>([
-            ['host', []],
-            ['guest', []],
-        ]),
+        disconnectTimers: new Map<PairingRole, ReturnType<typeof setTimeout>>(),
     }
 }
 
@@ -52,50 +53,28 @@ export function normalizeSignal(
     }
 }
 
-export function queuePendingSignal(state: ConnectionState, role: PairingRole, signal: PairingSignal): void {
-    const queue = state.pending.get(role)
-    if (!queue) {
-        return
-    }
-
-    queue.push(signal)
-    if (queue.length > PENDING_SIGNAL_LIMIT) {
-        queue.shift()
-    }
-}
-
-export function flushPendingSignals(state: ConnectionState, role: PairingRole): void {
-    const socket = state.sockets.get(role)
-    if (!socket || socket.readyState !== READY_STATE_OPEN) {
-        return
-    }
-
-    const queue = state.pending.get(role)
-    if (!queue || queue.length === 0) {
-        return
-    }
-
-    while (queue.length > 0) {
-        const signal = queue.shift()
-        if (signal) {
-            sendSignal(socket, signal)
-        }
-    }
-}
-
-export function emitReady(state: ConnectionState, pairingId: string, at: number, session: PairingSessionRecord): void {
+export function emitReady(
+    state: ConnectionState,
+    pairingId: string,
+    at: number,
+    session: PairingSessionRecord,
+    source: ReadySource = {}
+): void {
     if (!isApprovedSession(session)) {
         return
     }
 
-    const pairing = toPairingSessionSnapshot(session)
     for (const [role, socket] of state.sockets) {
         sendSignal(socket, {
             pairingId,
             type: 'ready',
+            from: source.role,
             to: role,
             at,
-            payload: { pairing },
+            payload: {
+                pairing: toPairingSessionSnapshotForRole(session, role),
+                transportId: source.transportId ?? undefined,
+            },
         })
     }
 }
@@ -108,7 +87,7 @@ export function emitState(connection: PairingConnection, at: number, session: Pa
         at,
         payload: {
             role: connection.role,
-            pairing: toPairingSessionSnapshot(session),
+            pairing: toPairingSessionSnapshotForRole(session, connection.role),
         },
     })
 }
@@ -127,7 +106,7 @@ export function emitStateToSocket(
         at,
         payload: {
             role,
-            pairing: toPairingSessionSnapshot(session),
+            pairing: toPairingSessionSnapshotForRole(session, role),
         },
     })
 }
@@ -155,7 +134,7 @@ export function emitPeerLeft(
         type: 'peer-left',
         to: role,
         at,
-        payload: { pairing: toPairingSessionSnapshot(session) },
+        payload: { pairing: toPairingSessionSnapshotForRole(session, role) },
     })
 }
 
@@ -166,7 +145,6 @@ export function emitExpired(
     session: PairingSessionRecord,
     reason: 'deleted' | 'expired'
 ): void {
-    const pairing = toPairingSessionSnapshot(session)
     for (const [role, socket] of state.sockets) {
         sendSignal(socket, {
             pairingId,
@@ -174,7 +152,7 @@ export function emitExpired(
             to: role,
             at,
             reason,
-            payload: { pairing },
+            payload: { pairing: toPairingSessionSnapshotForRole(session, role) },
         })
         socket.close(1000, reason)
     }

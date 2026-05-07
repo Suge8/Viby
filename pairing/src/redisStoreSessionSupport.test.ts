@@ -8,6 +8,8 @@ import type { RedisPairingAdapter } from './storeTypes'
 class FakeRedisAdapter implements RedisPairingAdapter {
     readonly values = new Map<string, string>()
 
+    async ping(): Promise<void> {}
+
     async get(key: string): Promise<string | null> {
         return this.values.get(key) ?? null
     }
@@ -87,12 +89,13 @@ describe('redisStoreSessionSupport', () => {
             approvalStatus: 'approved',
         })
         adapter.values.set(sessionKey(current.id), JSON.stringify(current))
+        const expectedRaw = JSON.stringify(current)
 
         await expect(
             replaceStoredSession({
                 adapter,
                 pairingId: current.id,
-                current,
+                expectedRaw,
                 next,
                 ttlSeconds: 1,
             })
@@ -103,7 +106,7 @@ describe('redisStoreSessionSupport', () => {
             replaceStoredSession({
                 adapter,
                 pairingId: current.id,
-                current,
+                expectedRaw,
                 next: current,
                 ttlSeconds: 1,
             })

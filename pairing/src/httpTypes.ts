@@ -4,7 +4,6 @@ import type { createBunWebSocket } from 'hono/bun'
 import type { PairingMetrics } from './metrics'
 import type { PairingRateLimiter, PairingRateLimitRule } from './rateLimit'
 import type { PairingStore } from './store'
-import type { TurnCredentialGenerator } from './turn'
 import type { PairingSocketHub } from './ws'
 
 export type UpgradeWebSocket = ReturnType<typeof createBunWebSocket>['upgradeWebSocket']
@@ -17,7 +16,9 @@ export interface PairingHttpOptions {
     ticketTtlSeconds: number
     reconnectChallengeTtlSeconds: number
     stunUrls: readonly string[]
-    turnGenerator: TurnCredentialGenerator | null
+    turnUrls: readonly string[]
+    turnStaticAuthSecret: string | null
+    turnCredentialTtlSeconds: number
     createToken: string | null
     upgradeWebSocket: UpgradeWebSocket
     logger?: Pick<Console, 'error' | 'info' | 'warn'>
@@ -30,6 +31,10 @@ export interface PairingHttpOptions {
     }
     metrics?: PairingMetrics
     now?: () => number
+    webApp?: {
+        indexHtml?: string
+        assetsRoot?: string
+    }
 }
 
 export type { PairingCreateRequest, PairingParticipantRecord, PairingSessionRecord }

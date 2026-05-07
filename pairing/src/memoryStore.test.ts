@@ -58,6 +58,17 @@ describe('MemoryPairingStore', () => {
         await expect(store.getSessionByTokenHash(guest.tokenHash)).resolves.toBeNull()
     })
 
+    it('renews active sessions for durable device reconnect', async () => {
+        const store = new MemoryPairingStore(() => 1_000)
+        const session = createSessionRecord(1_000)
+        await store.createSession(session)
+
+        await expect(store.renewSession(session.id, 10_000, 1_500)).resolves.toMatchObject({
+            expiresAt: 10_000,
+            updatedAt: 1_500,
+        })
+    })
+
     it('issues one-time reconnect challenges and consumes them once', async () => {
         const store = new MemoryPairingStore(() => 1_000)
         const session = createSessionRecord(1_000)

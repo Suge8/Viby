@@ -1,6 +1,7 @@
 import type { PairingParticipantRecord, PairingRole, PairingSessionRecord } from '@viby/protocol/pairing'
 
 export interface RedisPairingAdapter {
+    ping(): Promise<void>
     get(key: string): Promise<string | null>
     set(key: string, value: string, options?: { ttlSeconds?: number }): Promise<void>
     del(key: string): Promise<void>
@@ -19,6 +20,7 @@ export interface PairingReconnectChallengeRecord {
 }
 
 export interface PairingStore {
+    healthCheck(): Promise<void>
     createSession(session: PairingSessionRecord): Promise<PairingSessionRecord>
     getSession(pairingId: string): Promise<PairingSessionRecord | null>
     getSessionByTokenHash(tokenHash: string): Promise<{ session: PairingSessionRecord; role: PairingRole } | null>
@@ -31,6 +33,7 @@ export interface PairingStore {
     markConnected(pairingId: string, role: PairingRole, at: number): Promise<PairingSessionRecord | null>
     touchConnection(pairingId: string, role: PairingRole, at: number): Promise<PairingSessionRecord | null>
     markDisconnected(pairingId: string, role: PairingRole, at: number): Promise<PairingSessionRecord | null>
+    renewSession(pairingId: string, expiresAt: number, at: number): Promise<PairingSessionRecord | null>
     issueReconnectChallenge(
         pairingId: string,
         role: PairingRole,

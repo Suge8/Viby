@@ -7,7 +7,7 @@ import {
     type PairingSessionRecord,
     PairingSessionRecordSchema,
 } from './httpTypes'
-import { buildIceServers } from './turn'
+import { buildIceServers } from './iceServers'
 
 export function getBearerToken(value: string | null | undefined): string | null {
     if (!value) {
@@ -38,12 +38,22 @@ export function createParticipantRecord(input: {
 }
 
 export function createIceServers(
-    options: Pick<PairingHttpOptions, 'stunUrls' | 'turnGenerator'>,
+    options: Pick<PairingHttpOptions, 'stunUrls' | 'turnUrls' | 'turnStaticAuthSecret' | 'turnCredentialTtlSeconds'>,
     pairingId: string,
     now: number
 ) {
-    const turn = options.turnGenerator ? options.turnGenerator.create(pairingId, { now }) : null
-    return buildIceServers({ stunUrls: options.stunUrls, turn })
+    return buildIceServers(
+        {
+            stunUrls: options.stunUrls,
+            turn: {
+                urls: options.turnUrls,
+                staticAuthSecret: options.turnStaticAuthSecret,
+                credentialTtlSeconds: options.turnCredentialTtlSeconds,
+            },
+        },
+        pairingId,
+        now
+    )
 }
 
 export function authorizeCreateRequest(
