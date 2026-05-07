@@ -3,14 +3,17 @@ import type { DesktopEntryMode, HubSnapshot, HubStartupConfig } from '@/types'
 const LOCAL_LISTEN_HOST = '127.0.0.1'
 const LAN_LISTEN_HOST = '0.0.0.0'
 const DEFAULT_PREVIEW_LISTEN_PORT = 37173
-const CURRENT_ADDRESS_LABEL = '当前地址'
+const LAN_ADDRESS_LABEL = '局域网地址'
+const LOCAL_ADDRESS_LABEL = '本机地址'
 const PREVIEW_ADDRESS_LABEL = '启动后地址'
 
 export interface EntryPreviewModel {
     mode: DesktopEntryMode
     displayLabel: string
     displayValue: string
-    copyValue?: string
+    secondaryLabel?: string
+    secondaryValue?: string
+    secondaryOpenUrl?: string
     openUrl?: string
     isPreview: boolean
 }
@@ -40,37 +43,31 @@ export function deriveInitialEntryMode(snapshot: HubSnapshot | null): DesktopEnt
     return deriveEntryModeFromListenHost(getStartupConfig(snapshot).listenHost)
 }
 
-export function buildEntryPreviewModel(
-    snapshot: HubSnapshot | null,
-    selectedMode: DesktopEntryMode
-): EntryPreviewModel {
+export function buildEntryPreviewModel(snapshot: HubSnapshot | null): EntryPreviewModel {
     const status = snapshot?.status
     if (status && snapshot?.running) {
-        const runtimeMode = deriveEntryModeFromListenHost(status.listenHost)
-        const displayValue = formatHttpOrigin(
-            runtimeMode === 'lan' ? LAN_LISTEN_HOST : LOCAL_LISTEN_HOST,
-            status.listenPort
-        )
+        const mode = deriveEntryModeFromListenHost(status.listenHost)
+        const hasLanAddress = mode === 'lan' && status.preferredBrowserUrl !== status.localHubUrl
 
         return {
-            mode: runtimeMode,
-            displayLabel: CURRENT_ADDRESS_LABEL,
-            displayValue,
-            copyValue: displayValue,
+            mode,
+            displayLabel: hasLanAddress ? LAN_ADDRESS_LABEL : LOCAL_ADDRESS_LABEL,
+            displayValue: hasLanAddress ? status.preferredBrowserUrl : status.localHubUrl,
+            secondaryLabel: hasLanAddress ? LOCAL_ADDRESS_LABEL : undefined,
+            secondaryValue: hasLanAddress ? status.localHubUrl : undefined,
+            secondaryOpenUrl: hasLanAddress ? status.localHubUrl : undefined,
             openUrl: status.preferredBrowserUrl,
             isPreview: false,
         }
     }
 
     const startupConfig = getStartupConfig(snapshot)
-    const host = selectedMode === 'lan' ? LAN_LISTEN_HOST : LOCAL_LISTEN_HOST
-    const displayValue = formatHttpOrigin(host, startupConfig.listenPort)
+    const displayValue = formatHttpOrigin(LOCAL_LISTEN_HOST, startupConfig.listenPort)
 
     return {
-        mode: selectedMode,
+        mode: deriveEntryModeFromListenHost(startupConfig.listenHost),
         displayLabel: PREVIEW_ADDRESS_LABEL,
         displayValue,
-        copyValue: displayValue,
         isPreview: true,
     }
 }

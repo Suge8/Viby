@@ -1,217 +1,284 @@
-import type { JSX } from 'react'
-import { ControlPill } from '@/components/ControlPill'
-import { EntryModeSwitch } from '@/components/EntryModeSwitch'
-import { MetricCard } from '@/components/MetricCard'
-import { PairingCard, type PairingCardActions } from '@/components/PairingCard'
+import { type JSX, useEffect, useState } from 'react'
+import { CodingAgentsPage } from '@/components/CodingAgentsPage'
+import { ConnectionPage } from '@/components/ConnectionPage'
+import { DesktopPairingModal } from '@/components/DesktopPairingModal'
+import { WindowDragRegion } from '@/components/DesktopShellChrome'
+import { type DesktopPage, DesktopSidebar } from '@/components/DesktopSidebar'
+import { CheckIcon } from '@/components/icons'
+import { DesktopMotionProvider, PageTransition, ToastLayer } from '@/components/motion'
+import { SettingsPanel } from '@/components/SettingsPanel'
+import { useAgentAvailability } from '@/hooks/useAgentAvailability'
+import { useDesktopToast } from '@/hooks/useDesktopToast'
+import { useDesktopUpdates } from '@/hooks/useDesktopUpdates'
 import { useHubController } from '@/hooks/useHubController'
 import { usePairingBridge } from '@/hooks/usePairingBridge'
+import { usePairingInviteAutoRenew } from '@/hooks/usePairingInviteAutoRenew'
+import { DESKTOP_COPY } from '@/lib/desktopCopy'
+import {
+    getSystemLanguage,
+    getSystemTheme,
+    type LanguagePreference,
+    readLanguagePreference,
+    readThemePreference,
+    resolveLanguagePreference,
+    resolveThemePreference,
+    type ThemePreference,
+    writeLanguagePreference,
+    writeThemePreference,
+} from '@/lib/desktopPreferences'
+import {
+    buildHubSwitchModel,
+    COPY_FEEDBACK_DURATION_MS,
+    PAIRING_SUCCESS_DISMISS_MS,
+    shouldPollPairingSnapshot,
+} from '@/lib/desktopShellModel'
 import { buildEntryPreviewModel } from '@/lib/entryMode'
 import { deriveHubViewState } from '@/lib/hubSnapshot'
-import {
-    buildDetailFields,
-    buildFooterMessage,
-    buildOverviewFields,
-    buildPrimaryActionLabel,
-    buildStatusCopy,
-    getEmptyKeyMessage,
-} from '@/lib/panelContent'
-
-function getPrimaryCaption(ready: boolean, managed: boolean): string {
-    if (ready) {
-        return '入口已就绪'
-    }
-
-    if (managed) {
-        return '正在接管当前会话'
-    }
-
-    return '轻触即可进入'
-}
-
-function getAuraClassName(ready: boolean, managed: boolean): string {
-    if (ready) {
-        return 'desktop-aura desktop-aura-ready'
-    }
-
-    if (managed) {
-        return 'desktop-aura desktop-aura-booting'
-    }
-
-    return 'desktop-aura'
-}
+import { buildPairingConnectionSummary } from '@/lib/pairingBridgeSupport'
+import { shouldStartPairingBridge } from '@/lib/pairingModalSupport'
+import { getEmptyKeyMessage } from '@/lib/panelContent'
 
 export function App(): JSX.Element {
     const {
         snapshot,
         busy,
+        hubBusy,
         entryMode,
         actionError,
         pairing,
         setEntryMode,
         start,
         stop,
-        openPreferred,
         copyValue,
+        openUrl,
         createPairing,
-        approvePairing,
+        refreshPairing,
         recreatePairing,
-        clearPairing,
+        deletePairing,
     } = useHubController()
+    const [activePage, setActivePage] = useState<DesktopPage>('connection')
+    const [themePreference, setThemePreferenceState] = useState<ThemePreference>(() =>
+        readThemePreference(globalThis.localStorage)
+    )
+    const [languagePreference, setLanguagePreferenceState] = useState<LanguagePreference>(() =>
+        readLanguagePreference(globalThis.localStorage)
+    )
+    const [systemTheme, setSystemTheme] = useState(() => getSystemTheme(globalThis.matchMedia?.bind(globalThis)))
+    const [systemLanguage] = useState(() => getSystemLanguage(globalThis.navigator?.language))
+    const [pairingDialogOpen, setPairingDialogOpen] = useState(false)
+    const [pairingDialogRequested, setPairingDialogRequested] = useState(false)
+    const [pairingSuccessAutoDismissArmed, setPairingSuccessAutoDismissArmed] = useState(false)
+    const { message: toastMessage, tone: toastTone, showToast } = useDesktopToast()
+    const updates = useDesktopUpdates()
 
     const status = snapshot?.status
-    const pairingBridge = usePairingBridge({ pairing, status })
     const viewState = deriveHubViewState(snapshot)
-    const statusCopy = buildStatusCopy(viewState)
-    const entryPreview = buildEntryPreviewModel(snapshot, entryMode)
-    const footerMessage = buildFooterMessage(actionError, snapshot, viewState, entryPreview)
-    const overviewFields = buildOverviewFields({ entryPreview, status, copyValue })
-    const detailFields = buildDetailFields({ snapshot, status, copyValue })
-    const primaryActionLabel = buildPrimaryActionLabel(viewState, busy)
-    const primaryActionTone = viewState.managed ? 'secondary' : 'primary'
-
-    const primaryMetric = overviewFields[0]
-    const tokenMetric = overviewFields[1]
-    const lastUpdatedMetric = detailFields[3]
-    const canOpen = Boolean(viewState.ready && status?.preferredBrowserUrl)
+    const agentAvailability = useAgentAvailability(status, viewState.ready)
+    const pairingBridge = usePairingBridge({
+        pairing: shouldStartPairingBridge(pairing) ? pairing : null,
+        status,
+    })
+    const entryPreview = buildEntryPreviewModel(snapshot)
+    const switchModel = buildHubSwitchModel({ busy: hubBusy, running: viewState.running, ready: viewState.ready })
+    const themeMode = resolveThemePreference(themePreference, systemTheme)
+    const language = resolveLanguagePreference(languagePreference, systemLanguage)
+    const copy = DESKTOP_COPY[language]
+    const pairingConnection = buildPairingConnectionSummary({
+        ...pairingBridge,
+        pairing: pairingBridge.pairing ?? pairing?.pairing ?? null,
+    })
     const canCopyToken = Boolean(status?.cliApiToken)
-    const canPair = Boolean(viewState.ready)
+    const notice = actionError || snapshot?.lastError || null
 
-    const handlePrimaryAction = (): void => {
-        if (viewState.managed) {
-            void stop()
+    useEffect(() => {
+        const query = globalThis.matchMedia?.('(prefers-color-scheme: dark)')
+        if (!query) {
             return
         }
 
+        const handleChange = (event: MediaQueryListEvent): void => setSystemTheme(event.matches ? 'dark' : 'light')
+        query.addEventListener('change', handleChange)
+        return () => query.removeEventListener('change', handleChange)
+    }, [])
+
+    useEffect(() => {
+        if (!pairing) {
+            setPairingDialogOpen(false)
+            return
+        }
+
+        if (pairingDialogRequested) {
+            setPairingDialogOpen(true)
+            setPairingDialogRequested(false)
+        }
+    }, [pairing, pairingDialogRequested])
+
+    useEffect(() => {
+        if (!notice) {
+            return
+        }
+        showToast(notice)
+    }, [notice, showToast])
+
+    useEffect(() => {
+        if (updates.phase !== 'available' || !updates.message) {
+            return
+        }
+        showToast(updates.message)
+    }, [showToast, updates.message, updates.phase])
+
+    useEffect(() => {
+        if (!shouldPollPairingSnapshot(pairing, pairingBridge.phase, pairingDialogOpen)) {
+            return
+        }
+        const intervalId = window.setInterval(() => {
+            void refreshPairing()
+        }, 1000)
+        return () => window.clearInterval(intervalId)
+    }, [pairing, pairingBridge.phase, pairingDialogOpen, refreshPairing])
+
+    usePairingInviteAutoRenew(pairing, pairingDialogOpen, async () => {
+        setPairingSuccessAutoDismissArmed(false)
+        return await recreatePairing()
+    })
+
+    useEffect(() => {
+        if (!pairingDialogOpen || pairingBridge.phase !== 'ready') {
+            return
+        }
+        if (!pairingSuccessAutoDismissArmed) {
+            return
+        }
+        const timeoutId = window.setTimeout(() => {
+            setPairingDialogOpen(false)
+            setPairingSuccessAutoDismissArmed(false)
+        }, PAIRING_SUCCESS_DISMISS_MS)
+        return () => window.clearTimeout(timeoutId)
+    }, [pairingBridge.phase, pairingDialogOpen, pairingSuccessAutoDismissArmed])
+
+    const handleHubSwitch = (): void => {
+        if (viewState.ready) {
+            void stop()
+            return
+        }
         if (!viewState.running) {
             void start()
         }
     }
 
-    const pairingActions: PairingCardActions | null = pairing
-        ? {
-              onApprove: () => void approvePairing(),
-              onClear: () => void clearPairing(),
-              onCopyLink: () => void copyValue(pairing.pairingUrl, '当前没有可复制的配对链接。'),
-              onRefresh: () => void recreatePairing(),
-              onRejectAndRefresh: () => void recreatePairing(),
-          }
-        : null
+    const setThemePreference = (preference: ThemePreference): void => {
+        setThemePreferenceState(preference)
+        writeThemePreference(globalThis.localStorage, preference)
+    }
+
+    const setLanguagePreference = (preference: LanguagePreference): void => {
+        setLanguagePreferenceState(preference)
+        writeLanguagePreference(globalThis.localStorage, preference)
+    }
+
+    const handlePairingAction = (): void => {
+        if (pairing?.pairing.approvalStatus === 'approved') {
+            setPairingSuccessAutoDismissArmed(false)
+            return
+        }
+        if (pairing) {
+            setPairingSuccessAutoDismissArmed(false)
+            setPairingDialogOpen(true)
+            return
+        }
+        if (viewState.ready) {
+            setPairingSuccessAutoDismissArmed(true)
+            setPairingDialogRequested(true)
+            void createPairing()
+        }
+    }
+
+    const handleRemovePairing = (): void => {
+        const confirmed = globalThis.confirm?.('解除绑定后，这台手机需要重新扫码才能连接。继续？') ?? true
+        if (confirmed) {
+            setPairingDialogOpen(false)
+            void deletePairing()
+        }
+    }
+
+    const handleCopyToken = async (): Promise<void> => {
+        const copied = await copyValue(status?.cliApiToken, getEmptyKeyMessage())
+        if (copied) {
+            showToast(copy.accessKeyCopied, COPY_FEEDBACK_DURATION_MS, 'success')
+        }
+    }
 
     return (
-        <main className="desktop-shell">
-            <div className={getAuraClassName(viewState.ready, viewState.managed)} aria-hidden="true" />
-            <section className="desktop-stage">
-                <div className="desktop-panel">
-                    <div className="desktop-panel-grid">
-                        <section className="desktop-hero">
-                            <div className="desktop-status-row">
-                                <span className="desktop-brand-mark">Viby Desktop</span>
-                                <span className={`desktop-phase-chip ${viewState.ready ? 'is-ready' : ''}`}>
-                                    <span className="desktop-phase-dot" />
-                                    {statusCopy.chip}
-                                </span>
-                            </div>
+        <DesktopMotionProvider>
+            <main className="desktop-shell" data-theme={themeMode} lang={language === 'zh' ? 'zh-CN' : 'en'}>
+                <WindowDragRegion />
+                <DesktopSidebar
+                    activePage={activePage}
+                    copy={copy}
+                    hubReady={viewState.ready}
+                    switchModel={switchModel}
+                    onHubSwitch={handleHubSwitch}
+                    onPageChange={setActivePage}
+                />
 
-                            <div className="desktop-hero-copy">
-                                <p className="desktop-eyebrow">{statusCopy.title}</p>
-                                <h1 className="desktop-title">
-                                    机器在你身边。
-                                    <br />
-                                    Hub 也该如此。
-                                </h1>
-                                <p className="desktop-summary">{statusCopy.subtitle}</p>
-                            </div>
+                <section className="desktop-main" aria-live="polite">
+                    <PageTransition transitionKey={activePage}>
+                        {activePage === 'connection' ? (
+                            <ConnectionPage
+                                busy={busy}
+                                canCopyToken={canCopyToken}
+                                copy={copy}
+                                entryPreview={entryPreview}
+                                pairingConnection={pairingConnection}
+                                viewState={viewState}
+                                onCopyToken={() => void handleCopyToken()}
+                                onOpenEntry={(url) => void openUrl(url)}
+                                onPairingAction={handlePairingAction}
+                                onRemovePairing={handleRemovePairing}
+                            />
+                        ) : null}
 
-                            <div className="desktop-primary-zone">
-                                <button
-                                    className={`desktop-primary-button ${primaryActionTone === 'primary' ? 'is-primary' : ''}`}
-                                    disabled={busy}
-                                    onClick={handlePrimaryAction}
-                                    type="button"
-                                >
-                                    <span className="desktop-primary-label">{primaryActionLabel}</span>
-                                    <span className="desktop-primary-caption">
-                                        {busy ? '处理中' : getPrimaryCaption(viewState.ready, viewState.managed)}
-                                    </span>
-                                </button>
-                                <EntryModeSwitch
-                                    disabled={busy || viewState.running}
-                                    onChange={setEntryMode}
-                                    value={entryMode}
-                                />
-                            </div>
+                        {activePage === 'agents' ? (
+                            <CodingAgentsPage
+                                agents={agentAvailability.agents}
+                                copy={copy}
+                                error={agentAvailability.error}
+                                loading={agentAvailability.loading}
+                                onRefresh={agentAvailability.refresh}
+                            />
+                        ) : null}
 
-                            <div className="desktop-dock">
-                                <ControlPill
-                                    disabled={busy || !canOpen}
-                                    label="打开入口"
-                                    onClick={() => void openPreferred()}
-                                />
-                                <ControlPill
-                                    disabled={busy || !canCopyToken}
-                                    label="复制密钥"
-                                    onClick={() => void copyValue(status?.cliApiToken, getEmptyKeyMessage())}
-                                />
-                                <ControlPill
-                                    disabled={busy || !canPair}
-                                    label={pairing ? '刷新配对码' : '生成配对码'}
-                                    onClick={() => void (pairing ? recreatePairing() : createPairing())}
-                                />
-                            </div>
-                        </section>
+                        {activePage === 'settings' ? (
+                            <SettingsPanel
+                                copy={copy}
+                                entryMode={entryMode}
+                                entryModeDisabled={busy || viewState.running}
+                                languagePreference={languagePreference}
+                                themePreference={themePreference}
+                                onEntryModeChange={setEntryMode}
+                                onLanguagePreferenceChange={setLanguagePreference}
+                                onThemePreferenceChange={setThemePreference}
+                                updates={updates}
+                            />
+                        ) : null}
+                    </PageTransition>
+                </section>
 
-                        <section className="desktop-ambient-panel">
-                            <div className="desktop-orbit">
-                                <div className={`desktop-orbit-core ${viewState.ready ? 'is-ready' : ''}`} />
-                                <div className="desktop-orbit-ring desktop-orbit-ring-one" />
-                                <div className="desktop-orbit-ring desktop-orbit-ring-two" />
-                            </div>
-                            <div className="desktop-ambient-copy">
-                                <p>单一控制</p>
-                                <strong>
-                                    {viewState.managed ? '这扇窗在托管当前 Hub。' : '还没启动时只有一个动作。'}
-                                </strong>
-                                <span>
-                                    {viewState.ready
-                                        ? '入口、密钥、配对都从同一份 snapshot 生长出来。'
-                                        : '没有多余导航，没有学习成本，只有状态变化。'}
-                                </span>
-                            </div>
-                        </section>
-                    </div>
+                <DesktopPairingModal
+                    copy={copy}
+                    open={pairingDialogOpen}
+                    pairing={pairing}
+                    pairingBridge={pairingBridge}
+                    onClose={() => setPairingDialogOpen(false)}
+                />
 
-                    <section className="desktop-metrics" aria-label="核心信息">
-                        <MetricCard
-                            actionLabel={primaryMetric.actionLabel}
-                            label={primaryMetric.label}
-                            mono={primaryMetric.mono}
-                            onAction={primaryMetric.onAction}
-                            value={primaryMetric.value}
-                        />
-                        <MetricCard
-                            actionLabel={tokenMetric.actionLabel}
-                            label={tokenMetric.label}
-                            mono={tokenMetric.mono}
-                            onAction={tokenMetric.onAction}
-                            value={tokenMetric.value}
-                        />
-                        <MetricCard label="最近更新" value={lastUpdatedMetric?.value ?? '刚刚'} />
-                    </section>
-
-                    {pairing && pairingActions ? (
-                        <PairingCard
-                            actions={pairingActions}
-                            busy={busy}
-                            bridgeState={pairingBridge}
-                            pairing={pairing}
-                        />
-                    ) : null}
-
-                    <footer className={`desktop-footer ${actionError || snapshot?.lastError ? 'is-error' : ''}`}>
-                        <span>{footerMessage}</span>
-                    </footer>
-                </div>
-            </section>
-        </main>
+                <ToastLayer
+                    message={toastMessage}
+                    className="desktop-toast"
+                    tone={toastTone}
+                    icon={toastTone === 'success' ? <CheckIcon /> : undefined}
+                />
+            </main>
+        </DesktopMotionProvider>
     )
 }

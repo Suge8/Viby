@@ -1,0 +1,298 @@
+@layer components {
+    .desktop-mobile-action,
+    .desktop-copy-icon,
+    .desktop-device-remove,
+    .desktop-control-pill,
+    .desktop-page-action,
+    .desktop-agent-action,
+    .desktop-settings-action,
+    .desktop-settings-toggle,
+    .desktop-segmented-control button,
+    .desktop-pairing-close,
+    .desktop-pairing-side-top button {
+        cursor: pointer;
+        transition:
+            transform var(--desktop-motion-fast) var(--desktop-ease-emphasized),
+            border-color var(--desktop-motion-fast) ease,
+            background-color var(--desktop-motion-fast) ease,
+            color var(--desktop-motion-fast) ease,
+            opacity var(--desktop-motion-fast) ease,
+            box-shadow var(--desktop-motion-base) ease;
+    }
+
+    .desktop-mobile-action:not(:disabled):active,
+    .desktop-copy-icon:not(:disabled):active,
+    .desktop-device-remove:not(:disabled):active,
+    .desktop-control-pill:not(:disabled):active,
+    .desktop-page-action:not(:disabled):active,
+    .desktop-agent-action:active,
+    .desktop-settings-action:not(:disabled):active,
+    .desktop-settings-toggle:not(:disabled):active,
+    .desktop-segmented-control button:active,
+    .desktop-pairing-close:active,
+    .desktop-pairing-side-top button:not(:disabled):active {
+        transform: translateY(var(--desktop-press-lift)) scale(var(--desktop-press-scale));
+    }
+
+    .desktop-feature-card {
+        position: relative;
+        display: grid;
+        min-height: 360px;
+        align-content: space-between;
+        gap: 18px;
+        padding: clamp(24px, 3vw, 34px);
+        overflow: hidden;
+        border: 1px solid var(--desktop-border);
+        border-radius: var(--desktop-radius-lg);
+        background: rgba(255, 255, 255, 0.84);
+        box-shadow: var(--desktop-shadow);
+        backdrop-filter: blur(18px);
+        transition:
+            transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+            box-shadow 220ms ease,
+            border-color 220ms ease;
+    }
+
+    .desktop-shell[data-theme="dark"] .desktop-feature-card {
+        background: rgba(255, 255, 255, 0.045);
+    }
+
+    .desktop-feature-card::after {
+        position: absolute;
+        inset: auto -12% -22% 34%;
+        height: 46%;
+        pointer-events: none;
+        content: "";
+        border-radius: 999px;
+        background: radial-gradient(circle, rgba(47, 143, 91, 0.08), transparent 70%);
+    }
+
+    .desktop-card-heading {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        gap: 8px;
+    }
+
+    .desktop-card-heading h2 {
+        margin: 0;
+        color: var(--desktop-text);
+        font-size: clamp(2.1rem, 3.6vw, 3.3rem);
+        font-weight: 850;
+        line-height: 0.96;
+        letter-spacing: -0.07em;
+    }
+
+    .desktop-feature-card:hover {
+        border-color: var(--desktop-border-strong);
+        box-shadow: 0 28px 82px rgba(31, 27, 20, 0.11);
+        transform: translateY(-2px);
+    }
+
+    .desktop-mobile-action {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        min-height: 188px;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        padding: 24px;
+        border: 1px solid var(--desktop-border-strong);
+        border-radius: var(--desktop-radius-lg);
+        background:
+            radial-gradient(circle at 74% 22%, rgba(192, 132, 26, 0.13), transparent 36%),
+            linear-gradient(145deg, rgba(17, 19, 18, 0.04), rgba(17, 19, 18, 0.01));
+        color: var(--desktop-text);
+        font-size: clamp(1.6rem, 2.6vw, 2.2rem);
+        font-weight: 840;
+        letter-spacing: -0.06em;
+    }
+
+    .desktop-mobile-action-icon {
+        display: grid;
+        width: 84px;
+        height: 84px;
+        place-items: center;
+        border-radius: 24px;
+        background: var(--desktop-surface);
+        box-shadow: var(--desktop-shadow-sm);
+        color: var(--desktop-text);
+        transition:
+            transform 360ms cubic-bezier(0.2, 0.8, 0.2, 1),
+            box-shadow 240ms ease;
+    }
+
+    .desktop-mobile-action-icon .desktop-icon {
+        font-size: 44px;
+    }
+
+    .desktop-mobile-action:not(:disabled):hover .desktop-mobile-action-icon {
+        transform: translateY(-2px) rotate(-2deg);
+        box-shadow: 0 16px 40px rgba(31, 27, 20, 0.12);
+    }
+
+    .desktop-mobile-card:has(.desktop-device-summary.is-connected) .desktop-mobile-action {
+        border-color: rgba(47, 143, 91, 0.32);
+        background:
+            radial-gradient(circle at 74% 22%, rgba(47, 143, 91, 0.18), transparent 36%),
+            linear-gradient(145deg, rgba(47, 143, 91, 0.1), rgba(47, 143, 91, 0.03));
+    }
+
+    .desktop-mobile-card:has(.desktop-device-summary.is-connected) .desktop-mobile-action-icon {
+        color: var(--desktop-success);
+    }
+
+    .desktop-mobile-action:hover,
+    .desktop-control-pill:hover,
+    .desktop-copy-icon:hover,
+    .desktop-device-remove:hover,
+    .desktop-page-action:hover,
+    .desktop-agent-action:hover {
+        transform: translateY(var(--desktop-hover-lift));
+    }
+
+    .desktop-mobile-action:disabled,
+    .desktop-control-pill:disabled,
+    .desktop-copy-icon:disabled,
+    .desktop-device-remove:disabled,
+    .desktop-page-action:disabled,
+    .desktop-settings-action:disabled,
+    .desktop-settings-toggle:disabled,
+    .desktop-pairing-side-top button:disabled {
+        cursor: not-allowed;
+        opacity: 0.42;
+        transform: none;
+        box-shadow: none;
+    }
+
+    .desktop-entry-row {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        gap: 14px;
+        padding: 16px 18px;
+        border: 1px solid var(--desktop-border);
+        border-radius: 18px;
+        background: var(--desktop-surface-soft);
+        transition:
+            border-color 160ms ease,
+            background-color 160ms ease,
+            transform 160ms ease;
+    }
+
+    .desktop-entry-row:hover {
+        border-color: var(--desktop-border-strong);
+        background: #fffdfa;
+        transform: translateY(-1px);
+    }
+
+    .desktop-shell[data-theme="dark"] .desktop-entry-row:hover {
+        background: #24261f;
+    }
+
+    .desktop-entry-icon {
+        display: grid;
+        width: 38px;
+        height: 38px;
+        flex: 0 0 auto;
+        place-items: center;
+        border: 1px solid var(--desktop-border);
+        border-radius: 12px;
+        background: var(--desktop-surface);
+        color: var(--desktop-muted);
+    }
+
+    .desktop-entry-icon .desktop-icon {
+        font-size: 17px;
+    }
+
+    .desktop-entry-copy {
+        display: grid;
+        flex: 1 1 auto;
+        min-width: 0;
+        gap: 10px;
+    }
+
+    .desktop-entry-address {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+    }
+
+    .desktop-entry-address > div {
+        display: grid;
+        gap: 5px;
+        min-width: 0;
+    }
+
+    .desktop-entry-copy strong {
+        overflow: hidden;
+        color: var(--desktop-text);
+        font-size: clamp(0.96rem, 1.7vw, 1.3rem);
+        font-weight: 800;
+        letter-spacing: -0.045em;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .desktop-copy-icon {
+        display: grid;
+        width: 42px;
+        height: 42px;
+        flex: 0 0 auto;
+        place-items: center;
+        border: 1px solid var(--desktop-border);
+        border-radius: 12px;
+        background: var(--desktop-surface);
+        color: var(--desktop-muted);
+    }
+
+    .desktop-copy-icon:hover {
+        border-color: var(--desktop-border-strong);
+        color: var(--desktop-text);
+    }
+
+    .desktop-copy-icon .desktop-icon {
+        font-size: 17px;
+    }
+
+    .desktop-control-pill {
+        position: relative;
+        z-index: 1;
+        display: inline-flex;
+        width: 100%;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        min-height: 46px;
+        padding: 12px 18px;
+        border: 1px solid var(--desktop-border);
+        border-radius: 999px;
+        background: var(--desktop-surface);
+        color: var(--desktop-text);
+        font-size: 14px;
+        font-weight: 760;
+        letter-spacing: -0.02em;
+    }
+
+    .desktop-control-pill:hover {
+        border-color: var(--desktop-border-strong);
+        box-shadow: var(--desktop-shadow-sm);
+    }
+
+    .desktop-control-pill-icon {
+        display: grid;
+        place-items: center;
+        color: var(--desktop-muted);
+    }
+
+    .desktop-control-pill-icon .desktop-icon {
+        font-size: 16px;
+    }
+}

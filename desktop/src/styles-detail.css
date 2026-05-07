@@ -1,73 +1,257 @@
 @layer components {
-    .desktop-metrics {
-        @apply mt-4 grid gap-4 lg:grid-cols-3;
-    }
-
-    .desktop-metric-card {
-        @apply p-5;
-    }
-
-    .desktop-metric-head {
-        @apply text-xs uppercase tracking-[0.18em] text-text-secondary;
-    }
-
-    .desktop-metric-action {
-        @apply text-[11px] font-semibold tracking-[0.16em] text-white hover:text-emerald-200;
-    }
-
-    .desktop-metric-value {
-        @apply mt-4 text-lg font-semibold tracking-[-0.03em] text-white;
-    }
-
-    .desktop-metric-value.is-mono {
-        font-family:
-            ui-monospace,
-            SFMono-Regular,
-            Menlo,
-            Monaco,
-            Consolas,
-            Liberation Mono,
-            monospace;
+    .desktop-pairing-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 18px;
+        background: rgba(23, 23, 23, 0.42);
+        backdrop-filter: blur(18px);
     }
 
     .desktop-pairing-card {
-        @apply mt-4 space-y-5 p-6;
+        position: relative;
+        width: min(100%, 780px);
+        padding: 32px;
+        overflow: hidden;
+        border: 1px solid var(--desktop-border);
+        border-radius: var(--desktop-radius-lg);
+        background:
+            radial-gradient(circle at 82% 18%, rgba(192, 132, 26, 0.12), transparent 32%), rgba(255, 255, 255, 0.96);
+        box-shadow: var(--desktop-shadow-lg);
+    }
+
+    .desktop-shell[data-theme="dark"] .desktop-pairing-card {
+        background:
+            radial-gradient(circle at 82% 18%, rgba(192, 132, 26, 0.16), transparent 32%), rgba(36, 38, 31, 0.96);
+    }
+
+    .desktop-pairing-close {
+        position: absolute;
+        top: 18px;
+        right: 18px;
+        display: grid;
+        width: 44px;
+        height: 44px;
+        place-items: center;
+        border: 1px solid color-mix(in srgb, var(--desktop-border-strong) 70%, transparent);
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--desktop-surface) 86%, transparent);
+        color: var(--desktop-text);
+        box-shadow: var(--desktop-shadow-sm);
+    }
+
+    .desktop-pairing-close .desktop-icon {
+        font-size: 20px;
+    }
+
+    .desktop-pairing-close:hover {
+        background: var(--desktop-danger-soft);
+        color: var(--desktop-text);
+        transform: rotate(90deg);
     }
 
     .desktop-pairing-grid {
-        @apply grid gap-4 lg:grid-cols-[0.9fr_1.1fr];
+        display: grid;
+        grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+        gap: 34px;
+        align-items: center;
     }
 
-    .desktop-pairing-qr,
-    .desktop-pairing-meta-card {
-        @apply rounded-[24px] border border-white/10 bg-black/20 p-4;
+    .desktop-pairing-qr {
+        display: grid;
+        place-items: center;
     }
 
     .desktop-pairing-image {
-        @apply mx-auto h-56 w-56 rounded-[20px] bg-white p-3;
+        position: relative;
+        display: grid;
+        width: min(100%, 282px);
+        aspect-ratio: 1;
+        place-items: center;
+        padding: 14px;
+        border: 1px solid var(--desktop-border);
+        border-radius: 24px;
+        background: #ffffff;
     }
 
-    .desktop-pairing-placeholder {
-        @apply flex h-56 items-center justify-center text-sm text-text-secondary;
+    .desktop-pairing-svg {
+        width: 100%;
+        height: 100%;
+        fill: #000000;
+        shape-rendering: crispEdges;
+        transition:
+            opacity var(--desktop-motion-base) ease,
+            transform 260ms var(--desktop-ease-emphasized);
     }
 
-    .desktop-pairing-meta {
-        @apply grid gap-4 sm:grid-cols-2;
+    .desktop-pairing-grid.is-connected .desktop-pairing-svg {
+        opacity: 0.14;
+        transform: scale(0.96);
     }
 
-    .desktop-pairing-meta-card span {
-        @apply text-xs uppercase tracking-[0.18em] text-text-secondary;
+    .desktop-pairing-success {
+        position: absolute;
+        display: grid;
+        width: 96px;
+        height: 96px;
+        place-items: center;
+        border-radius: 999px;
+        background: var(--desktop-success);
+        color: #ffffff;
+        box-shadow:
+            0 0 0 14px rgba(47, 143, 91, 0.14),
+            0 24px 70px rgba(47, 143, 91, 0.32);
+        animation: desktop-pairing-success-pop 520ms var(--desktop-ease-emphasized) both;
     }
 
-    .desktop-pairing-meta-card strong {
-        @apply mt-3 block break-all text-base font-semibold text-white;
+    .desktop-pairing-success .desktop-icon {
+        font-size: 48px;
     }
 
-    .desktop-footer {
-        @apply mt-4 px-5 py-4;
+    .desktop-pairing-side {
+        display: grid;
+        gap: 16px;
+        min-width: 0;
     }
 
-    .desktop-footer.is-error {
-        @apply text-rose-300;
+    .desktop-pairing-side-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+    }
+
+    .desktop-pairing-side-top > span {
+        color: var(--desktop-faint);
+        font-size: 12px;
+        font-weight: 820;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+    }
+
+    .desktop-pairing-side-top button {
+        display: inline-flex;
+        min-height: var(--desktop-control-min);
+        flex: 0 0 auto;
+        align-items: center;
+        gap: 7px;
+        padding: 9px 13px;
+        border: 1px solid var(--desktop-border);
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--desktop-surface) 82%, transparent);
+        color: var(--desktop-text);
+        font-size: 13px;
+        font-weight: 760;
+    }
+
+    .desktop-pairing-side-top button:hover {
+        border-color: var(--desktop-border-strong);
+        background: var(--desktop-surface-soft);
+        box-shadow: var(--desktop-shadow-sm);
+        transform: translateY(var(--desktop-hover-lift));
+    }
+
+    .desktop-pairing-side-top button .desktop-icon {
+        font-size: 15px;
+    }
+
+    .desktop-pairing-side strong {
+        color: var(--desktop-success);
+        font-size: clamp(3.4rem, 9vw, 6rem);
+        font-weight: 840;
+        line-height: 0.92;
+        letter-spacing: -0.07em;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+
+    .desktop-pairing-side small {
+        display: inline-flex;
+        width: fit-content;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 12px;
+        border: 1px solid var(--desktop-border);
+        border-radius: 999px;
+        background: var(--desktop-surface-soft);
+        color: var(--desktop-muted);
+        font-size: 13px;
+        font-weight: 760;
+    }
+
+    .desktop-pairing-side small.is-ready {
+        border-color: rgba(47, 143, 91, 0.24);
+        background: var(--desktop-success-soft);
+        color: var(--desktop-success);
+    }
+
+    .desktop-pairing-side small.is-warning {
+        border-color: rgba(192, 132, 26, 0.28);
+        background: rgba(192, 132, 26, 0.11);
+        color: var(--desktop-warning);
+    }
+
+    .desktop-pairing-side small.is-neutral {
+        color: var(--desktop-muted);
+    }
+
+    .desktop-pairing-guidance {
+        max-width: 28rem;
+        margin: -4px 0 0;
+        color: var(--desktop-muted);
+        font-size: 14px;
+        font-weight: 650;
+        line-height: 1.55;
+    }
+
+    .desktop-pairing-grid.is-connected .desktop-pairing-side strong {
+        color: var(--desktop-success);
+        font-size: clamp(2.8rem, 7vw, 4.8rem);
+        animation: desktop-pairing-success-copy 480ms var(--desktop-ease-emphasized) both;
+    }
+
+    @keyframes desktop-pairing-success-pop {
+        0% {
+            opacity: 0;
+            transform: scale(0.62);
+        }
+        65% {
+            opacity: 1;
+            transform: scale(1.06);
+        }
+        100% {
+            opacity: 1;
+            transform: scale(1);
+        }
+    }
+
+    @keyframes desktop-pairing-success-copy {
+        0% {
+            opacity: 0;
+            transform: translateY(8px);
+        }
+        100% {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @media (max-width: 680px) {
+        .desktop-pairing-card {
+            padding: 24px;
+            border-radius: 26px;
+        }
+
+        .desktop-pairing-grid {
+            grid-template-columns: 1fr;
+            gap: 24px;
+        }
+
+        .desktop-pairing-side strong {
+            font-size: clamp(3rem, 16vw, 4.6rem);
+        }
     }
 }

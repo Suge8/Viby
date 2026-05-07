@@ -3,6 +3,7 @@ import type { DesktopPairingSession, HubSnapshot } from '@/types'
 
 const invokeMock = mock(async () => undefined)
 const listenMock = mock(async () => () => {})
+const checkMock = mock(async () => null)
 const PREVIEW_MESSAGE = '当前运行在浏览器预览环境，Tauri runtime 不可用。请使用 bun run dev:desktop 启动桌面壳。'
 
 mock.module('@tauri-apps/api/core', () => ({
@@ -11,6 +12,10 @@ mock.module('@tauri-apps/api/core', () => ({
 
 mock.module('@tauri-apps/api/event', () => ({
     listen: listenMock,
+}))
+
+mock.module('@tauri-apps/plugin-updater', () => ({
+    check: checkMock,
 }))
 
 const desktopApi = await import('./desktopApi')
@@ -64,8 +69,10 @@ const pairingFixture: DesktopPairingSession = {
 beforeEach(() => {
     invokeMock.mockReset()
     listenMock.mockReset()
+    checkMock.mockReset()
     invokeMock.mockImplementation(async () => undefined)
     listenMock.mockImplementation(async () => () => {})
+    checkMock.mockImplementation(async () => null)
     ;(globalThis as typeof globalThis & { window?: unknown }).window = {
         __TAURI_INTERNALS__: {
             invoke: () => undefined,
@@ -84,6 +91,42 @@ describe('desktopApi', () => {
         await desktopApi.openPreferredUrl()
 
         expect(invokeMock).toHaveBeenCalledWith('open_preferred_url', undefined)
+    })
+
+    it('opens a concrete entry URL without asking the hub to choose one', async () => {
+        await desktopApi.openUrl('http://192.168.12.34:37173')
+
+        expect(invokeMock).toHaveBeenCalledWith('open_url', { url: 'http://192.168.12.34:37173' })
+    })
+
+    it('starts the hub with the selected entry mode', async () => {
+        invokeMock.mockResolvedValueOnce(snapshotFixture)
+
+        await expect(desktopApi.startHub({ entryMode: 'lan' })).resolves.toBe(snapshotFixture)
+        expect(invokeMock).toHaveBeenCalledWith('start_hub', { options: { entryMode: 'lan' } })
+    })
+
+    it('checks local agent availability through the desktop CLI bridge', async () => {
+        const response = { agents: [] }
+        invokeMock.mockResolvedValueOnce(response)
+
+        await expect(desktopApi.listAgentAvailability({ forceRefresh: true })).resolves.toBe(response)
+        expect(invokeMock).toHaveBeenCalledWith('list_agent_availability', {
+            request: { forceRefresh: true },
+        })
+    })
+
+    it('loads the durable pairing session through the dedicated desktop command', async () => {
+        invokeMock.mockResolvedValueOnce(pairingFixture)
+
+        await expect(desktopApi.getPairingSession()).resolves.toEqual(pairingFixture)
+        expect(invokeMock).toHaveBeenCalledWith('get_pairing_session', undefined)
+    })
+
+    it('clears the durable pairing session through the dedicated desktop command', async () => {
+        await desktopApi.clearPairingSession()
+
+        expect(invokeMock).toHaveBeenCalledWith('clear_pairing_session', undefined)
     })
 
     it('requests a pairing session through the dedicated desktop command', async () => {
@@ -110,10 +153,74 @@ describe('desktopApi', () => {
         expect(invokeMock).toHaveBeenCalledWith('approve_pairing_session', { pairing: pairingFixture })
     })
 
+    it('refreshes a pairing session through the dedicated desktop command', async () => {
+        invokeMock.mockResolvedValueOnce({
+            ...pairingFixture,
+            pairing: {
+                ...pairingFixture.pairing,
+                shortCode: '490649',
+                approvalStatus: 'pending',
+                guest: {
+                    label: 'iPhone',
+                },
+            },
+        })
+
+        await expect(desktopApi.refreshPairingSession(pairingFixture)).resolves.toMatchObject({
+            pairing: {
+                shortCode: '490649',
+                approvalStatus: 'pending',
+            },
+        })
+        expect(invokeMock).toHaveBeenCalledWith('refresh_pairing_session', { pairing: pairingFixture })
+    })
+
     it('deletes a pairing session through the dedicated desktop command', async () => {
         await desktopApi.deletePairingSession(pairingFixture)
 
         expect(invokeMock).toHaveBeenCalledWith('delete_pairing_session', { pairing: pairingFixture })
+    })
+
+    it('checks desktop updates through the Tauri updater owner', async () => {
+        const update = {
+            version: '0.3.0',
+            currentVersion: '0.2.0',
+            date: '2026-04-25T00:00:00Z',
+            body: 'Desktop updater',
+            close: mock(async () => undefined),
+            downloadAndInstall: mock(async () => undefined),
+        }
+        checkMock.mockResolvedValueOnce(update)
+
+        await expect(desktopApi.checkForDesktopUpdate()).resolves.toEqual({
+            version: '0.3.0',
+            currentVersion: '0.2.0',
+            date: '2026-04-25T00:00:00Z',
+            body: 'Desktop updater',
+        })
+        expect(checkMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('installs the pending desktop update', async () => {
+        const update = {
+            version: '0.3.0',
+            currentVersion: '0.2.0',
+            close: mock(async () => undefined),
+            downloadAndInstall: mock(async () => undefined),
+        }
+        checkMock.mockResolvedValueOnce(update)
+
+        await desktopApi.checkForDesktopUpdate()
+        await desktopApi.installDesktopUpdate()
+
+        expect(update.downloadAndInstall).toHaveBeenCalledTimes(1)
+        expect(update.close).toHaveBeenCalledTimes(1)
+    })
+
+    it('rejects update install when no update is available', async () => {
+        checkMock.mockResolvedValueOnce(null)
+
+        await expect(desktopApi.installDesktopUpdate()).rejects.toThrow('没有可安装的桌面更新。')
     })
 
     it('forwards hub snapshot events to the caller callback', async () => {

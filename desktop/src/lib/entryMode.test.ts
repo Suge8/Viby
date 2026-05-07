@@ -51,14 +51,23 @@ describe('entryMode', () => {
         expect(deriveInitialEntryMode(snapshot)).toBe('local')
     })
 
-    it('builds an immediate LAN preview when the user selects the LAN tab', () => {
-        const model = buildEntryPreviewModel(makeSnapshot(), 'lan')
+    it('keeps startup preview browser-safe before the runtime publishes its entry URL', () => {
+        const model = buildEntryPreviewModel(
+            makeSnapshot({
+                startupConfig: {
+                    listenHost: '0.0.0.0',
+                    listenPort: 37173,
+                },
+            })
+        )
 
         expect(model.isPreview).toBe(true)
-        expect(model.displayValue).toBe('http://0.0.0.0:37173')
+        expect(model.mode).toBe('lan')
+        expect(model.displayValue).toBe('http://127.0.0.1:37173')
+        expect(model.openUrl).toBeUndefined()
     })
 
-    it('prefers the running hub address over any pending tab selection', () => {
+    it('shows the LAN address as the primary running entry when available', () => {
         const snapshot = makeSnapshot({
             running: true,
             status: {
@@ -67,7 +76,7 @@ describe('entryMode', () => {
                 listenHost: '0.0.0.0',
                 listenPort: 4567,
                 localHubUrl: 'http://127.0.0.1:4567',
-                preferredBrowserUrl: 'http://127.0.0.1:4567',
+                preferredBrowserUrl: 'https://hub.example.test',
                 cliApiToken: 'token',
                 settingsFile: '/tmp/settings.toml',
                 dataDir: '/tmp',
@@ -76,10 +85,15 @@ describe('entryMode', () => {
             },
         })
 
-        const model = buildEntryPreviewModel(snapshot, 'local')
+        const model = buildEntryPreviewModel(snapshot)
 
         expect(model.isPreview).toBe(false)
-        expect(model.displayValue).toBe('http://0.0.0.0:4567')
-        expect(model.openUrl).toBe('http://127.0.0.1:4567')
+        expect(model.mode).toBe('lan')
+        expect(model.displayLabel).toBe('局域网地址')
+        expect(model.displayValue).toBe('https://hub.example.test')
+        expect(model.secondaryLabel).toBe('本机地址')
+        expect(model.secondaryValue).toBe('http://127.0.0.1:4567')
+        expect(model.openUrl).toBe('https://hub.example.test')
+        expect(model.secondaryOpenUrl).toBe('http://127.0.0.1:4567')
     })
 })

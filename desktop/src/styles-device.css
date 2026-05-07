@@ -1,0 +1,84 @@
+@layer components {
+    .desktop-device-summary {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 14px;
+        border: 1px solid var(--desktop-border);
+        border-radius: 18px;
+        background: var(--desktop-surface-soft);
+        color: var(--desktop-muted);
+    }
+
+    .desktop-device-summary > span {
+        display: grid;
+        width: 56px;
+        height: 56px;
+        flex: 0 0 auto;
+        place-items: center;
+        border-radius: 16px;
+        background: var(--desktop-surface);
+        box-shadow: var(--desktop-shadow-sm);
+    }
+
+    .desktop-device-summary > span strong {
+        color: var(--desktop-text);
+        font-size: 24px;
+        line-height: 0.9;
+    }
+
+    .desktop-device-summary > span span {
+        font-size: 10px;
+        font-weight: 780;
+    }
+
+    .desktop-device-summary > div {
+        display: grid;
+        gap: 4px;
+        min-width: 0;
+    }
+
+    .desktop-device-summary > div strong {
+        color: var(--desktop-text);
+        font-size: 15px;
+        font-weight: 820;
+        letter-spacing: -0.03em;
+    }
+
+    .desktop-device-summary small {
+        overflow: hidden;
+        font-size: 13px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .desktop-device-remove {
+        margin-left: auto;
+        padding: 9px 12px;
+        border: 1px solid color-mix(in srgb, var(--desktop-danger) 24%, transparent);
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--desktop-danger-soft) 72%, transparent);
+        color: var(--desktop-danger);
+        font-size: 12px;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .desktop-device-remove:hover {
+        border-color: color-mix(in srgb, var(--desktop-danger) 38%, transparent);
+        background: color-mix(in srgb, var(--desktop-danger-soft) 88%, transparent);
+    }
+
+    .desktop-device-summary.is-connected {
+        border-color: color-mix(in srgb, var(--desktop-success) 24%, transparent);
+        background: var(--desktop-success-soft);
+        color: var(--desktop-success);
+    }
+
+    .desktop-device-summary.is-connected > span strong,
+    .desktop-device-summary.is-connected > div strong {
+        color: var(--desktop-success);
+    }
+}

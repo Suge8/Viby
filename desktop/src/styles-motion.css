@@ -1,0 +1,5 @@
+@layer components {
+    /* Page entry, card reveal, stagger and modal motion are owned by motion.tsx.
+       Only retain CSS keyframes for purely decorative state pulses that motion
+       primitives do not cover. */
+}

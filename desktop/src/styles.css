@@ -1,11 +1,17 @@
 @import "tailwindcss";
 @config "../tailwind.config.ts";
 @import "./styles-shell.css";
+@import "./styles-navigation.css";
+@import "./styles-shell-controls.css";
+@import "./styles-device.css";
+@import "./styles-settings.css";
+@import "./styles-agents.css";
 @import "./styles-detail.css";
+@import "./styles-motion.css";
 
 @layer base {
     :root {
-        color-scheme: dark;
+        color-scheme: light;
     }
 
     * {
@@ -13,52 +19,42 @@
     }
 
     body {
-        @apply bg-background text-text-primary font-sans;
-        min-height: 100vh;
+        width: 100vw;
+        height: 100vh;
         margin: 0;
         overflow: hidden;
+        font-family: Inter, Manrope, "SF Pro Display", "Segoe UI Variable", "Helvetica Neue", sans-serif;
+        background: #fbfaf6;
     }
 
     button {
         font: inherit;
+        background: none;
+        border: 0;
+    }
+
+    button:focus-visible,
+    a:focus-visible {
+        outline: 2px solid var(--desktop-success, #2f8f5b);
+        outline-offset: 2px;
     }
 
     #root {
-        min-height: 100vh;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
     }
 }
 
 @layer utilities {
-    @keyframes desktop-spin {
-        from {
-            transform: rotate(0deg);
-        }
-        to {
-            transform: rotate(360deg);
-        }
-    }
-
-    @keyframes desktop-float {
-        0%,
-        100% {
-            transform: translate(-50%, -50%) scale(0.96);
-        }
-        50% {
-            transform: translate(-50%, -50%) scale(1.05);
-        }
-    }
-
     @media (prefers-reduced-motion: reduce) {
-        .desktop-aura,
-        .desktop-orbit-ring {
-            animation: none;
-        }
-
-        .desktop-primary-button,
-        .desktop-control-pill,
-        .desktop-mode-option,
-        .desktop-metric-action {
-            transition: none;
+        *,
+        *::before,
+        *::after {
+            animation-duration: 0.001ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.001ms !important;
+            scroll-behavior: auto !important;
         }
     }
 }

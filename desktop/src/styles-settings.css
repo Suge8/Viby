@@ -1,0 +1,226 @@
+@layer components {
+    .desktop-settings-page {
+        --desktop-settings-action-gap: 12px;
+        --desktop-settings-inline-gap: 10px;
+        --desktop-settings-toggle-height: 28px;
+        --desktop-settings-toggle-padding: 3px;
+        --desktop-settings-toggle-thumb: calc(
+            var(--desktop-settings-toggle-height) -
+            var(--desktop-settings-toggle-padding) *
+            2
+        );
+        --desktop-settings-toggle-width: calc(var(--desktop-settings-toggle-height) * 1.72);
+        --desktop-settings-toggle-travel: calc(
+            var(--desktop-settings-toggle-width) -
+            var(--desktop-settings-toggle-thumb) -
+            var(--desktop-settings-toggle-padding) *
+            2
+        );
+
+        display: grid;
+        align-content: start;
+        gap: 12px;
+        width: min(100%, 880px);
+    }
+
+    .desktop-settings-row,
+    .desktop-settings-update {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        min-height: 78px;
+        padding: 16px 20px;
+        border: 1px solid var(--desktop-border);
+        border-radius: var(--desktop-radius);
+        background: rgba(255, 255, 255, 0.78);
+        box-shadow: var(--desktop-shadow-sm);
+        transition:
+            transform 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
+            border-color 170ms ease,
+            box-shadow 170ms ease;
+    }
+
+    .desktop-shell[data-theme="dark"] .desktop-settings-row,
+    .desktop-shell[data-theme="dark"] .desktop-settings-update {
+        background: rgba(255, 255, 255, 0.045);
+    }
+
+    .desktop-settings-row:hover,
+    .desktop-settings-update:hover {
+        border-color: var(--desktop-border-strong);
+        box-shadow: var(--desktop-shadow);
+        transform: translateX(2px);
+    }
+
+    .desktop-settings-heading {
+        display: flex;
+        flex: 1 1 auto;
+        align-items: center;
+        gap: 14px;
+        min-width: 0;
+    }
+
+    .desktop-settings-heading-icon {
+        display: grid;
+        width: 38px;
+        height: 38px;
+        flex: 0 0 auto;
+        place-items: center;
+        border-radius: 12px;
+        background: var(--desktop-surface-soft);
+        color: var(--desktop-muted);
+    }
+
+    .desktop-settings-heading-icon .desktop-icon {
+        font-size: 18px;
+    }
+
+    .desktop-settings-row:hover .desktop-settings-heading-icon,
+    .desktop-settings-update:hover .desktop-settings-heading-icon {
+        color: var(--desktop-text);
+    }
+
+    .desktop-settings-heading > div {
+        display: grid;
+        gap: 4px;
+        min-width: 0;
+    }
+
+    .desktop-settings-row strong,
+    .desktop-settings-update strong {
+        color: var(--desktop-text);
+        font-size: 15px;
+        font-weight: 800;
+        letter-spacing: -0.025em;
+    }
+
+    .desktop-settings-row span,
+    .desktop-settings-update span {
+        color: var(--desktop-muted);
+        font-size: 13px;
+        line-height: 1.45;
+    }
+
+    .desktop-segmented-control {
+        display: inline-flex;
+        flex: 0 0 auto;
+        align-items: center;
+        gap: 3px;
+        padding: 3px;
+        border: 1px solid var(--desktop-border);
+        border-radius: 16px;
+        background: color-mix(in srgb, var(--desktop-surface-soft) 86%, transparent);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+    }
+
+    .desktop-segmented-control button {
+        min-width: 64px;
+        min-height: 36px;
+        padding: 8px 13px;
+        border-radius: 13px;
+        color: var(--desktop-muted);
+        font-size: 13px;
+        font-weight: 760;
+    }
+
+    .desktop-segmented-control button:hover {
+        color: var(--desktop-text);
+        transform: translateY(var(--desktop-hover-lift));
+    }
+
+    .desktop-segmented-control button.is-selected {
+        background: var(--desktop-surface);
+        color: var(--desktop-text);
+        box-shadow:
+            0 6px 16px rgba(31, 27, 20, 0.08),
+            inset 0 1px 0 rgba(255, 255, 255, 0.72);
+    }
+
+    .desktop-settings-toggle {
+        display: flex;
+        width: var(--desktop-settings-toggle-width);
+        height: var(--desktop-settings-toggle-height);
+        min-height: var(--desktop-settings-toggle-height);
+        flex: 0 0 auto;
+        align-items: center;
+        padding: var(--desktop-settings-toggle-padding);
+        border-radius: 999px;
+        background: #d9d6ce;
+        touch-action: manipulation;
+    }
+
+    .desktop-shell[data-theme="dark"] .desktop-settings-toggle {
+        background: #3c3e34;
+    }
+
+    .desktop-settings-toggle:disabled {
+        opacity: 0.44;
+    }
+
+    .desktop-settings-toggle span {
+        width: var(--desktop-settings-toggle-thumb);
+        height: var(--desktop-settings-toggle-thumb);
+        border-radius: 999px;
+        background: #ffffff;
+        box-shadow: 0 4px 12px rgba(29, 24, 18, 0.18);
+        transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    .desktop-settings-toggle.is-on {
+        background: var(--desktop-success);
+    }
+
+    .desktop-settings-toggle.is-on span {
+        transform: translateX(var(--desktop-settings-toggle-travel));
+    }
+
+    .desktop-settings-update-actions {
+        display: inline-flex;
+        flex: 0 0 auto;
+        align-items: center;
+        gap: var(--desktop-settings-action-gap);
+    }
+
+    .desktop-settings-inline-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--desktop-settings-inline-gap);
+    }
+
+    .desktop-settings-inline-toggle > span {
+        color: var(--desktop-muted);
+        font-size: 13px;
+        font-weight: 760;
+        white-space: nowrap;
+    }
+
+    .desktop-settings-action {
+        display: inline-flex;
+        flex: 0 0 auto;
+        align-items: center;
+        gap: 8px;
+        min-height: 40px;
+        padding: 9px 14px;
+        border-radius: 999px;
+        background: #111312;
+        color: #ffffff;
+        font-size: 13px;
+        font-weight: 760;
+    }
+
+    .desktop-settings-action .desktop-icon {
+        font-size: 15px;
+    }
+
+    .desktop-settings-action:hover {
+        transform: translateY(var(--desktop-hover-lift));
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+    }
+
+    .desktop-settings-action:disabled {
+        opacity: 0.5;
+        transform: none;
+        box-shadow: none;
+    }
+}
