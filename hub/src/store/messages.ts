@@ -12,6 +12,7 @@ import type { StoredMessage } from './types'
 type CreateStoredMessageInput = {
     content: unknown
     createdAt?: number
+    invokedAt?: number | null
     localId?: string
 }
 
@@ -22,6 +23,7 @@ type DbMessageRow = {
     created_at: number
     seq: number
     local_id: string | null
+    invoked_at: number | null
 }
 
 const INTERNAL_MESSAGE_FETCH_MAX = SESSION_MAX_MESSAGE_PAGE_SIZE + 1
@@ -41,12 +43,25 @@ function toStoredMessage(row: DbMessageRow): StoredMessage {
         createdAt: row.created_at,
         seq: row.seq,
         localId: row.local_id,
+        invokedAt: row.invoked_at ?? null,
     }
 }
 
+function getFiniteTimestamp(value: number | undefined): number | null {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function resolveInvokedAt(input: CreateStoredMessageInput, createdAt: number): number | null {
+    if (input.invokedAt === null) {
+        return null
+    }
+
+    return getFiniteTimestamp(input.invokedAt) ?? createdAt
+}
+
 function insertMessage(db: Database, sessionId: string, input: CreateStoredMessageInput): StoredMessage {
-    const createdAt =
-        typeof input.createdAt === 'number' && Number.isFinite(input.createdAt) ? input.createdAt : Date.now()
+    const createdAt = getFiniteTimestamp(input.createdAt) ?? Date.now()
+    const invokedAt = resolveInvokedAt(input, createdAt)
     const json = JSON.stringify(input.content)
 
     if (input.localId) {
@@ -63,9 +78,9 @@ function insertMessage(db: Database, sessionId: string, input: CreateStoredMessa
 
     db.query(`
         INSERT INTO messages (
-            id, session_id, content, created_at, seq, local_id
+            id, session_id, content, created_at, seq, local_id, invoked_at
         ) VALUES (
-            @id, @session_id, @content, @created_at, @seq, @local_id
+            @id, @session_id, @content, @created_at, @seq, @local_id, @invoked_at
         )
     `).run({
         id,
@@ -74,6 +89,7 @@ function insertMessage(db: Database, sessionId: string, input: CreateStoredMessa
         created_at: createdAt,
         seq: msgSeq,
         local_id: input.localId ?? null,
+        invoked_at: invokedAt,
     })
 
     recordSessionMessageSideEffects(db, sessionId, input.content, createdAt)
@@ -91,9 +107,10 @@ export function addMessage(
     sessionId: string,
     content: unknown,
     localId?: string,
-    createdAt?: number
+    createdAt?: number,
+    invokedAt?: number | null
 ): StoredMessage {
-    return addMessages(db, sessionId, [{ content, localId, createdAt }])[0]
+    return addMessages(db, sessionId, [{ content, localId, createdAt, invokedAt }])[0]
 }
 
 export function addMessages(db: Database, sessionId: string, inputs: CreateStoredMessageInput[]): StoredMessage[] {
@@ -159,6 +176,65 @@ export function getMaxSeq(db: Database, sessionId: string): number {
     return row?.maxSeq ?? 0
 }
 
+export function getUninvokedLocalMessages(db: Database, sessionId: string): StoredMessage[] {
+    const rows = db
+        .query(
+            'SELECT * FROM messages WHERE session_id = ? AND local_id IS NOT NULL AND invoked_at IS NULL ORDER BY seq ASC'
+        )
+        .all(sessionId) as DbMessageRow[]
+    return rows.map(toStoredMessage)
+}
+
+export function markMessagesInvoked(db: Database, sessionId: string, localIds: string[], invokedAt: number): number {
+    if (localIds.length === 0) {
+        return 0
+    }
+
+    const placeholders = localIds.map(() => '?').join(', ')
+    const result = db
+        .query(
+            `UPDATE messages
+             SET invoked_at = ?
+             WHERE session_id = ?
+               AND local_id IN (${placeholders})
+               AND invoked_at IS NULL`
+        )
+        .run(invokedAt, sessionId, ...localIds)
+    return result.changes
+}
+
+export function cancelQueuedMessages(db: Database, sessionId: string, localIds: string[]): string[] {
+    if (localIds.length === 0) {
+        return []
+    }
+
+    const placeholders = localIds.map(() => '?').join(', ')
+    const rows = db
+        .query(
+            `SELECT local_id
+             FROM messages
+             WHERE session_id = ?
+               AND local_id IN (${placeholders})
+               AND invoked_at IS NULL`
+        )
+        .all(sessionId, ...localIds) as Array<{ local_id: string | null }>
+    const canceledLocalIds = rows
+        .map((row) => row.local_id)
+        .filter((localId): localId is string => typeof localId === 'string')
+    if (canceledLocalIds.length === 0) {
+        return []
+    }
+
+    const deletePlaceholders = canceledLocalIds.map(() => '?').join(', ')
+    db.query(
+        `DELETE FROM messages
+         WHERE session_id = ?
+           AND local_id IN (${deletePlaceholders})
+           AND invoked_at IS NULL`
+    ).run(sessionId, ...canceledLocalIds)
+    return canceledLocalIds
+}
+
 export function mergeSessionMessages(
     db: Database,
     fromSessionId: string,
@@ -191,10 +267,12 @@ export function mergeSessionMessages(
         if (collisions.length > 0) {
             const localIds = collisions.map((row) => row.local_id)
             const placeholders = localIds.map(() => '?').join(', ')
-            db.query(`UPDATE messages SET local_id = NULL WHERE session_id = ? AND local_id IN (${placeholders})`).run(
-                fromSessionId,
-                ...localIds
-            )
+            db.query(
+                `UPDATE messages
+                 SET local_id = NULL,
+                     invoked_at = COALESCE(invoked_at, created_at)
+                 WHERE session_id = ? AND local_id IN (${placeholders})`
+            ).run(fromSessionId, ...localIds)
         }
 
         const result = db

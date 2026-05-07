@@ -5,7 +5,12 @@ import {
 } from '@viby/protocol/schemas'
 
 import { safeJsonParse } from './json'
-import { REQUIRED_SESSION_COLUMNS, REQUIRED_TABLES, SCHEMA_REBUILD_GUIDANCE } from './storeSchemaDefinition'
+import {
+    REQUIRED_MESSAGE_COLUMNS,
+    REQUIRED_SESSION_COLUMNS,
+    REQUIRED_TABLES,
+    SCHEMA_REBUILD_GUIDANCE,
+} from './storeSchemaDefinition'
 import { isSessionMetadataRecord, normalizeLegacySessionMetadataContract } from './storeSchemaLegacyMetadata'
 
 type DbSessionMetadataRow = {
@@ -73,11 +78,35 @@ export class StoreSchemaMigrationSupport {
         }
     }
 
+    ensureSessionConfigColumns(): void {
+        const missingColumns = this.getMissingTableColumns('sessions', ['codex_service_tier'])
+        if (missingColumns.includes('codex_service_tier')) {
+            this.db.exec('ALTER TABLE sessions ADD COLUMN codex_service_tier TEXT')
+        }
+    }
+
     assertRequiredSessionColumnsPresent(): void {
         const missingColumns = this.getMissingTableColumns('sessions', REQUIRED_SESSION_COLUMNS)
         if (missingColumns.length > 0) {
             throw new Error(
                 `SQLite schema is missing required session columns (${missingColumns.join(', ')}). ${SCHEMA_REBUILD_GUIDANCE}`
+            )
+        }
+    }
+
+    ensureMessageInvocationColumns(): void {
+        const missingColumns = this.getMissingTableColumns('messages', REQUIRED_MESSAGE_COLUMNS)
+        if (missingColumns.includes('invoked_at')) {
+            this.db.exec('ALTER TABLE messages ADD COLUMN invoked_at INTEGER')
+            this.db.exec('UPDATE messages SET invoked_at = created_at WHERE invoked_at IS NULL')
+        }
+    }
+
+    assertRequiredMessageColumnsPresent(): void {
+        const missingColumns = this.getMissingTableColumns('messages', REQUIRED_MESSAGE_COLUMNS)
+        if (missingColumns.length > 0) {
+            throw new Error(
+                `SQLite schema is missing required message columns (${missingColumns.join(', ')}). ${SCHEMA_REBUILD_GUIDANCE}`
             )
         }
     }

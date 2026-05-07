@@ -1,5 +1,6 @@
 import type {
     CodexCollaborationMode,
+    CodexServiceTier,
     ModelReasoningEffort,
     PermissionMode,
     SessionActivityKind,
@@ -17,6 +18,7 @@ export type StoredSession = {
     agentStateVersion: number
     model: string | null
     modelReasoningEffort: ModelReasoningEffort | null
+    codexServiceTier: CodexServiceTier | null
     permissionMode: PermissionMode | null
     collaborationMode: CodexCollaborationMode | null
     todos: unknown | null
@@ -49,6 +51,7 @@ export type StoredMessage = {
     createdAt: number
     seq: number
     localId: string | null
+    invokedAt: number | null
 }
 
 export type StoredPushSubscription = {

@@ -1,5 +1,10 @@
 import type { Database } from 'bun:sqlite'
-import type { CodexCollaborationMode, ModelReasoningEffort, PermissionMode } from '@viby/protocol/types'
+import type {
+    CodexCollaborationMode,
+    CodexServiceTier,
+    ModelReasoningEffort,
+    PermissionMode,
+} from '@viby/protocol/types'
 import { type DbSessionRow, getSessionRow, toStoredSession } from './sessionRecordSupport'
 import type { StoredSession } from './types'
 
@@ -62,6 +67,34 @@ export function setSessionModelReasoningEffort(
         {
             id,
             model_reasoning_effort: modelReasoningEffort,
+            updated_at: now,
+            touch_updated_at: touchUpdatedAt ? 1 : 0,
+        }
+    )
+}
+
+export function setSessionCodexServiceTier(
+    db: Database,
+    id: string,
+    codexServiceTier: CodexServiceTier | null,
+    options?: { touchUpdatedAt?: boolean }
+): boolean {
+    const now = Date.now()
+    const touchUpdatedAt = options?.touchUpdatedAt === true
+
+    return updateSessionField(
+        db,
+        `
+        UPDATE sessions
+        SET codex_service_tier = @codex_service_tier,
+            updated_at = CASE WHEN @touch_updated_at = 1 THEN @updated_at ELSE updated_at END,
+            seq = seq + 1
+        WHERE id = @id
+          AND codex_service_tier IS NOT @codex_service_tier
+    `,
+        {
+            id,
+            codex_service_tier: codexServiceTier,
             updated_at: now,
             touch_updated_at: touchUpdatedAt ? 1 : 0,
         }

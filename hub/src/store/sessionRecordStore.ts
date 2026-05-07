@@ -1,6 +1,11 @@
 import type { Database } from 'bun:sqlite'
 import { randomUUID } from 'node:crypto'
-import type { CodexCollaborationMode, ModelReasoningEffort, PermissionMode } from '@viby/protocol/types'
+import type {
+    CodexCollaborationMode,
+    CodexServiceTier,
+    ModelReasoningEffort,
+    PermissionMode,
+} from '@viby/protocol/types'
 import { safeJsonParse } from './json'
 import { getSession } from './sessionRecordFieldStore'
 
@@ -9,6 +14,7 @@ export {
     getInactiveRunningSessionIds,
     getSession,
     getSessions,
+    setSessionCodexServiceTier,
     setSessionCollaborationMode,
     setSessionModel,
     setSessionModelReasoningEffort,
@@ -26,6 +32,7 @@ export type CreateStoredSessionInput = {
     agentState?: unknown
     model?: string
     modelReasoningEffort?: ModelReasoningEffort
+    codexServiceTier?: CodexServiceTier | null
     permissionMode?: PermissionMode
     collaborationMode?: CodexCollaborationMode
     sessionId?: string
@@ -38,8 +45,17 @@ function serializeNullableJson(value: unknown): string | null {
 }
 
 export function getOrCreateSession(db: Database, input: CreateStoredSessionInput): StoredSession {
-    const { tag, metadata, agentState, model, modelReasoningEffort, permissionMode, collaborationMode, sessionId } =
-        input
+    const {
+        tag,
+        metadata,
+        agentState,
+        model,
+        modelReasoningEffort,
+        codexServiceTier,
+        permissionMode,
+        collaborationMode,
+        sessionId,
+    } = input
     const normalizedMetadata = normalizeSessionMetadata(metadata)
 
     if (sessionId) {
@@ -69,6 +85,7 @@ export function getOrCreateSession(db: Database, input: CreateStoredSessionInput
             agent_state, agent_state_version,
             model,
             model_reasoning_effort,
+            codex_service_tier,
             permission_mode,
             collaboration_mode,
             next_message_seq,
@@ -81,6 +98,7 @@ export function getOrCreateSession(db: Database, input: CreateStoredSessionInput
             @agent_state, 1,
             @model,
             @model_reasoning_effort,
+            @codex_service_tier,
             @permission_mode,
             @collaboration_mode,
             1,
@@ -97,6 +115,7 @@ export function getOrCreateSession(db: Database, input: CreateStoredSessionInput
         agent_state: agentStateJson,
         model: model ?? null,
         model_reasoning_effort: modelReasoningEffort ?? null,
+        codex_service_tier: codexServiceTier ?? null,
         permission_mode: permissionMode ?? null,
         collaboration_mode: collaborationMode ?? null,
     })

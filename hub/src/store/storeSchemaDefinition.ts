@@ -1,19 +1,21 @@
 import type { Database } from 'bun:sqlite'
 
 export const IN_MEMORY_DATABASE_PREFIX = 'file::memory:'
-export const SCHEMA_VERSION = 15
-export const AUTO_MIGRATABLE_SCHEMA_VERSIONS = [14] as const
+export const SCHEMA_VERSION = 17
+export const AUTO_MIGRATABLE_SCHEMA_VERSIONS = [14, 15, 16] as const
 export type AutoMigratableSchemaVersion = (typeof AUTO_MIGRATABLE_SCHEMA_VERSIONS)[number]
 export const LEGACY_REQUIRED_TABLES = ['sessions', 'machines', 'messages', 'push_subscriptions'] as const
 export const REQUIRED_TABLES = [...LEGACY_REQUIRED_TABLES] as const
 export const REQUIRED_SESSION_COLUMNS = [
     'permission_mode',
     'collaboration_mode',
+    'codex_service_tier',
     'next_message_seq',
     'latest_activity_at',
     'latest_activity_kind',
     'latest_completed_reply_at',
 ] as const
+export const REQUIRED_MESSAGE_COLUMNS = ['invoked_at'] as const
 export const SCHEMA_REBUILD_GUIDANCE =
     'Back up and rebuild the database, or run an offline migration to the expected schema version.'
 export const AUTO_MIGRATABLE_SCHEMA_VERSION_LABEL = AUTO_MIGRATABLE_SCHEMA_VERSIONS.map(
@@ -52,6 +54,7 @@ export function createStoreSchema(db: Database): void {
             agent_state_version INTEGER DEFAULT 1,
             model TEXT,
             model_reasoning_effort TEXT,
+            codex_service_tier TEXT,
             permission_mode TEXT,
             collaboration_mode TEXT,
             next_message_seq INTEGER NOT NULL DEFAULT 1,
@@ -87,6 +90,7 @@ export function createStoreSchema(db: Database): void {
             created_at INTEGER NOT NULL,
             seq INTEGER NOT NULL,
             local_id TEXT,
+            invoked_at INTEGER,
             FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
         );
         CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, seq);

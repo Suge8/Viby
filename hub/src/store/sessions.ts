@@ -11,6 +11,7 @@ export {
     getSession,
     getSessions,
     setSessionAlive,
+    setSessionCodexServiceTier,
     setSessionCollaborationMode,
     setSessionInactive,
     setSessionModel,

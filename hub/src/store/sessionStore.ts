@@ -1,6 +1,7 @@
 import type { Database } from 'bun:sqlite'
 import type {
     CodexCollaborationMode,
+    CodexServiceTier,
     ModelReasoningEffort,
     PermissionMode,
     SessionMessageActivity,
@@ -14,6 +15,7 @@ import {
     getSessionMessageActivities,
     getSessions,
     setSessionAlive,
+    setSessionCodexServiceTier,
     setSessionCollaborationMode,
     setSessionInactive,
     setSessionModel,
@@ -76,6 +78,14 @@ export class SessionStore {
         options?: { touchUpdatedAt?: boolean }
     ): boolean {
         return setSessionModelReasoningEffort(this.db, id, modelReasoningEffort, options)
+    }
+
+    setSessionCodexServiceTier(
+        id: string,
+        codexServiceTier: CodexServiceTier | null,
+        options?: { touchUpdatedAt?: boolean }
+    ): boolean {
+        return setSessionCodexServiceTier(this.db, id, codexServiceTier, options)
     }
 
     setSessionPermissionMode(id: string, permissionMode: PermissionMode | null): boolean {

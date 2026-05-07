@@ -40,7 +40,10 @@ export class StoreSchemaManager {
             this.migrateSchema(currentVersion)
         }
         this.migrationSupport.assertRequiredTablesPresent()
+        this.migrationSupport.ensureSessionConfigColumns()
+        this.migrationSupport.ensureMessageInvocationColumns()
         this.migrationSupport.assertRequiredSessionColumnsPresent()
+        this.migrationSupport.assertRequiredMessageColumnsPresent()
     }
 
     private getUserVersion(): number {
@@ -65,11 +68,13 @@ export class StoreSchemaManager {
         }
 
         this.migrationSupport.assertRequiredTablesPresent(LEGACY_REQUIRED_TABLES)
+        this.migrationSupport.ensureSessionConfigColumns()
         this.migrationSupport.assertRequiredSessionColumnsPresent()
         this.db.exec('BEGIN IMMEDIATE')
 
         try {
             createStoreSchema(this.db)
+            this.migrationSupport.ensureMessageInvocationColumns()
             this.migrationSupport.normalizeLegacySessionMetadataContracts()
             this.setUserVersion(SCHEMA_VERSION)
             this.db.exec('COMMIT')

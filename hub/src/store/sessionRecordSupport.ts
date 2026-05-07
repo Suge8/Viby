@@ -2,6 +2,7 @@ import type { Database } from 'bun:sqlite'
 import { createEmptySessionMessageActivity, type SessionMessageActivity } from '@viby/protocol'
 import type {
     CodexCollaborationMode,
+    CodexServiceTier,
     ModelReasoningEffort,
     PermissionMode,
     SessionActivityKind,
@@ -22,6 +23,7 @@ export type DbSessionRow = {
     agent_state_version: number
     model: string | null
     model_reasoning_effort: ModelReasoningEffort | null
+    codex_service_tier: CodexServiceTier | null
     permission_mode: PermissionMode | null
     collaboration_mode: CodexCollaborationMode | null
     next_message_seq: number
@@ -68,6 +70,7 @@ export function toStoredSession(row: DbSessionRow): StoredSession {
         agentStateVersion: row.agent_state_version,
         model: row.model,
         modelReasoningEffort: row.model_reasoning_effort,
+        codexServiceTier: row.codex_service_tier,
         permissionMode: row.permission_mode,
         collaborationMode: row.collaboration_mode,
         todos: safeJsonParse(row.todos),
