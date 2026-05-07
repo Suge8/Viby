@@ -626,7 +626,7 @@ describe('session model', () => {
             expect(spawnCalls[0]?.directory).toBe('/tmp/project')
             expect(spawnCalls[0]?.agent).toBe('claude')
             expect(spawnCalls[0]?.model).toBeUndefined()
-            expect(spawnCalls[0]?.modelReasoningEffort).toBeNull()
+            expect(spawnCalls[0]?.modelReasoningEffort).toBe('xhigh')
             expect(spawnCalls[0]?.permissionMode).toBe('default')
             expect(spawnCalls[0]?.collaborationMode).toBeUndefined()
             expect(spawnCalls[0]?.driverSwitch).toMatchObject({
@@ -636,7 +636,7 @@ describe('session model', () => {
                     workingDirectory: '/tmp/project',
                     liveConfig: expect.objectContaining({
                         model: null,
-                        modelReasoningEffort: null,
+                        modelReasoningEffort: 'xhigh',
                         permissionMode: 'default',
                     }),
                 },
@@ -1040,7 +1040,7 @@ describe('session model', () => {
                 collaborationMode?: unknown
             }
             expect(spawnOptions.model).toBeUndefined()
-            expect(spawnOptions.modelReasoningEffort).toBeNull()
+            expect(spawnOptions.modelReasoningEffort).toBe('xhigh')
             expect(spawnOptions.collaborationMode).toBeUndefined()
             expect(result).toEqual({
                 type: 'error',

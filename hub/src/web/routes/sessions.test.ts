@@ -1181,7 +1181,7 @@ describe('sessions routes', () => {
         const response = await app.request('/api/sessions/session-1/model-reasoning-effort', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ modelReasoningEffort: 'xhigh' }),
+            body: JSON.stringify({ modelReasoningEffort: 'minimal' }),
         })
 
         expect(response.status).toBe(400)

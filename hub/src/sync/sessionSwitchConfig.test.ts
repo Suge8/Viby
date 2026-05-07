@@ -115,7 +115,7 @@ describe('normalizeDriverSwitchConfig', () => {
     it('drops malformed and stale values instead of forwarding them to the target runtime', () => {
         const session = createSession({
             model: '   ',
-            modelReasoningEffort: 'xhigh' as Session['modelReasoningEffort'],
+            modelReasoningEffort: 'minimal',
             permissionMode: 'read-only',
             collaborationMode: 'stale-plan' as Session['collaborationMode'],
         })
