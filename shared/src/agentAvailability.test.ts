@@ -15,9 +15,12 @@ describe('agentAvailability', () => {
         expect(getAgentSupportLink('codex', null)).toBeNull()
     })
 
-    it('parses query booleans without treating "false" as true', () => {
-        expect(ListAgentAvailabilityRequestSchema.parse({ forceRefresh: 'true' })).toEqual({
+    it('parses agent availability query state', () => {
+        expect(
+            ListAgentAvailabilityRequestSchema.parse({ forceRefresh: 'true', drivers: 'codex,claude,codex' })
+        ).toEqual({
             forceRefresh: true,
+            drivers: ['claude', 'codex'],
         })
         expect(ListAgentAvailabilityRequestSchema.parse({ forceRefresh: 'false' })).toEqual({
             forceRefresh: false,

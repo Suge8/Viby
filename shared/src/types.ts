@@ -8,6 +8,7 @@ export type {
 } from './agentAvailability'
 export type {
     AgentLaunchConfig,
+    AgentLaunchConfigErrorCode,
     AgentModelCapability,
     ResolveAgentLaunchConfigRequest,
     ResolveAgentLaunchConfigResponse,
@@ -74,6 +75,17 @@ export type {
     PiPermissionMode,
 } from './modes'
 export type { ProposedPlanSegment } from './proposedPlan'
+export type {
+    RuntimeAgentAvailabilitySnapshot,
+    RuntimeAgentCapabilitySnapshot,
+    RuntimeAgentLaunchConfigSnapshot,
+    RuntimeCapabilityDepth,
+    RuntimeCapabilityError,
+    RuntimeCapabilityErrorCode,
+    RuntimeCapabilityRequest,
+    RuntimeCapabilityResponse,
+    RuntimeCapabilitySnapshot,
+} from './runtimeCapability'
 export type { SameSessionSwitchTargetDriver } from './sameSessionSwitch'
 export type {
     AgentState,

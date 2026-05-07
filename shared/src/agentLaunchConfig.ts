@@ -1,9 +1,21 @@
 import { z } from 'zod'
 import { ModelReasoningEffortSchema, SessionDriverSchema } from './schemas'
 
+export const AGENT_LAUNCH_CONFIG_ERROR_CODES = [
+    'auth_missing',
+    'config_missing',
+    'provider_unavailable',
+    'model_unavailable',
+    'reasoning_unsupported',
+    'unknown',
+] as const
+
+export const AgentLaunchConfigErrorCodeSchema = z.enum(AGENT_LAUNCH_CONFIG_ERROR_CODES)
+export type AgentLaunchConfigErrorCode = z.infer<typeof AgentLaunchConfigErrorCodeSchema>
+
 export const ResolveAgentLaunchConfigRequestSchema = z.object({
     agent: SessionDriverSchema,
-    directory: z.string().trim().min(1),
+    directory: z.string().trim().min(1).optional(),
 })
 
 export type ResolveAgentLaunchConfigRequest = z.infer<typeof ResolveAgentLaunchConfigRequestSchema>
@@ -33,6 +45,7 @@ export const ResolveAgentLaunchConfigResponseSchema = z.union([
     }),
     z.object({
         type: z.literal('error'),
+        code: AgentLaunchConfigErrorCodeSchema.default('unknown'),
         message: z.string(),
     }),
 ])

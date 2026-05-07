@@ -14,6 +14,7 @@
         "./localSettings": "./src/localSettings.ts",
         "./messages": "./src/messages.ts",
         "./pairing": "./src/pairing/index.ts",
+        "./runtimeCapability": "./src/runtimeCapability.ts",
         "./runtimeDefaults": "./src/runtimeDefaults.ts",
         "./modes": "./src/modes.ts",
         "./agentLaunchConfig": "./src/agentLaunchConfig.ts",

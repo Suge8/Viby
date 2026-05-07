@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { AgentFlavor } from './modes'
+import { AGENT_FLAVORS, type AgentFlavor } from './modes'
 import { SessionDriverSchema } from './schemas'
 
 export const AGENT_AVAILABILITY_STATUS = [
@@ -47,9 +47,21 @@ const QueryBooleanSchema = z
     .union([z.boolean(), z.enum(['true', 'false'])])
     .transform((value) => value === true || value === 'true')
 
+const QueryAgentDriversSchema = z
+    .preprocess((value) => {
+        if (typeof value === 'string')
+            return value
+                .split(',')
+                .map((entry) => entry.trim())
+                .filter(Boolean)
+        return value
+    }, z.array(SessionDriverSchema).min(1).optional())
+    .transform((drivers) => (drivers ? AGENT_FLAVORS.filter((driver) => drivers.includes(driver)) : undefined))
+
 export const ListAgentAvailabilityRequestSchema = z.object({
     directory: z.string().trim().min(1).optional(),
     forceRefresh: QueryBooleanSchema.optional(),
+    drivers: QueryAgentDriversSchema.optional(),
 })
 
 export type AgentAvailabilityResponse = z.infer<typeof AgentAvailabilityResponseSchema>

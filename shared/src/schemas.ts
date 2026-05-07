@@ -265,6 +265,11 @@ export const SyncEventSchema = z.discriminatedUnion('type', [
         type: z.literal('machine-updated'),
         data: z.unknown().optional(),
     }),
+    MachineChangedSchema.extend({
+        type: z.literal('runtime-capability-updated'),
+        directory: z.string().min(1).nullable(),
+        drivers: z.array(SessionDriverSchema).optional(),
+    }),
     z.object({
         type: z.literal('toast'),
         data: z.object({
