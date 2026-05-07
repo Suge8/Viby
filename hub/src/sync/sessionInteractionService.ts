@@ -58,6 +58,7 @@ export class SessionInteractionService {
             text: payload.text,
             localId: payload.localId,
             attachments: payload.attachments,
+            queuedForInvocation: readySession?.thinking === true,
             meta: {
                 sentFrom: payload.sentFrom ?? 'webapp',
             },

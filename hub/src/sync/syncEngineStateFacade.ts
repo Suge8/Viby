@@ -138,6 +138,7 @@ export class SyncEngineStateFacade {
         permissionMode?: Session['permissionMode']
         model?: string | null
         modelReasoningEffort?: Session['modelReasoningEffort']
+        codexServiceTier?: Session['codexServiceTier']
         collaborationMode?: Session['collaborationMode']
     }): void {
         this.sessionCache.handleSessionAlive(payload)

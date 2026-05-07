@@ -295,6 +295,50 @@ describe('session model resume contracts', () => {
         }
     })
 
+    it('resumes pi sessions with durable native handles through the provider-handle contract', async () => {
+        const store = new Store(':memory:')
+        const engine = new SyncEngine(store, {} as never, new RpcRegistry(), { broadcast() {} } as never)
+
+        try {
+            const session = createEngineSession(engine, {
+                tag: 'session-pi-native-resume',
+                metadata: {
+                    path: '/tmp/project',
+                    host: 'localhost',
+                    machineId: 'machine-1',
+                    driver: 'pi',
+                    runtimeHandles: {
+                        pi: { sessionId: 'pi-provider-session' },
+                    },
+                    lifecycleState: 'closed',
+                    lifecycleStateSince: Date.now(),
+                },
+                model: 'openai/gpt-5.4-mini',
+            })
+            engine.getOrCreateMachine(
+                'machine-1',
+                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+                null
+            )
+            engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
+
+            const spawnCalls: Array<Record<string, unknown>> = []
+            ;(engine as any).rpcGateway.spawnSession = async (options: Record<string, unknown>) => {
+                spawnCalls.push(options)
+                ;(engine as any).sessionCache.handleSessionAlive({ sid: session.id, time: Date.now(), thinking: false })
+                return { type: 'success', sessionId: session.id }
+            }
+            ;(engine as any).waitForResumedSessionContract = async () => 'ready'
+
+            const result = await engine.resumeSession(session.id)
+
+            expect(result).toEqual({ type: 'success', sessionId: session.id })
+            expect(spawnCalls[0]?.resumeSessionId).toBe('pi-provider-session')
+        } finally {
+            engine.stop()
+        }
+    })
+
     it('passes the stored model when respawning a resumed session', async () => {
         const store = new Store(':memory:')
         const engine = new SyncEngine(store, {} as never, new RpcRegistry(), { broadcast() {} } as never)
@@ -345,6 +389,47 @@ describe('session model resume contracts', () => {
             expect(capturedModelReasoningEffort).toBeUndefined()
             expect(capturedPermissionMode).toBeUndefined()
             expect(capturedCollaborationMode).toBeUndefined()
+        } finally {
+            engine.stop()
+        }
+    })
+
+    it('uses the resume permission override when provided', async () => {
+        const store = new Store(':memory:')
+        const engine = new SyncEngine(store, {} as never, new RpcRegistry(), { broadcast() {} } as never)
+
+        try {
+            const session = createEngineSession(engine, {
+                tag: 'session-permission-resume-override',
+                metadata: {
+                    path: '/tmp/project',
+                    host: 'localhost',
+                    machineId: 'machine-1',
+                    driver: 'claude',
+                    runtimeHandles: {
+                        claude: { sessionId: 'claude-thread-1' },
+                    },
+                },
+                permissionMode: 'default',
+            })
+            engine.getOrCreateMachine(
+                'machine-1',
+                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+                null
+            )
+            engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
+
+            let capturedPermissionMode: unknown
+            ;(engine as any).rpcGateway.spawnSession = async (options: { permissionMode?: unknown }) => {
+                capturedPermissionMode = options.permissionMode
+                return { type: 'success', sessionId: session.id }
+            }
+            ;(engine as any).waitForResumedSessionContract = async () => 'ready'
+
+            const result = await engine.resumeSession(session.id, { permissionMode: 'bypassPermissions' })
+
+            expect(result).toEqual({ type: 'success', sessionId: session.id })
+            expect(capturedPermissionMode).toBe('bypassPermissions')
         } finally {
             engine.stop()
         }

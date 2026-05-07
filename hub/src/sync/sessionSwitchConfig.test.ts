@@ -3,11 +3,14 @@ import type { Session } from '@viby/protocol/types'
 import { normalizeDriverSwitchConfig } from './sessionSwitchConfig'
 
 function createSession(
-    overrides: Partial<Pick<Session, 'model' | 'modelReasoningEffort' | 'permissionMode' | 'collaborationMode'>> = {}
-): Pick<Session, 'model' | 'modelReasoningEffort' | 'permissionMode' | 'collaborationMode'> {
+    overrides: Partial<
+        Pick<Session, 'model' | 'modelReasoningEffort' | 'codexServiceTier' | 'permissionMode' | 'collaborationMode'>
+    > = {}
+): Pick<Session, 'model' | 'modelReasoningEffort' | 'codexServiceTier' | 'permissionMode' | 'collaborationMode'> {
     return {
         model: 'gpt-5.4',
         modelReasoningEffort: 'high',
+        codexServiceTier: 'standard',
         permissionMode: 'safe-yolo',
         collaborationMode: 'plan',
         ...overrides,
@@ -22,12 +25,14 @@ describe('normalizeDriverSwitchConfig', () => {
             durableConfig: {
                 model: 'gpt-5.4',
                 modelReasoningEffort: 'high',
+                codexServiceTier: 'standard',
                 permissionMode: 'safe-yolo',
                 collaborationMode: 'plan',
             },
             spawnConfig: {
                 model: 'gpt-5.4',
                 modelReasoningEffort: 'high',
+                codexServiceTier: 'standard',
                 permissionMode: 'safe-yolo',
                 collaborationMode: 'plan',
             },
@@ -41,12 +46,14 @@ describe('normalizeDriverSwitchConfig', () => {
             durableConfig: {
                 model: null,
                 modelReasoningEffort: 'high',
+                codexServiceTier: null,
                 permissionMode: 'default',
                 collaborationMode: null,
             },
             spawnConfig: {
                 model: undefined,
                 modelReasoningEffort: 'high',
+                codexServiceTier: undefined,
                 permissionMode: 'default',
                 collaborationMode: undefined,
             },
@@ -65,12 +72,14 @@ describe('normalizeDriverSwitchConfig', () => {
             durableConfig: {
                 model: 'gpt-5.4-mini',
                 modelReasoningEffort: null,
+                codexServiceTier: null,
                 permissionMode: 'default',
                 collaborationMode: null,
             },
             spawnConfig: {
                 model: 'gpt-5.4-mini',
                 modelReasoningEffort: null,
+                codexServiceTier: undefined,
                 permissionMode: 'default',
                 collaborationMode: undefined,
             },
@@ -89,12 +98,14 @@ describe('normalizeDriverSwitchConfig', () => {
             durableConfig: {
                 model: 'gpt-5.4-mini',
                 modelReasoningEffort: null,
+                codexServiceTier: null,
                 permissionMode: 'default',
                 collaborationMode: null,
             },
             spawnConfig: {
                 model: 'gpt-5.4-mini',
                 modelReasoningEffort: null,
+                codexServiceTier: undefined,
                 permissionMode: 'default',
                 collaborationMode: undefined,
             },
@@ -113,12 +124,14 @@ describe('normalizeDriverSwitchConfig', () => {
             durableConfig: {
                 model: null,
                 modelReasoningEffort: null,
+                codexServiceTier: null,
                 permissionMode: 'default',
                 collaborationMode: null,
             },
             spawnConfig: {
                 model: undefined,
                 modelReasoningEffort: null,
+                codexServiceTier: undefined,
                 permissionMode: 'default',
                 collaborationMode: undefined,
             },
@@ -127,12 +140,14 @@ describe('normalizeDriverSwitchConfig', () => {
             durableConfig: {
                 model: undefined,
                 modelReasoningEffort: undefined,
+                codexServiceTier: undefined,
                 permissionMode: undefined,
                 collaborationMode: undefined,
             },
             spawnConfig: {
                 model: undefined,
                 modelReasoningEffort: undefined,
+                codexServiceTier: undefined,
                 permissionMode: undefined,
                 collaborationMode: undefined,
             },

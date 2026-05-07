@@ -106,6 +106,7 @@ function hydrateSessionSnapshot(
         todos,
         model: stored.model,
         modelReasoningEffort: stored.modelReasoningEffort,
+        codexServiceTier: stored.codexServiceTier,
         permissionMode: permissionMode as PermissionMode | undefined,
         collaborationMode: collaborationMode as CodexCollaborationMode | undefined,
         latestActivityAt: stored.latestActivityAt,

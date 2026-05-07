@@ -12,13 +12,14 @@ export type SessionPresencePatch = Omit<Partial<Session>, 'metadata'> & {
 
 export type PresenceConfigSnapshot = Pick<
     Session,
-    'permissionMode' | 'model' | 'modelReasoningEffort' | 'collaborationMode'
+    'permissionMode' | 'model' | 'modelReasoningEffort' | 'codexServiceTier' | 'collaborationMode'
 >
 
 export type AlivePresencePayload = {
     permissionMode?: Session['permissionMode']
     model?: string | null
     modelReasoningEffort?: Session['modelReasoningEffort']
+    codexServiceTier?: Session['codexServiceTier']
     collaborationMode?: Session['collaborationMode']
 }
 
@@ -29,12 +30,16 @@ export function isPresenceBlockedByArchivedLifecycle(session: Session | null | u
 }
 
 export function capturePresenceConfig(
-    session: Pick<Session, 'permissionMode' | 'model' | 'modelReasoningEffort' | 'collaborationMode'>
+    session: Pick<
+        Session,
+        'permissionMode' | 'model' | 'modelReasoningEffort' | 'codexServiceTier' | 'collaborationMode'
+    >
 ): PresenceConfigSnapshot {
     return {
         permissionMode: session.permissionMode,
         model: session.model,
         modelReasoningEffort: session.modelReasoningEffort,
+        codexServiceTier: session.codexServiceTier,
         collaborationMode: session.collaborationMode,
     }
 }
@@ -47,6 +52,7 @@ export function hasPresenceConfigChanged(
         previousConfig.permissionMode !== currentConfig.permissionMode ||
         previousConfig.model !== currentConfig.model ||
         previousConfig.modelReasoningEffort !== currentConfig.modelReasoningEffort ||
+        previousConfig.codexServiceTier !== currentConfig.codexServiceTier ||
         previousConfig.collaborationMode !== currentConfig.collaborationMode
     )
 }
@@ -54,7 +60,10 @@ export function hasPresenceConfigChanged(
 export function applyAlivePresenceConfig(options: {
     store: Store
     sessionId: string
-    session: Pick<Session, 'permissionMode' | 'model' | 'modelReasoningEffort' | 'collaborationMode'>
+    session: Pick<
+        Session,
+        'permissionMode' | 'model' | 'modelReasoningEffort' | 'codexServiceTier' | 'collaborationMode'
+    >
     payload: AlivePresencePayload
 }): PresenceConfigSnapshot {
     const previousConfig = capturePresenceConfig(options.session)
@@ -86,6 +95,15 @@ export function applyAlivePresenceConfig(options: {
             )
         }
         options.session.modelReasoningEffort = options.payload.modelReasoningEffort
+    }
+
+    if (options.payload.codexServiceTier !== undefined) {
+        if (options.payload.codexServiceTier !== options.session.codexServiceTier) {
+            options.store.sessions.setSessionCodexServiceTier(options.sessionId, options.payload.codexServiceTier, {
+                touchUpdatedAt: false,
+            })
+        }
+        options.session.codexServiceTier = options.payload.codexServiceTier
     }
 
     if (options.payload.collaborationMode !== undefined) {
@@ -120,7 +138,13 @@ export function shouldBroadcastAlivePresence(options: {
 export function buildAlivePresencePatch(
     session: Pick<
         Session,
-        'activeAt' | 'thinking' | 'permissionMode' | 'model' | 'modelReasoningEffort' | 'collaborationMode'
+        | 'activeAt'
+        | 'thinking'
+        | 'permissionMode'
+        | 'model'
+        | 'modelReasoningEffort'
+        | 'codexServiceTier'
+        | 'collaborationMode'
     >
 ): SessionPresencePatch {
     return {
@@ -130,6 +154,7 @@ export function buildAlivePresencePatch(
         permissionMode: session.permissionMode,
         model: session.model,
         modelReasoningEffort: session.modelReasoningEffort,
+        codexServiceTier: session.codexServiceTier,
         collaborationMode: session.collaborationMode,
     }
 }

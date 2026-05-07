@@ -1,9 +1,11 @@
 import {
     AGENT_FLAVORS,
+    isCodexServiceTier,
     isDriverSwitchCompatibleModelPresetForDriver,
     isModelReasoningEffortAllowedForDriver,
     isPermissionModeAllowedForDriver,
     type SessionDriver,
+    supportsLiveCodexServiceTierForDriver,
     supportsLiveModelReasoningEffortForDriver,
 } from '@viby/protocol'
 import { CodexCollaborationModeSchema } from '@viby/protocol/schemas'
@@ -13,11 +15,15 @@ import type { SessionDurableConfigPatch } from './sessionPayloadTypes'
 const COLLABORATION_DRIVER: SessionDriver = 'codex'
 const SUPPORTED_TARGET_DRIVERS = new Set<SessionDriver>(AGENT_FLAVORS)
 
-type SwitchConfigSession = Pick<Session, 'model' | 'modelReasoningEffort' | 'permissionMode' | 'collaborationMode'>
+type SwitchConfigSession = Pick<
+    Session,
+    'model' | 'modelReasoningEffort' | 'codexServiceTier' | 'permissionMode' | 'collaborationMode'
+>
 
 export type DriverSwitchSpawnConfig = {
     model?: string
     modelReasoningEffort?: Session['modelReasoningEffort'] | null
+    codexServiceTier?: NonNullable<Session['codexServiceTier']>
     permissionMode?: Session['permissionMode']
     collaborationMode?: Session['collaborationMode']
 }
@@ -37,6 +43,7 @@ export function normalizeDriverSwitchConfig(
 
     const model = normalizeModel(session.model, targetDriver)
     const modelReasoningEffort = normalizeModelReasoningEffort(session.modelReasoningEffort, targetDriver)
+    const codexServiceTier = normalizeCodexServiceTier(session.codexServiceTier, targetDriver)
     const permissionMode = normalizePermissionMode(session.permissionMode, targetDriver)
     const collaborationMode = normalizeCollaborationMode(session.collaborationMode, targetDriver)
 
@@ -44,12 +51,14 @@ export function normalizeDriverSwitchConfig(
         durableConfig: {
             model,
             modelReasoningEffort,
+            codexServiceTier,
             permissionMode,
             collaborationMode,
         },
         spawnConfig: {
             model: model ?? undefined,
             modelReasoningEffort,
+            codexServiceTier: codexServiceTier ?? undefined,
             permissionMode,
             collaborationMode: collaborationMode ?? undefined,
         },
@@ -61,12 +70,14 @@ function createEmptyNormalizedConfig(): NormalizedDriverSwitchConfig {
         durableConfig: {
             model: undefined,
             modelReasoningEffort: undefined,
+            codexServiceTier: undefined,
             permissionMode: undefined,
             collaborationMode: undefined,
         },
         spawnConfig: {
             model: undefined,
             modelReasoningEffort: undefined,
+            codexServiceTier: undefined,
             permissionMode: undefined,
             collaborationMode: undefined,
         },
@@ -99,6 +110,17 @@ function normalizeModelReasoningEffort(
     }
 
     return modelReasoningEffort
+}
+
+function normalizeCodexServiceTier(
+    codexServiceTier: Session['codexServiceTier'],
+    targetDriver: SessionDriver
+): Session['codexServiceTier'] {
+    if (!supportsLiveCodexServiceTierForDriver(targetDriver) || !isCodexServiceTier(codexServiceTier)) {
+        return null
+    }
+
+    return codexServiceTier
 }
 
 function normalizePermissionMode(

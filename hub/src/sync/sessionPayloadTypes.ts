@@ -7,6 +7,7 @@ export type InternalSessionMessagePayload = {
     localId?: string | null
     attachments?: SessionMessageAttachment[]
     meta?: MessageMeta
+    queuedForInvocation?: boolean
 }
 
 export type SessionSendMessagePayload = {
@@ -20,6 +21,7 @@ export type SessionConfigPatch = {
     permissionMode?: Session['permissionMode']
     model?: Session['model']
     modelReasoningEffort?: Session['modelReasoningEffort']
+    codexServiceTier?: Session['codexServiceTier']
     collaborationMode?: Session['collaborationMode']
 }
 

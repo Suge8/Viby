@@ -2,6 +2,7 @@ import type {
     AgentAvailabilityResponse,
     AgentFlavor,
     CodexCollaborationMode,
+    CodexServiceTier,
     ListAgentAvailabilityRequest,
     LocalSessionCatalog,
     LocalSessionCatalogRequest,
@@ -92,6 +93,7 @@ export class RpcGateway {
             permissionMode?: PermissionMode
             model?: string | null
             modelReasoningEffort?: ModelReasoningEffort | null
+            codexServiceTier?: CodexServiceTier | null
             collaborationMode?: CodexCollaborationMode
         }
     ): Promise<unknown> {
@@ -109,6 +111,7 @@ export class RpcGateway {
         agent?: AgentFlavor
         model?: string
         modelReasoningEffort?: ModelReasoningEffort | null
+        codexServiceTier?: CodexServiceTier | null
         permissionMode?: PermissionMode
         sessionType?: 'simple' | 'worktree'
         worktreeName?: string
@@ -127,6 +130,7 @@ export class RpcGateway {
                 agent: options.agent ?? 'claude',
                 model: options.model,
                 modelReasoningEffort: options.modelReasoningEffort,
+                codexServiceTier: options.codexServiceTier ?? undefined,
                 permissionMode: options.permissionMode,
                 sessionType: options.sessionType,
                 worktreeName: options.worktreeName,
@@ -145,12 +149,17 @@ export class RpcGateway {
         return parsePathExistsResponse(result)
     }
 
-    async browseMachineDirectory(machineId: string, path?: string): Promise<RpcMachineDirectoryResponse> {
+    async browseMachineDirectory(
+        machineId: string,
+        path?: string,
+        options?: { workspaceRoot?: string }
+    ): Promise<RpcMachineDirectoryResponse> {
         let result: MachineDirectoryResponse | unknown
         try {
-            result = (await this.machineRpc(machineId, 'browse-directory', { path })) as
-                | MachineDirectoryResponse
-                | unknown
+            result = (await this.machineRpc(machineId, 'browse-directory', {
+                path,
+                workspaceRoot: options?.workspaceRoot,
+            })) as MachineDirectoryResponse | unknown
         } catch (error) {
             if (isMissingRpcHandler(error, machineId, 'browse-directory')) {
                 return {

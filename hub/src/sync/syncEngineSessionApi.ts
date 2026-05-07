@@ -29,6 +29,15 @@ export abstract class SyncEngineSessionApi extends SyncEngineReadApi {
         return await this.syncServices.sessionInteractionService.sendMessage(sessionId, payload)
     }
 
+    async cancelQueuedMessages(sessionId: string, localIds: string[]): Promise<string[]> {
+        const session = this.getSession(sessionId)
+        if (!session) {
+            throw new Error('Session not found')
+        }
+
+        return await this.syncServices.messageService.cancelQueuedMessages(sessionId, localIds)
+    }
+
     async appendInternalUserMessage(sessionId: string, payload: InternalSessionMessagePayload): Promise<Session> {
         return await this.syncServices.sessionInteractionService.appendInternalUserMessage(sessionId, payload)
     }
@@ -126,6 +135,11 @@ export abstract class SyncEngineSessionApi extends SyncEngineReadApi {
     }
 
     async applySessionConfig(sessionId: string, config: SessionConfigPatch): Promise<void> {
+        const session = this.syncServices.sessionCache.getSession(sessionId)
+        if (session && !session.active) {
+            this.syncServices.sessionCache.applySessionConfig(sessionId, config)
+            return
+        }
         await this.syncServices.sessionRpcFacade.requestSessionConfig(sessionId, config)
     }
 
@@ -135,16 +149,19 @@ export abstract class SyncEngineSessionApi extends SyncEngineReadApi {
         return await this.syncServices.sessionRpcFacade.spawnSession(options)
     }
 
-    async resumeSession(sessionId: string): Promise<ResumeSessionResult> {
-        return await this.syncServices.sessionLifecycleService.resumeSession(sessionId, this.buildResumeHooks())
+    async resumeSession(
+        sessionId: string,
+        opts?: { permissionMode?: Session['permissionMode'] }
+    ): Promise<ResumeSessionResult> {
+        return await this.syncServices.sessionLifecycleService.resumeSession(sessionId, this.buildResumeHooks(), opts)
     }
 
     async checkPathsExist(machineId: string, paths: string[]): Promise<Record<string, boolean>> {
         return await this.syncServices.sessionRpcFacade.checkPathsExist(machineId, paths)
     }
 
-    async browseMachineDirectory(machineId: string, path?: string) {
-        return await this.syncServices.sessionRpcFacade.browseMachineDirectory(machineId, path)
+    async browseMachineDirectory(machineId: string, path?: string, options?: { workspaceRoot?: string }) {
+        return await this.syncServices.sessionRpcFacade.browseMachineDirectory(machineId, path, options)
     }
 
     async resolveAgentLaunchConfig(
@@ -217,7 +234,7 @@ export abstract class SyncEngineSessionApi extends SyncEngineReadApi {
     async ensureSessionDriver(
         sessionId: string,
         driver: AgentFlavor,
-        options?: { model?: string | null }
+        options?: { model?: string | null; codexServiceTier?: Session['codexServiceTier'] }
     ): Promise<Session | null> {
         return await this.syncServices.sessionBootstrapConfigService.ensureSessionDriver(sessionId, driver, options)
     }

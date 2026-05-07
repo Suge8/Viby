@@ -44,6 +44,7 @@ export function buildDriverSwitchHandoffSnapshot(
         liveConfig: {
             model: normalizedConfig.durableConfig.model ?? null,
             modelReasoningEffort: normalizedConfig.durableConfig.modelReasoningEffort ?? null,
+            codexServiceTier: normalizedConfig.durableConfig.codexServiceTier ?? null,
             permissionMode: normalizedConfig.durableConfig.permissionMode,
             collaborationMode: normalizedConfig.durableConfig.collaborationMode ?? undefined,
         },

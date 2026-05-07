@@ -1,4 +1,4 @@
-import type { CodexCollaborationMode, PermissionMode, Session } from '@viby/protocol/types'
+import type { CodexCollaborationMode, CodexServiceTier, PermissionMode, Session } from '@viby/protocol/types'
 import type { Store } from '../store'
 import type { SessionDurableConfigPatch } from './sessionPayloadTypes'
 
@@ -27,6 +27,7 @@ export class SessionConfigMutationService {
         this.applyPermissionMode(sessionId, session, config.permissionMode)
         this.applyModel(sessionId, session, config.model)
         this.applyModelReasoningEffort(sessionId, session, config.modelReasoningEffort)
+        this.applyCodexServiceTier(sessionId, session, config.codexServiceTier)
         this.applyCollaborationMode(sessionId, session, config.collaborationMode)
 
         this.emitSessionUpdate(sessionId, session)
@@ -90,5 +91,24 @@ export class SessionConfigMutationService {
         const persisted = this.store.sessions.getSession(sessionId)?.collaborationMode ?? null
         assertPersistedConfigValue(updated, persisted, collaborationMode, 'Failed to update session collaboration mode')
         session.collaborationMode = collaborationMode ?? undefined
+    }
+
+    private applyCodexServiceTier(
+        sessionId: string,
+        session: Session,
+        codexServiceTier: CodexServiceTier | null | undefined
+    ): void {
+        if (codexServiceTier === undefined) {
+            return
+        }
+        if (codexServiceTier !== session.codexServiceTier) {
+            const updated = this.store.sessions.setSessionCodexServiceTier(sessionId, codexServiceTier, {
+                touchUpdatedAt: false,
+            })
+            if (!updated) {
+                throw new Error('Failed to update Codex fast mode')
+            }
+        }
+        session.codexServiceTier = codexServiceTier
     }
 }

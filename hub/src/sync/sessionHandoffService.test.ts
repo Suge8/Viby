@@ -45,6 +45,7 @@ function createSession(overrides: Partial<Session> = {}): Session {
         thinkingAt: 0,
         model: 'gpt-5',
         modelReasoningEffort: 'high',
+        codexServiceTier: null,
         permissionMode: 'safe-yolo',
         collaborationMode: 'plan',
         ...overrides,
@@ -77,6 +78,7 @@ function createEngineSession(
             ? {
                   model: 'gpt-5',
                   modelReasoningEffort: 'high',
+                  codexServiceTier: null,
                   permissionMode: 'safe-yolo',
                   collaborationMode: 'plan',
               }
@@ -138,6 +140,7 @@ describe('session handoff service', () => {
             expect(snapshot.liveConfig).toEqual({
                 model: 'gpt-5',
                 modelReasoningEffort: 'high',
+                codexServiceTier: null,
                 permissionMode: 'safe-yolo',
                 collaborationMode: 'plan',
             })
@@ -200,6 +203,7 @@ describe('session handoff service', () => {
                 liveConfig: {
                     model: null,
                     modelReasoningEffort: null,
+                    codexServiceTier: null,
                     permissionMode: undefined,
                     collaborationMode: undefined,
                 },

@@ -144,6 +144,7 @@ export class SessionCache {
         const stored = this.store.sessions.getOrCreateSession({
             ...input,
             modelReasoningEffort: input.modelReasoningEffort ?? undefined,
+            codexServiceTier: input.codexServiceTier ?? undefined,
         })
         return (
             this.refreshSession(stored.id) ??
@@ -182,6 +183,7 @@ export class SessionCache {
         permissionMode?: Session['permissionMode']
         model?: string | null
         modelReasoningEffort?: Session['modelReasoningEffort']
+        codexServiceTier?: Session['codexServiceTier']
         collaborationMode?: Session['collaborationMode']
     }): void {
         this.presenceService.handleSessionAlive(payload)

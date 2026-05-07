@@ -1,4 +1,4 @@
-import type { CodexCollaborationMode, PermissionMode, Session } from '@viby/protocol/types'
+import type { CodexCollaborationMode, CodexServiceTier, PermissionMode, Session } from '@viby/protocol/types'
 import type { Store } from '../store'
 import { clampAliveTime } from './aliveTime'
 import {
@@ -39,6 +39,7 @@ export class SessionPresenceService {
         permissionMode?: PermissionMode
         model?: string | null
         modelReasoningEffort?: Session['modelReasoningEffort']
+        codexServiceTier?: CodexServiceTier | null
         collaborationMode?: CodexCollaborationMode
     }): void {
         const activeAt = clampAliveTime(payload.time)

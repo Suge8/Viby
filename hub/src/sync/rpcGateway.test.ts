@@ -53,6 +53,20 @@ describe('RpcGateway browseMachineDirectory', () => {
         })
     })
 
+    it('rejects malformed agent launch config payloads through the shared schema', async () => {
+        const gateway = createGateway(
+            {
+                type: 'success',
+                config: { agent: 'codex', defaultModel: 42, defaultModelReasoningEffort: null, availableModels: [] },
+            },
+            'machine-1:resolve-agent-launch-config'
+        )
+
+        await expect(
+            gateway.resolveAgentLaunchConfig('machine-1', { agent: 'codex', directory: '/workspace' })
+        ).rejects.toThrow('Unexpected resolve-agent-launch-config result')
+    })
+
     it('surfaces spawn errors from machine RPC payloads', async () => {
         const gateway = createGateway(
             {

@@ -21,6 +21,7 @@ function createStoredSession(input: Partial<StoredSession> & Pick<StoredSession,
         agentStateVersion: input.agentStateVersion ?? 0,
         model: input.model ?? null,
         modelReasoningEffort: input.modelReasoningEffort ?? null,
+        codexServiceTier: input.codexServiceTier ?? null,
         permissionMode: input.permissionMode ?? null,
         collaborationMode: input.collaborationMode ?? null,
         todos: input.todos ?? null,
@@ -131,6 +132,7 @@ describe('LocalSessionRecoveryService', () => {
             latestCompletedReplyAt: null,
             model: null,
             modelReasoningEffort: null,
+            codexServiceTier: null,
             todos: undefined,
         }
         let resolveExport!: (snapshot: LocalSessionExportSnapshot) => void

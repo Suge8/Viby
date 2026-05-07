@@ -1,4 +1,4 @@
-import { AgentAvailabilityResponseSchema } from '@viby/protocol'
+import { AgentAvailabilityResponseSchema, ResolveAgentLaunchConfigResponseSchema } from '@viby/protocol'
 import type {
     AgentAvailabilityResponse,
     MachineDirectoryResponse,
@@ -68,6 +68,7 @@ export function parseMachineDirectoryResponse(result: MachineDirectoryResponse |
         success: response.success === true,
         currentPath: typeof response.currentPath === 'string' ? response.currentPath : undefined,
         parentPath: response.parentPath ?? null,
+        scopeRoot: response.scopeRoot ?? null,
         entries: Array.isArray(response.entries) ? response.entries : [],
         roots: Array.isArray(response.roots) ? response.roots : [],
         error: typeof response.error === 'string' ? response.error : undefined,
@@ -77,14 +78,9 @@ export function parseMachineDirectoryResponse(result: MachineDirectoryResponse |
 export function parseResolveAgentLaunchConfigResponse(
     result: ResolveAgentLaunchConfigResponse | unknown
 ): ResolveAgentLaunchConfigResponse {
-    if (!result || typeof result !== 'object') {
-        throw new Error('Unexpected resolve-agent-launch-config result')
-    }
-    if (
-        (result as ResolveAgentLaunchConfigResponse).type === 'success' ||
-        (result as ResolveAgentLaunchConfigResponse).type === 'error'
-    ) {
-        return result as ResolveAgentLaunchConfigResponse
+    const parsed = ResolveAgentLaunchConfigResponseSchema.safeParse(result)
+    if (parsed.success) {
+        return parsed.data
     }
     throw new Error('Unexpected resolve-agent-launch-config result')
 }

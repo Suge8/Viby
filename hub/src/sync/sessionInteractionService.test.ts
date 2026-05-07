@@ -23,6 +23,7 @@ function createSession(driver: 'gemini' | 'codex'): Session {
         thinkingAt: 1,
         model: null,
         modelReasoningEffort: null,
+        codexServiceTier: null,
     }
 }
 

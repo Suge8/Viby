@@ -40,6 +40,7 @@ export type RpcMachineDirectoryResponse = {
     success: boolean
     currentPath?: string
     parentPath?: string | null
+    scopeRoot?: string | null
     entries?: MachineDirectoryEntry[]
     roots?: MachineDirectoryRoot[]
     error?: string

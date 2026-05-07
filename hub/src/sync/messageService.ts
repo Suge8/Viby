@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { isObject, type SessionDriver, sanitizeDurableAttachmentMetadataList } from '@viby/protocol'
 import type { AttachmentMetadata, DecryptedMessage, MessageMeta, SessionMessageActivity } from '@viby/protocol/types'
 import type { Server } from 'socket.io'
@@ -54,6 +55,7 @@ export class MessageService {
             localId: message.localId,
             content: sanitizeDurableMessageContent(message.content),
             createdAt: message.createdAt,
+            invokedAt: message.invokedAt,
         }))
 
         let oldestSeq: number | null = null
@@ -83,6 +85,7 @@ export class MessageService {
             localId: message.localId,
             content: sanitizeDurableMessageContent(message.content),
             createdAt: message.createdAt,
+            invokedAt: message.invokedAt,
         }))
     }
 
@@ -101,6 +104,7 @@ export class MessageService {
             localId?: string | null
             attachments?: AttachmentMetadata[]
             meta?: MessageMeta
+            queuedForInvocation?: boolean
         }
     ): Promise<void> {
         const attachments = sanitizeDurableAttachmentMetadataList(payload.attachments)
@@ -113,7 +117,9 @@ export class MessageService {
             },
             ...(payload.meta ? { meta: payload.meta } : {}),
         }
-        await this.appendMessage(sessionId, content, payload.localId ?? undefined)
+        await this.appendMessage(sessionId, content, payload.localId ?? undefined, {
+            invokedAt: payload.queuedForInvocation ? null : undefined,
+        })
     }
 
     async sendMessage(
@@ -139,8 +145,55 @@ export class MessageService {
         await this.appendMessage(sessionId, createDriverSwitchedMessageContent(event))
     }
 
-    private async appendMessage(sessionId: string, content: unknown, localId?: string): Promise<void> {
-        const msg = this.store.messages.addMessage(sessionId, content, localId)
+    async markMessagesInvoked(sessionId: string, localIds: string[], invokedAt: number = Date.now()): Promise<void> {
+        if (localIds.length === 0) {
+            return
+        }
+
+        this.store.messages.markMessagesInvoked(sessionId, localIds, invokedAt)
+        this.publisher.emit({
+            type: 'messages-consumed',
+            sessionId,
+            localIds,
+            invokedAt,
+        })
+    }
+
+    async cancelQueuedMessages(sessionId: string, localIds: string[]): Promise<string[]> {
+        const canceledLocalIds = this.store.messages.cancelQueuedMessages(sessionId, localIds)
+        if (canceledLocalIds.length === 0) {
+            return []
+        }
+
+        this.io
+            .of('/cli')
+            .to(`session:${sessionId}`)
+            .emit('update', {
+                id: randomUUID(),
+                seq: 0,
+                createdAt: Date.now(),
+                body: {
+                    t: 'cancel-messages' as const,
+                    sid: sessionId,
+                    localIds: canceledLocalIds,
+                },
+            })
+
+        this.publisher.emit({
+            type: 'messages-canceled',
+            sessionId,
+            localIds: canceledLocalIds,
+        })
+        return canceledLocalIds
+    }
+
+    private async appendMessage(
+        sessionId: string,
+        content: unknown,
+        localId?: string,
+        options: { invokedAt?: number | null } = {}
+    ): Promise<void> {
+        const msg = this.store.messages.addMessage(sessionId, content, localId, undefined, options.invokedAt)
 
         const update = {
             id: msg.id,
@@ -154,6 +207,7 @@ export class MessageService {
                     seq: msg.seq,
                     createdAt: msg.createdAt,
                     localId: msg.localId,
+                    invokedAt: msg.invokedAt,
                     content: msg.content,
                 },
             },
@@ -169,6 +223,7 @@ export class MessageService {
                 localId: msg.localId,
                 content: msg.content,
                 createdAt: msg.createdAt,
+                invokedAt: msg.invokedAt,
             },
         })
     }

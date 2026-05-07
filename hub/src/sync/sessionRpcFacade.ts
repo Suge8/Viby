@@ -78,6 +78,7 @@ export class SessionRpcFacade {
         agent?: AgentFlavor
         model?: string
         modelReasoningEffort?: Session['modelReasoningEffort']
+        codexServiceTier?: Session['codexServiceTier']
         permissionMode?: PermissionMode
         sessionType?: 'simple' | 'worktree'
         worktreeName?: string
@@ -95,8 +96,12 @@ export class SessionRpcFacade {
         return await this.rpcGateway.checkPathsExist(machineId, paths)
     }
 
-    async browseMachineDirectory(machineId: string, path?: string): Promise<RpcMachineDirectoryResponse> {
-        return await this.rpcGateway.browseMachineDirectory(machineId, path)
+    async browseMachineDirectory(
+        machineId: string,
+        path?: string,
+        options?: { workspaceRoot?: string }
+    ): Promise<RpcMachineDirectoryResponse> {
+        return await this.rpcGateway.browseMachineDirectory(machineId, path, options)
     }
 
     async resolveAgentLaunchConfig(

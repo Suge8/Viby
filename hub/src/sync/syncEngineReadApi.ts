@@ -22,6 +22,7 @@ export type SyncEngineSessionAlivePayload = {
     permissionMode?: PermissionMode
     model?: string | null
     modelReasoningEffort?: Session['modelReasoningEffort']
+    codexServiceTier?: Session['codexServiceTier']
     collaborationMode?: CodexCollaborationMode
 }
 

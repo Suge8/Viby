@@ -722,6 +722,7 @@ describe('session model', () => {
             ).toEqual({
                 model: 'gpt-5.4-mini',
                 modelReasoningEffort: null,
+                codexServiceTier: null,
                 permissionMode: 'default',
                 collaborationMode: undefined,
             })
@@ -1550,7 +1551,6 @@ describe('session model', () => {
         cache.applySessionConfig(session.id, { collaborationMode: 'plan' })
         expect(cache.getSession(session.id)?.collaborationMode).toBe('plan')
         expect(store.sessions.getSession(session.id)?.collaborationMode).toBe('plan')
-
         cache.handleSessionAlive({
             sid: session.id,
             time: Date.now(),

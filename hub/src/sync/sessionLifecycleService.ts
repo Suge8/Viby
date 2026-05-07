@@ -117,11 +117,13 @@ export class SessionLifecycleService {
         return await this.sessionCache.transitionSessionLifecycle(sessionId, 'closed')
     }
 
-    async resumeSession(sessionId: string, hooks?: Partial<ResumeSessionHooks>): Promise<ResumeSessionResult> {
+    async resumeSession(
+        sessionId: string,
+        hooks?: Partial<ResumeSessionHooks>,
+        opts?: { permissionMode?: Session['permissionMode'] }
+    ): Promise<ResumeSessionResult> {
         const session = this.getSession(sessionId)
-        if (!session) {
-            return createResumeError('Session not found', 'session_not_found')
-        }
+        if (!session) return createResumeError('Session not found', 'session_not_found')
 
         if (session.active) {
             return { type: 'success', sessionId }
@@ -135,8 +137,10 @@ export class SessionLifecycleService {
             return createResumeError(spawnPreparation.message, spawnPreparation.code)
         }
         const { spawnOptions, resumeToken } = spawnPreparation
-        if (supportsHandlelessSessionResume(session.metadata)) {
-            return await this.spawnInactiveSession(spawnOptions)
+        const effectiveSpawnOptions =
+            opts?.permissionMode === undefined ? spawnOptions : { ...spawnOptions, permissionMode: opts.permissionMode }
+        if (!resumeToken && supportsHandlelessSessionResume(session.metadata)) {
+            return await this.spawnInactiveSession(effectiveSpawnOptions)
         }
 
         const resolvedHooks = this.resolveResumeSessionHooks(hooks)
@@ -156,7 +160,7 @@ export class SessionLifecycleService {
             }
 
             return await this.spawnInactiveSession({
-                ...spawnOptions,
+                ...effectiveSpawnOptions,
                 driverSwitch: {
                     targetDriver: resolvedDriver,
                     handoffSnapshot,
@@ -171,7 +175,7 @@ export class SessionLifecycleService {
             return createResumeError(message, 'resume_failed')
         }
 
-        const spawnResult = await this.rpcGateway.spawnSession(spawnOptions)
+        const spawnResult = await this.rpcGateway.spawnSession(effectiveSpawnOptions)
 
         if (spawnResult.type !== 'success') {
             const restoreError = await resolvedHooks

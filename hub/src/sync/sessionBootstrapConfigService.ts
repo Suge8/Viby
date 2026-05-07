@@ -19,7 +19,7 @@ export class SessionBootstrapConfigService {
     async ensureSessionDriver(
         sessionId: string,
         driver: AgentFlavor,
-        options?: { model?: string | null }
+        options?: { model?: string | null; codexServiceTier?: Session['codexServiceTier'] }
     ): Promise<Session | null> {
         const session = this.getSession(sessionId)
         if (!session) {
@@ -28,7 +28,9 @@ export class SessionBootstrapConfigService {
 
         const hasDriver = session.metadata?.driver != null
         const hasModelChange = options?.model !== undefined && session.model !== options.model
-        if (hasDriver && !hasModelChange) {
+        const hasCodexServiceTierChange =
+            options?.codexServiceTier !== undefined && session.codexServiceTier !== options.codexServiceTier
+        if (hasDriver && !hasModelChange && !hasCodexServiceTierChange) {
             return session
         }
 
@@ -40,16 +42,22 @@ export class SessionBootstrapConfigService {
                 { touchUpdatedAt: false }
             )
 
-            if (hasModelChange && options?.model !== undefined) {
-                this.applySessionConfig(sessionId, { model: options.model })
+            if (hasModelChange || hasCodexServiceTierChange) {
+                this.applySessionConfig(sessionId, {
+                    ...(options?.model !== undefined ? { model: options.model } : {}),
+                    ...(options?.codexServiceTier !== undefined ? { codexServiceTier: options.codexServiceTier } : {}),
+                })
                 return this.getSession(sessionId) ?? updatedSession
             }
 
             return updatedSession
         }
 
-        if (hasModelChange && options?.model !== undefined) {
-            this.applySessionConfig(sessionId, { model: options.model })
+        if (hasModelChange || hasCodexServiceTierChange) {
+            this.applySessionConfig(sessionId, {
+                ...(options?.model !== undefined ? { model: options.model } : {}),
+                ...(options?.codexServiceTier !== undefined ? { codexServiceTier: options.codexServiceTier } : {}),
+            })
             return this.getSession(sessionId) ?? session
         }
 
