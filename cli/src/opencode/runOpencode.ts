@@ -100,7 +100,7 @@ export async function runOpencode(
         logger.debug(`[opencode] Synced session permission mode for keepalive: ${currentPermissionMode}`)
     }
 
-    session.onUserMessage((message) => {
+    session.onUserMessage((message, localId) => {
         const formattedText = formatMessageWithAttachments(message.content.text, message.content.attachments)
         const continuityInstructions = pendingSessionContinuityHandoff.consumeForUserMessage(formattedText)
         if (continuityInstructions) {
@@ -110,7 +110,7 @@ export async function runOpencode(
             permissionMode: currentPermissionMode,
             developerInstructions: continuityInstructions,
         }
-        messageQueue.push(formattedText, mode)
+        messageQueue.push(formattedText, mode, localId)
     })
 
     session.rpcHandlerManager.registerHandler('set-session-config', async (payload: unknown) => {

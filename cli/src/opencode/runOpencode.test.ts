@@ -129,6 +129,7 @@ function createSessionContinuityHandoff(): SessionHandoffSnapshot {
         liveConfig: {
             model: 'gemini-2.5-pro',
             modelReasoningEffort: null,
+            codexServiceTier: null,
             permissionMode: 'default',
             collaborationMode: undefined,
         },

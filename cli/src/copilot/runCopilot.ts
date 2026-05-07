@@ -112,7 +112,7 @@ export async function runCopilot(
         )
     }
 
-    session.onUserMessage((message) => {
+    session.onUserMessage((message, localId) => {
         const formattedText = formatMessageWithAttachments(message.content.text, message.content.attachments)
         const continuityInstructions = pendingSessionContinuityHandoff.consumeForUserMessage(formattedText)
         if (continuityInstructions) {
@@ -123,7 +123,7 @@ export async function runCopilot(
             model: currentModel ?? undefined,
             developerInstructions: continuityInstructions,
         }
-        messageQueue.push(formattedText, mode)
+        messageQueue.push(formattedText, mode, localId)
     })
 
     session.rpcHandlerManager.registerHandler('set-session-config', async (payload: unknown) => {

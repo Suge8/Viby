@@ -88,7 +88,7 @@ export async function runCursor(opts: {
         logger.debug(`[cursor] Synced session permission mode: ${currentPermissionMode}`)
     }
 
-    session.onUserMessage((message) => {
+    session.onUserMessage((message, localId) => {
         const formattedText = formatMessageWithAttachments(message.content.text, message.content.attachments)
         const continuityInstructions = pendingSessionContinuityHandoff.consumeForUserMessage(formattedText)
         if (continuityInstructions) {
@@ -99,7 +99,7 @@ export async function runCursor(opts: {
             model: currentModel,
             developerInstructions: continuityInstructions,
         }
-        messageQueue.push(formattedText, enhancedMode)
+        messageQueue.push(formattedText, enhancedMode, localId)
     })
 
     session.rpcHandlerManager.registerHandler('set-session-config', async (payload: unknown) => {

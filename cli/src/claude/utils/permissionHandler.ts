@@ -169,6 +169,11 @@ export class PermissionHandler extends BasePermissionHandler<PermissionResponse,
         const descriptor = getToolDescriptor(toolName)
 
         if (!isQuestionTool && this.permissionMode === 'bypassPermissions') {
+            if (toolName === 'exit_plan_mode' || toolName === 'ExitPlanMode') {
+                logger.debug('Plan mode exit in bypassPermissions - injecting PLAN_FAKE_RESTART')
+                this.session.queue.unshift(PLAN_FAKE_RESTART, { permissionMode: this.permissionMode })
+                return { behavior: 'deny', message: PLAN_FAKE_REJECT }
+            }
             return { behavior: 'allow', updatedInput: input as Record<string, unknown> }
         }
 

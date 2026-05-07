@@ -122,6 +122,7 @@ function createSessionContinuityHandoff(): SessionHandoffSnapshot {
         liveConfig: {
             model: 'gpt-5.4',
             modelReasoningEffort: 'high',
+            codexServiceTier: null,
             permissionMode: 'default',
             collaborationMode: 'default',
         },

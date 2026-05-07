@@ -1,5 +1,6 @@
 import { CopilotClient, type PermissionHandler } from '@github/copilot-sdk'
 import { logger } from '@/ui/logger'
+import { COPILOT_DEFAULT_MODEL } from './copilotModel'
 
 type CopilotSdkSession = Awaited<ReturnType<CopilotClient['createSession']>>
 
@@ -44,7 +45,7 @@ export async function attachCopilotSdkSession(options: {
         )
         const created = await client.createSession({
             sessionId: session.durableSessionId,
-            model: session.currentModel ?? 'gpt-5',
+            model: session.currentModel ?? COPILOT_DEFAULT_MODEL,
             onPermissionRequest: permissionHandler,
             streaming: true,
         })

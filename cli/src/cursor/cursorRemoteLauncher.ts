@@ -146,6 +146,9 @@ class CursorRemoteLauncher extends RemoteLauncherBase {
                                 case 'text':
                                     messageBuffer.addMessage(agentMsg.text, 'assistant')
                                     break
+                                case 'reasoning':
+                                    messageBuffer.addMessage(`[Thinking] ${agentMsg.text}`, 'status')
+                                    break
                                 case 'tool_call':
                                     messageBuffer.addMessage(`Tool: ${agentMsg.name}`, 'tool')
                                     break

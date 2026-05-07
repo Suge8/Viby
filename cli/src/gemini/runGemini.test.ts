@@ -155,6 +155,7 @@ function createSessionContinuityHandoff(): SessionHandoffSnapshot {
         liveConfig: {
             model: 'claude-sonnet',
             modelReasoningEffort: 'high',
+            codexServiceTier: null,
             permissionMode: 'default',
             collaborationMode: undefined,
         },

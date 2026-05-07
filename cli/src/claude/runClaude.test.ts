@@ -215,6 +215,7 @@ function createDriverSwitchHandoff(): SessionHandoffSnapshot {
         liveConfig: {
             model: 'gpt-5.4',
             modelReasoningEffort: 'high',
+            codexServiceTier: null,
             permissionMode: 'safe-yolo',
             collaborationMode: 'plan',
         },

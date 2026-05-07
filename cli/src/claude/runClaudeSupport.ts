@@ -97,7 +97,7 @@ export function registerClaudeUserMessageHandler(options: {
     selections: ClaudeRuntimeSelections
     pendingSessionContinuityHandoff: PendingSessionContinuityHandoffState
 }): void {
-    options.session.onUserMessage((message: UserMessage) => {
+    options.session.onUserMessage((message: UserMessage, localId?: string) => {
         const messageMeta = (message.meta ?? null) as Record<string, unknown> | null
         const liveSession = options.getCurrentSession()
         const sessionPermissionMode = liveSession?.getPermissionMode()
@@ -200,12 +200,16 @@ export function registerClaudeUserMessageHandler(options: {
         }
 
         if (specialCommand.type === 'compact' || specialCommand.type === 'clear') {
-            options.queue.pushIsolateAndClear(specialCommand.originalMessage || message.content.text, enhancedMode)
+            options.queue.pushIsolateAndClear(
+                specialCommand.originalMessage || message.content.text,
+                enhancedMode,
+                localId
+            )
             logger.debugLargeJson(`[start] /${specialCommand.type} command pushed to queue:`, message)
             return
         }
 
-        options.queue.push(formattedText, enhancedMode)
+        options.queue.push(formattedText, enhancedMode, localId)
         logger.debugLargeJson('User message pushed to queue:', message)
     })
 }
