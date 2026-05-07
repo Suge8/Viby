@@ -5,11 +5,11 @@
     "author": "Kirill Dubovitskiy & weishu",
     "license": "AGPL-3.0-only",
     "type": "module",
-    "homepage": "https://github.com/tiann/viby",
-    "bugs": "https://github.com/tiann/viby/issues",
+    "homepage": "https://github.com/Suge8/Viby",
+    "bugs": "https://github.com/Suge8/Viby/issues",
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/tiann/viby.git",
+        "url": "git+https://github.com/Suge8/Viby.git",
         "directory": "cli"
     },
     "bin": {
@@ -52,7 +52,6 @@
     },
     "dependencies": {
         "@github/copilot-sdk": "^0.2.1",
-        "@mariozechner/pi-coding-agent": "0.64.0",
         "@modelcontextprotocol/sdk": "^1.25.1",
         "@types/cross-spawn": "^6.0.6",
         "@types/ps-list": "^6.2.1",

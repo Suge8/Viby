@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   publish-cli:
@@ -35,15 +36,16 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: 24
           registry-url: https://registry.npmjs.org
 
-      - name: Verify npm token
+      - name: Resolve npm auth mode
         shell: bash
         run: |
-          if [[ -z "${NODE_AUTH_TOKEN}" ]]; then
-            echo "Missing NPM_TOKEN secret"
-            exit 1
+          if [[ -n "${NODE_AUTH_TOKEN}" ]]; then
+            echo "NPM_TOKEN fallback is available."
+          else
+            echo "NPM_TOKEN is absent; npm Trusted Publishing must be configured for this workflow."
           fi
 
       - name: Guard publishable CLI tag

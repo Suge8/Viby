@@ -74,3 +74,11 @@ bun run build:pairing # 生成 pairing/deploy-bundle/ + deploy-bundle.tar.gz
 - README 只回答产品是什么、怎么跑、去哪里继续看
 - 复杂运行边界和恢复语义统一收口到 `docs/`
 - 模块内更细的开发规则继续看对应目录下的 `AGENTS.md`
+
+## Credits
+
+Viby 是从 [HAPI](https://github.com/tiann/hapi) 独立演进出的下游项目。Viby 维护自己的产品方向、发布渠道、更新元数据与分发入口：
+
+```text
+https://github.com/Suge8/Viby
+```

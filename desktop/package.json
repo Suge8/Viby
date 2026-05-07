@@ -15,11 +15,15 @@
         "tauri:build": "VIBY_HARNESS_SCOPE=desktop bun run --cwd .. harness:check && bun run repair:tauri-target && bun run prepare:icons && tauri build"
     },
     "dependencies": {
-        "@viby/protocol": "workspace:*",
         "@tauri-apps/api": "2.10.1",
+        "@tauri-apps/plugin-updater": "2.10.1",
+        "@viby/protocol": "workspace:*",
+        "lucide-react": "^0.577.0",
+        "motion": "^12.38.0",
         "qrcode": "^1.5.4",
         "react": "^19.2.3",
-        "react-dom": "^19.2.3"
+        "react-dom": "^19.2.3",
+        "socket.io-client": "^4.8.3"
     },
     "devDependencies": {
         "@tailwindcss/vite": "^4.2.2",
