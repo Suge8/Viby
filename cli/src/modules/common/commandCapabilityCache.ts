@@ -1,6 +1,6 @@
 import type { CommandCapability, SessionDriver } from '@viby/protocol/types'
-import { access } from 'fs/promises'
-import { dirname, resolve } from 'path'
+import { access, readdir, stat } from 'fs/promises'
+import { dirname, join, resolve } from 'path'
 import { startFileWatcher } from '@/modules/watcher/startFileWatcher'
 import { hashObject } from '@/utils/deterministicJson'
 
@@ -15,6 +15,8 @@ type CommandCapabilityCacheEntry = {
     stale: boolean
     invalidationListeners: Set<() => void>
     stopWatchers: Array<() => void>
+    watchTargets: string[]
+    watchFingerprint: string | null
     idleTimer: ReturnType<typeof setTimeout> | null
     lastAccessedAt: number
 }
@@ -55,6 +57,31 @@ async function resolveWatchTargets(paths: readonly string[]): Promise<string[]> 
     return [...new Set(targets.filter((target): target is string => target !== null))]
 }
 
+async function collectFingerprintRows(path: string, rows: string[]): Promise<void> {
+    try {
+        const info = await stat(path)
+        rows.push(`${path}:${info.isDirectory() ? 'd' : 'f'}:${info.mtimeMs}:${info.size}`)
+        if (!info.isDirectory()) {
+            return
+        }
+
+        const entries = await readdir(path, { withFileTypes: true })
+        await Promise.all(
+            entries
+                .filter((entry) => entry.isDirectory() || entry.isFile())
+                .map(async (entry) => await collectFingerprintRows(join(path, entry.name), rows))
+        )
+    } catch {
+        rows.push(`${path}:missing`)
+    }
+}
+
+async function buildWatchFingerprint(paths: readonly string[]): Promise<string> {
+    const rows: string[] = []
+    await Promise.all(paths.map(async (path) => await collectFingerprintRows(path, rows)))
+    return hashObject(rows.sort(), { sortArrays: false }, 'base64url')
+}
+
 function ensureCacheEntry(key: string): CommandCapabilityCacheEntry {
     const existing = commandCapabilityCache.get(key)
     if (existing) {
@@ -67,6 +94,8 @@ function ensureCacheEntry(key: string): CommandCapabilityCacheEntry {
         stale: true,
         invalidationListeners: new Set(),
         stopWatchers: [],
+        watchTargets: [],
+        watchFingerprint: null,
         idleTimer: null,
         lastAccessedAt: Date.now(),
     }
@@ -121,13 +150,23 @@ function markCacheEntryStale(entry: CommandCapabilityCacheEntry): void {
     }
 }
 
-function refreshWatchers(entry: CommandCapabilityCacheEntry, watchTargets: readonly string[]): void {
+async function refreshWatchers(entry: CommandCapabilityCacheEntry, watchTargets: readonly string[]): Promise<void> {
     stopCacheEntryWatchers(entry)
+    entry.watchTargets = [...watchTargets]
+    entry.watchFingerprint = await buildWatchFingerprint(watchTargets)
     entry.stopWatchers = watchTargets.map((target) =>
         startFileWatcher(target, () => {
             markCacheEntryStale(entry)
         })
     )
+}
+
+async function hasWatchFingerprintChanged(entry: CommandCapabilityCacheEntry): Promise<boolean> {
+    if (entry.watchFingerprint === null) {
+        return false
+    }
+
+    return (await buildWatchFingerprint(entry.watchTargets)) !== entry.watchFingerprint
 }
 
 export async function loadCachedCommandCapabilities(options: {
@@ -144,7 +183,7 @@ export async function loadCachedCommandCapabilities(options: {
         entry.invalidationListeners.add(options.onInvalidate)
     }
 
-    if (!entry.stale && entry.value) {
+    if (!entry.stale && entry.value && !(await hasWatchFingerprintChanged(entry))) {
         return entry.value
     }
 
@@ -155,7 +194,7 @@ export async function loadCachedCommandCapabilities(options: {
     entry.promise = (async () => {
         try {
             const [capabilities, watchRoots] = await Promise.all([options.load(), options.listWatchRoots()])
-            refreshWatchers(entry, await resolveWatchTargets(watchRoots))
+            await refreshWatchers(entry, await resolveWatchTargets(watchRoots))
             entry.value = {
                 capabilities,
                 revision: hashObject(capabilities, { sortArrays: false }, 'base64url'),
