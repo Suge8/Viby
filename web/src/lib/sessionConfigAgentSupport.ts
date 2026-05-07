@@ -1,4 +1,4 @@
-import type { PiModelCapability } from '@viby/protocol'
+import type { AgentModelCapability } from '@viby/protocol'
 
 function normalizeComposerStringValue(value?: string | null): string | null {
     const trimmed = value?.trim()
@@ -9,13 +9,15 @@ function normalizeComposerStringValue(value?: string | null): string | null {
     return trimmed
 }
 
-export function normalizePiModelCapabilities(capabilities?: readonly PiModelCapability[] | null): PiModelCapability[] {
+export function normalizeAgentModelCapabilities(
+    capabilities?: readonly AgentModelCapability[] | null
+): AgentModelCapability[] {
     if (!capabilities || capabilities.length === 0) {
         return []
     }
 
     const seen = new Set<string>()
-    const normalized: PiModelCapability[] = []
+    const normalized: AgentModelCapability[] = []
     for (const capability of capabilities) {
         const id = capability.id.trim()
         if (!id || seen.has(id)) {
@@ -34,11 +36,11 @@ export function normalizePiModelCapabilities(capabilities?: readonly PiModelCapa
     return normalized
 }
 
-export function findPiModelCapability(
+export function findAgentModelCapability(
     currentModel?: string | null,
-    capabilities?: readonly PiModelCapability[] | null
-): PiModelCapability | null {
-    const normalizedCapabilities = normalizePiModelCapabilities(capabilities)
+    capabilities?: readonly AgentModelCapability[] | null
+): AgentModelCapability | null {
+    const normalizedCapabilities = normalizeAgentModelCapabilities(capabilities)
     const normalizedModel = normalizeComposerStringValue(currentModel)
     if (!normalizedModel) {
         return null

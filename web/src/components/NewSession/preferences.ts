@@ -2,11 +2,12 @@ import { AGENT_FLAVORS } from '@viby/protocol'
 import { readBrowserStorageItem, removeBrowserStorageItem, writeBrowserStorageItem } from '@/lib/browserStorage'
 import { MODEL_OPTIONS, REASONING_EFFORT_OPTIONS } from '@/lib/sessionConfigOptions'
 import { type BrowserLocalStorageKey, LOCAL_STORAGE_KEYS } from '@/lib/storage/storageRegistry'
-import type { AgentType, ModelReasoningEffortSelection, SessionType } from './types'
+import type { AgentType, CodexServiceTierSelection, ModelReasoningEffortSelection, SessionType } from './types'
 
 export type AgentLaunchPreferences = {
     model: string
     modelReasoningEffort: ModelReasoningEffortSelection
+    codexServiceTier: CodexServiceTierSelection
 }
 
 export type NewSessionPreferences = {
@@ -48,6 +49,7 @@ export function getDefaultAgentLaunchPreferences(agent: AgentType): AgentLaunchP
     return {
         model: MODEL_OPTIONS[agent][0]?.value ?? 'auto',
         modelReasoningEffort: REASONING_EFFORT_OPTIONS[agent][0]?.value ?? 'default',
+        codexServiceTier: 'standard',
     }
 }
 
@@ -93,6 +95,10 @@ function normalizeReasoningEffort(agent: AgentType, value: unknown): ModelReason
     return trimmedValue as ModelReasoningEffortSelection
 }
 
+function normalizeCodexServiceTier(value: unknown): CodexServiceTierSelection {
+    return value === 'fast' ? 'fast' : 'standard'
+}
+
 function normalizeAgentSettings(value: unknown): Partial<Record<AgentType, AgentLaunchPreferences>> {
     if (!isRecord(value)) {
         return {}
@@ -107,6 +113,7 @@ function normalizeAgentSettings(value: unknown): Partial<Record<AgentType, Agent
         result[agent] = {
             model: normalizeModel(agent, rawValue.model),
             modelReasoningEffort: normalizeReasoningEffort(agent, rawValue.modelReasoningEffort),
+            codexServiceTier: normalizeCodexServiceTier(rawValue.codexServiceTier),
         }
         return result
     }, {})

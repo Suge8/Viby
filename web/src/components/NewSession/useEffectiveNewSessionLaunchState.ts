@@ -7,7 +7,7 @@ import {
     toEffectiveModelReasoningEffort,
 } from './newSessionAvailability'
 import type { AgentLaunchPreferences } from './preferences'
-import type { AgentType, ModelReasoningEffortSelection } from './types'
+import type { AgentType, CodexServiceTierSelection, ModelReasoningEffortSelection } from './types'
 
 type UseEffectiveNewSessionLaunchStateOptions = {
     api: ApiClient
@@ -15,6 +15,7 @@ type UseEffectiveNewSessionLaunchStateOptions = {
     agent: AgentType
     model: string
     modelReasoningEffort: ModelReasoningEffortSelection
+    codexServiceTier: CodexServiceTierSelection
     getAgentLaunchPreferences: (agent: AgentType) => AgentLaunchPreferences
     setAgentModel: (agent: AgentType, model: string) => void
     setAgentModelReasoningEffort: (agent: AgentType, value: ModelReasoningEffortSelection) => void
@@ -25,11 +26,13 @@ type UseEffectiveNewSessionLaunchStateOptions = {
 type UseEffectiveNewSessionLaunchStateResult = {
     agentAvailability: ReturnType<typeof useRuntimeAgentAvailability>['agents']
     isAgentAvailabilityLoading: boolean
+    isAgentAvailabilityRefreshing: boolean
     agentAvailabilityError: string | null
     refetchAgentAvailability: () => Promise<unknown>
     effectiveAgentSelection: ReturnType<typeof resolveEffectiveAgentSelection>
     effectiveModel: string
     effectiveReasoningEffort: ModelReasoningEffortSelection
+    effectiveCodexServiceTier: CodexServiceTierSelection
     handleLaunchModelChange: (nextModel: string) => void
     handleLaunchReasoningEffortChange: (nextValue: ModelReasoningEffortSelection) => void
 }
@@ -43,6 +46,7 @@ export function useEffectiveNewSessionLaunchState(
         agent,
         model,
         modelReasoningEffort,
+        codexServiceTier,
         getAgentLaunchPreferences,
         setAgentModel,
         setAgentModelReasoningEffort,
@@ -52,6 +56,7 @@ export function useEffectiveNewSessionLaunchState(
     const {
         agents: agentAvailability,
         isLoading: isAgentAvailabilityLoading,
+        isRefreshing: isAgentAvailabilityRefreshing,
         error: agentAvailabilityError,
         refetch: refetchAgentAvailability,
     } = useRuntimeAgentAvailability(api, directory)
@@ -68,10 +73,18 @@ export function useEffectiveNewSessionLaunchState(
                 {
                     model,
                     modelReasoningEffort,
+                    codexServiceTier,
                 },
                 getAgentLaunchPreferences
             ),
-        [agent, effectiveAgentSelection.effectiveAgent, getAgentLaunchPreferences, model, modelReasoningEffort]
+        [
+            agent,
+            codexServiceTier,
+            effectiveAgentSelection.effectiveAgent,
+            getAgentLaunchPreferences,
+            model,
+            modelReasoningEffort,
+        ]
     )
 
     const handleLaunchModelChange = useCallback(
@@ -101,11 +114,13 @@ export function useEffectiveNewSessionLaunchState(
     return {
         agentAvailability,
         isAgentAvailabilityLoading,
+        isAgentAvailabilityRefreshing,
         agentAvailabilityError,
         refetchAgentAvailability,
         effectiveAgentSelection,
         effectiveModel: effectiveAgentPreferences.model,
         effectiveReasoningEffort: toEffectiveModelReasoningEffort(effectiveAgentPreferences),
+        effectiveCodexServiceTier: effectiveAgentPreferences.codexServiceTier,
         handleLaunchModelChange,
         handleLaunchReasoningEffortChange,
     }

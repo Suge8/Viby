@@ -1,13 +1,14 @@
 import {
+    type AgentModelCapability,
     CLAUDE_SELECTABLE_MODEL_PRESETS,
     type ClaudeReasoningEffort,
     type CodexReasoningEffort,
     getClaudeModelLabel,
     getGeminiModelLabel,
     type ModelReasoningEffort,
-    type PiModelCapability,
     type SessionDriver,
 } from '@viby/protocol'
+import { findAgentModelCapability, normalizeAgentModelCapabilities } from '@/lib/sessionConfigAgentSupport'
 import {
     buildCuratedModelOptions,
     CODEX_MODEL_LABELS,
@@ -27,10 +28,9 @@ import {
     type SessionConfigOption,
     withCurrentOption,
 } from '@/lib/sessionConfigOptionSupport'
-import { findPiModelCapability, normalizePiModelCapabilities } from '@/lib/sessionConfigPiSupport'
 
 export type { ModelReasoningEffortSelection, SessionConfigOption } from '@/lib/sessionConfigOptionSupport'
-export { findPiModelCapability }
+export { findAgentModelCapability }
 
 export const MODEL_OPTIONS: Record<SessionDriver, SessionConfigOption<string>[]> = {
     claude: buildCuratedModelOptions(
@@ -90,7 +90,7 @@ export function getSessionModelDisplayLabel(model: string, sessionDriver?: strin
 export function getSessionModelDisplayLabelWithCapabilities(
     model: string,
     sessionDriver?: string | null,
-    piModelCapabilities?: readonly PiModelCapability[] | null
+    modelCapabilities?: readonly AgentModelCapability[] | null
 ): string {
     const normalizedModel = model.trim()
     if (!normalizedModel) {
@@ -98,7 +98,7 @@ export function getSessionModelDisplayLabelWithCapabilities(
     }
 
     if (sessionDriver === 'pi') {
-        return piModelCapabilities?.find((capability) => capability.id === normalizedModel)?.label ?? normalizedModel
+        return modelCapabilities?.find((capability) => capability.id === normalizedModel)?.label ?? normalizedModel
     }
 
     if (sessionDriver === 'codex') {
@@ -166,10 +166,10 @@ export function getCopilotComposerModelOptions(currentModel?: string | null): Se
     )
 }
 
-export function getPiLaunchModelOptions(
-    capabilities?: readonly PiModelCapability[] | null
+export function getAgentLaunchModelOptions(
+    capabilities?: readonly AgentModelCapability[] | null
 ): SessionConfigOption<string>[] {
-    const normalizedCapabilities = normalizePiModelCapabilities(capabilities)
+    const normalizedCapabilities = normalizeAgentModelCapabilities(capabilities)
 
     return [
         createTerminalDefaultModelOption('auto'),
@@ -180,7 +180,7 @@ export function getPiLaunchModelOptions(
     ]
 }
 
-export function getPiLaunchReasoningEffortOptions(
+export function getAgentLaunchReasoningEffortOptions(
     supportedEfforts?: readonly ModelReasoningEffort[] | null
 ): SessionConfigOption<ModelReasoningEffortSelection>[] {
     return [
@@ -193,9 +193,9 @@ export function getPiLaunchReasoningEffortOptions(
 
 export function getPiComposerModelOptions(
     currentModel?: string | null,
-    capabilities?: readonly PiModelCapability[] | null
+    capabilities?: readonly AgentModelCapability[] | null
 ): SessionConfigOption<string | null>[] {
-    const normalizedCapabilities = normalizePiModelCapabilities(capabilities)
+    const normalizedCapabilities = normalizeAgentModelCapabilities(capabilities)
     if (normalizedCapabilities.length === 0 && !normalizeComposerStringValue(currentModel)) {
         return []
     }

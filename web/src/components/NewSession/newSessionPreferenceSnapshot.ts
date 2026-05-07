@@ -1,5 +1,5 @@
 import type { NewSessionPreferences } from './preferences'
-import type { AgentType, ModelReasoningEffortSelection, SessionType } from './types'
+import type { AgentType, CodexServiceTierSelection, ModelReasoningEffortSelection, SessionType } from './types'
 
 export function createNewSessionPreferenceSnapshot(options: {
     agent: AgentType
@@ -7,6 +7,7 @@ export function createNewSessionPreferenceSnapshot(options: {
     yoloMode: boolean
     model: string
     modelReasoningEffort: ModelReasoningEffortSelection
+    codexServiceTier: CodexServiceTierSelection
     agentSettings: NewSessionPreferences['agentSettings']
 }): NewSessionPreferences {
     return {
@@ -18,6 +19,7 @@ export function createNewSessionPreferenceSnapshot(options: {
             [options.agent]: {
                 model: options.model,
                 modelReasoningEffort: options.modelReasoningEffort,
+                codexServiceTier: options.codexServiceTier,
             },
         },
     }

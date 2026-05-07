@@ -49,7 +49,6 @@ type DirectorySectionProps = {
 export function DirectorySection(props: DirectorySectionProps) {
     const { t } = useTranslation()
     const [isPickerOpen, setIsPickerOpen] = useState(false)
-
     return (
         <NewSessionSectionCard
             title={t('newSession.directory')}
@@ -86,6 +85,7 @@ export function DirectorySection(props: DirectorySectionProps) {
                     type="button"
                     size="sm"
                     variant="secondary"
+                    pressStyle="button"
                     disabled={props.picker.isDisabled}
                     onClick={() => {
                         props.picker.onOpen()
@@ -97,30 +97,6 @@ export function DirectorySection(props: DirectorySectionProps) {
                     {t('newSession.projectPicker.open')}
                 </Button>
             </div>
-
-            {props.picker.recentPaths.length > 0 && (
-                <div className="mt-3.5 flex flex-col gap-2">
-                    <span className="ds-directory-recent-label text-xs font-semibold uppercase text-[var(--ds-text-muted)]">
-                        {t('newSession.recent')}
-                    </span>
-                    <div className="flex flex-wrap gap-2">
-                        {props.picker.recentPaths.map((path) => (
-                            <Button
-                                key={path}
-                                type="button"
-                                size="sm"
-                                variant="secondary"
-                                onClick={() => props.picker.onPathSelect(path)}
-                                disabled={props.picker.isDisabled}
-                                className="ds-recent-path-chip truncate disabled:opacity-50"
-                                title={path}
-                            >
-                                {path}
-                            </Button>
-                        ))}
-                    </div>
-                </div>
-            )}
 
             {props.status.statusMessage ? (
                 <div className="mt-0.5">

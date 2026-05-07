@@ -30,6 +30,7 @@ describe('NewSession preferences', () => {
                 claude: {
                     model: 'sonnet',
                     modelReasoningEffort: 'high',
+                    codexServiceTier: 'standard',
                 },
             },
         })
@@ -41,6 +42,7 @@ describe('NewSession preferences', () => {
                 pi: {
                     model: 'openai/gpt-5.4',
                     modelReasoningEffort: 'high',
+                    codexServiceTier: 'standard',
                 },
             },
         })

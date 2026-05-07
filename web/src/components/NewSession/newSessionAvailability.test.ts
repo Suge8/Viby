@@ -33,16 +33,17 @@ describe('newSessionAvailability', () => {
         const preferences = resolveEffectiveAgentLaunchPreferences(
             'claude',
             'gemini',
-            { model: 'gemini-2.5-pro', modelReasoningEffort: 'high' },
+            { model: 'gemini-2.5-pro', modelReasoningEffort: 'high', codexServiceTier: 'standard' },
             (agent) =>
                 agent === 'claude'
-                    ? { model: 'claude-sonnet-4.5', modelReasoningEffort: 'medium' }
-                    : { model: 'gemini-2.5-pro', modelReasoningEffort: 'high' }
+                    ? { model: 'claude-sonnet-4.5', modelReasoningEffort: 'medium', codexServiceTier: 'standard' }
+                    : { model: 'gemini-2.5-pro', modelReasoningEffort: 'high', codexServiceTier: 'standard' }
         )
 
         expect(preferences).toEqual({
             model: 'claude-sonnet-4.5',
             modelReasoningEffort: 'medium',
+            codexServiceTier: 'standard',
         })
     })
 })

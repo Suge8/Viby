@@ -1,4 +1,4 @@
-import { ApiError } from '@/api/client'
+import { ApiError } from '@/api/clientShared'
 import { formatUserFacingErrorMessage } from '@/lib/userFacingError'
 
 type TranslationFn = (key: string) => string
@@ -19,6 +19,6 @@ export function formatRenameErrorMessage(error: unknown, t: TranslationFn): stri
 
     return formatUserFacingErrorMessage(error, {
         t,
-        fallbackKey: 'dialog.rename.error'
+        fallbackKey: 'dialog.rename.error',
     })
 }

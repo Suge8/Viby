@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import type { ApiClient } from '@/api/client'
 import type { LocalSessionCatalog, LocalSessionCatalogEntry } from '@/types/api'
 import {
@@ -12,48 +12,63 @@ type HapticFeedback = {
     notification: (type: 'success' | 'error') => void
 }
 
-const EMPTY_LOCAL_SESSION_CATALOG: LocalSessionCatalog = {
-    capabilities: [],
-    sessions: [],
-}
-
-function matchesRecoverSearch(session: LocalSessionCatalogEntry, query: string): boolean {
-    if (!query) {
-        return true
-    }
-
-    const haystack = [session.title, session.summary, session.path, session.providerSessionId, session.driver]
-        .filter((value): value is string => typeof value === 'string' && value.length > 0)
-        .join('\n')
-        .toLowerCase()
-
-    return haystack.includes(query)
-}
-
-export function useRecoverLocalState(options: {
+type RecoverLocalStateOptions = {
     api: ApiClient
     initialMode?: NewSessionMode
     isFormDisabled: boolean
     directory: string | null
     haptic: HapticFeedback
-    onSuccess: (sessionId: string) => void
+    onSuccess: (sessionId: string) => Promise<void> | void
     clearError: () => void
     setError: (message: string) => void
     formatError: (error: unknown) => string
     t: (key: string) => string
+}
+
+type RecoverLocalSearchEntry = {
+    session: LocalSessionCatalogEntry
+    selectionKey: string
+    searchText: string
+}
+
+const EMPTY_LOCAL_SESSION_CATALOG: LocalSessionCatalog = {
+    capabilities: [],
+    sessions: [],
+}
+
+type RecoverCatalogState = {
+    catalog: LocalSessionCatalog
+    catalogDirectory: string | null
+    isLoading: boolean
+    loadError: string | null
+}
+
+const EMPTY_RECOVER_CATALOG_STATE: RecoverCatalogState = {
+    catalog: EMPTY_LOCAL_SESSION_CATALOG,
+    catalogDirectory: null,
+    isLoading: false,
+    loadError: null,
+}
+
+function indexRecoverSession(session: LocalSessionCatalogEntry): RecoverLocalSearchEntry {
+    return {
+        session,
+        selectionKey: buildRecoverSelectionKey(session),
+        searchText: [session.title, session.path, session.driver]
+            .filter((value): value is string => typeof value === 'string' && value.length > 0)
+            .join('\n')
+            .toLowerCase(),
+    }
+}
+
+function useRecoverCatalog(options: {
+    api: ApiClient
+    mode: NewSessionMode
+    directory: string | null
+    driverSelection: RecoverLocalDriverSelection
+    formatError: (error: unknown) => string
 }) {
-    const [mode, setMode] = useState<NewSessionMode>(options.initialMode ?? 'start')
-    const [recoverSearchQuery, setRecoverSearchQuery] = useState('')
-    const [recoverDriverSelection, setRecoverDriverSelection] = useState<RecoverLocalDriverSelection>(
-        RECOVER_LOCAL_DRIVER_SELECTION_NONE
-    )
-    const [selectedRecoverSessionKey, setSelectedRecoverSessionKey] = useState<string | null>(null)
-    const [catalog, setCatalog] = useState<LocalSessionCatalog>(EMPTY_LOCAL_SESSION_CATALOG)
-    const [catalogDirectory, setCatalogDirectory] = useState<string | null>(null)
-    const [isLoading, setIsLoading] = useState(false)
-    const [loadError, setLoadError] = useState<string | null>(null)
-    const [isRecovering, setIsRecovering] = useState(false)
-    const deferredRecoverSearchQuery = useDeferredValue(recoverSearchQuery.trim().toLowerCase())
+    const [state, setState] = useState<RecoverCatalogState>(EMPTY_RECOVER_CATALOG_STATE)
     const deferredDirectory = useDeferredValue(options.directory)
     const formatErrorRef = useRef(options.formatError)
 
@@ -62,140 +77,209 @@ export function useRecoverLocalState(options: {
     }, [options.formatError])
 
     useEffect(() => {
-        setMode(options.initialMode ?? 'start')
-    }, [options.initialMode])
-
-    useEffect(() => {
         if (
-            mode !== 'recover-local' ||
             !deferredDirectory ||
-            recoverDriverSelection === RECOVER_LOCAL_DRIVER_SELECTION_NONE
+            options.mode !== 'recover-local' ||
+            options.driverSelection === RECOVER_LOCAL_DRIVER_SELECTION_NONE
         ) {
-            setCatalog(EMPTY_LOCAL_SESSION_CATALOG)
-            setCatalogDirectory(null)
-            setLoadError(null)
-            setIsLoading(false)
+            setState(EMPTY_RECOVER_CATALOG_STATE)
             return
         }
 
         const abortController = new AbortController()
         let cancelled = false
-        setIsLoading(true)
-        setLoadError(null)
-        setCatalogDirectory(null)
-
+        setState({ ...EMPTY_RECOVER_CATALOG_STATE, isLoading: true })
         options.api
-            .listRuntimeLocalSessions(deferredDirectory, recoverDriverSelection, { signal: abortController.signal })
-            .then((nextCatalog) => {
-                if (cancelled) {
-                    return
-                }
-                setCatalog(nextCatalog)
-                setCatalogDirectory(deferredDirectory)
+            .listRuntimeLocalSessions(deferredDirectory, options.driverSelection, { signal: abortController.signal })
+            .then((catalog) => {
+                if (!cancelled)
+                    setState({ catalog, catalogDirectory: deferredDirectory, isLoading: false, loadError: null })
             })
             .catch((error) => {
-                if (cancelled) {
-                    return
-                }
-                if (abortController.signal.aborted) {
-                    return
-                }
-                setCatalog(EMPTY_LOCAL_SESSION_CATALOG)
-                setCatalogDirectory(null)
-                setLoadError(formatErrorRef.current(error))
-            })
-            .finally(() => {
-                if (!cancelled) {
-                    setIsLoading(false)
-                }
+                if (cancelled || abortController.signal.aborted) return
+                setState({
+                    ...EMPTY_RECOVER_CATALOG_STATE,
+                    loadError: formatErrorRef.current(error),
+                })
             })
 
         return () => {
             cancelled = true
             abortController.abort()
         }
-    }, [deferredDirectory, mode, options.api, recoverDriverSelection])
+    }, [deferredDirectory, options.api, options.driverSelection, options.mode])
 
-    const filteredSessions = useMemo(() => {
-        return catalog.sessions.filter((session) => matchesRecoverSearch(session, deferredRecoverSearchQuery))
-    }, [catalog.sessions, deferredRecoverSearchQuery])
+    return {
+        ...state,
+        isCatalogCurrent:
+            Boolean(options.directory) &&
+            !state.isLoading &&
+            state.catalogDirectory === options.directory &&
+            deferredDirectory === options.directory,
+    }
+}
 
-    const unavailableCapabilities = useMemo(() => {
-        return catalog.capabilities.filter((capability) => !capability.supported)
-    }, [catalog.capabilities])
+function useRecoverSearch(catalog: LocalSessionCatalog, searchQuery: string) {
+    const deferredQuery = useDeferredValue(searchQuery.trim().toLowerCase())
+    const searchEntries = useMemo(() => catalog.sessions.map(indexRecoverSession), [catalog.sessions])
+    const filteredSearchEntries = useMemo(() => {
+        if (!deferredQuery) return searchEntries
+        return searchEntries.filter((entry) => entry.searchText.includes(deferredQuery))
+    }, [deferredQuery, searchEntries])
+
+    return {
+        filteredSearchEntries,
+        filteredSessions: useMemo(() => filteredSearchEntries.map((entry) => entry.session), [filteredSearchEntries]),
+        unavailableCapabilities: useMemo(
+            () => catalog.capabilities.filter((capability) => !capability.supported),
+            [catalog.capabilities]
+        ),
+    }
+}
+
+function useRecoverSelection(mode: NewSessionMode, entries: RecoverLocalSearchEntry[]) {
+    const [selectedKey, setSelectedKey] = useState<string | null>(null)
 
     useEffect(() => {
-        if (mode !== 'recover-local') {
-            return
-        }
+        if (mode !== 'recover-local') return
+        if (selectedKey && entries.some((entry) => entry.selectionKey === selectedKey)) return
+        setSelectedKey(entries[0]?.selectionKey ?? null)
+    }, [entries, mode, selectedKey])
 
-        if (
-            selectedRecoverSessionKey &&
-            filteredSessions.some((session) => buildRecoverSelectionKey(session) === selectedRecoverSessionKey)
-        ) {
-            return
-        }
+    return {
+        selectedKey,
+        selectedSession: entries.find((entry) => entry.selectionKey === selectedKey)?.session ?? null,
+        setSelectedKey,
+        clearSelection: useCallback(() => setSelectedKey(null), []),
+    }
+}
 
-        setSelectedRecoverSessionKey(filteredSessions[0] ? buildRecoverSelectionKey(filteredSessions[0]) : null)
-    }, [filteredSessions, mode, selectedRecoverSessionKey])
+type RecoverLocalActionOptions = Pick<
+    RecoverLocalStateOptions,
+    'api' | 'directory' | 'haptic' | 'onSuccess' | 'clearError' | 'setError' | 'formatError' | 'isFormDisabled'
+> & {
+    catalogDirectory: string | null
+    isCatalogCurrent: boolean
+    selectedSession: LocalSessionCatalogEntry | null
+}
 
-    const selectedRecoverSession =
-        filteredSessions.find((session) => buildRecoverSelectionKey(session) === selectedRecoverSessionKey) ?? null
-    const isCatalogCurrent =
-        Boolean(options.directory) &&
-        !isLoading &&
-        catalogDirectory === options.directory &&
-        deferredDirectory === options.directory
-
-    async function handleRecover(): Promise<void> {
-        if (!selectedRecoverSession || !options.directory || !isCatalogCurrent) {
-            return
-        }
-        if (!catalogDirectory) {
-            throw new Error('Recover-local catalog path unavailable')
-        }
-        const recoverPath = catalogDirectory
+function useRecoverAction(options: RecoverLocalActionOptions) {
+    const [isRecovering, setIsRecovering] = useState(false)
+    const handleRecover = useCallback(async (): Promise<void> => {
+        const session = options.selectedSession
+        if (!session || !options.directory || !options.isCatalogCurrent) return
+        if (!options.catalogDirectory) throw new Error('Recover-local catalog path unavailable')
 
         options.clearError()
         setIsRecovering(true)
         try {
-            const recoveredSession = await options.api.importRuntimeLocalSession({
-                path: recoverPath,
-                driver: selectedRecoverSession.driver,
-                providerSessionId: selectedRecoverSession.providerSessionId,
+            const recovered = await options.api.importRuntimeLocalSession({
+                path: options.catalogDirectory,
+                driver: session.driver,
+                providerSessionId: session.providerSessionId,
             })
             options.haptic.notification('success')
-            options.onSuccess(recoveredSession.session.id)
+            await options.onSuccess(recovered.session.id)
         } catch (error) {
             options.haptic.notification('error')
             options.setError(options.formatError(error))
         } finally {
             setIsRecovering(false)
         }
+    }, [
+        options.api,
+        options.catalogDirectory,
+        options.clearError,
+        options.directory,
+        options.formatError,
+        options.haptic,
+        options.isCatalogCurrent,
+        options.onSuccess,
+        options.selectedSession,
+        options.setError,
+    ])
+
+    return {
+        isRecovering,
+        handleRecover,
+        canRecover: Boolean(
+            options.selectedSession &&
+                options.directory &&
+                options.isCatalogCurrent &&
+                !options.isFormDisabled &&
+                !isRecovering
+        ),
     }
+}
+
+export function useRecoverLocalState(options: RecoverLocalStateOptions) {
+    const [mode, setMode] = useState<NewSessionMode>(options.initialMode ?? 'start')
+    const [recoverSearchQuery, setRecoverSearchQuery] = useState('')
+    const [recoverDriverSelection, setRecoverDriverSelection] = useState<RecoverLocalDriverSelection>(
+        RECOVER_LOCAL_DRIVER_SELECTION_NONE
+    )
+    useEffect(() => setMode(options.initialMode ?? 'start'), [options.initialMode])
+
+    const catalog = useRecoverCatalog({
+        api: options.api,
+        mode,
+        directory: options.directory,
+        driverSelection: recoverDriverSelection,
+        formatError: options.formatError,
+    })
+    const search = useRecoverSearch(catalog.catalog, recoverSearchQuery)
+    const selection = useRecoverSelection(mode, search.filteredSearchEntries)
+
+    const recoverAction = useRecoverAction({
+        api: options.api,
+        directory: options.directory,
+        haptic: options.haptic,
+        onSuccess: options.onSuccess,
+        clearError: options.clearError,
+        setError: options.setError,
+        formatError: options.formatError,
+        isFormDisabled: options.isFormDisabled,
+        catalogDirectory: catalog.catalogDirectory,
+        isCatalogCurrent: catalog.isCatalogCurrent,
+        selectedSession: selection.selectedSession,
+    })
+
+    const handleSearchQueryChange = useCallback(
+        (value: string) => {
+            setRecoverSearchQuery(value)
+            selection.clearSelection()
+        },
+        [selection.clearSelection]
+    )
+
+    const handleDriverSelectionChange = useCallback(
+        (value: RecoverLocalDriverSelection) => {
+            setRecoverDriverSelection(value)
+            selection.clearSelection()
+        },
+        [selection.clearSelection]
+    )
 
     return {
         mode,
         setMode,
-        isRecovering,
-        canRecover: Boolean(
-            selectedRecoverSession && options.directory && isCatalogCurrent && !options.isFormDisabled && !isRecovering
-        ),
+        isRecovering: recoverAction.isRecovering,
+        canRecover: recoverAction.canRecover,
         recoverActionLabel: options.t('newSession.recover.action'),
-        handleRecover,
+        handleRecover: recoverAction.handleRecover,
         panelProps: {
-            sessions: filteredSessions,
-            unavailableCapabilities,
-            selectedSessionKey: selectedRecoverSessionKey,
+            sessions: search.filteredSessions,
+            unavailableCapabilities: search.unavailableCapabilities,
+            selectedSessionKey: selection.selectedKey,
             searchQuery: recoverSearchQuery,
             driverSelection: recoverDriverSelection,
-            isLoading,
-            error: loadError,
+            isLoading: catalog.isLoading,
+            error: catalog.loadError,
             isDisabled: options.isFormDisabled,
             hasDirectory: Boolean(options.directory),
-            onSearchQueryChange: setRecoverSearchQuery,
-            onDriverSelectionChange: setRecoverDriverSelection,
-            onSelectSession: setSelectedRecoverSessionKey,
+            onSearchQueryChange: handleSearchQueryChange,
+            onDriverSelectionChange: handleDriverSelectionChange,
+            onSelectSession: selection.setSelectedKey,
         },
     }
 }

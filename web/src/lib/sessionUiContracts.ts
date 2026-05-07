@@ -22,6 +22,9 @@ export const SESSION_ROUTE_BACK_BUTTON_SELECTOR = getTestIdSelector(SESSION_ROUT
 export const SESSION_ROUTE_PAGE_SURFACE_TEST_ID = 'session-route-page-surface'
 export const SESSION_ROUTE_PAGE_SURFACE_SELECTOR = getTestIdSelector(SESSION_ROUTE_PAGE_SURFACE_TEST_ID)
 
+export const ROUTE_SCROLL_AREA_TEST_ID = 'route-scroll-area'
+export const ROUTE_SCROLL_AREA_SELECTOR = getTestIdSelector(ROUTE_SCROLL_AREA_TEST_ID)
+
 export const SESSIONS_SHELL_SETTINGS_BUTTON_TEST_ID = 'sessions-shell-settings-button'
 export const SESSIONS_SHELL_SETTINGS_BUTTON_SELECTOR = getTestIdSelector(SESSIONS_SHELL_SETTINGS_BUTTON_TEST_ID)
 
@@ -55,6 +58,10 @@ export const COMPOSER_MODEL_SECTION_TEST_ID = 'composer-model-section'
 export const COMPOSER_MODEL_SECTION_SELECTOR = getTestIdSelector(COMPOSER_MODEL_SECTION_TEST_ID)
 export const COMPOSER_REASONING_SECTION_TEST_ID = 'composer-reasoning-section'
 export const COMPOSER_REASONING_SECTION_SELECTOR = getTestIdSelector(COMPOSER_REASONING_SECTION_TEST_ID)
+export const COMPOSER_CODEX_SERVICE_TIER_SECTION_TEST_ID = 'composer-codex-service-tier-section'
+export const COMPOSER_CODEX_SERVICE_TIER_SECTION_SELECTOR = getTestIdSelector(
+    COMPOSER_CODEX_SERVICE_TIER_SECTION_TEST_ID
+)
 export const COMPOSER_COLLABORATION_SECTION_TEST_ID = 'composer-collaboration-section'
 export const COMPOSER_COLLABORATION_SECTION_SELECTOR = getTestIdSelector(COMPOSER_COLLABORATION_SECTION_TEST_ID)
 export const COMPOSER_PERMISSION_SECTION_TEST_ID = 'composer-permission-section'

@@ -2,15 +2,15 @@ import { describe, expect, it } from 'vitest'
 import {
     CLAUDE_REASONING_EFFORT_OPTIONS,
     CODEX_REASONING_EFFORT_OPTIONS,
-    MODEL_OPTIONS,
     getClaudeComposerModelOptions,
     getClaudeComposerReasoningEffortOptions,
     getCodexComposerModelOptions,
     getCodexComposerReasoningEffortOptions,
     getGeminiComposerModelOptions,
+    getNextClaudeComposerModel,
     getPiComposerModelOptions,
     getPiComposerReasoningEffortOptions,
-    getNextClaudeComposerModel
+    MODEL_OPTIONS,
 } from './sessionConfigOptions'
 
 describe('sessionConfigOptions', () => {
@@ -25,6 +25,7 @@ describe('sessionConfigOptions', () => {
     it('keeps new-session Codex options aligned with the curated model list', () => {
         expect(MODEL_OPTIONS.codex).toEqual([
             { value: 'auto', label: 'Terminal default model', labelKey: 'model.terminalDefault' },
+            { value: 'gpt-5.5', label: 'GPT-5.5' },
             { value: 'gpt-5.4', label: 'GPT-5.4' },
             { value: 'gpt-5.4-mini', label: 'GPT-5.4 Mini' },
             { value: 'gpt-5.3-codex', label: 'GPT-5.3 Codex' },
@@ -45,7 +46,11 @@ describe('sessionConfigOptions', () => {
 
     it('keeps new-session Codex reasoning effort options aligned with the curated list', () => {
         expect(CODEX_REASONING_EFFORT_OPTIONS).toEqual([
-            { value: 'default', label: 'Terminal default reasoning effort', labelKey: 'reasoningEffort.terminalDefault' },
+            {
+                value: 'default',
+                label: 'Terminal default reasoning effort',
+                labelKey: 'reasoningEffort.terminalDefault',
+            },
             { value: 'low', label: 'Low', labelKey: 'reasoningEffort.low' },
             { value: 'medium', label: 'Medium', labelKey: 'reasoningEffort.medium' },
             { value: 'high', label: 'High', labelKey: 'reasoningEffort.high' },
@@ -55,10 +60,15 @@ describe('sessionConfigOptions', () => {
 
     it('keeps new-session Claude reasoning effort options aligned with the supported list', () => {
         expect(CLAUDE_REASONING_EFFORT_OPTIONS).toEqual([
-            { value: 'default', label: 'Terminal default reasoning effort', labelKey: 'reasoningEffort.terminalDefault' },
+            {
+                value: 'default',
+                label: 'Terminal default reasoning effort',
+                labelKey: 'reasoningEffort.terminalDefault',
+            },
             { value: 'low', label: 'Low', labelKey: 'reasoningEffort.low' },
             { value: 'medium', label: 'Medium', labelKey: 'reasoningEffort.medium' },
             { value: 'high', label: 'High', labelKey: 'reasoningEffort.high' },
+            { value: 'xhigh', label: 'XHigh', labelKey: 'reasoningEffort.xhigh' },
             { value: 'max', label: 'Max', labelKey: 'reasoningEffort.max' },
         ])
     })
@@ -83,6 +93,7 @@ describe('sessionConfigOptions', () => {
         expect(getCodexComposerModelOptions('gpt-5.5-preview')).toEqual([
             { value: null, label: 'Terminal default model', labelKey: 'model.terminalDefault' },
             { value: 'gpt-5.5-preview', label: 'gpt-5.5-preview' },
+            { value: 'gpt-5.5', label: 'GPT-5.5' },
             { value: 'gpt-5.4', label: 'GPT-5.4' },
             { value: 'gpt-5.4-mini', label: 'GPT-5.4 Mini' },
             { value: 'gpt-5.3-codex', label: 'GPT-5.3 Codex' },
@@ -103,18 +114,20 @@ describe('sessionConfigOptions', () => {
     })
 
     it('uses the authoritative Pi model scope for composer model options', () => {
-        expect(getPiComposerModelOptions('openai/gpt-5.4-mini', [
-            {
-                id: 'openai/gpt-5.4',
-                label: 'GPT-5.4',
-                supportedThinkingLevels: ['none', 'low', 'medium', 'high']
-            },
-            {
-                id: 'openai/gpt-5.4-mini',
-                label: 'GPT-5.4 Mini',
-                supportedThinkingLevels: ['none', 'low']
-            }
-        ])).toEqual([
+        expect(
+            getPiComposerModelOptions('openai/gpt-5.4-mini', [
+                {
+                    id: 'openai/gpt-5.4',
+                    label: 'GPT-5.4',
+                    supportedThinkingLevels: ['none', 'low', 'medium', 'high'],
+                },
+                {
+                    id: 'openai/gpt-5.4-mini',
+                    label: 'GPT-5.4 Mini',
+                    supportedThinkingLevels: ['none', 'low'],
+                },
+            ])
+        ).toEqual([
             { value: null, label: 'Terminal default model', labelKey: 'model.terminalDefault' },
             { value: 'openai/gpt-5.4', label: 'GPT-5.4' },
             { value: 'openai/gpt-5.4-mini', label: 'GPT-5.4 Mini' },
@@ -150,6 +163,7 @@ describe('sessionConfigOptions', () => {
             { value: 'low', label: 'Low', labelKey: 'reasoningEffort.low' },
             { value: 'medium', label: 'Medium', labelKey: 'reasoningEffort.medium' },
             { value: 'high', label: 'High', labelKey: 'reasoningEffort.high' },
+            { value: 'xhigh', label: 'XHigh', labelKey: 'reasoningEffort.xhigh' },
             { value: 'max', label: 'Max', labelKey: 'reasoningEffort.max' },
         ])
     })

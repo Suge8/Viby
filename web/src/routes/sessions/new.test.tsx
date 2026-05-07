@@ -40,8 +40,8 @@ vi.mock('@tanstack/react-router', () => ({
     useSearch: () => useSearchMock(),
 }))
 
-vi.mock('@/components/icons', () => ({
-    BrandMarkIcon: () => <div data-testid="brand-mark-icon" />,
+vi.mock('@/components/RouteScrollArea', () => ({
+    RouteScrollArea: (props: { children: React.ReactNode }) => <div>{props.children}</div>,
 }))
 
 vi.mock('@/components/NewSession', () => ({

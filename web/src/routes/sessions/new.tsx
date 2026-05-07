@@ -1,9 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useCallback, useEffect, useRef } from 'react'
-import { BrandMarkIcon } from '@/components/icons'
 import { LoadingState } from '@/components/LoadingState'
 import { NewSession } from '@/components/NewSession'
+import { RouteScrollArea } from '@/components/RouteScrollArea'
 import { STAGE_BRAND_MARK_NEUTRAL_TONE_CLASS_NAME, StageBrandMark } from '@/components/StageBrandMark'
 import { SurfaceRouteHeader } from '@/components/SurfaceRouteHeader'
 import { useRuntime } from '@/hooks/queries/useRuntime'
@@ -50,7 +50,7 @@ type RuntimeRefreshOptions = {
 type NewSessionRouteContentProps = {
     api: ReturnType<typeof useAppContext>['api']
     handleCancel: () => void
-    handleSuccess: (sessionId: string) => void
+    handleSuccess: (sessionId: string) => Promise<void>
     runtime: LocalRuntime | null
     runtimeAvailability: RuntimeAvailabilityPresentation
     runtimeAvailabilityCopy: RuntimeAvailabilityCopy | null
@@ -168,7 +168,7 @@ export default function NewSessionRoute(): React.JSX.Element {
     }, [navigate])
 
     const handleSuccess = useCallback(
-        (sessionId: string) => {
+        async (sessionId: string): Promise<void> => {
             const recoveryHref = buildSessionHref(sessionId)
             const preloadOptions = buildSessionDetailReadyPreloadOptions({
                 api,
@@ -177,7 +177,7 @@ export default function NewSessionRoute(): React.JSX.Element {
             })
             void queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
             warmSessionDetailAncillaryRouteData(preloadOptions)
-            runPreloadedNavigation(
+            await runPreloadedNavigation(
                 () => preloadSessionDetailCriticalRoute(preloadOptions),
                 () => {
                     void navigate({
@@ -193,14 +193,9 @@ export default function NewSessionRoute(): React.JSX.Element {
     )
 
     return (
-        <SessionRoutePageSurface className="overflow-y-auto">
-            <div className="ds-stage-shell flex min-h-full flex-col px-3 pb-8">
-                <SurfaceRouteHeader
-                    title={t('newSession.title')}
-                    onBack={goBack}
-                    eyebrow="Viby"
-                    titleIcon={<BrandMarkIcon className="h-5.5 w-5.5 text-[var(--ds-text-primary)]" />}
-                />
+        <SessionRoutePageSurface>
+            <SurfaceRouteHeader title={t('newSession.title')} onBack={goBack} />
+            <RouteScrollArea>
                 {renderNewSessionRouteContent({
                     api,
                     handleCancel,
@@ -211,7 +206,7 @@ export default function NewSessionRoute(): React.JSX.Element {
                     searchMode: search.mode,
                     t,
                 })}
-            </div>
+            </RouteScrollArea>
         </SessionRoutePageSurface>
     )
 }

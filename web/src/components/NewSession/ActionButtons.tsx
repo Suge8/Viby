@@ -8,6 +8,7 @@ export function ActionButtons(props: {
     canCreate: boolean
     isDisabled: boolean
     createLabel?: string
+    pendingLabel?: string
     onCancel: () => void
     onCreate: () => void
 }) {
@@ -31,7 +32,7 @@ export function ActionButtons(props: {
                         {props.isPending ? (
                             <>
                                 <Spinner size="sm" label={null} className="text-[var(--app-button-text)]" />
-                                {t('newSession.creating')}
+                                {props.pendingLabel ?? t('newSession.creating')}
                             </>
                         ) : (
                             (props.createLabel ?? t('newSession.create'))

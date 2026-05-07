@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import type { PiModelCapability } from '@/types/api'
-import { getPiLaunchModelOptions, getPiLaunchReasoningEffortOptions } from './sessionConfigOptions'
-import { findPiModelCapability } from './sessionConfigPiSupport'
+import type { AgentModelCapability } from '@/types/api'
+import { findAgentModelCapability } from './sessionConfigAgentSupport'
+import { getAgentLaunchModelOptions, getAgentLaunchReasoningEffortOptions } from './sessionConfigOptions'
 
-describe('Pi launch config options', () => {
-    const capabilities: PiModelCapability[] = [
+describe('agent launch config options', () => {
+    const capabilities: AgentModelCapability[] = [
         {
             id: 'openai/gpt-5.4',
             label: 'GPT-5.4',
@@ -18,7 +18,7 @@ describe('Pi launch config options', () => {
     ]
 
     it('builds launch model options from Pi capabilities', () => {
-        expect(getPiLaunchModelOptions(capabilities)).toEqual([
+        expect(getAgentLaunchModelOptions(capabilities)).toEqual([
             {
                 value: 'auto',
                 label: 'Terminal default model',
@@ -36,8 +36,8 @@ describe('Pi launch config options', () => {
     })
 
     it('limits launch reasoning options to the active Pi model capability', () => {
-        expect(findPiModelCapability('openai/gpt-5.4', capabilities)?.id).toBe('openai/gpt-5.4')
-        expect(getPiLaunchReasoningEffortOptions(['none', 'high'])).toEqual([
+        expect(findAgentModelCapability('openai/gpt-5.4', capabilities)?.id).toBe('openai/gpt-5.4')
+        expect(getAgentLaunchReasoningEffortOptions(['none', 'high'])).toEqual([
             {
                 value: 'default',
                 label: 'Terminal default reasoning effort',

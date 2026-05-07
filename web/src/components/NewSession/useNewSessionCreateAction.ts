@@ -1,8 +1,8 @@
-import { useCallback } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { submitNewSessionCreation } from './createSessionSubmit'
 import { resolveLaunchPermissionMode } from './launchConfig'
 import { commitNewSessionPreferences, type NewSessionPreferences } from './preferences'
-import type { AgentType, ModelReasoningEffortSelection, SessionType } from './types'
+import type { AgentType, CodexServiceTierSelection, ModelReasoningEffortSelection, SessionType } from './types'
 
 type UseNewSessionCreateActionOptions = {
     trimmedDirectory: string
@@ -13,16 +13,18 @@ type UseNewSessionCreateActionOptions = {
     effectiveAgent: AgentType
     effectiveModel: string
     effectiveReasoningEffort: ModelReasoningEffortSelection
+    effectiveCodexServiceTier: CodexServiceTierSelection
     checkPathsExists: (paths: string[]) => Promise<Record<string, boolean>>
     confirmDirectoryCreation: () => void
     spawnSession: Parameters<typeof submitNewSessionCreation>[0]['spawnSession']
     buildPreferenceSnapshotFor: (
         targetAgent: AgentType,
         nextModel: string,
-        nextReasoningEffort: ModelReasoningEffortSelection
+        nextReasoningEffort: ModelReasoningEffortSelection,
+        nextCodexServiceTier: CodexServiceTierSelection
     ) => NewSessionPreferences
     addRecentPath: (path: string) => void
-    onSuccess: (sessionId: string) => void
+    onSuccess: (sessionId: string) => Promise<void> | void
     notifySuccess: () => void
     notifyError: () => void
     setError: (message: string | null) => void
@@ -30,8 +32,11 @@ type UseNewSessionCreateActionOptions = {
     formatError: (error: unknown) => string
 }
 
+type NewSessionCreatePhase = 'idle' | 'creating' | 'opening'
+
 type UseNewSessionCreateActionResult = {
     canCreate: boolean
+    createPhase: NewSessionCreatePhase
     handleCreate: () => Promise<void>
 }
 
@@ -45,6 +50,7 @@ export function useNewSessionCreateAction(options: UseNewSessionCreateActionOpti
         effectiveAgent,
         effectiveModel,
         effectiveReasoningEffort,
+        effectiveCodexServiceTier,
         checkPathsExists,
         confirmDirectoryCreation,
         spawnSession,
@@ -57,13 +63,18 @@ export function useNewSessionCreateAction(options: UseNewSessionCreateActionOpti
         t,
         formatError,
     } = options
+    const createInFlightRef = useRef(false)
+    const [createPhase, setCreatePhase] = useState<NewSessionCreatePhase>('idle')
     const canCreate = Boolean(trimmedDirectory)
 
     const handleCreate = useCallback(async (): Promise<void> => {
-        if (!trimmedDirectory) {
+        if (!trimmedDirectory || createInFlightRef.current || createPhase !== 'idle') {
             return
         }
 
+        createInFlightRef.current = true
+        let didOpen = false
+        setCreatePhase('creating')
         setError(null)
         try {
             await submitNewSessionCreation({
@@ -72,6 +83,7 @@ export function useNewSessionCreateAction(options: UseNewSessionCreateActionOpti
                 worktreeName,
                 model: effectiveModel,
                 modelReasoningEffort: effectiveReasoningEffort,
+                codexServiceTier: effectiveCodexServiceTier,
                 yoloMode,
                 trimmedDirectory,
                 directoryCreationConfirmed,
@@ -80,10 +92,19 @@ export function useNewSessionCreateAction(options: UseNewSessionCreateActionOpti
                 spawnSession,
                 resolvePermissionMode: resolveLaunchPermissionMode,
                 buildPreferenceSnapshot: () =>
-                    buildPreferenceSnapshotFor(effectiveAgent, effectiveModel, effectiveReasoningEffort),
+                    buildPreferenceSnapshotFor(
+                        effectiveAgent,
+                        effectiveModel,
+                        effectiveReasoningEffort,
+                        effectiveCodexServiceTier
+                    ),
                 commitPreferences: commitNewSessionPreferences,
                 addRecentPath,
                 notifySuccess,
+                onOpening: () => {
+                    didOpen = true
+                    setCreatePhase('opening')
+                },
                 onSuccess,
                 onWorktreeMissing: () => {
                     notifyError()
@@ -96,17 +117,26 @@ export function useNewSessionCreateAction(options: UseNewSessionCreateActionOpti
                 },
             })
         } catch (nextError) {
+            createInFlightRef.current = false
             notifyError()
             setError(formatError(nextError))
+            setCreatePhase('idle')
+        } finally {
+            if (!didOpen) {
+                createInFlightRef.current = false
+                setCreatePhase('idle')
+            }
         }
     }, [
         addRecentPath,
         buildPreferenceSnapshotFor,
         checkPathsExists,
         confirmDirectoryCreation,
+        createPhase,
         directoryCreationConfirmed,
         effectiveAgent,
         effectiveModel,
+        effectiveCodexServiceTier,
         effectiveReasoningEffort,
         formatError,
         notifyError,
@@ -123,6 +153,7 @@ export function useNewSessionCreateAction(options: UseNewSessionCreateActionOpti
 
     return {
         canCreate,
+        createPhase,
         handleCreate,
     }
 }

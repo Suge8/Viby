@@ -1,4 +1,4 @@
-import { CLAUDE_SELECTABLE_MODEL_PRESETS, CLAUDE_MODEL_PRESETS, getClaudeModelLabel } from '@viby/protocol'
+import { CLAUDE_MODEL_PRESETS, CLAUDE_SELECTABLE_MODEL_PRESETS, getClaudeModelLabel } from '@viby/protocol'
 import { describe, expect, it } from 'vitest'
 import { CLAUDE_REASONING_EFFORT_OPTIONS, MODEL_OPTIONS } from '@/lib/sessionConfigOptions'
 
@@ -25,10 +25,15 @@ describe('Claude model options', () => {
 
     it('exposes the supported Claude reasoning effort options in the expected order', () => {
         expect(CLAUDE_REASONING_EFFORT_OPTIONS).toEqual([
-            { value: 'default', label: 'Terminal default reasoning effort', labelKey: 'reasoningEffort.terminalDefault' },
+            {
+                value: 'default',
+                label: 'Terminal default reasoning effort',
+                labelKey: 'reasoningEffort.terminalDefault',
+            },
             { value: 'low', label: 'Low', labelKey: 'reasoningEffort.low' },
             { value: 'medium', label: 'Medium', labelKey: 'reasoningEffort.medium' },
             { value: 'high', label: 'High', labelKey: 'reasoningEffort.high' },
+            { value: 'xhigh', label: 'XHigh', labelKey: 'reasoningEffort.xhigh' },
             { value: 'max', label: 'Max', labelKey: 'reasoningEffort.max' },
         ])
     })
@@ -38,6 +43,7 @@ describe('Codex model options', () => {
     it('uses the requested terminal-default plus curated explicit models', () => {
         expect(MODEL_OPTIONS.codex).toEqual([
             { value: 'auto', label: 'Terminal default model', labelKey: 'model.terminalDefault' },
+            { value: 'gpt-5.5', label: 'GPT-5.5' },
             { value: 'gpt-5.4', label: 'GPT-5.4' },
             { value: 'gpt-5.4-mini', label: 'GPT-5.4 Mini' },
             { value: 'gpt-5.3-codex', label: 'GPT-5.3 Codex' },

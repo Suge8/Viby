@@ -1,6 +1,6 @@
-import type { ModelReasoningEffort, PermissionMode } from '@/types/api'
+import type { CodexServiceTier, ModelReasoningEffort, PermissionMode } from '@/types/api'
 import type { NewSessionPreferences } from './preferences'
-import type { AgentType, ModelReasoningEffortSelection, SessionType } from './types'
+import type { AgentType, CodexServiceTierSelection, ModelReasoningEffortSelection, SessionType } from './types'
 
 export async function submitNewSessionCreation(options: {
     agent: AgentType
@@ -8,6 +8,7 @@ export async function submitNewSessionCreation(options: {
     worktreeName: string
     model: string
     modelReasoningEffort: ModelReasoningEffortSelection
+    codexServiceTier: CodexServiceTierSelection
     yoloMode: boolean
     trimmedDirectory: string
     directoryCreationConfirmed: boolean
@@ -18,6 +19,7 @@ export async function submitNewSessionCreation(options: {
         agent: AgentType
         model?: string
         modelReasoningEffort?: ModelReasoningEffort
+        codexServiceTier?: CodexServiceTier
         permissionMode?: PermissionMode
         sessionType: SessionType
         worktreeName?: string
@@ -27,7 +29,8 @@ export async function submitNewSessionCreation(options: {
     commitPreferences: (snapshot: NewSessionPreferences) => void
     addRecentPath: (path: string) => void
     notifySuccess: () => void
-    onSuccess: (sessionId: string) => void
+    onOpening: () => void
+    onSuccess: (sessionId: string) => Promise<void> | void
     onWorktreeMissing: () => void
     onNeedsDirectoryCreation: () => void
     onError: (message: string) => void
@@ -54,6 +57,7 @@ export async function submitNewSessionCreation(options: {
         agent: options.agent,
         model: resolvedModel,
         modelReasoningEffort: resolvedModelReasoningEffort,
+        codexServiceTier: options.agent === 'codex' ? options.codexServiceTier : undefined,
         permissionMode: options.resolvePermissionMode(options.agent, options.yoloMode),
         sessionType: options.sessionType,
         worktreeName: options.sessionType === 'worktree' ? options.worktreeName.trim() || undefined : undefined,
@@ -67,5 +71,6 @@ export async function submitNewSessionCreation(options: {
     options.commitPreferences(options.buildPreferenceSnapshot())
     options.addRecentPath(options.trimmedDirectory)
     options.notifySuccess()
-    options.onSuccess(result.session.id)
+    options.onOpening()
+    await options.onSuccess(result.session.id)
 }

@@ -1,7 +1,9 @@
 import {
     CLAUDE_REASONING_EFFORTS,
     type ClaudeReasoningEffort,
+    CODEX_MODEL_LABELS,
     CODEX_MODEL_PRESETS,
+    COPILOT_MODEL_LABELS,
     COPILOT_MODEL_PRESETS,
     type CodexReasoningEffort,
     type CopilotModelPreset,
@@ -11,6 +13,8 @@ import {
     getCodexReasoningEffortLabel,
     type ModelReasoningEffort,
 } from '@viby/protocol'
+
+export { CODEX_MODEL_LABELS, COPILOT_MODEL_LABELS }
 
 export type SessionConfigOption<T extends string | null> = {
     value: T
@@ -33,20 +37,6 @@ export const CURATED_CODEX_REASONING_EFFORTS = [
     'high',
     'xhigh',
 ] as const satisfies readonly CodexReasoningEffort[]
-export const CODEX_MODEL_LABELS: Record<(typeof CURATED_CODEX_MODELS)[number], string> = {
-    'gpt-5.4': 'GPT-5.4',
-    'gpt-5.4-mini': 'GPT-5.4 Mini',
-    'gpt-5.3-codex': 'GPT-5.3 Codex',
-    'gpt-5.2': 'GPT-5.2',
-}
-export const COPILOT_MODEL_LABELS: Record<(typeof CURATED_COPILOT_MODELS)[number], string> = {
-    'gpt-5': 'GPT-5',
-    'gpt-5.4': 'GPT-5.4',
-    'gpt-5.4-mini': 'GPT-5.4 Mini',
-    'claude-sonnet-4.6': 'Claude Sonnet 4.6',
-    'claude-sonnet-4.5': 'Claude Sonnet 4.5',
-    'gemini-2.5-pro': 'Gemini 2.5 Pro',
-}
 export const REASONING_EFFORT_LABEL_KEYS: Record<ModelReasoningEffort, string> = {
     none: 'reasoningEffort.none',
     minimal: 'reasoningEffort.minimal',

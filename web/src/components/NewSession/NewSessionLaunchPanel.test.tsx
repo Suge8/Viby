@@ -11,8 +11,6 @@ vi.mock('@/lib/use-translation', () => ({
                     return 'Launch settings'
                 case 'newSession.agent':
                     return 'Agent'
-                case 'newSession.agentAvailability.helper':
-                    return 'Agent availability helper'
                 case 'newSession.agentAvailability.errorTitle':
                     return 'Could not check availability'
                 case 'newSession.agentAvailability.selectedUnavailableTitle':
@@ -45,12 +43,22 @@ vi.mock('@/lib/use-translation', () => ({
                     return 'Learn more'
                 case 'newSession.model':
                     return 'Model'
+                case 'model.terminalDefault':
+                    return 'Terminal default model'
                 case 'newSession.reasoningEffort':
                     return 'Reasoning effort'
+                case 'reasoningEffort.terminalDefault':
+                    return 'Terminal default reasoning effort'
+                case 'newSession.codexFastMode':
+                    return 'Codex fast mode'
+                case 'codexServiceTier.standard':
+                    return 'Standard'
+                case 'codexServiceTier.fast':
+                    return 'Fast'
                 case 'newSession.yolo':
                     return 'Yolo'
-                case 'newSession.piLaunchConfig.errorTitle':
-                    return 'Pi config unavailable'
+                case 'newSession.agentLaunchConfig.errorTitle':
+                    return 'Agent config unavailable'
                 default:
                     return key
             }
@@ -77,6 +85,7 @@ function renderPanel(overrides?: {
                     agent: 'claude',
                     model: 'auto',
                     modelReasoningEffort: 'default',
+                    codexServiceTier: 'standard',
                     yoloMode: false,
                     ...overrides?.form,
                 }}
@@ -104,11 +113,13 @@ function renderPanel(overrides?: {
                     },
                     hasAgentFallback: false,
                     ...overrides?.options,
+                    agentAvailabilityRefreshing: overrides?.options?.agentAvailabilityRefreshing ?? false,
                 }}
                 handlers={{
                     onAgentChange,
                     onModelChange: vi.fn(),
                     onReasoningEffortChange: vi.fn(),
+                    onCodexServiceTierChange: vi.fn(),
                     onYoloModeChange: vi.fn(),
                     onRefreshAgentAvailability: vi.fn(),
                     ...overrides?.handlers,
@@ -127,6 +138,16 @@ describe('NewSessionLaunchPanel', () => {
         expect(screen.getAllByRole('radio')).toHaveLength(7)
         expect(screen.getByText('Pi')).toBeInTheDocument()
         expect(screen.getByText('Copilot')).toBeInTheDocument()
+    })
+
+    it('supports arrow-key agent selection', () => {
+        const { onAgentChange } = renderPanel()
+        const firstAgent = screen.getAllByRole('radio')[0]
+
+        firstAgent.focus()
+        fireEvent.keyDown(firstAgent, { key: 'ArrowRight' })
+
+        expect(onAgentChange).toHaveBeenCalledWith('codex')
     })
 
     it('renders unavailable agents as disabled cards with install CTA', () => {
@@ -161,8 +182,9 @@ describe('NewSessionLaunchPanel', () => {
         })
 
         expect(screen.getByText('Unavailable selected agent')).toBeInTheDocument()
-        expect(screen.getByRole('link', { name: 'Install' })).toBeInTheDocument()
-        expect(screen.getAllByText('Not installed').length).toBeGreaterThan(0)
+        expect(screen.getAllByRole('radio')).toHaveLength(6)
+        expect(screen.getByRole('link', { name: 'Install Gemini' })).toBeInTheDocument()
+        expect(screen.queryByText('Not installed')).not.toBeInTheDocument()
     })
 
     it('does not change the agent when clicking an unavailable card CTA', () => {
@@ -186,20 +208,47 @@ describe('NewSessionLaunchPanel', () => {
             },
         })
 
-        fireEvent.click(screen.getByRole('link', { name: 'Set up' }))
+        fireEvent.click(screen.getByRole('link', { name: 'Set up Pi' }))
 
         expect(onAgentChange).not.toHaveBeenCalled()
     })
 
-    it('shows a Pi launch config warning when config loading fails', () => {
+    it('shows resolved terminal defaults in launch selectors', () => {
         renderPanel({
-            form: { agent: 'pi' },
             options: {
-                piLaunchConfigError: 'Pi auth missing',
+                modelOptions: [
+                    {
+                        value: 'auto',
+                        label: 'Terminal default model',
+                        labelKey: 'model.terminalDefault',
+                        resolvedLabel: 'GPT-5.4',
+                    },
+                ],
+                reasoningOptions: [
+                    {
+                        value: 'default',
+                        label: 'Terminal default reasoning effort',
+                        labelKey: 'reasoningEffort.terminalDefault',
+                        resolvedLabel: 'High',
+                    },
+                ],
             },
         })
 
-        expect(screen.getByText('Pi config unavailable')).toBeInTheDocument()
-        expect(screen.getByText('Pi auth missing')).toBeInTheDocument()
+        expect(screen.getAllByText('Terminal default model')).toHaveLength(2)
+        expect(screen.getAllByText('GPT-5.4')).toHaveLength(2)
+        expect(screen.getAllByText('Terminal default reasoning effort')).toHaveLength(2)
+        expect(screen.getAllByText('High')).toHaveLength(2)
+    })
+
+    it('shows an agent launch config warning when config loading fails', () => {
+        renderPanel({
+            options: {
+                agentLaunchConfigError: 'Local config missing',
+            },
+        })
+
+        expect(screen.getByText('Agent config unavailable')).toBeInTheDocument()
+        expect(screen.getByText('Local config missing')).toBeInTheDocument()
     })
 })

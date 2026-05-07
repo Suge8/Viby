@@ -3,6 +3,7 @@ import type { ApiClient } from '@/api/client'
 import { InlineNotice } from '@/components/InlineNotice'
 import { MotionStaggerGroup, MotionStaggerItem } from '@/components/motion/motionPrimitives'
 import { useSpawnSession } from '@/hooks/mutations/useSpawnSession'
+import { useRuntimeAgentLaunchConfig } from '@/hooks/queries/useRuntimeAgentLaunchConfig'
 import { useSessions } from '@/hooks/queries/useSessions'
 import { usePlatform } from '@/hooks/usePlatform'
 import { useRecentPaths } from '@/hooks/useRecentPaths'
@@ -13,24 +14,23 @@ import type { LocalRuntime } from '@/types/api'
 import { ActionButtons } from './ActionButtons'
 import { DirectorySection } from './DirectorySection'
 import { NewSessionLaunchPanel } from './NewSessionLaunchPanel'
-import { NewSessionModeToggle } from './NewSessionModeToggle'
+import { NewSessionModeSegmented } from './NewSessionModeSegmented'
 import { isEffectiveAgentReady } from './newSessionAvailability'
 import { type NewSessionMode } from './newSessionModes'
 import { RecoverLocalPanel } from './RecoverLocalPanel'
 import { SessionTypeSelector } from './SessionTypeSelector'
+import { useAgentLaunchOptions } from './useAgentLaunchOptions'
 import { useEffectiveNewSessionLaunchState } from './useEffectiveNewSessionLaunchState'
 import { useNewSessionCreateAction } from './useNewSessionCreateAction'
 import { useNewSessionDirectoryState } from './useNewSessionDirectoryState'
 import { useNewSessionLaunchForm } from './useNewSessionLaunchForm'
-import { usePiLaunchConfig } from './usePiLaunchConfig'
-import { usePiLaunchOptions } from './usePiLaunchOptions'
 import { useRecoverLocalState } from './useRecoverLocalState'
 
 export function NewSession(props: {
     api: ApiClient
     runtime: LocalRuntime
     initialMode?: NewSessionMode
-    onSuccess: (sessionId: string) => void
+    onSuccess: (sessionId: string) => Promise<void> | void
     onCancel: () => void
 }): React.JSX.Element {
     const { haptic } = usePlatform()
@@ -45,6 +45,7 @@ export function NewSession(props: {
         agent,
         model,
         modelReasoningEffort,
+        codexServiceTier,
         yoloMode,
         sessionType,
         worktreeName,
@@ -62,6 +63,7 @@ export function NewSession(props: {
         handleAgentChange,
         handleModelChange,
         handleReasoningEffortChange,
+        handleCodexServiceTierChange,
     } = useNewSessionLaunchForm()
 
     const {
@@ -82,32 +84,16 @@ export function NewSession(props: {
         getRecentPaths,
     })
 
-    const { config: piLaunchConfig, error: piLaunchConfigError } = usePiLaunchConfig({
-        api: props.api,
-        agent,
-        directory: trimmedDirectory,
-        t,
-    })
-
-    const { modelOptions, reasoningOptions } = usePiLaunchOptions({
-        agent,
-        model,
-        modelReasoningEffort,
-        directory: trimmedDirectory,
-        piLaunchConfig,
-        updateAgentSetting,
-        setModel,
-        setModelReasoningEffort,
-    })
-
     const {
         agentAvailability,
         isAgentAvailabilityLoading,
+        isAgentAvailabilityRefreshing,
         agentAvailabilityError,
         refetchAgentAvailability,
         effectiveAgentSelection,
         effectiveModel,
         effectiveReasoningEffort,
+        effectiveCodexServiceTier,
         handleLaunchModelChange,
         handleLaunchReasoningEffortChange,
     } = useEffectiveNewSessionLaunchState({
@@ -116,11 +102,30 @@ export function NewSession(props: {
         agent,
         model,
         modelReasoningEffort,
+        codexServiceTier,
         getAgentLaunchPreferences,
         setAgentModel,
         setAgentModelReasoningEffort,
         handleModelChange,
         handleReasoningEffortChange,
+    })
+
+    const { config: agentLaunchConfig, error: agentLaunchConfigError } = useRuntimeAgentLaunchConfig({
+        api: props.api,
+        agent: effectiveAgentSelection.effectiveAgent,
+        directory: trimmedDirectory,
+        t,
+    })
+
+    const { modelOptions, reasoningOptions } = useAgentLaunchOptions({
+        agent: effectiveAgentSelection.effectiveAgent,
+        model: effectiveModel,
+        modelReasoningEffort: effectiveReasoningEffort,
+        directory: trimmedDirectory,
+        launchConfig: agentLaunchConfig,
+        updateAgentSetting,
+        setModel,
+        setModelReasoningEffort,
     })
 
     const formatRecoverError = useCallback(
@@ -153,7 +158,11 @@ export function NewSession(props: {
             }),
         [t]
     )
-    const { canCreate: hasCreateDirectory, handleCreate } = useNewSessionCreateAction({
+    const {
+        canCreate: hasCreateDirectory,
+        createPhase,
+        handleCreate,
+    } = useNewSessionCreateAction({
         trimmedDirectory,
         sessionType,
         worktreeName,
@@ -162,6 +171,7 @@ export function NewSession(props: {
         effectiveAgent: effectiveAgentSelection.effectiveAgent,
         effectiveModel,
         effectiveReasoningEffort,
+        effectiveCodexServiceTier,
         checkPathsExists,
         confirmDirectoryCreation,
         spawnSession,
@@ -174,85 +184,88 @@ export function NewSession(props: {
         t,
         formatError: formatCreateError,
     })
+    const isCreateOpening = createPhase === 'opening'
     const canCreate =
         hasCreateDirectory &&
         !isFormDisabled &&
+        createPhase === 'idle' &&
         !missingWorktreeDirectory &&
         !isAgentAvailabilityLoading &&
         isEffectiveAgentReady(effectiveAgentSelection.effectiveAgentAvailability)
     const submitLabel = recoverLocal.mode === 'recover-local' ? recoverLocal.recoverActionLabel : createLabel
+    const pendingLabel = recoverLocal.isRecovering
+        ? t('newSession.recover.opening')
+        : isCreateOpening
+          ? t('newSession.opening')
+          : undefined
     const handleRefreshAgentAvailability = useCallback((): void => {
         void refetchAgentAvailability()
     }, [refetchAgentAvailability])
 
     return (
-        <MotionStaggerGroup className="flex flex-col gap-4 pb-8 pt-4" delay={0.03} stagger={0.09}>
-            <MotionStaggerItem y={18}>
-                <NewSessionModeToggle
+        <MotionStaggerGroup className="flex flex-col gap-3" delay={0.03} stagger={0.07}>
+            <MotionStaggerItem y={14}>
+                <NewSessionModeSegmented
                     mode={recoverLocal.mode}
                     isDisabled={isFormDisabled}
                     onModeChange={recoverLocal.setMode}
                 />
             </MotionStaggerItem>
 
-            <MotionStaggerItem y={20}>
-                <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
-                    <MotionStaggerGroup className="space-y-4" delay={0.02} stagger={0.08}>
-                        <MotionStaggerItem x={20} y={12}>
-                            <DirectorySection {...directorySectionProps} />
-                        </MotionStaggerItem>
-
-                        {recoverLocal.mode === 'start' ? (
-                            <MotionStaggerItem x={-18} y={12}>
-                                <SessionTypeSelector
-                                    sessionType={sessionType}
-                                    worktreeName={worktreeName}
-                                    worktreeInputRef={worktreeInputRef}
-                                    isDisabled={isFormDisabled}
-                                    onSessionTypeChange={setSessionType}
-                                    onWorktreeNameChange={setWorktreeName}
-                                />
-                            </MotionStaggerItem>
-                        ) : (
-                            <MotionStaggerItem x={-18} y={12}>
-                                <RecoverLocalPanel {...recoverLocal.panelProps} />
-                            </MotionStaggerItem>
-                        )}
-                    </MotionStaggerGroup>
-
-                    {recoverLocal.mode === 'start' ? (
-                        <MotionStaggerItem className="xl:sticky xl:top-5 xl:self-start" x={26} y={14} duration={0.42}>
-                            <NewSessionLaunchPanel
-                                form={{
-                                    agent: effectiveAgentSelection.effectiveAgent,
-                                    model: effectiveModel,
-                                    modelReasoningEffort: effectiveReasoningEffort,
-                                    yoloMode,
-                                }}
-                                options={{
-                                    modelOptions,
-                                    reasoningOptions,
-                                    isDisabled: isFormDisabled,
-                                    agentAvailability,
-                                    agentAvailabilityLoading: isAgentAvailabilityLoading,
-                                    agentAvailabilityError,
-                                    savedAgent: agent,
-                                    savedAgentAvailability: effectiveAgentSelection.rawAgentAvailability,
-                                    hasAgentFallback: effectiveAgentSelection.hasFallback,
-                                    piLaunchConfigError,
-                                }}
-                                handlers={{
-                                    onAgentChange: handleAgentChange,
-                                    onModelChange: handleLaunchModelChange,
-                                    onReasoningEffortChange: handleLaunchReasoningEffortChange,
-                                    onYoloModeChange: setYoloMode,
-                                    onRefreshAgentAvailability: handleRefreshAgentAvailability,
-                                }}
-                            />
-                        </MotionStaggerItem>
-                    ) : null}
-                </div>
+            <MotionStaggerItem y={14}>
+                <DirectorySection {...directorySectionProps} />
             </MotionStaggerItem>
+
+            {recoverLocal.mode === 'start' ? (
+                <>
+                    <MotionStaggerItem y={14}>
+                        <SessionTypeSelector
+                            sessionType={sessionType}
+                            worktreeName={worktreeName}
+                            worktreeInputRef={worktreeInputRef}
+                            isDisabled={isFormDisabled}
+                            onSessionTypeChange={setSessionType}
+                            onWorktreeNameChange={setWorktreeName}
+                        />
+                    </MotionStaggerItem>
+                    <MotionStaggerItem y={14}>
+                        <NewSessionLaunchPanel
+                            form={{
+                                agent: effectiveAgentSelection.effectiveAgent,
+                                model: effectiveModel,
+                                modelReasoningEffort: effectiveReasoningEffort,
+                                codexServiceTier: effectiveCodexServiceTier,
+                                yoloMode,
+                            }}
+                            options={{
+                                modelOptions,
+                                reasoningOptions,
+                                isDisabled: isFormDisabled,
+                                agentAvailability,
+                                agentAvailabilityLoading: isAgentAvailabilityLoading,
+                                agentAvailabilityRefreshing: isAgentAvailabilityRefreshing,
+                                agentAvailabilityError,
+                                savedAgent: agent,
+                                savedAgentAvailability: effectiveAgentSelection.rawAgentAvailability,
+                                hasAgentFallback: effectiveAgentSelection.hasFallback,
+                                agentLaunchConfigError,
+                            }}
+                            handlers={{
+                                onAgentChange: handleAgentChange,
+                                onModelChange: handleLaunchModelChange,
+                                onReasoningEffortChange: handleLaunchReasoningEffortChange,
+                                onCodexServiceTierChange: handleCodexServiceTierChange,
+                                onYoloModeChange: setYoloMode,
+                                onRefreshAgentAvailability: handleRefreshAgentAvailability,
+                            }}
+                        />
+                    </MotionStaggerItem>
+                </>
+            ) : (
+                <MotionStaggerItem y={14}>
+                    <RecoverLocalPanel {...recoverLocal.panelProps} />
+                </MotionStaggerItem>
+            )}
 
             {(error ?? spawnError) ? (
                 <MotionStaggerItem y={12}>
@@ -264,11 +277,12 @@ export function NewSession(props: {
                 </MotionStaggerItem>
             ) : null}
 
-            <MotionStaggerItem y={14}>
+            <MotionStaggerItem y={12}>
                 <ActionButtons
                     canCreate={recoverLocal.mode === 'recover-local' ? recoverLocal.canRecover : canCreate}
-                    isDisabled={isFormDisabled || recoverLocal.isRecovering}
-                    isPending={isPending || recoverLocal.isRecovering}
+                    isDisabled={isFormDisabled || createPhase !== 'idle' || recoverLocal.isRecovering}
+                    isPending={isPending || createPhase !== 'idle' || recoverLocal.isRecovering}
+                    pendingLabel={pendingLabel}
                     createLabel={submitLabel}
                     onCreate={recoverLocal.mode === 'recover-local' ? recoverLocal.handleRecover : handleCreate}
                     onCancel={props.onCancel}

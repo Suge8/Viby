@@ -1,5 +1,6 @@
 import {
     type CodexCollaborationMode,
+    type CodexServiceTier,
     getPermissionModesForDriver,
     type PermissionMode,
     type PiModelCapability,
@@ -227,6 +228,23 @@ export function getLocalizedCollaborationModeOptions(t: Translate): ComposerPane
             value: 'plan',
             label: t('sessionConfig.collaboration.plan.label'),
             description: getCollaborationDescription('plan', t),
+            tone: 'brand',
+        },
+    ]
+}
+
+export function getLocalizedCodexServiceTierOptions(t: Translate): ComposerPanelOption<CodexServiceTier>[] {
+    return [
+        {
+            value: 'standard',
+            label: t('codexServiceTier.standard'),
+            description: t('sessionConfig.codexServiceTier.standard.description'),
+            tone: 'neutral',
+        },
+        {
+            value: 'fast',
+            label: t('codexServiceTier.fast'),
+            description: t('sessionConfig.codexServiceTier.fast.description'),
             tone: 'brand',
         },
     ]

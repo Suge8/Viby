@@ -1,61 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { createNewSessionPreferenceSnapshot } from './newSessionPreferenceSnapshot'
 import {
-    getDefaultAgentLaunchPreferences,
-    loadNewSessionPreferences,
-    type NewSessionPreferences,
-    saveNewSessionPreferencesDraft,
-} from './preferences'
-import type { AgentType, ModelReasoningEffortSelection, SessionType } from './types'
-
-type NewSessionLaunchFormState = {
-    agentSettings: NewSessionPreferences['agentSettings']
-    agent: AgentType
-    model: string
-    modelReasoningEffort: ModelReasoningEffortSelection
-    yoloMode: boolean
-    sessionType: SessionType
-    worktreeName: string
-}
-
-function createInitialFormState(): NewSessionLaunchFormState {
-    const initialPreferences = loadNewSessionPreferences()
-    const initialAgentPreferences =
-        initialPreferences.agentSettings[initialPreferences.agent] ??
-        getDefaultAgentLaunchPreferences(initialPreferences.agent)
-
-    return {
-        agentSettings: initialPreferences.agentSettings,
-        agent: initialPreferences.agent,
-        model: initialAgentPreferences.model,
-        modelReasoningEffort: initialAgentPreferences.modelReasoningEffort,
-        yoloMode: initialPreferences.yoloMode,
-        sessionType: initialPreferences.sessionType,
-        worktreeName: '',
-    }
-}
-
-function persistFormState(state: NewSessionLaunchFormState): void {
-    saveNewSessionPreferencesDraft(
-        createNewSessionPreferenceSnapshot({
-            agent: state.agent,
-            sessionType: state.sessionType,
-            yoloMode: state.yoloMode,
-            model: state.model,
-            modelReasoningEffort: state.modelReasoningEffort,
-            agentSettings: state.agentSettings,
-        })
-    )
-}
+    createInitialLaunchFormState,
+    type NewSessionLaunchFormState,
+    persistLaunchFormState,
+} from './newSessionLaunchFormState'
+import { createNewSessionPreferenceSnapshot } from './newSessionPreferenceSnapshot'
+import { getDefaultAgentLaunchPreferences, type NewSessionPreferences } from './preferences'
+import type { AgentType, CodexServiceTierSelection, ModelReasoningEffortSelection, SessionType } from './types'
 
 export function useNewSessionLaunchForm() {
-    const [formState, setFormState] = useState<NewSessionLaunchFormState>(() => createInitialFormState())
+    const [formState, setFormState] = useState<NewSessionLaunchFormState>(() => createInitialLaunchFormState())
     const formStateRef = useRef(formState)
     const worktreeInputRef = useRef<HTMLInputElement>(null)
 
     formStateRef.current = formState
 
-    const { agentSettings, agent, model, modelReasoningEffort, yoloMode, sessionType, worktreeName } = formState
+    const { agentSettings, agent, model, modelReasoningEffort, codexServiceTier, yoloMode, sessionType, worktreeName } =
+        formState
 
     useEffect(() => {
         if (sessionType === 'worktree') {
@@ -71,15 +32,16 @@ export function useNewSessionLaunchForm() {
                 yoloMode,
                 model,
                 modelReasoningEffort,
+                codexServiceTier,
                 agentSettings,
             }),
-        [agent, agentSettings, model, modelReasoningEffort, sessionType, yoloMode]
+        [agent, agentSettings, codexServiceTier, model, modelReasoningEffort, sessionType, yoloMode]
     )
 
     const applyState = useCallback(
         (updater: (currentState: NewSessionLaunchFormState) => NewSessionLaunchFormState) => {
             const nextState = updater(formStateRef.current)
-            persistFormState(nextState)
+            persistLaunchFormState(nextState)
             formStateRef.current = nextState
             setFormState(nextState)
         },
@@ -92,6 +54,7 @@ export function useNewSessionLaunchForm() {
             nextValues: Partial<{
                 model: string
                 modelReasoningEffort: ModelReasoningEffortSelection
+                codexServiceTier: CodexServiceTierSelection
             }>
         ) => {
             applyState((currentState) => ({
@@ -119,6 +82,7 @@ export function useNewSessionLaunchForm() {
                     agent: nextAgent,
                     model: nextAgentPreferences.model,
                     modelReasoningEffort: nextAgentPreferences.modelReasoningEffort,
+                    codexServiceTier: nextAgentPreferences.codexServiceTier,
                 }
             })
         },
@@ -154,6 +118,23 @@ export function useNewSessionLaunchForm() {
                         ...(currentState.agentSettings[currentState.agent] ??
                             getDefaultAgentLaunchPreferences(currentState.agent)),
                         modelReasoningEffort: nextValue,
+                    },
+                },
+            }))
+        },
+        [applyState]
+    )
+
+    const handleCodexServiceTierChange = useCallback(
+        (nextValue: CodexServiceTierSelection) => {
+            applyState((currentState) => ({
+                ...currentState,
+                codexServiceTier: nextValue,
+                agentSettings: {
+                    ...currentState.agentSettings,
+                    codex: {
+                        ...(currentState.agentSettings.codex ?? getDefaultAgentLaunchPreferences('codex')),
+                        codexServiceTier: nextValue,
                     },
                 },
             }))
@@ -210,19 +191,30 @@ export function useNewSessionLaunchForm() {
     )
 
     const buildPreferenceSnapshotFor = useCallback(
-        (targetAgent: AgentType, nextModel: string, nextReasoningEffort: ModelReasoningEffortSelection) =>
+        (
+            targetAgent: AgentType,
+            nextModel: string,
+            nextReasoningEffort: ModelReasoningEffortSelection,
+            nextCodexServiceTier: CodexServiceTierSelection
+        ) =>
             createNewSessionPreferenceSnapshot({
                 agent: targetAgent,
                 sessionType,
                 yoloMode,
                 model: nextModel,
                 modelReasoningEffort: nextReasoningEffort,
+                codexServiceTier: nextCodexServiceTier,
                 agentSettings: {
                     ...agentSettings,
                     [targetAgent]: {
                         ...(agentSettings[targetAgent] ?? getDefaultAgentLaunchPreferences(targetAgent)),
                         model: nextModel,
                         modelReasoningEffort: nextReasoningEffort,
+                        codexServiceTier:
+                            targetAgent === 'codex'
+                                ? nextCodexServiceTier
+                                : (agentSettings[targetAgent]?.codexServiceTier ??
+                                  getDefaultAgentLaunchPreferences(targetAgent).codexServiceTier),
                     },
                 },
             }),
@@ -263,6 +255,7 @@ export function useNewSessionLaunchForm() {
         agent,
         model,
         modelReasoningEffort,
+        codexServiceTier,
         yoloMode,
         sessionType,
         worktreeName,
@@ -281,5 +274,6 @@ export function useNewSessionLaunchForm() {
         handleAgentChange,
         handleModelChange,
         handleReasoningEffortChange,
+        handleCodexServiceTierChange,
     }
 }
