@@ -123,40 +123,59 @@ fn configure_spawn_command(command: &mut Command) -> Result<(), String> {
     Ok(())
 }
 
-fn configure_hub_runtime_environment(
-    command: &mut Command,
-    options: &StartHubOptions,
-) -> Result<(), String> {
+fn configure_shared_home_environment(command: &mut Command) -> Result<(), String> {
     let viby_home_dir = resolve_shared_viby_home_dir()?;
     fs::create_dir_all(&viby_home_dir).map_err(|error| error.to_string())?;
     command.env("VIBY_HOME", &viby_home_dir);
+    Ok(())
+}
+
+fn configure_hub_runtime_environment(command: &mut Command, options: &StartHubOptions) {
     command.env("VIBY_LAUNCH_SOURCE", "desktop");
     command.env("VIBY_LISTEN_HOST", options.listen_host());
-
-    Ok(())
 }
 
 fn append_hub_args(command: &mut Command) {
     command.arg("hub");
 }
 
-fn spawn_dev_hub(options: &StartHubOptions) -> Result<Child, String> {
+fn create_dev_cli_command() -> Result<Command, String> {
     let repo_root = repo_root_dir()?;
     let cli_dir = repo_root.join("cli");
     let mut command = Command::new(BUN_EXECUTABLE);
     command.current_dir(cli_dir);
     command.arg("src/index.ts");
+    configure_shared_home_environment(&mut command)?;
+    Ok(command)
+}
+
+fn create_packaged_cli_command(app: &AppHandle) -> Result<Command, String> {
+    let sidecar_path = resolve_packaged_sidecar_path(app)?;
+    let mut command = Command::new(sidecar_path);
+    configure_shared_home_environment(&mut command)?;
+    Ok(command)
+}
+
+pub fn create_cli_command(app: &AppHandle) -> Result<Command, String> {
+    if cfg!(debug_assertions) {
+        return create_dev_cli_command();
+    }
+
+    create_packaged_cli_command(app)
+}
+
+fn spawn_dev_hub(options: &StartHubOptions) -> Result<Child, String> {
+    let mut command = create_dev_cli_command()?;
     append_hub_args(&mut command);
-    configure_hub_runtime_environment(&mut command, options)?;
+    configure_hub_runtime_environment(&mut command, options);
     configure_spawn_command(&mut command)?;
     command.spawn().map_err(|error| error.to_string())
 }
 
 fn spawn_packaged_hub(app: &AppHandle, options: &StartHubOptions) -> Result<Child, String> {
-    let sidecar_path = resolve_packaged_sidecar_path(app)?;
-    let mut command = Command::new(sidecar_path);
+    let mut command = create_packaged_cli_command(app)?;
     append_hub_args(&mut command);
-    configure_hub_runtime_environment(&mut command, options)?;
+    configure_hub_runtime_environment(&mut command, options);
     configure_spawn_command(&mut command)?;
     command.spawn().map_err(|error| error.to_string())
 }

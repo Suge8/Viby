@@ -12,7 +12,8 @@ use crate::launch::{
 };
 use crate::snapshot::{build_snapshot, stop_managed_hub};
 use crate::state::{
-    DesktopState, HubRuntimePhase, HubSnapshot, ManagedHubState, StartHubOptions, HUB_SNAPSHOT_EVENT,
+    DesktopState, HubRuntimePhase, HubSnapshot, ManagedHubState, StartHubOptions,
+    HUB_SNAPSHOT_EVENT,
 };
 
 struct SnapshotUpdate {
@@ -127,7 +128,7 @@ pub fn get_hub_snapshot(app: &AppHandle) -> Result<HubSnapshot, String> {
     refresh_snapshot(app)
 }
 
-pub fn start_hub(app: &AppHandle, options: StartHubOptions) -> Result<HubSnapshot, String> {
+pub fn start_hub(app: &AppHandle, options: &StartHubOptions) -> Result<HubSnapshot, String> {
     let mut spawned_child: Option<Child> = None;
     let update = with_hub_state(app, |process| {
         let existing_snapshot = build_snapshot(process)?;
@@ -137,7 +138,7 @@ pub fn start_hub(app: &AppHandle, options: StartHubOptions) -> Result<HubSnapsho
         }
 
         if process.managed_pid.is_none() {
-            let child = match spawn_hub_process(app, &options) {
+            let child = match spawn_hub_process(app, options) {
                 Ok(child) => child,
                 Err(error) => {
                     process.last_error = Some(error.clone());
@@ -196,6 +197,15 @@ pub fn open_preferred_url(app: &AppHandle) -> Result<(), String> {
     }
 
     open::that(status.preferred_browser_url).map_err(|error| error.to_string())
+}
+
+pub fn open_url(url: &str) -> Result<(), String> {
+    let trimmed = url.trim();
+    if trimmed != url || !(trimmed.starts_with("http://") || trimmed.starts_with("https://")) {
+        return Err("只能打开 HTTP/HTTPS 入口地址。".to_string());
+    }
+
+    open::that(trimmed).map_err(|error| error.to_string())
 }
 
 pub fn start_snapshot_supervisor(app: AppHandle) -> Result<(), String> {

@@ -1,7 +1,8 @@
 use std::process::{Child, Command};
 
 use crate::snapshot::{
-    default_startup_config, is_desktop_owned_running, is_pid_running, stop_managed_hub,
+    default_startup_config, is_desktop_owned_running, is_pid_running, resolve_visible_status,
+    stop_managed_hub,
 };
 use crate::state::{
     HubLaunchSource, HubRuntimePhase, HubRuntimeStatus, ManagedHubState, DEFAULT_VIBY_LISTEN_HOST,
@@ -15,7 +16,10 @@ fn parse_startup_config(raw: &str) -> Result<crate::state::HubStartupConfig, Str
         config.listen_host = listen_host.to_string();
     }
 
-    if let Some(listen_port) = parsed.get("listen_port").and_then(|value| value.as_integer()) {
+    if let Some(listen_port) = parsed
+        .get("listen_port")
+        .and_then(|value| value.as_integer())
+    {
         config.listen_port = listen_port as u16;
     }
 
@@ -122,6 +126,56 @@ fn desktop_owned_running_ignores_stopped_status() {
     status.phase = HubRuntimePhase::Stopped;
 
     assert!(!is_desktop_owned_running(&status));
+}
+
+#[test]
+fn managed_live_pid_without_status_is_canonical_starting() {
+    let mut child = spawn_waiting_process();
+    let pid = child.id();
+    let status = resolve_visible_status(Some(pid), None, &default_startup_config())
+        .expect("launching status should resolve")
+        .expect("live managed pid should be visible");
+
+    assert_eq!(status.phase, HubRuntimePhase::Starting);
+    assert_eq!(status.pid, pid);
+    assert_eq!(status.launch_source, Some(HubLaunchSource::Desktop));
+    assert_eq!(status.local_hub_url, "http://127.0.0.1:37173");
+
+    kill_child_if_running(&mut child);
+}
+
+#[test]
+fn managed_live_pid_ignores_stale_stopped_status() {
+    let mut child = spawn_waiting_process();
+    let pid = child.id();
+    let mut stale_status = make_status(std::process::id(), Some("desktop"));
+    stale_status.phase = HubRuntimePhase::Stopped;
+
+    let status = resolve_visible_status(Some(pid), Some(stale_status), &default_startup_config())
+        .expect("launching status should resolve")
+        .expect("live managed pid should be visible");
+
+    assert_eq!(status.phase, HubRuntimePhase::Starting);
+    assert_eq!(status.pid, pid);
+
+    kill_child_if_running(&mut child);
+}
+
+#[test]
+fn managed_live_pid_preserves_runtime_error_status() {
+    let mut child = spawn_waiting_process();
+    let pid = child.id();
+    let mut error_status = make_status(pid, Some("desktop"));
+    error_status.phase = HubRuntimePhase::Error;
+
+    let status = resolve_visible_status(Some(pid), Some(error_status), &default_startup_config())
+        .expect("error status should resolve")
+        .expect("runtime error should stay visible");
+
+    assert_eq!(status.phase, HubRuntimePhase::Error);
+    assert_eq!(status.pid, pid);
+
+    kill_child_if_running(&mut child);
 }
 
 #[test]

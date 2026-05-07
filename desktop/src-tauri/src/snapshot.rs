@@ -1,6 +1,6 @@
 use std::fs;
 use std::thread::sleep;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::Deserialize;
 use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
@@ -13,6 +13,10 @@ use crate::state::{
 
 const STOP_WAIT_INTERVAL: Duration = Duration::from_millis(100);
 const STOP_WAIT_ATTEMPTS: usize = 20;
+const LOCALHOST_LISTEN_HOST: &str = "127.0.0.1";
+const ALL_IPV4_LISTEN_HOST: &str = "0.0.0.0";
+const ALL_IPV6_LISTEN_HOST: &str = "::";
+const STARTING_MESSAGE: &str = "Hub process is launching.";
 
 #[derive(Debug, Deserialize)]
 struct SettingsFile {
@@ -34,7 +38,8 @@ fn read_runtime_status() -> Result<Option<HubRuntimeStatus>, String> {
     }
 
     let raw = fs::read_to_string(status_path).map_err(|error| error.to_string())?;
-    let parsed = serde_json::from_str::<HubRuntimeStatus>(&raw).map_err(|error| error.to_string())?;
+    let parsed =
+        serde_json::from_str::<HubRuntimeStatus>(&raw).map_err(|error| error.to_string())?;
     Ok(Some(parsed))
 }
 
@@ -81,7 +86,10 @@ fn wait_for_pid_exit(pid: u32) -> bool {
 }
 
 fn is_running_phase(status: &HubRuntimeStatus) -> bool {
-    matches!(status.phase, HubRuntimePhase::Starting | HubRuntimePhase::Ready)
+    matches!(
+        status.phase,
+        HubRuntimePhase::Starting | HubRuntimePhase::Ready
+    )
 }
 
 fn is_desktop_owned(status: &HubRuntimeStatus) -> bool {
@@ -133,16 +141,91 @@ fn normalize_runtime_status(status: HubRuntimeStatus) -> HubRuntimeStatus {
     }
 }
 
+fn format_runtime_url(listen_host: &str, listen_port: u16) -> String {
+    let host = match listen_host {
+        ALL_IPV4_LISTEN_HOST | ALL_IPV6_LISTEN_HOST => LOCALHOST_LISTEN_HOST,
+        value => value,
+    };
+    let formatted_host = if host.contains(':') && !host.starts_with('[') {
+        format!("[{host}]")
+    } else {
+        host.to_string()
+    };
+
+    format!("http://{formatted_host}:{listen_port}")
+}
+
+fn current_timestamp() -> String {
+    match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(duration) => format!(
+            "unix:{}.{:03}",
+            duration.as_secs(),
+            duration.subsec_millis()
+        ),
+        Err(_) => "unix:0.000".to_string(),
+    }
+}
+
+fn build_launching_status(
+    pid: u32,
+    startup_config: &HubStartupConfig,
+) -> Result<HubRuntimeStatus, String> {
+    let timestamp = current_timestamp();
+    let data_dir = crate::launch::resolve_shared_viby_home_dir()?;
+    let settings_file = settings_file_path()?;
+    let local_hub_url = format_runtime_url(&startup_config.listen_host, startup_config.listen_port);
+
+    Ok(HubRuntimeStatus {
+        phase: HubRuntimePhase::Starting,
+        pid,
+        launch_source: Some(HubLaunchSource::Desktop),
+        listen_host: startup_config.listen_host.clone(),
+        listen_port: startup_config.listen_port,
+        local_hub_url: local_hub_url.clone(),
+        preferred_browser_url: local_hub_url,
+        cli_api_token: String::new(),
+        settings_file: settings_file.display().to_string(),
+        data_dir: data_dir.display().to_string(),
+        started_at: timestamp.clone(),
+        updated_at: timestamp,
+        message: Some(STARTING_MESSAGE.to_string()),
+    })
+}
+
+pub(crate) fn resolve_visible_status(
+    managed_pid: Option<u32>,
+    normalized_status: Option<HubRuntimeStatus>,
+    startup_config: &HubStartupConfig,
+) -> Result<Option<HubRuntimeStatus>, String> {
+    let Some(pid) = managed_pid else {
+        return Ok(normalized_status.filter(is_desktop_owned));
+    };
+
+    if let Some(status) = normalized_status.filter(|status| status.pid == pid) {
+        if status.phase != HubRuntimePhase::Stopped || !is_pid_running(pid) {
+            return Ok(Some(status));
+        }
+    }
+
+    if is_pid_running(pid) {
+        return build_launching_status(pid, startup_config).map(Some);
+    }
+
+    Ok(None)
+}
+
 pub fn build_snapshot(process: &mut ManagedHubState) -> Result<HubSnapshot, String> {
     let startup_config = read_startup_config()?;
-    let normalized_status = read_runtime_status()?.map(normalize_runtime_status);
-    let visible_status = match normalized_status {
-        Some(status) if process.managed_pid.is_some() || is_desktop_owned(&status) => Some(status),
-        _ => None,
-    };
+    let visible_status = resolve_visible_status(
+        process.managed_pid,
+        read_runtime_status()?.map(normalize_runtime_status),
+        &startup_config,
+    )?;
     let log_path = desktop_log_file_path()?;
     let running = visible_status.as_ref().is_some_and(is_running_phase);
-    let desktop_owned_running = visible_status.as_ref().is_some_and(is_desktop_owned_running);
+    let desktop_owned_running = visible_status
+        .as_ref()
+        .is_some_and(is_desktop_owned_running);
 
     Ok(HubSnapshot {
         running,
@@ -165,7 +248,8 @@ pub fn stop_managed_hub(
         return Ok(());
     }
 
-    let Some(running_status) = status.filter(|current_status| is_running_phase(current_status)) else {
+    let Some(running_status) = status.filter(|current_status| is_running_phase(current_status))
+    else {
         process.last_error = None;
         return Ok(());
     };

@@ -6,6 +6,8 @@ use serde::Deserialize;
 use serde_json::json;
 use tauri::AppHandle;
 
+pub use crate::pairing_storage::{clear_pairing_session, read_pairing_session};
+use crate::pairing_storage::{persist_pairing_session, persist_pairing_session_if_changed};
 use crate::state::{DesktopPairingSession, HubRuntimePhase, HubSnapshot, PairingSessionSnapshot};
 use crate::supervisor::refresh_snapshot;
 
@@ -61,7 +63,10 @@ fn create_http_client() -> Result<Client, String> {
         .map_err(|error| error.to_string())
 }
 
-fn pairing_broker_endpoint(pairing: &DesktopPairingSession, path_suffix: &str) -> Result<String, String> {
+fn pairing_broker_endpoint(
+    pairing: &DesktopPairingSession,
+    path_suffix: &str,
+) -> Result<String, String> {
     let mut url = reqwest::Url::parse(&pairing.pairing_url).map_err(|error| error.to_string())?;
     url.set_query(None);
     url.set_fragment(None);
@@ -88,7 +93,8 @@ pub fn create_pairing_session(app: &AppHandle) -> Result<DesktopPairingSession, 
         return Err(parse_http_error(auth_status, &auth_body));
     }
 
-    let auth = serde_json::from_str::<HubAuthResponse>(&auth_body).map_err(|error| error.to_string())?;
+    let auth =
+        serde_json::from_str::<HubAuthResponse>(&auth_body).map_err(|error| error.to_string())?;
     let pairing_response = client
         .post(format!("{}/api/pairings", status.local_hub_url))
         .bearer_auth(auth.token)
@@ -102,10 +108,15 @@ pub fn create_pairing_session(app: &AppHandle) -> Result<DesktopPairingSession, 
         return Err(parse_http_error(pairing_status, &pairing_body));
     }
 
-    serde_json::from_str::<DesktopPairingSession>(&pairing_body).map_err(|error| error.to_string())
+    let pairing = serde_json::from_str::<DesktopPairingSession>(&pairing_body)
+        .map_err(|error| error.to_string())?;
+    persist_pairing_session(&pairing)?;
+    Ok(pairing)
 }
 
-pub fn approve_pairing_session(pairing: DesktopPairingSession) -> Result<DesktopPairingSession, String> {
+pub fn approve_pairing_session(
+    pairing: DesktopPairingSession,
+) -> Result<DesktopPairingSession, String> {
     let client = create_http_client()?;
     let response = client
         .post(pairing_broker_endpoint(&pairing, "approve")?)
@@ -119,11 +130,46 @@ pub fn approve_pairing_session(pairing: DesktopPairingSession) -> Result<Desktop
         return Err(parse_http_error(status, &body));
     }
 
-    let approved = serde_json::from_str::<PairingEnvelope>(&body).map_err(|error| error.to_string())?;
-    Ok(DesktopPairingSession {
+    let approved =
+        serde_json::from_str::<PairingEnvelope>(&body).map_err(|error| error.to_string())?;
+    let next = DesktopPairingSession {
         pairing: approved.pairing,
         ..pairing
-    })
+    };
+    persist_pairing_session(&next)?;
+    Ok(next)
+}
+
+pub fn refresh_pairing_session(
+    pairing: DesktopPairingSession,
+) -> Result<DesktopPairingSession, String> {
+    let client = create_http_client()?;
+    let mut url = reqwest::Url::parse(&pairing.pairing_url).map_err(|error| error.to_string())?;
+    url.set_query(None);
+    url.set_fragment(None);
+    url.set_path(&format!("/pairings/{}", pairing.pairing.id));
+
+    let response = client
+        .get(url)
+        .bearer_auth(&pairing.host_token)
+        .send()
+        .map_err(|error| error.to_string())?;
+
+    let status = response.status();
+    let body = response.text().map_err(|error| error.to_string())?;
+    if !status.is_success() {
+        return Err(parse_http_error(status, &body));
+    }
+
+    let refreshed =
+        serde_json::from_str::<PairingEnvelope>(&body).map_err(|error| error.to_string())?;
+    let previous = pairing.clone();
+    let next = DesktopPairingSession {
+        pairing: refreshed.pairing,
+        ..pairing
+    };
+    persist_pairing_session_if_changed(&previous, &next)?;
+    Ok(next)
 }
 
 pub fn delete_pairing_session(pairing: DesktopPairingSession) -> Result<(), String> {
@@ -146,5 +192,5 @@ pub fn delete_pairing_session(pairing: DesktopPairingSession) -> Result<(), Stri
         return Err(parse_http_error(status, &body));
     }
 
-    Ok(())
+    clear_pairing_session()
 }

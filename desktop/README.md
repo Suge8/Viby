@@ -9,6 +9,7 @@
 - 一键启动和停止本机 hub
 - 查看访问地址和登录凭据
 - 在配置公网 pairing broker 后，一键生成手机扫码配对二维码
+- 右上角设置里检查桌面更新，并可开关启动后自动检查
 - 关闭窗口后继续托盘常驻
 - 重复打开时唤醒已有实例
 
@@ -41,3 +42,4 @@ bun run tauri:build
 - 系统架构：`../docs/architecture/system-overview.md`
 - Desktop 边界：`AGENTS.md`
 - Desktop UI 壳层：`../docs/development/desktop-ui-shell.md`
+- 发布与更新：`../docs/deployment/release-distribution.md`

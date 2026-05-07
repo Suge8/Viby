@@ -1,7 +1,9 @@
+mod agent_availability;
 mod commands;
 mod launch;
 mod lifecycle;
 mod pairing;
+mod pairing_storage;
 mod snapshot;
 mod state;
 mod supervisor;
@@ -15,6 +17,7 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             let _ = state::show_main_window(app);
         }))
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(DesktopState::default())
         .setup(|app| {
             tray::create_tray(app.handle())?;
@@ -30,9 +33,14 @@ pub fn run() {
             commands::start_hub,
             commands::stop_hub,
             commands::open_preferred_url,
+            commands::open_url,
+            commands::list_agent_availability,
             commands::copy_text,
+            commands::get_pairing_session,
+            commands::clear_pairing_session,
             commands::create_pairing_session,
             commands::approve_pairing_session,
+            commands::refresh_pairing_session,
             commands::delete_pairing_session
         ])
         .build(tauri::generate_context!())

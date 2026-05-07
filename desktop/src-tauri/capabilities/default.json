@@ -6,11 +6,21 @@
     "permissions": [
         "core:event:allow-listen",
         "core:event:allow-unlisten",
+        "core:window:allow-start-dragging",
+        "updater:allow-check",
+        "updater:allow-download-and-install",
         "allow-get-hub-snapshot",
         "allow-start-hub",
         "allow-stop-hub",
         "allow-open-preferred-url",
+        "allow-open-url",
+        "allow-list-agent-availability",
         "allow-copy-text",
-        "allow-create-pairing-session"
+        "allow-get-pairing-session",
+        "allow-clear-pairing-session",
+        "allow-create-pairing-session",
+        "allow-approve-pairing-session",
+        "allow-refresh-pairing-session",
+        "allow-delete-pairing-session"
     ]
 }

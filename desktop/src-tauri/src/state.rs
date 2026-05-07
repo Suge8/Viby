@@ -8,7 +8,28 @@ pub const HUB_SNAPSHOT_EVENT: &str = "desktop://hub-snapshot";
 pub const DEFAULT_VIBY_LISTEN_HOST: &str = "127.0.0.1";
 pub const DEFAULT_VIBY_LISTEN_PORT: u16 = 37173;
 pub const LAN_LISTEN_HOST: &str = "0.0.0.0";
-pub const LOCAL_LISTEN_HOST: &str = "127.0.0.1";
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DesktopEntryMode {
+    Local,
+    Lan,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartHubOptions {
+    pub entry_mode: DesktopEntryMode,
+}
+
+impl StartHubOptions {
+    pub fn listen_host(&self) -> &'static str {
+        match self.entry_mode {
+            DesktopEntryMode::Local => DEFAULT_VIBY_LISTEN_HOST,
+            DesktopEntryMode::Lan => LAN_LISTEN_HOST,
+        }
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -106,26 +127,11 @@ pub struct HubSnapshot {
     pub status: Option<HubRuntimeStatus>,
 }
 
-#[derive(Debug, Deserialize, Clone, Copy)]
+#[derive(Debug, Deserialize, Clone, Default, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub enum DesktopEntryMode {
-    Local,
-    Lan,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct StartHubOptions {
-    pub entry_mode: DesktopEntryMode,
-}
-
-impl StartHubOptions {
-    pub fn listen_host(&self) -> &'static str {
-        match self.entry_mode {
-            DesktopEntryMode::Local => LOCAL_LISTEN_HOST,
-            DesktopEntryMode::Lan => LAN_LISTEN_HOST,
-        }
-    }
+pub struct ListAgentAvailabilityRequest {
+    pub directory: Option<String>,
+    pub force_refresh: Option<bool>,
 }
 
 pub struct ManagedHubState {

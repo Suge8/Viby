@@ -1,7 +1,7 @@
 use std::sync::atomic::Ordering;
 
 use tauri::menu::{Menu, MenuItem};
-use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager, WindowEvent};
 
 use crate::lifecycle::request_app_exit;
@@ -26,7 +26,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             }
         })
         .menu(&menu)
-        .show_menu_on_left_click(false)
+        .show_menu_on_left_click(true)
         .on_menu_event(|app, event| {
             let app_handle = app.app_handle();
             match event.id().as_ref() {
@@ -41,18 +41,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
                 }
                 _ => {}
             }
-        })
-        .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click {
-                button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
-                ..
-            } = event
-            {
-                let _ = show_main_window(tray.app_handle());
-            }
-        })
-        ;
+        });
 
     #[cfg(target_os = "macos")]
     {

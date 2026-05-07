@@ -1,6 +1,6 @@
 {
     "$schema": "https://schema.tauri.app/config/2",
-    "productName": "Viby Desktop",
+    "productName": "Viby",
     "version": "0.2.0",
     "identifier": "run.viby.desktop",
     "build": {
@@ -14,25 +14,39 @@
         "windows": [
             {
                 "label": "main",
-                "title": "Viby Desktop",
-                "width": 800,
-                "height": 640,
+                "title": "Viby",
+                "decorations": true,
+                "titleBarStyle": "Overlay",
+                "hiddenTitle": true,
+                "trafficLightPosition": {
+                    "x": 18,
+                    "y": 20
+                },
+                "width": 1120,
+                "height": 740,
                 "resizable": true,
                 "fullscreen": false,
-                "minWidth": 720,
-                "minHeight": 560,
+                "minWidth": 980,
+                "minHeight": 640,
                 "center": true
             }
         ],
         "security": {
-            "devCsp": "default-src 'self' http://127.0.0.1:1420 asset: http://asset.localhost; connect-src 'self' ipc: http://ipc.localhost ws://127.0.0.1:1420 http://127.0.0.1:1420; img-src 'self' asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline' http://127.0.0.1:1420; font-src 'self' data:; script-src 'self' 'unsafe-eval' http://127.0.0.1:1420",
-            "csp": "default-src 'self' asset: http://asset.localhost; connect-src 'self' ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:"
+            "devCsp": "default-src 'self' http://127.0.0.1:1420 asset: http://asset.localhost; connect-src 'self' ipc: http://ipc.localhost ws://127.0.0.1:1420 http://127.0.0.1:1420 http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:* http://[::1]:* ws://[::1]:* https://pair.viby.run wss://pair.viby.run; img-src 'self' asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline' http://127.0.0.1:1420; font-src 'self' data:; script-src 'self' 'unsafe-eval' http://127.0.0.1:1420",
+            "csp": "default-src 'self' asset: http://asset.localhost; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:* http://[::1]:* ws://[::1]:* https://pair.viby.run wss://pair.viby.run; img-src 'self' asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:"
         }
     },
     "bundle": {
         "active": true,
+        "createUpdaterArtifacts": true,
         "targets": ["app"],
         "externalBin": ["binaries/viby-sidecar"],
         "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"]
+    },
+    "plugins": {
+        "updater": {
+            "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IERFN0Y5NUNEOTQ1QkI0NjkKUldScHRGdVV6WlYvM2dKSERnTGtiWnRNV2g4SUZuaEpOdWJGT3h6NUZSOGFUR3paVTVubURhYnIK",
+            "endpoints": ["https://github.com/Suge8/Viby/releases/latest/download/latest.json"]
+        }
     }
 }

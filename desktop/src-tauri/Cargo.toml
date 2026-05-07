@@ -1,5 +1,5 @@
 [package]
-name = "viby-desktop"
+name = "viby"
 version = "0.2.0"
 description = "Native desktop shell for Viby hub"
 authors = ["OpenAI Codex"]
@@ -25,3 +25,4 @@ tauri = { version = "2.10.3", features = ["tray-icon"] }
 tauri-plugin-single-instance = "2"
 tokio = { version = "1.50.0", features = ["rt-multi-thread"] }
 toml = "0.9.7"
+tauri-plugin-updater = "2.10.1"
