@@ -34,7 +34,7 @@ import {
 } from '@/lib/desktopShellModel'
 import { buildEntryPreviewModel } from '@/lib/entryMode'
 import { deriveHubViewState } from '@/lib/hubSnapshot'
-import { buildPairingConnectionSummary } from '@/lib/pairingBridgeSupport'
+import { buildPairingConnectionSummary, isStalePairingBridgeState } from '@/lib/pairingBridgeSupport'
 import { shouldStartPairingBridge } from '@/lib/pairingModalSupport'
 import { getEmptyKeyMessage } from '@/lib/panelContent'
 
@@ -137,6 +137,15 @@ export function App(): JSX.Element {
         return () => window.clearInterval(intervalId)
     }, [pairing, pairingBridge.phase, pairingDialogOpen, refreshPairing])
 
+    useEffect(() => {
+        if (!pairing || !isStalePairingBridgeState(pairingBridge)) {
+            return
+        }
+        setPairingDialogOpen(false)
+        showToast('手机绑定已失效，请重新扫码。')
+        void deletePairing()
+    }, [deletePairing, pairing, pairingBridge, showToast])
+
     usePairingInviteAutoRenew(pairing, pairingDialogOpen, async () => {
         setPairingSuccessAutoDismissArmed(false)
         return await recreatePairing()
@@ -177,10 +186,6 @@ export function App(): JSX.Element {
     }
 
     const handlePairingAction = (): void => {
-        if (pairing?.pairing.approvalStatus === 'approved') {
-            setPairingSuccessAutoDismissArmed(false)
-            return
-        }
         if (pairing) {
             setPairingSuccessAutoDismissArmed(false)
             setPairingDialogOpen(true)

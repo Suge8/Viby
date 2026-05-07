@@ -2,11 +2,15 @@ import { useEffect, useState } from 'react'
 import { startPairingBridge } from '@/lib/pairingBridgeController'
 import type { DesktopPairingSession, HubRuntimeStatus, PairingBridgeState } from '@/types'
 
+function isPairingBridgeRuntimeReady(status: HubRuntimeStatus | undefined): status is HubRuntimeStatus {
+    return status?.phase === 'ready'
+}
+
 export function createPairingBridgeDependencyKey(
     pairing: DesktopPairingSession | null,
     status: HubRuntimeStatus | undefined
 ): string {
-    if (!pairing || !status) {
+    if (!pairing || !isPairingBridgeRuntimeReady(status)) {
         return 'idle'
     }
 
@@ -21,7 +25,7 @@ export function usePairingBridge(options: {
     const dependencyKey = createPairingBridgeDependencyKey(options.pairing, options.status)
 
     useEffect(() => {
-        if (!options.pairing || !options.status) {
+        if (!options.pairing || !isPairingBridgeRuntimeReady(options.status)) {
             setState({ phase: 'idle', message: null, pairing: null, stats: null })
             return
         }

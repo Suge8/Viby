@@ -1,6 +1,6 @@
 import type { JSX } from 'react'
 import { ControlPill } from '@/components/ControlPill'
-import { CheckIcon, KeyIcon, LinkIcon, OpenIcon, PhoneIcon, QrIcon } from '@/components/icons'
+import { KeyIcon, LinkIcon, OpenIcon, PhoneIcon, QrIcon } from '@/components/icons'
 import { StaggerGroup, StaggerItem } from '@/components/motion'
 import type { DesktopCopy } from '@/lib/desktopCopy'
 import type { EntryPreviewModel } from '@/lib/entryMode'
@@ -105,11 +105,11 @@ export function ConnectionPage(props: ConnectionPageProps): JSX.Element {
                     <button
                         type="button"
                         className="desktop-mobile-action"
-                        disabled={!props.viewState.ready || props.busy || props.pairingConnection.kind === 'bound'}
+                        disabled={!props.viewState.ready || props.busy}
                         onClick={props.onPairingAction}
                     >
                         <span className="desktop-mobile-action-icon" aria-hidden="true">
-                            {props.pairingConnection.connected ? <CheckIcon /> : <QrIcon />}
+                            <QrIcon />
                         </span>
                         <span>
                             {props.viewState.ready ? props.pairingConnection.actionLabel : props.copy.phoneWaiting}

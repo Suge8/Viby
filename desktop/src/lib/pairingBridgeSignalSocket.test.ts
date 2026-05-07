@@ -3,7 +3,7 @@ import { PAIRING_SIGNAL_PING_INTERVAL_MS } from '@viby/protocol/pairing'
 import type { DesktopPairingSession } from '@/types'
 import { createPairingBridgeSignalSocketController } from './pairingBridgeSignalSocket'
 
-type Listener = () => void
+type Listener = (event?: { code?: number; reason?: string }) => void
 
 class FakeWebSocket {
     static readonly CONNECTING = 0
@@ -31,13 +31,13 @@ class FakeWebSocket {
         this.emit('open')
     }
 
-    close(): void {
+    close(code = 1000, reason = ''): void {
         this.readyState = 3
-        this.emit('close')
+        this.emit('close', { code, reason })
     }
 
-    private emit(type: string): void {
-        for (const listener of this.listeners.get(type) ?? []) listener()
+    private emit(type: string, event?: { code?: number; reason?: string }): void {
+        for (const listener of this.listeners.get(type) ?? []) listener(event)
     }
 }
 
@@ -63,6 +63,60 @@ function createPairing(): DesktopPairingSession {
 }
 
 describe('pairingBridgeSignalSocket', () => {
+    it('turns broker stale-token close reasons into terminal stale pairing state', () => {
+        const originalWebSocket = globalThis.WebSocket
+        let activeSocket: WebSocket | null = null
+        let bridgeState: { phase: string; message: string | null } | null = null
+        let reconnects = 0
+        let closes = 0
+
+        globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket
+
+        try {
+            const controller = createPairingBridgeSignalSocketController({
+                pairing: createPairing(),
+                isDisposed: () => false,
+                isSuppressed: () => false,
+                getChannel: () => null,
+                getPeer: () => null,
+                getPairingSnapshot: () => createPairing().pairing,
+                setSocket: (socket) => {
+                    activeSocket = socket
+                },
+                getSocket: () => activeSocket,
+                setBridgeState: (state) => {
+                    bridgeState = { phase: state.phase, message: state.message }
+                },
+                scheduleReconnect: () => {
+                    reconnects += 1
+                },
+                closeTransport: () => {
+                    closes += 1
+                },
+                ensureOffer: async () => undefined,
+                rebuildTransport: () => undefined,
+                tryIceRestart: () => false,
+                getGuestTransportId: () => null,
+                setGuestTransportId: () => undefined,
+                resetOfferState: () => undefined,
+                schedulePeerRecovery: () => undefined,
+                reportAsyncError: () => undefined,
+                addRemoteCandidate: async () => undefined,
+                flushRemoteCandidates: async () => undefined,
+            })
+
+            controller.open()
+            FakeWebSocket.instances[0]?.close(1008, 'pairing-unavailable')
+
+            expect(bridgeState).toEqual({ phase: 'error', message: '当前配对已过期或被删除。' })
+            expect(closes).toBe(1)
+            expect(reconnects).toBe(0)
+        } finally {
+            globalThis.WebSocket = originalWebSocket
+            FakeWebSocket.instances = []
+        }
+    })
+
     it('keeps desktop signaling warm with protocol pings and clears them on close', () => {
         const originalWebSocket = globalThis.WebSocket
         const originalSetInterval = globalThis.setInterval

@@ -6,7 +6,7 @@ import {
     resolvePairingSelectedCandidatePairStats,
 } from '@viby/protocol/pairing'
 import type { DesktopPairingSession, PairingBridgeState, PairingBridgeStats, PairingSessionSnapshot } from '@/types'
-import { PAIRING_PHONE_PAUSED_MESSAGE } from './pairingBridgeRecovery'
+import { PAIRING_PHONE_PAUSED_MESSAGE, PAIRING_STALE_MESSAGE } from './pairingBridgeRecovery'
 
 export type PairingConnectionKind = 'empty' | 'invite' | 'bound'
 
@@ -18,6 +18,24 @@ export interface PairingConnectionSummary {
     kind: PairingConnectionKind
     actionLabel: string
     removable: boolean
+}
+
+const BOUND_ACTION_LABEL = '显示手机入口'
+
+function buildBoundPairingSummary(input: {
+    connected?: boolean
+    title: string
+    detail: string
+}): PairingConnectionSummary {
+    return {
+        connected: input.connected ?? false,
+        deviceCount: 1,
+        title: input.title,
+        detail: input.detail,
+        kind: 'bound',
+        actionLabel: BOUND_ACTION_LABEL,
+        removable: true,
+    }
 }
 
 export function toIceServers(servers: DesktopPairingSession['iceServers']): RTCIceServer[] {
@@ -49,6 +67,13 @@ export function describePairingTransport(stats: PairingBridgeStats | null): stri
     return describePairingLinkTransport(stats)
 }
 
+export function isStalePairingBridgeState(state: {
+    message?: string | null
+    phase: PairingBridgeState['phase']
+}): boolean {
+    return state.phase === 'error' && state.message === PAIRING_STALE_MESSAGE
+}
+
 export function describePairingTransportBadge(stats: PairingBridgeStats | null): string | null {
     if (!stats) {
         return null
@@ -60,6 +85,7 @@ export function describePairingTransportBadge(stats: PairingBridgeStats | null):
 }
 
 export function buildPairingConnectionSummary(input: {
+    message?: string | null
     phase: PairingBridgeState['phase']
     pairing: PairingSessionSnapshot | null
     stats?: PairingBridgeStats | null
@@ -68,63 +94,39 @@ export function buildPairingConnectionSummary(input: {
         const label = input.pairing?.guest?.label ?? '手机'
         const stats = input.stats ?? null
         const transport = buildPairingLinkPresentation(stats).title
-        return {
+        return buildBoundPairingSummary({
             connected: true,
-            deviceCount: 1,
             title: '已连接',
             detail: `${label} · ${transport}`,
-            kind: 'bound',
-            actionLabel: '连接已就绪',
-            removable: true,
-        }
+        })
     }
 
     if (input.phase === 'paused' && input.pairing?.guest) {
-        return {
-            connected: false,
-            deviceCount: 1,
+        return buildBoundPairingSummary({
             title: '手机在后台',
             detail: PAIRING_PHONE_PAUSED_MESSAGE,
-            kind: 'bound',
-            actionLabel: '等待手机回来',
-            removable: true,
-        }
+        })
     }
 
-    if (input.phase === 'connecting' && input.pairing?.guest) {
-        return {
-            connected: false,
-            deviceCount: 1,
-            title: '正在接回手机',
-            detail: `${input.pairing.guest.label ?? '手机'} · 安全链路重建中`,
-            kind: 'bound',
-            actionLabel: '正在接回',
-            removable: true,
-        }
+    if (isStalePairingBridgeState(input) && input.pairing?.guest) {
+        return buildBoundPairingSummary({
+            title: '绑定已失效',
+            detail: '请重新扫码',
+        })
     }
 
-    if (input.phase === 'error' && input.pairing?.guest) {
-        return {
-            connected: false,
-            deviceCount: 1,
-            title: '手机暂时离线',
-            detail: '打开手机页面后会自动接回',
-            kind: 'bound',
-            actionLabel: '等待自动接回',
-            removable: true,
-        }
+    if ((input.phase === 'connecting' || input.phase === 'error') && input.pairing?.guest) {
+        return buildBoundPairingSummary({
+            title: '已绑定',
+            detail: '打开手机页面后自动连接',
+        })
     }
 
     if (input.pairing?.guest && input.pairing.approvalStatus === 'approved') {
-        return {
-            connected: false,
-            deviceCount: 1,
-            title: '已绑定手机',
-            detail: `${input.pairing.guest.label ?? '手机'} · 打开 Viby 后自动接回`,
-            kind: 'bound',
-            actionLabel: '已绑定',
-            removable: true,
-        }
+        return buildBoundPairingSummary({
+            title: '已绑定',
+            detail: '开启中枢后自动连接',
+        })
     }
 
     if (input.pairing) {
@@ -201,7 +203,7 @@ export function describePairingSnapshotMessage(pairing: PairingSessionSnapshot):
     }
 
     if (pairing.approvalStatus === 'approved') {
-        return '正在连接手机。'
+        return '已绑定手机，等待手机页面接入。'
     }
 
     return '等待手机接入。'

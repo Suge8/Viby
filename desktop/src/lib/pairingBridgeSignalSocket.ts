@@ -1,10 +1,12 @@
 import { PAIRING_SIGNAL_PING_INTERVAL_MS, PAIRING_SIGNAL_RECONNECT_DELAY_MS } from '@viby/protocol/pairing'
 import type { DesktopPairingSession, PairingSessionSnapshot } from '@/types'
 import { handlePairingSignalMessage } from './pairingBridgeControllerSupport'
+import { PAIRING_STALE_MESSAGE } from './pairingBridgeRecovery'
 import { runPairingBridgeTask } from './pairingBridgeRuntimeSupport'
 
 const SIGNAL_RECONNECT_DELAY_MS = PAIRING_SIGNAL_RECONNECT_DELAY_MS
 const SIGNAL_PING_INTERVAL_MS = PAIRING_SIGNAL_PING_INTERVAL_MS
+const STALE_SIGNAL_CLOSE_REASONS = new Set(['pairing-unavailable', 'unauthorized'])
 
 type SignalSocketControllerOptions = {
     pairing: DesktopPairingSession
@@ -28,6 +30,10 @@ type SignalSocketControllerOptions = {
     reportAsyncError: (message: string, error: unknown) => void
     addRemoteCandidate: (peer: RTCPeerConnection, candidate: RTCIceCandidateInit) => Promise<void>
     flushRemoteCandidates: (peer: RTCPeerConnection) => Promise<void>
+}
+
+function isStaleSignalClose(event: CloseEvent): boolean {
+    return event.code === 1008 && STALE_SIGNAL_CLOSE_REASONS.has(event.reason)
 }
 
 export function createPairingBridgeSignalSocketController(options: SignalSocketControllerOptions) {
@@ -108,10 +114,15 @@ export function createPairingBridgeSignalSocketController(options: SignalSocketC
                 }
             )
         })
-        socket.addEventListener('close', () => {
+        socket.addEventListener('close', (event) => {
             if (options.getSocket() !== socket || options.isDisposed() || options.isSuppressed()) return
             clearPingTimer()
             options.setSocket(null)
+            if (isStaleSignalClose(event)) {
+                options.setBridgeState({ phase: 'error', message: PAIRING_STALE_MESSAGE })
+                options.closeTransport()
+                return
+            }
             if (options.getChannel()?.readyState === 'open') {
                 scheduleSignalReconnect()
                 return

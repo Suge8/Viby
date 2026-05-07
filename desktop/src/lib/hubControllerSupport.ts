@@ -87,6 +87,19 @@ export function isExpiredUnclaimedPairing(pairing: DesktopPairingSession, now: n
     return !pairing.pairing.guest && now > pairing.pairing.ticketExpiresAt
 }
 
+async function deleteRemotePairingIfExists(
+    pairing: DesktopPairingSession,
+    deletePairingSession: (pairing: DesktopPairingSession) => Promise<void>
+): Promise<void> {
+    try {
+        await deletePairingSession(pairing)
+    } catch (error) {
+        if (!isStalePairingDeletionError(error)) {
+            throw error
+        }
+    }
+}
+
 export async function deletePairingAction(options: {
     tauriRuntimeAvailable: boolean
     pairing: DesktopPairingSession | null
@@ -108,13 +121,7 @@ export async function deletePairingAction(options: {
     options.setBusy(true)
     options.setActionError(null)
     try {
-        try {
-            await options.deletePairingSession(options.pairing)
-        } catch (error) {
-            if (!isStalePairingDeletionError(error)) {
-                throw error
-            }
-        }
+        await deleteRemotePairingIfExists(options.pairing, options.deletePairingSession)
         await options.clearPairing()
     } catch (error) {
         options.setActionError(error instanceof Error ? error.message : '解除手机绑定失败。')
@@ -145,13 +152,7 @@ export async function recreatePairingAction(options: {
     options.setBusy(true)
     options.setActionError(null)
     try {
-        try {
-            await options.deletePairingSession(options.pairing)
-        } catch (error) {
-            if (!isStalePairingDeletionError(error)) {
-                throw error
-            }
-        }
+        await deleteRemotePairingIfExists(options.pairing, options.deletePairingSession)
         options.setPairing(await options.createPairingSession())
         return true
     } catch (error) {

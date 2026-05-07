@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'bun:test'
 import type { DesktopPairingSession } from '@/types'
-import { buildDesktopPairingPresentation, formatPairingCode, shouldStartPairingBridge } from './pairingModalSupport'
+import {
+    buildDesktopPairingPresentation,
+    buildDesktopPairingQrUrl,
+    formatPairingCode,
+    shouldStartPairingBridge,
+} from './pairingModalSupport'
 
 const basePairing: DesktopPairingSession = {
     pairing: {
@@ -77,9 +82,10 @@ describe('pairingModalSupport', () => {
                 },
             })
         ).toMatchObject({
-            codeHint: '已输入',
-            statusHint: '正在连接手机',
-            stage: 'connecting',
+            codeHint: '手机入口',
+            codeValue: '已配对',
+            statusHint: '打开已配对手机页面后自动连接',
+            stage: 'bound',
         })
     })
 
@@ -99,6 +105,7 @@ describe('pairingModalSupport', () => {
             )
         ).toMatchObject({
             codeHint: '已配对',
+            codeValue: '已配对',
             statusHint: '手机在后台，回来后自动接回',
             stage: 'paused',
         })
@@ -120,6 +127,7 @@ describe('pairingModalSupport', () => {
             )
         ).toMatchObject({
             codeHint: '已连接',
+            codeValue: '已连接',
             statusHint: '已连接',
             stage: 'ready',
         })
@@ -141,6 +149,16 @@ describe('pairingModalSupport', () => {
             statusHint: '等待手机接入',
             stage: 'invite',
         })
+    })
+
+    it('keeps used pairing tickets out of bound phone entry QR codes', () => {
+        expect(buildDesktopPairingQrUrl(basePairing)).toBe('https://pair.example.com/p/pairing-1#ticket=secret')
+        expect(
+            buildDesktopPairingQrUrl({
+                ...basePairing,
+                pairing: { ...basePairing.pairing, approvalStatus: 'approved', guest: { label: 'Phone' } },
+            })
+        ).toBe('https://pair.example.com/p/pairing-1')
     })
 
     it('formats short pairing codes into glanceable groups', () => {

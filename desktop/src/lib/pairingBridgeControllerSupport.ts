@@ -7,7 +7,7 @@ import {
     serializePairingPeerMessage,
     serializePairingTerminalEvent,
 } from './pairingBridgeCore'
-import { PAIRING_PHONE_PAUSED_MESSAGE } from './pairingBridgeRecovery'
+import { PAIRING_PHONE_PAUSED_MESSAGE, PAIRING_STALE_MESSAGE } from './pairingBridgeRecovery'
 import { readSignalPairingSnapshot, runPairingBridgeTask } from './pairingBridgeRuntimeSupport'
 import { describePairingConnectionState, describePairingSnapshotMessage } from './pairingBridgeSupport'
 
@@ -238,7 +238,7 @@ export async function handlePairingSignalMessage(options: {
         case 'expire':
             options.setBridgeState({
                 phase: 'error',
-                message: '当前配对已过期或被删除。',
+                message: PAIRING_STALE_MESSAGE,
                 pairing: readSignalPairingSnapshot(parsed.data.payload) ?? options.pairingSnapshot,
             })
             options.closeTransport()

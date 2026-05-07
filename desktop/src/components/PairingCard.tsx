@@ -16,7 +16,7 @@ export function PairingCard({ pairing, bridgeState, onDismiss }: PairingCardProp
     const presentation = buildDesktopPairingPresentation({ ...pairing, pairing: snapshot }, bridgeState.phase)
     const connected = presentation.stage === 'ready'
     const linkGuidance = connected ? buildPairingLinkPresentation(bridgeState.stats ?? null) : null
-    const qrCode = buildPairingQrCodeModel(pairing.pairingUrl)
+    const qrCode = buildPairingQrCodeModel(presentation.qrUrl)
 
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent): void => {
@@ -50,13 +50,11 @@ export function PairingCard({ pairing, bridgeState, onDismiss }: PairingCardProp
                     <div className="desktop-pairing-side-top">
                         <span>{presentation.codeHint}</span>
                     </div>
-                    <strong>{connected ? '已连接' : presentation.codeValue}</strong>
+                    <strong>{presentation.codeValue}</strong>
                     <small className={linkGuidance ? `is-ready is-${linkGuidance.tone}` : ''}>
                         {linkGuidance?.title ?? presentation.statusHint}
                     </small>
-                    <p className="desktop-pairing-guidance">
-                        {linkGuidance?.detail ?? '二维码会自动保持可用。手机扫码后，输入这里显示的 6 位数字。'}
-                    </p>
+                    <p className="desktop-pairing-guidance">{linkGuidance?.detail ?? presentation.guidance}</p>
                 </div>
             </div>
         </>

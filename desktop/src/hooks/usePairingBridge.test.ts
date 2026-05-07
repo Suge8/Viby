@@ -48,6 +48,11 @@ describe('usePairingBridge dependency key', () => {
         expect(refreshed).toBe(initial)
     })
 
+    it('does not arm reconnect until Hub is ready', () => {
+        expect(createPairingBridgeDependencyKey(pairingFixture, { ...statusFixture, phase: 'stopped' })).toBe('idle')
+        expect(createPairingBridgeDependencyKey(pairingFixture, { ...statusFixture, phase: 'starting' })).toBe('idle')
+    })
+
     it('changes when the active pairing transport endpoint changes', () => {
         const initial = createPairingBridgeDependencyKey(pairingFixture, statusFixture)
         const next = createPairingBridgeDependencyKey(
