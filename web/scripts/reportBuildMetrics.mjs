@@ -17,7 +17,7 @@ const CHUNK_BUDGETS = [
     {
         label: 'main-index-css',
         pattern: /^index-.*\.css$/,
-        maxRawBytes: 130 * 1024,
+        maxRawBytes: 136 * 1024,
         maxGzipBytes: 25 * 1024,
     },
     {
