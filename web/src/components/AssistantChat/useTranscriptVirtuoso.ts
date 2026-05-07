@@ -116,12 +116,12 @@ export function useTranscriptVirtuoso(options: UseTranscriptVirtuosoOptions): Us
     })
 
     const revealConversationAtManualTop = useCallback(
-        (conversationId: string) => {
+        (conversationId: string, markNotAtBottom = true) => {
             if (!options.rowStartIndexByConversationId.has(conversationId)) {
                 return false
             }
             cancelTopAnchorTransaction()
-            enterManualMode(true)
+            enterManualMode(markNotAtBottom)
             return revealConversationAtTopAnchor(conversationId)
         },
         [
@@ -131,10 +131,14 @@ export function useTranscriptVirtuoso(options: UseTranscriptVirtuosoOptions): Us
             revealConversationAtTopAnchor,
         ]
     )
+    const revealActiveTurnAtTopAnchor = useCallback(
+        (conversationId: string) => revealConversationAtManualTop(conversationId, false),
+        [revealConversationAtManualTop]
+    )
     const activeTurnAnchor = useTranscriptActiveTurnAnchor({
         activeTurnLocalId: options.activeTurnLocalId,
         rows: options.rows,
-        revealConversationAtTopAnchor: revealConversationAtManualTop,
+        revealConversationAtTopAnchor: revealActiveTurnAtTopAnchor,
     })
     const scrollToConversation = useCallback(
         (conversationId: string) => {
@@ -308,5 +312,6 @@ export function useTranscriptVirtuoso(options: UseTranscriptVirtuosoOptions): Us
         handleViewportTouchStartCapture,
         handleViewportTouchMoveCapture,
         scrollToBottom,
+        scrollToConversation,
     }
 }

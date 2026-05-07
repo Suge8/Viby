@@ -1,6 +1,7 @@
 import { memo, useMemo } from 'react'
 import { Virtuoso } from 'react-virtuoso'
 import type { ApiClient } from '@/api/client'
+import { ConversationOutline } from '@/components/AssistantChat/ConversationOutline'
 import { VibyChatProvider } from '@/components/AssistantChat/context'
 import {
     getThreadStageClassName,
@@ -25,6 +26,7 @@ import { useTranscriptVirtuoso } from '@/components/AssistantChat/useTranscriptV
 import type { SessionChatWorkspaceMessageState } from '@/components/sessionChatWorkspaceTypes'
 import { useSessionTranscriptModel } from '@/components/useSessionTranscriptModel'
 import type { LoadMoreMessagesResult } from '@/lib/message-window-store'
+import { isQueuedForInvocation } from '@/lib/messages'
 import type { Session, SessionMetadataSummary } from '@/types/api'
 
 type VibyThreadSessionContext = {
@@ -65,6 +67,7 @@ export const VibyThread = memo(function VibyThread(props: VibyThreadProps): Reac
     const threadModel = useVibyThreadModel(props)
     const {
         viewport,
+        outlineItems,
         renderRows,
         rawMessagesCount,
         showSkeleton,
@@ -113,7 +116,8 @@ export const VibyThread = memo(function VibyThread(props: VibyThreadProps): Reac
 
     return (
         <VibyChatProvider value={chatProviderValue}>
-            <div className="session-chat-thread-root flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-hidden">
+            <div className="session-chat-thread-root relative flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-hidden">
+                <ConversationOutline items={outlineItems} onJump={viewport.scrollToConversation} />
                 {showNormalizationWarning ? (
                     <div className="px-3 pt-2">
                         <div className="mx-auto w-full ds-stage-shell">
@@ -181,9 +185,13 @@ export const VibyThread = memo(function VibyThread(props: VibyThreadProps): Reac
 })
 
 function useVibyThreadModel(props: VibyThreadProps) {
+    const visibleMessages = useMemo(
+        () => props.messageState.messages.filter((message) => !isQueuedForInvocation(message)),
+        [props.messageState.messages]
+    )
     const transcript = useSessionTranscriptModel({
         sessionId: props.session.sessionId,
-        messages: props.messageState.messages,
+        messages: visibleMessages,
         agentState: props.session.agentState,
         stream: props.messageState.stream,
     })
@@ -215,6 +223,7 @@ function useVibyThreadModel(props: VibyThreadProps) {
 
     return {
         viewport,
+        outlineItems: transcript.outlineItems ?? [],
         renderRows: transcript.renderRows,
         rawMessagesCount: transcript.rawMessagesCount,
         showSkeleton,

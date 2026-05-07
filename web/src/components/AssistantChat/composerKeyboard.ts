@@ -6,6 +6,8 @@ type ComposerKeyboardInput = {
     key: string
     shiftKey: boolean
     altKey: boolean
+    ctrlKey: boolean
+    metaKey: boolean
     isTouch: boolean
 }
 
@@ -19,7 +21,7 @@ export function shouldComposerSendFromKeyboard(input: ComposerKeyboardInput): bo
         return false
     }
 
-    if (input.altKey || input.shiftKey || input.isTouch) {
+    if (input.altKey || input.ctrlKey || input.metaKey || input.shiftKey || input.isTouch) {
         return false
     }
 

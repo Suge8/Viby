@@ -54,6 +54,7 @@ function createSession(): Session {
         thinkingAt: 1_000,
         model: 'gpt-5.4',
         modelReasoningEffort: 'high',
+        codexServiceTier: null,
         permissionMode: 'safe-yolo',
         collaborationMode: 'plan',
         todos: undefined,

@@ -46,6 +46,7 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
     const { model: composerModel } = props
     const {
         disabled = false,
+        sendPending = false,
         autocompletePrefixes = DEFAULT_AUTOCOMPLETE_PREFIXES,
         replyingPhase = null,
     } = composerModel
@@ -75,13 +76,13 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
     const threadIsRunning = useAssistantState(({ thread }) => thread.isRunning)
     const threadIsDisabled = useAssistantState(({ thread }) => thread.isDisabled)
 
-    const controlsDisabled =
-        disabled || isSessionInteractionDisabled({ active, allowSendWhenInactive }) || threadIsDisabled
+    const interactionDisabled = isSessionInteractionDisabled({ active, allowSendWhenInactive })
+    const controlsDisabled = disabled || interactionDisabled || threadIsDisabled
     const switchDriverPending = composerModel.config.switchDriverPending === true
     const trimmed = composerText.trim()
     const hasText = trimmed.length > 0
     const hasAttachments = attachmentCount > 0
-    const canSend = (hasText || hasAttachments) && attachmentsReady && !controlsDisabled && !threadIsRunning
+    const canSend = (hasText || hasAttachments) && attachmentsReady && !controlsDisabled && !sendPending
 
     const [isAborting, setIsAborting] = useState(false)
     const controlsButtonAnchorRef = useRef<HTMLDivElement | null>(null)
@@ -95,7 +96,7 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
 
     const { haptic, isTouch } = useComposerPlatform()
 
-    const abortDisabled = controlsDisabled || isAborting || !threadIsRunning
+    const abortDisabled = isAborting || !threadIsRunning
     const showControlsButton = useMemo(
         () => hasComposerControls(composerModel.config, composerModel.handlers),
         [composerModel.config, composerModel.handlers]
@@ -193,8 +194,17 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
             window.removeEventListener(SESSION_COMPOSER_PREFILL_EVENT, handleExternalPrefill)
         }
     }, [api, clearResumeHint, composerInput.textareaRef, composerModel.sessionId])
-    const primaryButtonMode = threadIsRunning ? 'stop' : 'send'
-    const primaryButtonDisabled = threadIsRunning ? abortDisabled : !canSend
+    const primaryButtonMode = threadIsRunning && !canSend ? 'stop' : threadIsRunning ? 'queue' : 'send'
+    const primaryButtonDisabled = primaryButtonMode === 'stop' ? abortDisabled : !canSend
+    const stopAction =
+        threadIsRunning && canSend
+            ? {
+                  mode: 'stop' as const,
+                  disabled: abortDisabled,
+                  busy: isAborting,
+                  onClick: handleAbort,
+              }
+            : undefined
     const composerPlaceholder = getComposerPlaceholder({
         isReadonlyHistory: !active && !allowSendWhenInactive,
         showResumePlaceholder,
@@ -209,13 +219,13 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
     )
 
     const handlePrimaryAction = useCallback(() => {
-        if (threadIsRunning) {
+        if (primaryButtonMode === 'stop') {
             handleAbort()
             return
         }
 
         handleSend()
-    }, [handleAbort, handleSend, threadIsRunning])
+    }, [handleAbort, handleSend, primaryButtonMode])
 
     return (
         <ComposerPrimitive.Root onSubmit={handleFormSubmit}>
@@ -294,6 +304,7 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
                             busy: threadIsRunning && isAborting,
                             onClick: handlePrimaryAction,
                         }}
+                        stopAction={stopAction}
                     />
                 </div>
             </div>

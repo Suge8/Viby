@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { normalizeDecryptedMessage } from '@/chat/normalize'
+import { buildConversationOutline } from '@/chat/outline'
 import { reconcileChatBlocks } from '@/chat/reconcile'
 import { reduceChatBlocks } from '@/chat/reducer'
 import { resolveTextRenderMode } from '@/chat/textRenderMode'
@@ -93,10 +94,12 @@ export function useSessionTranscriptModel(options: {
     }, [reconciled.byId])
 
     const transcript = useMemo(() => createTranscriptModel(reconciled.blocks), [reconciled.blocks])
+    const outlineItems = useMemo(() => buildConversationOutline(transcript.rows), [transcript.rows])
 
     return {
         rows: transcript.rows,
         renderRows: transcript.renderRows,
+        outlineItems,
         conversationIds: transcript.conversationIds,
         rowStartIndexByConversationId: transcript.rowStartIndexByConversationId,
         historyJumpTargetConversationIds: transcript.historyJumpTargetConversationIds,

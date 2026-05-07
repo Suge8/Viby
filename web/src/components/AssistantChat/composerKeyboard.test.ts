@@ -8,6 +8,8 @@ describe('composerKeyboard', () => {
                 key: 'Enter',
                 shiftKey: false,
                 altKey: false,
+                ctrlKey: false,
+                metaKey: false,
                 isTouch: false,
             })
         ).toBe(true)
@@ -17,6 +19,8 @@ describe('composerKeyboard', () => {
                 key: 'Enter',
                 shiftKey: true,
                 altKey: false,
+                ctrlKey: false,
+                metaKey: false,
                 isTouch: false,
             })
         ).toBe(false)
@@ -26,6 +30,8 @@ describe('composerKeyboard', () => {
                 key: 'Enter',
                 shiftKey: false,
                 altKey: false,
+                ctrlKey: false,
+                metaKey: false,
                 isTouch: true,
             })
         ).toBe(false)
@@ -35,6 +41,30 @@ describe('composerKeyboard', () => {
                 key: 'Enter',
                 shiftKey: false,
                 altKey: true,
+                ctrlKey: false,
+                metaKey: false,
+                isTouch: false,
+            })
+        ).toBe(false)
+
+        expect(
+            shouldComposerSendFromKeyboard({
+                key: 'Enter',
+                shiftKey: false,
+                altKey: false,
+                ctrlKey: true,
+                metaKey: false,
+                isTouch: false,
+            })
+        ).toBe(false)
+
+        expect(
+            shouldComposerSendFromKeyboard({
+                key: 'Enter',
+                shiftKey: false,
+                altKey: false,
+                ctrlKey: false,
+                metaKey: true,
                 isTouch: false,
             })
         ).toBe(false)
@@ -46,6 +76,8 @@ describe('composerKeyboard', () => {
                 key: 'Tab',
                 shiftKey: false,
                 altKey: false,
+                ctrlKey: false,
+                metaKey: false,
                 isTouch: false,
             })
         ).toBe(false)

@@ -185,6 +185,8 @@ export function useComposerInputController(
                     key,
                     shiftKey: event.shiftKey,
                     altKey: event.altKey,
+                    ctrlKey: event.ctrlKey,
+                    metaKey: event.metaKey,
                     isTouch,
                 })
             ) {

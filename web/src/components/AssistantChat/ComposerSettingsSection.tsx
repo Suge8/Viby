@@ -51,6 +51,7 @@ export function ComposerSettingsSection<T extends string | null>(props: Composer
                                 type="button"
                                 variant="plain"
                                 size="sm"
+                                pressStyle="card"
                                 disabled={props.disabled}
                                 className={cn(
                                     getInteractiveCardClassName('disclosure-trigger'),

@@ -19,6 +19,7 @@ import { writeSessionToQueryCache } from '@/lib/sessionQueryCache'
 import { useTranslation } from '@/lib/use-translation'
 import type {
     CodexCollaborationMode,
+    CodexServiceTier,
     ModelReasoningEffort,
     PermissionMode,
     PiModelCapability,
@@ -68,6 +69,8 @@ export function useSessionLiveConfigControls(options: SessionConfigMutationOptio
             : []
     const controlledByUser = session.agentState?.controlledByUser === true
     const sessionId = session.id
+    const canChangePermissionMode =
+        liveConfigSupport.canChangePermissionMode || (!session.active && options.allowSendWhenInactive)
     const piModelCapabilities = sessionDriver === 'pi' ? (session.metadata?.piModelScope?.models ?? []) : []
     const activePiCapability = resolveActivePiCapability(session.model, piModelCapabilities)
 
@@ -113,8 +116,8 @@ export function useSessionLiveConfigControls(options: SessionConfigMutationOptio
             await runSessionConfigAction(async () => {
                 const sessionApi = assertSessionConfigApi(api)
                 assertSessionConfigCapability(
-                    liveConfigSupport.canChangePermissionMode,
-                    'Permission mode is only supported for Viby-managed active sessions'
+                    canChangePermissionMode,
+                    'Permission mode is only supported for Viby-managed sessions'
                 )
                 if (sessionDriver && !isPermissionModeAllowedForDriver(mode, sessionDriver)) {
                     throw new Error('Invalid permission mode for session driver')
@@ -123,7 +126,7 @@ export function useSessionLiveConfigControls(options: SessionConfigMutationOptio
                 return await sessionApi.setPermissionMode(sessionId, mode)
             })
         },
-        [api, liveConfigSupport.canChangePermissionMode, runSessionConfigAction, sessionDriver, sessionId]
+        [api, canChangePermissionMode, runSessionConfigAction, sessionDriver, sessionId]
     )
 
     const handleCollaborationModeChange = useCallback(
@@ -177,6 +180,24 @@ export function useSessionLiveConfigControls(options: SessionConfigMutationOptio
         [api, liveConfigSupport.canChangeModelReasoningEffort, runSessionConfigAction, sessionDriver, sessionId]
     )
 
+    const handleCodexServiceTierChange = useCallback(
+        async (codexServiceTier: CodexServiceTier | null) => {
+            await runSessionConfigAction(async () => {
+                const sessionApi = assertSessionConfigApi(api)
+                if (sessionDriver !== 'codex') {
+                    throw new Error('Codex fast mode is only supported for Codex sessions')
+                }
+                assertSessionConfigCapability(
+                    liveConfigSupport.canChangeCodexServiceTier,
+                    'Codex fast mode is only supported for remote-managed Codex sessions'
+                )
+
+                return await sessionApi.setCodexServiceTier(sessionId, codexServiceTier)
+            })
+        },
+        [api, liveConfigSupport.canChangeCodexServiceTier, runSessionConfigAction, sessionDriver, sessionId]
+    )
+
     const composerConfig = useMemo<ComposerConfigState>(
         () => ({
             permissionMode: session.permissionMode,
@@ -188,6 +209,7 @@ export function useSessionLiveConfigControls(options: SessionConfigMutationOptio
             modelReasoningEffort: liveConfigSupport.canChangeModelReasoningEffort
                 ? session.modelReasoningEffort
                 : undefined,
+            codexServiceTier: liveConfigSupport.canChangeCodexServiceTier ? session.codexServiceTier : undefined,
             sessionDriver,
             active: session.active,
             allowSendWhenInactive: options.allowSendWhenInactive,
@@ -201,6 +223,7 @@ export function useSessionLiveConfigControls(options: SessionConfigMutationOptio
             isSwitchingSessionDriver,
             liveConfigSupport.canChangeCollaborationMode,
             liveConfigSupport.canChangeModelReasoningEffort,
+            liveConfigSupport.canChangeCodexServiceTier,
             options.allowSendWhenInactive,
             options.attachmentsSupported,
             activePiCapability?.supportedThinkingLevels,
@@ -209,6 +232,7 @@ export function useSessionLiveConfigControls(options: SessionConfigMutationOptio
             session.collaborationMode,
             session.model,
             session.modelReasoningEffort,
+            session.codexServiceTier,
             session.permissionMode,
             sessionDriver,
             switchTargetDrivers,
@@ -220,10 +244,13 @@ export function useSessionLiveConfigControls(options: SessionConfigMutationOptio
             onCollaborationModeChange: liveConfigSupport.canChangeCollaborationMode
                 ? handleCollaborationModeChange
                 : undefined,
-            onPermissionModeChange: liveConfigSupport.canChangePermissionMode ? handlePermissionModeChange : undefined,
+            onPermissionModeChange: canChangePermissionMode ? handlePermissionModeChange : undefined,
             onModelChange: liveConfigSupport.canChangeModel ? handleModelChange : undefined,
             onModelReasoningEffortChange: liveConfigSupport.canChangeModelReasoningEffort
                 ? handleModelReasoningEffortChange
+                : undefined,
+            onCodexServiceTierChange: liveConfigSupport.canChangeCodexServiceTier
+                ? handleCodexServiceTierChange
                 : undefined,
             onSwitchSessionDriver: switchTargetDrivers.length > 0 ? handleSwitchSessionDriver : undefined,
             autocompleteSuggestions,
@@ -236,12 +263,14 @@ export function useSessionLiveConfigControls(options: SessionConfigMutationOptio
             handleCollaborationModeChange,
             handleModelChange,
             handleModelReasoningEffortChange,
+            handleCodexServiceTierChange,
             handlePermissionModeChange,
             handleSwitchSessionDriver,
             liveConfigSupport.canChangeCollaborationMode,
             liveConfigSupport.canChangeModel,
             liveConfigSupport.canChangeModelReasoningEffort,
-            liveConfigSupport.canChangePermissionMode,
+            liveConfigSupport.canChangeCodexServiceTier,
+            canChangePermissionMode,
             onSuggestionAction,
             switchTargetDrivers,
         ]

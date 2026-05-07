@@ -1,7 +1,13 @@
 import type { SameSessionSwitchTargetDriver, SessionDriver } from '@viby/protocol'
 import type { AssistantReplyingPhase } from '@/components/AssistantChat/assistantReplyingPhase'
 import type { Suggestion } from '@/hooks/useActiveSuggestions'
-import type { CodexCollaborationMode, ModelReasoningEffort, PermissionMode, PiModelCapability } from '@/types/api'
+import type {
+    CodexCollaborationMode,
+    CodexServiceTier,
+    ModelReasoningEffort,
+    PermissionMode,
+    PiModelCapability,
+} from '@/types/api'
 
 export type ComposerPanelId = 'controls'
 
@@ -12,6 +18,7 @@ export type ComposerConfigState = {
     piModelCapabilities?: PiModelCapability[] | null
     availableReasoningEfforts?: ModelReasoningEffort[] | null
     modelReasoningEffort?: ModelReasoningEffort | null
+    codexServiceTier?: CodexServiceTier | null
     active?: boolean
     allowSendWhenInactive?: boolean
     controlledByUser?: boolean
@@ -26,6 +33,7 @@ export type ComposerActionHandlers = {
     onPermissionModeChange?: (mode: PermissionMode) => void
     onModelChange?: (model: string | null) => void
     onModelReasoningEffortChange?: (modelReasoningEffort: ModelReasoningEffort | null) => void
+    onCodexServiceTierChange?: (codexServiceTier: CodexServiceTier | null) => void
     onSwitchSessionDriver?: (targetDriver: SameSessionSwitchTargetDriver) => void | Promise<void>
     autocompleteSuggestions?: (query: string) => Promise<Suggestion[]>
     autocompleteRefreshKey?: number
@@ -35,6 +43,7 @@ export type ComposerActionHandlers = {
 export type VibyComposerModel = {
     sessionId: string
     disabled?: boolean
+    sendPending?: boolean
     replyingPhase?: AssistantReplyingPhase | null
     autocompleteLayout?: {
         visibleViewportBottomPx: number

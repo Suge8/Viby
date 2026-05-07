@@ -13,8 +13,10 @@ import {
     flushMessageWindowSnapshot,
     getMessageWindowState,
     ingestIncomingMessages,
+    markMessagesConsumed,
     markPendingReplyAccepted,
     removeMessageWindow,
+    removeQueuedMessages,
     subscribeMessageWindow,
 } from './message-window-store'
 import { setAtBottom } from './messageWindowStoreCore'
@@ -62,6 +64,7 @@ function createRecoveryPage(
             thinkingAt: 0,
             model: null,
             modelReasoningEffort: null,
+            codexServiceTier: null,
             permissionMode: 'default',
             collaborationMode: 'default',
         },
@@ -495,6 +498,79 @@ describe('message-window-store', () => {
         })
 
         expect(getMessageWindowState('session-1').pendingReply).toBeNull()
+    })
+
+    it('keeps queued messages out of the pending-reply lane until the runtime consumes them', () => {
+        appendOptimisticMessage('session-1', {
+            id: 'local-queued',
+            seq: null,
+            localId: 'local-queued',
+            createdAt: 1_000,
+            invokedAt: null,
+            status: 'queued',
+            originalText: 'queued hello',
+            content: {
+                role: 'user',
+                content: {
+                    type: 'text',
+                    text: 'queued hello',
+                },
+            },
+        })
+
+        expect(getMessageWindowState('session-1').pendingReply).toBeNull()
+
+        markMessagesConsumed('session-1', ['local-queued'], 1_500)
+
+        const state = getMessageWindowState('session-1')
+        expect(state.messages[0]).toMatchObject({
+            localId: 'local-queued',
+            invokedAt: 1_500,
+            status: 'sent',
+        })
+        expect(state.pendingReply).toEqual({
+            localId: 'local-queued',
+            requestStartedAt: 1_000,
+            serverAcceptedAt: 1_500,
+            phase: 'preparing',
+        })
+    })
+
+    it('removes only still-queued messages when cancellation arrives', () => {
+        appendOptimisticMessage('session-1', {
+            id: 'local-queued',
+            seq: null,
+            localId: 'local-queued',
+            createdAt: 1_000,
+            invokedAt: null,
+            status: 'queued',
+            content: {
+                role: 'user',
+                content: {
+                    type: 'text',
+                    text: 'queued hello',
+                },
+            },
+        })
+        appendOptimisticMessage('session-1', {
+            id: 'local-sent',
+            seq: null,
+            localId: 'local-sent',
+            createdAt: 2_000,
+            invokedAt: 2_000,
+            status: 'sent',
+            content: {
+                role: 'user',
+                content: {
+                    type: 'text',
+                    text: 'sent hello',
+                },
+            },
+        })
+
+        removeQueuedMessages('session-1', ['local-queued', 'local-sent'])
+
+        expect(getMessageWindowState('session-1').messages.map((message) => message.localId)).toEqual(['local-sent'])
     })
 
     it('does not let optimistic sends overwrite the manual atBottom owner', () => {

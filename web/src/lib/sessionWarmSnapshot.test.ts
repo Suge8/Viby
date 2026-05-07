@@ -25,6 +25,7 @@ function createSession() {
         thinkingAt: 1,
         model: null,
         modelReasoningEffort: null,
+        codexServiceTier: null,
         permissionMode: 'default',
         collaborationMode: 'default',
         todos: undefined,

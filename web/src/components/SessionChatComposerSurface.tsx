@@ -13,6 +13,7 @@ function SessionChatComposerSurfaceInner(props: SessionChatComposerSurfaceProps)
             session,
             runtimeOptions,
             isSending,
+            sendPending,
             pendingReply,
             onSwitchSessionDriver,
             isSwitchingSessionDriver,
@@ -45,12 +46,21 @@ function SessionChatComposerSurfaceInner(props: SessionChatComposerSurfaceProps)
         () => ({
             sessionId: session.id,
             disabled,
+            sendPending,
             replyingPhase,
             autocompleteLayout: runtimeOptions.autocompleteLayout,
             config: composerConfig,
             handlers: composerHandlers,
         }),
-        [composerConfig, composerHandlers, disabled, replyingPhase, runtimeOptions.autocompleteLayout, session.id]
+        [
+            composerConfig,
+            composerHandlers,
+            disabled,
+            replyingPhase,
+            runtimeOptions.autocompleteLayout,
+            sendPending,
+            session.id,
+        ]
     )
 
     return <VibyComposer model={composerModel} key={`composer:${session.id}`} />

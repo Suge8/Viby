@@ -1,4 +1,5 @@
 import type { Attachment, AttachmentAdapter, CompleteAttachment, PendingAttachment } from '@assistant-ui/react'
+import { SESSION_ATTACHMENT_MAX_UPLOAD_BYTES } from '@viby/protocol'
 import type { ApiClient } from '@/api/client'
 import { SUPPORTED_ATTACHMENT_ACCEPT } from '@/lib/attachmentAccept'
 import { createObjectPreviewUrl, revokeObjectPreviewUrl } from '@/lib/attachmentPreviews'
@@ -6,8 +7,6 @@ import { isImageMimeType } from '@/lib/fileAttachments'
 import { createRandomId } from '@/lib/id'
 import { reportWebRuntimeError } from '@/lib/runtimeDiagnostics'
 import type { AttachmentMetadata } from '@/types/api'
-
-const MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 
 type PendingUploadAttachment = PendingAttachment & {
     path?: string
@@ -98,8 +97,8 @@ export function createAttachmentAdapter(api: ApiClient, sessionId: string): Atta
         if (!path) return
         try {
             await api.deleteUploadFile(sessionId, path)
-        } catch {
-            // Best effort cleanup
+        } catch (error) {
+            reportWebRuntimeError('Attachment cleanup failed.', error)
         }
     }
 
@@ -127,7 +126,7 @@ export function createAttachmentAdapter(api: ApiClient, sessionId: string): Atta
                     return
                 }
 
-                if (file.size > MAX_UPLOAD_BYTES) {
+                if (file.size > SESSION_ATTACHMENT_MAX_UPLOAD_BYTES) {
                     yield {
                         id,
                         type,

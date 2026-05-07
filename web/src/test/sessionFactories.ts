@@ -10,7 +10,7 @@ export const TEST_RUNTIME_PROJECTS_PATH = `${TEST_RUNTIME_HOME_PATH}/projects`
 export const TEST_RUNTIME_PROJECT_PATH = `${TEST_RUNTIME_PROJECTS_PATH}/viby`
 
 export function createTestSession(overrides: Partial<Session> & Pick<Session, 'id'>): Session {
-    const { id, metadata, ...restOverrides } = overrides
+    const { id, metadata, codexServiceTier = null, ...restOverrides } = overrides
 
     return {
         id,
@@ -37,6 +37,7 @@ export function createTestSession(overrides: Partial<Session> & Pick<Session, 'i
         todos: undefined,
         model: null,
         modelReasoningEffort: null,
+        codexServiceTier,
         permissionMode: undefined,
         collaborationMode: undefined,
         ...restOverrides,
@@ -48,6 +49,7 @@ export function createTestSessionSummary(
 ): SessionSummary {
     const {
         id,
+        codexServiceTier = null,
         latestActivityAt = 0,
         latestActivityKind = 'ready',
         latestCompletedReplyAt = 0,
@@ -78,6 +80,7 @@ export function createTestSessionSummary(
         resumeStrategy: 'none',
         model: null,
         modelReasoningEffort: null,
+        codexServiceTier,
         ...restOverrides,
     }
 }

@@ -8,6 +8,7 @@ import type { AttachmentMetadata, DecryptedMessage, Session, SessionStreamState 
 
 export type SessionChatWorkspaceMessageState = {
     messages: DecryptedMessage[]
+    pending: DecryptedMessage[]
     warning: MessageWindowWarningKey | null
     hasMore: boolean
     isLoading: boolean
@@ -57,6 +58,7 @@ export type SessionChatComposerSurfaceModel = {
     session: Session
     runtimeOptions: SessionChatWorkspaceRuntimeOptions
     isSending: boolean
+    sendPending: boolean
     pendingReply: PendingReplyState | null
     onSwitchSessionDriver: (targetDriver: SameSessionSwitchTargetDriver) => Promise<void>
     isSwitchingSessionDriver: boolean

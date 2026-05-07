@@ -67,6 +67,7 @@ function createSession(lifecycleState: 'closed' | 'archived'): Session {
         thinkingAt: 2_000,
         model: 'gpt-5.4',
         modelReasoningEffort: 'high',
+        codexServiceTier: null,
         permissionMode: 'default',
         collaborationMode: 'default',
     }
@@ -115,6 +116,7 @@ function primeSessionsCache(queryClient: QueryClient, session: CachedSession): v
                 resumeStrategy: 'none',
                 model: session.model,
                 modelReasoningEffort: session.modelReasoningEffort,
+                codexServiceTier: session.codexServiceTier,
             },
         ],
     })
@@ -455,6 +457,7 @@ describe('useSessionActions', () => {
                         canChangeCollaborationMode: true,
                         canChangeModel: true,
                         canChangeModelReasoningEffort: true,
+                        canChangeCodexServiceTier: true,
                     },
                 }),
             { wrapper: createWrapper(queryClient) }
@@ -536,6 +539,7 @@ describe('useSessionActions', () => {
                         canChangeCollaborationMode: false,
                         canChangeModel: true,
                         canChangeModelReasoningEffort: true,
+                        canChangeCodexServiceTier: false,
                     },
                 }),
             { wrapper: createWrapper(queryClient) }
@@ -588,6 +592,7 @@ describe('useSessionActions', () => {
                         canChangeCollaborationMode: false,
                         canChangeModel: true,
                         canChangeModelReasoningEffort: false,
+                        canChangeCodexServiceTier: false,
                     },
                 }),
             { wrapper: createWrapper(queryClient) }

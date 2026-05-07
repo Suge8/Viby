@@ -126,6 +126,7 @@ function createOptions(
             canChangeCollaborationMode: true,
             canChangeModel: true,
             canChangeModelReasoningEffort: true,
+            canChangeCodexServiceTier: true,
         },
         onSwitchSessionDriver: vi.fn(async () => undefined),
         isSwitchingSessionDriver: false,

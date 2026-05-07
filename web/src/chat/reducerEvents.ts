@@ -1,11 +1,34 @@
 import type { AgentEvent, AgentEventBlock, ChatBlock, NormalizedMessage } from '@/chat/types'
 
-function parseClaudeUsageLimit(text: string): number | null {
-    const match = text.match(/^Claude AI usage limit reached\|(\d+)$/)
-    if (!match) return null
-    const timestamp = Number.parseInt(match[1], 10)
-    if (!Number.isFinite(timestamp)) return null
-    return timestamp
+function parseTimestamp(value: string | undefined): number | null {
+    if (!value) return null
+    const timestamp = Number.parseInt(value, 10)
+    return Number.isFinite(timestamp) ? timestamp : null
+}
+
+function parseClaudeUsageLimit(text: string): AgentEvent | null {
+    const reached = text.match(/^Claude AI usage limit reached\|(\d+)(?:\|([^|]*))?$/)
+    if (reached) {
+        const endsAt = parseTimestamp(reached[1])
+        if (endsAt === null) return null
+        return {
+            type: 'limit-reached',
+            endsAt,
+            ...(reached[2] ? { limitType: reached[2] } : {}),
+        }
+    }
+
+    const warning = text.match(/^Claude AI usage limit warning\|(\d+)\|(\d+)(?:\|([^|]*))?$/)
+    if (!warning) return null
+    const endsAt = parseTimestamp(warning[1])
+    const percent = Number.parseInt(warning[2] ?? '', 10)
+    if (endsAt === null || !Number.isFinite(percent)) return null
+    return {
+        type: 'limit-warning',
+        endsAt,
+        percent,
+        ...(warning[3] ? { limitType: warning[3] } : {}),
+    }
 }
 
 export function parseMessageAsEvent(msg: NormalizedMessage): AgentEvent | null {
@@ -14,9 +37,9 @@ export function parseMessageAsEvent(msg: NormalizedMessage): AgentEvent | null {
 
     for (const content of msg.content) {
         if (content.type === 'text') {
-            const limitReached = parseClaudeUsageLimit(content.text)
-            if (limitReached !== null) {
-                return { type: 'limit-reached', endsAt: limitReached }
+            const event = parseClaudeUsageLimit(content.text)
+            if (event) {
+                return event
             }
         }
     }

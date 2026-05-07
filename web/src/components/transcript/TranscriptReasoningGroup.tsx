@@ -28,6 +28,7 @@ function TranscriptReasoningGroupComponent(props: TranscriptReasoningGroupProps)
                 type="button"
                 variant="plain"
                 size="sm"
+                pressStyle="chip"
                 onClick={handleToggle}
                 aria-expanded={isOpen}
                 className={joinClassNames(

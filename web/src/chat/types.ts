@@ -17,7 +17,8 @@ export type AgentEvent =
           code?: 'empty_first_turn' | 'timeout' | 'unknown'
       }
     | { type: 'message'; message: string }
-    | { type: 'limit-reached'; endsAt: number }
+    | { type: 'limit-reached'; endsAt: number; limitType?: string }
+    | { type: 'limit-warning'; endsAt: number; percent: number; limitType?: string }
     | { type: 'ready' }
     | { type: 'api-error'; retryAttempt: number; maxRetries: number; error: unknown }
     | { type: 'turn-duration'; durationMs: number }

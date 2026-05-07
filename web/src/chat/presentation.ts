@@ -77,6 +77,16 @@ export function getEventPresentation(event: AgentEvent): EventPresentation {
             tone: 'warning',
         }
     }
+    if (event.type === 'limit-warning') {
+        const percent = typeof event.percent === 'number' ? event.percent : 0
+        const endsAt = typeof event.endsAt === 'number' ? event.endsAt : null
+        const until = endsAt ? ` until ${formatUnixTimestamp(endsAt)}` : ''
+        return {
+            icon: '⏳',
+            text: `Usage limit warning (${percent}%)${until}`,
+            tone: 'warning',
+        }
+    }
     if (event.type === 'message') {
         return { icon: null, text: typeof event.message === 'string' ? event.message : 'Message', tone: 'default' }
     }

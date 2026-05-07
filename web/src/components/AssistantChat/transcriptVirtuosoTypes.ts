@@ -42,4 +42,5 @@ export type UseTranscriptVirtuosoResult = {
     handleViewportTouchStartCapture: (event: Pick<TouchEvent, 'touches'>) => void
     handleViewportTouchMoveCapture: (event: Pick<TouchEvent, 'touches'>) => void
     scrollToBottom: () => void
+    scrollToConversation: (conversationId: string) => boolean
 }

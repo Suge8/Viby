@@ -20,7 +20,13 @@ vi.mock('@/components/AssistantChat/ComposerAttachmentButton', () => ({
 
 function buildComposerButtons(props?: {
     primaryAction?: {
-        mode: 'send' | 'stop'
+        mode: 'send' | 'queue' | 'stop'
+        disabled: boolean
+        busy: boolean
+        onClick: () => void
+    }
+    stopAction?: {
+        mode: 'stop'
         disabled: boolean
         busy: boolean
         onClick: () => void
@@ -44,6 +50,7 @@ function buildComposerButtons(props?: {
                     onClick: vi.fn(),
                 }
             }
+            stopAction={props?.stopAction}
         />
     )
 }
@@ -92,5 +99,27 @@ describe('ComposerButtons', () => {
         )
 
         expect(screen.getByRole('button', { name: 'Stopping' })).toBeInTheDocument()
+    })
+
+    it('shows queue and stop as separate actions while a run is active with a draft', async () => {
+        await renderWithI18n(
+            buildComposerButtons({
+                primaryAction: {
+                    mode: 'queue',
+                    disabled: false,
+                    busy: false,
+                    onClick: vi.fn(),
+                },
+                stopAction: {
+                    mode: 'stop',
+                    disabled: false,
+                    busy: false,
+                    onClick: vi.fn(),
+                },
+            })
+        )
+
+        expect(screen.getByRole('button', { name: 'Queue' })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument()
     })
 })

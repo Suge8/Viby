@@ -18,6 +18,10 @@ function isOptimisticMessage(msg: DecryptedMessage): boolean {
     return Boolean(msg.localId && msg.id === msg.localId)
 }
 
+export function isQueuedForInvocation(msg: DecryptedMessage): boolean {
+    return isUserMessage(msg) && msg.invokedAt === null && msg.status !== 'failed'
+}
+
 function compareMessages(a: DecryptedMessage, b: DecryptedMessage): number {
     const aSeq = typeof a.seq === 'number' ? a.seq : null
     const bSeq = typeof b.seq === 'number' ? b.seq : null
@@ -26,10 +30,37 @@ function compareMessages(a: DecryptedMessage, b: DecryptedMessage): number {
         return aSeq - bSeq
     }
 
-    if (a.createdAt !== b.createdAt) {
-        return a.createdAt - b.createdAt
+    const aPosition = a.invokedAt ?? a.createdAt
+    const bPosition = b.invokedAt ?? b.createdAt
+    if (aPosition !== bPosition) {
+        return aPosition - bPosition
     }
     return a.id.localeCompare(b.id)
+}
+
+function hasOwnInvokedAt(message: DecryptedMessage): boolean {
+    return Object.prototype.hasOwnProperty.call(message, 'invokedAt')
+}
+
+function mergeIncomingMessage(
+    message: DecryptedMessage,
+    optimisticByLocalId: ReadonlyMap<string, DecryptedMessage>
+): DecryptedMessage {
+    if (!message.localId || isOptimisticMessage(message)) {
+        return message
+    }
+
+    const optimistic = optimisticByLocalId.get(message.localId)
+    if (!optimistic) {
+        return message
+    }
+
+    return {
+        ...message,
+        status: message.status ?? (message.invokedAt === null ? optimistic.status : 'sent'),
+        originalText: message.originalText ?? optimistic.originalText,
+        invokedAt: hasOwnInvokedAt(message) ? message.invokedAt : optimistic.invokedAt,
+    }
 }
 
 export function mergeMessages(existing: DecryptedMessage[], incoming: DecryptedMessage[]): DecryptedMessage[] {
@@ -41,11 +72,15 @@ export function mergeMessages(existing: DecryptedMessage[], incoming: DecryptedM
     }
 
     const byId = new Map<string, DecryptedMessage>()
+    const optimisticByLocalId = new Map<string, DecryptedMessage>()
     for (const msg of existing) {
         byId.set(msg.id, msg)
+        if (msg.localId && isOptimisticMessage(msg)) {
+            optimisticByLocalId.set(msg.localId, msg)
+        }
     }
     for (const msg of incoming) {
-        byId.set(msg.id, msg)
+        byId.set(msg.id, mergeIncomingMessage(msg, optimisticByLocalId))
     }
 
     let merged = Array.from(byId.values())
@@ -75,9 +110,8 @@ export function mergeMessages(existing: DecryptedMessage[], incoming: DecryptedM
 
     for (const optimistic of optimisticMessages) {
         if (optimistic.status === 'sent') {
-            const hasServerUserMessage = nonOptimisticMessages.some((m) =>
-                isUserMessage(m) &&
-                Math.abs(m.createdAt - optimistic.createdAt) < 10_000
+            const hasServerUserMessage = nonOptimisticMessages.some(
+                (m) => isUserMessage(m) && Math.abs(m.createdAt - optimistic.createdAt) < 10_000
             )
             if (hasServerUserMessage) {
                 continue
@@ -92,7 +126,7 @@ export function mergeMessages(existing: DecryptedMessage[], incoming: DecryptedM
 
 export function upsertMessagesInCache(
     data: InfiniteData<MessagesResponse> | undefined,
-    incoming: DecryptedMessage[],
+    incoming: DecryptedMessage[]
 ): InfiniteData<MessagesResponse> {
     const mergedIncoming = mergeMessages([], incoming)
 

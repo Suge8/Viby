@@ -62,6 +62,7 @@ export function buildSessionPlaceholderSession(summary: SessionSummary): Resumab
         modelReasoningEffort: summary.modelReasoningEffort,
         permissionMode: summary.permissionMode,
         collaborationMode: summary.collaborationMode,
+        codexServiceTier: null,
         todos: undefined,
         // Summary seeds do not carry the provider token itself, only the durable
         // fact that the Hub already marked this session resumable.

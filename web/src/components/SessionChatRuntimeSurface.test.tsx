@@ -105,6 +105,7 @@ function createProps(
             composerHeight: 72,
             messageState: {
                 messages: [],
+                pending: [],
                 warning: null,
                 hasMore: false,
                 isLoading: false,
@@ -155,6 +156,7 @@ describe('SessionChatRuntimeSurface', () => {
                         session: createSession({ active: false }),
                         messageState: {
                             messages: [],
+                            pending: [],
                             warning: null,
                             hasMore: false,
                             isLoading: false,
@@ -187,6 +189,7 @@ describe('SessionChatRuntimeSurface', () => {
                         session: createSession({ active: false }),
                         messageState: {
                             messages: [],
+                            pending: [],
                             warning: null,
                             hasMore: false,
                             isLoading: false,

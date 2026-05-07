@@ -58,6 +58,7 @@ export function useMessages(
     sessionId: string | null
 ): {
     messages: DecryptedMessage[]
+    pending: DecryptedMessage[]
     warning: MessageWindowWarningKey | null
     isLoading: boolean
     isLoadingMore: boolean
@@ -137,6 +138,7 @@ export function useMessages(
 
     return {
         messages: state.messages,
+        pending: state.pending,
         warning: state.warning,
         isLoading: state.isLoading,
         isLoadingMore: state.isLoadingMore,

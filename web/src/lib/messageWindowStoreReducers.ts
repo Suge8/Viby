@@ -12,7 +12,9 @@ export {
     applyClearedPendingReply,
     applyClearedSessionStream,
     applyMessageStatusUpdate,
+    applyMessagesConsumed,
     applyPendingReplyAccepted,
+    applyQueuedMessagesCanceled,
     applySessionReplyingState,
     applySessionStreamUpdate,
 } from '@/lib/messageWindowReplyReducers'

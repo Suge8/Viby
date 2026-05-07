@@ -17,7 +17,9 @@ import {
     applyFlushedPendingMessages,
     applyIncomingMessages,
     applyMessageStatusUpdate,
+    applyMessagesConsumed,
     applyPendingReplyAccepted,
+    applyQueuedMessagesCanceled,
     applySessionReplyingState,
     applySessionStreamUpdate,
 } from '@/lib/messageWindowStoreReducers'
@@ -276,6 +278,18 @@ export function markPendingReplyAccepted(sessionId: string, localId: string, acc
 
 export function clearPendingReply(sessionId: string, localId?: string): void {
     updateMessageWindowState(sessionId, (prev) => applyClearedPendingReply(prev, localId), { immediate: true })
+}
+
+export function markMessagesConsumed(
+    sessionId: string,
+    localIds: readonly string[],
+    invokedAt: number = Date.now()
+): void {
+    updateMessageWindowState(sessionId, (prev) => applyMessagesConsumed(prev, localIds, invokedAt), { immediate: true })
+}
+
+export function removeQueuedMessages(sessionId: string, localIds: readonly string[]): void {
+    updateMessageWindowState(sessionId, (prev) => applyQueuedMessagesCanceled(prev, localIds), { immediate: true })
 }
 
 export function getSessionReplyingState(sessionId: string): SessionReplyingState | null {

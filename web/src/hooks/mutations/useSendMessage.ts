@@ -1,7 +1,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
-import { ApiError, type ApiClient } from '@/api/client'
-import type { AttachmentMetadata, DecryptedMessage, Session, SessionsResponse } from '@/types/api'
+import type { ApiClient } from '@/api/client'
+import { ApiError } from '@/api/clientShared'
+import { usePlatform } from '@/hooks/usePlatform'
 import { makeClientSideId } from '@/lib/messages'
 import {
     appendOptimisticMessage,
@@ -12,46 +13,47 @@ import {
 } from '@/lib/messageWindowStoreCore'
 import { queryKeys } from '@/lib/query-keys'
 import { markSessionPendingUserTurnInQueryCache } from '@/lib/sessionQueryCache'
-import { usePlatform } from '@/hooks/usePlatform'
+import type { AttachmentMetadata, DecryptedMessage, Session, SessionsResponse } from '@/types/api'
 
 type SendMessageInput = {
     sessionId: string
     text: string
     localId: string
     createdAt: number
+    queuedForInvocation: boolean
     attachments?: AttachmentMetadata[]
 }
 
 type BlockedReason = 'no-api' | 'no-session' | 'pending'
 
 type UseSendMessageOptions = {
+    isSessionThinking?: () => boolean
     onBlocked?: (reason: BlockedReason) => void
-    onSendStart?: (info: {
-        sessionId: string
-        localId: string
-        createdAt: number
-        attachmentsCount: number
-    }) => void
-    afterServerAccepted?: (info: {
-        sessionId: string
-        localId: string
-        createdAt: number
-        acceptedAt: number
-        session: Session
-    }) => Promise<void> | void
-    onSendError?: (info: {
-        sessionId: string
-        localId: string
-        createdAt: number
-        error: unknown
-    }) => Promise<void> | void
+    onSendStart?: (info: SendStartInfo) => void
+    afterServerAccepted?: (info: ServerAcceptedSendInfo) => Promise<void> | void
+    onSendError?: (info: SendErrorInfo) => Promise<void> | void
 }
 
-type SendStartInfo = {
+export type SendStartInfo = {
     sessionId: string
     localId: string
     createdAt: number
     attachmentsCount: number
+}
+
+type ServerAcceptedSendInfo = {
+    sessionId: string
+    localId: string
+    createdAt: number
+    acceptedAt: number
+    session: Session
+}
+
+export type SendErrorInfo = {
+    sessionId: string
+    localId: string
+    createdAt: number
+    error: unknown
 }
 
 function findMessageByLocalIdInCollection(
@@ -61,10 +63,7 @@ function findMessageByLocalIdInCollection(
     return messages.find((message) => message.localId === localId) ?? null
 }
 
-function findMessageByLocalId(
-    sessionId: string,
-    localId: string,
-): DecryptedMessage | null {
+function findMessageByLocalId(sessionId: string, localId: string): DecryptedMessage | null {
     const state = getMessageWindowState(sessionId)
 
     return (
@@ -83,11 +82,12 @@ function createOptimisticMessage(input: SendMessageInput): DecryptedMessage {
             content: {
                 type: 'text',
                 text: input.text,
-                attachments: input.attachments
-            }
+                attachments: input.attachments,
+            },
         },
         createdAt: input.createdAt,
-        status: 'sending',
+        invokedAt: input.queuedForInvocation ? null : input.createdAt,
+        status: input.queuedForInvocation ? 'queued' : 'sending',
         originalText: input.text,
     }
 }
@@ -106,7 +106,7 @@ function getOptimisticMessageAttachments(message: DecryptedMessage): AttachmentM
         return undefined
     }
     const attachments = (userContent as { attachments?: unknown }).attachments
-    return Array.isArray(attachments) ? attachments as AttachmentMetadata[] : undefined
+    return Array.isArray(attachments) ? (attachments as AttachmentMetadata[]) : undefined
 }
 
 export function useSendMessage(
@@ -120,13 +120,21 @@ export function useSendMessage(
 } {
     const { haptic } = usePlatform()
     const queryClient = useQueryClient()
+    const afterServerAccepted = options?.afterServerAccepted
+    const isSessionThinking = options?.isSessionThinking
+    const onBlocked = options?.onBlocked
+    const onSendError = options?.onSendError
+    const onSendStart = options?.onSendStart
 
-    const handleBlocked = useCallback((reason: BlockedReason): void => {
-        options?.onBlocked?.(reason)
-        if (reason !== 'pending') {
-            haptic.notification('error')
-        }
-    }, [haptic, options])
+    const handleBlocked = useCallback(
+        (reason: BlockedReason): void => {
+            onBlocked?.(reason)
+            if (reason !== 'pending') {
+                haptic.notification('error')
+            }
+        },
+        [haptic, onBlocked]
+    )
 
     const mutation = useMutation({
         mutationFn: async (input: SendMessageInput) => {
@@ -142,15 +150,17 @@ export function useSendMessage(
         },
         onSuccess: (session, input) => {
             const acceptedAt = Date.now()
-            updateMessageStatus(input.sessionId, input.localId, 'sent')
-            markPendingReplyAccepted(input.sessionId, input.localId, acceptedAt)
+            updateMessageStatus(input.sessionId, input.localId, input.queuedForInvocation ? 'queued' : 'sent')
+            if (!input.queuedForInvocation) {
+                markPendingReplyAccepted(input.sessionId, input.localId, acceptedAt)
+            }
             haptic.notification('success')
-            void options?.afterServerAccepted?.({
+            void afterServerAccepted?.({
                 sessionId: input.sessionId,
                 localId: input.localId,
                 createdAt: input.createdAt,
                 acceptedAt,
-                session
+                session,
             })
         },
         onError: (error, input, context) => {
@@ -164,11 +174,11 @@ export function useSendMessage(
             updateMessageStatus(input.sessionId, input.localId, 'failed')
             clearPendingReply(input.sessionId, input.localId)
             haptic.notification('error')
-            void options?.onSendError?.({
+            void onSendError?.({
                 sessionId: input.sessionId,
                 localId: input.localId,
                 createdAt: input.createdAt,
-                error
+                error,
             })
         },
     })
@@ -186,66 +196,77 @@ export function useSendMessage(
         return null
     }, [api, mutation.isPending, sessionId])
 
-    const startSendAttempt = useCallback((input: SendMessageInput): void => {
-        const sendStartInfo: SendStartInfo = {
-            sessionId: input.sessionId,
-            localId: input.localId,
-            createdAt: input.createdAt,
-            attachmentsCount: input.attachments?.length ?? 0
-        }
-        options?.onSendStart?.(sendStartInfo)
-        mutation.mutate(input)
-    }, [mutation, options])
+    const startSendAttempt = useCallback(
+        (input: SendMessageInput): void => {
+            const sendStartInfo: SendStartInfo = {
+                sessionId: input.sessionId,
+                localId: input.localId,
+                createdAt: input.createdAt,
+                attachmentsCount: input.attachments?.length ?? 0,
+            }
+            onSendStart?.(sendStartInfo)
+            mutation.mutate(input)
+        },
+        [mutation, onSendStart]
+    )
 
-    const sendMessage = useCallback((text: string, attachments?: AttachmentMetadata[]) => {
-        const blockedReason = getBlockedReason()
-        if (blockedReason) {
-            handleBlocked(blockedReason)
-            return
-        }
+    const sendMessage = useCallback(
+        (text: string, attachments?: AttachmentMetadata[]) => {
+            const blockedReason = getBlockedReason()
+            if (blockedReason) {
+                handleBlocked(blockedReason)
+                return
+            }
 
-        const currentSessionId = sessionId
-        if (!currentSessionId) {
-            return
-        }
+            const currentSessionId = sessionId
+            if (!currentSessionId) {
+                return
+            }
 
-        const localId = makeClientSideId('local')
-        const createdAt = Date.now()
-        const optimisticInput: SendMessageInput = {
-            sessionId: currentSessionId,
-            text,
-            localId,
-            createdAt,
-            attachments,
-        }
+            const localId = makeClientSideId('local')
+            const createdAt = Date.now()
+            const optimisticInput: SendMessageInput = {
+                sessionId: currentSessionId,
+                text,
+                localId,
+                createdAt,
+                queuedForInvocation: isSessionThinking?.() === true,
+                attachments,
+            }
 
-        appendOptimisticMessage(currentSessionId, createOptimisticMessage(optimisticInput))
-        startSendAttempt(optimisticInput)
-    }, [getBlockedReason, handleBlocked, sessionId, startSendAttempt])
+            appendOptimisticMessage(currentSessionId, createOptimisticMessage(optimisticInput))
+            startSendAttempt(optimisticInput)
+        },
+        [getBlockedReason, handleBlocked, isSessionThinking, sessionId, startSendAttempt]
+    )
 
-    const retryMessage = useCallback((localId: string) => {
-        const blockedReason = getBlockedReason()
-        if (blockedReason) {
-            handleBlocked(blockedReason)
-            return
-        }
-        if (!sessionId) {
-            return
-        }
+    const retryMessage = useCallback(
+        (localId: string) => {
+            const blockedReason = getBlockedReason()
+            if (blockedReason) {
+                handleBlocked(blockedReason)
+                return
+            }
+            if (!sessionId) {
+                return
+            }
 
-        const message = findMessageByLocalId(sessionId, localId)
-        if (!message?.originalText) return
-        const retryInput: SendMessageInput = {
-            sessionId,
-            text: message.originalText,
-            localId,
-            createdAt: message.createdAt,
-            attachments: getOptimisticMessageAttachments(message)
-        }
+            const message = findMessageByLocalId(sessionId, localId)
+            if (!message?.originalText) return
+            const retryInput: SendMessageInput = {
+                sessionId,
+                text: message.originalText,
+                localId,
+                createdAt: message.createdAt,
+                queuedForInvocation: isSessionThinking?.() === true,
+                attachments: getOptimisticMessageAttachments(message),
+            }
 
-        updateMessageStatus(sessionId, localId, 'sending')
-        startSendAttempt(retryInput)
-    }, [getBlockedReason, handleBlocked, sessionId, startSendAttempt])
+            updateMessageStatus(sessionId, localId, retryInput.queuedForInvocation ? 'queued' : 'sending')
+            startSendAttempt(retryInput)
+        },
+        [getBlockedReason, handleBlocked, isSessionThinking, sessionId, startSendAttempt]
+    )
 
     return {
         sendMessage,

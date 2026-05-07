@@ -81,7 +81,7 @@ afterEach(() => {
 })
 
 describe('useTranscriptVirtuoso active turn anchoring', () => {
-    it('anchors a new active user turn to the top anchor instead of starting the bottom owner', () => {
+    it('anchors a new active user turn without showing bottom CTA before the viewport actually leaves bottom', () => {
         const frameQueue = installQueuedAnimationFrameHarness()
 
         try {
@@ -149,7 +149,7 @@ describe('useTranscriptVirtuoso active turn anchoring', () => {
                 behavior: 'auto',
             })
             expect(scrollTo).not.toHaveBeenCalled()
-            expect(onAtBottomChange).toHaveBeenCalledWith(false)
+            expect(onAtBottomChange).not.toHaveBeenCalled()
         } finally {
             frameQueue.restore()
         }

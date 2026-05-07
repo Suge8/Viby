@@ -94,12 +94,10 @@ export function useVibyRuntime(props: {
 
     const adapter = useMemo(
         () => ({
-            isDisabled:
-                props.isSending ||
-                isSessionInteractionDisabled({
-                    active: props.session.active,
-                    allowSendWhenInactive: props.allowSendWhenInactive === true,
-                }),
+            isDisabled: isSessionInteractionDisabled({
+                active: props.session.active,
+                allowSendWhenInactive: props.allowSendWhenInactive === true,
+            }),
             isRunning: props.session.thinking,
             messages: EMPTY_MESSAGES,
             onNew,
@@ -110,7 +108,6 @@ export function useVibyRuntime(props: {
         [
             props.allowSendWhenInactive,
             props.attachmentAdapter,
-            props.isSending,
             props.session.active,
             props.session.thinking,
             onCancel,

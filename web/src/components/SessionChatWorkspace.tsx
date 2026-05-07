@@ -1,3 +1,4 @@
+import { QueuedMessagesBar } from '@/components/AssistantChat/QueuedMessagesBar'
 import { SessionChatComposerShell } from '@/components/SessionChatComposerShell'
 import { SessionChatComposerSurface } from '@/components/SessionChatComposerSurface'
 import { SessionChatLocalNoticeStack } from '@/components/SessionChatLocalNoticeStack'
@@ -31,6 +32,12 @@ export default function SessionChatWorkspace(props: SessionChatWorkspaceProps): 
             >
                 <SessionChatComposerShell containerRef={composerRef}>
                     <SessionChatLocalNoticeStack notices={localNotices} />
+                    <QueuedMessagesBar
+                        api={props.api}
+                        sessionId={props.session.id}
+                        messages={props.messageState.messages}
+                        pending={props.messageState.pending}
+                    />
                     <SessionChatComposerSurface model={composerSurfaceModel} />
                 </SessionChatComposerShell>
             </SessionChatRuntimeSurface>

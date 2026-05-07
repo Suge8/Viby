@@ -41,6 +41,7 @@ export function ComposerActionSection(props: ComposerActionSectionProps): ReactN
                         type="button"
                         variant="plain"
                         size="sm"
+                        pressStyle="card"
                         disabled={item.disabled}
                         className={cn(
                             getInteractiveCardClassName('disclosure-trigger'),

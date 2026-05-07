@@ -26,6 +26,7 @@ function createSessionSummary(id: string) {
         resumeStrategy: 'provider-handle',
         model: 'gpt-5.4',
         modelReasoningEffort: 'high',
+        codexServiceTier: null,
     } as const
 }
 

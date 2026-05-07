@@ -62,6 +62,7 @@ function seedSessionsSummary(queryClient: QueryClient): void {
                 resumeStrategy: 'none',
                 model: 'gpt-5.4',
                 modelReasoningEffort: null,
+                codexServiceTier: null,
                 permissionMode: 'default',
                 collaborationMode: 'default',
             },
@@ -191,6 +192,43 @@ describe('useSendMessage', () => {
             latestActivityAt: 2_000,
             updatedAt: 2_000,
         })
+    })
+
+    it('queues optimistic messages without blocking the composer when the session is already thinking', async () => {
+        const queryClient = createQueryClient()
+        seedSessionsSummary(queryClient)
+        const api = {
+            sendMessage: vi.fn(
+                async () =>
+                    ({
+                        id: 'session-1',
+                        active: true,
+                        metadata: {
+                            driver: 'codex',
+                            codexSessionId: 'thread-1',
+                        },
+                    }) as never
+            ),
+        } as unknown as ApiClient
+
+        const { result } = renderHook(() => useSendMessage(api, 'session-1', { isSessionThinking: () => true }), {
+            wrapper: createWrapper(queryClient),
+        })
+
+        act(() => {
+            result.current.sendMessage('queue while running')
+        })
+
+        await waitFor(() => {
+            expect(api.sendMessage).toHaveBeenCalledTimes(1)
+        })
+
+        const state = getMessageWindowState('session-1')
+        expect(state.messages[0]).toMatchObject({
+            status: 'queued',
+            invokedAt: null,
+        })
+        expect(state.pendingReply).toBeNull()
     })
 
     it('refreshes authoritative session snapshots instead of rolling back lifecycle state after server-side send failures', async () => {

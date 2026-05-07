@@ -63,4 +63,25 @@ describe('chat event presentation', () => {
             tone: 'warning',
         })
     })
+
+    it('renders usage limit warning events', () => {
+        expect(
+            getEventPresentation({
+                type: 'limit-warning',
+                endsAt: 1774278000,
+                percent: 90,
+                limitType: 'five_hour',
+            })
+        ).toMatchObject({
+            icon: '⏳',
+            tone: 'warning',
+        })
+        expect(
+            renderEventLabel({
+                type: 'limit-warning',
+                endsAt: 1774278000,
+                percent: 90,
+            })
+        ).toContain('Usage limit warning (90%)')
+    })
 })

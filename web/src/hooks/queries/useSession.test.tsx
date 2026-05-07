@@ -56,6 +56,7 @@ function createSessionSummary() {
         resumeAvailable: true,
         model: 'gpt-5.4',
         modelReasoningEffort: 'high',
+        codexServiceTier: null,
         permissionMode: 'yolo',
         collaborationMode: 'plan',
     } as const
@@ -214,6 +215,7 @@ describe('useSession', () => {
             thinkingAt: 30,
             model: 'gpt-5.4',
             modelReasoningEffort: 'high',
+            codexServiceTier: null,
             permissionMode: 'default',
             collaborationMode: 'default',
             todos: undefined,

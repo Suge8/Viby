@@ -20,7 +20,7 @@ type ComposerToggleButtonState = {
 }
 
 type ComposerPrimaryActionState = {
-    mode: 'send' | 'stop'
+    mode: 'send' | 'queue' | 'stop'
     disabled: boolean
     busy: boolean
     onClick: () => void
@@ -32,6 +32,7 @@ type ComposerButtonsProps = {
     controlsAnchorRef?: RefObject<HTMLDivElement | null>
     controlsButton: ComposerToggleButtonState
     primaryAction: ComposerPrimaryActionState
+    stopAction?: ComposerPrimaryActionState
 }
 
 function getControlsButtonClassName(active?: boolean): string {
@@ -49,7 +50,14 @@ function getPrimaryButtonPresentation(
     icon: React.JSX.Element
     label: string
 } {
-    if (props.mode !== 'stop') {
+    if (props.mode === 'queue') {
+        return {
+            icon: <SendIcon className="h-4 w-4" />,
+            label: t('composer.queue'),
+        }
+    }
+
+    if (props.mode === 'send') {
         return {
             icon: <SendIcon className="h-4 w-4" />,
             label: t('composer.send'),
@@ -127,7 +135,10 @@ export function ComposerButtons(props: ComposerButtonsProps): React.JSX.Element 
                 ) : null}
             </div>
 
-            <PrimaryButton {...props.primaryAction} />
+            <div className="flex items-center gap-1">
+                {props.stopAction ? <PrimaryButton {...props.stopAction} /> : null}
+                <PrimaryButton {...props.primaryAction} />
+            </div>
         </div>
     )
 }
