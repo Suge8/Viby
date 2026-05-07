@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { AgentAvailabilityResponseSchema, ListAgentAvailabilityRequestSchema } from '../agentAvailability'
 import { ResolveAgentLaunchConfigRequestSchema, ResolveAgentLaunchConfigResponseSchema } from '../agentLaunchConfig'
 import { MachineDirectoryResponseSchema } from '../machineDirectory'
+import { RuntimeCapabilityRequestSchema, RuntimeCapabilityResponseSchema } from '../runtimeCapability'
 import {
     CodexServiceTierSchema,
     DecryptedMessageSchema,
@@ -83,38 +84,31 @@ export type PairingRemoteSessionSummary = z.infer<typeof PairingRemoteSessionSum
 
 export const PairingPeerListSessionsParamsSchema = z.object({})
 export type PairingPeerListSessionsParams = z.infer<typeof PairingPeerListSessionsParamsSchema>
-
 export const PairingPeerOpenSessionParamsSchema = z.object({ sessionId: z.string().min(1) })
 export type PairingPeerOpenSessionParams = z.infer<typeof PairingPeerOpenSessionParamsSchema>
-
 export const PairingPeerResumeSessionParamsSchema = z.object({ sessionId: z.string().min(1) })
 export type PairingPeerResumeSessionParams = z.infer<typeof PairingPeerResumeSessionParamsSchema>
-
 export const PairingPeerLoadAfterParamsSchema = z.object({
     sessionId: z.string().min(1),
     afterSeq: z.number().int().min(0),
     limit: z.number().int().positive().max(200).optional(),
 })
 export type PairingPeerLoadAfterParams = z.infer<typeof PairingPeerLoadAfterParamsSchema>
-
 export const PairingPeerSendMessageParamsSchema = z.object({
     sessionId: z.string().min(1),
     text: z.string(),
     localId: z.string().min(1).optional(),
 })
 export type PairingPeerSendMessageParams = z.infer<typeof PairingPeerSendMessageParamsSchema>
-
 export const PairingPeerPathsExistParamsSchema = z.object({
     paths: z.array(z.string().trim().min(1)).min(1).max(1000),
 })
 export type PairingPeerPathsExistParams = z.infer<typeof PairingPeerPathsExistParamsSchema>
-
 export const PairingPeerBrowseDirectoryParamsSchema = z.object({
     path: z.string().min(1).optional(),
     workspaceRoot: z.string().min(1).optional(),
 })
 export type PairingPeerBrowseDirectoryParams = z.infer<typeof PairingPeerBrowseDirectoryParamsSchema>
-
 export const PairingPeerSpawnSessionParamsSchema = z.object({
     directory: z.string().min(1),
     agent: SessionDriverSchema.optional(),
@@ -152,6 +146,9 @@ export type PairingPeerPathsExistResult = z.infer<typeof PairingPeerPathsExistRe
 export const PairingPeerBrowseDirectoryResultSchema = MachineDirectoryResponseSchema
 export type PairingPeerBrowseDirectoryResult = z.infer<typeof PairingPeerBrowseDirectoryResultSchema>
 
+export const PairingPeerRuntimeCapabilityResultSchema = RuntimeCapabilityResponseSchema
+export type PairingPeerRuntimeCapabilityResult = z.infer<typeof PairingPeerRuntimeCapabilityResultSchema>
+
 export const PairingPeerAgentAvailabilityResultSchema = AgentAvailabilityResponseSchema
 export type PairingPeerAgentAvailabilityResult = z.infer<typeof PairingPeerAgentAvailabilityResultSchema>
 
@@ -185,6 +182,10 @@ export const PairingPeerLoadAfterRequestSchema = createPairingPeerRequestSchema(
 export const PairingPeerSendMessageRequestSchema = createPairingPeerRequestSchema(
     'session.send',
     PairingPeerSendMessageParamsSchema
+)
+export const PairingPeerRuntimeCapabilityRequestSchema = createOptionalPairingPeerRequestSchema(
+    'runtime.capabilities',
+    RuntimeCapabilityRequestSchema
 )
 export const PairingPeerAgentAvailabilityRequestSchema = createOptionalPairingPeerRequestSchema(
     'runtime.agent-availability',
@@ -228,6 +229,7 @@ export const PairingPeerRequestSchema = z.discriminatedUnion('method', [
     PairingPeerCommandCapabilitiesRequestSchema,
     PairingPeerApprovePermissionRequestSchema,
     PairingPeerDenyPermissionRequestSchema,
+    PairingPeerRuntimeCapabilityRequestSchema,
     PairingPeerAgentAvailabilityRequestSchema,
     PairingPeerPathsExistRequestSchema,
     PairingPeerBrowseDirectoryRequestSchema,

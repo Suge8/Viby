@@ -15,6 +15,7 @@ import {
     PairingPeerPathsExistResultSchema,
     PairingPeerPushVapidResultSchema,
     PairingPeerResumeSessionResultSchema,
+    PairingPeerRuntimeCapabilityResultSchema,
     PairingPeerRuntimeLocalSessionsResultSchema,
     PairingPeerSendMessageResultSchema,
     PairingPeerSessionResultSchema,
@@ -117,6 +118,11 @@ export function createRemotePeerBridge(options: {
         denyPermission: async (params) => {
             await options.requestPeer(createRemotePeerRequest('permission.deny', params), () => undefined)
         },
+        getRuntimeCapabilities: (params) =>
+            options.requestPeer(
+                createRemotePeerRequest('runtime.capabilities', params),
+                PairingPeerRuntimeCapabilityResultSchema.parse
+            ),
         getRuntimeAgentAvailability: (params) =>
             options.requestPeer(
                 createRemotePeerRequest('runtime.agent-availability', params),

@@ -114,6 +114,17 @@ function createBridge(overrides: Partial<RemotePeerBridge> = {}): RemotePeerBrid
         getCommandCapabilities: vi.fn(async () => ({ success: true, revision: 'remote', capabilities: [] })),
         approvePermission: vi.fn(async () => undefined),
         denyPermission: vi.fn(async () => undefined),
+        getRuntimeCapabilities: vi.fn(async () => ({
+            snapshot: {
+                machineId: 'remote-machine',
+                directory: null,
+                detectedAt: null,
+                expiresAt: null,
+                refreshing: false,
+                error: null,
+                agents: [],
+            },
+        })),
         getRuntimeAgentAvailability: vi.fn(async () => ({ agents: [] })),
         checkRuntimePathsExists: vi.fn(async () => ({ exists: { '/repo': true } })),
         browseRuntimeDirectory: vi.fn(async () => ({
@@ -123,7 +134,11 @@ function createBridge(overrides: Partial<RemotePeerBridge> = {}): RemotePeerBrid
             entries: [{ name: 'app', path: '/repo/app', type: 'directory' as const }],
             roots: [],
         })),
-        resolveAgentLaunchConfig: vi.fn(async () => ({ type: 'error' as const, message: 'not configured' })),
+        resolveAgentLaunchConfig: vi.fn(async () => ({
+            type: 'error' as const,
+            code: 'config_missing' as const,
+            message: 'not configured',
+        })),
         listRuntimeLocalSessions: vi.fn(async () => ({ capabilities: [], sessions: [] })),
         importRuntimeLocalSession: vi.fn(async () => ({
             session: createSession({ id: 'session-imported' }),

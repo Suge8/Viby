@@ -38,6 +38,7 @@ import type {
     PairingPeerRequest,
     PairingPeerResumeSessionParams,
     PairingPeerResumeSessionResult,
+    PairingPeerRuntimeCapabilityResult,
     PairingPeerRuntimeLocalSessionsResult,
     PairingPeerSearchFilesParams,
     PairingPeerSendMessageParams,
@@ -49,6 +50,7 @@ import type {
     PairingPeerTerminalEventPayload,
     PairingPeerUploadResult,
     ResolveAgentLaunchConfigRequest,
+    RuntimeCapabilityRequest,
 } from '@viby/protocol'
 import type { SyncEvent } from '@/types/api'
 import type { RemotePeerTransportStats } from './remotePairingStats'
@@ -76,6 +78,7 @@ export type RemotePeerBridge = {
     ) => Promise<PairingPeerCommandCapabilitiesResult>
     approvePermission: (params: PairingPeerApprovePermissionParams) => Promise<void>
     denyPermission: (params: PairingPeerDenyPermissionParams) => Promise<void>
+    getRuntimeCapabilities: (params?: RuntimeCapabilityRequest) => Promise<PairingPeerRuntimeCapabilityResult>
     getRuntimeAgentAvailability: (params?: ListAgentAvailabilityRequest) => Promise<PairingPeerAgentAvailabilityResult>
     checkRuntimePathsExists: (params: PairingPeerPathsExistParams) => Promise<PairingPeerPathsExistResult>
     browseRuntimeDirectory: (params?: PairingPeerBrowseDirectoryParams) => Promise<PairingPeerBrowseDirectoryResult>

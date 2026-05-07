@@ -22,6 +22,8 @@ import type {
     PermissionMode,
     ResolveAgentLaunchConfigRequest,
     ResolveAgentLaunchConfigResponse,
+    RuntimeCapabilityRequest,
+    RuntimeCapabilityResponse,
     Session,
     SessionSummary,
     SessionViewSnapshot,
@@ -32,6 +34,7 @@ import {
     browseRuntimeDirectory,
     checkRuntimePathsExists,
     getRuntimeAgentAvailability,
+    getRuntimeCapabilities,
     importRuntimeLocalSession,
     listRuntimeLocalSessions,
     resolveAgentLaunchConfig,
@@ -180,6 +183,9 @@ export class LocalHubPairingClient extends LocalHubPairingClientCore {
     }
     async getCommandCapabilities(sessionId: string, revision?: string): Promise<CommandCapabilitiesResponse> {
         return await getCommandCapabilities(this.request, sessionId, revision)
+    }
+    async getRuntimeCapabilities(input: RuntimeCapabilityRequest): Promise<RuntimeCapabilityResponse> {
+        return await getRuntimeCapabilities(this.request, input)
     }
     async getRuntimeAgentAvailability(input: ListAgentAvailabilityRequest = {}): Promise<AgentAvailabilityResponse> {
         return await getRuntimeAgentAvailability(this.request, input)

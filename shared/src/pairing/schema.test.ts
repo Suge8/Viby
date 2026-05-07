@@ -265,7 +265,13 @@ describe('pairing peer rpc schema', () => {
             tone: 'neutral',
             latencyTier: 'unknown',
         })
+        expect(classifyPairingLinkQuality({ transport: 'direct', currentRoundTripTimeMs: 240 })).toMatchObject({
+            tone: 'warning',
+            latencyTier: 'slow',
+            roundTripTimeMs: 240,
+        })
         expect(formatPairingRoundTripTime(37.7)).toBe('38ms')
+        expect(formatPairingRoundTripTime(-1)).toBe('0ms')
         expect(describePairingLinkTransport({ transport: 'relay' })).toBe('安全中转')
         expect(resolvePairingLinkTransport({ localCandidateType: 'host', remoteCandidateType: 'srflx' })).toBe('direct')
         expect(resolvePairingLinkTransport({ localCandidateType: null, remoteCandidateType: 'srflx' })).toBe('unknown')
@@ -274,6 +280,11 @@ describe('pairing peer rpc schema', () => {
             title: '本机直连 · 延迟 38ms',
             detail: '最快路线。延迟数字越小，手机操作越跟手。',
             tone: 'success',
+        })
+        expect(buildPairingLinkPresentation({ transport: 'direct', currentRoundTripTimeMs: 240 })).toEqual({
+            title: '本机直连 · 延迟 240ms',
+            detail: '最快路线。延迟数字越小，手机操作越跟手。',
+            tone: 'warning',
         })
         expect(buildPairingLinkPresentation({ transport: 'relay', currentRoundTripTimeMs: 120 })).toEqual({
             title: '安全中转 · 延迟 120ms',

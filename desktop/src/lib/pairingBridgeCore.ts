@@ -10,6 +10,7 @@ import type {
     PairingPeerRequest,
     PairingPeerResponse,
     PairingPeerResumeSessionResult,
+    PairingPeerRuntimeCapabilityResult,
     PairingPeerSendMessageResult,
     PairingPeerSpawnSessionResult,
     PairingPeerTerminalEventPayload,
@@ -29,6 +30,7 @@ import {
     PairingPeerRequestSchema,
     PairingPeerResponseSchema,
     PairingPeerResumeSessionResultSchema,
+    PairingPeerRuntimeCapabilityResultSchema,
     PairingPeerRuntimeLocalSessionsResultSchema,
     PairingPeerSendMessageResultSchema,
     PairingPeerSessionResultSchema,
@@ -217,6 +219,12 @@ export async function executePairingPeerRequest(
             case 'permission.deny':
                 await client.denyPermission(request.params.sessionId, request.params.requestId, request.params.decision)
                 return successResponse(request.id, PairingPeerOkResultSchema.parse({ ok: true }))
+            case 'runtime.capabilities': {
+                const result: PairingPeerRuntimeCapabilityResult = PairingPeerRuntimeCapabilityResultSchema.parse(
+                    await client.getRuntimeCapabilities(request.params ?? { depth: 'availability' })
+                )
+                return successResponse(request.id, result)
+            }
             case 'runtime.agent-availability': {
                 const result: PairingPeerAgentAvailabilityResult = PairingPeerAgentAvailabilityResultSchema.parse(
                     await client.getRuntimeAgentAvailability(request.params ?? {})

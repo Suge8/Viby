@@ -21,6 +21,7 @@ export const PairingPeerMethodSchema = z.enum([
     'session.command-capabilities',
     'permission.approve',
     'permission.deny',
+    'runtime.capabilities',
     'runtime.agent-availability',
     'runtime.paths-exists',
     'runtime.browse-directory',

@@ -14,6 +14,7 @@ import type {
     FileReadResponse,
     FileSearchResponse,
     GitCommandResponse,
+    ListAgentAvailabilityRequest,
     ListDirectoryResponse,
     LocalSessionExportRequest,
     MessagesResponse,
@@ -21,6 +22,8 @@ import type {
     PermissionMode,
     PushSubscriptionPayload,
     PushUnsubscribePayload,
+    RuntimeCapabilityRequest,
+    RuntimeCapabilityResponse,
     RuntimeResponse,
     Session,
     SessionRecoveryPage,
@@ -173,15 +176,25 @@ export function createRemotePeerApiClient(options: RemoteApiOptions): ApiClient 
                 },
             }
         },
-        async getRuntimeAgentAvailability(input?: {
-            directory?: string
-            forceRefresh?: boolean
-            signal?: AbortSignal
-        }) {
+        async getRuntimeCapabilities(
+            input?: RuntimeCapabilityRequest & { signal?: AbortSignal }
+        ): Promise<RuntimeCapabilityResponse> {
+            const request = input
+                ? {
+                      directory: input.directory,
+                      forceRefresh: input.forceRefresh,
+                      drivers: input.drivers,
+                      depth: input.depth,
+                  }
+                : undefined
+            return await withAbortSignal(options.bridge.getRuntimeCapabilities(request), input?.signal)
+        },
+        async getRuntimeAgentAvailability(input?: ListAgentAvailabilityRequest & { signal?: AbortSignal }) {
             return await withAbortSignal(
                 options.bridge.getRuntimeAgentAvailability({
                     directory: input?.directory,
                     forceRefresh: input?.forceRefresh,
+                    drivers: input?.drivers,
                 }),
                 input?.signal
             )

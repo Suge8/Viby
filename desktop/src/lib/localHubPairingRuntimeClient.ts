@@ -6,9 +6,28 @@ import type {
     MachineDirectoryResponse,
     ResolveAgentLaunchConfigRequest,
     ResolveAgentLaunchConfigResponse,
+    RuntimeCapabilityRequest,
+    RuntimeCapabilityResponse,
     Session,
 } from '@viby/protocol/types'
 import type { LocalHubPairingRequestJson } from './localHubPairingRequest'
+
+function appendRuntimeCapabilityParams(params: URLSearchParams, input: RuntimeCapabilityRequest): void {
+    if (input.directory) params.set('directory', input.directory)
+    if (input.forceRefresh) params.set('forceRefresh', 'true')
+    if (input.drivers?.length) params.set('drivers', input.drivers.join(','))
+    if (input.depth) params.set('depth', input.depth)
+}
+
+export async function getRuntimeCapabilities(
+    requestJson: LocalHubPairingRequestJson,
+    input: RuntimeCapabilityRequest = { depth: 'availability' }
+): Promise<RuntimeCapabilityResponse> {
+    const params = new URLSearchParams()
+    appendRuntimeCapabilityParams(params, input)
+    const query = params.toString()
+    return await requestJson<RuntimeCapabilityResponse>(`/api/runtime/capabilities${query ? `?${query}` : ''}`)
+}
 
 export async function getRuntimeAgentAvailability(
     requestJson: LocalHubPairingRequestJson,
@@ -17,6 +36,7 @@ export async function getRuntimeAgentAvailability(
     const params = new URLSearchParams()
     if (input.directory) params.set('directory', input.directory)
     if (input.forceRefresh) params.set('forceRefresh', 'true')
+    if (input.drivers?.length) params.set('drivers', input.drivers.join(','))
     const query = params.toString()
     return await requestJson<AgentAvailabilityResponse>(`/api/runtime/agent-availability${query ? `?${query}` : ''}`)
 }
