@@ -10,7 +10,10 @@ export type CodexCollaborationMode = (typeof CODEX_COLLABORATION_MODES)[number]
 export const CODEX_REASONING_EFFORTS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const
 export type CodexReasoningEffort = (typeof CODEX_REASONING_EFFORTS)[number]
 
-export const CLAUDE_REASONING_EFFORTS = ['low', 'medium', 'high', 'max'] as const
+export const CODEX_SERVICE_TIERS = ['standard', 'fast'] as const
+export type CodexServiceTier = (typeof CODEX_SERVICE_TIERS)[number]
+
+export const CLAUDE_REASONING_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const
 export type ClaudeReasoningEffort = (typeof CLAUDE_REASONING_EFFORTS)[number]
 
 export const PI_REASONING_EFFORTS = CODEX_REASONING_EFFORTS
@@ -52,7 +55,7 @@ export type ClaudeModelPreset = (typeof CLAUDE_MODEL_PRESETS)[number]
 export const CLAUDE_SELECTABLE_MODEL_PRESETS = ['sonnet', 'opus'] as const
 export type ClaudeSelectableModelPreset = (typeof CLAUDE_SELECTABLE_MODEL_PRESETS)[number]
 
-export const CODEX_MODEL_PRESETS = ['gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex', 'gpt-5.2'] as const
+export const CODEX_MODEL_PRESETS = ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex', 'gpt-5.2'] as const
 export type CodexModelPreset = (typeof CODEX_MODEL_PRESETS)[number]
 
 export const GEMINI_MODEL_PRESETS = [
@@ -140,6 +143,23 @@ export const GEMINI_MODEL_LABELS: Record<GeminiModelPreset, string> = {
     'gemini-3-flash-preview': 'Gemini 3 Flash Preview',
 }
 
+export const CODEX_MODEL_LABELS: Record<CodexModelPreset, string> = {
+    'gpt-5.5': 'GPT-5.5',
+    'gpt-5.4': 'GPT-5.4',
+    'gpt-5.4-mini': 'GPT-5.4 Mini',
+    'gpt-5.3-codex': 'GPT-5.3 Codex',
+    'gpt-5.2': 'GPT-5.2',
+}
+
+export const COPILOT_MODEL_LABELS: Record<CopilotModelPreset, string> = {
+    'gpt-5': 'GPT-5',
+    'gpt-5.4': 'GPT-5.4',
+    'gpt-5.4-mini': 'GPT-5.4 Mini',
+    'claude-sonnet-4.6': 'Claude Sonnet 4.6',
+    'claude-sonnet-4.5': 'Claude Sonnet 4.5',
+    'gemini-2.5-pro': 'Gemini 2.5 Pro',
+}
+
 export const CODEX_COLLABORATION_MODE_LABELS: Record<CodexCollaborationMode, string> = {
     default: 'Default',
     plan: 'Plan',
@@ -158,5 +178,6 @@ export const CLAUDE_REASONING_EFFORT_LABELS: Record<ClaudeReasoningEffort, strin
     low: 'Low',
     medium: 'Medium',
     high: 'High',
+    xhigh: 'XHigh',
     max: 'Max',
 }

@@ -4,6 +4,7 @@ import {
     CLAUDE_REASONING_EFFORTS,
     CODEX_COLLABORATION_MODES,
     CODEX_REASONING_EFFORTS,
+    CODEX_SERVICE_TIERS,
     MODEL_REASONING_EFFORTS,
     PERMISSION_MODES,
 } from './modes'
@@ -31,6 +32,7 @@ export { SESSION_METADATA_RUNNER_START_FLAG_KEY, SESSION_METADATA_RUNTIME_HANDLE
 export const PermissionModeSchema = z.enum(PERMISSION_MODES)
 export const CodexCollaborationModeSchema = z.enum(CODEX_COLLABORATION_MODES)
 export const CodexReasoningEffortSchema = z.enum(CODEX_REASONING_EFFORTS)
+export const CodexServiceTierSchema = z.enum(CODEX_SERVICE_TIERS)
 export const ClaudeReasoningEffortSchema = z.enum(CLAUDE_REASONING_EFFORTS)
 export const ModelReasoningEffortSchema = z.enum(MODEL_REASONING_EFFORTS)
 export const SessionLifecycleStateSchema = z.enum(SESSION_LIFECYCLE_STATES)
@@ -147,8 +149,9 @@ export type AgentState = z.infer<typeof AgentStateSchema>
 export const TodoItemSchema = z.object({
     content: z.string(),
     status: z.enum(['pending', 'in_progress', 'completed']),
-    priority: z.enum(['high', 'medium', 'low']),
-    id: z.string(),
+    priority: z.enum(['high', 'medium', 'low']).optional().default('medium'),
+    id: z.string().optional().default(''),
+    activeForm: z.string().optional(),
 })
 
 export type TodoItem = z.infer<typeof TodoItemSchema>
@@ -172,6 +175,7 @@ export const DecryptedMessageSchema = z.object({
     localId: z.string().nullable(),
     content: z.unknown(),
     createdAt: z.number(),
+    invokedAt: z.number().nullable().optional(),
 })
 
 export type DecryptedMessage = z.infer<typeof DecryptedMessageSchema>
@@ -201,6 +205,7 @@ export const SessionSchema = z.object({
     todos: TodosSchema.optional(),
     model: z.string().nullable(),
     modelReasoningEffort: ModelReasoningEffortSchema.nullable(),
+    codexServiceTier: CodexServiceTierSchema.nullable().default(null),
     permissionMode: PermissionModeSchema.optional(),
     collaborationMode: CodexCollaborationModeSchema.optional(),
     latestActivityAt: z.number().nullable().optional(),
@@ -235,6 +240,15 @@ export const SyncEventSchema = z.discriminatedUnion('type', [
     SessionChangedSchema.extend({
         type: z.literal('message-received'),
         message: DecryptedMessageSchema,
+    }),
+    SessionChangedSchema.extend({
+        type: z.literal('messages-consumed'),
+        localIds: z.array(z.string()),
+        invokedAt: z.number().optional(),
+    }),
+    SessionChangedSchema.extend({
+        type: z.literal('messages-canceled'),
+        localIds: z.array(z.string()),
     }),
     SessionChangedSchema.extend({
         type: z.literal('session-stream-updated'),

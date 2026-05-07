@@ -88,6 +88,7 @@ export const AGENT_SUPPORT_LINKS = {
         learnMoreUrl: 'https://docs.cursor.com/en/cli/overview',
     },
     pi: {
+        installUrl: 'https://www.npmjs.com/package/@mariozechner/pi-coding-agent',
         configureUrl: 'https://www.npmjs.com/package/@mariozechner/pi-coding-agent',
         learnMoreUrl: 'https://www.npmjs.com/package/@mariozechner/pi-coding-agent',
     },

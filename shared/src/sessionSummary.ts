@@ -13,6 +13,8 @@ import { getPendingRequestsCount } from './sessionTurnState'
 export type SessionSummaryMetadata = {
     name?: string
     path: string
+    host?: string
+    machineId?: string
     summary?: {
         text: string
         updatedAt: number
@@ -42,6 +44,7 @@ export type SessionSummary = {
     resumeStrategy: SessionResumeStrategy
     model: string | null
     modelReasoningEffort: ModelReasoningEffort | null
+    codexServiceTier: Session['codexServiceTier']
     permissionMode?: PermissionMode
     collaborationMode?: CodexCollaborationMode
 }
@@ -107,6 +110,8 @@ export function toSessionSummary(session: Session, messageActivity?: SessionMess
         ? {
               name: session.metadata.name,
               path: session.metadata.path,
+              host: session.metadata.host,
+              machineId: session.metadata.machineId,
               summary: session.metadata.summary
                   ? {
                         text: session.metadata.summary.text,
@@ -146,6 +151,7 @@ export function toSessionSummary(session: Session, messageActivity?: SessionMess
         resumeStrategy: resumeState.resumeStrategy,
         model: session.model,
         modelReasoningEffort: session.modelReasoningEffort,
+        codexServiceTier: session.codexServiceTier,
         permissionMode: session.permissionMode,
         collaborationMode: session.collaborationMode,
     }

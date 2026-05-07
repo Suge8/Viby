@@ -7,7 +7,7 @@ export const MACHINE_DIRECTORY_ROOT_KINDS = [
     'downloads',
     'projects',
     'code',
-    'workspace'
+    'workspace',
 ] as const
 
 export const MachineDirectoryRootKindSchema = z.enum(MACHINE_DIRECTORY_ROOT_KINDS)
@@ -16,14 +16,14 @@ export type MachineDirectoryRootKind = z.infer<typeof MachineDirectoryRootKindSc
 export const MachineDirectoryEntrySchema = z.object({
     name: z.string(),
     path: z.string(),
-    type: z.enum(['directory'])
+    type: z.enum(['directory']),
 })
 
 export type MachineDirectoryEntry = z.infer<typeof MachineDirectoryEntrySchema>
 
 export const MachineDirectoryRootSchema = z.object({
     kind: MachineDirectoryRootKindSchema,
-    path: z.string()
+    path: z.string(),
 })
 
 export type MachineDirectoryRoot = z.infer<typeof MachineDirectoryRootSchema>
@@ -32,9 +32,10 @@ export const MachineDirectoryResponseSchema = z.object({
     success: z.boolean(),
     currentPath: z.string().optional(),
     parentPath: z.string().nullable().optional(),
+    scopeRoot: z.string().nullable().optional(),
     entries: z.array(MachineDirectoryEntrySchema).optional(),
     roots: z.array(MachineDirectoryRootSchema).optional(),
-    error: z.string().optional()
+    error: z.string().optional(),
 })
 
 export type MachineDirectoryResponse = z.infer<typeof MachineDirectoryResponseSchema>

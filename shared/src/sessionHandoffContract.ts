@@ -2,6 +2,7 @@ import { z } from 'zod'
 import {
     AttachmentMetadataSchema,
     CodexCollaborationModeSchema,
+    CodexServiceTierSchema,
     ModelReasoningEffortSchema,
     PermissionModeSchema,
     SessionDriverSchema,
@@ -39,6 +40,7 @@ export type SessionHandoffMessage = z.infer<typeof SessionHandoffMessageSchema>
 export const SessionHandoffLiveConfigSchema = z.object({
     model: z.string().nullable(),
     modelReasoningEffort: ModelReasoningEffortSchema.nullable(),
+    codexServiceTier: CodexServiceTierSchema.nullable(),
     permissionMode: PermissionModeSchema.nullish(),
     collaborationMode: CodexCollaborationModeSchema.nullish(),
 })

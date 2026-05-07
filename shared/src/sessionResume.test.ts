@@ -14,13 +14,25 @@ describe('sessionResume', () => {
         ).toBe('provider-handle')
     })
 
-    it('falls back to transcript replay for handleless drivers', () => {
+    it('falls back to transcript replay for handleless Pi sessions', () => {
         expect(
             resolveSessionResumeStrategy({
                 driver: 'pi',
                 startedBy: 'runner',
             })
         ).toBe('transcript-replay')
+    })
+
+    it('uses provider handles for Pi when a native session id is durable', () => {
+        expect(
+            resolveSessionResumeStrategy({
+                driver: 'pi',
+                runtimeHandles: {
+                    pi: { sessionId: 'pi-session-1' },
+                },
+                startedBy: 'runner',
+            })
+        ).toBe('provider-handle')
     })
 
     it('uses continuity handoff only for runner-managed supported drivers', () => {

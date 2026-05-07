@@ -3,7 +3,7 @@ import type { SessionSummary } from './sessionSummary'
 import { compareSessionSummaries, getSessionSummarySortTimestamp, toSessionSummary } from './sessionSummary'
 
 function createSessionSummary(overrides: Partial<SessionSummary> & Pick<SessionSummary, 'id'>): SessionSummary {
-    const { id, ...restOverrides } = overrides
+    const { id, codexServiceTier = null, ...restOverrides } = overrides
 
     return {
         id,
@@ -23,6 +23,7 @@ function createSessionSummary(overrides: Partial<SessionSummary> & Pick<SessionS
         resumeStrategy: 'none',
         model: null,
         modelReasoningEffort: null,
+        codexServiceTier,
         ...restOverrides,
     }
 }

@@ -31,6 +31,7 @@ export function buildSessionHandoffSnapshot(
         liveConfig: {
             model: session.model,
             modelReasoningEffort: session.modelReasoningEffort,
+            codexServiceTier: session.codexServiceTier,
             permissionMode: session.permissionMode,
             collaborationMode: session.collaborationMode,
         },

@@ -1,9 +1,11 @@
+import { z } from 'zod'
 import {
     COMMAND_CAPABILITY_ACTIONS,
     COMMAND_CAPABILITY_EFFECTS,
     COMMAND_CAPABILITY_HIDDEN_TRIGGERS,
     COMMAND_CAPABILITY_INVALIDATION_TRIGGERS,
 } from './commandCapabilityRegistry'
+import { SessionDriverSchema } from './schemas'
 import type { SessionDriver } from './sessionDriver'
 
 export type CommandCapabilityKind = 'native_command' | 'native_skill' | 'viby_skill' | 'viby_action'
@@ -37,6 +39,25 @@ export type CommandCapability = {
     disabledReason?: string
 }
 
+export const CommandCapabilitySchema = z.object({
+    id: z.string(),
+    trigger: z.string(),
+    label: z.string(),
+    description: z.string().optional(),
+    kind: z.enum(['native_command', 'native_skill', 'viby_skill', 'viby_action']),
+    source: z.enum(['builtin', 'user', 'plugin', 'project', 'provider', 'viby']),
+    provider: z.union([SessionDriverSchema, z.literal('shared')]),
+    sessionEffect: z.enum(['none', 'mutates_context', 'creates_session', 'switches_session', 'replays_history']),
+    requiresLifecycleOwner: z.boolean(),
+    selectionMode: z.enum(['insert', 'action', 'disabled']),
+    actionType: z.literal('open_new_session').optional(),
+    displayGroup: z.enum(['native', 'skill', 'session', 'project']),
+    riskLevel: z.enum(['low', 'medium', 'high']),
+    content: z.string().optional(),
+    pluginName: z.string().optional(),
+    disabledReason: z.string().optional(),
+})
+
 export type CommandCapabilitiesResponse = {
     success: boolean
     revision?: string
@@ -44,6 +65,14 @@ export type CommandCapabilitiesResponse = {
     capabilities?: CommandCapability[]
     error?: string
 }
+
+export const CommandCapabilitiesResponseSchema = z.object({
+    success: z.boolean(),
+    revision: z.string().optional(),
+    notModified: z.boolean().optional(),
+    capabilities: z.array(CommandCapabilitySchema).optional(),
+    error: z.string().optional(),
+})
 
 const COMPOUND_COMMAND_TRIGGERS = new Set(
     [

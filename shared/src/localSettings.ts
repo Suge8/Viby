@@ -1,8 +1,4 @@
-import {
-    DEFAULT_VIBY_LISTEN_HOST,
-    DEFAULT_VIBY_LISTEN_PORT,
-    DEFAULT_VIBY_LOCAL_API_URL
-} from './runtimeDefaults'
+import { DEFAULT_VIBY_LISTEN_HOST, DEFAULT_VIBY_LISTEN_PORT, DEFAULT_VIBY_LOCAL_API_URL } from './runtimeDefaults'
 
 type BunTomlParser = {
     parse(raw: string): unknown
@@ -15,6 +11,8 @@ export type VibyLocalSettings = {
     listenPort?: number
     publicUrl?: string
     corsOrigins?: string[]
+    pairingBrokerUrl?: string
+    pairingCreateToken?: string
     machineId?: string
     machineIdConfirmedByServer?: boolean
     vapidKeys?: {
@@ -28,7 +26,7 @@ function getTomlParser(): BunTomlParser {
     const parser = bunValue?.TOML
     if (!parser) {
         return {
-            parse: parseTomlFallback
+            parse: parseTomlFallback,
         }
     }
     return parser
@@ -44,10 +42,7 @@ function parseTomlValue(raw: string): unknown {
     if (/^-?\d+(\.\d+)?$/.test(raw)) {
         return Number(raw)
     }
-    if (
-        (raw.startsWith('"') && raw.endsWith('"'))
-        || (raw.startsWith('[') && raw.endsWith(']'))
-    ) {
+    if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith('[') && raw.endsWith(']'))) {
         try {
             return JSON.parse(raw)
         } catch {
@@ -152,14 +147,17 @@ export function parseVibyLocalSettingsToml(raw: string): VibyLocalSettings {
         listenPort: readNumber(parsed, 'listen_port'),
         publicUrl: readString(parsed, 'public_url'),
         corsOrigins: readStringArray(parsed, 'cors_origins'),
+        pairingBrokerUrl: readString(parsed, 'pairing_broker_url'),
+        pairingCreateToken: readString(parsed, 'pairing_create_token'),
         machineId: readString(system, 'machine_id'),
         machineIdConfirmedByServer: readBoolean(system, 'machine_id_confirmed_by_server'),
-        vapidKeys: pushPublicKey && pushPrivateKey
-            ? {
-                publicKey: pushPublicKey,
-                privateKey: pushPrivateKey
-            }
-            : undefined
+        vapidKeys:
+            pushPublicKey && pushPrivateKey
+                ? {
+                      publicKey: pushPublicKey,
+                      privateKey: pushPrivateKey,
+                  }
+                : undefined,
     }
 }
 
@@ -169,7 +167,7 @@ export function stringifyVibyLocalSettingsToml(settings: VibyLocalSettings): str
         '# 🌏 Viby Settings / 用户配置',
         '# Edit the fields below when you need to. / 需要时只改下面这些。',
         '# ================================================',
-        ''
+        '',
     ]
 
     lines.push('# 🔑 Shared login token / 登录令牌')
@@ -188,6 +186,10 @@ export function stringifyVibyLocalSettingsToml(settings: VibyLocalSettings): str
     lines.push(`public_url = ${formatTomlString(settings.publicUrl ?? '')}`)
     lines.push('# 🪪 Allowed CORS origins / 允许的来源')
     lines.push(`cors_origins = ${formatTomlStringArray(settings.corsOrigins ?? [])}`)
+    lines.push('')
+    lines.push('# 📱 Pairing broker / 手机配对服务')
+    lines.push(`pairing_broker_url = ${formatTomlString(settings.pairingBrokerUrl ?? '')}`)
+    lines.push(`pairing_create_token = ${formatTomlString(settings.pairingCreateToken ?? '')}`)
 
     lines.push(
         '',

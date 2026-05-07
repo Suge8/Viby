@@ -10,6 +10,7 @@ describe('getLiveSessionConfigSupport', () => {
                 canChangeCollaborationMode: false,
                 canChangeModel: true,
                 canChangeModelReasoningEffort: true,
+                canChangeCodexServiceTier: false,
             },
             codex: {
                 isRemoteManaged: true,
@@ -17,6 +18,7 @@ describe('getLiveSessionConfigSupport', () => {
                 canChangeCollaborationMode: true,
                 canChangeModel: true,
                 canChangeModelReasoningEffort: true,
+                canChangeCodexServiceTier: true,
             },
             gemini: {
                 isRemoteManaged: true,
@@ -24,6 +26,7 @@ describe('getLiveSessionConfigSupport', () => {
                 canChangeCollaborationMode: false,
                 canChangeModel: true,
                 canChangeModelReasoningEffort: false,
+                canChangeCodexServiceTier: false,
             },
             opencode: {
                 isRemoteManaged: true,
@@ -31,6 +34,7 @@ describe('getLiveSessionConfigSupport', () => {
                 canChangeCollaborationMode: false,
                 canChangeModel: false,
                 canChangeModelReasoningEffort: false,
+                canChangeCodexServiceTier: false,
             },
             cursor: {
                 isRemoteManaged: true,
@@ -38,6 +42,7 @@ describe('getLiveSessionConfigSupport', () => {
                 canChangeCollaborationMode: false,
                 canChangeModel: false,
                 canChangeModelReasoningEffort: false,
+                canChangeCodexServiceTier: false,
             },
             pi: {
                 isRemoteManaged: true,
@@ -45,6 +50,7 @@ describe('getLiveSessionConfigSupport', () => {
                 canChangeCollaborationMode: false,
                 canChangeModel: true,
                 canChangeModelReasoningEffort: true,
+                canChangeCodexServiceTier: false,
             },
             copilot: {
                 isRemoteManaged: true,
@@ -52,6 +58,7 @@ describe('getLiveSessionConfigSupport', () => {
                 canChangeCollaborationMode: false,
                 canChangeModel: true,
                 canChangeModelReasoningEffort: false,
+                canChangeCodexServiceTier: false,
             },
         } as const
 
@@ -84,6 +91,7 @@ describe('getLiveSessionConfigSupport', () => {
             canChangeCollaborationMode: true,
             canChangeModel: true,
             canChangeModelReasoningEffort: true,
+            canChangeCodexServiceTier: true,
         })
     })
 
@@ -100,6 +108,7 @@ describe('getLiveSessionConfigSupport', () => {
             canChangeCollaborationMode: false,
             canChangeModel: true,
             canChangeModelReasoningEffort: true,
+            canChangeCodexServiceTier: false,
         })
     })
 
@@ -121,6 +130,7 @@ describe('getLiveSessionConfigSupport', () => {
             canChangeCollaborationMode: false,
             canChangeModel: true,
             canChangeModelReasoningEffort: true,
+            canChangeCodexServiceTier: false,
         })
     })
 
@@ -137,6 +147,7 @@ describe('getLiveSessionConfigSupport', () => {
             canChangeCollaborationMode: false,
             canChangeModel: false,
             canChangeModelReasoningEffort: false,
+            canChangeCodexServiceTier: false,
         })
     })
 
@@ -153,6 +164,7 @@ describe('getLiveSessionConfigSupport', () => {
             canChangeCollaborationMode: false,
             canChangeModel: false,
             canChangeModelReasoningEffort: false,
+            canChangeCodexServiceTier: false,
         })
     })
 
@@ -169,6 +181,7 @@ describe('getLiveSessionConfigSupport', () => {
             canChangeCollaborationMode: false,
             canChangeModel: false,
             canChangeModelReasoningEffort: false,
+            canChangeCodexServiceTier: false,
         })
     })
 })

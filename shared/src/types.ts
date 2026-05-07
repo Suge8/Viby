@@ -8,6 +8,7 @@ export type {
 } from './agentAvailability'
 export type {
     AgentLaunchConfig,
+    AgentModelCapability,
     ResolveAgentLaunchConfigRequest,
     ResolveAgentLaunchConfigResponse,
 } from './agentLaunchConfig'
@@ -38,6 +39,7 @@ export type {
     LocalSessionCatalogRequest,
     LocalSessionExportRequest,
     LocalSessionExportSnapshot,
+    LocalSessionRecoveryDriver,
     LocalSessionTranscriptMessage,
 } from './localSessions'
 export type { MachineCapability } from './machineCapabilities'
@@ -59,6 +61,7 @@ export type {
     CodexPermissionMode,
     CodexReasoningEffort,
     CodexReasoningEffortOption,
+    CodexServiceTier,
     CopilotModelPreset,
     CopilotPermissionMode,
     CursorPermissionMode,

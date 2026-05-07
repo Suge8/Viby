@@ -14,10 +14,13 @@ export {
     type ClaudeSelectableModelPreset,
     CODEX_COLLABORATION_MODE_LABELS,
     CODEX_COLLABORATION_MODES,
+    CODEX_MODEL_LABELS,
     CODEX_MODEL_PRESETS,
     CODEX_PERMISSION_MODES,
     CODEX_REASONING_EFFORT_LABELS,
     CODEX_REASONING_EFFORTS,
+    CODEX_SERVICE_TIERS,
+    COPILOT_MODEL_LABELS,
     COPILOT_MODEL_PRESETS,
     COPILOT_PERMISSION_MODES,
     type CodexCollaborationMode,
@@ -26,6 +29,7 @@ export {
     type CodexPermissionMode,
     type CodexReasoningEffort,
     type CodexReasoningEffortOption,
+    type CodexServiceTier,
     type CopilotModelPreset,
     type CopilotPermissionMode,
     CURSOR_PERMISSION_MODES,
@@ -65,16 +69,20 @@ import {
     type ClaudeReasoningEffortOption,
     CODEX_COLLABORATION_MODE_LABELS,
     CODEX_COLLABORATION_MODES,
+    CODEX_MODEL_LABELS,
     CODEX_MODEL_PRESETS,
     CODEX_PERMISSION_MODES,
     CODEX_REASONING_EFFORT_LABELS,
     CODEX_REASONING_EFFORTS,
+    CODEX_SERVICE_TIERS,
+    COPILOT_MODEL_LABELS,
     COPILOT_MODEL_PRESETS,
     COPILOT_PERMISSION_MODES,
     type CodexCollaborationMode,
     type CodexCollaborationModeOption,
     type CodexReasoningEffort,
     type CodexReasoningEffortOption,
+    type CodexServiceTier,
     CURSOR_PERMISSION_MODES,
     GEMINI_MODEL_LABELS,
     GEMINI_MODEL_PRESETS,
@@ -106,6 +114,16 @@ export function getClaudeModelLabel(model: string): string | null {
 export function getGeminiModelLabel(model: string): string | null {
     const trimmedModel = model.trim()
     return trimmedModel ? (GEMINI_MODEL_LABELS[trimmedModel as keyof typeof GEMINI_MODEL_LABELS] ?? null) : null
+}
+
+export function getCodexModelLabel(model: string): string | null {
+    const trimmedModel = model.trim()
+    return trimmedModel ? (CODEX_MODEL_LABELS[trimmedModel as keyof typeof CODEX_MODEL_LABELS] ?? null) : null
+}
+
+export function getCopilotModelLabel(model: string): string | null {
+    const trimmedModel = model.trim()
+    return trimmedModel ? (COPILOT_MODEL_LABELS[trimmedModel as keyof typeof COPILOT_MODEL_LABELS] ?? null) : null
 }
 
 export function getPermissionModeLabel(mode: PermissionMode): string {
@@ -151,6 +169,14 @@ export function supportsLiveModelSelectionForDriver(driver?: string | null): boo
 
 export function supportsLiveModelReasoningEffortForDriver(driver?: string | null): boolean {
     return LIVE_MODEL_REASONING_EFFORT_DRIVERS.includes(driver as (typeof LIVE_MODEL_REASONING_EFFORT_DRIVERS)[number])
+}
+
+export function supportsLiveCodexServiceTierForDriver(driver?: string | null): boolean {
+    return driver === 'codex'
+}
+
+export function isCodexServiceTier(value: string | null | undefined): value is CodexServiceTier {
+    return typeof value === 'string' && CODEX_SERVICE_TIERS.includes(value as CodexServiceTier)
 }
 
 export function supportsDriverSwitchModelCarryover(driver?: string | null): boolean {

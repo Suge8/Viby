@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { CodexCollaborationMode, ModelReasoningEffort, PermissionMode } from './modes'
+import type { CodexCollaborationMode, CodexServiceTier, ModelReasoningEffort, PermissionMode } from './modes'
 
 export type SocketErrorReason = 'not-found'
 
@@ -113,11 +113,20 @@ export const UpdateNewMessageBodySchema = z.object({
         seq: z.number(),
         createdAt: z.number(),
         localId: z.string().nullable().optional(),
+        invokedAt: z.number().nullable().optional(),
         content: z.unknown(),
     }),
 })
 
 export type UpdateNewMessageBody = z.infer<typeof UpdateNewMessageBodySchema>
+
+export const UpdateCancelMessagesBodySchema = z.object({
+    t: z.literal('cancel-messages'),
+    sid: z.string(),
+    localIds: z.array(z.string()),
+})
+
+export type UpdateCancelMessagesBody = z.infer<typeof UpdateCancelMessagesBodySchema>
 
 export const UpdateSessionBodySchema = z.object({
     t: z.literal('update-session'),
@@ -160,7 +169,12 @@ export type UpdateMachineBody = z.infer<typeof UpdateMachineBodySchema>
 export const UpdateSchema = z.object({
     id: z.string(),
     seq: z.number(),
-    body: z.union([UpdateNewMessageBodySchema, UpdateSessionBodySchema, UpdateMachineBodySchema]),
+    body: z.union([
+        UpdateNewMessageBodySchema,
+        UpdateCancelMessagesBodySchema,
+        UpdateSessionBodySchema,
+        UpdateMachineBodySchema,
+    ]),
     createdAt: z.number(),
 })
 
@@ -178,6 +192,8 @@ export interface ServerToClientEvents {
 
 export interface ClientToServerEvents {
     message: (data: { sid: string; message: unknown; localId?: string }) => void
+    'messages-consumed': (data: { sid: string; localIds: string[] }) => void
+    'messages-canceled': (data: { sid: string; localIds: string[] }) => void
     'command-capabilities-invalidated': (data: { sid: string }) => void
     'session-alive': (data: {
         sid: string
@@ -187,6 +203,7 @@ export interface ClientToServerEvents {
         permissionMode?: PermissionMode
         model?: string | null
         modelReasoningEffort?: ModelReasoningEffort | null
+        codexServiceTier?: CodexServiceTier | null
         collaborationMode?: CodexCollaborationMode
     }) => void
     'session-end': (data: { sid: string; time: number }) => void

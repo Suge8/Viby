@@ -1,7 +1,7 @@
 import {
     getPermissionModesForDriver,
     supportsLiveModelReasoningEffortForDriver,
-    supportsLiveModelSelectionForDriver
+    supportsLiveModelSelectionForDriver,
 } from './modes'
 import type { Session } from './schemas'
 import { resolveSessionDriver } from './sessionDriver'
@@ -14,6 +14,7 @@ export type LiveSessionConfigSupport = {
     canChangeCollaborationMode: boolean
     canChangeModel: boolean
     canChangeModelReasoningEffort: boolean
+    canChangeCodexServiceTier: boolean
 }
 
 export function getLiveSessionConfigSupport(session: LiveSessionConfigSource): LiveSessionConfigSupport {
@@ -30,5 +31,6 @@ export function getLiveSessionConfigSupport(session: LiveSessionConfigSource): L
         canChangeCollaborationMode: isRemoteCodexSession,
         canChangeModel: isRemoteManaged && hasLiveModelSelection,
         canChangeModelReasoningEffort: isRemoteManaged && hasLiveModelReasoningEffort,
+        canChangeCodexServiceTier: isRemoteCodexSession,
     }
 }

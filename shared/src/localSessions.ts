@@ -1,8 +1,11 @@
 import { z } from 'zod'
-import { SessionDriverSchema } from './schemas'
+
+export const LOCAL_SESSION_RECOVERY_DRIVERS = ['claude', 'codex', 'copilot', 'gemini', 'opencode', 'pi'] as const
+export const LocalSessionRecoveryDriverSchema = z.enum(LOCAL_SESSION_RECOVERY_DRIVERS)
+export type LocalSessionRecoveryDriver = z.infer<typeof LocalSessionRecoveryDriverSchema>
 
 export const LocalSessionCapabilitySchema = z.object({
-    driver: SessionDriverSchema,
+    driver: LocalSessionRecoveryDriverSchema,
     supported: z.boolean(),
     reason: z.string().optional(),
 })
@@ -18,7 +21,7 @@ export const LocalSessionTranscriptMessageSchema = z.object({
 export type LocalSessionTranscriptMessage = z.infer<typeof LocalSessionTranscriptMessageSchema>
 
 export const LocalSessionCatalogEntrySchema = z.object({
-    driver: SessionDriverSchema,
+    driver: LocalSessionRecoveryDriverSchema,
     providerSessionId: z.string(),
     title: z.string(),
     summary: z.string().optional(),
@@ -32,7 +35,7 @@ export type LocalSessionCatalogEntry = z.infer<typeof LocalSessionCatalogEntrySc
 
 export const LocalSessionCatalogRequestSchema = z.object({
     path: z.string().min(1),
-    driver: SessionDriverSchema,
+    driver: LocalSessionRecoveryDriverSchema,
 })
 
 export type LocalSessionCatalogRequest = z.infer<typeof LocalSessionCatalogRequestSchema>
