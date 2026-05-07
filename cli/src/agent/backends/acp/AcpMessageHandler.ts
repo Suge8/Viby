@@ -1,251 +1,199 @@
-import type { AgentMessage, PlanItem } from '@/agent/types';
-import { asString, isObject } from '@viby/protocol';
-import { deriveToolNameWithSource, isPlaceholderToolName } from '@/agent/utils';
-import { ACP_SESSION_UPDATE_TYPES } from './constants';
+import { asString, isObject } from '@viby/protocol'
+import { isInternalEventJson } from '@/agent/internalEventFilter'
+import { parseRateLimitText } from '@/agent/rateLimitParser'
+import type { AgentMessage, PlanItem } from '@/agent/types'
+import { deriveToolNameWithSource, isPlaceholderToolName } from '@/agent/utils'
+import { extractTextContent, mergeTextChunk } from './acpMessageText'
+import { deriveToolInputFromUpdate, hoistDiffContentIntoInput, normalizeAcpToolContent } from './acpToolContent'
+import { ACP_SESSION_UPDATE_TYPES } from './constants'
 
-function normalizeStatus(status: unknown): 'pending' | 'in_progress' | 'completed' | 'failed' {
+type ToolStatus = 'pending' | 'in_progress' | 'completed' | 'failed'
+
+function normalizeStatus(status: unknown): ToolStatus {
     if (status === 'in_progress' || status === 'completed' || status === 'failed') {
-        return status;
+        return status
     }
-    return 'pending';
+    return 'pending'
 }
 
-type DerivedToolName = ReturnType<typeof deriveToolNameWithSource>;
+type DerivedToolName = ReturnType<typeof deriveToolNameWithSource>
 
 function deriveToolNameFromUpdate(update: Record<string, unknown>): DerivedToolName {
     return deriveToolNameWithSource({
         title: asString(update.title),
         kind: asString(update.kind),
-        rawInput: update.rawInput
-    });
-}
-
-function extractTextContent(block: unknown): string | null {
-    if (!isObject(block)) return null;
-    if (block.type !== 'text') return null;
-    const explicitAudience = extractExplicitAudience(block.annotations);
-    if (explicitAudience.length > 0 && !explicitAudience.includes('assistant')) {
-        return null;
-    }
-    const text = block.text;
-    return typeof text === 'string' ? text : null;
-}
-
-function extractExplicitAudience(annotations: unknown): string[] {
-    if (Array.isArray(annotations)) {
-        const audiences: string[] = [];
-        for (const entry of annotations) {
-            if (typeof entry === 'string') {
-                audiences.push(entry);
-                continue;
-            }
-            if (!isObject(entry)) {
-                continue;
-            }
-            audiences.push(...extractAudienceField(entry.audience));
-            if (isObject(entry.value)) {
-                audiences.push(...extractAudienceField(entry.value.audience));
-            }
-        }
-        return audiences;
-    }
-    if (isObject(annotations)) {
-        return [
-            ...extractAudienceField(annotations.audience),
-            ...(isObject(annotations.value) ? extractAudienceField(annotations.value.audience) : [])
-        ];
-    }
-    return [];
-}
-
-function extractAudienceField(value: unknown): string[] {
-    if (typeof value === 'string') {
-        return [value];
-    }
-    if (!Array.isArray(value)) {
-        return [];
-    }
-    return value.filter((entry): entry is string => typeof entry === 'string');
+        rawInput: update.rawInput,
+    })
 }
 
 function normalizePlanEntries(entries: unknown): PlanItem[] {
-    if (!Array.isArray(entries)) return [];
+    if (!Array.isArray(entries)) return []
 
-    const items: PlanItem[] = [];
+    const items: PlanItem[] = []
     for (const entry of entries) {
-        if (!isObject(entry)) continue;
-        const content = asString(entry.content);
-        const priority = asString(entry.priority);
-        const status = asString(entry.status);
+        if (!isObject(entry)) continue
+        const content = asString(entry.content)
+        const priority = asString(entry.priority)
+        const status = asString(entry.status)
 
-        if (!content) continue;
-        if (priority !== 'high' && priority !== 'medium' && priority !== 'low') continue;
-        if (status !== 'pending' && status !== 'in_progress' && status !== 'completed') continue;
+        if (!content) continue
+        if (priority !== 'high' && priority !== 'medium' && priority !== 'low') continue
+        if (status !== 'pending' && status !== 'in_progress' && status !== 'completed') continue
 
-        items.push({ content, priority, status });
+        items.push({ content, priority, status })
     }
 
-    return items;
-}
-
-function getSuffixPrefixOverlap(base: string, next: string): number {
-    const maxOverlap = Math.min(base.length, next.length);
-    for (let length = maxOverlap; length > 0; length -= 1) {
-        if (base.endsWith(next.slice(0, length))) {
-            return length;
-        }
-    }
-    return 0;
+    return items
 }
 
 export class AcpMessageHandler {
-    private readonly toolCalls = new Map<string, { name: string; input: unknown }>();
-    private bufferedText = '';
+    private readonly toolCalls = new Map<string, { name: string; input: unknown }>()
+    private bufferedText = ''
 
     constructor(private readonly onMessage: (message: AgentMessage) => void) {}
 
     flushText(): void {
         if (!this.bufferedText) {
-            return;
+            return
         }
-        this.onMessage({ type: 'text', text: this.bufferedText });
-        this.bufferedText = '';
+        const text = this.bufferedText
+        this.bufferedText = ''
+        this.onMessage({ type: 'text', text })
     }
 
     private appendTextChunk(text: string): void {
-        if (!text) {
-            return;
-        }
-        if (!this.bufferedText) {
-            this.bufferedText = text;
-            return;
-        }
-        if (text === this.bufferedText) {
-            return;
-        }
-        if (text.startsWith(this.bufferedText)) {
-            this.bufferedText = text;
-            return;
-        }
-        if (this.bufferedText.startsWith(text)) {
-            return;
-        }
-        if (this.bufferedText.endsWith(text)) {
-            return;
-        }
-        if (text.endsWith(this.bufferedText)) {
-            this.bufferedText = text;
-            return;
-        }
-
-        const overlap = getSuffixPrefixOverlap(this.bufferedText, text);
-        if (overlap > 0) {
-            this.bufferedText += text.slice(overlap);
-            return;
-        }
-
-        this.bufferedText += text;
+        if (text) this.bufferedText = mergeTextChunk(this.bufferedText, text)
     }
 
     handleUpdate(update: unknown): void {
-        if (!isObject(update)) return;
-        const updateType = asString(update.sessionUpdate);
-        if (!updateType) return;
+        if (!isObject(update)) return
+        const updateType = asString(update.sessionUpdate)
+        if (!updateType) return
 
         if (updateType === ACP_SESSION_UPDATE_TYPES.agentMessageChunk) {
-            const content = update.content;
-            const text = extractTextContent(content);
+            const content = update.content
+            const text = extractTextContent(content)
             if (text) {
-                this.appendTextChunk(text);
+                const hadBufferedPrefix = this.bufferedText !== '' && text.startsWith(this.bufferedText)
+                const rateLimit = parseRateLimitText(text)
+                if (rateLimit) {
+                    if (hadBufferedPrefix) {
+                        this.bufferedText = ''
+                    }
+                    if (!rateLimit.suppress) {
+                        this.flushText()
+                        this.onMessage(rateLimit.message)
+                    }
+                    return
+                }
+                if (isInternalEventJson(text)) {
+                    if (hadBufferedPrefix) {
+                        this.bufferedText = ''
+                    }
+                    return
+                }
+                this.appendTextChunk(text)
             }
-            return;
+            return
         }
 
         if (updateType === ACP_SESSION_UPDATE_TYPES.agentThoughtChunk) {
-            return;
+            const text = extractTextContent(update.content)
+            if (text) {
+                this.onMessage({ type: 'reasoning', text })
+            }
+            return
         }
 
         if (updateType === ACP_SESSION_UPDATE_TYPES.toolCall) {
-            this.handleToolCall(update);
-            return;
+            this.flushText()
+            this.handleToolCall(update)
+            return
         }
 
         if (updateType === ACP_SESSION_UPDATE_TYPES.toolCallUpdate) {
-            this.handleToolCallUpdate(update);
-            return;
+            this.handleToolCallUpdate(update)
+            return
         }
 
         if (updateType === ACP_SESSION_UPDATE_TYPES.plan) {
-            const items = normalizePlanEntries(update.entries);
+            const items = normalizePlanEntries(update.entries)
             if (items.length > 0) {
-                this.onMessage({ type: 'plan', items });
+                this.flushText()
+                this.onMessage({ type: 'plan', items })
             }
         }
     }
 
     private handleToolCall(update: Record<string, unknown>): void {
-        const toolCallId = asString(update.toolCallId);
-        if (!toolCallId) return;
+        const toolCallId = asString(update.toolCallId)
+        if (!toolCallId) return
 
-        const derivedName = deriveToolNameFromUpdate(update);
-        const name = derivedName.name;
-        const input = update.rawInput ?? null;
-        const status = normalizeStatus(update.status);
+        const derivedName = deriveToolNameFromUpdate(update)
+        const name = derivedName.name
+        const input = 'rawInput' in update ? update.rawInput : deriveToolInputFromUpdate(update)
+        const status = normalizeStatus(update.status)
 
-        this.toolCalls.set(toolCallId, { name, input });
+        this.toolCalls.set(toolCallId, { name, input })
 
-        this.onMessage({
-            type: 'tool_call',
-            id: toolCallId,
-            name,
-            input,
-            status
-        });
+        this.emitToolCall(toolCallId, name, input, status)
+    }
+
+    private emitToolCall(id: string, name: string, input: unknown, status: ToolStatus): void {
+        this.onMessage({ type: 'tool_call', id, name, input, status })
     }
 
     private handleToolCallUpdate(update: Record<string, unknown>): void {
-        const toolCallId = asString(update.toolCallId);
-        if (!toolCallId) return;
+        const toolCallId = asString(update.toolCallId)
+        if (!toolCallId) return
 
-        const status = normalizeStatus(update.status);
-        const existing = this.toolCalls.get(toolCallId);
+        const status = normalizeStatus(update.status)
+        const existing = this.toolCalls.get(toolCallId)
 
         if (update.rawInput !== undefined) {
-            const derivedName = deriveToolNameFromUpdate(update);
-            const name = this.selectToolNameForUpdate(existing?.name ?? null, derivedName);
-            const input = update.rawInput;
-            this.toolCalls.set(toolCallId, { name, input });
-            this.onMessage({
-                type: 'tool_call',
-                id: toolCallId,
-                name,
-                input,
-                status
-            });
-        } else if (existing && (status === 'in_progress' || status === 'pending')) {
-            this.onMessage({
-                type: 'tool_call',
-                id: toolCallId,
-                name: existing.name,
-                input: existing.input,
-                status
-            });
+            const derivedName = deriveToolNameFromUpdate(update)
+            const name = this.selectToolNameForUpdate(existing?.name ?? null, derivedName)
+            const input = update.rawInput
+            this.toolCalls.set(toolCallId, { name, input })
+            this.emitToolCall(toolCallId, name, input, status)
+        } else if (existing) {
+            const fallback = existing.input == null ? deriveToolInputFromUpdate(update) : null
+            const input = fallback ?? existing.input
+            const name = fallback
+                ? this.selectToolNameForUpdate(existing.name, deriveToolNameFromUpdate(update))
+                : existing.name
+            if (fallback) {
+                this.toolCalls.set(toolCallId, { name, input })
+            }
+            if (status === 'in_progress' || status === 'pending' || fallback) {
+                this.emitToolCall(toolCallId, name, input, status)
+            }
         }
 
         if (status === 'completed' || status === 'failed') {
-            const result = update.rawOutput ?? update.content;
+            if (status === 'completed' && update.rawInput == null && existing) {
+                const hoisted = hoistDiffContentIntoInput(update.content)
+                if (hoisted) {
+                    this.toolCalls.set(toolCallId, hoisted)
+                    this.emitToolCall(toolCallId, hoisted.name, hoisted.input, status)
+                }
+            }
+            const output =
+                update.rawOutput !== undefined
+                    ? update.rawOutput
+                    : (normalizeAcpToolContent(update.content) ?? update.content)
             this.onMessage({
                 type: 'tool_result',
                 id: toolCallId,
-                output: result,
-                status: status === 'failed' ? 'failed' : 'completed'
-            });
+                output,
+                status: status === 'failed' ? 'failed' : 'completed',
+            })
         }
     }
 
     private selectToolNameForUpdate(existingName: string | null, derivedName: DerivedToolName): string {
         if (!existingName) {
-            return derivedName.name;
+            return derivedName.name
         }
 
         if (
@@ -253,13 +201,13 @@ export class AcpMessageHandler {
             derivedName.source === 'raw_input_name' ||
             derivedName.source === 'raw_input_tool'
         ) {
-            return derivedName.name;
+            return derivedName.name
         }
 
         if (isPlaceholderToolName(existingName)) {
-            return derivedName.name;
+            return derivedName.name
         }
 
-        return existingName;
+        return existingName
     }
 }

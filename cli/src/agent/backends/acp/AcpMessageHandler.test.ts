@@ -62,7 +62,7 @@ describe('AcpMessageHandler', () => {
         expect(result.output).toEqual({ stdout: 'ok\n' })
     })
 
-    it('keeps buffered text behind tool lifecycle events', () => {
+    it('flushes buffered text before tool lifecycle events', () => {
         const messages: AgentMessage[] = []
         const handler = new AcpMessageHandler((message) => messages.push(message))
 
@@ -88,9 +88,88 @@ describe('AcpMessageHandler', () => {
 
         handler.flushText()
 
-        expect(messages.map((message) => message.type)).toEqual(['tool_call', 'tool_result', 'text'])
-        const textMessage = messages[messages.length - 1]
+        expect(messages.map((message) => message.type)).toEqual(['text', 'tool_call', 'tool_result'])
+        const textMessage = messages[0]
         expect(textMessage).toEqual({ type: 'text', text: 'final answer' })
+    })
+
+    it('keeps buffered text behind tool update events', () => {
+        const messages: AgentMessage[] = []
+        const handler = new AcpMessageHandler((message) => messages.push(message))
+
+        handler.handleUpdate({
+            sessionUpdate: ACP_SESSION_UPDATE_TYPES.agentMessageChunk,
+            content: { type: 'text', text: 'final answer' },
+        })
+
+        handler.handleUpdate({
+            sessionUpdate: ACP_SESSION_UPDATE_TYPES.toolCallUpdate,
+            toolCallId: 'tool-3b',
+            status: 'completed',
+            rawOutput: { content: 'ok' },
+        })
+
+        handler.flushText()
+
+        expect(messages.map((message) => message.type)).toEqual(['tool_result', 'text'])
+    })
+
+    it('forwards thought chunks as reasoning without flushing visible text', () => {
+        const messages: AgentMessage[] = []
+        const handler = new AcpMessageHandler((message) => messages.push(message))
+
+        handler.handleUpdate({
+            sessionUpdate: ACP_SESSION_UPDATE_TYPES.agentMessageChunk,
+            content: { type: 'text', text: 'answer' },
+        })
+        handler.handleUpdate({
+            sessionUpdate: ACP_SESSION_UPDATE_TYPES.agentThoughtChunk,
+            content: { type: 'text', text: 'thinking' },
+        })
+        handler.flushText()
+
+        expect(messages).toEqual([
+            { type: 'reasoning', text: 'thinking' },
+            { type: 'text', text: 'answer' },
+        ])
+    })
+
+    it('converts rate limit JSON and suppresses internal JSON leaks', () => {
+        const messages: AgentMessage[] = []
+        const handler = new AcpMessageHandler((message) => messages.push(message))
+
+        handler.handleUpdate({
+            sessionUpdate: ACP_SESSION_UPDATE_TYPES.agentMessageChunk,
+            content: { type: 'text', text: '{"type":"rate' },
+        })
+        handler.handleUpdate({
+            sessionUpdate: ACP_SESSION_UPDATE_TYPES.agentMessageChunk,
+            content: {
+                type: 'text',
+                text: JSON.stringify({
+                    type: 'rate_limit_event',
+                    rate_limit_info: {
+                        status: 'allowed_warning',
+                        resetsAt: 1774278000,
+                        utilization: 0.9,
+                        rateLimitType: 'five_hour',
+                    },
+                }),
+            },
+        })
+        handler.handleUpdate({
+            sessionUpdate: ACP_SESSION_UPDATE_TYPES.agentMessageChunk,
+            content: {
+                type: 'text',
+                text: JSON.stringify({
+                    type: 'output',
+                    data: { parentUuid: null, sessionId: 'session-1', userType: 'external' },
+                }),
+            },
+        })
+        handler.flushText()
+
+        expect(messages).toEqual([{ type: 'text', text: 'Claude AI usage limit warning|1774278000|90|five_hour' }])
     })
 
     it('ignores text chunks targeted only to user audience', () => {

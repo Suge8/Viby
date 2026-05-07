@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { convertAgentMessage } from './messageConverter';
+import { describe, expect, it } from 'vitest'
+import { convertAgentMessage } from './messageConverter'
 
 describe('convertAgentMessage', () => {
     it('keeps tool-call status when converting ACP tool events', () => {
@@ -8,31 +8,44 @@ describe('convertAgentMessage', () => {
             id: 'call-1',
             name: 'Bash',
             input: { cmd: 'echo test' },
-            status: 'completed'
-        });
+            status: 'completed',
+        })
 
         expect(converted).toEqual({
             type: 'tool-call',
             callId: 'call-1',
             name: 'Bash',
             input: { cmd: 'echo test' },
-            status: 'completed'
-        });
-    });
+            status: 'completed',
+        })
+    })
 
     it('marks failed tool results as error', () => {
         const converted = convertAgentMessage({
             type: 'tool_result',
             id: 'call-2',
             output: { message: 'boom' },
-            status: 'failed'
-        });
+            status: 'failed',
+        })
 
         expect(converted).toEqual({
             type: 'tool-call-result',
             callId: 'call-2',
             output: { message: 'boom' },
-            is_error: true
-        });
-    });
-});
+            is_error: true,
+        })
+    })
+
+    it('converts reasoning chunks for Codex-compatible rendering', () => {
+        const converted = convertAgentMessage({
+            type: 'reasoning',
+            text: 'thinking through it',
+        })
+
+        expect(converted).toMatchObject({
+            type: 'reasoning',
+            message: 'thinking through it',
+        })
+        expect(converted && 'id' in converted && typeof converted.id).toBe('string')
+    })
+})
