@@ -122,6 +122,17 @@ describe('listSlashCommands', () => {
         expect(commands.find((command) => command.name === 'project-only')).toBeUndefined()
     })
 
+    it('exposes Codex clear and compact as built-in slash commands', async () => {
+        const commands = await listSlashCommands('codex', projectDir)
+
+        expect(commands).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ name: 'clear', source: 'builtin' }),
+                expect.objectContaining({ name: 'compact', source: 'builtin' }),
+            ])
+        )
+    })
+
     it('loads Gemini user and project commands from toml files', async () => {
         await writeFile(
             join(geminiHomeDir, 'commands', 'global.toml'),

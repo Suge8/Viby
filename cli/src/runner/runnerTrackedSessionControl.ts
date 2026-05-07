@@ -1,5 +1,6 @@
 import type { Metadata } from '@/api/types'
 import { logger } from '@/ui/logger'
+import { killProcess } from '@/utils/process'
 import { stopTrackedSessionProcess } from './managedSessionLifecycle'
 import { removeTrackedSession, requestTrackedSessionStop } from './trackedSessionRegistry'
 import { EXTERNAL_TERMINAL_STARTED_BY, RUNNER_MANAGED_STARTED_BY, type TrackedSession } from './types'
@@ -39,6 +40,13 @@ export function createRunnerTrackedSessionControl(options: RunnerTrackedSessionC
 
         const existingSession = pidToTrackedSession.get(pid)
         if (existingSession && existingSession.startedBy === RUNNER_MANAGED_STARTED_BY) {
+            if (existingSession.spawnAbandoned) {
+                logger.debug(`[RUNNER RUN] Ignoring late webhook from abandoned runner-spawned PID ${pid}`)
+                void stopTrackedSessionProcess(existingSession).catch((error) => {
+                    logger.debug(`[RUNNER RUN] Failed to stop abandoned runner-spawned PID ${pid}:`, error)
+                })
+                return
+            }
             existingSession.vibySessionId = sessionId
             existingSession.vibySessionMetadataFromLocalWebhook = sessionMetadata
             logger.debug(`[RUNNER RUN] Updated runner-spawned session ${sessionId} with metadata`)
@@ -56,6 +64,13 @@ export function createRunnerTrackedSessionControl(options: RunnerTrackedSessionC
         }
 
         if (!existingSession) {
+            if (sessionMetadata.startedBy === 'runner') {
+                logger.debug(`[RUNNER RUN] Ignoring orphaned runner-spawned session ${sessionId} from PID ${pid}`)
+                void killProcess(pid).catch((error) => {
+                    logger.debug(`[RUNNER RUN] Failed to stop orphaned runner-spawned PID ${pid}:`, error)
+                })
+                return
+            }
             pidToTrackedSession.set(pid, {
                 startedBy: EXTERNAL_TERMINAL_STARTED_BY,
                 vibySessionId: sessionId,

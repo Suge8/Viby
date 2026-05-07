@@ -2,8 +2,8 @@ import { resolve } from 'node:path'
 import type {
     LocalSessionCatalogEntry,
     LocalSessionExportSnapshot,
+    LocalSessionRecoveryDriver,
     LocalSessionTranscriptMessage,
-    SessionDriver,
 } from '@viby/protocol/types'
 
 type DraftLocalSessionMessage = {
@@ -13,7 +13,7 @@ type DraftLocalSessionMessage = {
 }
 
 type CreateLocalSessionSnapshotInput = {
-    driver: SessionDriver
+    driver: LocalSessionRecoveryDriver
     providerSessionId: string
     path: string
     title?: string | null
@@ -24,7 +24,7 @@ type CreateLocalSessionSnapshotInput = {
 }
 
 type CreateLocalSessionCatalogEntryInput = {
-    driver: SessionDriver
+    driver: LocalSessionRecoveryDriver
     providerSessionId: string
     path: string
     title?: string | null

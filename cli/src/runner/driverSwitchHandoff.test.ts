@@ -17,6 +17,7 @@ function createHandoffSnapshot() {
         liveConfig: {
             model: 'claude-sonnet',
             modelReasoningEffort: 'high' as const,
+            codexServiceTier: null,
             permissionMode: 'default' as const,
             collaborationMode: undefined,
         },

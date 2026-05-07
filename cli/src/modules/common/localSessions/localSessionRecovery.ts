@@ -5,7 +5,7 @@ import type {
     LocalSessionCatalogRequest,
     LocalSessionExportRequest,
     LocalSessionExportSnapshot,
-    SessionDriver,
+    LocalSessionRecoveryDriver,
 } from '@viby/protocol/types'
 import { logger } from '@/ui/logger'
 import { exportClaudeLocalSession, listClaudeLocalSessions } from './localSessionRecoveryClaude'
@@ -13,9 +13,8 @@ import { exportCodexLocalSession, listCodexLocalSessions } from './localSessionR
 import { exportCopilotLocalSession, listCopilotLocalSessions } from './localSessionRecoveryCopilot'
 import { exportGeminiLocalSession, listGeminiLocalSessions } from './localSessionRecoveryGemini'
 import { exportOpencodeLocalSession, listOpencodeLocalSessions } from './localSessionRecoveryOpencode'
+import { exportPiLocalSession, listPiLocalSessions } from './localSessionRecoveryPi'
 import { normalizeLocalSessionPath } from './localSessionRecoverySupport'
-
-type SupportedLocalSessionDriver = 'claude' | 'codex' | 'copilot' | 'gemini' | 'opencode'
 
 type LocalSessionProvider = {
     listCatalog: (path: string) => Promise<LocalSessionCatalogEntry[]>
@@ -32,7 +31,7 @@ const LOCAL_SESSION_EXPORT_TTL_MS = 15_000
 const catalogCache = new Map<string, TimedCacheEntry<LocalSessionCatalog>>()
 const exportCache = new Map<string, TimedCacheEntry<LocalSessionExportSnapshot>>()
 
-const PROVIDERS: Record<SupportedLocalSessionDriver, LocalSessionProvider> = {
+const PROVIDERS: Record<LocalSessionRecoveryDriver, LocalSessionProvider> = {
     claude: {
         listCatalog: listClaudeLocalSessions,
         export: exportClaudeLocalSession,
@@ -53,11 +52,10 @@ const PROVIDERS: Record<SupportedLocalSessionDriver, LocalSessionProvider> = {
         listCatalog: listOpencodeLocalSessions,
         export: exportOpencodeLocalSession,
     },
-}
-
-const UNSUPPORTED_DRIVER_REASONS: Partial<Record<SessionDriver, string>> = {
-    cursor: 'Cursor does not expose a reliable local session catalog/export path yet.',
-    pi: 'Pi does not expose provider-local orphan sessions for durable recovery.',
+    pi: {
+        listCatalog: listPiLocalSessions,
+        export: exportPiLocalSession,
+    },
 }
 
 function formatDiagnosticFields(fields: Record<string, unknown>): string {
@@ -110,27 +108,15 @@ function sortCatalogSessions(left: LocalSessionCatalogEntry, right: LocalSession
     return left.title.localeCompare(right.title)
 }
 
-function getLocalSessionProvider(driver: SessionDriver): LocalSessionProvider | null {
-    return driver in PROVIDERS ? PROVIDERS[driver as SupportedLocalSessionDriver] : null
+function getLocalSessionProvider(driver: LocalSessionRecoveryDriver): LocalSessionProvider {
+    return PROVIDERS[driver]
 }
 
 async function loadDriverCatalog(
-    driver: SessionDriver,
+    driver: LocalSessionRecoveryDriver,
     path: string
 ): Promise<{ capabilities: LocalSessionCapability[]; sessions: LocalSessionCatalogEntry[] }> {
     const provider = getLocalSessionProvider(driver)
-    if (!provider) {
-        return {
-            capabilities: [
-                {
-                    driver,
-                    supported: false,
-                    reason: UNSUPPORTED_DRIVER_REASONS[driver],
-                } satisfies LocalSessionCapability,
-            ],
-            sessions: [],
-        }
-    }
 
     try {
         const sessions = await withLocalSessionDiagnostics(
@@ -221,12 +207,6 @@ export async function listLocalSessions(request: LocalSessionCatalogRequest): Pr
 
 export async function exportLocalSession(request: LocalSessionExportRequest): Promise<LocalSessionExportSnapshot> {
     const provider = getLocalSessionProvider(request.driver)
-    if (!provider) {
-        throw new Error(
-            UNSUPPORTED_DRIVER_REASONS[request.driver] ?? `Local recovery is unsupported for ${request.driver}`
-        )
-    }
-
     const cacheKey = `${normalizeLocalSessionPath(request.path)}:${request.driver}:${request.providerSessionId}`
     const cacheHit = (() => {
         const cached = exportCache.get(cacheKey)

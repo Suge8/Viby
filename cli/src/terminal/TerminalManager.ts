@@ -27,6 +27,9 @@ type TerminalManagerOptions = {
 
 const DEFAULT_IDLE_TIMEOUT_MS = 15 * 60_000
 const DEFAULT_MAX_TERMINALS = 4
+const DEFAULT_TERMINAL_TYPE = 'xterm-256color'
+const DEFAULT_TERMINAL_COLOR = 'truecolor'
+const DEFAULT_TERMINAL_LANG = process.platform === 'darwin' ? 'en_US.UTF-8' : 'C.UTF-8'
 const SENSITIVE_ENV_KEYS = new Set([
     'CLI_API_TOKEN',
     'VIBY_API_URL',
@@ -67,6 +70,9 @@ function buildFilteredEnv(): NodeJS.ProcessEnv {
         }
         env[key] = value
     }
+    env.TERM ??= DEFAULT_TERMINAL_TYPE
+    env.COLORTERM ??= DEFAULT_TERMINAL_COLOR
+    env.LANG ??= DEFAULT_TERMINAL_LANG
     return env
 }
 

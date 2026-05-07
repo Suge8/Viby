@@ -14,6 +14,12 @@ type SpawnFailureDetails = {
 }
 
 type SpawnOutcome = { type: 'success' } | { type: 'error'; details: SpawnFailureDetails }
+const DEFAULT_WEBHOOK_TIMEOUT_MS = 15_000
+
+export function resolveRunnerWebhookTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+    const parsed = Number(env.VIBY_RUNNER_WEBHOOK_TIMEOUT_MS)
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_WEBHOOK_TIMEOUT_MS
+}
 
 function formatSpawnError(error: unknown): string {
     if (error instanceof Error) {
@@ -30,6 +36,7 @@ export function buildSpawnArgs(
         permissionMode?: string
         model?: string
         modelReasoningEffort?: string | null
+        codexServiceTier?: string | null
         collaborationMode?: string | null
         driverSwitchTransport: DriverSwitchHandoffTransport | null
     }
@@ -121,6 +128,7 @@ export async function spawnChildProcess(options: {
     vibyProcess.removeListener('error', captureSpawnErrorBeforePidCheck)
 
     const pid = vibyProcess.pid
+    const webhookTimeoutMs = resolveRunnerWebhookTimeoutMs()
     let observedExitCode: number | null = null
     let observedExitSignal: NodeJS.Signals | null = null
 
@@ -191,12 +199,21 @@ export async function spawnChildProcess(options: {
         const timeout = setTimeout(() => {
             pidToAwaiter.delete(pid)
             pidToErrorAwaiter.delete(pid)
+            trackedSession.spawnAbandoned = true
+            vibyProcess.once('exit', () => {
+                maybeCleanupWorktree('spawn-timeout-exit').catch((error) => {
+                    logger.debug('[RUNNER RUN] Failed to cleanup worktree after timed-out spawn exit', error)
+                })
+            })
+            stopTrackedSessionProcess(trackedSession).catch((error) => {
+                logger.debug('[RUNNER RUN] Failed to stop timed-out spawn', error)
+            })
             logStderrTail()
             resolve({
                 type: 'error',
                 errorMessage: buildWebhookFailureMessage('timeout'),
             })
-        }, 15_000)
+        }, webhookTimeoutMs)
 
         pidToAwaiter.set(pid, (completedSession) => {
             clearTimeout(timeout)

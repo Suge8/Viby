@@ -1,22 +1,26 @@
-import { stat } from 'node:fs/promises'
+import { open, readFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { LocalSessionCatalogEntry, LocalSessionExportSnapshot } from '@viby/protocol/types'
 import { type CodexSessionEvent, convertCodexEvent } from '@/codex/utils/codexEventConverter'
-import { listSessionFiles, readSessionFile, sortFilesByMtime } from '@/codex/utils/codexSessionScannerFs'
-import { normalizePath, parseTimestamp } from '@/codex/utils/codexSessionScannerSupport'
+import { listSessionFiles, readSessionFile } from '@/codex/utils/codexSessionScannerFs'
+import { asRecord, asString, normalizePath, parseTimestamp } from '@/codex/utils/codexSessionScannerSupport'
 import {
     createLocalSessionCatalogEntry,
     createLocalSessionSnapshot,
     mapWithConcurrency,
 } from './localSessionRecoverySupport'
 
-type ParsedCodexFile = {
-    sessionId: string | null
-    cwd: string | null
+type CodexFileMeta = {
+    filePath: string
+    sessionId: string
+    cwd: string
     sessionTimestamp: number | null
-    events: CodexSessionEvent[]
     fileUpdatedAt: number
+}
+
+type ParsedCodexFile = CodexFileMeta & {
+    events: CodexSessionEvent[]
 }
 
 type TimedCacheEntry<T> = {
@@ -24,14 +28,17 @@ type TimedCacheEntry<T> = {
     promise: Promise<T>
 }
 
-const CODEX_PARSED_FILES_TTL_MS = 5_000
-const parsedCodexFilesCache = new Map<string, TimedCacheEntry<ParsedCodexFile[]>>()
+const CODEX_FILE_META_TTL_MS = 5_000
+const CODEX_SCAN_CONCURRENCY = 8
+const CODEX_FIRST_LINE_CHUNK_BYTES = 16 * 1024
+const CODEX_FIRST_LINE_MAX_BYTES = 1024 * 1024
+const codexFileMetaCache = new Map<string, TimedCacheEntry<CodexFileMeta[]>>()
 
-async function readCodexFileStats(filePath: string) {
+async function readFileMtime(filePath: string): Promise<number> {
     try {
-        return await stat(filePath)
+        return (await stat(filePath)).mtimeMs
     } catch {
-        return null
+        return Date.now()
     }
 }
 
@@ -58,199 +65,201 @@ function getTimedCacheValue<T>(
         }
         throw error
     })
-    store.set(key, {
-        expiresAt: now + ttlMs,
-        promise,
-    })
+    store.set(key, { expiresAt: now + ttlMs, promise })
     return promise
 }
 
-async function loadParsedCodexFiles(): Promise<ParsedCodexFile[]> {
-    const sessionsRoot = getCodexSessionsRoot()
-    const files = await sortFilesByMtime(await listSessionFiles(sessionsRoot, sessionsRoot, null))
-    return await mapWithConcurrency(files, 8, async (filePath) => await readCodexFile(filePath))
-}
+async function readFirstLine(filePath: string): Promise<string | null> {
+    try {
+        const file = await open(filePath, 'r')
+        try {
+            let offset = 0
+            let content = ''
+            const buffer = Buffer.allocUnsafe(CODEX_FIRST_LINE_CHUNK_BYTES)
+            while (offset < CODEX_FIRST_LINE_MAX_BYTES) {
+                const { bytesRead } = await file.read(buffer, 0, buffer.length, offset)
+                if (!bytesRead) return content || null
 
-async function getParsedCodexFiles(): Promise<ParsedCodexFile[]> {
-    const sessionsRoot = getCodexSessionsRoot()
-    return await getTimedCacheValue(
-        parsedCodexFilesCache,
-        sessionsRoot,
-        CODEX_PARSED_FILES_TTL_MS,
-        loadParsedCodexFiles
-    )
-}
+                const chunk = buffer.subarray(0, bytesRead).toString('utf8')
+                const newlineIndex = chunk.indexOf('\n')
+                if (newlineIndex >= 0) return content + chunk.slice(0, newlineIndex)
 
-async function readCodexFile(filePath: string): Promise<ParsedCodexFile> {
-    const sessionMetaParsed = new Set<string>()
-    const fileEpochByPath = new Map<string, number>()
-    const sessionIdByFile = new Map<string, string>()
-    const sessionCwdByFile = new Map<string, string>()
-    const sessionTimestampByFile = new Map<string, number>()
-    const parsed = await readSessionFile({
-        filePath,
-        startLine: 0,
-        sessionMetaParsed,
-        fileEpochByPath,
-        sessionIdByFile,
-        sessionCwdByFile,
-        sessionTimestampByFile,
-    })
-
-    const fileUpdatedAt = (await readCodexFileStats(filePath))?.mtimeMs ?? Date.now()
-    return {
-        sessionId: sessionIdByFile.get(filePath) ?? null,
-        cwd: sessionCwdByFile.get(filePath) ?? null,
-        sessionTimestamp: sessionTimestampByFile.get(filePath) ?? null,
-        events: parsed.events.map((entry) => entry.event),
-        fileUpdatedAt,
+                content += chunk
+                offset += bytesRead
+            }
+            return content || null
+        } finally {
+            await file.close().catch(() => undefined)
+        }
+    } catch {
+        return null
     }
 }
 
-function createCodexSnapshot(parsed: ParsedCodexFile, fallbackPath: string): LocalSessionExportSnapshot | null {
-    if (!parsed.sessionId) {
+async function readCodexFileMeta(filePath: string): Promise<CodexFileMeta | null> {
+    const line = await readFirstLine(filePath)
+    if (!line) {
         return null
     }
 
+    try {
+        const parsed = JSON.parse(line) as CodexSessionEvent
+        const payload = parsed.type === 'session_meta' ? asRecord(parsed.payload) : null
+        const sessionId = payload ? asString(payload.id) : null
+        const cwd = payload ? asString(payload.cwd) : null
+        if (!sessionId || !cwd) {
+            return null
+        }
+        const sessionTimestamp = parseTimestamp(payload?.timestamp) ?? parseTimestamp(parsed.timestamp)
+        return {
+            filePath,
+            sessionId,
+            cwd: normalizePath(cwd),
+            sessionTimestamp,
+            fileUpdatedAt: sessionTimestamp ?? (await readFileMtime(filePath)),
+        }
+    } catch {
+        return null
+    }
+}
+
+async function loadCodexFileMetas(): Promise<CodexFileMeta[]> {
+    const sessionsRoot = getCodexSessionsRoot()
+    const files = await listSessionFiles(sessionsRoot, sessionsRoot, null)
+    const metas = await mapWithConcurrency(files, CODEX_SCAN_CONCURRENCY, readCodexFileMeta)
+    return metas
+        .filter((meta): meta is CodexFileMeta => Boolean(meta))
+        .sort((left, right) => right.fileUpdatedAt - left.fileUpdatedAt)
+}
+
+async function getCodexFileMetas(): Promise<CodexFileMeta[]> {
+    const sessionsRoot = getCodexSessionsRoot()
+    return await getTimedCacheValue(codexFileMetaCache, sessionsRoot, CODEX_FILE_META_TTL_MS, loadCodexFileMetas)
+}
+
+async function readCodexFile(meta: CodexFileMeta): Promise<ParsedCodexFile> {
+    const parsed = await readSessionFile({
+        filePath: meta.filePath,
+        startLine: 0,
+        sessionMetaParsed: new Set<string>(),
+        fileEpochByPath: new Map<string, number>(),
+        sessionIdByFile: new Map<string, string>(),
+        sessionCwdByFile: new Map<string, string>(),
+        sessionTimestampByFile: new Map<string, number>(),
+    })
+    return { ...meta, events: parsed.events.map((entry) => entry.event) }
+}
+
+function createCodexSnapshot(parsed: ParsedCodexFile): LocalSessionExportSnapshot | null {
     const messages: Array<{ role: 'user' | 'agent'; text: string; createdAt?: number | null }> = []
     for (const event of parsed.events) {
         const converted = convertCodexEvent(event)
-        if (!converted) {
-            continue
-        }
+        if (!converted) continue
 
         const createdAt = parseTimestamp(event.timestamp)
         if (converted.userMessage) {
-            messages.push({
-                role: 'user',
-                text: converted.userMessage,
-                createdAt,
-            })
+            messages.push({ role: 'user', text: converted.userMessage, createdAt })
         } else if (converted.message?.type === 'message') {
-            messages.push({
-                role: 'agent',
-                text: converted.message.message,
-                createdAt,
-            })
+            messages.push({ role: 'agent', text: converted.message.message, createdAt })
         }
     }
 
     return createLocalSessionSnapshot({
         driver: 'codex',
         providerSessionId: parsed.sessionId,
-        path: parsed.cwd ?? fallbackPath,
+        path: parsed.cwd,
         startedAt: parsed.sessionTimestamp ?? messages[0]?.createdAt ?? parsed.fileUpdatedAt,
         updatedAt: messages.at(-1)?.createdAt ?? parsed.fileUpdatedAt,
         messages,
     })
 }
 
-function createCodexCatalogEntry(parsed: ParsedCodexFile, fallbackPath: string): LocalSessionCatalogEntry | null {
-    if (!parsed.sessionId) {
-        return null
+function collectCodexCatalogEvent(
+    state: { title: string | null; messageCount: number; startedAt: number | null; updatedAt: number | null },
+    event: CodexSessionEvent
+): void {
+    const converted = convertCodexEvent(event)
+    if (!converted) return
+
+    const createdAt = parseTimestamp(event.timestamp)
+    if (converted.userMessage) {
+        state.messageCount += 1
+        state.title ??= converted.userMessage
+        state.startedAt ??= createdAt
+        state.updatedAt = createdAt ?? state.updatedAt
+        return
     }
+    if (converted.message?.type === 'message') {
+        state.messageCount += 1
+        state.startedAt ??= createdAt
+        state.updatedAt = createdAt ?? state.updatedAt
+    }
+}
 
-    let title: string | null = null
-    let messageCount = 0
-    let startedAt = parsed.sessionTimestamp
-    let updatedAt: number | null = null
-
-    for (const event of parsed.events) {
-        const converted = convertCodexEvent(event)
-        if (!converted) {
-            continue
+async function createCodexCatalogEntry(meta: CodexFileMeta): Promise<LocalSessionCatalogEntry> {
+    const state = {
+        title: null as string | null,
+        messageCount: 0,
+        startedAt: meta.sessionTimestamp,
+        updatedAt: null as number | null,
+    }
+    try {
+        for (const line of (await readFile(meta.filePath, 'utf8')).split('\n')) {
+            if (!line.includes('"event_msg"')) continue
+            collectCodexCatalogEvent(state, JSON.parse(line) as CodexSessionEvent)
         }
-
-        const createdAt = parseTimestamp(event.timestamp)
-        if (converted.userMessage) {
-            messageCount += 1
-            title ??= converted.userMessage
-            startedAt ??= createdAt
-            if (createdAt !== null) {
-                updatedAt = createdAt
-            }
-            continue
-        }
-
-        if (converted.message?.type === 'message') {
-            messageCount += 1
-            startedAt ??= createdAt
-            if (createdAt !== null) {
-                updatedAt = createdAt
-            }
-        }
+    } catch {
+        state.updatedAt = meta.fileUpdatedAt
     }
 
     return createLocalSessionCatalogEntry({
         driver: 'codex',
-        providerSessionId: parsed.sessionId,
-        path: parsed.cwd ?? fallbackPath,
-        title,
-        startedAt: startedAt ?? parsed.fileUpdatedAt,
-        updatedAt: updatedAt ?? parsed.fileUpdatedAt,
-        messageCount,
+        providerSessionId: meta.sessionId,
+        path: meta.cwd,
+        title: state.title,
+        startedAt: state.startedAt ?? meta.fileUpdatedAt,
+        updatedAt: state.updatedAt ?? meta.fileUpdatedAt,
+        messageCount: state.messageCount,
     })
 }
 
-async function loadCodexCatalogEntries(workingDirectory: string): Promise<LocalSessionCatalogEntry[]> {
-    const targetCwd = normalizePath(workingDirectory)
-    const entriesBySessionId = new Map<string, LocalSessionCatalogEntry>()
-    const parsedFiles = await getParsedCodexFiles()
-
-    for (const parsed of parsedFiles) {
-        if (!parsed.sessionId || parsed.cwd !== targetCwd) {
-            continue
-        }
-
-        const entry = createCodexCatalogEntry(parsed, workingDirectory)
-        if (!entry) {
-            continue
-        }
-
-        const current = entriesBySessionId.get(entry.providerSessionId)
-        if (!current || entry.updatedAt > current.updatedAt) {
-            entriesBySessionId.set(entry.providerSessionId, entry)
+function pickLatestBySession<T extends { providerSessionId: string; updatedAt: number }>(items: T[]): T[] {
+    const bySessionId = new Map<string, T>()
+    for (const item of items) {
+        const current = bySessionId.get(item.providerSessionId)
+        if (!current || item.updatedAt > current.updatedAt) {
+            bySessionId.set(item.providerSessionId, item)
         }
     }
-
-    return [...entriesBySessionId.values()]
+    return [...bySessionId.values()]
 }
 
-async function loadCodexSnapshots(workingDirectory: string): Promise<LocalSessionExportSnapshot[]> {
+async function loadMatchingCodexMetas(workingDirectory: string): Promise<CodexFileMeta[]> {
     const targetCwd = normalizePath(workingDirectory)
-    const snapshotsBySessionId = new Map<string, LocalSessionExportSnapshot>()
-    const parsedFiles = await getParsedCodexFiles()
-
-    for (const parsed of parsedFiles) {
-        if (!parsed.sessionId || parsed.cwd !== targetCwd) {
-            continue
-        }
-
-        const snapshot = createCodexSnapshot(parsed, workingDirectory)
-        if (!snapshot) {
-            continue
-        }
-
-        const current = snapshotsBySessionId.get(snapshot.providerSessionId)
-        if (!current || snapshot.updatedAt > current.updatedAt) {
-            snapshotsBySessionId.set(snapshot.providerSessionId, snapshot)
-        }
-    }
-
-    return [...snapshotsBySessionId.values()]
+    return (await getCodexFileMetas()).filter((meta) => meta.cwd === targetCwd)
 }
 
 export async function listCodexLocalSessions(workingDirectory: string): Promise<LocalSessionCatalogEntry[]> {
-    return await loadCodexCatalogEntries(workingDirectory)
+    const entries = await mapWithConcurrency(
+        await loadMatchingCodexMetas(workingDirectory),
+        CODEX_SCAN_CONCURRENCY,
+        createCodexCatalogEntry
+    )
+    return pickLatestBySession(entries)
 }
 
 export async function exportCodexLocalSession(
     workingDirectory: string,
     providerSessionId: string
 ): Promise<LocalSessionExportSnapshot> {
-    const snapshot = (await loadCodexSnapshots(workingDirectory)).find(
-        (entry) => entry.providerSessionId === providerSessionId
+    const targetCwd = normalizePath(workingDirectory)
+    const metas = (await getCodexFileMetas()).filter(
+        (meta) => meta.cwd === targetCwd && meta.sessionId === providerSessionId
     )
+    const snapshots = (await mapWithConcurrency(metas, CODEX_SCAN_CONCURRENCY, readCodexFile))
+        .map(createCodexSnapshot)
+        .filter((entry): entry is LocalSessionExportSnapshot => Boolean(entry))
+    const snapshot = pickLatestBySession(snapshots)[0]
     if (!snapshot) {
         throw new Error(`Codex local session not found: ${providerSessionId}`)
     }

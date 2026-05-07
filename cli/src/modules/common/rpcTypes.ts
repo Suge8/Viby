@@ -1,6 +1,7 @@
 import type { SessionDriver, SessionHandoffSnapshot } from '@viby/protocol/types'
 import type {
     AgentFlavor,
+    CodexServiceTier,
     SessionCollaborationMode,
     SessionModelReasoningEffort,
     SessionPermissionMode,
@@ -15,6 +16,7 @@ export interface SpawnSessionOptions {
     agent?: AgentFlavor
     model?: string
     modelReasoningEffort?: SessionModelReasoningEffort
+    codexServiceTier?: CodexServiceTier
     permissionMode?: SessionPermissionMode
     collaborationMode?: SessionCollaborationMode
     token?: string

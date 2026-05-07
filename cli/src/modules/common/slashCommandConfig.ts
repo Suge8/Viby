@@ -30,6 +30,7 @@ const BUILTIN_COMMANDS: Record<string, SlashCommand[]> = {
         { name: 'status', description: 'Show Claude status', source: 'builtin' },
     ],
     codex: [
+        { name: 'clear', description: 'Start a fresh conversation', source: 'builtin' },
         { name: 'compact', description: 'Summarize the conversation to save context', source: 'builtin' },
         { name: 'diff', description: 'Show the current git diff', source: 'builtin' },
         { name: 'fork', description: 'Fork the current conversation into a new thread', source: 'builtin' },

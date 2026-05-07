@@ -74,6 +74,7 @@ runner 在创建会话时会：
 - 启动新的 `viby` 子进程，并把其生命周期绑定到当前 runner
 - 等待新会话回报 `session-started`
 - 对 resume 场景，只有真的重新接回旧 agent session 才算成功；Codex resume 失败不会再静默新建 thread 冒充恢复
+- `VIBY_RUNNER_WEBHOOK_TIMEOUT_MS` 可提高 `session-started` webhook 等待上限；超时的子进程会被标记为 abandoned 并通过统一 stop owner 收口，避免 late webhook 变成幽灵会话
 
 ## 支持的代理
 

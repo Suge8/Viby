@@ -5,7 +5,7 @@ import { RUNNER_MANAGED_STARTED_BY } from './types'
 
 type InternalSessionArgBuilderOptions = Pick<
     SpawnSessionOptions,
-    'resumeSessionId' | 'permissionMode' | 'model' | 'modelReasoningEffort' | 'collaborationMode'
+    'resumeSessionId' | 'permissionMode' | 'model' | 'modelReasoningEffort' | 'collaborationMode' | 'codexServiceTier'
 > & {
     sessionId?: string
     driverSwitchTransport?: DriverSwitchHandoffTransport | null
@@ -38,6 +38,9 @@ export function buildInternalSessionArgs(
     }
     if (options.collaborationMode && resolvedAgent === 'codex') {
         args.push('--collaboration-mode', options.collaborationMode)
+    }
+    if (options.codexServiceTier && resolvedAgent === 'codex') {
+        args.push('--codex-service-tier', options.codexServiceTier)
     }
     if (options.driverSwitchTransport) {
         args.push('--driver-switch-target', options.driverSwitchTransport.targetDriver)

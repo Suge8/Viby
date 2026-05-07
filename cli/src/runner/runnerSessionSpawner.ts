@@ -77,6 +77,7 @@ export function createSpawnSessionHandler({
                 permissionMode: options.permissionMode,
                 model: options.model,
                 modelReasoningEffort: options.modelReasoningEffort,
+                codexServiceTier: options.codexServiceTier,
                 collaborationMode: options.collaborationMode,
                 driverSwitchTransport,
             })
