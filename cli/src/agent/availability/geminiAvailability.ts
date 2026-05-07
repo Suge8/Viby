@@ -4,13 +4,13 @@ import { createCommandAvailabilityDetector } from './commandAvailability'
 
 const detectGeminiCommandAvailability = createCommandAvailabilityDetector('gemini', ['gemini'])
 
-export const detectGeminiAvailability: AgentAvailabilityDetector = async ({ detectedAt, forceRefresh }) => {
+export const detectGeminiAvailability: AgentAvailabilityDetector = async ({ detectedAt, directory, forceRefresh }) => {
     const commandAvailability = await detectGeminiCommandAvailability({ detectedAt, forceRefresh })
     if (commandAvailability.status !== 'ready') {
         return commandAvailability
     }
 
-    const runtimeConfig = resolveGeminiRuntimeConfig()
+    const runtimeConfig = resolveGeminiRuntimeConfig({ cwd: directory })
     if (!runtimeConfig.token) {
         return createAvailability({
             driver: 'gemini',

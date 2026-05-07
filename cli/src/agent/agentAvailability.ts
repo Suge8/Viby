@@ -20,6 +20,46 @@ type CachedAgentAvailability = {
 
 const STATIC_AVAILABILITY_CACHE_TTL_MS = 30_000
 const DIRECTORY_AWARE_AVAILABILITY_CACHE_TTL_MS = 15_000
+const DETECTOR_TIMEOUT_MS = 2_500
+
+function createTimedOutAvailability(driver: (typeof AGENT_FLAVORS)[number], detectedAt: number) {
+    return {
+        driver,
+        status: 'unavailable' as const,
+        resolution: 'learn_more' as const,
+        code: 'unknown' as const,
+        reason: `${driver} availability check timed out`,
+        detectedAt,
+    }
+}
+
+async function detectWithDeadline(options: {
+    driver: (typeof AGENT_FLAVORS)[number]
+    detector: AgentAvailabilityDetector
+    detectedAt: number
+    directory?: string
+    forceRefresh?: boolean
+}) {
+    let timeout: ReturnType<typeof setTimeout> | null = null
+    try {
+        return await Promise.race([
+            options.detector({
+                detectedAt: options.detectedAt,
+                directory: options.directory,
+                forceRefresh: options.forceRefresh,
+            }),
+            new Promise<AgentAvailabilityResponse['agents'][number]>((resolve) => {
+                timeout = setTimeout(
+                    () => resolve(createTimedOutAvailability(options.driver, options.detectedAt)),
+                    DETECTOR_TIMEOUT_MS
+                )
+                timeout.unref?.()
+            }),
+        ])
+    } finally {
+        if (timeout) clearTimeout(timeout)
+    }
+}
 
 const STATIC_DETECTORS = {
     claude: detectClaudeAvailability,
@@ -58,13 +98,15 @@ async function detectAvailabilityGroup(options: {
 
     const detectedAgents = (
         await Promise.all(
-            Object.entries(options.detectors).map(async ([driver, detector]) => {
-                return await detector({
+            Object.entries(options.detectors).map(async ([driver, detector]) =>
+                detectWithDeadline({
+                    driver: driver as (typeof AGENT_FLAVORS)[number],
+                    detector,
                     detectedAt: options.detectedAt,
                     directory: options.directory,
                     forceRefresh: options.forceRefresh,
                 })
-            })
+            )
         )
     ).sort((left, right) => AGENT_FLAVORS.indexOf(left.driver) - AGENT_FLAVORS.indexOf(right.driver))
 

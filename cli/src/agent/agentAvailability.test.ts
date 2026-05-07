@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { listAgentAvailability } from './agentAvailability'
 
 const harness = vi.hoisted(() => ({
@@ -35,6 +35,10 @@ vi.mock('@/pi/launchConfig', () => ({
 }))
 
 describe('listAgentAvailability', () => {
+    afterEach(() => {
+        vi.useRealTimers()
+    })
+
     beforeEach(() => {
         harness.claudePath.mockReset().mockReturnValue('/usr/local/bin/claude')
         harness.codexPath.mockReset().mockReturnValue('/usr/local/bin/codex')
@@ -120,5 +124,22 @@ describe('listAgentAvailability', () => {
             status: 'not_installed',
             resolution: 'install',
         })
+    })
+
+    it('bounds a hung directory-aware detector without hiding ready static agents', async () => {
+        vi.useFakeTimers()
+        harness.piLaunchConfig.mockReturnValue(new Promise(() => undefined))
+
+        const pending = listAgentAvailability({ directory: '/tmp/project-slow', forceRefresh: true })
+        await vi.advanceTimersByTimeAsync(2_500)
+        const response = await pending
+
+        expect(response.agents.find((agent) => agent.driver === 'claude')).toMatchObject({ status: 'ready' })
+        expect(response.agents.find((agent) => agent.driver === 'pi')).toMatchObject({
+            status: 'unavailable',
+            resolution: 'learn_more',
+            code: 'unknown',
+        })
+        vi.useRealTimers()
     })
 })
