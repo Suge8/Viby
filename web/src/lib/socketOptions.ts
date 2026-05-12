@@ -1,7 +1,7 @@
 const SOCKET_IO_PATH = '/socket.io/'
 const SOCKET_RECONNECT_DELAY_MS = 1_000
 const SOCKET_RECONNECT_DELAY_MAX_MS = 5_000
-const SOCKET_CONNECT_TIMEOUT_MS = 10_000
+const SOCKET_OPEN_DEADLINE_MS = 10_000
 const SOCKET_TRANSPORTS = ['websocket', 'polling']
 
 type BaseSocketOptions = {
@@ -35,7 +35,7 @@ function createBaseSocketOptions(): BaseSocketOptions {
         reconnectionAttempts: Infinity,
         reconnectionDelay: SOCKET_RECONNECT_DELAY_MS,
         reconnectionDelayMax: SOCKET_RECONNECT_DELAY_MAX_MS,
-        timeout: SOCKET_CONNECT_TIMEOUT_MS,
+        timeout: SOCKET_OPEN_DEADLINE_MS,
     }
 }
 

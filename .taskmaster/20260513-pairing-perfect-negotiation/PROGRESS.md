@@ -15,17 +15,17 @@
 
 > Resume from here after compaction / restart.
 
-- **Current milestone**: #6 — Phase F Web RemotePeerSession
-- **Current status**: Phase E DONE；Phase F TODO
-- **Last completed**: #5 Phase E Desktop Bridge Rewrite
-- **Current artifact**: `desktop/src/lib/pairingBridgeController.ts`
+- **Current milestone**: #7 — Phase G UI state machine
+- **Current status**: Phase F DONE；Phase G TODO
+- **Last completed**: #6 Phase F Web RemotePeerSession
+- **Current artifact**: `web/src/remote/RemotePeerSession.ts`
 - **Claimed by**: `none`
 - **Lease until**: `none`
 - **Write scope**: `none`
 - **Handoff**: `none`
-- **Key context**: Phase E desktop bridge now uses shared `createPairingTransport`; counted bridge runtime files total 200 lines. RPC owner files renamed to `pairingPeer*`. Desktop bridge phase is `connecting | ready | fatal`. RM1/RM3/RM4/RM7/RM8 deferred to Phase K bulk run.
+- **Key context**: Phase F web guest now uses shared `createPairingTransport` via `RemotePeerSession` (transport stack 401 lines). Legacy guest signal/negotiation/liveness modules deleted. `mapByeToErrorKey()` added. D/E/F code is merged locally but not deployed; staging burn-in still pending.
 - **Known issues**: 真机回归矩阵需要 iPhone Safari + 桌面端联调；自动化只是保底。D/E/F 发布必须协调 staging 24h burn-in。
-- **Next action**: 取 row 6 (`tasks/06-web-peer-session`)，Web guest 切到 shared transport；D/E/F 仍不得单独 prod 部署，等 F 后 staging burn-in。
+- **Next action**: 取 row 7 (`tasks/07-ui-state-machine`)，Web UI 状态机 + IDB hydrate。
 
 ---
 
@@ -163,4 +163,14 @@
 - Collapsed desktop bridge phase to `connecting | ready | fatal`; updated UI/link badge projections.
 - Validation: desktop typecheck/test; shared typecheck/link-quality focused test; line/grep guards ✅
 - Real-device RM: RM1/RM3/RM4/RM7/RM8 deferred to Phase K bulk run.
+- Commit: pending.
+
+## Phase F Complete — 2026-05-12T21:10:00Z
+
+- Web guest transport now runs through `RemotePeerSession` + shared `createPairingTransport`.
+- Deleted legacy guest transport/negotiation/signal/liveness/foreground modules and tests.
+- Controller now awaits `session.untilReady()`; foreground pulse is owned by `RemotePeerSession` and calls `transport.notifyForeground()`.
+- `mapByeToErrorKey()` added; `RemotePeerConnectError` moved to `remotePairingErrors.ts`.
+- Validation: web typecheck, focused tests, full test, build, line/grep guards ✅
+- Real-device RM: RM1/RM2/RM3/RM5/RM6/RM8/RM10 deferred to Phase K bulk run.
 - Commit: pending.

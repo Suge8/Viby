@@ -4,7 +4,6 @@ import { hasPairingWorkspaceIntent, withPairingWorkspaceIntent } from '@viby/pro
 import { type JSX, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AppInstallPromptLayer } from '@/components/AppInstallPromptLayer'
 import { useFinalizeBootShell } from '@/hooks/useFinalizeBootShell'
-import { subscribeForegroundPulse } from '@/lib/foregroundPulse'
 import { useNoticeCenter, usePersistentNotice } from '@/lib/notice-center'
 import { queryKeys } from '@/lib/query-keys'
 import { getRemoteConnectingFallbackPhase, type RemoteConnectingPhase } from '@/lib/remoteConnectingPhase'
@@ -12,6 +11,7 @@ import { useTranslation } from '@/lib/use-translation'
 import { useStickyTrue } from '@/lib/useStickyTrue'
 import { type RemotePairingReadyConnection, RemotePairingReadyShell } from '@/remote/RemotePairingReadyShell'
 import { RemotePairingCodeScreen, RemotePairingStatusScreen } from '@/remote/RemotePairingScreens'
+import { RemotePeerSession } from '@/remote/RemotePeerSession'
 import { isRemotePairingApproved, resolveRemotePairingAuth } from '@/remote/remotePairingAuthFlow'
 import {
     clearStoredGuestToken,
@@ -21,12 +21,8 @@ import {
 } from '@/remote/remotePairingHttp'
 import { useRemotePairingPwaHandoffWarmup } from '@/remote/remotePairingPwaHandoffWarmup'
 import { pauseRemotePairingQueries, resumeRemotePairingQueries } from '@/remote/remotePairingQueryOnlineState'
-import {
-    createRemotePairingReconnectLoop,
-    shouldRequestRemoteForegroundReconnect,
-} from '@/remote/remotePairingReconnectLoop'
+import { createRemotePairingReconnectLoop } from '@/remote/remotePairingReconnectLoop'
 import { isRecoverableRemotePairingError } from '@/remote/remotePairingRecovery'
-import { connectRemotePeer } from '@/remote/remotePairingTransport'
 import { getRemotePairingErrorKeyOrFallback, type RemotePairingErrorKey } from './remotePairingErrors'
 import {
     buildRemoteReconnectNotice,
@@ -147,11 +143,12 @@ export function RemotePairingController(props: RemotePairingControllerProps): JS
     const connectReadyBridge = useCallback(
         async (auth: PairingRemoteAuth, token: string): Promise<RemotePairingReadyConnection> => {
             setConnectingPhase('connecting')
-            const bridge = await connectRemotePeer({
+            const bridge = new RemotePeerSession({
                 pairingId: props.pairingId,
                 wsUrl: auth.wsUrl,
                 iceServers: auth.iceServers,
             })
+            await bridge.untilReady()
             setConnectingPhase('finalizing')
             clearReconnectTimer()
             reconnectAttemptRef.current = 0
@@ -227,24 +224,6 @@ export function RemotePairingController(props: RemotePairingControllerProps): JS
     useEffect(() => {
         return () => clearReconnectTimer()
     }, [clearReconnectTimer])
-
-    useEffect(() => {
-        function handleResume(): void {
-            const context = {
-                state: { kind: state.kind },
-                bootStartedAt: bootStartedAtRef.current,
-                now: Date.now(),
-            }
-            if (!shouldRequestRemoteForegroundReconnect(context)) return
-            if (state.kind === 'reconnecting') {
-                requestReconnect()
-                return
-            }
-            forceFreshAttempt()
-        }
-
-        return subscribeForegroundPulse(handleResume)
-    }, [forceFreshAttempt, requestReconnect, state.kind])
 
     useEffect(() => {
         if (state.kind !== 'ready') return

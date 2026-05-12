@@ -2,14 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { BrowserStorageUnavailableError } from '@/lib/browserStorage'
 import { AppCacheUnavailableError } from '@/lib/storage/appCacheDb'
 import { APP_CACHE_STORES } from '@/lib/storage/storageRegistry'
-import { createRemotePairingUserError } from './remotePairingErrors'
+import { createRemotePairingUserError, RemotePeerConnectError } from './remotePairingErrors'
 import { RemotePairingHttpError } from './remotePairingHttp'
 import {
     getRemoteReconnectDelay,
     isRecoverableRemotePairingError,
     REMOTE_RECONNECT_MAX_DELAY_MS,
 } from './remotePairingRecovery'
-import { RemotePeerConnectError } from './remotePairingSignal'
 
 describe('remotePairingRecovery', () => {
     it('caps reconnect backoff without losing the first retry window', () => {

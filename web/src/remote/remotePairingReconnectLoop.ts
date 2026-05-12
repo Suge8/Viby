@@ -1,26 +1,9 @@
-import { PAIRING_BOOT_STUCK_RESCUE_MS, PAIRING_REMOTE_RECONNECT_MAX_ATTEMPTS } from '@viby/protocol'
+import { PAIRING_REMOTE_RECONNECT_MAX_ATTEMPTS } from '@viby/protocol'
 import type { MutableRefObject } from 'react'
 import type { RemotePeerBridge } from './remotePairingBridgeTypes'
 import { getRemoteReconnectDelay } from './remotePairingRecovery'
 
 type RemoteReconnectState = { kind: string }
-
-export type RemoteForegroundReconnectContext = {
-    state: RemoteReconnectState
-    bootStartedAt: number
-    now: number
-    stuckRescueMs?: number
-}
-
-export function shouldRequestRemoteForegroundReconnect(context: RemoteForegroundReconnectContext): boolean {
-    if (context.state.kind === 'reconnecting') return true
-    if (context.state.kind === 'error') return true
-    if (context.state.kind === 'booting') {
-        const threshold = context.stuckRescueMs ?? PAIRING_BOOT_STUCK_RESCUE_MS
-        return context.now - context.bootStartedAt >= threshold
-    }
-    return false
-}
 
 export function shouldGiveUpRemoteReconnect(
     attempt: number,

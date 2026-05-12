@@ -1,8 +1,8 @@
 import { PAIRING_REMOTE_RECONNECT_BASE_DELAY_MS, PAIRING_REMOTE_RECONNECT_MAX_DELAY_MS } from '@viby/protocol'
 import { isBrowserStorageUnavailableError } from '@/lib/browserStorage'
 import { isAppCacheUnavailableError } from '@/lib/storage/appCacheDb'
+import { RemotePeerConnectError } from './remotePairingErrors'
 import { RemotePairingHttpError } from './remotePairingHttp'
-import { RemotePeerConnectError } from './remotePairingSignal'
 
 export const REMOTE_RECONNECT_BASE_DELAY_MS = PAIRING_REMOTE_RECONNECT_BASE_DELAY_MS
 export const REMOTE_RECONNECT_MAX_DELAY_MS = PAIRING_REMOTE_RECONNECT_MAX_DELAY_MS

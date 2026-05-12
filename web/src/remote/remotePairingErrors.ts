@@ -1,3 +1,5 @@
+import type { PairingByeReason } from '@viby/protocol/pairing'
+
 type TranslationFn = (key: string) => string
 
 export type RemotePairingErrorKey =
@@ -40,6 +42,16 @@ const REMOTE_PAIRING_ERROR_KEYS = new Set<string>([
     'remotePairing.error.uploadFailed',
     'remotePairing.error.closed',
 ])
+
+export class RemotePeerConnectError extends Error {
+    constructor(
+        readonly kind: string,
+        readonly code: RemotePairingErrorKey
+    ) {
+        super(code)
+        this.name = 'RemotePeerConnectError'
+    }
+}
 
 export class RemotePairingCodedError extends Error {
     constructor(
@@ -84,6 +96,18 @@ export function canRetryRemotePairingError(key: RemotePairingErrorKey): boolean 
 
 export function getRemotePairingErrorKeyOrFallback(error: unknown): RemotePairingErrorKey {
     return getRemotePairingErrorKey(error) ?? 'remotePairing.error.fallback'
+}
+
+export function mapByeToErrorKey(reason: PairingByeReason): RemotePairingErrorKey {
+    switch (reason) {
+        case 'invalid_device_proof':
+        case 'handoff_invalid':
+            return 'remotePairing.error.regenerateQr'
+        case 'pairing_unavailable':
+        case 'invalid_token':
+        case 'user_revoked':
+            return 'remotePairing.error.scanAgain'
+    }
 }
 
 export function getRemotePairingErrorMessage(error: unknown, t: TranslationFn): string {
