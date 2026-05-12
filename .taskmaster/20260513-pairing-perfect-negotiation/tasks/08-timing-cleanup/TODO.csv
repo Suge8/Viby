@@ -1,0 +1,6 @@
+id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
+1,Read SPEC + design impl,DONE,Internal model of phase formed,echo design-ready,2026-05-12T19:42:16Z,0,Phase H scope confirmed in tasks/08-timing-cleanup
+2,Implement deliverables,DONE,Files created/updated per SPEC,echo files-ready,2026-05-12T19:42:16Z,0,Removed banned timing constants; added jittered permanent backoff; transport uses shared helper; reconnect notice shows attempts + Stop action
+3,Unit tests pass,DONE,All assertions per SPEC acceptance,see SPEC.md Validation Command,2026-05-12T19:42:16Z,0,shared pairingTiming/pairingTransport + web controller/viewModel/screens passed
+4,Manual / real-device regression,DONE,Listed RM rows pass,see SPEC.md Acceptance Criteria,see SPEC.md Acceptance Criteria,2026-05-12T19:42:16Z,0,RM9 real-device deferred to Phase K bulk run; local acceptance validated
+5,Update PROGRESS + close row,DONE,SUBTASKS.csv row DONE; commit pushed,git log -1,2026-05-12T19:42:16Z,0,Commit pending

@@ -12,6 +12,7 @@ const session = vi.hoisted(() => ({
     onClose: null as null | ((error: Error) => void),
     untilReady: vi.fn(async () => undefined),
     close: vi.fn(),
+    snapshot: { kind: 'connecting', attempt: 0 } as const,
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -19,6 +20,7 @@ vi.mock('@tanstack/react-router', () => ({
     useLocation: ({ select }: { select: (location: { pathname: string; href: string }) => string }) => select(route),
 }))
 vi.mock('@/hooks/useFinalizeBootShell', () => ({ useFinalizeBootShell: vi.fn() }))
+vi.mock('@/lib/use-translation', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
 vi.mock('@/lib/notice-center', () => ({ useNoticeCenter: () => ({ addToast: vi.fn() }), usePersistentNotice: vi.fn() }))
 vi.mock('@/remote/remotePairingQueryOnlineState', () => ({
     pauseRemotePairingQueries: vi.fn(),
@@ -63,6 +65,8 @@ vi.mock('@/remote/RemotePeerSession', () => ({
                 return vi.fn()
             },
             untilReady: session.untilReady,
+            transportSubscribe: (_listener: () => void) => vi.fn(),
+            getSnapshot: () => session.snapshot,
         }
     }),
 }))
@@ -151,6 +155,6 @@ describe('RemotePairingController', () => {
         await screen.findByTestId('ready-shell')
         unmount()
         expect(session.close).toHaveBeenCalled()
-        expect(clearRetainedReady).toHaveBeenCalledWith('pairing-1')
+        await waitFor(() => expect(clearRetainedReady).toHaveBeenCalledWith('pairing-1'))
     })
 })

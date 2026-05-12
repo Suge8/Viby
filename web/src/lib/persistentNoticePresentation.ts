@@ -25,6 +25,7 @@ type CompactPersistentNoticeOptions = {
     tone?: Notice['tone']
     icon?: ReactNode
     onPress?: Notice['onPress']
+    action?: Notice['action']
 }
 
 export function getPersistentNoticePriority(id: string): number {
@@ -48,5 +49,6 @@ export function buildCompactPersistentNotice(options: CompactPersistentNoticeOpt
         compact: true,
         priority: getPersistentNoticePriority(options.id),
         onPress: options.onPress,
+        action: options.action,
     }
 }

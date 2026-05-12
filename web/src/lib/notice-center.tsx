@@ -13,6 +13,7 @@ export type Notice = {
     priority?: number
     href?: string
     onPress?: () => void | Promise<void>
+    action?: ReactNode
 }
 
 type ToastInput = Omit<Notice, 'id'> & {
@@ -43,7 +44,8 @@ function areNoticesEquivalent(left: Notice, right: Notice): boolean {
         left.compact === right.compact &&
         left.priority === right.priority &&
         left.title === right.title &&
-        left.description === right.description
+        left.description === right.description &&
+        left.action === right.action
     )
 }
 

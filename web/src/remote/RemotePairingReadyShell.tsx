@@ -1,4 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
+import type { PairingTransportState } from '@viby/protocol/pairing'
 import { lazy, Suspense, useMemo } from 'react'
 import { AppReadyShell } from '@/components/appControllerSupport'
 import { getAppViewportRoute } from '@/lib/appShellPresentation'
@@ -14,7 +15,10 @@ async function loadRemotePairingRuntimeModule() {
 const LazyRemotePairingRuntime = lazy(loadRemotePairingRuntimeModule)
 
 export type RemotePairingReadyConnection = {
-    bridge: RemotePeerBridge
+    bridge: RemotePeerBridge & {
+        transportSubscribe(listener: () => void): () => void
+        getSnapshot(): PairingTransportState
+    }
     token: string
 }
 

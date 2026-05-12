@@ -44,6 +44,7 @@ const FloatingNoticeCard = memo(function FloatingNoticeCard(props: FloatingNotic
             title={props.notice.title}
             description={props.notice.description}
             compact={props.notice.compact}
+            action={props.notice.action}
             className="w-full transition-transform duration-200 hover:-translate-y-0.5"
         />
     )

@@ -12,6 +12,7 @@ type AppNoticeProps = {
     layout?: AppNoticeLayout
     compact?: boolean
     className?: string
+    action?: ReactNode
 }
 
 function getToneClassName(tone: AppNoticeTone): string {
@@ -53,6 +54,7 @@ export function AppNotice(props: AppNoticeProps): React.JSX.Element {
                     </div>
                 ) : null}
             </div>
+            {props.action ? <div className="shrink-0">{props.action}</div> : null}
         </div>
     )
 }

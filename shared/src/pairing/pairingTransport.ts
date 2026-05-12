@@ -1,9 +1,8 @@
+import { computePairingReconnectDelay } from './pairingTiming'
 import { createPerfectNegotiation, type RTCPeerConnection as NegotiationPeer } from './perfectNegotiation'
 import { PairingSignalV2Schema, type PairingByeReason, type PairingSignalV2 } from './pairingSignal'
 
 const SOCKET_OPEN = 1
-const BASE_BACKOFF_MS = 300
-const MAX_BACKOFF_MS = 10_000
 const ICE_RESTART_STATES = new Set(['disconnected', 'failed'])
 
 export type PairingTransportState = { kind: 'connecting'; attempt: number } | { kind: 'ready' } | { kind: 'fatal'; reason: PairingByeReason | 'closed' }
@@ -159,8 +158,7 @@ export function createPairingTransport(options: PairingTransportOptions): Pairin
         })
     }
     function backoff(attempt: number) {
-        const jitter = options.randomJitter?.() ?? Math.random() * 0.3 - 0.15
-        return Math.min(BASE_BACKOFF_MS * 2 ** attempt, MAX_BACKOFF_MS) * (1 + jitter)
+        return computePairingReconnectDelay(attempt, options.randomJitter)
     }
 }
 

@@ -15,17 +15,17 @@
 
 > Resume from here after compaction / restart.
 
-- **Current milestone**: #8 — Phase H transparent reconnect budget
-- **Current status**: Phase G DONE；Phase H TODO
-- **Last completed**: #7 Phase G UI state machine
-- **Current artifact**: `web/src/remote/RemotePairingController.tsx`
+- **Current milestone**: #9 — Phase I bridge / Hub decouple
+- **Current status**: Phase H DONE；Phase I TODO
+- **Last completed**: #8 Phase H timing cleanup
+- **Current artifact**: `desktop/src/hooks/usePairingBridges.ts`
 - **Claimed by**: `none`
 - **Lease until**: `none`
 - **Write scope**: `none`
 - **Handoff**: `none`
 - **Key context**: Phase F web guest now uses shared `createPairingTransport` via `RemotePeerSession` (transport stack 401 lines). Legacy guest signal/negotiation/liveness modules deleted. `mapByeToErrorKey()` added. D/E/F code is merged locally but not deployed; staging burn-in still pending.
 - **Known issues**: 真机回归矩阵需要 iPhone Safari + 桌面端联调；自动化只是保底。D/E/F 发布必须协调 staging 24h burn-in。
-- **Next action**: 取 row 8 (`tasks/08-transparent-reconnect`)，实现 transparent reconnect budget。
+- **Next action**: 取 row 9 (`tasks/09-bridge-hub-decouple`)，解耦 bridge / Hub 状态。
 
 ---
 
@@ -182,4 +182,16 @@
 - Remote connecting phase shrunk to `pairing | verify | finalizing`; legacy reconnect loop removed.
 - Validation: web typecheck, focused controller/persistence tests, full web test, web build ✅
 - Real-device RM5 deferred to Phase K bulk run.
+- Commit: pending.
+
+## Phase H Complete — 2026-05-12T19:42:16Z
+
+- Removed banned timing constants and added `computePairingReconnectDelay()` with permanent bounded exponential backoff + jitter.
+- Shared transport reconnect loop now uses the timing helper and keeps attempt snapshots for UI.
+- Web reconnect notice now shows attempt count after attempt > 2 and Stop action after attempt > 2.
+- Stop action closes the bridge, clears retained ready, and moves UI to `remotePairing.error.userCancelled` fatal state.
+- Notice center / persistent notice / floating viewport now pass optional notice actions.
+- `RemotePairingController.tsx` remains under guard: 188 lines.
+- Validation: shared typecheck, shared pairingTiming/pairingTransport tests, web typecheck, focused web tests, full web test, web build ✅
+- Real-device RM9 deferred to Phase K bulk run.
 - Commit: pending.
