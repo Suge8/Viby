@@ -9,6 +9,7 @@ import { useSessions } from '@/hooks/queries/useSessions'
 import { useDesktopSessionsLayout } from '@/hooks/useDesktopSessionsLayout'
 import { useFinalizeBootShell } from '@/hooks/useFinalizeBootShell'
 import { useAppContext } from '@/lib/app-context'
+import { useNoticeCenter } from '@/lib/notice-center'
 import { getNoticePreset } from '@/lib/noticePresets'
 import { writeLastOpenedSessionId } from '@/lib/sessionEntryPreference'
 import {
@@ -17,7 +18,6 @@ import {
     SESSIONS_LIST_SCROLLER_TEST_ID,
 } from '@/lib/sessionUiContracts'
 import { useTranslation } from '@/lib/use-translation'
-import { SessionRouteBanner } from '@/routes/sessions/components/SessionRouteBanner'
 import { SessionsMobileCreateButton } from '@/routes/sessions/components/SessionsMobileCreateButton'
 import { SessionsShellHeader } from '@/routes/sessions/components/SessionsShellHeader'
 import {
@@ -54,6 +54,7 @@ export function SessionsShell(): JSX.Element {
     const matchRoute = useMatchRoute()
     const { t } = useTranslation()
     const errorPreset = getNoticePreset('genericError', t)
+    const { addToast } = useNoticeCenter()
     const { sessions, error, isLoading: areSessionsLoading } = useSessions(api)
 
     const sessionMatch = matchRoute({ to: '/sessions/$sessionId', fuzzy: true })
@@ -61,6 +62,7 @@ export function SessionsShell(): JSX.Element {
     const isSessionsIndex = isSessionsIndexPath(pathname)
     const isDesktopLayout = useDesktopSessionsLayout()
     const previousRuntimeSessionIdRef = useRef<string | null>(selectedSessionId)
+    const lastErrorToastRef = useRef<string | null>(null)
     const {
         activeSectionId,
         handleActiveSectionChange,
@@ -90,6 +92,14 @@ export function SessionsShell(): JSX.Element {
         runStaticRouteNavigation(navigate, SETTINGS_ROUTE, loadSettingsRouteModule())
     }, [navigate])
 
+    const handleSessionListActiveSectionChange = useCallback(
+        (sectionId: 'running' | 'history') => {
+            handleActiveSectionChange(sectionId)
+            void navigate(buildSessionsIndexNavigation(sectionId))
+        },
+        [handleActiveSectionChange, navigate]
+    )
+
     useEffect(() => {
         const previousSessionId = previousRuntimeSessionIdRef.current
         if (previousSessionId && previousSessionId !== selectedSessionId) {
@@ -106,6 +116,14 @@ export function SessionsShell(): JSX.Element {
 
         writeLastOpenedSessionId(selectedSessionId)
     }, [selectedSessionId])
+
+    useEffect(() => {
+        if (!error || lastErrorToastRef.current === error) {
+            return
+        }
+        lastErrorToastRef.current = error
+        addToast({ tone: errorPreset.tone, title: errorPreset.title, description: error })
+    }, [addToast, error, errorPreset.title, errorPreset.tone])
 
     useEffect(() => {
         if (areSessionsLoading) {
@@ -144,7 +162,7 @@ export function SessionsShell(): JSX.Element {
     })
 
     return (
-        <div className="relative flex h-full min-h-0 min-w-0 w-full flex-1 overflow-hidden lg:overflow-visible">
+        <div className="ds-native-sessions-shell relative flex h-full min-h-0 min-w-0 w-full flex-1 overflow-hidden lg:overflow-visible">
             <m.div
                 data-testid={SESSIONS_LIST_PANE_TEST_ID}
                 data-sessions-pane="list"
@@ -158,14 +176,9 @@ export function SessionsShell(): JSX.Element {
                 <SessionsShellHeader settingsTitle={t('settings.title')} onOpenSettings={handleOpenSettings} />
 
                 <div data-testid={SESSIONS_LIST_SCROLLER_TEST_ID} className={SESSIONS_LIST_SCROLLER_CLASS_NAME}>
-                    {error ? (
-                        <div className="mx-auto w-full max-w-content">
-                            <SessionRouteBanner tone="error" title={errorPreset.title} description={error} />
-                        </div>
-                    ) : null}
                     <SessionList
                         activeSectionId={activeSectionId}
-                        onActiveSectionChange={handleActiveSectionChange}
+                        onActiveSectionChange={handleSessionListActiveSectionChange}
                         sessions={sessions}
                         selectedSessionId={selectedSessionId}
                         preferredSectionId={search.section}
@@ -183,7 +196,7 @@ export function SessionsShell(): JSX.Element {
                 data-testid="sessions-detail-pane"
                 data-sessions-pane="detail"
                 aria-hidden={!isDesktopLayout && isSessionsIndex ? 'true' : undefined}
-                className={`${SESSIONS_DETAIL_PANE_CLASS_NAME} absolute inset-0 z-20 flex min-w-0 w-full flex-1 flex-col bg-transparent lg:relative lg:inset-auto lg:z-auto lg:bg-[var(--app-bg)]`}
+                className={`${SESSIONS_DETAIL_PANE_CLASS_NAME} ds-sessions-detail-pane absolute inset-0 z-20 flex min-w-0 w-full flex-1 flex-col bg-transparent lg:relative lg:inset-auto lg:z-auto lg:bg-[var(--app-bg)]`}
                 animate={paneMotionState.detailPaneAnimate}
                 transition={SESSIONS_PANE_TRANSITION}
                 style={{ pointerEvents: paneMotionState.detailPanePointerEvents }}

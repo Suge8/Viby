@@ -13,7 +13,7 @@ import { SESSION_LIST_CREATE_BUTTON_TEST_ID } from '@/lib/sessionUiContracts'
 const SESSION_LIST_CONTROL_ROW_CLASS_NAME =
     'relative min-w-0 lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:gap-2'
 const SESSION_LIST_SEGMENTED_CONTROL_CLASS_NAME =
-    'grid min-w-0 w-full grid-cols-2 gap-2 rounded-[var(--ds-radius-lg)] border border-[var(--app-divider)] bg-[color:color-mix(in_srgb,var(--ds-panel-strong)_94%,transparent)] p-1 shadow-[var(--ds-shadow-soft)]'
+    'ds-session-list-native-controls grid min-w-0 w-full grid-cols-2 gap-2 rounded-[var(--ds-radius-lg)] border p-1'
 const SESSION_LIST_NEW_BUTTON_CLASS_NAME =
     'session-list-new-button ds-session-list-new-button rounded-[var(--ds-radius-md)] px-0 text-[var(--ds-text-primary)] shadow-[var(--ds-shadow-soft)] sm:gap-2 sm:px-3'
 const SESSION_LIST_COUNT_CLASS_NAME =
@@ -75,7 +75,6 @@ export const SessionListControls = memo(function SessionListControls(
                                     pressStyle="segmented"
                                     role="tab"
                                     aria-selected={active}
-                                    disabled={tab.count === 0}
                                     onClick={() => actions.onChange(tab.id)}
                                     className={getSessionTabButtonClassName(active)}
                                 >

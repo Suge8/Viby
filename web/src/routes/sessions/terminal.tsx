@@ -108,7 +108,7 @@ export default function TerminalPage(): ReactNode {
     if (!session) {
         return (
             <div className="flex h-full items-center justify-center">
-                <LoadingState label={t('loading.session')} className="text-sm" />
+                <LoadingState label={t('loading')} className="text-sm" />
             </div>
         )
     }
@@ -224,7 +224,7 @@ function TerminalViewLoadingState(): React.JSX.Element {
 
     return (
         <div className="flex h-full items-center justify-center">
-            <LoadingState label={t('loading.session')} className="text-sm" />
+            <LoadingState label={t('loading')} className="text-sm" />
         </div>
     )
 }

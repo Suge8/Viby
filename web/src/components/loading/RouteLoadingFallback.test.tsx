@@ -4,19 +4,6 @@ import { I18nProvider } from '@/lib/i18n-context'
 import { RouteLoadingFallback } from './RouteLoadingFallback'
 
 describe('RouteLoadingFallback', () => {
-    it('renders the route hero copy for file routes without the long workspace description', async () => {
-        const { container } = render(
-            <I18nProvider>
-                <RouteLoadingFallback kind="files" />
-            </I18nProvider>
-        )
-
-        await waitFor(() => {
-            expect(container.querySelector('[data-testid="loading-state-hero"]')).toHaveTextContent('Loading files…')
-        })
-        expect(screen.queryByText('Chat, files, and live updates will pick up in a moment.')).not.toBeInTheDocument()
-    })
-
     it('defaults to the workspace presentation when no kind is provided', async () => {
         const { container } = render(
             <I18nProvider>
@@ -31,14 +18,39 @@ describe('RouteLoadingFallback', () => {
         })
     })
 
-    it('supports inline route fallback for nested detail transitions', () => {
+    it('omits the long workspace description unless explicitly requested', async () => {
         const { container } = render(
             <I18nProvider>
-                <RouteLoadingFallback kind="terminal" variant="inline" />
+                <RouteLoadingFallback />
             </I18nProvider>
         )
 
-        expect(screen.getByText('Loading terminal…')).toBeInTheDocument()
+        await waitFor(() => {
+            expect(container.querySelector('[data-testid="loading-state-hero"]')).toBeInTheDocument()
+        })
+        expect(screen.queryByText('Chat, files, and live updates will pick up in a moment.')).not.toBeInTheDocument()
+    })
+
+    it('renders the runtime presentation for new-session runtime probing', async () => {
+        render(
+            <I18nProvider>
+                <RouteLoadingFallback kind="runtime" />
+            </I18nProvider>
+        )
+
+        await waitFor(() => {
+            expect(screen.getByText('Loading local runtime…')).toBeInTheDocument()
+        })
+    })
+
+    it('supports inline variant for nested detail transitions', () => {
+        const { container } = render(
+            <I18nProvider>
+                <RouteLoadingFallback variant="inline" />
+            </I18nProvider>
+        )
+
+        expect(screen.getByText('Preparing your workspace…')).toBeInTheDocument()
         expect(container.querySelector('[data-testid="loading-state-hero"]')).toBeNull()
     })
 })

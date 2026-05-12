@@ -150,7 +150,7 @@ export default function FilePage(): ReactNode {
                     {!filePath ? (
                         <div className="text-sm text-[var(--app-hint)]">{t('file.error.noPath')}</div>
                     ) : loading ? (
-                        <FileContentSkeleton label={t('loading.file')} />
+                        <FileContentSkeleton label={t('loading')} />
                     ) : fileError ? (
                         <div className="text-sm text-[var(--app-hint)]">{fileError}</div>
                     ) : binaryFile ? (

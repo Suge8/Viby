@@ -67,9 +67,14 @@ vi.mock('@/lib/networkPreloadPolicy', () => ({
     shouldPreloadIdleSessionRoutes: () => false,
 }))
 
+vi.mock('@/lib/notice-center', () => ({
+    useNoticeCenter: () => ({ addToast: vi.fn() }),
+}))
+
 vi.mock('@/lib/noticePresets', () => ({
     getNoticePreset: () => ({
         title: 'Something went wrong',
+        tone: 'danger',
     }),
 }))
 
@@ -82,10 +87,6 @@ vi.mock('@/lib/use-translation', () => ({
     useTranslation: () => ({
         t: (key: string) => key,
     }),
-}))
-
-vi.mock('@/routes/sessions/components/SessionRouteBanner', () => ({
-    SessionRouteBanner: () => <div data-testid="session-route-banner" />,
 }))
 
 vi.mock('@/routes/sessions/components/SessionsShellHeader', () => ({

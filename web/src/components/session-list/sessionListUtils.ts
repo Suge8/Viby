@@ -157,34 +157,28 @@ export function buildSessionSections(
         historyCount += 1
     }
 
-    const sections: SessionListSection[] = []
+    const historyRows = getVisibleHistoryRows(history, {
+        expanded: Boolean(options.expandedSectionIds?.has('history')),
+        searchActive: normalizedQuery.length > 0,
+        selectedSessionId: options.selectedSessionId ?? null,
+    })
 
-    if (running.length > 0) {
-        sections.push({
+    return [
+        {
             id: 'running',
             titleKey: 'sessions.section.running',
             count: runningCount,
             hiddenCount: 0,
             rows: running,
-        })
-    }
-
-    if (history.length > 0) {
-        const historyRows = getVisibleHistoryRows(history, {
-            expanded: Boolean(options.expandedSectionIds?.has('history')),
-            searchActive: normalizedQuery.length > 0,
-            selectedSessionId: options.selectedSessionId ?? null,
-        })
-        sections.push({
+        },
+        {
             id: 'history',
             titleKey: 'sessions.section.history',
             count: historyCount,
             hiddenCount: history.length - historyRows.length,
             rows: historyRows,
-        })
-    }
-
-    return sections
+        },
+    ]
 }
 
 export function buildSessionRows(sessions: readonly SessionSummary[]): SessionListRow[] {

@@ -39,18 +39,24 @@ export function SessionListView(props: SessionListViewProps): React.JSX.Element 
                         label={props.t(props.activeSection.titleKey)}
                     />
                 </MotionStaggerItem>
-                <div className={SESSION_LIST_SECTION_CARD_STACK_CLASS_NAME}>
-                    {props.activeSection.rows.map((row, rowIndex) => (
-                        <MotionStaggerItem key={row.id} x={rowIndex % 2 === 0 ? -18 : 18} y={8} scaleFrom={0.992}>
-                            <SessionListAnimatedItem
-                                session={row.session}
-                                hasUnseenReply={props.renderContext.hasUnseenReply(row.session)}
-                                selection={props.renderContext.selection}
-                                onOpenActionMenu={props.renderContext.onOpenActionMenu}
-                            />
-                        </MotionStaggerItem>
-                    ))}
-                </div>
+                {props.activeSection.rows.length === 0 ? (
+                    <MotionStaggerItem y={16}>
+                        <SessionListEmptyState label={props.emptyLabel} />
+                    </MotionStaggerItem>
+                ) : (
+                    <div className={SESSION_LIST_SECTION_CARD_STACK_CLASS_NAME}>
+                        {props.activeSection.rows.map((row, rowIndex) => (
+                            <MotionStaggerItem key={row.id} x={rowIndex % 2 === 0 ? -18 : 18} y={8} scaleFrom={0.992}>
+                                <SessionListAnimatedItem
+                                    session={row.session}
+                                    hasUnseenReply={props.renderContext.hasUnseenReply(row.session)}
+                                    selection={props.renderContext.selection}
+                                    onOpenActionMenu={props.renderContext.onOpenActionMenu}
+                                />
+                            </MotionStaggerItem>
+                        ))}
+                    </div>
+                )}
                 {props.activeSection.hiddenCount > 0 ? (
                     <MotionStaggerItem y={8}>
                         <Button

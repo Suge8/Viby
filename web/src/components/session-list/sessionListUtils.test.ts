@@ -72,8 +72,18 @@ describe('sessionListUtils', () => {
         const sections = buildSessionSections(sessions, { searchQuery: 'history' })
         const history = sections.find((section) => section.id === 'history')
 
-        expect(sections.find((section) => section.id === 'running')).toBeUndefined()
+        expect(sections.find((section) => section.id === 'running')?.count).toBe(0)
+        expect(sections.find((section) => section.id === 'running')?.rows).toHaveLength(0)
         expect(history?.rows).toHaveLength(SESSION_LIST_HISTORY_PREVIEW_LIMIT + 2)
         expect(history?.hiddenCount).toBe(0)
+    })
+
+    it('keeps empty running and history sections addressable', () => {
+        const sections = buildSessionSections([createHistorySession(1)])
+
+        expect(sections.map((section) => section.id)).toEqual(['running', 'history'])
+        expect(sections.find((section) => section.id === 'running')?.count).toBe(0)
+        expect(sections.find((section) => section.id === 'running')?.rows).toHaveLength(0)
+        expect(sections.find((section) => section.id === 'history')?.count).toBe(1)
     })
 })

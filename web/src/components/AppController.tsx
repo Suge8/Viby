@@ -18,7 +18,7 @@ import { useViewportInteractionGuards } from '@/hooks/useViewportInteractionGuar
 import { getAppViewportRoute, isUnauthorizedAuthError } from '@/lib/appShellPresentation'
 import { requireHubUrlForLogin } from '@/lib/runtime-config'
 import { RemotePairingController } from '@/remote/RemotePairingController'
-import { RemotePairingMissingScreen } from '@/remote/RemotePairingScreens'
+import { RemotePwaBootstrap } from '@/remote/RemotePwaBootstrap'
 import { readRemotePairingId } from '@/remote/remotePairingHttp'
 
 const REQUIRE_SERVER_URL = requireHubUrlForLogin()
@@ -42,7 +42,7 @@ const LazyAppRealtimeRuntime = lazy(loadAppRealtimeRuntimeModule)
 
 export function AppController(): JSX.Element | null {
     const { serverUrl, baseUrl, setServerUrl, clearServerUrl } = useServerUrl()
-    const { authSource, setAccessToken, clearAuth } = useAuthSource(baseUrl)
+    const { authSource, setPairingCode, clearAuth } = useAuthSource(baseUrl)
     const { token, api, error: authError } = useAuth(authSource, baseUrl)
     const pathname = useLocation({ select: (location) => location.pathname })
     const locationHref = useLocation({ select: (location) => location.href })
@@ -134,7 +134,13 @@ export function AppController(): JSX.Element | null {
     }
 
     if (hasRemoteWorkspaceIntent) {
-        return <RemotePairingMissingScreen />
+        // Workspace shell launched without any storage state. This is the
+        // cold-start path for PWAs whose standalone partition is isolated
+        // from the browser tab that performed the original claim. The
+        // bootstrap controller asks the broker to recover the pairing via
+        // the signed manifest cookie before falling back to a re-scan
+        // prompt, so the common case becomes a one-round-trip auto-recovery.
+        return <RemotePwaBootstrap />
     }
 
     if (displayAppSession) {
@@ -155,7 +161,7 @@ export function AppController(): JSX.Element | null {
         return (
             <Suspense fallback={null}>
                 <LazyLoginPrompt
-                    onLogin={setAccessToken}
+                    onLogin={setPairingCode}
                     server={loginPromptServer}
                     error={authSource ? authError : undefined}
                 />

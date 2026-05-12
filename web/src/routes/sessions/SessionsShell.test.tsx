@@ -71,6 +71,9 @@ vi.mock('@/components/SessionList', () => ({
             <button type="button" onClick={() => props.onActiveSectionChange?.('history')}>
                 show-history
             </button>
+            <button type="button" onClick={() => props.onActiveSectionChange?.('running')}>
+                show-running
+            </button>
             <button type="button" title="sessions.new" onClick={() => props.actions.onNewSession()}>
                 new-session
             </button>
@@ -141,9 +144,14 @@ vi.mock('@/lib/navigationTransition', () => ({
     },
 }))
 
+vi.mock('@/lib/notice-center', () => ({
+    useNoticeCenter: () => ({ addToast: vi.fn() }),
+}))
+
 vi.mock('@/lib/noticePresets', () => ({
     getNoticePreset: () => ({
         title: 'Something went wrong',
+        tone: 'danger',
     }),
 }))
 
@@ -151,10 +159,6 @@ vi.mock('@/lib/use-translation', () => ({
     useTranslation: () => ({
         t: (key: string) => key,
     }),
-}))
-
-vi.mock('@/routes/sessions/components/SessionRouteBanner', () => ({
-    SessionRouteBanner: () => <div data-testid="session-route-banner" />,
 }))
 
 describe('SessionsShell', () => {
@@ -561,6 +565,21 @@ describe('SessionsShell', () => {
                 to: '/sessions',
                 replace: true,
                 search: { section: 'history' },
+            })
+        })
+    })
+
+    it('clears the section search param when switching back to running', async () => {
+        useSearchMock.mockReturnValue({ section: 'history' })
+
+        render(<SessionsShell />)
+
+        fireEvent.click(screen.getByText('show-running'))
+
+        await waitFor(() => {
+            expect(navigateMock).toHaveBeenCalledWith({
+                to: '/sessions',
+                replace: true,
             })
         })
     })

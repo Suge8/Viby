@@ -99,6 +99,12 @@ vi.mock('@/lib/use-translation', () => ({
                     return `Show ${values?.count ?? 0} more`
                 case 'sessions.empty.sessions':
                     return 'No sessions'
+                case 'sessions.empty.running':
+                    return 'No active sessions'
+                case 'sessions.empty.history':
+                    return 'No history sessions'
+                case 'sessions.empty.search':
+                    return 'No matching sessions'
                 case 'sessions.new':
                     return 'New Session'
                 case 'session.attention.newReply':

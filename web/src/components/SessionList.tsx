@@ -25,6 +25,12 @@ import type { SessionSummary } from '@/types/api'
 const SESSION_LIST_ROOT_CLASS_NAME = 'mx-auto flex w-full max-w-content flex-col'
 const SESSION_LIST_STICKY_CONTROLS_CLASS_NAME = '-mt-2 sticky top-0 z-10 px-3 pb-2'
 
+type SessionListEmptyLabelOptions = {
+    activeSectionId: SessionListSectionId
+    searchQuery: string
+    t: (key: string) => string
+}
+
 type SessionListActions = {
     onSessionIntent?: (sessionId: string, source: 'focus' | 'hover' | 'press') => void
     onSelect: (sessionId: string) => void
@@ -106,6 +112,11 @@ function SessionListComponent(props: SessionListProps): React.JSX.Element {
         () => sections.find((section) => section.id === activeSectionId) ?? null,
         [activeSectionId, sections]
     )
+    const emptyLabel = getSessionListEmptyLabel({
+        activeSectionId,
+        searchQuery: deferredSearchQuery,
+        t,
+    })
     const { hasUnseenReply } = useSessionAttention(sessions, selectedSessionId)
     const selection = useMemo<SessionListSelection>(
         () => ({
@@ -164,7 +175,7 @@ function SessionListComponent(props: SessionListProps): React.JSX.Element {
                     <SessionListView
                         activeSection={activeSection}
                         renderContext={renderContext}
-                        emptyLabel={t('sessions.empty.sessions')}
+                        emptyLabel={emptyLabel}
                         onShowAll={handleShowAllActiveSection}
                         showAllLabel={
                             activeSection?.hiddenCount
@@ -188,6 +199,16 @@ function SessionListComponent(props: SessionListProps): React.JSX.Element {
             ) : null}
         </div>
     )
+}
+
+function getSessionListEmptyLabel(options: SessionListEmptyLabelOptions): string {
+    if (options.searchQuery.trim()) {
+        return options.t('sessions.empty.search')
+    }
+
+    return options.activeSectionId === 'running'
+        ? options.t('sessions.empty.running')
+        : options.t('sessions.empty.history')
 }
 
 export const SessionList = memo(SessionListComponent)

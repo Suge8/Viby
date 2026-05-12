@@ -143,6 +143,7 @@ function renderSessionList(onSelect: (sessionId: string) => void = vi.fn()): voi
                 sessions={[createSessionSummary()]}
                 api={null}
                 selectedSessionId={null}
+                preferredSectionId="history"
                 actions={{
                     onSelect,
                     onNewSession: vi.fn(),

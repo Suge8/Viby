@@ -161,7 +161,7 @@ export default function FilesPage(): ReactNode {
 
                     {shouldSearch ? (
                         searchResults.isLoading ? (
-                            <FileListSkeleton label={t('loading.files')} />
+                            <FileListSkeleton label={t('loading')} />
                         ) : searchResults.error ? (
                             <SessionRouteBanner
                                 tone="error"
@@ -184,7 +184,7 @@ export default function FilesPage(): ReactNode {
                             </div>
                         )
                     ) : activeTab === 'directories' ? (
-                        <Suspense fallback={<FileListSkeleton label={t('loading.files')} />}>
+                        <Suspense fallback={<FileListSkeleton label={t('loading')} />}>
                             <LazyDirectoryTree
                                 api={api}
                                 sessionId={sessionId}
@@ -193,7 +193,7 @@ export default function FilesPage(): ReactNode {
                             />
                         </Suspense>
                     ) : gitLoading ? (
-                        <FileListSkeleton label={t('loading.git')} />
+                        <FileListSkeleton label={t('loading')} />
                     ) : gitStatus ? (
                         <div>
                             {gitStatus.stagedFiles.length > 0 ? (

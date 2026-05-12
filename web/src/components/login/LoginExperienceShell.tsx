@@ -21,7 +21,6 @@ export function LoginExperienceShell(props: LoginExperienceShellProps): JSX.Elem
                             className={`h-11 w-11 ${STAGE_BRAND_MARK_NEUTRAL_TONE_CLASS_NAME}`}
                             markClassName="h-7 w-7"
                         />
-                        <span>{props.t('login.title')}</span>
                     </div>
                     {props.languageSwitcher}
                 </header>

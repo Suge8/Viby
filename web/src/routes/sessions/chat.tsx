@@ -55,7 +55,7 @@ export default function SessionChatRoute(): React.JSX.Element {
     }, [addToast, errorPreset.title, navigate, sessionError])
 
     if (sessionError) {
-        return <RouteLoadingFallback kind="session" testId="session-route-pending" />
+        return <RouteLoadingFallback kind="workspace" testId="session-route-pending" />
     }
 
     if (!session) {
@@ -64,7 +64,7 @@ export default function SessionChatRoute(): React.JSX.Element {
             return <RetainedSessionChatSurface snapshot={retainedSnapshot} />
         }
 
-        return <RouteLoadingFallback kind="session" testId="session-route-pending" />
+        return <RouteLoadingFallback kind="workspace" testId="session-route-pending" />
     }
 
     return (
