@@ -3,10 +3,15 @@ import {
     PAIRING_NAKED_WORKSPACE_REDIRECT_URL,
     PairingClaimRequestSchema,
     PairingCreateRequestSchema,
+    PairingPwaHandoffClaimRequestSchema,
+    PairingPwaHandoffTicketRequestSchema,
     PairingVerifyCodeRequestSchema,
 } from '@viby/protocol/pairing'
 import { type Context, Hono } from 'hono'
 import { readBrandLogoAsset } from './brandLogoAsset'
+import { registerPairingPwaHandoffRoutes } from './httpPwaHandoffRoutes'
+import { createPairingManifestHandler } from './httpPwaManifest'
+import { createPairingCookieRecoverHandler } from './httpPwaRecover'
 import { registerPairingReconnectRoutes } from './httpReconnectRoutes'
 import { registerPairingSessionRoutes } from './httpSessionRoutes'
 import { authorizeCreateRequest, getNow } from './httpSupport'
@@ -24,17 +29,7 @@ function serveWorkspaceApp(path: string, search: string): boolean {
     return hasPairingWorkspaceIntent(path, search)
 }
 
-function redirectNakedWorkspace(c: Context): Response {
-    c.header('cache-control', 'no-store')
-    return c.redirect(PAIRING_NAKED_WORKSPACE_REDIRECT_URL, 302)
-}
-
-function serveWebAppHtml(c: Context, options: PairingHttpOptions): Response | Promise<Response> {
-    const html = readWebAppIndexHtml(options.webApp)
-    return c.html(html, 200, { 'content-length': String(Buffer.byteLength(html)) })
-}
-
-function serveWebAppAsset(c: Context, options: PairingHttpOptions): Response | Promise<Response> {
+function serveWebAppAssetByPath(c: Context, options: PairingHttpOptions): Response | Promise<Response> {
     const asset = readWebAppAsset(c.req.path, options.webApp)
     if (!asset) {
         return c.notFound()
@@ -46,8 +41,51 @@ function serveWebAppAsset(c: Context, options: PairingHttpOptions): Response | P
     })
 }
 
+function redirectNakedWorkspace(c: Context): Response {
+    c.header('cache-control', 'no-store')
+    return c.redirect(PAIRING_NAKED_WORKSPACE_REDIRECT_URL, 302)
+}
+
+// iOS Chrome / iOS Safari standalone PWAs do not forward cookies to the
+// system-level manifest fetch issued at "Add to Home Screen" time, so a
+// cookie-only manifest personalization path leaves those users stuck on the
+// fallback workspace URL. Injecting the pairing id directly into the manifest
+// link href guarantees a personalized `start_url` regardless of cookie
+// behavior. The pairing id is public once approved (it appears in the QR
+// URL), so the only added attack surface is that someone holding the same
+// pairing id during the post-approval window can also install a PWA bound
+// to that pairing; the desktop device list surfaces every binding so the
+// owner can revoke unexpected installs.
+function injectPairingManifestLink(html: string, pairingId: string): string {
+    const params = new URLSearchParams({ pairing: pairingId })
+    return html.replace(/<link rel="manifest"([^>]*?) href="([^"]+)"/, (match, attrs, href) => {
+        const url = href.includes('?') ? `${href}&${params.toString()}` : `${href}?${params.toString()}`
+        return `<link rel="manifest"${attrs} href="${url}"`
+    })
+}
+
+function serveWebAppHtml(c: Context, options: PairingHttpOptions, pairingId?: string): Response | Promise<Response> {
+    const baseHtml = readWebAppIndexHtml(options.webApp)
+    const html = pairingId ? injectPairingManifestLink(baseHtml, pairingId) : baseHtml
+    return c.html(html, 200, { 'content-length': String(Buffer.byteLength(html)) })
+}
+
 export function createPairingApp(options: PairingHttpOptions): Hono {
     const app = new Hono()
+
+    // Lightweight request log for diagnosing PWA install flows in production.
+    // Skips the high-volume health probes and only emits one structured line
+    // per request, so deployment journals stay readable while still showing
+    // exactly which manifest / handoff fetches each device made.
+    app.use('*', async (c, next) => {
+        const startedAt = Date.now()
+        await next()
+        if (c.req.path === '/health' || c.req.path === '/ready') return
+        const logger = options.logger ?? console
+        logger.info?.(
+            `[Pairing] req ${c.req.method} ${c.req.path}${new URL(c.req.url, 'https://pairing.local').search} -> ${c.res.status} (${Date.now() - startedAt}ms) cookie=${c.req.header('cookie') ? 'yes' : 'no'} ua=${c.req.header('user-agent')?.slice(0, 80) ?? ''}`
+        )
+    })
 
     app.get('/health', (c) => c.json({ ok: true, service: 'pairing' }))
     app.get('/ready', async (c) => {
@@ -65,7 +103,7 @@ export function createPairingApp(options: PairingHttpOptions): Hono {
             'content-type': 'image/png',
         })
     )
-    app.get('/p/:id', (c) => serveWebAppHtml(c, options))
+    app.get('/p/:id', (c) => serveWebAppHtml(c, options, c.req.param('id')))
     app.get('/sessions', (c) =>
         serveWorkspaceApp(c.req.path, getRequestSearch(c.req.url))
             ? serveWebAppHtml(c, options)
@@ -76,7 +114,15 @@ export function createPairingApp(options: PairingHttpOptions): Hono {
             ? serveWebAppHtml(c, options)
             : redirectNakedWorkspace(c)
     )
-    app.get('/assets/*', (c) => serveWebAppAsset(c, options))
+    app.get('/assets/*', (c) => serveWebAppAssetByPath(c, options))
+    // Manifest is dynamic per pairing cookie, so it bypasses the static
+    // asset reader and runs the cookie-aware handler instead.
+    app.get('/manifest.webmanifest', createPairingManifestHandler(options))
+    // PWA standalone cold-start fallback: the workspace shell calls this to
+    // recover the pairing via the same signed cookie. iOS Chrome / Safari may
+    // strip cookies on the manifest fetch but keep them on regular fetches
+    // from the PWA window, so this is the second-chance bootstrap path.
+    app.get('/pairings/cookie-recover', createPairingCookieRecoverHandler(options))
     app.get('/metrics', (c) => {
         const authError = authorizeCreateRequest(options, c.req.header('authorization'))
         if (authError) {
@@ -98,11 +144,21 @@ export function createPairingApp(options: PairingHttpOptions): Hono {
         ),
     })
     registerPairingReconnectRoutes(app, options)
+    registerPairingPwaHandoffRoutes(app, options, {
+        handoffClaimBodyValidator: createJsonBodyValidator(
+            PairingPwaHandoffClaimRequestSchema,
+            'Invalid pairing PWA handoff claim body'
+        ),
+        handoffTicketBodyValidator: createJsonBodyValidator(
+            PairingPwaHandoffTicketRequestSchema,
+            'Invalid pairing PWA handoff ticket body'
+        ),
+    })
     app.get('/:asset', (c) => {
         if (serveWorkspaceApp(c.req.path, getRequestSearch(c.req.url))) {
             return serveWebAppHtml(c, options)
         }
-        return serveWebAppAsset(c, options)
+        return serveWebAppAssetByPath(c, options)
     })
 
     return app

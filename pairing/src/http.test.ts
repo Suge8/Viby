@@ -7,6 +7,7 @@ import { readPairingTicketFromUrl } from '@viby/protocol/pairing'
 import { createBunWebSocket } from 'hono/bun'
 import { buildPairingDeviceProofPayload } from './crypto'
 import { createPairingApp } from './http'
+import { createPairingManifestCookieSigner } from './manifestCookie'
 import { PairingMetrics } from './metrics'
 import { PairingRateLimiter } from './rateLimit'
 import { MemoryPairingStore } from './store'
@@ -35,6 +36,9 @@ function createTestApp(overrides?: {
         approve: { bucket: string; limit: number; windowMs: number }
     }
     webApp?: { indexHtml?: string; assetsRoot?: string }
+    manifestCookieSigner?: ReturnType<typeof createPairingManifestCookieSigner>
+    manifestCookieTtlSeconds?: number
+    logger?: Pick<Console, 'debug' | 'error' | 'info' | 'log' | 'warn'>
 }) {
     const now = overrides?.now ?? (() => 1_700_000_000_000)
     const store = new MemoryPairingStore(now)
@@ -54,10 +58,13 @@ function createTestApp(overrides?: {
         turnCredentialTtlSeconds: overrides?.turn?.credentialTtlSeconds ?? 600,
         createToken: 'create-secret',
         upgradeWebSocket,
+        logger: overrides?.logger,
         metrics: overrides?.metrics,
         rateLimiter: overrides?.rateLimiter,
         rateLimitRules: overrides?.rateLimitRules,
         now,
+        manifestCookieSigner: overrides?.manifestCookieSigner ?? createPairingManifestCookieSigner(),
+        manifestCookieTtlSeconds: overrides?.manifestCookieTtlSeconds ?? 1800,
         webApp: overrides?.webApp ?? {
             indexHtml:
                 '<!doctype html><html><body><div id="root"></div><script type="module" src="/assets/index.js"></script></body></html>',
@@ -274,6 +281,42 @@ describe('pairing http routes', () => {
             `wss://pair.example.com/pairings/${created.pairing.id}/ws?token=${claimed.guestToken}`
         )
 
+        const deviceChallengeResponse = await app.request(
+            `/pairings/${created.pairing.id}/device-reconnect-challenge`,
+            {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ publicKey: guestIdentity.publicKey }),
+            }
+        )
+        expect(deviceChallengeResponse.status).toBe(200)
+        const deviceChallenge = await deviceChallengeResponse.json()
+        const recoveryProof = await createReconnectDeviceProof(
+            created.pairing.id,
+            guestIdentity,
+            deviceChallenge.challenge.nonce
+        )
+
+        const deviceReconnectResponse = await app.request(`/pairings/${created.pairing.id}/device-reconnect`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ deviceProof: recoveryProof }),
+        })
+        expect(deviceReconnectResponse.status).toBe(200)
+        const deviceRecovered = await deviceReconnectResponse.json()
+        expect(deviceRecovered.guestToken).toBeTruthy()
+        expect(deviceRecovered.guestToken).not.toBe(claimed.guestToken)
+        expect(deviceRecovered.wsUrl).toBe(
+            `wss://pair.example.com/pairings/${created.pairing.id}/ws?token=${deviceRecovered.guestToken}`
+        )
+
+        const staleTokenResponse = await app.request(`/pairings/${created.pairing.id}/reconnect-challenge`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ token: claimed.guestToken }),
+        })
+        expect(staleTokenResponse.status).toBe(403)
+
         const deleteResponse = await app.request(`/pairings/${created.pairing.id}`, {
             method: 'DELETE',
             headers: { authorization: `Bearer ${created.hostToken}` },
@@ -282,6 +325,136 @@ describe('pairing http routes', () => {
         const deleted = await deleteResponse.json()
         expect(deleted.deleted).toBe(true)
         expect(deleted.pairing.state).toBe('deleted')
+    })
+
+    it('hands an approved browser pairing to a freshly installed PWA once', async () => {
+        const app = createTestApp()
+        const createResponse = await app.request('/pairings', {
+            method: 'POST',
+            headers: { authorization: 'Bearer create-secret', 'content-type': 'application/json' },
+            body: JSON.stringify({ label: 'Desk Host' }),
+        })
+        const created = await createResponse.json()
+        const browserIdentity = await createReconnectDeviceIdentity()
+        const ticket = readPairingTicketFromUrl(created.pairingUrl)
+        const claimResponse = await app.request(`/pairings/${created.pairing.id}/claim`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ ticket, label: 'Phone Browser', publicKey: browserIdentity.publicKey }),
+        })
+        const claimed = await claimResponse.json()
+        await app.request(`/pairings/${created.pairing.id}/approve`, {
+            method: 'POST',
+            headers: { authorization: `Bearer ${created.hostToken}` },
+        })
+
+        const challengeResponse = await app.request(`/pairings/${created.pairing.id}/reconnect-challenge`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ token: claimed.guestToken }),
+        })
+        const challenge = await challengeResponse.json()
+        const deviceProof = await createReconnectDeviceProof(
+            created.pairing.id,
+            browserIdentity,
+            challenge.challenge.nonce
+        )
+        const handoffTicketResponse = await app.request(`/pairings/${created.pairing.id}/pwa-handoff-ticket`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ token: claimed.guestToken, deviceProof }),
+        })
+        expect(handoffTicketResponse.status).toBe(200)
+        const handoff = await handoffTicketResponse.json()
+        expect(handoff.handoffTicket).toBeTruthy()
+
+        const pwaIdentity = await createReconnectDeviceIdentity()
+        const handoffClaimResponse = await app.request(`/pairings/${created.pairing.id}/pwa-handoff-claim`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+                handoffTicket: handoff.handoffTicket,
+                label: 'Phone PWA',
+                publicKey: pwaIdentity.publicKey,
+            }),
+        })
+        expect(handoffClaimResponse.status).toBe(200)
+        const handoffClaimed = await handoffClaimResponse.json()
+        expect(handoffClaimed.guestToken).toBeTruthy()
+        expect(handoffClaimed.guestToken).not.toBe(claimed.guestToken)
+        expect(handoffClaimed.wsUrl).toBe(
+            `wss://pair.example.com/pairings/${created.pairing.id}/ws?token=${handoffClaimed.guestToken}`
+        )
+
+        const reusedHandoffResponse = await app.request(`/pairings/${created.pairing.id}/pwa-handoff-claim`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ handoffTicket: handoff.handoffTicket, publicKey: pwaIdentity.publicKey }),
+        })
+        expect(reusedHandoffResponse.status).toBe(403)
+        expect(await reusedHandoffResponse.json()).toMatchObject({ code: 'pairing_invalid_handoff_ticket' })
+
+        const staleTokenResponse = await app.request(`/pairings/${created.pairing.id}/reconnect-challenge`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ token: claimed.guestToken }),
+        })
+        expect(staleTokenResponse.status).toBe(403)
+    })
+
+    it('binds legacy token-only browser pairings before PWA handoff', async () => {
+        const app = createTestApp()
+        const createResponse = await app.request('/pairings', {
+            method: 'POST',
+            headers: { authorization: 'Bearer create-secret', 'content-type': 'application/json' },
+            body: JSON.stringify({ label: 'Desk Host' }),
+        })
+        const created = await createResponse.json()
+        const browserIdentity = await createReconnectDeviceIdentity()
+        const ticket = readPairingTicketFromUrl(created.pairingUrl)
+        const claimResponse = await app.request(`/pairings/${created.pairing.id}/claim`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ ticket, label: 'Phone Browser' }),
+        })
+        const claimed = await claimResponse.json()
+        await app.request(`/pairings/${created.pairing.id}/approve`, {
+            method: 'POST',
+            headers: { authorization: `Bearer ${created.hostToken}` },
+        })
+
+        const challengeResponse = await app.request(`/pairings/${created.pairing.id}/reconnect-challenge`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ token: claimed.guestToken }),
+        })
+        const challenge = await challengeResponse.json()
+        const deviceProof = await createReconnectDeviceProof(
+            created.pairing.id,
+            browserIdentity,
+            challenge.challenge.nonce
+        )
+        const handoffTicketResponse = await app.request(`/pairings/${created.pairing.id}/pwa-handoff-ticket`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ token: claimed.guestToken, deviceProof }),
+        })
+        expect(handoffTicketResponse.status).toBe(200)
+
+        const statusResponse = await app.request(`/pairings/${created.pairing.id}`, {
+            headers: { authorization: `Bearer ${created.hostToken}` },
+        })
+        const status = await statusResponse.json()
+        expect(status.pairing.guest.publicKey).toBe(browserIdentity.publicKey)
+
+        const handoff = await handoffTicketResponse.json()
+        const pwaIdentity = await createReconnectDeviceIdentity()
+        const handoffClaimResponse = await app.request(`/pairings/${created.pairing.id}/pwa-handoff-claim`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ handoffTicket: handoff.handoffTicket, publicKey: pwaIdentity.publicKey }),
+        })
+        expect(handoffClaimResponse.status).toBe(200)
     })
 
     it('returns temporary TURN credentials with every broker-issued ICE response', async () => {
@@ -431,6 +604,32 @@ describe('pairing http routes', () => {
         })
 
         expect(response.status).toBe(401)
+    })
+
+    it('emits a structured request log line for non-health requests so production journals show each PWA install fetch in sequence', async () => {
+        const lines: string[] = []
+        const app = createTestApp({
+            logger: {
+                debug: () => {},
+                error: () => {},
+                info: (...args: unknown[]) => {
+                    lines.push(args.map((arg) => String(arg)).join(' '))
+                },
+                log: () => {},
+                warn: () => {},
+            },
+        })
+
+        await app.request('/health')
+        await app.request('/manifest.webmanifest', {
+            headers: { 'user-agent': 'iPhone CriOS test', cookie: 'viby_pair_manifest=fake' },
+        })
+
+        expect(lines.some((line) => line.includes('/health'))).toBe(false)
+        const manifestLine = lines.find((line) => line.includes('/manifest.webmanifest'))
+        expect(manifestLine).toBeDefined()
+        expect(manifestLine).toContain('cookie=yes')
+        expect(manifestLine).toContain('iPhone CriOS test')
     })
 
     it('serves the shared brand logo asset', async () => {

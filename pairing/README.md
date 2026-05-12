@@ -9,7 +9,7 @@
 - 交换 WebRTC signaling
 - 下发 STUN + TURN ICE 配置；浏览器默认先走直连，打不通时才用中转
 - 维护可重连的会话令牌
-- guest claim 后生成连接码；桌面显示，手机输入正确后自动批准
+- guest claim 后生成配对码；桌面显示，手机输入正确后自动批准
 - guest reconnect 默认要求同设备签名证明，不再只靠裸 token
 - 托管手机端正常 Viby Web，并通过 DataChannel 接回桌面本地 Hub
 - 提供基础限流与受控 counters
@@ -96,7 +96,7 @@ TURN 建议按 `UDP 3478 -> TCP 3478 -> TLS 5349` 排列；多地区就把最近
 
 - `POST /pairings`：创建配对会话，返回 `pairingUrl`、`hostToken`、`wsUrl`
 - `POST /pairings/:id/claim`：消费一次性 ticket，返回 `guestToken`
-- `POST /pairings/:id/verify-code`：guest 输入桌面显示的 6 位连接码，正确后自动批准接入
+- `POST /pairings/:id/verify-code`：guest 输入桌面显示的 6 位配对码，正确后自动批准接入
 - `POST /pairings/:id/approve`：host 侧保留调试批准接口；产品 UI 默认不暴露
 - `POST /pairings/:id/reconnect-challenge`：为设备绑定过的 guest 发放一次性 reconnect nonce
 - `POST /pairings/:id/reconnect`：使用已保存设备 token + 一次性 nonce 签名证明自动重连

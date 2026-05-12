@@ -1,7 +1,6 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, normalize, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { withPairingWorkspaceIntent } from '@viby/protocol/pairing'
 
 type WebAppAssetOptions = {
     indexHtml?: string
@@ -18,7 +17,6 @@ type CachedAsset = WebAppAsset & { path: string }
 
 const WEB_INDEX_FILE_NAME = 'web-index.html'
 const WEB_MANIFEST_FILE_NAME = 'manifest.webmanifest'
-const PAIRING_PWA_START_URL = withPairingWorkspaceIntent('/sessions')
 const WEB_ROOT_ASSET_FILE_NAMES = new Set([
     'agent-claude-favicon.png',
     'agent-claude.png',
@@ -125,17 +123,6 @@ export function readWebAppIndexHtml(options?: WebAppAssetOptions): string {
     return html
 }
 
-function buildServedAssetBody(targetPath: string, rootAssetName: string): ArrayBuffer {
-    const body = readFileSync(targetPath)
-    if (rootAssetName !== WEB_MANIFEST_FILE_NAME) {
-        return toArrayBuffer(body)
-    }
-
-    const manifest = JSON.parse(body.toString('utf8')) as Record<string, unknown>
-    const rewritten = JSON.stringify({ ...manifest, scope: '/', start_url: PAIRING_PWA_START_URL })
-    return toArrayBuffer(new TextEncoder().encode(rewritten))
-}
-
 export function readWebAppAsset(requestPath: string, options?: WebAppAssetOptions): WebAppAsset | null {
     const root = resolveWebRoot(options)
     const normalizedPath = requestPath.startsWith('/assets/') ? requestPath : `/${requestPath.replace(/^\/+/, '')}`
@@ -146,8 +133,12 @@ export function readWebAppAsset(requestPath: string, options?: WebAppAssetOption
     if (!isHashedAsset && !isRootAsset) {
         return null
     }
+    // `/manifest.webmanifest` is served by `httpPwaManifest.ts` because it
+    // needs to read cookies and issue handoff tickets per request; routing
+    // it through the static asset reader would lose that dynamic owner.
+    if (rootAssetName === WEB_MANIFEST_FILE_NAME) return null
     const targetPath = resolveSafeAssetPath(root, safePath)
-    if (!targetPath || !existsSync(targetPath)) {
+    if (!targetPath || !existsSync(targetPath) || !statSync(targetPath).isFile()) {
         return null
     }
     const cacheKey = `${root}:${safePath}`
@@ -156,11 +147,20 @@ export function readWebAppAsset(requestPath: string, options?: WebAppAssetOption
         return cached
     }
     const asset = {
-        body: buildServedAssetBody(targetPath, rootAssetName),
+        body: toArrayBuffer(readFileSync(targetPath)),
         contentType: getContentType(targetPath),
         cacheControl: isHashedAsset ? 'public, max-age=31536000, immutable' : 'public, max-age=3600',
         path: targetPath,
     }
     assetCache.set(cacheKey, asset)
     return asset
+}
+
+export function readPairingManifestTemplate(options?: WebAppAssetOptions): Record<string, unknown> | null {
+    const root = resolveWebRoot(options)
+    const targetPath = join(root, WEB_MANIFEST_FILE_NAME)
+    if (!existsSync(targetPath) || !statSync(targetPath).isFile()) {
+        return null
+    }
+    return JSON.parse(readFileSync(targetPath, 'utf8')) as Record<string, unknown>
 }

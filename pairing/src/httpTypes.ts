@@ -1,6 +1,7 @@
 import type { PairingCreateRequest, PairingParticipantRecord, PairingSessionRecord } from '@viby/protocol/pairing'
 import { PairingSessionRecordSchema } from '@viby/protocol/pairing'
 import type { createBunWebSocket } from 'hono/bun'
+import type { PairingManifestCookieSigner } from './manifestCookie'
 import type { PairingMetrics } from './metrics'
 import type { PairingRateLimiter, PairingRateLimitRule } from './rateLimit'
 import type { PairingStore } from './store'
@@ -35,6 +36,8 @@ export interface PairingHttpOptions {
         indexHtml?: string
         assetsRoot?: string
     }
+    manifestCookieSigner: PairingManifestCookieSigner
+    manifestCookieTtlSeconds: number
 }
 
 export type { PairingCreateRequest, PairingParticipantRecord, PairingSessionRecord }

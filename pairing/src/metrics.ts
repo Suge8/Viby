@@ -16,6 +16,8 @@ export type PairingMetricName =
     | 'delete_requests'
     | 'delete_rejected'
     | 'rate_limited'
+    | 'pwa_manifest_personalized'
+    | 'pwa_cookie_recover_success'
 
 type TelemetryAggregate = {
     totalReports: number
