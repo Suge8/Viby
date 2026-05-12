@@ -23,17 +23,6 @@ const reconnectSchema = z.object({
     secret: z.string().min(32).max(256),
 })
 
-const pairingPresenceSchema = z.object({
-    pairingId: z.string().trim().min(1).max(128),
-    alive: z.boolean(),
-    deviceName: z.string().trim().min(1).max(80).optional(),
-    platform: DevicePlatformSchema.optional(),
-})
-
-export interface PairingPresenceSink {
-    set(pairingDeviceId: string, alive: boolean): void
-}
-
 async function signSession(jwtSecret: Uint8Array, deviceId?: string) {
     const userId = await getOrCreateOwnerId()
     const token = await new SignJWT(deviceId ? { uid: userId, did: deviceId } : { uid: userId })
@@ -48,8 +37,11 @@ function createSecret(): string {
     return randomBytes(32).toString('base64url')
 }
 
-function isActiveDevice(device: { id: string; revokedAt: number | null }, activeIds: Set<string>): boolean {
-    if (device.revokedAt !== null) return false
+function isActiveDevice(
+    device: { id: string; channel: string | null; revokedAt: number | null },
+    activeIds: Set<string>
+): boolean {
+    if (device.revokedAt !== null || device.channel === 'scan') return false
     return activeIds.has(device.id)
 }
 
@@ -59,7 +51,6 @@ export function createDeviceAuthRoutes(
     options: {
         protectedRoutes?: boolean
         getActiveDeviceIds?: () => Set<string>
-        pairingPresence?: PairingPresenceSink
     } = {}
 ): Hono<WebAppEnv> {
     const app = new HonoApp<WebAppEnv>()
@@ -93,22 +84,6 @@ export function createDeviceAuthRoutes(
         return app
     }
 
-    app.post('/device-auth/pairing-presence', createJsonBodyValidator(pairingPresenceSchema), (c) => {
-        const { pairingId, alive, deviceName, platform } = c.req.valid('json')
-        const pairingDeviceId = `pairing:${pairingId}`
-        if (alive) {
-            const device = devices.bindPairingDevice({ pairingId, name: deviceName, platform, channel: 'scan' })
-            if (!device) {
-                options.pairingPresence?.set(pairingDeviceId, false)
-                return c.json({ error: 'Pairing device is revoked', code: 'device_revoked' }, 410)
-            }
-            options.pairingPresence?.set(pairingDeviceId, true)
-            return c.json({ device })
-        }
-        options.pairingPresence?.set(pairingDeviceId, false)
-        return c.json({ ok: true })
-    })
-
     app.get('/device-auth/devices', (c) => {
         const activeIds = options.getActiveDeviceIds?.() ?? new Set<string>()
         const listedDevices = devices.listDevices().map((device) => ({
@@ -121,11 +96,7 @@ export function createDeviceAuthRoutes(
 
     app.delete('/device-auth/devices/:deviceId', (c) => {
         const deviceId = c.req.param('deviceId')
-        if (deviceId.startsWith('pairing:')) {
-            const deleted = devices.deletePairingDevice(deviceId)
-            if (deleted) options.pairingPresence?.set(deviceId, false)
-            return c.json({ deleted })
-        }
+        if (deviceId.startsWith('pairing:')) return c.json({ deleted: devices.deletePairingDevice(deviceId) })
         return c.json({ revoked: devices.revokeDevice(deviceId) })
     })
 

@@ -3,7 +3,6 @@ import type { DesktopPairingSession, HubRuntimeStatus, PairingBridgeState, Pairi
 import { LocalHubPairingClient } from './localHubPairingClient'
 import { attachPairingDataChannel, HubPausedError, isHubPausedError } from './pairingBridgeControllerSupport'
 import { startPairingBridgeStats } from './pairingBridgeStats'
-import { createPairingPresenceReporter } from './pairingPresenceSync'
 
 function toIceServers(servers: PairingIceServer[]): RTCIceServer[] {
     return servers.map((server) => ({ urls: server.urls, username: server.username, credential: server.credential }))
@@ -61,11 +60,6 @@ export function startPairingBridge(options: {
     let eventStreamAbort: AbortController | null = null
     let channel: RTCDataChannel | null = null
     const client = createDeferredHubClient(options.getStatus)
-    const presence = createPairingPresenceReporter({
-        client,
-        pairingId: options.pairing.pairing.id,
-        onError: reportAsyncError,
-    })
     const transport = createPairingTransport({
         pairingId: options.pairing.pairing.id,
         polite: false,
@@ -92,7 +86,6 @@ export function startPairingBridge(options: {
         stats.dispose()
         transport.dispose()
         channel?.close()
-        presence.dispose()
         try {
             client.closeAllTerminals()
         } catch (error) {
@@ -119,15 +112,8 @@ export function startPairingBridge(options: {
             setBridgeState: (state) => options.onStateChange({ pairing: options.pairing.pairing, ...state }),
             startEventStream,
             stopEventStream,
-            reportPairingPresence: emitPresence,
             reportAsyncError,
         })
-    }
-
-    function emitPresence(alive: boolean): void {
-        const guest = options.pairing.pairing.guest
-        const platform = guest?.metadata?.platform
-        presence.set(alive, { deviceName: guest?.label, platform: typeof platform === 'string' ? platform : undefined })
     }
 
     async function startEventStream(activeChannel: RTCDataChannel): Promise<void> {

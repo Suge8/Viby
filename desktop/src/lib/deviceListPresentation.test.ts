@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import type { DeviceAuthDevice } from '@/lib/deviceAuthSummary'
+import type { DeviceLinkSnapshotMap } from '@/lib/deviceLinkBadge'
 import { getConnectedDevices } from './deviceListPresentation'
 
 function device(overrides: Partial<DeviceAuthDevice>): DeviceAuthDevice {
@@ -16,12 +17,23 @@ function device(overrides: Partial<DeviceAuthDevice>): DeviceAuthDevice {
     }
 }
 
-describe('deviceListPresentation', () => {
-    it('keeps the connected list aligned with the connected count semantics', () => {
-        const connected = device({ id: 'connected', active: true })
-        const recentOffline = device({ id: 'recent-offline', lastSeenAt: Date.now() })
-        const revokedOnline = device({ id: 'revoked-online', active: true, revokedAt: Date.now() })
+const noLinks: DeviceLinkSnapshotMap = new Map()
 
-        expect(getConnectedDevices([connected, recentOffline, revokedOnline])).toEqual([connected])
+describe('deviceListPresentation', () => {
+    it('counts link/local devices from hub active state', () => {
+        const connected = device({ id: 'connected', channel: 'link', active: true })
+        const recentOffline = device({ id: 'recent-offline', channel: 'link', lastSeenAt: Date.now() })
+        const revokedOnline = device({ id: 'revoked-online', channel: 'link', active: true, revokedAt: Date.now() })
+        expect(getConnectedDevices([connected, recentOffline, revokedOnline], noLinks)).toEqual([connected])
+    })
+
+    it('counts scan devices only when their bridge is ready', () => {
+        const ready = device({ id: 'pairing:ready', channel: 'scan', active: false })
+        const connecting = device({ id: 'pairing:connecting', channel: 'scan', active: true })
+        const links: DeviceLinkSnapshotMap = new Map([
+            ['pairing:ready', { deviceId: 'pairing:ready', phase: 'ready', stats: null }],
+            ['pairing:connecting', { deviceId: 'pairing:connecting', phase: 'connecting', stats: null }],
+        ])
+        expect(getConnectedDevices([ready, connecting], links)).toEqual([ready])
     })
 })

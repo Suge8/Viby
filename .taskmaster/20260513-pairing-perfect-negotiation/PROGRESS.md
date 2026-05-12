@@ -15,14 +15,14 @@
 
 > Resume from here after compaction / restart.
 
-- **Current milestone**: #10 — Phase J presence migration
-- **Current status**: Phase I DONE；Phase J TODO
-- **Last completed**: #9 Phase I bridge / Hub decouple
-- **Current artifact**: `desktop/src/lib/pairingPresenceSync.ts`
+- **Current milestone**: #11 — Phase K legacy cleanup + final regression
+- **Current status**: Phase J DONE；Phase K TODO
+- **Last completed**: #10 Phase J presence migration
+- **Current artifact**: `.taskmaster/20260513-pairing-perfect-negotiation/tasks/11-legacy-cleanup/`
 - **Claimed by**: `none`
 - **Lease until**: `none`
 - **Write scope**: `none`
-- **Handoff**: `none`
+- **Handoff**: Phase K must run legacy schema cleanup, docs rewrite, harness checks, and real-device RM bulk run.
 - **Key context**: Phase F web guest now uses shared `createPairingTransport` via `RemotePeerSession` (transport stack 401 lines). Legacy guest signal/negotiation/liveness modules deleted. `mapByeToErrorKey()` added. D/E/F code is merged locally but not deployed; staging burn-in still pending.
 - **Known issues**: 真机回归矩阵需要 iPhone Safari + 桌面端联调；自动化只是保底。D/E/F 发布必须协调 staging 24h burn-in。
 - **Next action**: 取 row 10 (`tasks/10-presence-migration`)，迁移 presence 事实源。
@@ -205,4 +205,15 @@
 - Hub-paused presence/event-stream errors do not mark bridge fatal.
 - Validation: desktop typecheck, focused hook/controller tests, full desktop test, `rg "hubRuntimeKey" desktop/src` ✅
 - Real-device RM7 deferred to Phase K bulk run.
+- Commit: pending.
+
+
+## Phase J Complete — 2026-05-12T20:01:54Z
+
+- Desktop connected counts/popover now derive scan online state from `usePairingBridges().deviceLinks` bridge phase.
+- Retired scan-channel presence reporting: deleted `pairingPresenceSync`, removed `reportPairingPresence`, removed Hub `pairing-presence` route/sink/options.
+- Hub keeps scan metadata but `DevicePresenceTracker` ignores `pairing:*`; link/local presence remains Hub-owned.
+- Docs updated for new owner split.
+- Validation: `bun run --cwd desktop typecheck` ✅; `bun run --cwd desktop test` ✅; `bun run --cwd hub typecheck` ✅; `bun run --cwd hub test` ✅.
+- Real-device RM7/RM11 deferred to Phase K bulk run.
 - Commit: pending.

@@ -64,9 +64,12 @@ export function buildDeviceLinkStatus(
     bridge: DeviceLinkSnapshot | null
 ): PairingDeviceLinkStatus {
     const matched = bridge && bridge.deviceId === device.id ? bridge : null
+    if (matched?.phase === 'connecting')
+        return { phase: 'handshaking', title: '正在握手', tone: 'warning', latencyMs: null }
+    if (matched?.phase === 'fatal') return { phase: 'failed', title: '连接中断', tone: 'danger', latencyMs: null }
     return buildPairingDeviceLinkStatus({
         channel: device.channel,
-        active: device.active,
+        active: device.channel === 'scan' ? false : device.active,
         bridge: matched ? adaptBridgeInput(matched) : null,
     })
 }

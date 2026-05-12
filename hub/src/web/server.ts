@@ -108,7 +108,6 @@ function createWebApp(options: {
     publicAccessEnabled: boolean
     embeddedAssetMap: Map<string, EmbeddedWebAsset> | null
     getActiveDeviceIds?: () => Set<string>
-    pairingPresence?: import('./routes/deviceAuth').PairingPresenceSink
 }): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
@@ -148,7 +147,6 @@ function createWebApp(options: {
         createDeviceAuthRoutes(options.jwtSecret, options.store.devices, {
             protectedRoutes: true,
             getActiveDeviceIds: options.getActiveDeviceIds,
-            pairingPresence: options.pairingPresence,
         })
     )
     app.route('/api', createPushRoutes(options.store, options.vapidPublicKey))
@@ -243,7 +241,6 @@ export type StartWebServerOptions = {
     publicAccessEnabled: boolean
     corsOrigins?: string[]
     getActiveDeviceIds?: () => Set<string>
-    pairingPresence?: import('./routes/deviceAuth').PairingPresenceSink
 }
 
 export async function createWebServerFetch(
@@ -261,7 +258,6 @@ export async function createWebServerFetch(
         publicAccessEnabled: options.publicAccessEnabled,
         embeddedAssetMap,
         getActiveDeviceIds: options.getActiveDeviceIds,
-        pairingPresence: options.pairingPresence,
     })
 
     const socketHandler = options.socketEngine.handler()

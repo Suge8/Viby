@@ -108,10 +108,9 @@ export class StoreSchemaMigrationSupport {
 
     /**
      * v20 presence cleanup: hard-delete all soft-revoked tombstones and every
-     * scan-channel row. scan devices are reconstructed by the desktop bridge
-     * `POST /api/device-auth/pairing-presence` on the next data channel open,
-     * so dropping stale rows is the cheapest way to converge on the new
-     * single-source-of-truth active model.
+     * scan-channel row. scan device rows are reconstructed by the current
+     * pairing bind path, while scan online state is owned by the desktop bridge
+     * map instead of Hub presence.
      */
     purgeLegacyDeviceAuthRows(): void {
         this.db.exec('DELETE FROM device_auth_devices WHERE revoked_at IS NOT NULL')

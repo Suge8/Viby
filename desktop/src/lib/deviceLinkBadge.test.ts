@@ -40,7 +40,7 @@ function bridgeState(overrides: Partial<PairingBridgeState>): PairingBridgeState
 
 describe('buildDeviceLinkSnapshot', () => {
     it('returns null when the bridge has no pairing', () => {
-        const snapshot = buildDeviceLinkSnapshot({ phase: 'idle', message: null, pairing: null, stats: null })
+        const snapshot = buildDeviceLinkSnapshot({ phase: 'connecting', message: null, pairing: null, stats: null })
         expect(snapshot).toBeNull()
     })
 
@@ -121,7 +121,7 @@ describe('buildDeviceLinkStatus', () => {
         const failed = buildDeviceLinkSnapshot(bridgeState({ phase: 'fatal' }))
         expect(buildDeviceLinkStatus(pairingDevice(), failed)).toMatchObject({
             phase: 'failed',
-            title: '链路异常',
+            title: '连接中断',
             tone: 'danger',
         })
     })
@@ -131,7 +131,7 @@ describe('buildDeviceLinkStatus', () => {
         expect(buildDeviceLinkStatus(pairingDevice(), snapshot)).toEqual({
             phase: 'public',
             title: '公网',
-            tone: 'success',
+            tone: 'neutral',
             latencyMs: null,
         })
     })

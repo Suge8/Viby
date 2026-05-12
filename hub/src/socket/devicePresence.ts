@@ -1,16 +1,16 @@
 /**
- * Tracks which device IDs currently have a live owner (Socket.IO socket or
- * bridge presence reporter). active = membership of this set; there is no
- * timestamp or TTL fallback.
+ * Tracks link/local device IDs with a live socket owner. Scan (`pairing:*`)
+ * presence is derived from desktop bridge phase and never registered here.
  */
 export class DevicePresenceTracker {
     private readonly ownersByDevice = new Map<string, Set<string>>()
 
-    add(deviceId: string | undefined, ownerKey: string): void {
-        if (!deviceId) return
+    add(deviceId: string | undefined, ownerKey: string): boolean {
+        if (!deviceId || deviceId.startsWith('pairing:')) return false
         const owners = this.ownersByDevice.get(deviceId) ?? new Set<string>()
         owners.add(ownerKey)
         this.ownersByDevice.set(deviceId, owners)
+        return true
     }
 
     remove(deviceId: string | undefined, ownerKey: string): void {

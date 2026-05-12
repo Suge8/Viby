@@ -55,27 +55,16 @@ export function attachPairingDataChannel(options: {
     setBridgeState: BridgeStateSetter
     startEventStream: (channel: RTCDataChannel) => Promise<void>
     stopEventStream: () => void
-    reportPairingPresence: (alive: boolean) => void
     reportAsyncError: (message: string, error: unknown) => void
 }): void {
-    const {
-        channel,
-        getClient,
-        isDisposed,
-        setBridgeState,
-        startEventStream,
-        stopEventStream,
-        reportPairingPresence,
-        reportAsyncError,
-    } = options
+    const { channel, getClient, isDisposed, setBridgeState, startEventStream, stopEventStream, reportAsyncError } =
+        options
     channel.addEventListener('open', () => {
-        reportPairingPresence(true)
         void startEventStream(channel).catch((error) => reportAsyncError('配对事件流启动失败：', error))
     })
     channel.addEventListener('close', () => {
         stopEventStream()
         closeAllTerminals(getClient)
-        reportPairingPresence(true)
         if (!isDisposed()) setBridgeState({ phase: 'connecting', message: '正在握手' })
     })
     channel.addEventListener('message', (event) => {

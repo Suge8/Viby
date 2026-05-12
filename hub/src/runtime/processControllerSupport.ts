@@ -37,7 +37,6 @@ export function buildProcessWebServerOptions(options: {
     publicAccessEnabled: boolean
     corsOrigins: string[]
     getActiveDeviceIds?: StartWebServerOptions['getActiveDeviceIds']
-    pairingPresence?: StartWebServerOptions['pairingPresence']
 }): StartWebServerOptions {
     return {
         getSyncEngine: options.getSyncEngine,
@@ -52,7 +51,6 @@ export function buildProcessWebServerOptions(options: {
         publicAccessEnabled: options.publicAccessEnabled,
         corsOrigins: options.corsOrigins,
         getActiveDeviceIds: options.getActiveDeviceIds,
-        pairingPresence: options.pairingPresence,
     }
 }
 

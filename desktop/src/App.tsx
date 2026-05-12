@@ -36,6 +36,7 @@ import {
     shouldPollPairingSnapshot,
 } from '@/lib/desktopShellModel'
 import { buildDeviceLinkSnapshots } from '@/lib/deviceLinkBadge'
+import { getConnectedDevices } from '@/lib/deviceListPresentation'
 import { buildEntryPreviewModel } from '@/lib/entryMode'
 import { deriveHubViewState } from '@/lib/hubSnapshot'
 import { buildLanEntryQrModel } from '@/lib/lanEntryQr'
@@ -101,7 +102,10 @@ export function App(): JSX.Element {
     const copy = DESKTOP_COPY[language]
     const lanEntryQr = buildLanEntryQrModel({ entryPreview, publicAccessEnabled: hub.publicAccessEnabled })
     const lanEntryQrUrl = lanEntryQr?.url ?? null
-    const activeDeviceCount = buildDeviceCount(deviceSummary.loaded, deviceSummary.activeCount)
+    const activeDeviceCount = buildDeviceCount(
+        deviceSummary.loaded,
+        getConnectedDevices(deviceSummary.devices, deviceLinks).length
+    )
     const deviceActionVisible = hub.publicAccessEnabled || Boolean(lanEntryQr)
     const deviceActionLabel = lanEntryQr ? copy.lanEntryQrAction : copy.deviceTitle
     const notice = hub.actionError || pairings.actionError || hub.snapshot?.lastError || null

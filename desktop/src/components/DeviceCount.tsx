@@ -29,7 +29,7 @@ function DeviceRow(props: {
             </span>
             <div>
                 <strong>{buildDeviceHeadline(device, linkStatus)}</strong>
-                <small>当前在线</small>
+                <small>{linkStatus.title}</small>
             </div>
             <button type="button" disabled={props.revoking} onClick={() => props.onRevokeDevice(device.id)}>
                 {props.revoking ? '取消中…' : '取消配对'}
@@ -44,7 +44,7 @@ function DeviceListPopover(props: {
     revokingId: string | null
     onRevokeDevice(deviceId: string): void
 }): JSX.Element {
-    const activeDevices = getConnectedDevices(props.devices)
+    const activeDevices = getConnectedDevices(props.devices, props.links)
     return (
         <div className="desktop-device-popover" role="listbox" aria-live="polite">
             {activeDevices.length === 0 ? <span className="desktop-device-popover-empty">暂无在线设备</span> : null}

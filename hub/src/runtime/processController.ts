@@ -94,12 +94,6 @@ export function createHubProcessController(): HubProcessController {
             publicAccessEnabled: getConfig().publicAccessEnabled,
             corsOrigins,
             getActiveDeviceIds: () => currentSocketServer.devicePresence.activeDeviceIds(),
-            pairingPresence: {
-                set: (deviceId, alive) => {
-                    if (alive) currentSocketServer.devicePresence.add(deviceId, 'pairing-bridge')
-                    else currentSocketServer.devicePresence.remove(deviceId, 'pairing-bridge')
-                },
-            },
         })
     }
 

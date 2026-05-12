@@ -27,37 +27,31 @@ function attach(channel: FakeDataChannel, overrides: Record<string, unknown> = {
         setBridgeState: mock(() => undefined),
         stopEventStream: mock(() => undefined),
         startEventStream: mock(async () => undefined),
-        reportPairingPresence: mock(() => undefined),
         reportAsyncError: mock(() => undefined),
         ...overrides,
     })
 }
 
 describe('pairingBridgeControllerSupport', () => {
-    it('reports presence and starts the event stream on channel open', () => {
+    it('starts the event stream on channel open', () => {
         const channel = new FakeDataChannel()
-        const reportPairingPresence = mock(() => undefined)
         const startEventStream = mock(async () => undefined)
-        attach(channel, { reportPairingPresence, startEventStream })
+        attach(channel, { startEventStream })
         channel.emit('open')
-        expect(reportPairingPresence).toHaveBeenCalledWith(true)
         expect(startEventStream).toHaveBeenCalled()
     })
 
-    it('keeps presence alive and closes terminals on channel close', () => {
+    it('closes terminals on channel close', () => {
         const channel = new FakeDataChannel()
         const stopEventStream = mock(() => undefined)
         const closeAllTerminals = mock(() => undefined)
-        const reportPairingPresence = mock(() => undefined)
         attach(channel, {
             getClient: () => ({ closeAllTerminals, acceptUploadChunk: mock(async () => false) }) as never,
             stopEventStream,
-            reportPairingPresence,
         })
         channel.emit('close')
         expect(stopEventStream).toHaveBeenCalled()
         expect(closeAllTerminals).toHaveBeenCalled()
-        expect(reportPairingPresence).toHaveBeenCalledWith(true)
     })
 
     it('echoes heartbeat frames and marks ready', () => {
