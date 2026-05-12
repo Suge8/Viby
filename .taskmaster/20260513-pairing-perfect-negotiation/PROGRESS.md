@@ -15,17 +15,17 @@
 
 > Resume from here after compaction / restart.
 
-- **Current milestone**: #2 — Phase B PerfectNegotiation engine
-- **Current status**: Phase A DONE；Phase B TODO
-- **Last completed**: #1 Phase A Signal Schema 收缩到 `description | candidate | bye`
-- **Current artifact**: `shared/src/pairing/pairingSignal.ts`
+- **Current milestone**: #3 — Phase C Pairing Transport
+- **Current status**: Phase B DONE；Phase C TODO
+- **Last completed**: #2 Phase B PerfectNegotiation engine
+- **Current artifact**: `shared/src/pairing/perfectNegotiation.ts`
 - **Claimed by**: `none`
 - **Lease until**: `none`
 - **Write scope**: `none`
 - **Handoff**: `none`
-- **Key context**: Phase A 纯新增 V2 signal contract；旧 9 信号 schema/消费方未动。V2 导出：`PairingSignalV2Schema`、`PairingSignalV2Description/Candidate/Bye`、`PairingByeReasonSchema`。
+- **Key context**: Phase B added an 80-line event-driven perfect-negotiation engine using explicit `createOffer/createAnswer + setLocalDescription(desc)`. It does not call transport recovery APIs and does not listen to connection/ICE state events. Phase A V2 signal contract remains additive.
 - **Known issues**: 真机回归矩阵需要 iPhone Safari + 桌面端联调；自动化只是保底。D/E/F 发布必须协调 staging 24h burn-in。
-- **Next action**: 取 row 2 (`tasks/02-perfect-negotiation`)，实现 shared perfect-negotiation engine；注意显式 `createOffer/Answer + setLocalDescription(desc)`，ICE restart 只留给 Phase C transport。
+- **Next action**: 取 row 3 (`tasks/03-pairing-transport`)，实现 shared createPairingTransport；ICE recovery/foreground hooks belong there.
 
 ---
 
@@ -117,4 +117,13 @@
 - Exported V2 signal schema from `shared/src/pairing/index.ts`.
 - Validation: `bun run --cwd shared typecheck && bun run --cwd shared test -t pairingSignal` ✅
 - Real-device RM: not applicable for Phase A.
+- Commit: pending.
+
+## Phase B Complete — 2026-05-12T18:23:00Z
+
+- Added `shared/src/pairing/perfectNegotiation.ts` W3C perfect-negotiation engine (80 lines).
+- Added mock RTCPeerConnection tests for initial offer/answer, polite/impolite glare, pre-SDP candidate handling, dispose.
+- Exported engine from `shared/src/pairing/index.ts`.
+- Validation: `bun run --cwd shared typecheck`; grep guard for transport recovery terms empty; `bun run --cwd shared test -t perfectNegotiation` ✅
+- Real-device RM: not applicable for Phase B.
 - Commit: pending.
