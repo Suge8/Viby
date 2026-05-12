@@ -118,7 +118,7 @@ export class RemotePeerSession {
     close(): void {
         this.unsubscribeForeground()
         this.unsubscribeTransport()
-        this.pendingRequests.rejectAll(createRemotePairingCodedError('remotePairing.error.closed'))
+        this.pendingRequests.rejectAll(createRemotePairingCodedError('remotePairing.error.closedRetrying'))
         this.closeListeners.clear()
         this.channel?.close()
         this.transport.dispose()

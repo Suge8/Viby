@@ -44,6 +44,10 @@ export type PairingDeviceKeyCacheRecord = Readonly<{
     publicKey: string
 }>
 
+export type PairingRetainedReadyCacheRecord = Readonly<{
+    lastReadyAt: number
+}>
+
 export type SessionAttentionCacheRecord = Readonly<{
     snapshot: Record<string, number>
 }>
@@ -56,6 +60,7 @@ type AppCacheRecordByStore = {
     [APP_CACHE_STORES.composerDrafts]: ComposerDraftCacheRecord
     [APP_CACHE_STORES.messageWindowWarm]: MessageWindowWarmCacheRecord
     [APP_CACHE_STORES.pairingDeviceKeys]: PairingDeviceKeyCacheRecord
+    [APP_CACHE_STORES.pairingRetainedReady]: PairingRetainedReadyCacheRecord
     [APP_CACHE_STORES.sessionAttention]: SessionAttentionCacheRecord
     [APP_CACHE_STORES.sessionWarm]: SessionWarmCacheRecord
     [APP_CACHE_STORES.sessionsWarm]: SessionsWarmCacheRecord

@@ -19,9 +19,9 @@ describe('RemotePairingScreens', () => {
     })
 
     it('renders the connecting surface with the active phase step', async () => {
-        renderWithI18n(<RemotePairingStatusScreen message={null} phase="connecting" />)
+        renderWithI18n(<RemotePairingStatusScreen message={null} phase="finalizing" />)
 
-        expect(screen.getByText('Opening secure channel')).toBeInTheDocument()
+        expect(screen.getByText('Almost there')).toBeInTheDocument()
     })
 
     it('renders retryable errors with one explicit retry action', async () => {

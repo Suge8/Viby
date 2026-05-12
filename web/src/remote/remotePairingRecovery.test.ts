@@ -19,25 +19,29 @@ describe('remotePairingRecovery', () => {
 
     it('keeps transient transport and broker failures in the reconnect path', () => {
         expect(
-            isRecoverableRemotePairingError(new RemotePeerConnectError('socket', 'remotePairing.error.socket'))
+            isRecoverableRemotePairingError(new RemotePeerConnectError('socket', 'remotePairing.error.closedRetrying'))
         ).toBe(true)
         expect(
-            isRecoverableRemotePairingError(new RemotePeerConnectError('closed', 'remotePairing.error.closed'))
-        ).toBe(true)
-        expect(
-            isRecoverableRemotePairingError(new RemotePeerConnectError('p2p-blocked', 'remotePairing.error.p2pBlocked'))
+            isRecoverableRemotePairingError(new RemotePeerConnectError('closed', 'remotePairing.error.closedRetrying'))
         ).toBe(true)
         expect(
             isRecoverableRemotePairingError(
-                new RemotePeerConnectError('host-unavailable', 'remotePairing.error.hostUnavailable')
+                new RemotePeerConnectError('p2p-blocked', 'remotePairing.error.closedRetrying')
             )
         ).toBe(true)
         expect(
-            isRecoverableRemotePairingError(new RemotePeerConnectError('host-closed', 'remotePairing.error.hostClosed'))
+            isRecoverableRemotePairingError(
+                new RemotePeerConnectError('host-unavailable', 'remotePairing.error.closedRetrying')
+            )
         ).toBe(true)
-        expect(isRecoverableRemotePairingError(new RemotePairingHttpError(503, 'remotePairing.error.fallback'))).toBe(
-            true
-        )
+        expect(
+            isRecoverableRemotePairingError(
+                new RemotePeerConnectError('host-closed', 'remotePairing.error.closedRetrying')
+            )
+        ).toBe(true)
+        expect(
+            isRecoverableRemotePairingError(new RemotePairingHttpError(503, 'remotePairing.error.closedRetrying'))
+        ).toBe(true)
         expect(
             isRecoverableRemotePairingError(
                 new RemotePairingHttpError(
@@ -53,7 +57,7 @@ describe('remotePairingRecovery', () => {
 
     it('does not retry terminal peer states or invalid credentials forever', () => {
         expect(
-            isRecoverableRemotePairingError(new RemotePeerConnectError('expired', 'remotePairing.error.expired'))
+            isRecoverableRemotePairingError(new RemotePeerConnectError('expired', 'remotePairing.error.scanAgain'))
         ).toBe(false)
         expect(
             isRecoverableRemotePairingError(

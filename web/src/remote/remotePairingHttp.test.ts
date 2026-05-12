@@ -218,7 +218,7 @@ describe('remotePairingHttp', () => {
         installFetch([jsonResponse({ message: 'try again' }, 503)])
 
         await expect(reconnectRemotePairing('pairing-1')).rejects.toMatchObject({
-            code: 'remotePairing.error.fallback',
+            code: 'remotePairing.error.closedRetrying',
         })
 
         expect(readBrowserStorageItem('local', getPairingGuestTokenStorageKey('pairing-1'))).toBe('guest-token-1')

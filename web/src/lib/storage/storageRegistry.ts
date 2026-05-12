@@ -29,13 +29,14 @@ export const SESSION_STORAGE_KEYS = {
 } as const
 
 export const APP_CACHE_DB_NAME = 'viby-app-cache'
-export const APP_CACHE_DB_VERSION = 2
+export const APP_CACHE_DB_VERSION = 3
 export const APP_CACHE_BROADCAST_CHANNEL = 'viby-app-cache-events'
 
 export const APP_CACHE_STORES = {
     composerDrafts: 'composer-drafts',
     messageWindowWarm: 'message-window-warm',
     pairingDeviceKeys: 'pairing-device-keys',
+    pairingRetainedReady: 'pairing-retained-ready',
     sessionAttention: 'session-attention',
     sessionWarm: 'session-warm',
     sessionsWarm: 'sessions-warm',

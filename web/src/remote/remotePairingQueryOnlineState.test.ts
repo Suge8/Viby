@@ -22,10 +22,10 @@ describe('remotePairingQueryOnlineState', () => {
             queryClient.fetchQuery({
                 queryKey: ['remote-broken'],
                 queryFn: async () => {
-                    throw new Error('remotePairing.error.peerTimeout')
+                    throw new Error('remotePairing.error.peerRequestFailed')
                 },
             })
-        ).rejects.toThrow('remotePairing.error.peerTimeout')
+        ).rejects.toThrow('remotePairing.error.peerRequestFailed')
 
         await queryClient.fetchQuery({ queryKey: ['remote-retained'], queryFn: async () => 'retained' })
         await expect(
@@ -33,10 +33,10 @@ describe('remotePairingQueryOnlineState', () => {
                 queryKey: ['remote-retained'],
                 staleTime: 0,
                 queryFn: async () => {
-                    throw new Error('remotePairing.error.peerTimeout')
+                    throw new Error('remotePairing.error.peerRequestFailed')
                 },
             })
-        ).rejects.toThrow('remotePairing.error.peerTimeout')
+        ).rejects.toThrow('remotePairing.error.peerRequestFailed')
 
         expect(queryClient.getQueryState(['remote-broken'])?.status).toBe('error')
         expect(queryClient.getQueryState(['remote-retained'])?.status).toBe('error')

@@ -73,7 +73,7 @@ export function RemotePwaBootstrap(): JSX.Element {
     if (state.failure.kind === 'transient') {
         return (
             <RemotePairingStatusScreen
-                message={t('remotePairing.error.fallback')}
+                message={t('remotePairing.error.closedRetrying')}
                 onRetry={() => {
                     attemptedRef.current = false
                     setState({ kind: 'attempting' })

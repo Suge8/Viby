@@ -209,9 +209,11 @@ function resolvePairingHttpErrorKey(
             : 'remotePairing.error.scanAgain'
     }
     if (context === 'claim') {
-        return status >= 500 || status === 408 ? 'remotePairing.error.fallback' : 'remotePairing.error.regenerateQr'
+        return status >= 500 || status === 408
+            ? 'remotePairing.error.closedRetrying'
+            : 'remotePairing.error.regenerateQr'
     }
-    return status >= 500 || status === 408 ? 'remotePairing.error.fallback' : 'remotePairing.error.scanAgain'
+    return status >= 500 || status === 408 ? 'remotePairing.error.closedRetrying' : 'remotePairing.error.scanAgain'
 }
 
 async function readJsonPayload(response: Response): Promise<unknown> {

@@ -23,8 +23,8 @@ describe('formatUserFacingErrorMessage', () => {
 
     it('translates remote pairing error codes before raw-message passthrough', () => {
         expect(
-            formatUserFacingErrorMessage(new Error('remotePairing.error.peerTimeout'), {
-                t: (key) => (key === 'remotePairing.error.peerTimeout' ? 'Computer timed out' : key),
+            formatUserFacingErrorMessage(new Error('remotePairing.error.peerRequestFailed'), {
+                t: (key) => (key === 'remotePairing.error.peerRequestFailed' ? 'Computer timed out' : key),
                 fallbackKey: 'fallback',
                 allowPassthrough: true,
             })

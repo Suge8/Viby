@@ -9,10 +9,10 @@ describe('RemotePeerSession', () => {
     })
 
     it('maps broker bye reasons to user-facing errors', () => {
-        expect(mapByeToErrorKey('pairing_unavailable')).toBe('remotePairing.error.scanAgain')
+        expect(mapByeToErrorKey('pairing_unavailable')).toBe('remotePairing.error.pairingUnavailable')
         expect(mapByeToErrorKey('invalid_token')).toBe('remotePairing.error.scanAgain')
         expect(mapByeToErrorKey('invalid_device_proof')).toBe('remotePairing.error.regenerateQr')
         expect(mapByeToErrorKey('handoff_invalid')).toBe('remotePairing.error.regenerateQr')
-        expect(mapByeToErrorKey('user_revoked')).toBe('remotePairing.error.scanAgain')
+        expect(mapByeToErrorKey('user_revoked')).toBe('remotePairing.error.pairingUnavailable')
     })
 })

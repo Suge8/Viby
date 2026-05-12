@@ -31,7 +31,7 @@ function waitForBufferedAmountLow(channel: RTCDataChannel): Promise<void> {
         }
         const handleClose = (): void => {
             cleanup()
-            reject(createRemotePairingCodedError('remotePairing.error.peerNotConnected'))
+            reject(createRemotePairingCodedError('remotePairing.error.peerRequestFailed'))
         }
         channel.addEventListener('bufferedamountlow', handleLow)
         channel.addEventListener('close', handleClose, { once: true })
@@ -59,7 +59,7 @@ export async function uploadRemoteFile(options: {
 }): Promise<{ success: boolean; path?: string; error?: string }> {
     const { channel, file, mimeType, requestPeer, sessionId } = options
     if (!channel || channel.readyState !== 'open') {
-        return { success: false, error: 'remotePairing.error.peerNotConnected' }
+        return { success: false, error: 'remotePairing.error.peerRequestFailed' }
     }
 
     const transferId = crypto.randomUUID()

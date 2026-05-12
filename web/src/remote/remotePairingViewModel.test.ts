@@ -1,80 +1,36 @@
 import { describe, expect, it } from 'vitest'
 import {
-    buildRemoteReconnectNoticeSpec,
     buildRemoteStatusSpec,
     shouldBlockRemoteReadyShellInteraction,
-    shouldRenderRemoteReadyShell,
     shouldShowRemoteReconnectNotice,
 } from './remotePairingViewModel'
 
-const SESSIONS_PATH = '/sessions/session-1'
-
 describe('remotePairingViewModel', () => {
-    it('keeps retained workspace visible during reconnect and reconnect attempts', () => {
-        expect(
-            shouldRenderRemoteReadyShell({
-                state: { kind: 'reconnecting' },
-                hasRetainedReady: true,
-                pathname: SESSIONS_PATH,
-            })
-        ).toBe(true)
-        expect(
-            shouldRenderRemoteReadyShell({
-                state: { kind: 'booting' },
-                hasRetainedReady: true,
-                pathname: SESSIONS_PATH,
-            })
-        ).toBe(true)
+    it('shows reconnect chrome only while the retained workspace is running', () => {
+        expect(shouldShowRemoteReconnectNotice({ kind: 'running' })).toBe(true)
+        expect(shouldShowRemoteReconnectNotice({ kind: 'hydrating' })).toBe(false)
+        expect(shouldShowRemoteReconnectNotice({ kind: 'first-pairing' })).toBe(false)
+        expect(shouldShowRemoteReconnectNotice({ kind: 'fatal' })).toBe(false)
     })
 
-    it('uses the cold connection page before any workspace has been retained', () => {
-        expect(
-            shouldRenderRemoteReadyShell({
-                state: { kind: 'reconnecting' },
-                hasRetainedReady: false,
-                pathname: SESSIONS_PATH,
-            })
-        ).toBe(false)
+    it('blocks workspace actions outside the running state', () => {
+        expect(shouldBlockRemoteReadyShellInteraction({ kind: 'running' })).toBe(false)
+        expect(shouldBlockRemoteReadyShellInteraction({ kind: 'hydrating' })).toBe(true)
+        expect(shouldBlockRemoteReadyShellInteraction({ kind: 'fatal' })).toBe(true)
     })
 
-    it('blocks stale retained workspace actions until remote bridge is ready again', () => {
-        expect(shouldBlockRemoteReadyShellInteraction({ kind: 'booting' })).toBe(true)
-        expect(shouldBlockRemoteReadyShellInteraction({ kind: 'reconnecting' })).toBe(true)
-        expect(shouldBlockRemoteReadyShellInteraction({ kind: 'ready' })).toBe(false)
-        expect(shouldBlockRemoteReadyShellInteraction({ kind: 'approval' })).toBe(false)
-        expect(shouldBlockRemoteReadyShellInteraction({ kind: 'error' })).toBe(false)
-    })
-
-    it('keeps reconnect chrome compact only over retained workspace', () => {
-        expect(shouldShowRemoteReconnectNotice({ kind: 'reconnecting' }, false)).toBe(false)
-        expect(shouldShowRemoteReconnectNotice({ kind: 'reconnecting' }, true)).toBe(true)
-        expect(shouldShowRemoteReconnectNotice({ kind: 'booting' }, true)).toBe(true)
-        expect(shouldShowRemoteReconnectNotice({ kind: 'ready' }, true)).toBe(false)
-    })
-
-    it('uses one reconnect notice copy instead of attempt-based escalation', () => {
-        expect(buildRemoteReconnectNoticeSpec()).toEqual({
-            tone: 'info',
-            titleKey: 'remotePairing.reconnectNotice.title',
-        })
-    })
-
-    it('collapses raw transport errors into a small status surface set', () => {
+    it('collapses status errors into a small surface set', () => {
         expect(buildRemoteStatusSpec(null)).toEqual({ messageKey: null, retry: false })
-        expect(buildRemoteStatusSpec('remotePairing.error.closed')).toEqual({
-            messageKey: 'remotePairing.error.fallback',
-            retry: true,
-        })
-        expect(buildRemoteStatusSpec('remotePairing.error.expired')).toEqual({
+        expect(buildRemoteStatusSpec('remotePairing.error.scanAgain')).toEqual({
             messageKey: 'remotePairing.error.scanAgain',
             retry: false,
         })
-        expect(buildRemoteStatusSpec('remotePairing.error.hostUnavailable')).toEqual({
-            messageKey: 'remotePairing.error.hostClosed',
-            retry: true,
+        expect(buildRemoteStatusSpec('remotePairing.error.regenerateQr')).toEqual({
+            messageKey: 'remotePairing.error.regenerateQr',
+            retry: false,
         })
-        expect(buildRemoteStatusSpec('remotePairing.error.p2pTimedOut')).toEqual({
-            messageKey: 'remotePairing.error.p2pBlocked',
+        expect(buildRemoteStatusSpec('remotePairing.error.closedRetrying')).toEqual({
+            messageKey: 'remotePairing.error.closedRetrying',
             retry: true,
         })
     })

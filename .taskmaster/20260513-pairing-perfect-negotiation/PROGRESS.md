@@ -15,17 +15,17 @@
 
 > Resume from here after compaction / restart.
 
-- **Current milestone**: #7 — Phase G UI state machine
-- **Current status**: Phase F DONE；Phase G TODO
-- **Last completed**: #6 Phase F Web RemotePeerSession
-- **Current artifact**: `web/src/remote/RemotePeerSession.ts`
+- **Current milestone**: #8 — Phase H transparent reconnect budget
+- **Current status**: Phase G DONE；Phase H TODO
+- **Last completed**: #7 Phase G UI state machine
+- **Current artifact**: `web/src/remote/RemotePairingController.tsx`
 - **Claimed by**: `none`
 - **Lease until**: `none`
 - **Write scope**: `none`
 - **Handoff**: `none`
 - **Key context**: Phase F web guest now uses shared `createPairingTransport` via `RemotePeerSession` (transport stack 401 lines). Legacy guest signal/negotiation/liveness modules deleted. `mapByeToErrorKey()` added. D/E/F code is merged locally but not deployed; staging burn-in still pending.
 - **Known issues**: 真机回归矩阵需要 iPhone Safari + 桌面端联调；自动化只是保底。D/E/F 发布必须协调 staging 24h burn-in。
-- **Next action**: 取 row 7 (`tasks/07-ui-state-machine`)，Web UI 状态机 + IDB hydrate。
+- **Next action**: 取 row 8 (`tasks/08-transparent-reconnect`)，实现 transparent reconnect budget。
 
 ---
 
@@ -173,4 +173,13 @@
 - `mapByeToErrorKey()` added; `RemotePeerConnectError` moved to `remotePairingErrors.ts`.
 - Validation: web typecheck, focused tests, full test, build, line/grep guards ✅
 - Real-device RM: RM1/RM2/RM3/RM5/RM6/RM8/RM10 deferred to Phase K bulk run.
+- Commit: pending.
+
+## Phase G Complete — 2026-05-13T05:20:00Z
+
+- Web UI state is now `hydrating | first-pairing | running | fatal`; refresh with retained ready renders hydrate skeleton then workspace shell, not full-screen boot.
+- `pairingRetainedReady` IDB store added via app cache DB v3; sensitive tokens remain in existing owners.
+- Remote connecting phase shrunk to `pairing | verify | finalizing`; legacy reconnect loop removed.
+- Validation: web typecheck, focused controller/persistence tests, full web test, web build ✅
+- Real-device RM5 deferred to Phase K bulk run.
 - Commit: pending.

@@ -51,7 +51,7 @@ export function createRemotePeerPendingRequests(options: PendingRequestOptions =
         parse: (value: unknown) => T
     ): Promise<T> {
         if (!channel || channel.readyState !== 'open') {
-            const error = createRemotePairingCodedError('remotePairing.error.peerNotConnected')
+            const error = createRemotePairingCodedError('remotePairing.error.peerRequestFailed')
             options.onTransportFailure?.(error)
             return Promise.reject(error)
         }
@@ -59,7 +59,7 @@ export function createRemotePeerPendingRequests(options: PendingRequestOptions =
         return new Promise<T>((resolve, reject) => {
             const timeoutId = window.setTimeout(() => {
                 pending.delete(request.id)
-                const error = createRemotePairingCodedError('remotePairing.error.peerTimeout')
+                const error = createRemotePairingCodedError('remotePairing.error.peerRequestFailed')
                 reject(error)
                 options.onTransportFailure?.(error)
             }, PEER_REQUEST_TIMEOUT_MS)
