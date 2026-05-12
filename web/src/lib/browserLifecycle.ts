@@ -6,6 +6,8 @@ export type BrowserLifecycleEventKind =
     | 'pageshow-restored'
     | 'pagehide'
     | 'freeze'
+    | 'network-online'
+    | 'network-change'
 
 export type BrowserLifecycleEvent = Readonly<{
     at: number
@@ -19,6 +21,26 @@ let uninstallBrowserLifecycleListeners: (() => void) | null = null
 
 function canUseBrowserLifecycle(): boolean {
     return typeof window !== 'undefined' && typeof document !== 'undefined'
+}
+
+type NetworkConnectionLike = EventTarget & {
+    readonly effectiveType?: string
+    readonly type?: string
+}
+
+function getNetworkConnection(): NetworkConnectionLike | null {
+    if (typeof navigator === 'undefined') return null
+    const nav = navigator as Navigator & {
+        connection?: NetworkConnectionLike
+        mozConnection?: NetworkConnectionLike
+        webkitConnection?: NetworkConnectionLike
+    }
+    return nav.connection ?? nav.mozConnection ?? nav.webkitConnection ?? null
+}
+
+function readConnectionSignature(connection: NetworkConnectionLike | null): string | null {
+    if (!connection) return null
+    return connection.type ?? connection.effectiveType ?? null
 }
 
 function isDocumentVisible(): boolean {
@@ -76,12 +98,28 @@ function installBrowserLifecycleListeners(): void {
         emitBrowserLifecycleEvent('freeze')
     }
 
+    const handleOnline = (): void => {
+        emitBrowserLifecycleEvent('network-online')
+    }
+
+    const networkConnection = getNetworkConnection()
+    let lastConnectionSignature = readConnectionSignature(networkConnection)
+    const handleConnectionChange = (): void => {
+        const nextSignature = readConnectionSignature(networkConnection)
+        if (nextSignature !== lastConnectionSignature && lastConnectionSignature !== null) {
+            emitBrowserLifecycleEvent('network-change')
+        }
+        lastConnectionSignature = nextSignature
+    }
+
     window.addEventListener('focus', handleFocus)
     document.addEventListener('visibilitychange', handleVisibilityChange)
     document.addEventListener('resume', handleResume as EventListener)
     window.addEventListener('pageshow', handlePageShow)
     window.addEventListener('pagehide', handlePageHide)
     document.addEventListener('freeze', handleFreeze as EventListener)
+    window.addEventListener('online', handleOnline)
+    networkConnection?.addEventListener?.('change', handleConnectionChange)
 
     uninstallBrowserLifecycleListeners = () => {
         window.removeEventListener('focus', handleFocus)
@@ -90,6 +128,8 @@ function installBrowserLifecycleListeners(): void {
         window.removeEventListener('pageshow', handlePageShow)
         window.removeEventListener('pagehide', handlePageHide)
         document.removeEventListener('freeze', handleFreeze as EventListener)
+        window.removeEventListener('online', handleOnline)
+        networkConnection?.removeEventListener?.('change', handleConnectionChange)
         uninstallBrowserLifecycleListeners = null
     }
 }

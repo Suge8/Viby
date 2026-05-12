@@ -38,6 +38,12 @@ export type SessionsWarmCacheRecord = Readonly<{
     sessions: SessionSummary[]
 }>
 
+export type PairingDeviceKeyCacheRecord = Readonly<{
+    createdAt: number
+    privateKey: CryptoKey
+    publicKey: string
+}>
+
 export type SessionAttentionCacheRecord = Readonly<{
     snapshot: Record<string, number>
 }>
@@ -49,6 +55,7 @@ export type AppCacheBroadcastEvent = Readonly<{
 type AppCacheRecordByStore = {
     [APP_CACHE_STORES.composerDrafts]: ComposerDraftCacheRecord
     [APP_CACHE_STORES.messageWindowWarm]: MessageWindowWarmCacheRecord
+    [APP_CACHE_STORES.pairingDeviceKeys]: PairingDeviceKeyCacheRecord
     [APP_CACHE_STORES.sessionAttention]: SessionAttentionCacheRecord
     [APP_CACHE_STORES.sessionWarm]: SessionWarmCacheRecord
     [APP_CACHE_STORES.sessionsWarm]: SessionsWarmCacheRecord
@@ -65,6 +72,23 @@ const APP_CACHE_STORE_LIST = Object.values(APP_CACHE_STORES) as AppCacheStoreNam
 const TEST_APP_CACHE_DB_SUFFIX_KEY = '__VIBY_TEST_APP_CACHE_DB_SUFFIX__'
 
 let appCacheDbPromise: Promise<IDBPDatabase<AppCacheDbSchema> | null> | null = null
+
+export class AppCacheUnavailableError extends Error {
+    constructor(
+        readonly operation: 'read' | 'write' | 'delete',
+        readonly storeName: AppCacheStoreName,
+        readonly key: string,
+        cause?: unknown
+    ) {
+        super(`AppCacheDB unavailable during ${operation}`)
+        this.name = 'AppCacheUnavailableError'
+        this.cause = cause
+    }
+}
+
+export function isAppCacheUnavailableError(error: unknown): error is AppCacheUnavailableError {
+    return error instanceof AppCacheUnavailableError
+}
 
 function resolveAppCacheDbName(): string {
     const globalRecord = globalThis as Record<string, unknown>
@@ -169,6 +193,23 @@ export async function readAppCacheRecord<StoreName extends AppCacheStoreName>(
         return value ?? null
     } catch {
         return null
+    }
+}
+
+export async function readAppCacheRecordOrThrow<StoreName extends AppCacheStoreName>(
+    storeName: StoreName,
+    key: string
+): Promise<AppCacheRecordByStore[StoreName] | null> {
+    const db = await getAppCacheDb()
+    if (!db) {
+        throw new AppCacheUnavailableError('read', storeName, key)
+    }
+
+    try {
+        const value = (await db.get(storeName, key)) as AppCacheRecordByStore[StoreName] | undefined
+        return value ?? null
+    } catch (error) {
+        throw new AppCacheUnavailableError('read', storeName, key, error)
     }
 }
 

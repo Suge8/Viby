@@ -26,16 +26,17 @@ async function bootstrap(): Promise<void> {
     initializeFontScale()
     ensureAppOverlayRoot()
     const currentOrigin = window.location.origin
+    const shouldUseServiceWorker = import.meta.env.PROD && shouldRegisterServiceWorkerForOrigin(currentOrigin)
     await preloadTranslations(resolveInitialLocale())
     await preloadAppCacheRuntime()
 
-    const shouldReloadAfterServiceWorkerReset = await disableServiceWorkerForCurrentOrigin()
+    const shouldReloadAfterServiceWorkerReset = await disableServiceWorkerForCurrentOrigin({
+        keepServiceWorker: shouldUseServiceWorker,
+    })
     if (shouldReloadAfterServiceWorkerReset) {
         reloadWindowForRecovery('local-service-worker-reset')
         return
     }
-
-    const shouldUseServiceWorker = shouldRegisterServiceWorkerForOrigin(currentOrigin)
 
     if (import.meta.env.PROD) {
         installVitePreloadErrorHandler()

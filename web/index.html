@@ -58,23 +58,22 @@
                 justify-content: center;
                 padding: 1.25rem;
                 background:
-                    radial-gradient(circle at top, rgba(26, 99, 255, 0.12), transparent 45%),
-                    linear-gradient(180deg, rgba(247, 249, 255, 0.96), rgba(255, 255, 255, 0.98));
+                    radial-gradient(circle at 50% 0%, rgba(15, 23, 42, 0.06), transparent 45%),
+                    #fbfaf6;
                 opacity: 1;
-                transition: opacity 0.28s ease, transform 0.28s ease;
+                transition: opacity 0.2s ease;
             }
 
             @media (prefers-color-scheme: dark) {
                 #app-boot-shell {
                     background:
-                        radial-gradient(circle at top, rgba(114, 182, 255, 0.16), transparent 42%),
-                        linear-gradient(180deg, rgba(20, 22, 30, 0.96), rgba(14, 17, 25, 0.98));
+                        radial-gradient(circle at 50% 0%, rgba(250, 250, 250, 0.08), transparent 45%),
+                        #1c1c1e;
                 }
             }
 
             #app-boot-shell.is-hidden {
                 opacity: 0;
-                transform: scale(1.01);
                 pointer-events: none;
             }
 
@@ -84,11 +83,11 @@
             }
 
             .boot-shell-stage {
-                width: min(100%, 20rem);
+                width: min(100%, 22rem);
                 display: flex;
                 flex-direction: column;
                 align-items: center;
-                gap: 1rem;
+                gap: 1.5rem;
                 text-align: center;
             }
 
@@ -99,16 +98,14 @@
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                border-radius: 1.4rem;
-                background: rgba(255, 255, 255, 0.7);
-                box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.18);
+                filter: drop-shadow(0 0.75rem 1.75rem rgba(15, 23, 42, 0.1));
             }
 
             .boot-shell-mark {
-                width: 3.5rem;
-                height: 3.5rem;
+                width: 3.4rem;
+                height: 3.4rem;
                 display: inline-block;
-                background-color: #0f172a;
+                background-color: #171717;
                 -webkit-mask-image: url('/brand-logo-tight.png');
                 mask-image: url('/brand-logo-tight.png');
                 -webkit-mask-position: center;
@@ -120,69 +117,95 @@
             }
 
             .boot-shell-title {
-                font-size: 1rem;
-                font-weight: 600;
-                line-height: 1.4;
-                color: #0f172a;
-                letter-spacing: -0.02em;
+                margin: 0;
+                font-size: clamp(1.4rem, 6.6vw, 1.65rem);
+                font-weight: 700;
+                line-height: 1.18;
+                color: #171717;
+                letter-spacing: -0.038em;
             }
 
-            .boot-shell-copy {
-                margin-top: 0.38rem;
-                font-size: 0.84rem;
-                line-height: 1.6;
-                color: rgba(15, 23, 42, 0.72);
-            }
-
-            .boot-shell-copy:empty {
+            .boot-shell-title:empty {
                 display: none;
             }
 
             .boot-shell-rail {
                 position: relative;
-                width: min(100%, 10rem);
-                height: 0.375rem;
+                width: min(100%, 13rem);
+                height: 0.4rem;
                 overflow: hidden;
                 border-radius: 999px;
-                background: rgba(148, 163, 184, 0.18);
+                background: rgba(23, 23, 23, 0.07);
+                box-shadow: inset 0 0 0 1px rgba(23, 23, 23, 0.04);
             }
 
-            .boot-shell-rail::after {
+            .boot-shell-rail-fill {
+                position: absolute;
+                inset: 0;
+                width: 22%;
+                border-radius: inherit;
+                background: linear-gradient(
+                    90deg,
+                    rgba(23, 23, 23, 0.7),
+                    rgba(23, 23, 23, 1),
+                    rgba(23, 23, 23, 0.85)
+                );
+                animation: boot-shell-progress 2.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+            }
+
+            .boot-shell-rail-fill::after {
                 content: '';
                 position: absolute;
                 inset: 0;
-                width: 5rem;
                 border-radius: inherit;
-                background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.92), transparent);
-                transform: translateX(-140%);
-                animation: boot-shell-shimmer 1.4s ease-in-out infinite;
+                background: linear-gradient(
+                    90deg,
+                    transparent 0%,
+                    rgba(255, 255, 255, 0.55) 50%,
+                    transparent 100%
+                );
+                transform: translateX(-120%);
+                animation: boot-shell-sheen 1.6s ease-in-out infinite;
             }
 
             @media (prefers-color-scheme: dark) {
-                .boot-shell-mark-stage {
-                    background: rgba(20, 25, 35, 0.44);
-                    box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.16);
+                .boot-shell-mark { background-color: #fafafa }
+                .boot-shell-title { color: #fafafc }
+                .boot-shell-rail {
+                    background: rgba(250, 250, 250, 0.08);
+                    box-shadow: inset 0 0 0 1px rgba(250, 250, 250, 0.05);
                 }
-
-                .boot-shell-mark {
-                    background-color: #f8fafc;
+                .boot-shell-rail-fill {
+                    background: linear-gradient(
+                        90deg,
+                        rgba(250, 250, 250, 0.75),
+                        rgba(250, 250, 250, 1),
+                        rgba(250, 250, 250, 0.88)
+                    );
                 }
-
-                .boot-shell-title { color: #f8fafc }
-                .boot-shell-copy { color: rgba(226, 232, 240, 0.74) }
             }
 
-            @keyframes boot-shell-shimmer {
-                0% { transform: translateX(-140%); opacity: 0.3 }
-                50% { opacity: 0.9 }
-                100% { transform: translateX(220%); opacity: 0.3 }
+            @keyframes boot-shell-progress {
+                0% { transform: translateX(-20%); width: 22% }
+                55% { transform: translateX(220%); width: 36% }
+                100% { transform: translateX(220%); width: 36% }
+            }
+
+            @keyframes boot-shell-sheen {
+                0% { transform: translateX(-120%) }
+                65%, 100% { transform: translateX(220%) }
             }
 
             @media (prefers-reduced-motion: reduce) {
                 #app-boot-shell,
-                .boot-shell-rail::after {
+                .boot-shell-rail-fill,
+                .boot-shell-rail-fill::after {
                     animation: none;
                     transition: none;
+                    transform: none;
+                }
+                .boot-shell-rail-fill {
+                    width: 50%;
                 }
             }
         </style>
@@ -360,9 +383,10 @@
                 <div class="boot-shell-mark-stage" aria-hidden="true">
                     <span class="boot-shell-mark"></span>
                 </div>
-                <div class="boot-shell-title" id="app-boot-shell-title">Viby</div>
-                <div class="boot-shell-copy" id="app-boot-shell-copy"></div>
-                <div class="boot-shell-rail" aria-hidden="true"></div>
+                <h1 class="boot-shell-title" id="app-boot-shell-title"></h1>
+                <div class="boot-shell-rail" aria-hidden="true">
+                    <div class="boot-shell-rail-fill"></div>
+                </div>
             </div>
         </div>
         <div id="root"></div>
@@ -371,24 +395,12 @@
                 var LOCALE_PREFERENCE_STORAGE_KEY = 'viby-lang-preference'
                 var STRINGS = {
                     en: {
-                        normal: {
-                            title: 'Viby',
-                            copy: ''
-                        },
-                        recovery: {
-                            title: 'Restoring your session…',
-                            copy: 'Reopening your session and syncing the latest replies.'
-                        }
+                        normal: '',
+                        recovery: 'Restoring your session…'
                     },
                     'zh-CN': {
-                        normal: {
-                            title: 'Viby',
-                            copy: ''
-                        },
-                        recovery: {
-                            title: '正在恢复刚才的会话…',
-                            copy: '正在重新打开当前会话，并同步最新回复。'
-                        }
+                        normal: '',
+                        recovery: '正在恢复刚才的会话…'
                     }
                 }
                 var bootMode = document.documentElement.getAttribute('data-boot-mode')
@@ -423,17 +435,12 @@
 
                 var locale = readPreferredLocale()
                 var mode = bootMode === 'recovery' ? 'recovery' : 'normal'
-                var content = STRINGS[locale][mode]
                 var title = document.getElementById('app-boot-shell-title')
-                var copy = document.getElementById('app-boot-shell-copy')
 
                 document.documentElement.lang = locale
 
                 if (title) {
-                    title.textContent = content.title
-                }
-                if (copy) {
-                    copy.textContent = content.copy
+                    title.textContent = STRINGS[locale][mode]
                 }
             })()
         </script>

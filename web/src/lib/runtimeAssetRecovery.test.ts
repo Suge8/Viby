@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { consumePendingAppRecovery } from '@/lib/appRecovery'
 import { isLikelyRuntimeAssetFailure, recordRuntimeAssetFailureRecovery } from '@/lib/runtimeAssetFailure'
-import { isLocalNetworkOrigin, isLoopbackOrigin, shouldRegisterServiceWorkerForOrigin } from '@/lib/runtimeAssetPolicy'
+import {
+    isLocalNetworkOrigin,
+    isLoopbackOrigin,
+    isPotentiallyTrustworthyWebOrigin,
+    shouldRegisterServiceWorkerForOrigin,
+} from '@/lib/runtimeAssetPolicy'
 import {
     clearRuntimeAssetRecoveryMarker,
     disableServiceWorkerForCurrentOrigin,
@@ -98,6 +103,7 @@ describe('runtimeAssetRecovery', () => {
     it('detects loopback origins for local runtime cleanup', () => {
         expect(isLoopbackOrigin('http://127.0.0.1:37173')).toBe(true)
         expect(isLoopbackOrigin('http://localhost:37173')).toBe(true)
+        expect(isLoopbackOrigin('http://dev.viby.localhost:37173')).toBe(true)
         expect(isLoopbackOrigin('https://app.viby.run')).toBe(false)
     })
 
@@ -107,10 +113,14 @@ describe('runtimeAssetRecovery', () => {
         expect(isLocalNetworkOrigin('https://studio.example.com')).toBe(false)
     })
 
-    it('registers service workers only for non-local https origins', () => {
-        expect(shouldRegisterServiceWorkerForOrigin('https://app.viby.run')).toBe(true)
-        expect(shouldRegisterServiceWorkerForOrigin('http://127.0.0.1:37173')).toBe(false)
-        expect(shouldRegisterServiceWorkerForOrigin('https://192.168.1.10:37173')).toBe(false)
+    it('registers service workers for trustworthy web origins', () => {
+        expect(isPotentiallyTrustworthyWebOrigin('https://app.viby.run')).toBe(true)
+        expect(isPotentiallyTrustworthyWebOrigin('http://127.0.0.1:37173')).toBe(true)
+        expect(isPotentiallyTrustworthyWebOrigin('http://dev.viby.localhost:37173')).toBe(true)
+        expect(isPotentiallyTrustworthyWebOrigin('https://192.168.1.10:37173')).toBe(true)
+        expect(isPotentiallyTrustworthyWebOrigin('http://192.168.1.10:37173')).toBe(false)
+        expect(isPotentiallyTrustworthyWebOrigin('http://0.0.0.0:37173')).toBe(false)
+        expect(shouldRegisterServiceWorkerForOrigin('http://localhost:37173')).toBe(true)
     })
 
     it('unregisters service workers and clears caches when recovering', async () => {
@@ -193,10 +203,10 @@ describe('runtimeAssetRecovery', () => {
             delete: deleteCache,
         })
 
-        await expect(disableServiceWorkerForCurrentOrigin()).resolves.toBe(true)
+        await expect(disableServiceWorkerForCurrentOrigin({ keepServiceWorker: false })).resolves.toBe(true)
         expect(unregister).toHaveBeenCalledTimes(1)
         expect(deleteCache).toHaveBeenCalledWith('local-cache')
 
-        await expect(disableServiceWorkerForCurrentOrigin()).resolves.toBe(false)
+        await expect(disableServiceWorkerForCurrentOrigin({ keepServiceWorker: false })).resolves.toBe(false)
     })
 })

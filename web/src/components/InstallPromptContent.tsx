@@ -1,14 +1,16 @@
 import { home, starNorth, tabArrowUpRight, tabPlus } from '@lucide/lab'
-import { Icon } from 'lucide-react'
-import { type CSSProperties, type JSX } from 'react'
+import { type JSX, type Ref, useRef } from 'react'
 import { FeatureCloseIcon as CloseIcon, FeatureShareIcon as ShareIcon } from '@/components/featureIcons'
+import { INSTALL_ICON_TONES, InstallLabIcon, type InstallTone } from '@/components/InstallPromptIcons'
 import { BrandMarkIcon } from '@/components/icons'
 import { Button } from '@/components/ui/button'
+import { useModalFocusTrap } from '@/components/useModalFocusTrap'
+import type { InstallPlatform } from '@/hooks/usePWAInstall'
 import { cn } from '@/lib/utils'
 import '@/styles/design-install.css'
 
-type LabIconNode = ReadonlyArray<readonly [string, Record<string, string>]>
-type InstallTone = 'coral' | 'gold' | 'violet'
+type InstallBadgeTone = 'native' | 'shortcut'
+type InstallPromptKind = Exclude<InstallPlatform, null>
 
 export type InstallStepItem = {
     key: string
@@ -21,6 +23,7 @@ export type InstallStepItem = {
 export type InstallBannerModel = {
     badge: string
     platformLabel: string
+    platformTone: InstallBadgeTone
     title: string
     description: string
     actionLabel: string
@@ -41,87 +44,81 @@ export type InstallPromptViewModel = {
     guide: InstallGuideModel
 }
 
-const INSTALL_ICON_TONES: Record<InstallTone, CSSProperties> = {
-    coral: {
-        color: 'var(--ds-accent-coral)',
-        background: 'color-mix(in srgb, var(--ds-accent-coral) 16%, var(--ds-panel-strong))',
-        borderColor: 'color-mix(in srgb, var(--ds-accent-coral) 28%, transparent)',
-        boxShadow: '0 14px 32px color-mix(in srgb, var(--ds-accent-coral) 18%, transparent)',
-    },
-    gold: {
-        color: 'var(--ds-accent-gold)',
-        background: 'color-mix(in srgb, var(--ds-accent-gold) 18%, var(--ds-panel-strong))',
-        borderColor: 'color-mix(in srgb, var(--ds-accent-gold) 32%, transparent)',
-        boxShadow: '0 14px 32px color-mix(in srgb, var(--ds-accent-gold) 16%, transparent)',
-    },
-    violet: {
-        color: 'var(--ds-accent-violet)',
-        background: 'color-mix(in srgb, var(--ds-accent-violet) 16%, var(--ds-panel-strong))',
-        borderColor: 'color-mix(in srgb, var(--ds-accent-violet) 28%, transparent)',
-        boxShadow: '0 14px 32px color-mix(in srgb, var(--ds-accent-violet) 16%, transparent)',
-    },
+function getInstallStepPrefix(kind: InstallPromptKind): string {
+    if (kind === 'shortcut') return 'install.shortcutStep'
+    if (kind === 'desktop-safari') return 'install.desktopSafariStep'
+    return 'install.step'
+}
+
+function buildInstallSteps(
+    t: (key: string, params?: Record<string, string | number>) => string,
+    kind: InstallPromptKind
+): InstallStepItem[] {
+    const prefix = getInstallStepPrefix(kind)
+    return [
+        {
+            key: 'share',
+            title: t(`${prefix}.share.title`),
+            description: t(`${prefix}.share.description`),
+            tone: 'coral',
+            icon: <ShareIcon className="h-4.5 w-4.5" strokeWidth={2.2} />,
+        },
+        {
+            key: 'home',
+            title: t(`${prefix}.addToHome.title`),
+            description: t(`${prefix}.addToHome.description`),
+            tone: 'gold',
+            icon: <InstallLabIcon iconNode={tabPlus} tone="gold" iconClassName="h-4.5 w-4.5" compact />,
+        },
+        {
+            key: 'confirm',
+            title: t(`${prefix}.confirm.title`),
+            description: t(`${prefix}.confirm.description`),
+            tone: 'violet',
+            icon: <InstallLabIcon iconNode={tabArrowUpRight} tone="violet" iconClassName="h-4.5 w-4.5" compact />,
+        },
+    ]
 }
 
 export function createInstallPromptViewModel(
     t: (key: string, params?: Record<string, string | number>) => string,
-    isIOSGuide: boolean
+    kind: InstallPromptKind
 ): InstallPromptViewModel {
-    const description = isIOSGuide ? t('install.description.ios') : t('install.description.native')
-    const actionLabel = isIOSGuide ? t('install.action.showSteps') : t('install.action.install')
-    const platformLabel = isIOSGuide ? t('install.platform.ios') : t('install.platform.native')
+    const isShortcut = kind === 'shortcut'
+    const descriptionKey = `install.description.${kind}`
+    const title = t(isShortcut ? 'install.title.shortcut' : 'install.title')
 
     return {
         banner: {
             badge: t('install.badge'),
-            platformLabel,
-            title: t('install.title'),
-            description,
-            actionLabel,
+            platformLabel: t(`install.platform.${kind}`),
+            platformTone: isShortcut ? 'shortcut' : 'native',
+            title,
+            description: t(descriptionKey),
+            actionLabel: kind === 'native' ? t('install.action.install') : t('install.action.showSteps'),
             dismissLabel: t('button.dismiss'),
         },
         guide: {
             badge: t('install.badge'),
-            title: t('install.title'),
-            description,
+            title,
+            description: t(descriptionKey),
             closeLabel: t('button.close'),
             dismissLabel: t('button.dismiss'),
-            steps: [
-                {
-                    key: 'share',
-                    title: t('install.step.share.title'),
-                    description: t('install.step.share.description'),
-                    tone: 'coral',
-                    icon: <ShareIcon className="h-4.5 w-4.5" strokeWidth={2.2} />,
-                },
-                {
-                    key: 'home',
-                    title: t('install.step.addToHome.title'),
-                    description: t('install.step.addToHome.description'),
-                    tone: 'gold',
-                    icon: <InstallLabIcon iconNode={tabPlus} tone="gold" iconClassName="h-4.5 w-4.5" compact />,
-                },
-                {
-                    key: 'confirm',
-                    title: t('install.step.confirm.title'),
-                    description: t('install.step.confirm.description'),
-                    tone: 'violet',
-                    icon: (
-                        <InstallLabIcon iconNode={tabArrowUpRight} tone="violet" iconClassName="h-4.5 w-4.5" compact />
-                    ),
-                },
-            ],
+            steps: buildInstallSteps(t, kind),
         },
     }
 }
 
 export function InstallBanner(props: {
     model: InstallBannerModel
+    primaryActionRef?: Ref<HTMLButtonElement>
     onPrimaryAction: () => void
     onDismiss: () => void
 }): JSX.Element {
     return (
-        <div className="fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-50 mx-auto w-auto max-w-md animate-slide-up sm:inset-x-4">
+        <div className="ds-install-banner-frame animate-slide-up">
             <div className="ds-panel ds-install-banner-surface">
+                <div className="ds-install-banner-glow" aria-hidden="true" />
                 <div className="flex items-start gap-3">
                     <div className="relative shrink-0">
                         <InstallLabIcon iconNode={home} tone="coral" iconClassName="h-5.5 w-5.5" />
@@ -132,17 +129,30 @@ export function InstallBanner(props: {
                     <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                             <span className="ds-install-badge">{props.model.badge}</span>
-                            <span className="ds-install-platform-badge">{props.model.platformLabel}</span>
+                            <span
+                                className={cn(
+                                    'ds-install-platform-badge',
+                                    props.model.platformTone === 'shortcut' && 'ds-install-platform-badge-warning'
+                                )}
+                            >
+                                {props.model.platformLabel}
+                            </span>
                         </div>
                         <p className="mt-3 text-sm font-semibold text-[var(--app-fg)]">{props.model.title}</p>
                         <p className="mt-1 text-sm leading-6 text-[var(--app-hint)]">{props.model.description}</p>
                         <div className="mt-4 flex items-center gap-2">
-                            <Button size="sm" className="ds-install-action-button" onClick={props.onPrimaryAction}>
+                            <Button
+                                ref={props.primaryActionRef}
+                                size="sm"
+                                className="ds-install-action-button"
+                                onClick={props.onPrimaryAction}
+                            >
                                 {props.model.actionLabel}
                             </Button>
                             <Button
-                                size="sm"
+                                size="iconSm"
                                 variant="outline"
+                                className="ds-install-dismiss-button"
                                 onClick={props.onDismiss}
                                 aria-label={props.model.dismissLabel}
                                 data-testid="install-banner-dismiss"
@@ -162,16 +172,29 @@ export function InstallGuideDialog(props: {
     onClose: () => void
     onDismiss: () => void
 }): JSX.Element {
+    const sheetRef = useRef<HTMLDivElement | null>(null)
+    useModalFocusTrap(sheetRef, props.onClose)
+
     return (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-[var(--ds-overlay)] backdrop-blur-md">
-            <div className="ds-dialog-surface ds-install-guide-sheet space-y-5 animate-slide-up">
+        <div className="ds-install-guide-backdrop animate-install-fade" role="presentation" onClick={props.onClose}>
+            <div
+                ref={sheetRef}
+                className="ds-dialog-surface ds-install-guide-sheet space-y-5 animate-slide-up"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="install-guide-title"
+                tabIndex={-1}
+                onClick={(event) => event.stopPropagation()}
+            >
                 <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
                         <div className="ds-install-badge">{props.model.badge}</div>
                         <div className="mt-4 flex items-center gap-3">
                             <InstallLabIcon iconNode={starNorth} tone="coral" iconClassName="h-5.5 w-5.5" />
                             <div>
-                                <h3 className="text-lg font-semibold text-[var(--app-fg)]">{props.model.title}</h3>
+                                <h3 id="install-guide-title" className="text-lg font-semibold text-[var(--app-fg)]">
+                                    {props.model.title}
+                                </h3>
                                 <p className="mt-1 text-sm leading-6 text-[var(--app-hint)]">
                                     {props.model.description}
                                 </p>
@@ -206,7 +229,7 @@ export function InstallGuideDialog(props: {
 
                 <Button
                     variant="outline"
-                    className="w-full"
+                    className="ds-install-guide-dismiss-button w-full"
                     onClick={props.onDismiss}
                     data-testid="install-guide-dismiss"
                 >
@@ -241,21 +264,5 @@ function InstallStepCard(props: {
                 </div>
             </div>
         </div>
-    )
-}
-
-function InstallLabIcon(props: {
-    iconNode: LabIconNode
-    tone: InstallTone
-    iconClassName?: string
-    compact?: boolean
-}): JSX.Element {
-    return (
-        <span
-            className={cn('ds-install-lab-icon', props.compact ? 'ds-install-lab-icon-compact' : null)}
-            style={INSTALL_ICON_TONES[props.tone]}
-        >
-            <Icon iconNode={props.iconNode as never} className={cn('h-5 w-5', props.iconClassName)} strokeWidth={2.1} />
-        </span>
     )
 }

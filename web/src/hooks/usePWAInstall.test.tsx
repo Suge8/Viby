@@ -2,6 +2,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { usePWAInstall } from './usePWAInstall'
 
+const ANDROID_CHROME_UA =
+    'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Mobile Safari/537.36'
+
 type MockBeforeInstallPromptEvent = Event & {
     prompt: ReturnType<typeof vi.fn<() => Promise<void>>>
     userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
@@ -18,6 +21,13 @@ function InstallProbe() {
             <button onClick={dismissInstall}>dismiss</button>
         </div>
     )
+}
+
+function installAndroidChromeUserAgent(): void {
+    Object.defineProperty(window.navigator, 'userAgent', {
+        configurable: true,
+        value: ANDROID_CHROME_UA,
+    })
 }
 
 function installMatchMediaMock(standalone: boolean): void {
@@ -37,7 +47,7 @@ function installMatchMediaMock(standalone: boolean): void {
 }
 
 function createBeforeInstallPromptEvent(outcome: 'accepted' | 'dismissed' = 'accepted'): MockBeforeInstallPromptEvent {
-    const event = new Event('beforeinstallprompt') as MockBeforeInstallPromptEvent
+    const event = new Event('beforeinstallprompt', { cancelable: true }) as MockBeforeInstallPromptEvent
     event.prompt = vi.fn<() => Promise<void>>().mockResolvedValue(undefined)
     event.userChoice = Promise.resolve({ outcome })
     return event
@@ -97,7 +107,9 @@ describe('usePWAInstall', () => {
         })
     })
 
-    it('surfaces native install availability after beforeinstallprompt and clears after acceptance', async () => {
+    it('surfaces native install availability on Android after beforeinstallprompt and clears after acceptance', async () => {
+        installAndroidChromeUserAgent()
+
         render(<InstallProbe />)
 
         const promptEvent = createBeforeInstallPromptEvent('accepted')
@@ -115,7 +127,21 @@ describe('usePWAInstall', () => {
         })
     })
 
-    it('persists dismiss state and hides the install surface', async () => {
+    it('surfaces native install availability on desktop after beforeinstallprompt', async () => {
+        render(<InstallProbe />)
+
+        const promptEvent = createBeforeInstallPromptEvent('accepted')
+        window.dispatchEvent(promptEvent)
+
+        await waitFor(() => {
+            expect(screen.getByTestId('platform')).toHaveTextContent('native')
+        })
+        expect(promptEvent.defaultPrevented).toBe(true)
+    })
+
+    it('hides the install surface within the current session after dismiss but re-shows it on a fresh tab', async () => {
+        installAndroidChromeUserAgent()
+
         render(<InstallProbe />)
 
         window.dispatchEvent(createBeforeInstallPromptEvent('dismissed'))
@@ -126,32 +152,27 @@ describe('usePWAInstall', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'dismiss' }))
 
-        expect(Number(window.localStorage.getItem('pwa_install_dismissed'))).toBeGreaterThan(0)
+        // Dismiss is session-scoped so a fresh tab/scan always re-offers the
+        // banner; the previous three-day localStorage TTL surprised users who
+        // expected the prompt to come back on every new pairing entry.
+        expect(window.sessionStorage.getItem('viby-pwa-install-dismissed')).toBe('1')
+        expect(window.localStorage.getItem('pwa_install_dismissed')).toBeNull()
         await waitFor(() => {
             expect(screen.getByTestId('platform')).toHaveTextContent('none')
         })
     })
 
-    it('expires dismissed install state after three days', async () => {
-        const fourDaysAgo = Date.now() - 4 * 24 * 60 * 60 * 1_000
-        window.localStorage.setItem('pwa_install_dismissed', String(fourDaysAgo))
+    it('treats macOS Safari browser mode as Add to Dock guidance', async () => {
+        Object.defineProperty(window.navigator, 'userAgent', {
+            configurable: true,
+            value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+        })
 
         render(<InstallProbe />)
-        window.dispatchEvent(createBeforeInstallPromptEvent('dismissed'))
 
         await waitFor(() => {
-            expect(screen.getByTestId('platform')).toHaveTextContent('native')
+            expect(screen.getByTestId('platform')).toHaveTextContent('desktop-safari')
         })
-    })
-
-    it('migrates old dismissed install state to a three-day timestamp', async () => {
-        window.localStorage.setItem('pwa_install_dismissed', 'true')
-
-        render(<InstallProbe />)
-        window.dispatchEvent(createBeforeInstallPromptEvent('dismissed'))
-
-        expect(screen.getByTestId('platform')).toHaveTextContent('none')
-        expect(Number(window.localStorage.getItem('pwa_install_dismissed'))).toBeGreaterThan(0)
     })
 
     it('treats iOS Safari browser mode as manual install guidance', async () => {

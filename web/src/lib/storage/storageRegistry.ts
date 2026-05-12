@@ -3,7 +3,6 @@ export const LOCAL_STORAGE_KEYS = {
     appBuildId: 'viby-app-build-id',
     fontScale: 'viby-font-scale',
     hubUrl: 'viby_hub_url',
-    installDismissed: 'pwa_install_dismissed',
     lastOpenedSession: 'viby:last-opened-session',
     localePreference: 'viby-lang-preference',
     newSessionDraft: 'viby:newSession:draft',
@@ -22,6 +21,7 @@ export const SESSION_STORAGE_KEYS = {
     appBootRecoverySurfaceOwner: 'viby-boot-recovery-surface-owner',
     appRecovery: 'viby-pending-app-recovery',
     appShellRevealed: 'viby-app-shell-revealed',
+    installDismissed: 'viby-pwa-install-dismissed',
     localServiceWorkerReset: 'viby-local-service-worker-reset',
     runtimeAssetRecovery: 'viby-runtime-asset-recovery',
     runtimeUpdateSnapshot: 'viby-runtime-update-ready',
@@ -29,12 +29,13 @@ export const SESSION_STORAGE_KEYS = {
 } as const
 
 export const APP_CACHE_DB_NAME = 'viby-app-cache'
-export const APP_CACHE_DB_VERSION = 1
+export const APP_CACHE_DB_VERSION = 2
 export const APP_CACHE_BROADCAST_CHANNEL = 'viby-app-cache-events'
 
 export const APP_CACHE_STORES = {
     composerDrafts: 'composer-drafts',
     messageWindowWarm: 'message-window-warm',
+    pairingDeviceKeys: 'pairing-device-keys',
     sessionAttention: 'session-attention',
     sessionWarm: 'session-warm',
     sessionsWarm: 'sessions-warm',

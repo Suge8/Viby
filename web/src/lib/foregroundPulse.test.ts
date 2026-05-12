@@ -59,4 +59,15 @@ describe('foregroundPulse', () => {
 
         expect(pulses).toEqual(['resume'])
     })
+
+    it('fires a network pulse when the device regains connectivity', () => {
+        const pulses: string[] = []
+        subscribeForegroundPulse((pulse) => {
+            pulses.push(pulse.reason)
+        })
+
+        window.dispatchEvent(new Event('online'))
+
+        expect(pulses).toEqual(['network'])
+    })
 })

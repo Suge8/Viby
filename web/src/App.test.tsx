@@ -209,11 +209,25 @@ describe('App', () => {
     it('shows a rescan path for installed remote PWA launches without stored pairing', async () => {
         useLocationMock.mockReturnValue({ pathname: '/sessions', search: '?remote=1', hash: '' })
         useAuthMock.mockReturnValue({ token: null, api: null, isLoading: false, error: null })
+        // The bootstrap controller asks the broker to recover the pairing via
+        // the signed manifest cookie; when no cookie is present the broker
+        // returns 401 with `pairing_cookie_missing` so the UI falls into the
+        // same re-scan prompt that pure pre-PWA installs already render.
+        const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+            new Response(JSON.stringify({ code: 'pairing_cookie_missing' }), {
+                status: 401,
+                headers: { 'content-type': 'application/json' },
+            })
+        )
 
-        render(<App />)
+        try {
+            render(<App />)
 
-        expect(await screen.findByText('remotePairing.error.scanAgain')).toBeInTheDocument()
-        expect(screen.queryByTestId('login-prompt')).not.toBeInTheDocument()
+            expect(await screen.findByText('remotePairing.error.scanAgain')).toBeInTheDocument()
+            expect(screen.queryByTestId('login-prompt')).not.toBeInTheDocument()
+        } finally {
+            fetchMock.mockRestore()
+        }
     })
 
     it('retains the ready app shell while auth refresh temporarily drops token and api but keeps authSource alive', async () => {

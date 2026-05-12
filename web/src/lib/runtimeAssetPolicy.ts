@@ -1,11 +1,12 @@
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]'])
+const TRUSTWORTHY_LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]'])
 const PRIVATE_IPV6_PREFIXES = ['fc', 'fd', 'fe8', 'fe9', 'fea', 'feb'] as const
 
 function normalizeHostname(hostname: string): string {
     if (hostname.startsWith('[') && hostname.endsWith(']')) {
         return hostname.slice(1, -1)
     }
-    return hostname
+    return hostname.toLowerCase()
 }
 
 function parseOrigin(origin: string): URL | null {
@@ -16,13 +17,19 @@ function parseOrigin(origin: string): URL | null {
     }
 }
 
+function isLoopbackHostname(hostname: string): boolean {
+    const normalized = normalizeHostname(hostname)
+    return LOOPBACK_HOSTS.has(normalized) || normalized.endsWith('.localhost')
+}
+
+function isTrustworthyLoopbackHostname(hostname: string): boolean {
+    const normalized = normalizeHostname(hostname)
+    return TRUSTWORTHY_LOOPBACK_HOSTS.has(normalized) || normalized.endsWith('.localhost')
+}
+
 export function isLoopbackOrigin(origin: string): boolean {
     const parsed = parseOrigin(origin)
-    if (!parsed) {
-        return false
-    }
-
-    return LOOPBACK_HOSTS.has(normalizeHostname(parsed.hostname))
+    return parsed ? isLoopbackHostname(parsed.hostname) : false
 }
 
 function isPrivateIpv4Hostname(hostname: string): boolean {
@@ -32,11 +39,13 @@ function isPrivateIpv4Hostname(hostname: string): boolean {
     }
 
     const [a, b] = parts
-    return a === 10
-        || (a === 172 && b >= 16 && b <= 31)
-        || (a === 192 && b === 168)
-        || (a === 169 && b === 254)
-        || (a === 100 && b >= 64 && b <= 127)
+    return (
+        a === 10 ||
+        (a === 172 && b >= 16 && b <= 31) ||
+        (a === 192 && b === 168) ||
+        (a === 169 && b === 254) ||
+        (a === 100 && b >= 64 && b <= 127)
+    )
 }
 
 function isPrivateIpv6Hostname(hostname: string): boolean {
@@ -51,18 +60,26 @@ export function isLocalNetworkOrigin(origin: string): boolean {
     }
 
     const hostname = normalizeHostname(parsed.hostname)
-    if (LOOPBACK_HOSTS.has(hostname) || hostname.endsWith('.local')) {
+    if (isLoopbackHostname(hostname) || hostname.endsWith('.local')) {
         return true
     }
 
     return isPrivateIpv4Hostname(hostname) || isPrivateIpv6Hostname(hostname)
 }
 
-export function shouldRegisterServiceWorkerForOrigin(origin: string): boolean {
+export function isPotentiallyTrustworthyWebOrigin(origin: string): boolean {
     const parsed = parseOrigin(origin)
-    if (!parsed || parsed.protocol !== 'https:') {
+    if (!parsed) {
         return false
     }
 
-    return !isLocalNetworkOrigin(origin)
+    if (parsed.protocol === 'https:') {
+        return true
+    }
+
+    return parsed.protocol === 'http:' && isTrustworthyLoopbackHostname(parsed.hostname)
+}
+
+export function shouldRegisterServiceWorkerForOrigin(origin: string): boolean {
+    return isPotentiallyTrustworthyWebOrigin(origin)
 }

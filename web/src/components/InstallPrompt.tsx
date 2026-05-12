@@ -1,4 +1,4 @@
-import { type JSX, useCallback, useEffect, useMemo, useState } from 'react'
+import { type JSX, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { usePlatform } from '@/hooks/usePlatform'
 import { usePWAInstall } from '@/hooks/usePWAInstall'
@@ -14,31 +14,47 @@ export function InstallPrompt({ suppressed = false }: InstallPromptProps): JSX.E
     const { t } = useTranslation()
     const { installPlatform, promptInstall, dismissInstall, isStandalone } = usePWAInstall()
     const { haptic } = usePlatform()
-    const [showIOSGuide, setShowIOSGuide] = useState(false)
+    const [showGuide, setShowGuide] = useState(false)
+    const bannerPrimaryActionRef = useRef<HTMLButtonElement | null>(null)
+    const shouldRestoreGuideFocusRef = useRef(false)
 
-    const isIOSGuide = installPlatform === 'ios'
-    const promptModel = useMemo(() => createInstallPromptViewModel(t, isIOSGuide), [isIOSGuide, t])
-    const isHidden = suppressed || isStandalone || installPlatform === null
+    const usesGuide =
+        installPlatform === 'desktop-safari' || installPlatform === 'ios' || installPlatform === 'shortcut'
+    const promptModel = useMemo(
+        () => (installPlatform ? createInstallPromptViewModel(t, installPlatform) : null),
+        [installPlatform, t]
+    )
+    const isHidden = suppressed || isStandalone || promptModel === null
 
     useEffect(() => {
         if (isHidden) {
-            setShowIOSGuide(false)
+            shouldRestoreGuideFocusRef.current = false
+            setShowGuide(false)
         }
     }, [isHidden])
 
+    useEffect(() => {
+        if (showGuide || !shouldRestoreGuideFocusRef.current) return
+        shouldRestoreGuideFocusRef.current = false
+        bannerPrimaryActionRef.current?.focus()
+    }, [showGuide])
+
     const handleDismiss = useCallback((): void => {
         haptic.impact('light')
-        setShowIOSGuide(false)
+        setShowGuide(false)
         dismissInstall()
     }, [dismissInstall, haptic])
     const handleCloseGuide = useCallback((): void => {
-        setShowIOSGuide(false)
+        shouldRestoreGuideFocusRef.current = true
+        setShowGuide(false)
     }, [])
 
     const handlePrimaryAction = useCallback(async (): Promise<void> => {
         haptic.impact('light')
-        if (isIOSGuide) {
-            setShowIOSGuide(true)
+        if (usesGuide) {
+            if (await promptInstall()) {
+                setShowGuide(true)
+            }
             return
         }
 
@@ -46,9 +62,9 @@ export function InstallPrompt({ suppressed = false }: InstallPromptProps): JSX.E
         if (installed) {
             haptic.notification('success')
         }
-    }, [haptic, isIOSGuide, promptInstall])
+    }, [haptic, promptInstall, usesGuide])
 
-    if (isHidden) {
+    if (isHidden || !promptModel) {
         return null
     }
 
@@ -59,14 +75,16 @@ export function InstallPrompt({ suppressed = false }: InstallPromptProps): JSX.E
 
     return createPortal(
         <>
-            {showIOSGuide ? (
+            {showGuide ? (
                 <InstallGuideDialog model={promptModel.guide} onClose={handleCloseGuide} onDismiss={handleDismiss} />
-            ) : null}
-            <InstallBanner
-                model={promptModel.banner}
-                onPrimaryAction={() => void handlePrimaryAction()}
-                onDismiss={handleDismiss}
-            />
+            ) : (
+                <InstallBanner
+                    model={promptModel.banner}
+                    primaryActionRef={bannerPrimaryActionRef}
+                    onPrimaryAction={() => void handlePrimaryAction()}
+                    onDismiss={handleDismiss}
+                />
+            )}
         </>,
         overlayRoot
     )

@@ -1,4 +1,5 @@
 import { registerSW } from 'virtual:pwa-register'
+import { publishRuntimeServiceWorkerRegistration } from '@/lib/runtimeServiceWorkerRegistration'
 import { publishRuntimeUpdateReady } from '@/lib/runtimeUpdateChannel'
 
 const SERVICE_WORKER_UPDATE_INTERVAL_MS = 60 * 60 * 1000
@@ -15,6 +16,7 @@ export async function registerRuntimeServiceWorker(): Promise<void> {
             console.log('App ready for offline use')
         },
         onRegistered(registration) {
+            publishRuntimeServiceWorkerRegistration(registration ?? null)
             if (registration) {
                 setInterval(() => {
                     registration.update()
@@ -22,8 +24,9 @@ export async function registerRuntimeServiceWorker(): Promise<void> {
             }
         },
         onRegisterError(error) {
+            publishRuntimeServiceWorkerRegistration(null)
             console.error('SW registration error:', error)
-        }
+        },
     })
 }
 

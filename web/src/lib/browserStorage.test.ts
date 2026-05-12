@@ -1,13 +1,16 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
     readBrowserStorageItem,
+    readBrowserStorageItemOrThrow,
     readBrowserStorageJson,
     removeBrowserStorageItem,
-    writeBrowserStorageJson
+    writeBrowserStorageJson,
 } from '@/lib/browserStorage'
 
 describe('browserStorage', () => {
     afterEach(() => {
+        vi.restoreAllMocks()
+        vi.unstubAllGlobals()
         window.localStorage.clear()
         window.sessionStorage.clear()
     })
@@ -26,7 +29,7 @@ describe('browserStorage', () => {
         const value = readBrowserStorageJson({
             storage: 'local',
             key: 'viby:test-invalid',
-            parse: () => null
+            parse: () => null,
         })
 
         expect(value).toBeNull()
@@ -40,7 +43,7 @@ describe('browserStorage', () => {
             storage: 'session',
             key: 'viby:test-keep-invalid',
             parse: () => null,
-            removeInvalid: false
+            removeInvalid: false,
         })
 
         expect(value).toBeNull()
@@ -48,5 +51,17 @@ describe('browserStorage', () => {
 
         removeBrowserStorageItem('session', 'viby:test-keep-invalid')
         expect(window.sessionStorage.getItem('viby:test-keep-invalid')).toBeNull()
+    })
+
+    it('exposes unavailable storage to recovery owners without silent null fallback', () => {
+        vi.stubGlobal('localStorage', {
+            getItem: () => {
+                throw new DOMException('blocked', 'SecurityError')
+            },
+        })
+
+        expect(() => readBrowserStorageItemOrThrow('local', 'viby:test-blocked')).toThrow(
+            'localStorage unavailable during read'
+        )
     })
 })

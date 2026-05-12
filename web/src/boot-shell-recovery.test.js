@@ -35,14 +35,14 @@ describe('index.html boot recovery guard', () => {
     it('keeps the default boot shell neutral instead of claiming the workspace is loading', () => {
         const html = readIndexHtml()
 
-        expect(html).toContain('<div class="boot-shell-title" id="app-boot-shell-title">Viby</div>')
+        expect(html).toContain('<h1 class="boot-shell-title" id="app-boot-shell-title"></h1>')
         expect(html).toContain('<span class="boot-shell-mark"></span>')
         expect(html).toContain('.boot-shell-mark-stage')
         expect(html).not.toContain('.boot-shell-orb::before')
         expect(html).not.toContain('rgba(255, 159, 114')
         expect(html).not.toContain('/brand-browser-icon.png')
         expect(html).not.toContain('/brand-logo.png')
-        expect(html).toContain("title: 'Viby'")
+        expect(html).toContain("normal: ''")
         expect(html).not.toContain('Preparing your workspace…')
         expect(html).not.toContain('正在准备你的工作区…')
     })
@@ -50,9 +50,8 @@ describe('index.html boot recovery guard', () => {
     it('preserves explicit recovery copy for restore-mode launches', () => {
         const html = readIndexHtml()
 
-        expect(html).toContain("title: 'Restoring your session…'")
-        expect(html).toContain("title: '正在恢复刚才的会话…'")
-        expect(html).toContain("copy: 'Reopening your session and syncing the latest replies.'")
+        expect(html).toContain("recovery: 'Restoring your session…'")
+        expect(html).toContain("recovery: '正在恢复刚才的会话…'")
     })
 
     it('hides the boot shell on recovery reloads after this tab has already revealed the app once', () => {

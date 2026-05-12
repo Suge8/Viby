@@ -51,12 +51,15 @@ export async function resetRuntimeAssets(): Promise<void> {
     await deleteRuntimeCaches()
 }
 
-export async function disableServiceWorkerForCurrentOrigin(): Promise<boolean> {
+export async function disableServiceWorkerForCurrentOrigin(
+    options: { keepServiceWorker?: boolean } = {}
+): Promise<boolean> {
     if (typeof window === 'undefined') {
         return false
     }
 
-    if (shouldRegisterServiceWorkerForOrigin(window.location.origin)) {
+    const keepServiceWorker = options.keepServiceWorker ?? shouldRegisterServiceWorkerForOrigin(window.location.origin)
+    if (keepServiceWorker) {
         return false
     }
 

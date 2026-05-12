@@ -3,6 +3,22 @@ import type { BrowserStorageKeyByKind } from '@/lib/storage/storageRegistry'
 
 export type BrowserStorageKind = 'local' | 'session'
 
+export class BrowserStorageUnavailableError extends Error {
+    constructor(
+        readonly storage: BrowserStorageKind,
+        readonly operation: 'read' | 'write',
+        cause?: unknown
+    ) {
+        super(`${storage}Storage unavailable during ${operation}`)
+        this.name = 'BrowserStorageUnavailableError'
+        this.cause = cause
+    }
+}
+
+export function isBrowserStorageUnavailableError(error: unknown): error is BrowserStorageUnavailableError {
+    return error instanceof BrowserStorageUnavailableError
+}
+
 export type BrowserStorageWriteResult =
     | {
           ok: true
@@ -73,6 +89,22 @@ export function readBrowserStorageItem<K extends BrowserStorageKind>(
         },
         null
     )
+}
+
+export function readBrowserStorageItemOrThrow<K extends BrowserStorageKind>(
+    storage: K,
+    key: BrowserStorageKeyByKind[K]
+): string | null {
+    const storageHost = getBrowserStorage(storage)
+    if (!storageHost) {
+        throw new BrowserStorageUnavailableError(storage, 'read')
+    }
+
+    try {
+        return storageHost.getItem(key)
+    } catch (error) {
+        throw new BrowserStorageUnavailableError(storage, 'read', error)
+    }
 }
 
 export function writeBrowserStorageItem<K extends BrowserStorageKind>(

@@ -1,6 +1,6 @@
 import { subscribeBrowserLifecycle } from '@/lib/browserLifecycle'
 
-export type ForegroundPulseReason = 'focus' | 'visible' | 'resume' | 'pageshow-restored'
+export type ForegroundPulseReason = 'focus' | 'visible' | 'resume' | 'pageshow-restored' | 'network'
 
 export type ForegroundPulse = {
     at: number
@@ -54,6 +54,10 @@ function installForegroundPulseListeners(): void {
         }
         if (event.kind === 'pageshow-restored') {
             emitForegroundPulse('pageshow-restored')
+            return
+        }
+        if (event.kind === 'network-online' || event.kind === 'network-change') {
+            emitForegroundPulse('network')
         }
     })
 }
