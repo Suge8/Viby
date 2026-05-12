@@ -11,6 +11,10 @@ export interface HubRuntimeStatus {
     listenPort: number
     localHubUrl: string
     preferredBrowserUrl: string
+    publicUrl: string
+    publicAccessEnabled: boolean
+    pairingBrokerUrl?: string | null
+    pairingCode?: string
     cliApiToken: string
     settingsFile: string
     dataDir: string

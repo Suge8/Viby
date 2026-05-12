@@ -4,6 +4,8 @@ import {
     classifyPairingLinkQuality,
     describePairingLinkTransport,
     formatPairingRoundTripTime,
+    PairingDeviceReconnectChallengeRequestSchema,
+    PairingDeviceReconnectRequestSchema,
     PairingPeerBrowseDirectoryResultSchema,
     PairingPeerCommandCapabilitiesResultSchema,
     PairingPeerEventSchema,
@@ -12,6 +14,9 @@ import {
     PairingPeerMessageSchema,
     PairingPeerOpenSessionResultSchema,
     PairingPeerPathsExistResultSchema,
+    PairingPwaHandoffClaimRequestSchema,
+    PairingPwaHandoffTicketRequestSchema,
+    PairingPwaHandoffTicketResponseSchema,
     PairingReconnectChallengeResponseSchema,
     PairingReconnectRequestSchema,
     PairingTelemetryRequestSchema,
@@ -212,6 +217,14 @@ describe('pairing peer rpc schema', () => {
     })
 
     it('accepts reconnect requests with an optional signed device proof', () => {
+        const deviceRecovery = PairingDeviceReconnectRequestSchema.parse({
+            deviceProof: {
+                publicKey: 'spki-public-key',
+                challengeNonce: 'challenge-nonce',
+                signedAt: 1_700_000_000_000,
+                signature: 'signature-value',
+            },
+        })
         const parsed = PairingReconnectRequestSchema.parse({
             token: 'guest-token',
             challengeNonce: 'challenge-nonce',
@@ -223,6 +236,21 @@ describe('pairing peer rpc schema', () => {
             },
         })
 
+        expect(PairingDeviceReconnectChallengeRequestSchema.parse({ publicKey: 'spki-public-key' }).publicKey).toBe(
+            'spki-public-key'
+        )
+        expect(PairingPwaHandoffTicketRequestSchema.parse(parsed).deviceProof.publicKey).toBe('spki-public-key')
+        expect(
+            PairingPwaHandoffTicketResponseSchema.parse({ handoffTicket: 'handoff-ticket', expiresAt: 1 }).handoffTicket
+        ).toBe('handoff-ticket')
+        expect(
+            PairingPwaHandoffClaimRequestSchema.parse({
+                handoffTicket: 'handoff-ticket',
+                label: 'Device PWA',
+                publicKey: 'new-spki-public-key',
+            }).publicKey
+        ).toBe('new-spki-public-key')
+        expect(deviceRecovery.deviceProof.publicKey).toBe('spki-public-key')
         expect(parsed.deviceProof?.publicKey).toBe('spki-public-key')
     })
 
@@ -277,13 +305,13 @@ describe('pairing peer rpc schema', () => {
         expect(resolvePairingLinkTransport({ localCandidateType: null, remoteCandidateType: 'srflx' })).toBe('unknown')
         expect(resolvePairingLinkTransport({ localCandidateType: null, remoteCandidateType: 'relay' })).toBe('relay')
         expect(buildPairingLinkPresentation({ transport: 'direct', currentRoundTripTimeMs: 38 })).toEqual({
-            title: '本机直连 · 延迟 38ms',
-            detail: '最快路线。延迟数字越小，手机操作越跟手。',
+            title: '点对点直连 · 延迟 38ms',
+            detail: '最快路线。延迟数字越小，设备操作越跟手。',
             tone: 'success',
         })
         expect(buildPairingLinkPresentation({ transport: 'direct', currentRoundTripTimeMs: 240 })).toEqual({
-            title: '本机直连 · 延迟 240ms',
-            detail: '最快路线。延迟数字越小，手机操作越跟手。',
+            title: '点对点直连 · 延迟 240ms',
+            detail: '最快路线。延迟数字越小，设备操作越跟手。',
             tone: 'warning',
         })
         expect(buildPairingLinkPresentation({ transport: 'relay', currentRoundTripTimeMs: 120 })).toEqual({
@@ -293,12 +321,12 @@ describe('pairing peer rpc schema', () => {
         })
         expect(buildPairingLinkPresentation({ transport: 'unknown', currentRoundTripTimeMs: null })).toEqual({
             title: '已连接 · 正在检测链路',
-            detail: '不影响使用；Viby 正在确认是本机直连还是安全中转。',
+            detail: '不影响使用；Viby 正在确认是点对点直连还是安全中转。',
             tone: 'neutral',
         })
         expect(buildPairingLinkPresentation(null)).toEqual({
             title: '正在检测链路',
-            detail: '已连接后会确认是本机直连还是安全中转。',
+            detail: '已连接后会确认是点对点直连还是安全中转。',
             tone: 'neutral',
         })
     })

@@ -291,9 +291,15 @@ export const PairingPeerEventSchema = z.discriminatedUnion('event', [
 ])
 export type PairingPeerEvent = z.infer<typeof PairingPeerEventSchema>
 
+export const PairingPeerHeartbeatSchema = z.object({
+    kind: z.literal('heartbeat'),
+})
+export type PairingPeerHeartbeat = z.infer<typeof PairingPeerHeartbeatSchema>
+
 export const PairingPeerMessageSchema = z.union([
     PairingPeerRequestSchema,
     PairingPeerResponseSchema,
     PairingPeerEventSchema,
+    PairingPeerHeartbeatSchema,
 ])
 export type PairingPeerMessage = z.infer<typeof PairingPeerMessageSchema>

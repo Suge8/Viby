@@ -1,6 +1,20 @@
 export type PairingLinkTransport = 'direct' | 'relay' | 'unknown'
 export type PairingLinkTone = 'success' | 'warning' | 'neutral'
+export type PairingDeviceLinkTone = PairingLinkTone | 'danger'
 export type PairingLinkLatencyTier = 'fast' | 'steady' | 'slow' | 'unknown'
+export type PairingDeviceChannel = 'local' | 'link' | 'scan'
+export type PairingDeviceLinkBridgePhase = 'idle' | 'connecting' | 'paused' | 'ready' | 'error'
+export type PairingDeviceLinkPhase =
+    | 'direct'
+    | 'relay'
+    | 'measuring'
+    | 'handshaking'
+    | 'paused'
+    | 'failed'
+    | 'lan'
+    | 'local'
+    | 'public'
+    | 'unknown'
 
 const FAST_RTT_MS = 80
 const STEADY_RTT_MS = 180
@@ -8,6 +22,13 @@ const STEADY_RTT_MS = 180
 export interface PairingLinkQualityInput {
     transport: PairingLinkTransport
     currentRoundTripTimeMs: number | null
+    /**
+     * Last confirmed transport (direct/relay). When the current transport is
+     * `unknown` mid-renegotiation, the UI uses this to label the in-flight
+     * direction (e.g. "由中转切换至点对点”). When the current transport is
+     * settled and matches `previousTransport`, no transition copy is shown.
+     */
+    previousTransport?: 'direct' | 'relay' | null
 }
 
 export interface PairingLinkTransportInput {
@@ -54,6 +75,24 @@ export interface PairingLinkPresentation {
     title: string
     detail: string
     tone: PairingLinkTone
+}
+
+export interface PairingDeviceLinkBridgeInput {
+    phase: PairingDeviceLinkBridgePhase
+    stats: PairingLinkQualityInput | null
+}
+
+export interface PairingDeviceLinkInput {
+    channel: PairingDeviceChannel | null
+    active: boolean
+    bridge: PairingDeviceLinkBridgeInput | null
+}
+
+export interface PairingDeviceLinkStatus {
+    phase: PairingDeviceLinkPhase
+    title: string
+    tone: PairingDeviceLinkTone
+    latencyMs: number | null
 }
 
 function normalizeRoundTripTime(value: number | null): number | null {
@@ -108,7 +147,7 @@ export function describePairingLinkTransport(input: PairingLinkTransportInput | 
 
     switch (input.transport) {
         case 'direct':
-            return '本机直连'
+            return '点对点直连'
         case 'relay':
             return '安全中转'
         default:
@@ -174,13 +213,93 @@ export function resolvePairingSelectedCandidatePairStats(
     }
 }
 
+function buildReadyDeviceLinkStatus(stats: PairingLinkQualityInput | null): PairingDeviceLinkStatus {
+    if (!stats) {
+        // Bridge has reached `ready` but the first stats sample has not
+        // landed yet (polling is every ~10s). The device is genuinely
+        // connected, so display a success-toned label instead of the older
+        // “正在测速” wording that made the row look stuck mid-handshake.
+        return { phase: 'measuring', title: '已连接', tone: 'success', latencyMs: null }
+    }
+
+    // Mid-transition: ICE renegotiation cleared the selected candidate pair.
+    // Show the *direction* the user is heading so the UI never looks frozen.
+    if (stats.transport === 'unknown' && stats.previousTransport) {
+        return stats.previousTransport === 'direct'
+            ? { phase: 'handshaking', title: '正在重选点对点路径', tone: 'neutral', latencyMs: null }
+            : { phase: 'handshaking', title: '正在尝试升级至点对点直连', tone: 'neutral', latencyMs: null }
+    }
+
+    const quality = classifyPairingLinkQuality(stats)
+    const latency = formatPairingRoundTripTime(quality.roundTripTimeMs)
+
+    if (quality.transport === 'direct') {
+        return {
+            phase: 'direct',
+            title: latency ? `点对点直连 · ${latency}` : '点对点直连',
+            tone: quality.tone,
+            latencyMs: quality.roundTripTimeMs,
+        }
+    }
+
+    if (quality.transport === 'relay') {
+        return {
+            phase: 'relay',
+            title: latency ? `安全中转 · ${latency}` : '安全中转',
+            tone: quality.tone,
+            latencyMs: quality.roundTripTimeMs,
+        }
+    }
+
+    return { phase: 'measuring', title: '已连接', tone: 'success', latencyMs: null }
+}
+
+function buildLiveDeviceLinkStatus(bridge: PairingDeviceLinkBridgeInput): PairingDeviceLinkStatus | null {
+    switch (bridge.phase) {
+        case 'ready':
+            return buildReadyDeviceLinkStatus(bridge.stats)
+        case 'connecting':
+            return { phase: 'handshaking', title: '正在握手', tone: 'neutral', latencyMs: null }
+        case 'paused':
+            return { phase: 'paused', title: '等待回连', tone: 'warning', latencyMs: null }
+        case 'error':
+            return { phase: 'failed', title: '链路异常', tone: 'danger', latencyMs: null }
+        case 'idle':
+            return null
+    }
+}
+
+function buildChannelDeviceLinkStatus(channel: PairingDeviceChannel | null, active: boolean): PairingDeviceLinkStatus {
+    if (channel === 'local') {
+        return { phase: 'local', title: '本机', tone: 'neutral', latencyMs: null }
+    }
+
+    if (channel === 'link') {
+        return { phase: 'lan', title: '局域网', tone: active ? 'success' : 'neutral', latencyMs: null }
+    }
+
+    if (channel === 'scan') {
+        return { phase: 'public', title: '公网', tone: active ? 'success' : 'neutral', latencyMs: null }
+    }
+
+    return { phase: 'unknown', title: active ? '已连接' : '已离线', tone: 'neutral', latencyMs: null }
+}
+
+export function buildPairingDeviceLinkStatus(input: PairingDeviceLinkInput): PairingDeviceLinkStatus {
+    if (input.bridge) {
+        const live = buildLiveDeviceLinkStatus(input.bridge)
+        if (live) return live
+    }
+    return buildChannelDeviceLinkStatus(input.channel, input.active)
+}
+
 export function buildPairingLinkPresentation(
     input: PairingLinkQualityInput | null | undefined
 ): PairingLinkPresentation {
     if (!input) {
         return {
             title: '正在检测链路',
-            detail: '已连接后会确认是本机直连还是安全中转。',
+            detail: '已连接后会确认是点对点直连还是安全中转。',
             tone: 'neutral',
         }
     }
@@ -191,8 +310,8 @@ export function buildPairingLinkPresentation(
 
     if (quality.transport === 'direct') {
         return {
-            title: `本机直连${latencyText}`,
-            detail: '最快路线。延迟数字越小，手机操作越跟手。',
+            title: `点对点直连${latencyText}`,
+            detail: '最快路线。延迟数字越小，设备操作越跟手。',
             tone: quality.tone,
         }
     }
@@ -207,7 +326,7 @@ export function buildPairingLinkPresentation(
 
     return {
         title: '已连接 · 正在检测链路',
-        detail: '不影响使用；Viby 正在确认是本机直连还是安全中转。',
+        detail: '不影响使用；Viby 正在确认是点对点直连还是安全中转。',
         tone: 'neutral',
     }
 }

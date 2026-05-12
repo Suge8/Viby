@@ -11,8 +11,11 @@
     "types": "./src/index.ts",
     "exports": {
         ".": "./src/index.ts",
+        "./deviceAuth": "./src/deviceAuth.ts",
+        "./hubAccessEntries": "./src/hubAccessEntries.ts",
         "./localSettings": "./src/localSettings.ts",
         "./messages": "./src/messages.ts",
+        "./networkScope": "./src/networkScope.ts",
         "./pairing": "./src/pairing/index.ts",
         "./runtimeCapability": "./src/runtimeCapability.ts",
         "./runtimeDefaults": "./src/runtimeDefaults.ts",

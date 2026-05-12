@@ -10,6 +10,7 @@ export type VibyLocalSettings = {
     listenHost?: string
     listenPort?: number
     publicUrl?: string
+    publicAccessEnabled?: boolean
     corsOrigins?: string[]
     pairingBrokerUrl?: string
     pairingCreateToken?: string
@@ -146,6 +147,7 @@ export function parseVibyLocalSettingsToml(raw: string): VibyLocalSettings {
         listenHost: readString(parsed, 'listen_host'),
         listenPort: readNumber(parsed, 'listen_port'),
         publicUrl: readString(parsed, 'public_url'),
+        publicAccessEnabled: readBoolean(parsed, 'public_access_enabled'),
         corsOrigins: readStringArray(parsed, 'cors_origins'),
         pairingBrokerUrl: readString(parsed, 'pairing_broker_url'),
         pairingCreateToken: readString(parsed, 'pairing_create_token'),
@@ -184,10 +186,12 @@ export function stringifyVibyLocalSettingsToml(settings: VibyLocalSettings): str
     lines.push(`listen_port = ${settings.listenPort ?? DEFAULT_VIBY_LISTEN_PORT}`)
     lines.push('# 🚀 Public URL / 对外访问地址')
     lines.push(`public_url = ${formatTomlString(settings.publicUrl ?? '')}`)
+    lines.push('# 🌍 Public access / 公网访问')
+    lines.push(`public_access_enabled = ${settings.publicAccessEnabled ?? true}`)
     lines.push('# 🪪 Allowed CORS origins / 允许的来源')
     lines.push(`cors_origins = ${formatTomlStringArray(settings.corsOrigins ?? [])}`)
     lines.push('')
-    lines.push('# 📱 Pairing broker / 手机配对服务')
+    lines.push('# 📱 Pairing broker / 设备配对服务')
     lines.push(`pairing_broker_url = ${formatTomlString(settings.pairingBrokerUrl ?? '')}`)
     lines.push(`pairing_create_token = ${formatTomlString(settings.pairingCreateToken ?? '')}`)
 

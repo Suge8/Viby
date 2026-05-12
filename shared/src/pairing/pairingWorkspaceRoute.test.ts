@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'bun:test'
-import { hasPairingWorkspaceIntent, withPairingWorkspaceIntent } from './pairingWorkspaceRoute'
+import {
+    hasPairingWorkspaceIntent,
+    PAIRING_PWA_HANDOFF_PARAM,
+    PAIRING_PWA_MANIFEST_PAIRING_PARAM,
+    withPairingWorkspaceIntent,
+} from './pairingWorkspaceRoute'
 
 describe('pairingWorkspaceRoute', () => {
     it('requires explicit remote intent on workspace routes', () => {
@@ -17,5 +22,10 @@ describe('pairingWorkspaceRoute', () => {
 
     it('does not tag non-workspace links', () => {
         expect(withPairingWorkspaceIntent('/p/pairing-1#ticket=ticket-1')).toBe('/p/pairing-1#ticket=ticket-1')
+    })
+
+    it('keeps PWA handoff parameter names canonical', () => {
+        expect(PAIRING_PWA_HANDOFF_PARAM).toBe('handoff')
+        expect(PAIRING_PWA_MANIFEST_PAIRING_PARAM).toBe('pairing')
     })
 })

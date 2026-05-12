@@ -1,5 +1,7 @@
 export const PAIRING_WORKSPACE_INTENT_PARAM = 'remote'
 export const PAIRING_WORKSPACE_INTENT_VALUE = '1'
+export const PAIRING_PWA_HANDOFF_PARAM = 'handoff'
+export const PAIRING_PWA_MANIFEST_PAIRING_PARAM = 'pairing'
 export const PAIRING_NAKED_WORKSPACE_REDIRECT_URL = 'https://viby.run'
 
 export function isPairingWorkspacePath(pathname: string): boolean {
