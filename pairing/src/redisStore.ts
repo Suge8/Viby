@@ -6,10 +6,12 @@ import {
 } from '@viby/protocol/pairing'
 import {
     clearSessionSideKeys,
+    consumeHandoffTicket,
     consumeReconnectChallenge,
     createTokenIndex,
     loadTokenIndex,
     setTokenIndex,
+    storeHandoffTicket,
     storeReconnectChallenge,
 } from './redisStoreIndexSupport'
 import { renewRedisPairingSession } from './redisStoreRenewal'
@@ -28,7 +30,12 @@ import {
     updateParticipant,
     updateState,
 } from './storeSupport'
-import type { PairingReconnectChallengeRecord, PairingStore, RedisPairingAdapter } from './storeTypes'
+import type {
+    PairingHandoffTicketRecord,
+    PairingReconnectChallengeRecord,
+    PairingStore,
+    RedisPairingAdapter,
+} from './storeTypes'
 
 export { RedisClientPairingAdapter } from './redisPairingAdapter'
 
@@ -177,6 +184,37 @@ export class RedisPairingStore implements PairingStore {
         })
     }
 
+    async bindGuestDeviceKey(pairingId: string, publicKey: string, at: number): Promise<PairingSessionRecord | null> {
+        return this.updateSession(pairingId, async (current) => {
+            if (!isActiveState(current.state) || !current.guest) return null
+            if (current.guest.publicKey) return current.guest.publicKey === publicKey ? current : null
+            return updateState({ ...current, updatedAt: at, guest: { ...current.guest, publicKey } })
+        })
+    }
+    async rotateGuestToken(
+        pairingId: string,
+        guest: PairingParticipantRecord,
+        at: number
+    ): Promise<PairingSessionRecord | null> {
+        let oldTokenHash: string | null = null
+        const session = await this.updateSession(pairingId, async (current) => {
+            if (!isActiveState(current.state) || !current.guest) return null
+            oldTokenHash = current.guest.tokenHash
+            return updateState({ ...current, updatedAt: at, guest: { ...guest } })
+        })
+        if (!session) return null
+
+        if (oldTokenHash) await this.adapter.del(tokenIndexKey(oldTokenHash))
+        await setTokenIndex({
+            adapter: this.adapter,
+            tokenHash: guest.tokenHash,
+            pairingId,
+            role: 'guest',
+            ttlSeconds: this.ttlSeconds(session.expiresAt),
+        })
+        return session
+    }
+
     async issueReconnectChallenge(
         pairingId: string,
         role: PairingRole,
@@ -197,6 +235,27 @@ export class RedisPairingStore implements PairingStore {
             pairingId,
             role,
             nonce,
+            at,
+        })
+    }
+
+    async issueHandoffTicket(
+        pairingId: string,
+        ticket: PairingHandoffTicketRecord
+    ): Promise<PairingHandoffTicketRecord> {
+        return await storeHandoffTicket({
+            adapter: this.adapter,
+            pairingId,
+            ticket,
+            ttlSeconds: this.ttlSeconds(ticket.expiresAt),
+        })
+    }
+
+    async consumeHandoffTicket(pairingId: string, tokenHash: string, at: number): Promise<boolean> {
+        return await consumeHandoffTicket({
+            adapter: this.adapter,
+            pairingId,
+            tokenHash,
             at,
         })
     }

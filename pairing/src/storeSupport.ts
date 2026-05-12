@@ -1,5 +1,5 @@
 import type { PairingParticipantRecord, PairingRole, PairingSessionRecord } from '@viby/protocol/pairing'
-import type { PairingReconnectChallengeRecord } from './storeTypes'
+import type { PairingHandoffTicketRecord, PairingReconnectChallengeRecord } from './storeTypes'
 
 export interface PairingTokenIndex {
     pairingId: string
@@ -20,6 +20,10 @@ export function tokenIndexKey(tokenHash: string): string {
 
 export function reconnectChallengeKey(pairingId: string, role: PairingRole): string {
     return `pairing:challenge:${pairingId}:${role}`
+}
+
+export function handoffTicketKey(pairingId: string): string {
+    return `pairing:handoff:${pairingId}`
 }
 
 export function encodeTokenIndex(index: PairingTokenIndex): string {
@@ -73,6 +77,25 @@ export function decodeReconnectChallenge(raw: string): PairingReconnectChallenge
             issuedAt: Number(issuedAt),
             expiresAt: Number(expiresAt),
         }
+    } catch {
+        return null
+    }
+}
+
+export function cloneHandoffTicket(ticket: PairingHandoffTicketRecord): PairingHandoffTicketRecord {
+    return { ...ticket }
+}
+
+export function encodeHandoffTicket(ticket: PairingHandoffTicketRecord): string {
+    return JSON.stringify(ticket)
+}
+
+export function decodeHandoffTicket(raw: string): PairingHandoffTicketRecord | null {
+    try {
+        const parsed = JSON.parse(raw) as Partial<PairingHandoffTicketRecord>
+        if (typeof parsed.tokenHash !== 'string' || parsed.tokenHash.length === 0) return null
+        if (!Number.isInteger(parsed.expiresAt) || (parsed.expiresAt ?? 0) <= 0) return null
+        return { tokenHash: parsed.tokenHash, expiresAt: Number(parsed.expiresAt) }
     } catch {
         return null
     }

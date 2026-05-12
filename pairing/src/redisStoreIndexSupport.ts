@@ -1,15 +1,19 @@
 import type { PairingRole, PairingSessionRecord } from '@viby/protocol/pairing'
 import {
+    cloneHandoffTicket,
     cloneReconnectChallenge,
+    decodeHandoffTicket,
     decodeReconnectChallenge,
     decodeTokenIndex,
+    encodeHandoffTicket,
     encodeReconnectChallenge,
     encodeTokenIndex,
+    handoffTicketKey,
     type PairingTokenIndex,
     reconnectChallengeKey,
     tokenIndexKey,
 } from './storeSupport'
-import type { PairingReconnectChallengeRecord, RedisPairingAdapter } from './storeTypes'
+import type { PairingHandoffTicketRecord, PairingReconnectChallengeRecord, RedisPairingAdapter } from './storeTypes'
 
 const RECONNECT_CHALLENGE_ROLES: readonly PairingRole[] = ['host', 'guest']
 
@@ -71,6 +75,7 @@ export async function clearTokenIndexes(adapter: RedisPairingAdapter, session: P
 export async function clearSessionSideKeys(adapter: RedisPairingAdapter, session: PairingSessionRecord): Promise<void> {
     await clearTokenIndexes(adapter, session)
     await clearReconnectChallenges(adapter, session.id)
+    await clearHandoffTicket(adapter, session.id)
 }
 
 export async function storeReconnectChallenge(options: {
@@ -108,6 +113,41 @@ export async function consumeReconnectChallenge(options: {
     }
 
     return await options.adapter.compareAndSet(key, raw, null)
+}
+
+export async function storeHandoffTicket(options: {
+    adapter: RedisPairingAdapter
+    pairingId: string
+    ticket: PairingHandoffTicketRecord
+    ttlSeconds: number
+}): Promise<PairingHandoffTicketRecord> {
+    await options.adapter.set(handoffTicketKey(options.pairingId), encodeHandoffTicket(options.ticket), {
+        ttlSeconds: options.ttlSeconds,
+    })
+    return cloneHandoffTicket(options.ticket)
+}
+
+export async function consumeHandoffTicket(options: {
+    adapter: RedisPairingAdapter
+    pairingId: string
+    tokenHash: string
+    at: number
+}): Promise<boolean> {
+    const key = handoffTicketKey(options.pairingId)
+    const raw = await options.adapter.get(key)
+    if (!raw) return false
+
+    const ticket = decodeHandoffTicket(raw)
+    if (!ticket || ticket.tokenHash !== options.tokenHash || options.at > ticket.expiresAt) {
+        await options.adapter.del(key)
+        return false
+    }
+
+    return await options.adapter.compareAndSet(key, raw, null)
+}
+
+export async function clearHandoffTicket(adapter: RedisPairingAdapter, pairingId: string): Promise<void> {
+    await adapter.del(handoffTicketKey(pairingId))
 }
 
 export async function clearReconnectChallenges(adapter: RedisPairingAdapter, pairingId: string): Promise<void> {

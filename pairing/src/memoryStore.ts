@@ -5,16 +5,18 @@ import {
     PairingSessionRecordSchema,
 } from '@viby/protocol/pairing'
 import {
+    cloneHandoffTicket,
     cloneReconnectChallenge,
     cloneSession,
     expireIfNeeded,
+    handoffTicketKey,
     isActiveState,
     type PairingTokenIndex,
     reconnectChallengeKey,
     updateParticipant,
     updateState,
 } from './storeSupport'
-import type { PairingReconnectChallengeRecord, PairingStore } from './storeTypes'
+import type { PairingHandoffTicketRecord, PairingReconnectChallengeRecord, PairingStore } from './storeTypes'
 
 const RECONNECT_CHALLENGE_ROLES: readonly PairingRole[] = ['host', 'guest']
 type ConnectionUpdateMode = 'connected' | 'touched' | 'disconnected'
@@ -23,6 +25,7 @@ export class MemoryPairingStore implements PairingStore {
     private readonly sessions = new Map<string, PairingSessionRecord>()
     private readonly tokenIndex = new Map<string, PairingTokenIndex>()
     private readonly reconnectChallenges = new Map<string, PairingReconnectChallengeRecord>()
+    private readonly handoffTickets = new Map<string, PairingHandoffTicketRecord>()
 
     constructor(private readonly now: () => number = Date.now) {}
 
@@ -51,6 +54,7 @@ export class MemoryPairingStore implements PairingStore {
         if (normalized !== session) {
             if (normalized.state === 'expired') {
                 this.clearReconnectChallenges(pairingId)
+                this.handoffTickets.delete(handoffTicketKey(pairingId))
             }
             this.sessions.set(pairingId, normalized)
         }
@@ -155,6 +159,46 @@ export class MemoryPairingStore implements PairingStore {
         return cloneSession(renewed)
     }
 
+    async bindGuestDeviceKey(pairingId: string, publicKey: string, at: number): Promise<PairingSessionRecord | null> {
+        const session = this.sessions.get(pairingId)
+        if (!session) return null
+
+        const normalized = expireIfNeeded(session, this.now(), this.tokenIndex)
+        const guest = normalized.guest
+        if (!isActiveState(normalized.state) || !guest) {
+            this.sessions.set(pairingId, normalized)
+            return null
+        }
+        if (guest.publicKey) {
+            return guest.publicKey === publicKey ? cloneSession(normalized) : null
+        }
+
+        const next = updateState({ ...normalized, updatedAt: at, guest: { ...guest, publicKey } })
+        this.sessions.set(pairingId, next)
+        return cloneSession(next)
+    }
+
+    async rotateGuestToken(
+        pairingId: string,
+        guest: PairingParticipantRecord,
+        at: number
+    ): Promise<PairingSessionRecord | null> {
+        const session = this.sessions.get(pairingId)
+        if (!session) return null
+
+        const normalized = expireIfNeeded(session, this.now(), this.tokenIndex)
+        if (!isActiveState(normalized.state) || !normalized.guest) {
+            this.sessions.set(pairingId, normalized)
+            return null
+        }
+
+        const next = updateState({ ...normalized, updatedAt: at, guest: { ...guest } })
+        this.tokenIndex.delete(normalized.guest.tokenHash)
+        this.tokenIndex.set(guest.tokenHash, { pairingId, role: 'guest' })
+        this.sessions.set(pairingId, next)
+        return cloneSession(next)
+    }
+
     async issueReconnectChallenge(
         pairingId: string,
         role: PairingRole,
@@ -173,6 +217,23 @@ export class MemoryPairingStore implements PairingStore {
 
         this.reconnectChallenges.delete(key)
         return challenge.nonce === nonce && at <= challenge.expiresAt
+    }
+
+    async issueHandoffTicket(
+        pairingId: string,
+        ticket: PairingHandoffTicketRecord
+    ): Promise<PairingHandoffTicketRecord> {
+        this.handoffTickets.set(handoffTicketKey(pairingId), cloneHandoffTicket(ticket))
+        return cloneHandoffTicket(ticket)
+    }
+
+    async consumeHandoffTicket(pairingId: string, tokenHash: string, at: number): Promise<boolean> {
+        const key = handoffTicketKey(pairingId)
+        const ticket = this.handoffTickets.get(key)
+        if (!ticket) return false
+
+        this.handoffTickets.delete(key)
+        return ticket.tokenHash === tokenHash && at <= ticket.expiresAt
     }
 
     async deleteSession(pairingId: string, at: number): Promise<PairingSessionRecord | null> {
@@ -196,6 +257,7 @@ export class MemoryPairingStore implements PairingStore {
             this.tokenIndex.delete(session.guest.tokenHash)
         }
         this.clearReconnectChallenges(pairingId)
+        this.handoffTickets.delete(handoffTicketKey(pairingId))
         this.sessions.set(pairingId, next)
         return cloneSession(next)
     }

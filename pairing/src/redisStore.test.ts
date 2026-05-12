@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test'
 import { PairingSessionRecordSchema } from '@viby/protocol/pairing'
 import { createParticipantRecord } from './httpSupport'
 import { RedisPairingStore } from './redisStore'
-import { reconnectChallengeKey, sessionKey, tokenIndexKey } from './storeSupport'
+import { handoffTicketKey, reconnectChallengeKey, sessionKey, tokenIndexKey } from './storeSupport'
 import type { RedisPairingAdapter } from './storeTypes'
 
 function createSessionRecord(now: number) {
@@ -166,6 +166,7 @@ describe('RedisPairingStore', () => {
             issuedAt: now,
             expiresAt: now + 600,
         })
+        await store.issueHandoffTicket(session.id, { tokenHash: 'handoff-hash', expiresAt: now + 600 })
 
         now = session.expiresAt + 1
 
@@ -179,6 +180,7 @@ describe('RedisPairingStore', () => {
         expect(adapter.values.get(tokenIndexKey(guest.tokenHash))).toBeUndefined()
         expect(adapter.values.get(reconnectChallengeKey(session.id, 'host'))).toBeUndefined()
         expect(adapter.values.get(reconnectChallengeKey(session.id, 'guest'))).toBeUndefined()
+        expect(adapter.values.get(handoffTicketKey(session.id))).toBeUndefined()
     })
 
     it('renews session and token index TTLs for reconnecting paired devices', async () => {
@@ -198,6 +200,54 @@ describe('RedisPairingStore', () => {
         expect(adapter.ttlByKey.get(sessionKey(session.id))).toBe(10)
         expect(adapter.ttlByKey.get(tokenIndexKey(session.host.tokenHash))).toBe(10)
         expect(adapter.ttlByKey.get(tokenIndexKey(guest.tokenHash))).toBe(10)
+    })
+
+    it('binds a missing guest device key without touching token indexes', async () => {
+        const now = 1_000
+        const adapter = new FakeRedisAdapter()
+        const { session } = createSessionRecord(now)
+        const store = new RedisPairingStore(adapter, () => now)
+        const guest = createParticipantRecord({ token: 'guest-secret', label: 'Phone' })
+
+        await store.createSession(session)
+        await store.claimSession(session.id, guest, '123456')
+        const bound = await store.bindGuestDeviceKey(session.id, 'public-key-1', now + 5)
+        const rejected = await store.bindGuestDeviceKey(session.id, 'public-key-2', now + 6)
+
+        expect(bound?.guest?.publicKey).toBe('public-key-1')
+        expect(bound?.updatedAt).toBe(now + 5)
+        expect(rejected).toBeNull()
+        expect(adapter.values.get(tokenIndexKey(guest.tokenHash))).toBeTruthy()
+    })
+
+    it('rotates guest token indexes for device-key recovery', async () => {
+        const now = 1_000
+        const adapter = new FakeRedisAdapter()
+        const { session } = createSessionRecord(now)
+        const store = new RedisPairingStore(adapter, () => now)
+        const guest = createParticipantRecord({ token: 'guest-old', label: 'Phone' })
+        const nextGuest = createParticipantRecord({ token: 'guest-new', label: 'Phone' })
+
+        await store.createSession(session)
+        await store.claimSession(session.id, guest, '123456')
+        const rotated = await store.rotateGuestToken(session.id, nextGuest, now + 5)
+
+        expect(rotated?.guest?.tokenHash).toBe(nextGuest.tokenHash)
+        expect(adapter.values.get(tokenIndexKey(guest.tokenHash))).toBeUndefined()
+        expect(adapter.values.get(tokenIndexKey(nextGuest.tokenHash))).toBeTruthy()
+    })
+
+    it('stores PWA handoff tickets in redis and consumes them once', async () => {
+        const now = 1_000
+        const adapter = new FakeRedisAdapter()
+        const { session } = createSessionRecord(now)
+        const store = new RedisPairingStore(adapter, () => now)
+
+        await store.createSession(session)
+        await store.issueHandoffTicket(session.id, { tokenHash: 'handoff-hash', expiresAt: now + 600 })
+
+        await expect(store.consumeHandoffTicket(session.id, 'handoff-hash', now + 1)).resolves.toBe(true)
+        await expect(store.consumeHandoffTicket(session.id, 'handoff-hash', now + 1)).resolves.toBe(false)
     })
 
     it('stores reconnect challenges in redis and consumes them once', async () => {
@@ -234,9 +284,11 @@ describe('RedisPairingStore', () => {
             issuedAt: now,
             expiresAt: now + 600,
         })
+        await store.issueHandoffTicket(session.id, { tokenHash: 'handoff-hash', expiresAt: now + 600 })
 
         await expect(store.deleteSession(session.id, now + 1)).resolves.toMatchObject({ state: 'deleted' })
         expect(adapter.values.get(reconnectChallengeKey(session.id, 'host'))).toBeUndefined()
         expect(adapter.values.get(reconnectChallengeKey(session.id, 'guest'))).toBeUndefined()
+        expect(adapter.values.get(handoffTicketKey(session.id))).toBeUndefined()
     })
 })

@@ -19,6 +19,11 @@ export interface PairingReconnectChallengeRecord {
     expiresAt: number
 }
 
+export interface PairingHandoffTicketRecord {
+    expiresAt: number
+    tokenHash: string
+}
+
 export interface PairingStore {
     healthCheck(): Promise<void>
     createSession(session: PairingSessionRecord): Promise<PairingSessionRecord>
@@ -34,12 +39,20 @@ export interface PairingStore {
     touchConnection(pairingId: string, role: PairingRole, at: number): Promise<PairingSessionRecord | null>
     markDisconnected(pairingId: string, role: PairingRole, at: number): Promise<PairingSessionRecord | null>
     renewSession(pairingId: string, expiresAt: number, at: number): Promise<PairingSessionRecord | null>
+    bindGuestDeviceKey(pairingId: string, publicKey: string, at: number): Promise<PairingSessionRecord | null>
+    rotateGuestToken(
+        pairingId: string,
+        guest: PairingParticipantRecord,
+        at: number
+    ): Promise<PairingSessionRecord | null>
     issueReconnectChallenge(
         pairingId: string,
         role: PairingRole,
         challenge: PairingReconnectChallengeRecord
     ): Promise<PairingReconnectChallengeRecord>
     consumeReconnectChallenge(pairingId: string, role: PairingRole, nonce: string, at: number): Promise<boolean>
+    issueHandoffTicket(pairingId: string, ticket: PairingHandoffTicketRecord): Promise<PairingHandoffTicketRecord>
+    consumeHandoffTicket(pairingId: string, tokenHash: string, at: number): Promise<boolean>
     deleteSession(pairingId: string, at: number): Promise<PairingSessionRecord | null>
 }
 

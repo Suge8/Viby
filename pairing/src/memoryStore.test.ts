@@ -69,6 +69,48 @@ describe('MemoryPairingStore', () => {
         })
     })
 
+    it('binds a missing guest device key without overwriting an existing key', async () => {
+        const store = new MemoryPairingStore(() => 1_000)
+        const session = createSessionRecord(1_000)
+        const guest = createParticipantRecord({ token: 'guest-secret', label: 'Phone' })
+
+        await store.createSession(session)
+        await store.claimSession(session.id, guest, '123456')
+
+        const bound = await store.bindGuestDeviceKey(session.id, 'public-key-1', 1_500)
+        const rejected = await store.bindGuestDeviceKey(session.id, 'public-key-2', 1_600)
+
+        expect(bound?.guest?.publicKey).toBe('public-key-1')
+        expect(bound?.updatedAt).toBe(1_500)
+        expect(rejected).toBeNull()
+        await expect(store.getSessionByTokenHash(guest.tokenHash)).resolves.toMatchObject({ role: 'guest' })
+    })
+
+    it('rotates guest tokens for device-key recovery', async () => {
+        const store = new MemoryPairingStore(() => 1_000)
+        const session = createSessionRecord(1_000)
+        const guest = createParticipantRecord({ token: 'guest-old', label: 'Phone' })
+        const nextGuest = createParticipantRecord({ token: 'guest-new', label: 'Phone' })
+
+        await store.createSession(session)
+        await store.claimSession(session.id, guest, '123456')
+        const rotated = await store.rotateGuestToken(session.id, nextGuest, 1_500)
+
+        expect(rotated?.guest?.tokenHash).toBe(nextGuest.tokenHash)
+        await expect(store.getSessionByTokenHash(guest.tokenHash)).resolves.toBeNull()
+        await expect(store.getSessionByTokenHash(nextGuest.tokenHash)).resolves.toMatchObject({ role: 'guest' })
+    })
+
+    it('issues one-time PWA handoff tickets and consumes them once', async () => {
+        const store = new MemoryPairingStore(() => 1_000)
+        const session = createSessionRecord(1_000)
+        await store.createSession(session)
+        await store.issueHandoffTicket(session.id, { tokenHash: 'handoff-hash', expiresAt: 2_000 })
+
+        await expect(store.consumeHandoffTicket(session.id, 'handoff-hash', 1_500)).resolves.toBe(true)
+        await expect(store.consumeHandoffTicket(session.id, 'handoff-hash', 1_500)).resolves.toBe(false)
+    })
+
     it('issues one-time reconnect challenges and consumes them once', async () => {
         const store = new MemoryPairingStore(() => 1_000)
         const session = createSessionRecord(1_000)
@@ -84,7 +126,7 @@ describe('MemoryPairingStore', () => {
         await expect(store.consumeReconnectChallenge(session.id, 'guest', 'nonce-1', 1_500)).resolves.toBe(false)
     })
 
-    it('clears reconnect challenges when a session expires', async () => {
+    it('clears transient reconnect and handoff records when a session expires', async () => {
         let now = 1_000
         const store = new MemoryPairingStore(() => now)
         const session = createSessionRecord(now)
@@ -94,10 +136,12 @@ describe('MemoryPairingStore', () => {
             issuedAt: now,
             expiresAt: now + 500,
         })
+        await store.issueHandoffTicket(session.id, { tokenHash: 'handoff-hash', expiresAt: now + 500 })
 
         now = session.expiresAt + 1
 
         await expect(store.getSession(session.id)).resolves.toMatchObject({ state: 'expired' })
         await expect(store.consumeReconnectChallenge(session.id, 'guest', 'nonce-expire', now)).resolves.toBe(false)
+        await expect(store.consumeHandoffTicket(session.id, 'handoff-hash', now)).resolves.toBe(false)
     })
 })

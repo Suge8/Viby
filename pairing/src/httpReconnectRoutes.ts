@@ -1,15 +1,18 @@
 import {
+    PairingClaimResponseSchema,
+    PairingDeviceReconnectChallengeRequestSchema,
+    PairingDeviceReconnectRequestSchema,
     PairingReconnectChallengeRequestSchema,
     PairingReconnectChallengeResponseSchema,
-    type PairingReconnectRequest,
     PairingReconnectRequestSchema,
     PairingReconnectResponseSchema,
     PairingTelemetryRequestSchema,
     PairingTelemetryResponseSchema,
     toPairingSessionSnapshotForRole,
 } from '@viby/protocol/pairing'
-import type { Context, Hono } from 'hono'
-import { generatePairingSecret, hashPairingSecret, verifyPairingDeviceProof } from './crypto'
+import type { Hono } from 'hono'
+import { generatePairingSecret, hashPairingSecret } from './crypto'
+import { verifyStoredPairingDeviceProof } from './httpDeviceProofSupport'
 import {
     enforcePairingRateLimit,
     getClientAddress,
@@ -17,7 +20,7 @@ import {
     rejectPairingCode,
     requirePairingIdentity,
 } from './httpRouteSupport'
-import { buildPairingUrls, createIceServers, getNow } from './httpSupport'
+import { buildPairingUrls, createIceServers, createParticipantRecord, getNow } from './httpSupport'
 import type { PairingHttpOptions } from './httpTypes'
 import { createJsonBodyValidator } from './httpValidation'
 
@@ -53,6 +56,111 @@ export function registerPairingReconnectRoutes(app: Hono, options: PairingHttpOp
     )
 
     app.post(
+        '/pairings/:id/device-reconnect-challenge',
+        createJsonBodyValidator(
+            PairingDeviceReconnectChallengeRequestSchema,
+            'Invalid pairing device reconnect challenge body'
+        ),
+        async (c) => {
+            const rateLimitResponse = enforcePairingRateLimit(c, options, 'reconnect')
+            if (rateLimitResponse) return rateLimitResponse
+
+            const pairingId = c.req.param('id')
+            const body = c.req.valid('json')
+            const now = getNow(options.now)
+            options.metrics?.increment('challenge_requests')
+
+            const session = await options.store.getSession(pairingId)
+            if (!session || session.state === 'deleted' || session.state === 'expired') {
+                return rejectPairingCode(c, options, 'challenge_rejected', 410, 'pairing_unavailable')
+            }
+            if (session.approvalStatus !== 'approved' || session.guest?.publicKey !== body.publicKey) {
+                return rejectPairingCode(c, options, 'challenge_rejected', 403, 'pairing_invalid_device_proof')
+            }
+
+            const challenge = await options.store.issueReconnectChallenge(pairingId, 'guest', {
+                nonce: generatePairingSecret(24),
+                issuedAt: now,
+                expiresAt: now + options.reconnectChallengeTtlSeconds * 1000,
+            })
+            logPairingAudit(options, 'device_reconnect_challenge', { ip: getClientAddress(c), pairingId })
+            return c.json(PairingReconnectChallengeResponseSchema.parse({ role: 'guest', challenge }))
+        }
+    )
+
+    app.post(
+        '/pairings/:id/device-reconnect',
+        createJsonBodyValidator(PairingDeviceReconnectRequestSchema, 'Invalid pairing device reconnect body'),
+        async (c) => {
+            const rateLimitResponse = enforcePairingRateLimit(c, options, 'reconnect')
+            if (rateLimitResponse) return rateLimitResponse
+
+            const pairingId = c.req.param('id')
+            const body = c.req.valid('json')
+            const now = getNow(options.now)
+            options.metrics?.increment('reconnect_requests')
+
+            const session = await options.store.getSession(pairingId)
+            if (!session || session.state === 'deleted' || session.state === 'expired') {
+                return rejectPairingCode(c, options, 'reconnect_rejected', 410, 'pairing_unavailable')
+            }
+            if (session.approvalStatus !== 'approved' || session.guest?.publicKey !== body.deviceProof.publicKey) {
+                return rejectPairingCode(c, options, 'reconnect_rejected', 403, 'pairing_invalid_device_proof')
+            }
+
+            const proofFailure = await verifyStoredPairingDeviceProof({
+                pairingId,
+                role: 'guest',
+                proof: body.deviceProof,
+                expectedPublicKey: session.guest.publicKey,
+                now,
+                store: options.store,
+            })
+            if (proofFailure === 'invalid') {
+                return rejectPairingCode(c, options, 'reconnect_rejected', 403, 'pairing_invalid_device_proof')
+            }
+            if (proofFailure === 'challenge-expired') {
+                return rejectPairingCode(c, options, 'reconnect_rejected', 403, 'pairing_reconnect_challenge_expired')
+            }
+
+            const guestToken = generatePairingSecret()
+            const renewedSession = await options.store.renewSession(
+                pairingId,
+                now + options.sessionTtlSeconds * 1000,
+                now
+            )
+            const guest = renewedSession?.guest
+            if (!guest) {
+                return rejectPairingCode(c, options, 'reconnect_rejected', 410, 'pairing_unavailable')
+            }
+
+            const recovered = await options.store.rotateGuestToken(
+                pairingId,
+                createParticipantRecord({
+                    token: guestToken,
+                    label: guest.label,
+                    publicKey: guest.publicKey,
+                    metadata: guest.metadata,
+                }),
+                now
+            )
+            if (!recovered) {
+                return rejectPairingCode(c, options, 'reconnect_rejected', 410, 'pairing_unavailable')
+            }
+
+            logPairingAudit(options, 'device_reconnect', { ip: getClientAddress(c), pairingId })
+            return c.json(
+                PairingClaimResponseSchema.parse({
+                    pairing: toPairingSessionSnapshotForRole(recovered, 'guest'),
+                    guestToken,
+                    wsUrl: buildPairingUrls(options.publicUrl, pairingId, '', guestToken).wsUrl,
+                    iceServers: createIceServers(options, pairingId, now),
+                })
+            )
+        }
+    )
+
+    app.post(
         '/pairings/:id/reconnect',
         createJsonBodyValidator(PairingReconnectRequestSchema, 'Invalid pairing reconnect body'),
         async (c) => {
@@ -73,9 +181,43 @@ export function registerPairingReconnectRoutes(app: Hono, options: PairingHttpOp
                 return rejectPairingCode(c, options, 'reconnect_rejected', 410, 'pairing_unavailable')
             }
 
-            if (identity.role === 'guest' && identity.session.guest?.publicKey) {
-                const rejected = await verifyGuestReconnectProof({ c, pairingId, body, identity, now, options })
-                if (rejected) return rejected
+            if (identity.role === 'guest') {
+                const expectedPublicKey = identity.session.guest?.publicKey ?? body.deviceProof?.publicKey
+                if (expectedPublicKey) {
+                    const proofFailure = await verifyStoredPairingDeviceProof({
+                        pairingId,
+                        role: identity.role,
+                        challengeNonce: body.challengeNonce,
+                        proof: body.deviceProof,
+                        expectedPublicKey,
+                        now,
+                        store: options.store,
+                    })
+                    if (proofFailure === 'invalid') {
+                        return rejectPairingCode(c, options, 'reconnect_rejected', 403, 'pairing_invalid_device_proof')
+                    }
+                    if (proofFailure === 'challenge-expired') {
+                        return rejectPairingCode(
+                            c,
+                            options,
+                            'reconnect_rejected',
+                            403,
+                            'pairing_reconnect_challenge_expired'
+                        )
+                    }
+                    if (!identity.session.guest?.publicKey) {
+                        const bound = await options.store.bindGuestDeviceKey(pairingId, expectedPublicKey, now)
+                        if (!bound) {
+                            return rejectPairingCode(
+                                c,
+                                options,
+                                'reconnect_rejected',
+                                403,
+                                'pairing_invalid_device_proof'
+                            )
+                        }
+                    }
+                }
             }
 
             const renewedSession = await options.store.renewSession(
@@ -121,48 +263,4 @@ export function registerPairingReconnectRoutes(app: Hono, options: PairingHttpOp
             return c.json(PairingTelemetryResponseSchema.parse({ accepted: true }))
         }
     )
-}
-
-type ReconnectIdentity = NonNullable<Awaited<ReturnType<PairingHttpOptions['store']['getSessionByTokenHash']>>>
-
-type VerifyGuestReconnectProofOptions = {
-    c: Context
-    pairingId: string
-    body: PairingReconnectRequest
-    identity: ReconnectIdentity
-    now: number
-    options: PairingHttpOptions
-}
-
-async function verifyGuestReconnectProof({
-    c,
-    pairingId,
-    body,
-    identity,
-    now,
-    options,
-}: VerifyGuestReconnectProofOptions): Promise<Response | null> {
-    const proof = body.deviceProof
-    const challengeNonce = proof?.challengeNonce ?? body.challengeNonce
-    if (!proof || !challengeNonce || proof.challengeNonce !== challengeNonce) {
-        return rejectPairingCode(c, options, 'reconnect_rejected', 403, 'pairing_invalid_device_proof')
-    }
-    if (proof.publicKey !== identity.session.guest?.publicKey) {
-        return rejectPairingCode(c, options, 'reconnect_rejected', 403, 'pairing_invalid_device_proof')
-    }
-
-    const accepted = await options.store.consumeReconnectChallenge(pairingId, identity.role, challengeNonce, now)
-    if (!accepted) {
-        return rejectPairingCode(c, options, 'reconnect_rejected', 403, 'pairing_reconnect_challenge_expired')
-    }
-
-    const verified = await verifyPairingDeviceProof({
-        pairingId,
-        challengeNonce,
-        signedAt: proof.signedAt,
-        publicKey: proof.publicKey,
-        signature: proof.signature,
-        now,
-    })
-    return verified ? null : rejectPairingCode(c, options, 'reconnect_rejected', 403, 'pairing_invalid_device_proof')
 }

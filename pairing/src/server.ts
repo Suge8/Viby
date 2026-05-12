@@ -1,10 +1,17 @@
 import { createBunWebSocket } from 'hono/bun'
 import { type PairingBrokerConfig, readPairingBrokerConfig } from './config'
 import { createPairingApp, type PairingHttpOptions } from './http'
+import { createPairingManifestCookieSigner } from './manifestCookie'
 import { PairingMetrics } from './metrics'
 import { PairingRateLimiter } from './rateLimit'
 import { createConfiguredPairingStore, type PairingStore } from './store'
 import { PairingSocketHub } from './ws'
+
+// Cookie TTL is intentionally larger than the broker handoff ticket TTL
+// because the client warmup owner rotates the cookie at the same 5-minute
+// cadence as the ticket; an iOS Safari tab left idle past one rotation
+// window still has a valid cookie when the user opens the share sheet.
+const PAIRING_MANIFEST_COOKIE_TTL_SECONDS = 30 * 60
 
 export interface PairingRuntime {
     app: ReturnType<typeof createPairingApp>
@@ -33,6 +40,7 @@ export async function createPairingRuntime(options: CreatePairingRuntimeOptions)
     const { upgradeWebSocket, websocket } = createBunWebSocket()
     const rateLimiter = new PairingRateLimiter()
     const metrics = new PairingMetrics(options.now?.() ?? Date.now())
+    const manifestCookieSigner = createPairingManifestCookieSigner()
 
     const app = createPairingApp({
         store: storeLease.store,
@@ -47,7 +55,7 @@ export async function createPairingRuntime(options: CreatePairingRuntimeOptions)
         turnCredentialTtlSeconds: options.turnCredentialTtlSeconds,
         createToken: options.createToken,
         upgradeWebSocket,
-        logger: options.logger,
+        logger: options.logger ?? console,
         rateLimiter,
         rateLimitRules: {
             create: { bucket: 'create', limit: options.createLimitPerMinute, windowMs: 60_000 },
@@ -57,6 +65,8 @@ export async function createPairingRuntime(options: CreatePairingRuntimeOptions)
         },
         metrics,
         now: options.now,
+        manifestCookieSigner,
+        manifestCookieTtlSeconds: PAIRING_MANIFEST_COOKIE_TTL_SECONDS,
     } satisfies PairingHttpOptions)
 
     return {
