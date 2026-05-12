@@ -1,4 +1,172 @@
 @layer components {
+    .desktop-device-count-wrap {
+        position: relative;
+        z-index: 3;
+        display: inline-flex;
+        justify-content: center;
+    }
+
+    .desktop-device-count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        padding: 6px 11px 6px 6px;
+        border: 1px solid var(--desktop-border-strong);
+        border-radius: 999px;
+        background: var(--desktop-surface);
+        color: var(--desktop-muted);
+        font-size: 13px;
+        font-weight: 820;
+        line-height: 1;
+        white-space: nowrap;
+    }
+
+    .desktop-device-count strong {
+        display: inline-grid;
+        min-width: 24px;
+        height: 24px;
+        place-items: center;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--desktop-muted) 14%, transparent);
+        color: var(--desktop-text);
+        font-size: 14px;
+        font-weight: 920;
+    }
+
+    .desktop-device-count.is-active {
+        border-color: color-mix(in srgb, var(--desktop-success) 34%, var(--desktop-border-strong));
+        color: var(--desktop-success);
+        background: color-mix(in srgb, var(--desktop-success) 8%, transparent);
+    }
+
+    .desktop-device-count.is-active strong {
+        background: var(--desktop-success);
+        color: var(--desktop-surface);
+    }
+
+    .desktop-device-popover {
+        position: absolute;
+        top: calc(100% + 10px);
+        left: 50%;
+        display: grid;
+        width: min(340px, calc(100vw - 64px));
+        max-height: 280px;
+        gap: 8px;
+        padding: 10px;
+        overflow: auto;
+        border: 1px solid var(--desktop-border);
+        border-radius: 18px;
+        background: var(--desktop-surface);
+        box-shadow: var(--desktop-shadow-soft);
+        opacity: 0;
+        pointer-events: none;
+        transform: translate(-50%, -4px);
+        transition:
+            opacity 160ms ease,
+            transform 160ms ease;
+    }
+
+    .desktop-device-popover::before {
+        position: absolute;
+        inset: -10px 0 auto;
+        height: 10px;
+        content: "";
+    }
+
+    .desktop-device-count-wrap.is-open .desktop-device-popover,
+    .desktop-device-count-wrap:hover .desktop-device-popover,
+    .desktop-device-count-wrap:focus-within .desktop-device-popover {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translate(-50%, 0);
+    }
+
+    .desktop-device-popover-empty {
+        padding: 10px;
+        color: var(--desktop-muted);
+        font-size: 13px;
+        font-weight: 760;
+        text-align: center;
+    }
+
+    .desktop-device-row {
+        display: grid;
+        grid-template-columns: 12px 18px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 10px;
+        padding: 9px;
+        border-radius: 12px;
+        background: color-mix(in srgb, var(--desktop-muted) 6%, transparent);
+    }
+
+    .desktop-device-icon {
+        font-size: 16px;
+        line-height: 1;
+        text-align: center;
+    }
+
+    .desktop-device-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--desktop-muted) 55%, transparent);
+        box-shadow: 0 0 0 4px color-mix(in srgb, var(--desktop-muted) 12%, transparent);
+        transition:
+            background 200ms ease,
+            box-shadow 200ms ease;
+    }
+
+    .desktop-device-dot.is-success {
+        background: var(--desktop-success);
+        box-shadow: 0 0 0 4px color-mix(in srgb, var(--desktop-success) 22%, transparent);
+    }
+
+    .desktop-device-dot.is-warning {
+        background: var(--desktop-warning);
+        box-shadow: 0 0 0 4px color-mix(in srgb, var(--desktop-warning) 22%, transparent);
+    }
+
+    .desktop-device-dot.is-danger {
+        background: var(--desktop-danger);
+        box-shadow: 0 0 0 4px color-mix(in srgb, var(--desktop-danger) 22%, transparent);
+    }
+
+    .desktop-device-row div {
+        display: grid;
+        min-width: 0;
+        gap: 2px;
+    }
+
+    .desktop-device-row strong,
+    .desktop-device-row small {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .desktop-device-row strong {
+        color: var(--desktop-text);
+        font-size: 13px;
+        font-weight: 840;
+    }
+
+    .desktop-device-row small {
+        color: var(--desktop-muted);
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .desktop-device-row button {
+        padding: 7px 9px;
+        border: 1px solid var(--desktop-border);
+        border-radius: 999px;
+        background: var(--desktop-surface);
+        color: var(--desktop-danger);
+        font-size: 12px;
+        font-weight: 820;
+    }
+
     .desktop-device-summary {
         position: relative;
         z-index: 1;

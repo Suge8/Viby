@@ -276,17 +276,15 @@
 
     .desktop-toast-icon {
         display: grid;
-        width: 28px;
-        height: 28px;
         flex: 0 0 auto;
         place-items: center;
-        border-radius: 999px;
-        background: var(--desktop-success);
-        color: var(--desktop-surface);
+        color: var(--desktop-success);
     }
 
     .desktop-toast-icon .desktop-icon {
-        font-size: 16px;
+        font-size: 18px;
+        fill: currentColor;
+        stroke: var(--desktop-surface);
     }
 
     @media (max-width: 980px) {

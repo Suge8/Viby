@@ -51,10 +51,6 @@
         stroke-width: 2.35;
     }
 
-    .desktop-connection-empty .desktop-device-summary {
-        margin-top: var(--desktop-empty-gap);
-    }
-
     .desktop-hub-boot-page {
         position: absolute;
         inset: 0;

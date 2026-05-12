@@ -12,6 +12,7 @@ import {
     DoorOpen,
     Download,
     Github,
+    HelpCircle,
     KeyRound,
     Languages,
     Link2,
@@ -58,7 +59,7 @@ export function SettingsIcon(props: DesktopIconProps) {
     return <Settings {...props} className={withClass(props.className)} strokeWidth={strokeFor(props)} />
 }
 
-export function PhoneIcon(props: DesktopIconProps) {
+export function DeviceIcon(props: DesktopIconProps) {
     return <Smartphone {...props} className={withClass(props.className)} strokeWidth={strokeFor(props)} />
 }
 
@@ -76,6 +77,10 @@ export function QrIcon(props: DesktopIconProps) {
 
 export function CopyIcon(props: DesktopIconProps) {
     return <Copy {...props} className={withClass(props.className)} strokeWidth={strokeFor(props)} />
+}
+
+export function HelpIcon(props: DesktopIconProps) {
+    return <HelpCircle {...props} className={withClass(props.className)} strokeWidth={strokeFor(props)} />
 }
 
 export function KeyIcon(props: DesktopIconProps) {

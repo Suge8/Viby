@@ -10,17 +10,23 @@ export function DesktopPairingModal(props: {
     pairing: DesktopPairingSession | null
     pairingBridge: PairingBridgeState
     onClose(): void
+    onCopyCode?: (code: string) => void
 }): JSX.Element {
     return (
         <ModalLayer
             open={Boolean(props.pairing && props.open)}
             backdropClassName="desktop-pairing-backdrop"
             cardClassName="desktop-pairing-card"
-            label={props.copy.phoneTitle}
+            label={props.copy.deviceTitle}
             onBackdropClick={props.onClose}
         >
             {props.pairing ? (
-                <PairingCard bridgeState={props.pairingBridge} onDismiss={props.onClose} pairing={props.pairing} />
+                <PairingCard
+                    bridgeState={props.pairingBridge}
+                    onCopyCode={props.onCopyCode}
+                    onDismiss={props.onClose}
+                    pairing={props.pairing}
+                />
             ) : null}
         </ModalLayer>
     )

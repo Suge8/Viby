@@ -6,6 +6,7 @@ import {
     GithubIcon,
     LanguageIcon,
     LinkIcon,
+    QrIcon,
     RefreshIcon,
     SpinnerIcon,
     ThemeLightIcon,
@@ -23,11 +24,16 @@ interface SettingsPanelProps {
     copy: DesktopCopy
     entryMode: DesktopEntryMode
     entryModeDisabled: boolean
+    entryModeLocked: boolean
+    publicAccessDisabled: boolean
+    publicAccessEnabled: boolean
+    publicAccessLocked: boolean
     languagePreference: LanguagePreference
     themePreference: ThemePreference
     onEntryModeChange(value: DesktopEntryMode): void
     onLanguagePreferenceChange(value: LanguagePreference): void
     onOpenUrl(url: string): void
+    onPublicAccessChange(value: boolean): void
     onThemePreferenceChange(value: ThemePreference): void
 }
 
@@ -109,11 +115,16 @@ export function SettingsPanel({
     copy,
     entryMode,
     entryModeDisabled,
+    entryModeLocked,
+    publicAccessDisabled,
+    publicAccessEnabled,
+    publicAccessLocked,
     languagePreference,
     themePreference,
     onEntryModeChange,
     onLanguagePreferenceChange,
     onOpenUrl,
+    onPublicAccessChange,
     onThemePreferenceChange,
 }: SettingsPanelProps): JSX.Element {
     const busy = updates.phase === 'checking' || updates.phase === 'installing'
@@ -145,9 +156,22 @@ export function SettingsPanel({
 
                 <StaggerItem className="desktop-settings-row">
                     <SettingHeader
+                        icon={<QrIcon />}
+                        title={copy.settingsPublicTitle}
+                        hint={publicAccessLocked ? copy.settingsPublicLocked : copy.settingsPublicHint}
+                    />
+                    <SettingsToggle
+                        checked={publicAccessEnabled}
+                        disabled={publicAccessDisabled}
+                        onClick={() => onPublicAccessChange(!publicAccessEnabled)}
+                    />
+                </StaggerItem>
+
+                <StaggerItem className="desktop-settings-row">
+                    <SettingHeader
                         icon={<LinkIcon />}
                         title={copy.settingsLanTitle}
-                        hint={entryModeDisabled ? copy.settingsLanLocked : copy.settingsLanHint}
+                        hint={entryModeLocked ? copy.settingsLanLocked : copy.settingsLanHint}
                     />
                     <SettingsToggle
                         checked={entryMode === 'lan'}

@@ -1,5 +1,7 @@
 @layer components {
     .desktop-mobile-action,
+    .desktop-device-count,
+    .desktop-device-row button,
     .desktop-copy-icon,
     .desktop-control-pill,
     .desktop-page-action,
@@ -20,6 +22,8 @@
     }
 
     .desktop-mobile-action:not(:disabled):active,
+    .desktop-device-count:not(:disabled):active,
+    .desktop-device-row button:not(:disabled):active,
     .desktop-copy-icon:not(:disabled):active,
     .desktop-control-pill:not(:disabled):active,
     .desktop-page-action:not(:disabled):active,
@@ -86,14 +90,115 @@
         letter-spacing: -0.06em;
     }
 
+    .desktop-help-button {
+        display: grid;
+        width: 30px;
+        height: 30px;
+        place-items: center;
+        border: 1px solid var(--desktop-border);
+        border-radius: 999px;
+        background: var(--desktop-surface);
+        color: var(--desktop-muted);
+        cursor: pointer;
+        transition:
+            transform 160ms ease,
+            border-color 160ms ease,
+            color 160ms ease;
+    }
+
+    .desktop-help-button:hover {
+        border-color: var(--desktop-border-strong);
+        color: var(--desktop-text);
+        transform: translateY(-1px);
+    }
+
+    .desktop-help-button:active {
+        transform: scale(0.96);
+    }
+
+    .desktop-help-button > span {
+        font-size: 17px;
+        font-weight: 850;
+        line-height: 1;
+    }
+
+    .desktop-access-card {
+        position: relative;
+    }
+
+    .desktop-access-help {
+        position: absolute;
+        top: -30px;
+        right: 22px;
+        z-index: 3;
+    }
+
+    .desktop-access-help-popover {
+        position: absolute;
+        top: 38px;
+        right: 0;
+        z-index: 4;
+        display: grid;
+        width: min(320px, calc(100vw - 64px));
+        gap: 12px;
+        padding: 14px;
+        border: 1px solid var(--desktop-border);
+        border-radius: 16px;
+        background: var(--desktop-surface);
+        box-shadow: var(--desktop-shadow-soft);
+        color: var(--desktop-muted);
+        font-size: 13px;
+        line-height: 1.45;
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(-4px);
+        transition:
+            opacity 160ms ease,
+            transform 160ms ease;
+    }
+
+    .desktop-access-help:hover .desktop-access-help-popover,
+    .desktop-access-help:focus-within .desktop-access-help-popover {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateY(0);
+    }
+
+    .desktop-access-help-item {
+        display: grid;
+        grid-template-columns: 22px minmax(0, 1fr);
+        align-items: start;
+        gap: 10px;
+    }
+
+    .desktop-access-help-item .desktop-icon {
+        margin-top: 1px;
+        color: var(--desktop-hub-action-strong-text);
+        font-size: 17px;
+    }
+
     .desktop-mobile-card {
         justify-items: stretch;
     }
 
     .desktop-mobile-card > .desktop-card-heading,
     .desktop-mobile-card > .desktop-mobile-action,
-    .desktop-mobile-card > .desktop-device-summary {
+    .desktop-mobile-card > .desktop-device-count,
+    .desktop-mobile-card > .desktop-device-summary,
+    .desktop-mobile-card > .desktop-device-hint {
         justify-self: center;
+    }
+
+    .desktop-device-hint {
+        margin: 0;
+        padding: 12px 18px;
+        max-width: 280px;
+        text-align: center;
+        line-height: 1.55;
+        font-size: 13px;
+        color: var(--desktop-text-muted, rgba(255, 255, 255, 0.72));
+        border-radius: 12px;
+        background: var(--desktop-surface-soft, rgba(255, 255, 255, 0.04));
     }
 
     .desktop-access-card > .desktop-card-heading,
@@ -143,17 +248,6 @@
     .desktop-mobile-action-icon .desktop-icon {
         font-size: 132px;
         stroke-width: 2.05;
-    }
-
-    .desktop-mobile-action-label {
-        position: absolute;
-        right: 24px;
-        bottom: 20px;
-        left: 24px;
-        overflow-wrap: anywhere;
-        font-size: 0.92rem;
-        letter-spacing: -0.03em;
-        text-align: center;
     }
 
     .desktop-mobile-action:not(:disabled):hover {
@@ -230,6 +324,11 @@
         display: grid;
         gap: 5px;
         min-width: 0;
+    }
+
+    .desktop-entry-address > .desktop-entry-actions {
+        display: inline-flex;
+        gap: 8px;
     }
 
     .desktop-entry-copy strong {

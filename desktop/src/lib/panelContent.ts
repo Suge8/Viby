@@ -1,5 +1,5 @@
-const EMPTY_KEY_MESSAGE = '当前还没有访问密钥。'
+const EMPTY_ENTRY_MESSAGE = '当前还没有可复制的入口。'
 
 export function getEmptyKeyMessage(): string {
-    return EMPTY_KEY_MESSAGE
+    return EMPTY_ENTRY_MESSAGE
 }
