@@ -13,6 +13,7 @@ type SignalSocketControllerOptions = {
     isDisposed: () => boolean
     isSuppressed: () => boolean
     getChannel: () => RTCDataChannel | null
+    isChannelHealthy: () => boolean
     getPeer: () => RTCPeerConnection | null
     getPairingSnapshot: () => PairingSessionSnapshot
     setSocket: (socket: WebSocket | null) => void
@@ -104,6 +105,7 @@ export function createPairingBridgeSignalSocketController(options: SignalSocketC
                         resetOfferState: options.resetOfferState,
                         schedulePeerRecovery: options.schedulePeerRecovery,
                         getChannel: options.getChannel,
+                        isChannelHealthy: options.isChannelHealthy,
                         addRemoteCandidate: options.addRemoteCandidate,
                         flushRemoteCandidates: options.flushRemoteCandidates,
                     })

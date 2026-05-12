@@ -65,23 +65,23 @@ describe('pairingBridgeSupport', () => {
     })
 
     it('keeps connection status copy aligned with the single bridge lifecycle owner', () => {
-        expect(describePairingConnectionState('new')).toBe('等待手机接入。')
+        expect(describePairingConnectionState('new')).toBe('等待设备接入。')
         expect(describePairingConnectionState('connecting')).toBe('正在建立点对点链路。')
-        expect(describePairingConnectionState('connected')).toBe('手机链路已接通。')
-        expect(describePairingConnectionState('disconnected')).toBe('手机已断开，等待重连。')
+        expect(describePairingConnectionState('connected')).toBe('设备链路已接通。')
+        expect(describePairingConnectionState('disconnected')).toBe('设备已断开，等待重连。')
         expect(describePairingConnectionState('failed')).toBe('点对点链路失败，正在重试。')
         expect(describePairingConnectionState('closed')).toBe('配对链路已关闭。')
     })
 
     it('describes waiting, pending-approval, and approved pairing snapshots through one status owner', () => {
-        expect(describePairingSnapshotMessage(pairingSnapshot())).toBe('等待手机扫码接入。')
+        expect(describePairingSnapshotMessage(pairingSnapshot())).toBe('等待设备扫码接入。')
         expect(
             describePairingSnapshotMessage(
                 pairingSnapshot({
                     state: 'claimed',
                     shortCode: '123456',
                     approvalStatus: 'pending',
-                    guest: { label: 'Phone' },
+                    guest: { label: 'Device' },
                 })
             )
         ).toContain('123456')
@@ -91,10 +91,10 @@ describe('pairingBridgeSupport', () => {
                     state: 'connected',
                     shortCode: '123456',
                     approvalStatus: 'approved',
-                    guest: { label: 'Phone' },
+                    guest: { label: 'Device' },
                 })
             )
-        ).toBe('已绑定手机，等待手机页面接入。')
+        ).toBe('已绑定设备，等待设备页面接入。')
     })
 
     it('describes direct, relay, and unknown pairing transport stats through one owner', () => {
@@ -109,7 +109,7 @@ describe('pairingBridgeSupport', () => {
                     restartCount: 1,
                 })
             )
-        ).toBe('本机直连')
+        ).toBe('点对点直连')
         expect(
             describePairingTransport(
                 bridgeStats({
@@ -132,7 +132,7 @@ describe('pairingBridgeSupport', () => {
                     restartCount: 1,
                 })
             )
-        ).toBe('本机直连 · 38ms')
+        ).toBe('点对点直连 · 38ms')
     })
 
     it('builds connection page device summary from bridge state', () => {
@@ -143,15 +143,15 @@ describe('pairingBridgeSupport', () => {
             ticketExpiresAt: 4,
             shortCode: '123456',
             approvalStatus: 'approved',
-            guest: { label: 'iPhone' },
+            guest: { label: 'Device' },
         })
 
         expect(buildPairingConnectionSummary({ phase: 'idle', pairing: null, stats: null })).toEqual({
             title: '未连接',
-            detail: '等待手机扫码',
+            detail: '等待设备扫码',
             kind: 'empty',
             tone: 'neutral',
-            actionLabel: '连接手机',
+            actionLabel: '连接设备',
         })
         expect(buildPairingConnectionSummary({ phase: 'idle', pairing: pairingSnapshot(), stats: null })).toEqual({
             ...INVITE_BASE,
@@ -162,35 +162,35 @@ describe('pairingBridgeSupport', () => {
         expect(
             buildPairingConnectionSummary({
                 phase: 'idle',
-                pairing: pairingSnapshot({ state: 'claimed', approvalStatus: 'pending', guest: { label: 'iPhone' } }),
+                pairing: pairingSnapshot({ state: 'claimed', approvalStatus: 'pending', guest: { label: 'Device' } }),
                 stats: null,
             })
         ).toEqual({
             ...INVITE_BASE,
-            title: '等待连接码',
-            detail: '手机已扫码，输入连接码完成绑定',
+            title: '等待配对码',
+            detail: '设备已扫码，输入配对码完成绑定',
             tone: 'pending',
         })
         expect(buildPairingConnectionSummary({ phase: 'connecting', pairing: paired, stats: null })).toEqual({
             ...BOUND_BASE,
-            title: '待手机打开页面',
+            title: '已配对',
             detail: '',
         })
         expect(buildPairingConnectionSummary({ phase: 'paused', pairing: paired, stats: null })).toEqual({
             ...BOUND_BASE,
-            title: '手机在后台',
-            detail: '回来后自动接回',
+            title: '已配对',
+            detail: '',
         })
         expect(buildPairingConnectionSummary({ phase: 'idle', pairing: paired, stats: null })).toEqual({
             ...BOUND_BASE,
-            title: '手机已配对',
+            title: '已配对',
             detail: '',
         })
         expect(buildPairingConnectionSummary({ phase: 'error', pairing: paired, stats: null })).toEqual({
             ...BOUND_BASE,
             tone: 'danger',
             title: '连接异常',
-            detail: '请重新打开手机页面',
+            detail: '请重新打开设备页面',
         })
         expect(
             buildPairingConnectionSummary({
@@ -214,8 +214,34 @@ describe('pairingBridgeSupport', () => {
         ).toEqual({
             ...BOUND_BASE,
             tone: 'active',
-            title: '手机已连接',
-            detail: 'iPhone · 本机直连 · 延迟 28ms',
+            title: '设备已连接',
+            detail: '扫码设备 · 点对点直连 · 延迟 28ms',
+        })
+    })
+
+    it('uses guest metadata.platform to label the live connection', () => {
+        const paired = pairingSnapshot({
+            state: 'connected',
+            approvalStatus: 'approved',
+            shortCode: '123456',
+            guest: { label: 'Device', metadata: { platform: 'ios' } },
+        })
+        expect(
+            buildPairingConnectionSummary({
+                phase: 'ready',
+                pairing: paired,
+                stats: bridgeStats({
+                    transport: 'direct',
+                    localCandidateType: 'host',
+                    remoteCandidateType: 'srflx',
+                    currentRoundTripTimeMs: 28,
+                }),
+            })
+        ).toEqual({
+            ...BOUND_BASE,
+            tone: 'active',
+            title: '设备已连接',
+            detail: 'iPhone · 点对点直连 · 延迟 28ms',
         })
     })
 
@@ -224,12 +250,12 @@ describe('pairingBridgeSupport', () => {
             describePairingSnapshotMessage(
                 pairingSnapshot({ state: 'claimed', approvalStatus: 'pending', guest: { label: 'Mobile Safari' } })
             )
-        ).toBe('手机已扫码，等待输入连接码。')
+        ).toBe('设备已扫码，等待输入配对码。')
     })
 
     it('keeps fallback snapshot copy neutral for partially claimed broker states', () => {
-        expect(describePairingSnapshotMessage(pairingSnapshot({ state: 'claimed', guest: { label: 'Phone' } }))).toBe(
-            '等待手机接入。'
+        expect(describePairingSnapshotMessage(pairingSnapshot({ state: 'claimed', guest: { label: 'Device' } }))).toBe(
+            '等待设备接入。'
         )
     })
 

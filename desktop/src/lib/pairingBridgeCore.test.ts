@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'bun:test'
 import type { PairingPeerRequest } from '@viby/protocol/pairing'
-import { executePairingPeerRequest, parsePairingPeerRequest, serializePairingSyncEvent } from './pairingBridgeCore'
+import {
+    executePairingPeerRequest,
+    isPairingHeartbeat,
+    parsePairingPeerRequest,
+    serializePairingSyncEvent,
+} from './pairingBridgeCore'
 
 describe('pairingBridgeCore', () => {
     it('maps session list requests onto the narrow remote summary contract', async () => {
@@ -80,5 +85,11 @@ describe('pairingBridgeCore', () => {
                 data: { sid: 'session-1' },
             },
         })
+    })
+
+    it('recognizes peer heartbeat frames and rejects other payloads', () => {
+        expect(isPairingHeartbeat(JSON.stringify({ kind: 'heartbeat' }))).toBe(true)
+        expect(isPairingHeartbeat('{"kind":"request","id":"x","method":"sessions.list","params":{}}')).toBe(false)
+        expect(isPairingHeartbeat('not-json')).toBe(false)
     })
 })

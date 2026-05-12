@@ -78,6 +78,27 @@ export class LocalHubPairingClient extends LocalHubPairingClientCore {
             authenticate: () => this.authenticate(),
         })
     }
+    /**
+     * Notify the hub that the desktop bridge data channel for this pairing is
+     * either live or torn down. This is the single source of truth for scan
+     * device presence: hub will only consider the device active while the
+     * most recent presence report from the bridge owner is `alive=true`.
+     */
+    async reportPairingPresence(
+        pairingId: string,
+        alive: boolean,
+        meta?: { deviceName?: string; platform?: string }
+    ): Promise<void> {
+        await this.requestJson('/api/device-auth/pairing-presence', {
+            method: 'POST',
+            body: JSON.stringify({
+                pairingId,
+                alive,
+                ...(meta?.deviceName ? { deviceName: meta.deviceName } : {}),
+                ...(meta?.platform ? { platform: meta.platform } : {}),
+            }),
+        })
+    }
     async listSessions(): Promise<SessionSummary[]> {
         const response = await this.requestJson<{ sessions: SessionSummary[] }>('/api/sessions')
         return response.sessions

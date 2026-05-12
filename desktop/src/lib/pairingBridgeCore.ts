@@ -64,6 +64,15 @@ export function serializePairingTerminalEvent(event: PairingPeerTerminalEventPay
 export function parsePairingPeerRequest(raw: string): PairingPeerRequest {
     return PairingPeerRequestSchema.parse(JSON.parse(raw))
 }
+
+export function isPairingHeartbeat(raw: string): boolean {
+    try {
+        const value = JSON.parse(raw) as { kind?: unknown }
+        return value?.kind === 'heartbeat'
+    } catch {
+        return false
+    }
+}
 export async function executePairingPeerRequest(
     client: LocalHubPairingClient,
     request: PairingPeerRequest,

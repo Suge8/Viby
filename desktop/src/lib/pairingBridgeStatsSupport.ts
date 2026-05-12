@@ -4,6 +4,10 @@ import { runPairingBridgeTask } from './pairingBridgeRuntimeSupport'
 import { readPairingBridgeStats } from './pairingBridgeSupport'
 
 const STATS_POLL_INTERVAL_MS = PAIRING_STATS_POLL_INTERVAL_MS
+// How long we stay on relay before opportunistically restarting ICE to see
+// whether a direct path has become available (e.g. cellular -> Wi-Fi handover
+// where the OS routing table now allows host candidates again).
+const RELAY_UPGRADE_PROBE_INTERVAL_MS = 30_000
 
 type BridgeStateSetter = (
     state: Omit<PairingBridgeState, 'pairing'> & {
@@ -38,6 +42,9 @@ export function createPairingBridgeStatsController(options: {
     reportAsyncError: (message: string, error: unknown) => void
 }) {
     let statsTimer: ReturnType<typeof setInterval> | null = null
+    let previousTransport: 'direct' | 'relay' | null = null
+    let relayEnteredAt: number | null = null
+    let lastUpgradeProbeAt = 0
 
     function stopStatsPolling(): void {
         if (statsTimer) {
@@ -46,9 +53,46 @@ export function createPairingBridgeStatsController(options: {
         statsTimer = null
     }
 
+    function maybeProbeRelayUpgrade(activePeer: RTCPeerConnection, transport: PairingBridgeStats['transport']): void {
+        const now = Date.now()
+        if (transport === 'direct' || transport === 'unknown') {
+            relayEnteredAt = transport === 'direct' ? null : relayEnteredAt
+            return
+        }
+        // transport === 'relay': decide whether to probe for a direct path.
+        if (relayEnteredAt === null) {
+            relayEnteredAt = now
+            return
+        }
+        if (now - relayEnteredAt < RELAY_UPGRADE_PROBE_INTERVAL_MS) return
+        if (now - lastUpgradeProbeAt < RELAY_UPGRADE_PROBE_INTERVAL_MS) return
+        if (!options.canRestartIce()) return
+        lastUpgradeProbeAt = now
+        relayEnteredAt = now
+        // Opportunistic ICE restart: re-gather candidates without tearing down
+        // the DataChannel. If the network now allows a host/srflx pair, ICE
+        // will prefer it; otherwise we stay on relay with no user-visible
+        // disruption beyond a brief "正在尝试升级” label.
+        runPairingBridgeTask(
+            async () => {
+                activePeer.restartIce()
+                await options.ensureOffer(activePeer)
+            },
+            {
+                isDisposed: options.isDisposed,
+                onError: (error) => options.reportAsyncError('点对点直连探测失败：', error),
+            }
+        )
+    }
+
     async function samplePairingStats(activePeer: RTCPeerConnection): Promise<void> {
-        const stats = await readPairingBridgeStats(activePeer, options.getRestartCount())
+        const sample = await readPairingBridgeStats(activePeer, options.getRestartCount())
+        const stats: PairingBridgeStats = { ...sample, previousTransport }
+        if (sample.transport === 'direct' || sample.transport === 'relay') {
+            previousTransport = sample.transport
+        }
         options.setBridgeStats(stats)
+        maybeProbeRelayUpgrade(activePeer, sample.transport)
         try {
             await options.publishPairingTelemetry(stats)
         } catch {}
@@ -79,9 +123,10 @@ export function createPairingBridgeStatsController(options: {
         }
 
         const restartCount = options.incrementRestartCount()
+        const recoveringLiveChannel = options.getChannel()?.readyState === 'open'
         options.resetOfferState()
         options.setBridgeState({
-            phase: 'connecting',
+            phase: recoveringLiveChannel ? 'paused' : 'connecting',
             message,
             stats: createPendingIceRestartStats(restartCount),
         })

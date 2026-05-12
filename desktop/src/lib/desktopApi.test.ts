@@ -27,6 +27,7 @@ const snapshotFixture: HubSnapshot = {
     startupConfig: {
         listenHost: '127.0.0.1',
         listenPort: 37173,
+        publicAccessEnabled: true,
     },
     status: {
         phase: 'ready',
@@ -36,6 +37,9 @@ const snapshotFixture: HubSnapshot = {
         listenPort: 37173,
         localHubUrl: 'http://127.0.0.1:37173',
         preferredBrowserUrl: 'http://127.0.0.1:37173',
+        publicUrl: 'http://127.0.0.1:37173',
+        publicAccessEnabled: true,
+        pairingBrokerUrl: 'https://pair.viby.run',
         cliApiToken: 'token',
         settingsFile: '/tmp/settings.toml',
         dataDir: '/tmp',
@@ -106,17 +110,29 @@ describe('desktopApi', () => {
         expect(invokeMock).toHaveBeenCalledWith('start_hub', { options: { entryMode: 'lan' } })
     })
 
-    it('loads the durable pairing session through the dedicated desktop command', async () => {
-        invokeMock.mockResolvedValueOnce(pairingFixture)
+    it('persists the public access switch through the dedicated desktop command', async () => {
+        await desktopApi.setPublicAccessEnabled(false)
 
-        await expect(desktopApi.getPairingSession()).resolves.toEqual(pairingFixture)
-        expect(invokeMock).toHaveBeenCalledWith('get_pairing_session', undefined)
+        expect(invokeMock).toHaveBeenCalledWith('set_public_access_enabled', { enabled: false })
     })
 
-    it('clears the durable pairing session through the dedicated desktop command', async () => {
-        await desktopApi.clearPairingSession()
+    it('loads every durable pairing session through the multi-pairing desktop command', async () => {
+        invokeMock.mockResolvedValueOnce([pairingFixture])
 
-        expect(invokeMock).toHaveBeenCalledWith('clear_pairing_session', undefined)
+        await expect(desktopApi.getPairingSessions()).resolves.toEqual([pairingFixture])
+        expect(invokeMock).toHaveBeenCalledWith('get_pairing_sessions', undefined)
+    })
+
+    it('clears every durable pairing session through the multi-pairing desktop command', async () => {
+        await desktopApi.clearPairingSessions()
+
+        expect(invokeMock).toHaveBeenCalledWith('clear_pairing_sessions', undefined)
+    })
+
+    it('removes one durable pairing session by id through the desktop command', async () => {
+        await desktopApi.removePairingSession('pairing-1')
+
+        expect(invokeMock).toHaveBeenCalledWith('remove_pairing_session', { pairingId: 'pairing-1' })
     })
 
     it('requests a pairing session through the dedicated desktop command', async () => {
@@ -151,7 +167,7 @@ describe('desktopApi', () => {
                 shortCode: '490649',
                 approvalStatus: 'pending',
                 guest: {
-                    label: 'iPhone',
+                    label: 'Device',
                 },
             },
         })

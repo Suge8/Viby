@@ -1,15 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
-    clearPairingSession,
     copyText,
-    createPairingSession,
-    deletePairingSession,
     getHubSnapshot,
-    getPairingSession,
     isTauriRuntimeAvailable,
     listenHubSnapshot,
     openUrl as openConcreteUrl,
-    refreshPairingSession,
+    setPublicAccessEnabled as persistPublicAccessEnabled,
     startHub,
     stopHub,
 } from '@/lib/desktopApi'
@@ -18,15 +14,12 @@ import type { HubAction } from '@/lib/desktopShellModel'
 import { deriveInitialEntryMode } from '@/lib/entryMode'
 import {
     applyHubSnapshot,
-    createPairingAction,
     DESKTOP_PREVIEW_MESSAGE,
-    deletePairingAction,
-    isExpiredUnclaimedPairing,
-    isStalePairingRefreshError,
-    recreatePairingAction,
+    describeDesktopError,
+    resolvePublicAccessEnabled,
     runHubAction,
 } from '@/lib/hubControllerSupport'
-import type { DesktopEntryMode, DesktopPairingSession, HubSnapshot } from '@/types'
+import type { DesktopEntryMode, HubSnapshot } from '@/types'
 
 interface HubControllerState {
     snapshot: HubSnapshot | null
@@ -34,18 +27,15 @@ interface HubControllerState {
     hubBusy: boolean
     hubAction: HubAction
     entryMode: DesktopEntryMode
+    publicAccessEnabled: boolean
     actionError: string | null
-    pairing: DesktopPairingSession | null
     setEntryMode: (value: DesktopEntryMode) => void
+    setPublicAccessEnabled: (value: boolean) => Promise<void>
     refresh: () => Promise<void>
     start: () => Promise<void>
     stop: () => Promise<void>
     copyValue: (value: string | undefined, emptyMessage: string) => Promise<boolean>
     openUrl: (url: string) => Promise<void>
-    createPairing: () => Promise<void>
-    refreshPairing: () => Promise<void>
-    recreatePairing: () => Promise<boolean>
-    deletePairing: () => Promise<void>
 }
 
 export function useHubController(): HubControllerState {
@@ -56,16 +46,9 @@ export function useHubController(): HubControllerState {
     const [entryMode, setEntryModeState] = useState<DesktopEntryMode>(() =>
         readEntryModePreference(globalThis.localStorage)
     )
+    const [publicAccessEnabled, setPublicAccessEnabledState] = useState(true)
     const [actionError, setActionError] = useState<string | null>(null)
-    const [pairing, setPairing] = useState<DesktopPairingSession | null>(null)
     const tauriRuntimeAvailable = isTauriRuntimeAvailable()
-
-    const clearPairing = useCallback(async (): Promise<void> => {
-        setPairing(null)
-        if (tauriRuntimeAvailable) {
-            await clearPairingSession()
-        }
-    }, [tauriRuntimeAvailable])
 
     const setEntryMode = useCallback((value: DesktopEntryMode): void => {
         setEntryModeState(value)
@@ -78,6 +61,7 @@ export function useHubController(): HubControllerState {
                 setSnapshot,
                 setActionError,
             })
+            setPublicAccessEnabledState(resolvePublicAccessEnabled(nextSnapshot))
             if (useInitialEntryMode && nextSnapshot.running) {
                 setEntryMode(deriveInitialEntryMode(nextSnapshot))
             }
@@ -112,7 +96,7 @@ export function useHubController(): HubControllerState {
                 }
             } catch (error) {
                 if (!stopped) {
-                    setActionError(error instanceof Error ? error.message : '读取中枢状态失败。')
+                    setActionError(describeDesktopError(error, '读取中枢状态失败。'))
                 }
             }
         }
@@ -123,30 +107,6 @@ export function useHubController(): HubControllerState {
             teardownListener?.()
         }
     }, [applySnapshot, tauriRuntimeAvailable])
-
-    useEffect(() => {
-        if (!tauriRuntimeAvailable) return
-        let stopped = false
-
-        async function loadPairing(): Promise<void> {
-            try {
-                const stored = await getPairingSession()
-                if (stopped || !stored) return
-                if (isExpiredUnclaimedPairing(stored)) {
-                    await clearPairingSession()
-                    return
-                }
-                setPairing(stored)
-            } catch (error) {
-                if (!stopped) setActionError(error instanceof Error ? error.message : '读取手机绑定失败。')
-            }
-        }
-
-        void loadPairing()
-        return () => {
-            stopped = true
-        }
-    }, [tauriRuntimeAvailable])
 
     const runAction = useCallback(
         async (action: () => Promise<HubSnapshot | void>): Promise<boolean> => {
@@ -160,6 +120,23 @@ export function useHubController(): HubControllerState {
             })
         },
         [applySnapshot, refresh, tauriRuntimeAvailable]
+    )
+
+    const setPublicAccessEnabled = useCallback(
+        async (value: boolean): Promise<void> => {
+            if (snapshot?.running) {
+                setActionError('中枢运行中，关闭后可更改公网访问。')
+                return
+            }
+
+            const previousValue = publicAccessEnabled
+            setPublicAccessEnabledState(value)
+            const ok = await runAction(async () => {
+                await persistPublicAccessEnabled(value)
+            })
+            if (!ok) setPublicAccessEnabledState(previousValue)
+        },
+        [publicAccessEnabled, runAction, snapshot?.running]
     )
 
     const start = useCallback(async (): Promise<void> => {
@@ -206,65 +183,11 @@ export function useHubController(): HubControllerState {
             try {
                 await openConcreteUrl(url)
             } catch (error) {
-                setActionError(error instanceof Error ? error.message : '打开入口失败。')
+                setActionError(describeDesktopError(error, '打开入口失败。'))
             }
         },
         [tauriRuntimeAvailable]
     )
-
-    const createPairing = useCallback(async (): Promise<void> => {
-        await createPairingAction({
-            tauriRuntimeAvailable,
-            setBusy,
-            setActionError,
-            setPairing,
-            createPairingSession,
-        })
-    }, [tauriRuntimeAvailable])
-
-    const refreshPairing = useCallback(async (): Promise<void> => {
-        if (!tauriRuntimeAvailable || !pairing) {
-            return
-        }
-
-        try {
-            const nextPairing = await refreshPairingSession(pairing)
-            if (isExpiredUnclaimedPairing(nextPairing)) {
-                await clearPairing()
-                return
-            }
-            setPairing(nextPairing)
-        } catch (error) {
-            if (isStalePairingRefreshError(error)) {
-                await clearPairing()
-                return
-            }
-            setActionError(error instanceof Error ? error.message : '刷新配对状态失败。')
-        }
-    }, [clearPairing, pairing, tauriRuntimeAvailable])
-
-    const recreatePairing = useCallback(async (): Promise<boolean> => {
-        return await recreatePairingAction({
-            tauriRuntimeAvailable,
-            pairing,
-            setBusy,
-            setActionError,
-            setPairing,
-            deletePairingSession,
-            createPairingSession,
-        })
-    }, [pairing, tauriRuntimeAvailable])
-
-    const deletePairing = useCallback(async (): Promise<void> => {
-        await deletePairingAction({
-            tauriRuntimeAvailable,
-            pairing,
-            setBusy,
-            setActionError,
-            clearPairing,
-            deletePairingSession,
-        })
-    }, [clearPairing, pairing, tauriRuntimeAvailable])
 
     return {
         snapshot,
@@ -272,17 +195,14 @@ export function useHubController(): HubControllerState {
         hubBusy,
         hubAction,
         entryMode,
+        publicAccessEnabled,
         actionError,
-        pairing,
         setEntryMode,
+        setPublicAccessEnabled,
         refresh,
         start,
         stop,
         copyValue,
         openUrl,
-        createPairing,
-        refreshPairing,
-        recreatePairing,
-        deletePairing,
     }
 }

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'bun:test'
 import type { DesktopPairingSession } from '@/types'
-import { buildHubSwitchModel, getPairingInviteRenewDelay, shouldPollPairingSnapshot } from './desktopShellModel'
+import {
+    buildDeviceCount,
+    buildHubSwitchModel,
+    getPairingInviteRenewDelay,
+    shouldPollPairingSnapshot,
+} from './desktopShellModel'
 
 const pairingFixture: DesktopPairingSession = {
     pairing: {
@@ -45,6 +50,12 @@ describe('desktopShellModel', () => {
         })
     })
 
+    it('counts devices only from Hub device auth summary', () => {
+        expect(buildDeviceCount(false, 1)).toBe(0)
+        expect(buildDeviceCount(true, 0)).toBe(0)
+        expect(buildDeviceCount(true, 2)).toBe(2)
+    })
+
     it('renews only unclaimed QR invites shortly before ticket expiry', () => {
         const now = 1_000
         const ticketExpiresAt = now + 60_000
@@ -62,7 +73,7 @@ describe('desktopShellModel', () => {
         ).toBe(0)
         expect(
             getPairingInviteRenewDelay(
-                { ...pairingFixture, pairing: { ...pairingFixture.pairing, guest: { label: 'Phone' } } },
+                { ...pairingFixture, pairing: { ...pairingFixture.pairing, guest: { label: 'Device' } } },
                 now
             )
         ).toBeNull()
@@ -74,7 +85,7 @@ describe('desktopShellModel', () => {
         expect(shouldPollPairingSnapshot(pairingFixture, 'ready', true)).toBe(false)
         expect(
             shouldPollPairingSnapshot(
-                { ...pairingFixture, pairing: { ...pairingFixture.pairing, guest: { label: 'Phone' } } },
+                { ...pairingFixture, pairing: { ...pairingFixture.pairing, guest: { label: 'Device' } } },
                 'idle'
             )
         ).toBe(true)

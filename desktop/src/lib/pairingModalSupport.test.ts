@@ -4,6 +4,7 @@ import {
     buildDesktopPairingPresentation,
     buildDesktopPairingQrUrl,
     formatPairingCode,
+    shouldOfferPairingCodeCopy,
     shouldStartPairingBridge,
 } from './pairingModalSupport'
 
@@ -33,7 +34,7 @@ describe('pairingModalSupport', () => {
         expect(
             shouldStartPairingBridge({
                 ...basePairing,
-                pairing: { ...basePairing.pairing, approvalStatus: 'pending', guest: { label: 'Phone' } },
+                pairing: { ...basePairing.pairing, approvalStatus: 'pending', guest: { label: 'Device' } },
             })
         ).toBe(false)
     })
@@ -42,15 +43,16 @@ describe('pairingModalSupport', () => {
         expect(
             shouldStartPairingBridge({
                 ...basePairing,
-                pairing: { ...basePairing.pairing, approvalStatus: 'approved', guest: { label: 'Phone' } },
+                pairing: { ...basePairing.pairing, approvalStatus: 'approved', guest: { label: 'Device' } },
             })
         ).toBe(true)
     })
 
     it('builds action-oriented pairing copy instead of generic loading labels', () => {
         expect(buildDesktopPairingPresentation(basePairing)).toMatchObject({
-            codeHint: '手机扫码后显示',
-            statusHint: '等待手机扫码',
+            codeHint: '',
+            guidance: '',
+            statusHint: '等待设备扫码',
             stage: 'invite',
         })
 
@@ -61,13 +63,13 @@ describe('pairingModalSupport', () => {
                     ...basePairing.pairing,
                     shortCode: '490649',
                     approvalStatus: 'pending',
-                    guest: { label: 'Phone' },
+                    guest: { label: 'Device' },
                 },
             })
         ).toMatchObject({
             codeValue: '490 649',
-            codeHint: '连接码',
-            statusHint: '等待手机输入连接码',
+            codeHint: '配对码',
+            statusHint: null,
             stage: 'approval',
         })
 
@@ -78,59 +80,35 @@ describe('pairingModalSupport', () => {
                     ...basePairing.pairing,
                     shortCode: '490649',
                     approvalStatus: 'approved',
-                    guest: { label: 'Phone' },
+                    guest: { label: 'Device' },
                 },
             })
         ).toMatchObject({
             codeHint: '',
-            codeValue: '已配对',
-            guidance: '用已配对手机打开 Viby，即可自动接回。',
+            codeValue: '已连接',
+            guidance: '',
             statusHint: null,
             stage: 'bound',
         })
     })
 
-    it('lets the bridge paused phase preserve pairing while the phone is backgrounded', () => {
+    it('keeps transport recovery out of the add-device modal', () => {
         expect(
-            buildDesktopPairingPresentation(
-                {
-                    ...basePairing,
-                    pairing: {
-                        ...basePairing.pairing,
-                        shortCode: '490649',
-                        approvalStatus: 'approved',
-                        guest: { label: 'Phone' },
-                    },
+            buildDesktopPairingPresentation({
+                ...basePairing,
+                pairing: {
+                    ...basePairing.pairing,
+                    shortCode: '490649',
+                    approvalStatus: 'approved',
+                    guest: { label: 'Device' },
                 },
-                'paused'
-            )
+            })
         ).toMatchObject({
-            codeHint: '已配对',
-            codeValue: '已配对',
-            statusHint: '手机在后台，回来后自动接回',
-            stage: 'paused',
-        })
-    })
-
-    it('lets the bridge ready phase own the final connected presentation', () => {
-        expect(
-            buildDesktopPairingPresentation(
-                {
-                    ...basePairing,
-                    pairing: {
-                        ...basePairing.pairing,
-                        shortCode: '490649',
-                        approvalStatus: 'approved',
-                        guest: { label: 'Phone' },
-                    },
-                },
-                'ready'
-            )
-        ).toMatchObject({
-            codeHint: '已连接',
+            codeHint: '',
             codeValue: '已连接',
-            statusHint: '已连接',
-            stage: 'ready',
+            guidance: '',
+            statusHint: null,
+            stage: 'bound',
         })
     })
 
@@ -142,12 +120,12 @@ describe('pairingModalSupport', () => {
                     ...basePairing.pairing,
                     shortCode: null,
                     approvalStatus: null,
-                    guest: { label: 'Phone' },
+                    guest: { label: 'Device' },
                 },
             })
         ).toMatchObject({
             codeHint: '等待确认',
-            statusHint: '等待手机接入',
+            statusHint: '等待设备接入',
             stage: 'invite',
         })
     })
@@ -157,7 +135,7 @@ describe('pairingModalSupport', () => {
         expect(
             buildDesktopPairingQrUrl({
                 ...basePairing,
-                pairing: { ...basePairing.pairing, approvalStatus: 'approved', guest: { label: 'Phone' } },
+                pairing: { ...basePairing.pairing, approvalStatus: 'approved', guest: { label: 'Device' } },
             })
         ).toBe('https://pair.example.com/p/pairing-1')
     })
@@ -166,5 +144,11 @@ describe('pairingModalSupport', () => {
         expect(formatPairingCode(null)).toBe('— — —')
         expect(formatPairingCode('490649')).toBe('490 649')
         expect(formatPairingCode('already-done')).toBe('already-done')
+    })
+
+    it('only offers the copy affordance while the pairing is in approval stage so users never copy a status label', () => {
+        expect(shouldOfferPairingCodeCopy('approval')).toBe(true)
+        expect(shouldOfferPairingCodeCopy('invite')).toBe(false)
+        expect(shouldOfferPairingCodeCopy('bound')).toBe(false)
     })
 })

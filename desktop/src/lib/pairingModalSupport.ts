@@ -1,6 +1,6 @@
-import type { DesktopPairingSession, PairingBridgeState } from '@/types'
+import type { DesktopPairingSession } from '@/types'
 
-export type DesktopPairingStage = 'invite' | 'approval' | 'bound' | 'paused' | 'ready'
+export type DesktopPairingStage = 'invite' | 'approval' | 'bound'
 
 export interface DesktopPairingPresentation {
     codeValue: string
@@ -11,8 +11,8 @@ export interface DesktopPairingPresentation {
     stage: DesktopPairingStage
 }
 
-const INVITE_GUIDANCE = '二维码会自动保持可用。手机扫码后，输入这里显示的 6 位数字。'
-const BOUND_GUIDANCE = '用已配对手机打开 Viby，即可自动接回。'
+const INVITE_GUIDANCE = ''
+const BOUND_GUIDANCE = ''
 
 export function shouldStartPairingBridge(pairing: DesktopPairingSession | null): boolean {
     return pairing?.pairing.approvalStatus === 'approved'
@@ -39,42 +39,27 @@ export function buildDesktopPairingQrUrl(pairing: DesktopPairingSession): string
     return fragmentIndex === -1 ? pairing.pairingUrl : pairing.pairingUrl.slice(0, fragmentIndex)
 }
 
-export function buildDesktopPairingPresentation(
-    pairing: DesktopPairingSession,
-    bridgePhase: PairingBridgeState['phase'] = 'idle'
-): DesktopPairingPresentation {
+/**
+ * Returns true when the workspace shell should surface the six-digit code
+ * copy affordance. Only the approval stage shows a copyable code; the bound
+ * stage replaces the code value with a status label ("已连接") that is not
+ * meaningful to copy.
+ */
+export function shouldOfferPairingCodeCopy(stage: DesktopPairingStage): boolean {
+    return stage === 'approval'
+}
+
+export function buildDesktopPairingPresentation(pairing: DesktopPairingSession): DesktopPairingPresentation {
     const snapshot = pairing.pairing
     const qrUrl = buildDesktopPairingQrUrl(pairing)
-
-    if (bridgePhase === 'ready') {
-        return {
-            codeValue: '已连接',
-            codeHint: '已连接',
-            guidance: BOUND_GUIDANCE,
-            qrUrl,
-            statusHint: '已连接',
-            stage: 'ready',
-        }
-    }
-
-    if (bridgePhase === 'paused') {
-        return {
-            codeValue: '已配对',
-            codeHint: '已配对',
-            guidance: BOUND_GUIDANCE,
-            qrUrl,
-            statusHint: '手机在后台，回来后自动接回',
-            stage: 'paused',
-        }
-    }
 
     if (!snapshot.guest) {
         return {
             codeValue: formatPairingCode(null),
-            codeHint: '手机扫码后显示',
+            codeHint: '',
             guidance: INVITE_GUIDANCE,
             qrUrl,
-            statusHint: '等待手机扫码',
+            statusHint: '等待设备扫码',
             stage: 'invite',
         }
     }
@@ -82,17 +67,17 @@ export function buildDesktopPairingPresentation(
     if (snapshot.approvalStatus === 'pending') {
         return {
             codeValue: formatPairingCode(snapshot.shortCode),
-            codeHint: '连接码',
+            codeHint: '配对码',
             guidance: BOUND_GUIDANCE,
             qrUrl,
-            statusHint: '等待手机输入连接码',
+            statusHint: null,
             stage: 'approval',
         }
     }
 
     if (snapshot.approvalStatus === 'approved') {
         return {
-            codeValue: '已配对',
+            codeValue: '已连接',
             codeHint: '',
             guidance: BOUND_GUIDANCE,
             qrUrl,
@@ -106,7 +91,7 @@ export function buildDesktopPairingPresentation(
         codeHint: '等待确认',
         guidance: BOUND_GUIDANCE,
         qrUrl,
-        statusHint: '等待手机接入',
+        statusHint: '等待设备接入',
         stage: 'invite',
     }
 }

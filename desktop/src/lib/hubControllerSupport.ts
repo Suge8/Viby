@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react'
-import type { DesktopPairingSession, HubSnapshot } from '@/types'
+import type { HubSnapshot } from '@/types'
 
 export const DESKTOP_PREVIEW_MESSAGE =
     '当前运行在浏览器预览环境，Tauri runtime 不可用。请使用 bun run dev:desktop 启动桌面壳。'
@@ -12,6 +12,17 @@ export type HubControllerStateSetters = {
 export function applyHubSnapshot(nextSnapshot: HubSnapshot, options: HubControllerStateSetters): void {
     options.setSnapshot(nextSnapshot)
     options.setActionError(null)
+}
+
+export function describeDesktopError(error: unknown, fallback: string): string {
+    if (error instanceof Error && error.message.trim()) return error.message
+    if (typeof error === 'string' && error.trim()) return error
+    return fallback
+}
+
+export function resolvePublicAccessEnabled(snapshot: HubSnapshot): boolean {
+    if (snapshot.running && snapshot.status) return snapshot.status.publicAccessEnabled
+    return snapshot.startupConfig.publicAccessEnabled
 }
 
 export async function runHubAction(options: {
@@ -38,31 +49,8 @@ export async function runHubAction(options: {
         }
         return true
     } catch (error) {
-        options.setActionError(error instanceof Error ? error.message : '桌面操作失败。')
+        options.setActionError(describeDesktopError(error, '桌面操作失败。'))
         return false
-    } finally {
-        options.setBusy(false)
-    }
-}
-
-export async function createPairingAction(options: {
-    tauriRuntimeAvailable: boolean
-    setBusy: (value: boolean) => void
-    setActionError: (value: string | null) => void
-    setPairing: (value: DesktopPairingSession | null) => void
-    createPairingSession: () => Promise<DesktopPairingSession>
-}): Promise<void> {
-    if (!options.tauriRuntimeAvailable) {
-        options.setActionError(DESKTOP_PREVIEW_MESSAGE)
-        return
-    }
-
-    options.setBusy(true)
-    options.setActionError(null)
-    try {
-        options.setPairing(await options.createPairingSession())
-    } catch (error) {
-        options.setActionError(error instanceof Error ? error.message : '生成配对码失败。')
     } finally {
         options.setBusy(false)
     }
@@ -72,7 +60,8 @@ const STALE_PAIRING_DELETE_MESSAGES = ['Invalid pairing token', 'Pairing session
 const STALE_PAIRING_REFRESH_MESSAGES = [...STALE_PAIRING_DELETE_MESSAGES, 'Pairing session no longer active'] as const
 
 function hasKnownPairingError(error: unknown, messages: readonly string[]): boolean {
-    return error instanceof Error && messages.some((message) => error.message.includes(message))
+    const message = error instanceof Error ? error.message : typeof error === 'string' ? error : null
+    return message !== null && messages.some((known) => message.includes(known))
 }
 
 export function isStalePairingDeletionError(error: unknown): boolean {
@@ -84,79 +73,3 @@ export function isStalePairingRefreshError(error: unknown): boolean {
 }
 
 export { isExpiredUnclaimedPairing } from './desktopShellModel'
-
-async function deleteRemotePairingIfExists(
-    pairing: DesktopPairingSession,
-    deletePairingSession: (pairing: DesktopPairingSession) => Promise<void>
-): Promise<void> {
-    try {
-        await deletePairingSession(pairing)
-    } catch (error) {
-        if (!isStalePairingDeletionError(error)) {
-            throw error
-        }
-    }
-}
-
-export async function deletePairingAction(options: {
-    tauriRuntimeAvailable: boolean
-    pairing: DesktopPairingSession | null
-    setBusy: (value: boolean) => void
-    setActionError: (value: string | null) => void
-    clearPairing: () => Promise<void>
-    deletePairingSession: (pairing: DesktopPairingSession) => Promise<void>
-}): Promise<void> {
-    if (!options.tauriRuntimeAvailable) {
-        options.setActionError(DESKTOP_PREVIEW_MESSAGE)
-        return
-    }
-
-    if (!options.pairing) {
-        options.setActionError('当前没有可解除的手机绑定。')
-        return
-    }
-
-    options.setBusy(true)
-    options.setActionError(null)
-    try {
-        await deleteRemotePairingIfExists(options.pairing, options.deletePairingSession)
-        await options.clearPairing()
-    } catch (error) {
-        options.setActionError(error instanceof Error ? error.message : '解除手机绑定失败。')
-    } finally {
-        options.setBusy(false)
-    }
-}
-
-export async function recreatePairingAction(options: {
-    tauriRuntimeAvailable: boolean
-    pairing: DesktopPairingSession | null
-    setBusy: (value: boolean) => void
-    setActionError: (value: string | null) => void
-    setPairing: (value: DesktopPairingSession | null) => void
-    deletePairingSession: (pairing: DesktopPairingSession) => Promise<void>
-    createPairingSession: () => Promise<DesktopPairingSession>
-}): Promise<boolean> {
-    if (!options.tauriRuntimeAvailable) {
-        options.setActionError(DESKTOP_PREVIEW_MESSAGE)
-        return false
-    }
-
-    if (!options.pairing) {
-        options.setActionError('当前没有可刷新的配对。')
-        return false
-    }
-
-    options.setBusy(true)
-    options.setActionError(null)
-    try {
-        await deleteRemotePairingIfExists(options.pairing, options.deletePairingSession)
-        options.setPairing(await options.createPairingSession())
-        return true
-    } catch (error) {
-        options.setActionError(error instanceof Error ? error.message : '刷新配对码失败。')
-        return false
-    } finally {
-        options.setBusy(false)
-    }
-}

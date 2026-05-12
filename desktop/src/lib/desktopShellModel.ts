@@ -59,6 +59,10 @@ export function isExpiredUnclaimedPairing(pairing: DesktopPairingSession, now = 
     return !pairing.pairing.guest && now > pairing.pairing.ticketExpiresAt
 }
 
+export function buildDeviceCount(loaded: boolean, activeCount: number): number {
+    return loaded ? activeCount : 0
+}
+
 export function shouldPollPairingSnapshot(
     pairing: DesktopPairingSession | null,
     bridgePhase: PairingBridgeState['phase'],

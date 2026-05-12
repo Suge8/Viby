@@ -90,12 +90,20 @@ export async function copyText(text: string): Promise<void> {
     await invokeDesktopCommand('copy_text', { text })
 }
 
-export async function getPairingSession(): Promise<DesktopPairingSession | null> {
-    return await invokeDesktopCommand<DesktopPairingSession | null>('get_pairing_session')
+export async function setPublicAccessEnabled(enabled: boolean): Promise<void> {
+    await invokeDesktopCommand('set_public_access_enabled', { enabled })
 }
 
-export async function clearPairingSession(): Promise<void> {
-    await invokeDesktopCommand('clear_pairing_session')
+export async function getPairingSessions(): Promise<DesktopPairingSession[]> {
+    return await invokeDesktopCommand<DesktopPairingSession[]>('get_pairing_sessions')
+}
+
+export async function clearPairingSessions(): Promise<void> {
+    await invokeDesktopCommand('clear_pairing_sessions')
+}
+
+export async function removePairingSession(pairingId: string): Promise<void> {
+    await invokeDesktopCommand('remove_pairing_session', { pairingId })
 }
 
 export async function createPairingSession(): Promise<DesktopPairingSession> {

@@ -1,68 +1,32 @@
 import { PairingSignalSchema, readPairingSignalTransportId } from '@viby/protocol/pairing'
 import type { PairingBridgeState, PairingSessionSnapshot } from '@/types'
 import type { LocalHubPairingClient } from './localHubPairingClient'
+import type { PairingBridgeChannelHealth } from './pairingBridgeChannelHealth'
 import {
     executePairingPeerRequest,
+    isPairingHeartbeat,
     parsePairingPeerRequest,
     serializePairingPeerMessage,
     serializePairingTerminalEvent,
 } from './pairingBridgeCore'
 import { PAIRING_PHONE_PAUSED_MESSAGE, PAIRING_STALE_MESSAGE } from './pairingBridgeRecovery'
 import { readSignalPairingSnapshot, runPairingBridgeTask } from './pairingBridgeRuntimeSupport'
-import { describePairingConnectionState, describePairingSnapshotMessage } from './pairingBridgeSupport'
+import {
+    isClosedChannel,
+    isHealthyGuestTransport,
+    readSignalCandidate,
+    resolveSignalMessage,
+    resolveSignalPhase,
+    shouldRebuildForGuestReady,
+} from './pairingBridgeSignalSupport'
+import { describePairingConnectionState } from './pairingBridgeSupport'
 
 type BridgeStateSetter = (
     state: Omit<PairingBridgeState, 'pairing'> & { pairing?: PairingSessionSnapshot | null }
 ) => void
 
-type GuestReadyTransport = { fromGuest: boolean; transportId: string | null; knownTransportId: string | null }
-
-function resolveSignalPhase(
-    activePeer: RTCPeerConnection,
-    channel?: RTCDataChannel | null
-): PairingBridgeState['phase'] {
-    if (channel && channel.readyState !== 'open') return 'connecting'
-    return activePeer.connectionState === 'connected' ? 'ready' : 'connecting'
-}
-
 function readSignalingState(activePeer: RTCPeerConnection): RTCSignalingState {
     return activePeer.signalingState
-}
-
-function isClosedChannel(channel: RTCDataChannel | null | undefined): boolean {
-    return channel?.readyState === 'closed'
-}
-
-function isHealthyGuestTransport(options: {
-    signal: { from?: string }
-    activePeer: RTCPeerConnection
-    channel: RTCDataChannel | null | undefined
-}): boolean {
-    return (
-        options.signal.from === 'guest' &&
-        options.activePeer.connectionState === 'connected' &&
-        options.channel?.readyState === 'open'
-    )
-}
-
-function shouldRebuildForGuestReady(options: GuestReadyTransport): boolean {
-    return (
-        options.fromGuest &&
-        options.knownTransportId !== null &&
-        Boolean(options.transportId) &&
-        options.transportId !== options.knownTransportId
-    )
-}
-
-function resolveSignalMessage(
-    activePeer: RTCPeerConnection,
-    pairing: PairingSessionSnapshot,
-    channel?: RTCDataChannel | null
-): string {
-    if (channel && channel.readyState !== 'open') return '正在建立点对点链路。'
-    return activePeer.connectionState === 'connected'
-        ? describePairingConnectionState(activePeer.connectionState)
-        : describePairingSnapshotMessage(pairing)
 }
 
 function serializeInvalidRequest(error: unknown): string {
@@ -77,18 +41,6 @@ function serializeInvalidRequest(error: unknown): string {
     })
 }
 
-function readSignalCandidate(payload: unknown): RTCIceCandidateInit | null {
-    if (!payload || typeof payload !== 'object') {
-        return payload as RTCIceCandidateInit | null
-    }
-
-    if ('candidate' in payload && payload.candidate && typeof payload.candidate === 'object') {
-        return payload.candidate as RTCIceCandidateInit
-    }
-
-    return payload as RTCIceCandidateInit
-}
-
 export function attachPairingDataChannel(options: {
     nextChannel: RTCDataChannel
     client: LocalHubPairingClient
@@ -97,7 +49,9 @@ export function attachPairingDataChannel(options: {
     setBridgeState: BridgeStateSetter
     stopEventStream: () => void
     startEventStream: (activeChannel: RTCDataChannel) => Promise<void>
+    reportPairingPresence: (alive: boolean) => void
     schedulePeerRecovery: () => void
+    channelHealth: PairingBridgeChannelHealth
     reportAsyncError: (message: string, error: unknown) => void
 }): void {
     const {
@@ -108,12 +62,19 @@ export function attachPairingDataChannel(options: {
         setBridgeState,
         stopEventStream,
         startEventStream,
+        reportPairingPresence,
         schedulePeerRecovery,
+        channelHealth,
         reportAsyncError,
     } = options
 
     nextChannel.addEventListener('open', () => {
-        setBridgeState({ phase: 'ready', message: '手机链路已接通。' })
+        if (getSuppressTransportClose()) return
+        channelHealth.start()
+        setBridgeState({ phase: 'connecting', message: '正在建立点对点链路。' })
+        // Presence reporter owns ordering, retry and keepalive. The bridge only
+        // declares the desired state on each data-channel event boundary.
+        reportPairingPresence(true)
         runPairingBridgeTask(() => startEventStream(nextChannel), {
             isDisposed,
             onError: (error) => reportAsyncError('配对事件流启动失败：', error),
@@ -121,15 +82,38 @@ export function attachPairingDataChannel(options: {
     })
 
     nextChannel.addEventListener('close', () => {
+        if (getSuppressTransportClose()) return
+        channelHealth.stop()
+        // Do NOT flip presence to inactive on a transport-level close: the
+        // bridge is about to schedule peer recovery (paused state), the host
+        // is still serving this pairing, and broker mobile disconnect grace is
+        // up to 10 minutes. Hub presence only flips inactive on dispose so
+        // the desktop popover keeps showing the device in a “等待回连” state
+        // instead of dropping the count to 0 while the phone is roaming.
         stopEventStream()
         client.closeAllTerminals()
-        if (!isDisposed() && !getSuppressTransportClose()) {
+        if (!isDisposed()) {
             schedulePeerRecovery()
         }
     })
 
     nextChannel.addEventListener('message', (event) => {
+        if (getSuppressTransportClose()) return
+        if (channelHealth.noteInbound()) {
+            setBridgeState({ phase: 'ready', message: describePairingConnectionState('connected') })
+        }
         const rawData = typeof event.data === 'string' ? event.data : ''
+        if (rawData && isPairingHeartbeat(rawData)) {
+            if (nextChannel.readyState === 'open') {
+                try {
+                    nextChannel.send(rawData)
+                } catch (error) {
+                    nextChannel.close()
+                    reportAsyncError('配对心跳响应失败：', error)
+                }
+            }
+            return
+        }
         runPairingBridgeTask(
             async () => {
                 if (typeof event.data !== 'string' && (await client.acceptUploadChunk(event.data))) {
@@ -178,6 +162,7 @@ export async function handlePairingSignalMessage(options: {
     resetOfferState?: () => void
     schedulePeerRecovery?: () => void
     getChannel?: () => RTCDataChannel | null
+    isChannelHealthy?: () => boolean
     addRemoteCandidate?: (peer: RTCPeerConnection, candidate: RTCIceCandidateInit) => Promise<void>
     flushRemoteCandidates?: (peer: RTCPeerConnection) => Promise<void>
 }): Promise<void> {
@@ -246,9 +231,10 @@ export async function handlePairingSignalMessage(options: {
         case 'state': {
             const nextPairing = readSignalPairingSnapshot(parsed.data.payload) ?? options.pairingSnapshot
             const channel = options.getChannel?.()
+            const channelHealthy = options.isChannelHealthy?.() ?? false
             options.setBridgeState({
-                phase: resolveSignalPhase(options.activePeer, channel),
-                message: resolveSignalMessage(options.activePeer, nextPairing, channel),
+                phase: resolveSignalPhase(options.activePeer, channel, channelHealthy),
+                message: resolveSignalMessage(options.activePeer, nextPairing, channel, channelHealthy),
                 pairing: nextPairing,
             })
             return
@@ -258,25 +244,22 @@ export async function handlePairingSignalMessage(options: {
             const nextPairing = readSignalPairingSnapshot(parsed.data.payload)
             const knownTransportId = options.getGuestTransportId?.() ?? null
             const transportId = readPairingSignalTransportId(parsed.data.payload)
+            const channelHealthy = options.isChannelHealthy?.() ?? false
             const healthyGuestTransport = isHealthyGuestTransport({
                 signal: parsed.data,
                 activePeer: options.activePeer,
                 channel,
+                channelHealthy,
             })
-            const keepHealthyTransport = Boolean(
-                transportId && transportId === knownTransportId && healthyGuestTransport
-            )
-            if (transportId) options.setGuestTransportId?.(transportId)
-            if (
-                isClosedChannel(channel) ||
-                shouldRebuildForGuestReady({
-                    fromGuest: parsed.data.from === 'guest',
-                    transportId,
-                    knownTransportId,
-                })
-            ) {
+            const shouldReplaceGuestTransport = shouldRebuildForGuestReady({
+                fromGuest: parsed.data.from === 'guest',
+                transportId,
+                knownTransportId,
+            })
+            if (transportId && transportId !== knownTransportId) options.setGuestTransportId?.(transportId)
+            if (isClosedChannel(channel) || shouldReplaceGuestTransport) {
                 options.resetOfferState?.()
-                const message = '手机已回来，正在重建安全链路。'
+                const message = '设备已回来，正在重建安全链路。'
                 if (options.rebuildTransport) {
                     options.rebuildTransport(message)
                     return
@@ -284,18 +267,25 @@ export async function handlePairingSignalMessage(options: {
                 options.scheduleReconnect(message)
                 return
             }
+            if (healthyGuestTransport) {
+                if (nextPairing) {
+                    options.setBridgeState({
+                        phase: 'ready',
+                        message: describePairingConnectionState('connected'),
+                        pairing: nextPairing,
+                    })
+                }
+                return
+            }
             if (nextPairing) {
                 options.setBridgeState({
-                    phase: resolveSignalPhase(options.activePeer, channel),
-                    message: resolveSignalMessage(options.activePeer, nextPairing, channel),
+                    phase: resolveSignalPhase(options.activePeer, channel, channelHealthy),
+                    message: resolveSignalMessage(options.activePeer, nextPairing, channel, channelHealthy),
                     pairing: nextPairing,
                 })
             }
-            if (keepHealthyTransport) {
-                return
-            }
             if (options.activePeer.connectionState !== 'connected') {
-                if (options.tryIceRestart?.('手机已回来，正在刷新点对点链路。')) {
+                if (options.tryIceRestart?.('设备已回来，正在刷新点对点链路。')) {
                     return
                 }
                 options.resetOfferState?.()

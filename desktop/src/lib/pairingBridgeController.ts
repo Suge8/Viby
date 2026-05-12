@@ -1,12 +1,7 @@
 import { PAIRING_SIGNAL_RECONNECT_DELAY_MS } from '@viby/protocol/pairing'
-import type {
-    DesktopPairingSession,
-    HubRuntimeStatus,
-    PairingBridgeState,
-    PairingBridgeStats,
-    PairingSessionSnapshot,
-} from '@/types'
+import type { DesktopPairingSession, HubRuntimeStatus, PairingBridgeState, PairingBridgeStats } from '@/types'
 import { LocalHubPairingClient } from './localHubPairingClient'
+import { createPairingBridgeChannelHealth } from './pairingBridgeChannelHealth'
 import { attachPairingDataChannel } from './pairingBridgeControllerSupport'
 import { createPairingBridgeRemoteCandidateQueue } from './pairingBridgeIceCandidates'
 import { createPairingBridgeIceRestartGate } from './pairingBridgeIceRecovery'
@@ -17,10 +12,12 @@ import {
     runPairingBridgeTask,
 } from './pairingBridgeRuntimeSupport'
 import { createPairingBridgeSignalSocketController } from './pairingBridgeSignalSocket'
+import { createPairingBridgeStateController } from './pairingBridgeState'
 import { createPairingBridgeStatsController } from './pairingBridgeStatsSupport'
 import { describePairingConnectionState, toIceServers } from './pairingBridgeSupport'
 import { createPairingTelemetryPublisher } from './pairingBridgeTelemetrySupport'
 import { sendPairingOffer, startPairingEventStream } from './pairingBridgeTransportSupport'
+import { createPairingPresenceReporter } from './pairingPresenceSync'
 
 const RECONNECT_DELAY_MS = PAIRING_SIGNAL_RECONNECT_DELAY_MS
 export function startPairingBridge(options: {
@@ -36,7 +33,6 @@ export function startPairingBridge(options: {
         cliApiToken: options.status.cliApiToken,
     })
     const disposed = { value: false }
-    let pairingSnapshot = pairing.pairing
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null
     let recoveryTimer: ReturnType<typeof setTimeout> | null = null
     let peer: RTCPeerConnection | null = null
@@ -47,37 +43,36 @@ export function startPairingBridge(options: {
     let suppressTransportClose = false
     let restartCount = 0
     let guestTransportId: string | null = null
-    let pairingStats: PairingBridgeStats | null = null
-    let bridgePhase: PairingBridgeState['phase'] = 'connecting'
-    let bridgeMessage: string | null = '正在建立点对点链路。'
     const publishPairingTelemetry = createPairingTelemetryPublisher(pairing)
     const iceRestartGate = createPairingBridgeIceRestartGate()
     const remoteCandidateQueue = createPairingBridgeRemoteCandidateQueue()
-    function setBridgeState(
-        state: Omit<PairingBridgeState, 'pairing'> & {
-            pairing?: PairingSessionSnapshot | null
-            stats?: PairingBridgeStats | null
-        }
-    ): void {
-        bridgePhase = state.phase
-        bridgeMessage = state.message
-        if (typeof state.pairing !== 'undefined' && state.pairing) pairingSnapshot = state.pairing
-        if (typeof state.stats !== 'undefined') pairingStats = state.stats
-        if (!disposed.value) {
-            options.onStateChange({
-                phase: bridgePhase,
-                message: bridgeMessage,
-                pairing: pairingSnapshot,
-                stats: pairingStats,
-            })
-        }
-    }
-    function setBridgeStats(stats: PairingBridgeStats): void {
-        pairingStats = stats
-        if (!disposed.value) {
-            options.onStateChange({ phase: bridgePhase, message: bridgeMessage, pairing: pairingSnapshot, stats })
-        }
-    }
+    const presence = createPairingPresenceReporter({
+        client,
+        pairingId: pairing.pairing.id,
+        onError: reportAsyncError,
+    })
+    const channelHealth = createPairingBridgeChannelHealth({
+        onStale: () => {
+            // Stale heartbeats mean the existing data channel is silent, but
+            // the bridge will fall straight into recovery / reconnect. The
+            // host is still the owner of this pairing, so do not yank hub
+            // presence here — only `presence.dispose()` flips it inactive.
+            channel?.close()
+            scheduleTransportRecovery('设备长时间无响应，正在自动接回。')
+        },
+    })
+    const bridgeState = createPairingBridgeStateController({
+        initialPairing: pairing.pairing,
+        isDisposed: () => disposed.value,
+        isLiveTransport: () =>
+            channelHealth.isHealthy() &&
+            channel?.readyState === 'open' &&
+            peer?.connectionState !== 'failed' &&
+            peer?.connectionState !== 'closed',
+        onStateChange: options.onStateChange,
+    })
+    const setBridgeState = bridgeState.setState
+    const setBridgeStats = bridgeState.setStats
     function reportAsyncError(message: string, error: unknown): void {
         setBridgeState({ phase: 'error', message: `${message}${describePairingBridgeError(error)}` })
     }
@@ -100,8 +95,8 @@ export function startPairingBridge(options: {
         clearRecoveryTimer()
         signalController.clearReconnectTimer()
         statsController.stopStatsPolling()
+        channelHealth.stop()
         suppressTransportClose = true
-        pairingStats = null
         channel?.close()
         channel = null
         peer?.close()
@@ -123,7 +118,7 @@ export function startPairingBridge(options: {
         closeTransport()
         clearRecoveryTimer()
         clearReconnectTimer()
-        setBridgeState({ phase: 'connecting', message })
+        setBridgeState({ phase: 'connecting', message, stats: null })
         startReconnectTask('配对桥接重建失败：')
     }
 
@@ -133,7 +128,7 @@ export function startPairingBridge(options: {
         closeTransport()
         clearRecoveryTimer()
         clearReconnectTimer()
-        setBridgeState({ phase: 'connecting', message })
+        setBridgeState({ phase: 'connecting', message, stats: null })
         reconnectTimer = setTimeout(() => {
             reconnectTimer = null
             startReconnectTask('配对桥接重连失败：')
@@ -145,7 +140,7 @@ export function startPairingBridge(options: {
         setBridgeState({ phase: 'paused', message })
         recoveryTimer = setTimeout(() => {
             recoveryTimer = null
-            scheduleReconnect('手机仍未接回，正在重建安全链路。')
+            scheduleReconnect('设备仍未接回，正在重建安全链路。')
         }, PAIRING_TRANSPORT_RECOVERY_GRACE_MS)
     }
 
@@ -197,6 +192,15 @@ export function startPairingBridge(options: {
         reportAsyncError,
     })
 
+    function emitBridgePresence(alive: boolean): void {
+        const live = bridgeState.getPairing() ?? pairing.pairing
+        const platform = live.guest?.metadata?.platform
+        presence.set(alive, {
+            deviceName: live.guest?.label,
+            platform: typeof platform === 'string' ? platform : undefined,
+        })
+    }
+
     function attachDataChannel(nextChannel: RTCDataChannel): void {
         channel = nextChannel
         attachPairingDataChannel({
@@ -207,6 +211,8 @@ export function startPairingBridge(options: {
             setBridgeState,
             stopEventStream,
             startEventStream,
+            channelHealth,
+            reportPairingPresence: emitBridgePresence,
             schedulePeerRecovery: scheduleTransportRecovery,
             reportAsyncError,
         })
@@ -217,8 +223,9 @@ export function startPairingBridge(options: {
         isDisposed: () => disposed.value,
         isSuppressed: () => suppressTransportClose,
         getChannel: () => channel,
+        isChannelHealthy: channelHealth.isHealthy,
         getPeer: () => peer,
-        getPairingSnapshot: () => pairingSnapshot,
+        getPairingSnapshot: bridgeState.getPairing,
         setSocket: (socket) => {
             signalSocket = socket
         },
@@ -247,9 +254,17 @@ export function startPairingBridge(options: {
 
         closeTransport()
         suppressTransportClose = false
-        setBridgeState({ phase: 'connecting', message: '正在建立点对点链路。' })
+        setBridgeState({ phase: 'connecting', message: '正在建立点对点链路。', stats: null })
 
-        const nextPeer = new RTCPeerConnection({ iceServers: toIceServers(pairing.iceServers) })
+        // iceCandidatePoolSize lets the peer pre-gather candidates as soon as
+        // it is created instead of waiting for `setLocalDescription`. By the
+        // time SDP exchange completes, candidates are ready and ICE typically
+        // converges in <1s on a healthy network.
+        const nextPeer = new RTCPeerConnection({
+            iceServers: toIceServers(pairing.iceServers),
+            iceCandidatePoolSize: 4,
+            bundlePolicy: 'max-bundle',
+        })
         peer = nextPeer
 
         nextPeer.addEventListener('icecandidate', (event) => {
@@ -273,8 +288,19 @@ export function startPairingBridge(options: {
             const connectionState = nextPeer.connectionState
             if (connectionState === 'connected') {
                 clearRecoveryTimer()
-                setBridgeState({ phase: 'ready', message: describePairingConnectionState(connectionState) })
-                statsController.startStatsPolling(nextPeer)
+                // ICE restart success: the data channel never closed but the
+                // stale timer may have fired during the negotiation gap.
+                // Re-arm channelHealth so we give the new ICE pair a fresh
+                // heartbeat window before reporting "正在握手" again, and treat an
+                // open channel as ready since `connected` is the canonical
+                // ICE success signal.
+                if (channel?.readyState === 'open') {
+                    if (!channelHealth.isHealthy()) channelHealth.start()
+                    setBridgeState({ phase: 'ready', message: describePairingConnectionState(connectionState) })
+                    statsController.startStatsPolling(nextPeer)
+                    return
+                }
+                setBridgeState({ phase: 'connecting', message: '正在建立点对点链路。' })
                 return
             }
 
@@ -309,5 +335,8 @@ export function startPairingBridge(options: {
         clearReconnectTimer()
         clearRecoveryTimer()
         closeTransport()
+        // Final alive=false is owned by the presence reporter so ordering and
+        // keepalive teardown happen in one place.
+        presence.dispose()
     }
 }

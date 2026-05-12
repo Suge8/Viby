@@ -43,8 +43,27 @@ describe('pairingBridgeStatsSupport', () => {
             remoteCandidateType: null,
             currentRoundTripTimeMs: null,
             restartCount: 0,
+            previousTransport: null,
         })
         expect(setBridgeState).not.toHaveBeenCalled()
+    })
+
+    it('keeps an open data channel in recovery presentation during ICE restart', () => {
+        const { controller, setBridgeState } = createStatsControllerHarness()
+
+        expect(controller.tryIceRestart('链路波动，正在执行 ICE 重启。')).toBe(true)
+
+        expect(setBridgeState).toHaveBeenCalledWith({
+            phase: 'paused',
+            message: '链路波动，正在执行 ICE 重启。',
+            stats: {
+                transport: 'unknown',
+                localCandidateType: null,
+                remoteCandidateType: null,
+                currentRoundTripTimeMs: null,
+                restartCount: 1,
+            },
+        })
     })
 
     it('does not consume ICE restart throttle when signaling is unavailable', () => {
