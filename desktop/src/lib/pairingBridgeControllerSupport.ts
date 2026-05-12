@@ -12,18 +12,45 @@ type BridgeStateSetter = (
     state: Omit<PairingBridgeState, 'pairing'> & { pairing?: PairingSessionSnapshot | null }
 ) => void
 
+export class HubPausedError extends Error {
+    readonly code = 'hub_paused'
+    constructor() {
+        super('hub_paused')
+        this.name = 'HubPausedError'
+    }
+}
+
+export function isHubPausedError(error: unknown): boolean {
+    return (
+        error instanceof HubPausedError ||
+        (typeof error === 'object' && error !== null && (error as { code?: unknown }).code === 'hub_paused')
+    )
+}
+
+function serializeHubPausedRequest(id: string): string {
+    return serializePairingPeerMessage({
+        kind: 'response',
+        id,
+        ok: false,
+        error: { code: 'hub_paused', message: 'Hub is paused' },
+    })
+}
+
 function serializeInvalidRequest(error: unknown): string {
     return serializePairingPeerMessage({
         kind: 'response',
         id: 'invalid-request',
         ok: false,
-        error: { code: 'pairing_peer_invalid_request', message: error instanceof Error ? error.message : String(error) },
+        error: {
+            code: 'pairing_peer_invalid_request',
+            message: error instanceof Error ? error.message : String(error),
+        },
     })
 }
 
 export function attachPairingDataChannel(options: {
     channel: RTCDataChannel
-    client: LocalHubPairingClient
+    getClient: () => LocalHubPairingClient
     isDisposed: () => boolean
     setBridgeState: BridgeStateSetter
     startEventStream: (channel: RTCDataChannel) => Promise<void>
@@ -31,14 +58,23 @@ export function attachPairingDataChannel(options: {
     reportPairingPresence: (alive: boolean) => void
     reportAsyncError: (message: string, error: unknown) => void
 }): void {
-    const { channel, client, isDisposed, setBridgeState, startEventStream, stopEventStream, reportPairingPresence, reportAsyncError } = options
+    const {
+        channel,
+        getClient,
+        isDisposed,
+        setBridgeState,
+        startEventStream,
+        stopEventStream,
+        reportPairingPresence,
+        reportAsyncError,
+    } = options
     channel.addEventListener('open', () => {
         reportPairingPresence(true)
         void startEventStream(channel).catch((error) => reportAsyncError('配对事件流启动失败：', error))
     })
     channel.addEventListener('close', () => {
         stopEventStream()
-        client.closeAllTerminals()
+        closeAllTerminals(getClient)
         reportPairingPresence(true)
         if (!isDisposed()) setBridgeState({ phase: 'connecting', message: '正在握手' })
     })
@@ -53,17 +89,40 @@ export function attachPairingDataChannel(options: {
     })
 
     async function handleMessage(data: unknown): Promise<void> {
-        if (typeof data !== 'string' && (await client.acceptUploadChunk(data))) return
+        if (typeof data !== 'string' && (await acceptUploadChunk(getClient, data))) return
+        let request: ReturnType<typeof parsePairingPeerRequest> | null = null
         try {
-            const request = parsePairingPeerRequest(typeof data === 'string' ? data : '')
-            const response = await executePairingPeerRequest(client, request, {
+            request = parsePairingPeerRequest(typeof data === 'string' ? data : '')
+            const response = await executePairingPeerRequest(getClient(), request, {
                 emitTerminalEvent: (terminalEvent) => {
                     if (channel.readyState === 'open') channel.send(serializePairingTerminalEvent(terminalEvent))
                 },
             })
             if (channel.readyState === 'open') channel.send(serializePairingPeerMessage(response))
         } catch (error) {
-            if (channel.readyState === 'open') channel.send(serializeInvalidRequest(error))
+            if (channel.readyState !== 'open') return
+            channel.send(
+                request && isHubPausedError(error)
+                    ? serializeHubPausedRequest(request.id)
+                    : serializeInvalidRequest(error)
+            )
         }
+    }
+}
+
+async function acceptUploadChunk(getClient: () => LocalHubPairingClient, data: unknown): Promise<boolean> {
+    try {
+        return await getClient().acceptUploadChunk(data)
+    } catch (error) {
+        if (isHubPausedError(error)) return false
+        throw error
+    }
+}
+
+function closeAllTerminals(getClient: () => LocalHubPairingClient): void {
+    try {
+        getClient().closeAllTerminals()
+    } catch (error) {
+        if (!isHubPausedError(error)) throw error
     }
 }

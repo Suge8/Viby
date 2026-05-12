@@ -1,5 +1,5 @@
 import { describe, expect, it, mock } from 'bun:test'
-import { attachPairingDataChannel } from './pairingBridgeControllerSupport'
+import { attachPairingDataChannel, HubPausedError } from './pairingBridgeControllerSupport'
 
 type Listener = (event?: { data: unknown }) => void
 
@@ -10,7 +10,9 @@ class FakeDataChannel {
     addEventListener(type: string, listener: Listener): void {
         this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener])
     }
-    send(data: string): void { this.sent.push(data) }
+    send(data: string): void {
+        this.sent.push(data)
+    }
     emit(type: string, data?: unknown): void {
         for (const listener of this.listeners.get(type) ?? []) listener({ data })
     }
@@ -19,7 +21,8 @@ class FakeDataChannel {
 function attach(channel: FakeDataChannel, overrides: Record<string, unknown> = {}) {
     attachPairingDataChannel({
         channel: channel as unknown as RTCDataChannel,
-        client: { closeAllTerminals: mock(() => undefined), acceptUploadChunk: mock(async () => false) } as never,
+        getClient: () =>
+            ({ closeAllTerminals: mock(() => undefined), acceptUploadChunk: mock(async () => false) }) as never,
         isDisposed: () => false,
         setBridgeState: mock(() => undefined),
         stopEventStream: mock(() => undefined),
@@ -46,7 +49,11 @@ describe('pairingBridgeControllerSupport', () => {
         const stopEventStream = mock(() => undefined)
         const closeAllTerminals = mock(() => undefined)
         const reportPairingPresence = mock(() => undefined)
-        attach(channel, { client: { closeAllTerminals, acceptUploadChunk: mock(async () => false) }, stopEventStream, reportPairingPresence })
+        attach(channel, {
+            getClient: () => ({ closeAllTerminals, acceptUploadChunk: mock(async () => false) }) as never,
+            stopEventStream,
+            reportPairingPresence,
+        })
         channel.emit('close')
         expect(stopEventStream).toHaveBeenCalled()
         expect(closeAllTerminals).toHaveBeenCalled()
@@ -60,5 +67,22 @@ describe('pairingBridgeControllerSupport', () => {
         channel.emit('message', JSON.stringify({ kind: 'heartbeat', at: 1 }))
         expect(channel.sent).toHaveLength(1)
         expect(setBridgeState).toHaveBeenCalledWith({ phase: 'ready', message: '已连接' })
+    })
+
+    it('returns hub_paused when Hub is unavailable during RPC', async () => {
+        const channel = new FakeDataChannel()
+        attach(channel, {
+            getClient: () => {
+                throw new HubPausedError()
+            },
+        })
+        channel.emit('message', JSON.stringify({ kind: 'request', id: 'r1', method: 'sessions.list', params: {} }))
+        await Promise.resolve()
+        expect(JSON.parse(channel.sent[0] ?? '{}')).toMatchObject({
+            kind: 'response',
+            id: 'r1',
+            ok: false,
+            error: { code: 'hub_paused' },
+        })
     })
 })

@@ -15,17 +15,17 @@
 
 > Resume from here after compaction / restart.
 
-- **Current milestone**: #9 — Phase I bridge / Hub decouple
-- **Current status**: Phase H DONE；Phase I TODO
-- **Last completed**: #8 Phase H timing cleanup
-- **Current artifact**: `desktop/src/hooks/usePairingBridges.ts`
+- **Current milestone**: #10 — Phase J presence migration
+- **Current status**: Phase I DONE；Phase J TODO
+- **Last completed**: #9 Phase I bridge / Hub decouple
+- **Current artifact**: `desktop/src/lib/pairingPresenceSync.ts`
 - **Claimed by**: `none`
 - **Lease until**: `none`
 - **Write scope**: `none`
 - **Handoff**: `none`
 - **Key context**: Phase F web guest now uses shared `createPairingTransport` via `RemotePeerSession` (transport stack 401 lines). Legacy guest signal/negotiation/liveness modules deleted. `mapByeToErrorKey()` added. D/E/F code is merged locally but not deployed; staging burn-in still pending.
 - **Known issues**: 真机回归矩阵需要 iPhone Safari + 桌面端联调；自动化只是保底。D/E/F 发布必须协调 staging 24h burn-in。
-- **Next action**: 取 row 9 (`tasks/09-bridge-hub-decouple`)，解耦 bridge / Hub 状态。
+- **Next action**: 取 row 10 (`tasks/10-presence-migration`)，迁移 presence 事实源。
 
 ---
 
@@ -194,4 +194,15 @@
 - `RemotePairingController.tsx` remains under guard: 188 lines.
 - Validation: shared typecheck, shared pairingTiming/pairingTransport tests, web typecheck, focused web tests, full web test, web build ✅
 - Real-device RM9 deferred to Phase K bulk run.
+- Commit: pending.
+
+## Phase I Complete — 2026-05-12T19:58:00Z
+
+- `usePairingBridges` no longer uses `hubRuntimeKey` and its lifecycle key ignores Hub status changes.
+- Existing bridge instances read latest Hub status through a ref-backed `getStatus()` getter.
+- `startPairingBridge` uses a deferred Hub client so latest `cliApiToken` / URL are read per RPC without transport teardown.
+- Hub unavailable during peer RPC returns `{ code: 'hub_paused' }`.
+- Hub-paused presence/event-stream errors do not mark bridge fatal.
+- Validation: desktop typecheck, focused hook/controller tests, full desktop test, `rg "hubRuntimeKey" desktop/src` ✅
+- Real-device RM7 deferred to Phase K bulk run.
 - Commit: pending.

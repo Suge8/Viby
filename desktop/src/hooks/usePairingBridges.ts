@@ -18,16 +18,19 @@ const IDLE_BRIDGE_STATE: PairingBridgeState = {
     stats: null,
 }
 
-function isHubRuntimeReady(status: HubRuntimeStatus | undefined): status is HubRuntimeStatus {
-    return status?.phase === 'ready'
-}
-
-function buildHubRuntimeKey(status: HubRuntimeStatus | undefined): string {
-    return isHubRuntimeReady(status) ? `${status.localHubUrl}|${status.cliApiToken}` : 'idle'
+function getReadyStatus(status: HubRuntimeStatus | undefined): HubRuntimeStatus | null {
+    return status?.phase === 'ready' ? status : null
 }
 
 function buildPairingsKey(pairings: readonly DesktopPairingSession[]): string {
     return pairings.map((session) => `${session.pairing.id}:${session.wsUrl}`).join('|')
+}
+
+export function buildPairingBridgeLifecycleKey(options: {
+    enabled: boolean
+    pairings: readonly DesktopPairingSession[]
+}): string {
+    return options.enabled ? buildPairingsKey(options.pairings) : 'disabled'
 }
 
 export function usePairingBridges(options: {
@@ -37,10 +40,10 @@ export function usePairingBridges(options: {
 }): Map<string, PairingBridgeState> {
     const [states, setStates] = useState<Map<string, PairingBridgeState>>(() => new Map())
     const activeRef = useRef<Map<string, () => void>>(new Map())
+    const statusRef = useRef<HubRuntimeStatus | undefined>(options.status)
+    statusRef.current = options.status
 
-    const hubRuntimeKey = buildHubRuntimeKey(options.status)
-    const pairingsKey = options.enabled ? buildPairingsKey(options.pairings) : 'disabled'
-    const status = options.status
+    const pairingsKey = buildPairingBridgeLifecycleKey(options)
     const enabled = options.enabled
     const pairings = options.pairings
 
@@ -50,7 +53,7 @@ export function usePairingBridges(options: {
             activeRef.current.clear()
         }
 
-        if (!enabled || !isHubRuntimeReady(status)) {
+        if (!enabled) {
             teardownAll()
             setStates(new Map())
             return
@@ -83,7 +86,7 @@ export function usePairingBridges(options: {
             })
             const cleanup = startPairingBridge({
                 pairing,
-                status,
+                getStatus: () => getReadyStatus(statusRef.current),
                 onStateChange: (state) => {
                     setStates((prev) => {
                         const next = new Map(prev)
@@ -94,7 +97,7 @@ export function usePairingBridges(options: {
             })
             live.set(pairingId, cleanup)
         }
-    }, [enabled, hubRuntimeKey, pairings, pairingsKey, status])
+    }, [enabled, pairingsKey])
 
     useEffect(() => {
         return () => {

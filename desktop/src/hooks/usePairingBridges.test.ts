@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test'
+import { buildPairingBridgeLifecycleKey } from '@/hooks/usePairingBridges'
 import { buildDeviceLinkSnapshots } from '@/lib/deviceLinkBadge'
 import type { DesktopPairingSession, PairingBridgeState } from '@/types'
 
@@ -61,12 +62,23 @@ describe('usePairingBridges support — bridge map invariants', () => {
     it('removing one pairing leaves the other bridge entry untouched', () => {
         const bridges = new Map<string, PairingBridgeState>([
             ['kept', makeBridgeState('kept', 'ready')],
-            ['gone', makeBridgeState('gone', 'paused')],
+            ['gone', makeBridgeState('gone', 'connecting')],
         ])
         bridges.delete('gone')
         expect(bridges.size).toBe(1)
         expect(bridges.get('kept')?.phase).toBe('ready')
         expect(bridges.has('gone')).toBe(false)
+    })
+
+    it('bridge lifecycle key ignores Hub status and changes only with enabled/pairings', () => {
+        const first = [makeSession('first')]
+        expect(buildPairingBridgeLifecycleKey({ enabled: true, pairings: first })).toBe(
+            buildPairingBridgeLifecycleKey({ enabled: true, pairings: first })
+        )
+        expect(
+            buildPairingBridgeLifecycleKey({ enabled: true, pairings: [makeSession('first'), makeSession('second')] })
+        ).not.toBe(buildPairingBridgeLifecycleKey({ enabled: true, pairings: first }))
+        expect(buildPairingBridgeLifecycleKey({ enabled: false, pairings: first })).toBe('disabled')
     })
 
     it('buildDeviceLinkSnapshots maps each live bridge to its pairing:<id> device row', () => {
@@ -76,12 +88,12 @@ describe('usePairingBridges support — bridge map invariants', () => {
         const _session = makeSession('alpha')
         const bridges = new Map<string, PairingBridgeState>([
             ['alpha', makeBridgeState('alpha', 'ready')],
-            ['beta', makeBridgeState('beta', 'paused')],
+            ['beta', makeBridgeState('beta', 'connecting')],
         ])
         const snapshots = buildDeviceLinkSnapshots(bridges)
         expect(snapshots.size).toBe(2)
         expect(snapshots.get('pairing:alpha')?.phase).toBe('ready')
-        expect(snapshots.get('pairing:beta')?.phase).toBe('paused')
+        expect(snapshots.get('pairing:beta')?.phase).toBe('connecting')
         expect(snapshots.get('pairing:beta')?.deviceId).toBe('pairing:beta')
     })
 })

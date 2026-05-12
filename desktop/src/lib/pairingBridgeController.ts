@@ -1,7 +1,7 @@
 import { createPairingTransport, type PairingTransportHandle } from '@viby/protocol/pairing'
 import type { DesktopPairingSession, HubRuntimeStatus, PairingBridgeState, PairingIceServer } from '@/types'
 import { LocalHubPairingClient } from './localHubPairingClient'
-import { attachPairingDataChannel } from './pairingBridgeControllerSupport'
+import { attachPairingDataChannel, HubPausedError, isHubPausedError } from './pairingBridgeControllerSupport'
 import { startPairingBridgeStats } from './pairingBridgeStats'
 import { createPairingPresenceReporter } from './pairingPresenceSync'
 
@@ -13,24 +13,59 @@ function bridgeStateFromTransport(transport: PairingTransportHandle, base: Deskt
     const state = transport.getSnapshot()
     if (state.kind === 'ready') return { phase: 'ready', message: '已连接', pairing: base.pairing }
     if (state.kind === 'fatal') return { phase: 'fatal', message: state.reason, pairing: base.pairing, stats: null }
-    return { phase: 'connecting', message: state.attempt > 0 ? `正在握手（${state.attempt}）` : '正在握手', pairing: base.pairing }
+    return {
+        phase: 'connecting',
+        message: state.attempt > 0 ? `正在握手（${state.attempt}）` : '正在握手',
+        pairing: base.pairing,
+    }
+}
+
+function createDeferredHubClient(getStatus: () => HubRuntimeStatus | null): LocalHubPairingClient {
+    let client: LocalHubPairingClient | null = null
+    let key = ''
+    function current(): LocalHubPairingClient {
+        const status = getStatus()
+        if (!status || status.phase !== 'ready') throw new HubPausedError()
+        const nextKey = `${status.localHubUrl}|${status.cliApiToken}`
+        if (!client || nextKey !== key) {
+            client?.closeAllTerminals()
+            client = new LocalHubPairingClient({ baseUrl: status.localHubUrl, cliApiToken: status.cliApiToken })
+            key = nextKey
+        }
+        return client
+    }
+    return new Proxy({} as LocalHubPairingClient, {
+        get: (_target, property) => {
+            const value = (current() as unknown as Record<PropertyKey, unknown>)[property]
+            return typeof value === 'function' ? value.bind(current()) : value
+        },
+    })
 }
 
 export function startPairingBridge(options: {
     pairing: DesktopPairingSession
-    status: HubRuntimeStatus
+    getStatus: () => HubRuntimeStatus | null
     onStateChange: (state: PairingBridgeState) => void
 }): () => void {
     if (typeof RTCPeerConnection === 'undefined' || typeof WebSocket === 'undefined') {
-        options.onStateChange({ phase: 'fatal', message: '当前环境不支持 WebRTC。', pairing: options.pairing.pairing, stats: null })
+        options.onStateChange({
+            phase: 'fatal',
+            message: '当前环境不支持 WebRTC。',
+            pairing: options.pairing.pairing,
+            stats: null,
+        })
         return () => {}
     }
 
     let disposed = false
     let eventStreamAbort: AbortController | null = null
     let channel: RTCDataChannel | null = null
-    const client = new LocalHubPairingClient({ baseUrl: options.status.localHubUrl, cliApiToken: options.status.cliApiToken })
-    const presence = createPairingPresenceReporter({ client, pairingId: options.pairing.pairing.id, onError: reportAsyncError })
+    const client = createDeferredHubClient(options.getStatus)
+    const presence = createPairingPresenceReporter({
+        client,
+        pairingId: options.pairing.pairing.id,
+        onError: reportAsyncError,
+    })
     const transport = createPairingTransport({
         pairingId: options.pairing.pairing.id,
         polite: false,
@@ -41,10 +76,13 @@ export function startPairingBridge(options: {
     })
     const stats = startPairingBridgeStats({
         getPeer: () => transport.getPeer() as unknown as RTCPeerConnection,
-        setStats: (nextStats) => options.onStateChange({ ...bridgeStateFromTransport(transport, options.pairing), stats: nextStats }),
+        setStats: (nextStats) =>
+            options.onStateChange({ ...bridgeStateFromTransport(transport, options.pairing), stats: nextStats }),
         reportError: reportAsyncError,
     })
-    const unsubscribe = transport.subscribe(() => options.onStateChange(bridgeStateFromTransport(transport, options.pairing)))
+    const unsubscribe = transport.subscribe(() =>
+        options.onStateChange(bridgeStateFromTransport(transport, options.pairing))
+    )
     options.onStateChange({ phase: 'connecting', message: '正在握手', pairing: options.pairing.pairing, stats: null })
 
     return () => {
@@ -55,19 +93,28 @@ export function startPairingBridge(options: {
         transport.dispose()
         channel?.close()
         presence.dispose()
-        client.closeAllTerminals()
+        try {
+            client.closeAllTerminals()
+        } catch (error) {
+            if (!(error instanceof HubPausedError)) throw error
+        }
     }
 
     function reportAsyncError(message: string, error: unknown): void {
-        if (disposed) return
-        options.onStateChange({ phase: 'fatal', message: `${message}${error instanceof Error ? error.message : String(error)}`, pairing: options.pairing.pairing, stats: null })
+        if (disposed || isHubPausedError(error)) return
+        options.onStateChange({
+            phase: 'fatal',
+            message: `${message}${error instanceof Error ? error.message : String(error)}`,
+            pairing: options.pairing.pairing,
+            stats: null,
+        })
     }
 
     function attachChannel(nextChannel: RTCDataChannel): void {
         channel = nextChannel
         attachPairingDataChannel({
             channel: nextChannel,
-            client,
+            getClient: () => client,
             isDisposed: () => disposed,
             setBridgeState: (state) => options.onStateChange({ pairing: options.pairing.pairing, ...state }),
             startEventStream,
