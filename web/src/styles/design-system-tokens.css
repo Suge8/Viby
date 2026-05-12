@@ -58,16 +58,24 @@
     --ds-stage-width: 1040px;
     --ds-thread-width: 52rem;
 
-    --ds-canvas: #ffffff;
-    --ds-canvas-ambient: none;
-    --ds-panel: rgba(255, 255, 255, 0.88);
-    --ds-panel-strong: #ffffff;
+    --ds-canvas: #fbfaf6;
+    --ds-canvas-ambient:
+        radial-gradient(circle at 84% 8%, rgba(192, 132, 26, 0.09), transparent 30%),
+        radial-gradient(circle at 14% 92%, rgba(35, 165, 90, 0.08), transparent 34%);
+    --ds-native-sidebar: #f3f0ea;
+    --ds-native-surface-soft: #f7f4ee;
+    --ds-native-grid: rgba(31, 27, 20, 0.035);
+    --ds-native-separator: rgba(31, 27, 20, 0.1);
+    --ds-native-shadow: 0 18px 56px rgba(31, 27, 20, 0.08);
+    --ds-native-shadow-strong: 0 28px 84px rgba(29, 24, 18, 0.14);
+    --ds-panel: rgba(255, 255, 255, 0.82);
+    --ds-panel-strong: #fffdfa;
     --ds-elevated: #ffffff;
     --ds-overlay: rgba(0, 0, 0, 0.48);
 
-    --ds-text-primary: #0a0a0a;
-    --ds-text-secondary: #404040;
-    --ds-text-muted: #737373;
+    --ds-text-primary: #171717;
+    --ds-text-secondary: #43413b;
+    --ds-text-muted: #77736a;
     --ds-text-inverse: #fafafa;
 
     --ds-brand: #0a0a0a;
@@ -78,16 +86,16 @@
     --ds-accent-violet: #6b7280;
     --ds-accent-gold: #c0841a;
 
-    --ds-border-subtle: rgba(10, 10, 10, 0.06);
-    --ds-border-default: rgba(10, 10, 10, 0.12);
-    --ds-border-strong: rgba(10, 10, 10, 0.22);
+    --ds-border-subtle: rgba(31, 27, 20, 0.065);
+    --ds-border-default: rgba(31, 27, 20, 0.12);
+    --ds-border-strong: rgba(31, 27, 20, 0.22);
 
-    --ds-shadow-soft: 0 2px 10px rgba(0, 0, 0, 0.04);
-    --ds-shadow-card: 0 10px 30px rgba(0, 0, 0, 0.06);
-    --ds-shadow-floating: 0 24px 60px rgba(0, 0, 0, 0.16);
-    --ds-composer-surface-bg: color-mix(in srgb, var(--ds-panel-strong) 78%, transparent);
-    --ds-composer-shell-edge-bg: color-mix(in srgb, var(--ds-panel-strong) 86%, transparent);
-    --ds-composer-surface-blur: blur(18px);
+    --ds-shadow-soft: 0 6px 18px rgba(31, 27, 20, 0.05);
+    --ds-shadow-card: 0 18px 56px rgba(31, 27, 20, 0.08);
+    --ds-shadow-floating: 0 26px 76px rgba(31, 27, 20, 0.16);
+    --ds-composer-surface-bg: color-mix(in srgb, var(--ds-panel-strong) 76%, transparent);
+    --ds-composer-shell-edge-bg: color-mix(in srgb, var(--ds-panel-strong) 88%, transparent);
+    --ds-composer-surface-blur: blur(20px);
 
     --ds-success: #20b26b;
     --ds-success-soft: rgba(32, 178, 107, 0.15);
@@ -163,16 +171,24 @@
 }
 
 [data-theme="dark"] {
-    --ds-canvas: #0f1012;
-    --ds-canvas-ambient: none;
-    --ds-panel: rgba(20, 21, 24, 0.92);
-    --ds-panel-strong: #15161a;
-    --ds-elevated: #1b1d21;
+    --ds-canvas: #12130f;
+    --ds-canvas-ambient:
+        radial-gradient(circle at 84% 8%, rgba(194, 142, 37, 0.1), transparent 30%),
+        radial-gradient(circle at 14% 92%, rgba(80, 185, 123, 0.1), transparent 34%);
+    --ds-native-sidebar: #181914;
+    --ds-native-surface-soft: #1a1c17;
+    --ds-native-grid: rgba(244, 241, 233, 0.045);
+    --ds-native-separator: rgba(244, 241, 233, 0.1);
+    --ds-native-shadow: 0 22px 70px rgba(0, 0, 0, 0.34);
+    --ds-native-shadow-strong: 0 36px 110px rgba(0, 0, 0, 0.44);
+    --ds-panel: rgba(32, 34, 28, 0.9);
+    --ds-panel-strong: #20221c;
+    --ds-elevated: #272921;
     --ds-overlay: rgba(0, 0, 0, 0.6);
 
     --ds-text-primary: #fafafa;
-    --ds-text-secondary: #e5e5e5;
-    --ds-text-muted: #a1a1aa;
+    --ds-text-secondary: #e7e3d7;
+    --ds-text-muted: #aaa79c;
     --ds-text-inverse: #0a0a0a;
 
     --ds-brand: #fafafa;
@@ -183,16 +199,16 @@
     --ds-accent-violet: #c6b5ff;
     --ds-accent-gold: #f0c86e;
 
-    --ds-border-subtle: rgba(255, 255, 255, 0.08);
-    --ds-border-default: rgba(255, 255, 255, 0.14);
-    --ds-border-strong: rgba(255, 255, 255, 0.22);
+    --ds-border-subtle: rgba(244, 241, 233, 0.08);
+    --ds-border-default: rgba(244, 241, 233, 0.14);
+    --ds-border-strong: rgba(244, 241, 233, 0.24);
 
-    --ds-shadow-soft: 0 2px 12px rgba(0, 0, 0, 0.22);
-    --ds-shadow-card: 0 12px 36px rgba(0, 0, 0, 0.24);
-    --ds-shadow-floating: 0 24px 70px rgba(0, 0, 0, 0.42);
-    --ds-composer-surface-bg: color-mix(in srgb, var(--ds-panel-strong) 72%, transparent);
-    --ds-composer-shell-edge-bg: color-mix(in srgb, var(--ds-panel-strong) 82%, transparent);
-    --ds-composer-surface-blur: blur(20px);
+    --ds-shadow-soft: 0 6px 18px rgba(0, 0, 0, 0.32);
+    --ds-shadow-card: 0 22px 70px rgba(0, 0, 0, 0.34);
+    --ds-shadow-floating: 0 30px 92px rgba(0, 0, 0, 0.48);
+    --ds-composer-surface-bg: color-mix(in srgb, var(--ds-panel-strong) 74%, transparent);
+    --ds-composer-shell-edge-bg: color-mix(in srgb, var(--ds-panel-strong) 86%, transparent);
+    --ds-composer-surface-blur: blur(22px);
 
     --ds-success: #61d8a0;
     --ds-success-soft: rgba(97, 216, 160, 0.14);

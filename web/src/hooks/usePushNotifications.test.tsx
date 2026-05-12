@@ -1,6 +1,10 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { resetForegroundPulseForTests } from '@/lib/foregroundPulse'
+import {
+    publishRuntimeServiceWorkerRegistration,
+    resetRuntimeServiceWorkerRegistrationForTests,
+} from '@/lib/runtimeServiceWorkerRegistration'
 import { usePushNotifications } from './usePushNotifications'
 
 const shouldRegisterServiceWorkerForOriginMock = vi.fn<(origin: string) => boolean>()
@@ -35,6 +39,18 @@ function installNotificationMock(permission: NotificationPermission): MockNotifi
     return notification
 }
 
+function createServiceWorkerRegistration(pushManager: {
+    getSubscription: ReturnType<typeof vi.fn<() => Promise<PushSubscription | null>>>
+    subscribe: ReturnType<typeof vi.fn<() => Promise<PushSubscription>>>
+}): ServiceWorkerRegistration {
+    return {
+        pushManager: {
+            ...pushManager,
+            permissionState: vi.fn(),
+        },
+    } as unknown as ServiceWorkerRegistration
+}
+
 function installPushSupport(pushManager: {
     getSubscription: ReturnType<typeof vi.fn<() => Promise<PushSubscription | null>>>
     subscribe: ReturnType<typeof vi.fn<() => Promise<PushSubscription>>>
@@ -46,12 +62,9 @@ function installPushSupport(pushManager: {
     Object.defineProperty(navigator, 'serviceWorker', {
         configurable: true,
         value: {
-            getRegistration: vi.fn<() => Promise<ServiceWorkerRegistration>>().mockResolvedValue({
-                pushManager: {
-                    ...pushManager,
-                    permissionState: vi.fn(),
-                },
-            } as unknown as ServiceWorkerRegistration),
+            getRegistration: vi
+                .fn<() => Promise<ServiceWorkerRegistration>>()
+                .mockResolvedValue(createServiceWorkerRegistration(pushManager)),
         },
     })
 }
@@ -82,6 +95,7 @@ describe('usePushNotifications', () => {
 
     beforeEach(() => {
         vi.restoreAllMocks()
+        vi.stubEnv('PROD', true)
         shouldRegisterServiceWorkerForOriginMock.mockReturnValue(true)
     })
 
@@ -113,6 +127,8 @@ describe('usePushNotifications', () => {
             })
         }
         resetForegroundPulseForTests()
+        resetRuntimeServiceWorkerRegistrationForTests()
+        vi.unstubAllEnvs()
     })
 
     it('re-subscribes when the existing subscription uses a different VAPID public key', async () => {
@@ -191,6 +207,69 @@ describe('usePushNotifications', () => {
 
         await act(async () => {
             await expect(result.current.enableNotifications()).resolves.toBe(false)
+        })
+    })
+
+    it('waits for the boot-owned service worker registration before subscribing', async () => {
+        installNotificationMock('granted')
+        const pushManager = {
+            getSubscription: vi.fn<() => Promise<PushSubscription | null>>().mockResolvedValue(null),
+            subscribe: vi.fn<() => Promise<PushSubscription>>().mockResolvedValue(
+                createSubscription({
+                    endpoint: 'https://push.example.com/fresh',
+                    applicationServerKey: createApplicationServerKey(20),
+                })
+            ),
+        }
+        const registration = createServiceWorkerRegistration(pushManager)
+        Object.defineProperty(window, 'PushManager', {
+            configurable: true,
+            value: class PushManagerMock {},
+        })
+        Object.defineProperty(navigator, 'serviceWorker', {
+            configurable: true,
+            value: {
+                getRegistration: vi
+                    .fn<() => Promise<ServiceWorkerRegistration | undefined>>()
+                    .mockResolvedValue(undefined),
+            },
+        })
+        const api = {
+            getPushVapidPublicKey: vi.fn().mockResolvedValue({
+                publicKey: 'FBUfQ9n3eZxM4n1l7w2W5mM8i8IHbS7R0YjNfJ0W4yC4tJmJ8x4b1zU5p7uR2oH1rQ6gC5fK0dL2nP3sA4tB5cC',
+            }),
+            subscribePushNotifications: vi.fn().mockResolvedValue(undefined),
+            unsubscribePushNotifications: vi.fn().mockResolvedValue(undefined),
+        }
+
+        const { result } = renderHook(() => usePushNotifications(api as never))
+        await act(async () => {
+            const subscribe = result.current.ensureSubscription()
+            publishRuntimeServiceWorkerRegistration(registration)
+            await subscribe
+        })
+
+        expect(pushManager.subscribe).toHaveBeenCalledTimes(1)
+        expect(api.subscribePushNotifications).toHaveBeenCalledWith({
+            endpoint: 'https://push.example.com/fresh',
+            keys: {
+                p256dh: 'p256dh-key',
+                auth: 'auth-key',
+            },
+        })
+    })
+
+    it('does not expose push support on dev server even with localhost origin', async () => {
+        installNotificationMock('default')
+        shouldRegisterServiceWorkerForOriginMock.mockReturnValue(true)
+        vi.stubEnv('PROD', false)
+
+        const { result } = renderHook(() => usePushNotifications(null))
+
+        await waitFor(() => {
+            expect(result.current.isSupported).toBe(false)
+            expect(result.current.isSubscribed).toBe(false)
+            expect(result.current.pushEndpoint).toBe(null)
         })
     })
 })

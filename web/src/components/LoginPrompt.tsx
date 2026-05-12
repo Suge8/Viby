@@ -1,6 +1,6 @@
-import { type JSX, useCallback, useEffect, useState } from 'react'
-import { authenticateWithAccessToken } from '@/api/authClient'
-import { InlineNotice } from '@/components/InlineNotice'
+import { type JSX, useCallback, useEffect, useRef, useState } from 'react'
+import { authenticateWithPairingCode } from '@/api/authClient'
+import { ApiError } from '@/api/clientShared'
 import { SettingsIcon } from '@/components/icons'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { LoginExperienceShell } from '@/components/login/LoginExperienceShell'
@@ -15,15 +15,20 @@ import {
     DialogTrigger,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { writeStoredDeviceBinding } from '@/hooks/deviceBindingStorage'
 import { useFinalizeBootShell } from '@/hooks/useFinalizeBootShell'
 import type { ServerUrlResult } from '@/hooks/useServerUrl'
-import { getNoticePreset } from '@/lib/noticePresets'
+import { resolveClientPlatform } from '@/lib/clientPlatform'
+import { useNoticeCenter } from '@/lib/notice-center'
+import { getAccessTokenStorageKey } from '@/lib/storage/storageRegistry'
 import { useTranslation } from '@/lib/use-translation'
 import { formatUserFacingErrorMessage } from '@/lib/userFacingError'
 
-const ACCESS_TOKEN_AUTOCOMPLETE = 'new-password'
-const ACCESS_TOKEN_INPUT_NAME = 'accessToken'
-const ACCESS_TOKEN_TITLE_ID = 'login-access-key-title'
+const PAIRING_CODE_AUTOCOMPLETE = 'one-time-code'
+const PAIRING_CODE_INPUT_NAME = 'pairingCode'
+const PAIRING_CODE_TITLE_ID = 'login-pairing-code-title'
+const PAIRING_CODE_ERROR_ID = 'login-pairing-code-error'
+const HUB_SERVER_ERROR_ID = 'login-server-error'
 const ACCESS_TOKEN_INPUT_CLASS_NAME = 'ds-field-control-elevated py-4 text-base'
 const HUB_TRIGGER_CLASS_NAME = 'viby-login-server-trigger rounded-full px-2 py-1'
 const HUB_INPUT_CLASS_NAME = 'ds-field-control-elevated'
@@ -46,26 +51,50 @@ function buildServerSummary(server: LoginPromptServerConfig, defaultLabel: strin
     return server.serverUrl ?? `${server.baseUrl} ${defaultLabel}`
 }
 
+function formatLoginError(error: unknown, t: (key: string) => string): string {
+    if (error instanceof ApiError) {
+        if (error.code === 'auth_rate_limited' || error.status === 429) return t('login.error.rateLimited')
+        if (error.code === 'public_access_disabled' || error.status === 403)
+            return t('login.error.publicAccessDisabled')
+        if (error.status === 401) return t('login.error.invalidToken')
+        if (error.status >= 500) return t('login.error.hubFailed')
+        return t('login.error.hubRejected')
+    }
+
+    if (error instanceof TypeError) return t('login.error.hubUnreachable')
+    return formatUserFacingErrorMessage(error, { t, fallbackKey: 'login.error.authFailed' })
+}
+
 export function LoginPrompt(props: LoginPromptProps): JSX.Element {
     const { error: externalError, onLogin, server } = props
     const { t } = useTranslation()
+    const { addToast } = useNoticeCenter()
     useFinalizeBootShell()
-    const loginErrorPreset = getNoticePreset('loginError', t)
-    const loginServerErrorPreset = getNoticePreset('loginServerError', t)
-    const [accessToken, setAccessToken] = useState('')
+    const [pairingCode, setPairingCode] = useState('')
     const [isLoading, setIsLoading] = useState(false)
-    const [error, setError] = useState<string | null>(null)
     const [isServerDialogOpen, setIsServerDialogOpen] = useState(false)
     const [serverInput, setServerInput] = useState(server.serverUrl ?? '')
     const [serverError, setServerError] = useState<string | null>(null)
+    const lastExternalErrorRef = useRef<string | null>(null)
+
+    const showLoginError = useCallback(
+        (description: string): void => {
+            addToast({
+                tone: 'danger',
+                title: t('login.error.title'),
+                description,
+            })
+        },
+        [addToast, t]
+    )
 
     const handleSubmit = useCallback(
         async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
             event.preventDefault()
 
-            const trimmedToken = accessToken.trim()
-            if (!trimmedToken) {
-                setError(t('login.error.enterToken'))
+            const normalizedCode = pairingCode.replace(/\D/g, '')
+            if (normalizedCode.length !== 6) {
+                showLoginError(t('login.error.enterToken'))
                 return
             }
 
@@ -76,28 +105,37 @@ export function LoginPrompt(props: LoginPromptProps): JSX.Element {
             }
 
             setIsLoading(true)
-            setError(null)
 
             try {
-                await authenticateWithAccessToken(server.baseUrl, trimmedToken)
+                const platform = resolveClientPlatform()
+                const auth = await authenticateWithPairingCode(server.baseUrl, normalizedCode, { platform })
+                if (auth.device?.secret) {
+                    writeStoredDeviceBinding(getAccessTokenStorageKey(server.baseUrl), {
+                        deviceId: auth.device.id,
+                        secret: auth.device.secret,
+                    })
+                }
                 if (!onLogin) {
-                    setError(t('login.error.loginUnavailable'))
+                    showLoginError(t('login.error.loginUnavailable'))
                     return
                 }
-                onLogin(trimmedToken)
+                onLogin(normalizedCode)
             } catch (e) {
-                setError(
-                    formatUserFacingErrorMessage(e, {
-                        t,
-                        fallbackKey: 'login.error.authFailed',
-                    })
-                )
+                showLoginError(formatLoginError(e, t))
             } finally {
                 setIsLoading(false)
             }
         },
-        [accessToken, onLogin, server.baseUrl, server.requireServerUrl, server.serverUrl, t]
+        [onLogin, pairingCode, server.baseUrl, server.requireServerUrl, server.serverUrl, showLoginError, t]
     )
+
+    useEffect(() => {
+        if (!externalError || lastExternalErrorRef.current === externalError) {
+            return
+        }
+        lastExternalErrorRef.current = externalError
+        showLoginError(externalError)
+    }, [externalError, showLoginError])
 
     useEffect(() => {
         if (!isServerDialogOpen) {
@@ -135,8 +173,13 @@ export function LoginPrompt(props: LoginPromptProps): JSX.Element {
         }
     }, [])
 
-    const handleAccessTokenChange = useCallback((event: React.ChangeEvent<HTMLInputElement>): void => {
-        setAccessToken(event.target.value)
+    const handlePairingCodeChange = useCallback((event: React.ChangeEvent<HTMLInputElement>): void => {
+        setPairingCode(
+            event.target.value
+                .replace(/\D/g, '')
+                .slice(0, 6)
+                .replace(/(\d{3})(\d+)/, '$1 $2')
+        )
     }, [])
 
     const handleServerInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>): void => {
@@ -144,46 +187,43 @@ export function LoginPrompt(props: LoginPromptProps): JSX.Element {
         setServerError(null)
     }, [])
 
-    const displayError = error || externalError
+    const hasLoginError = Boolean(externalError)
     const serverSummary = buildServerSummary(server, t('login.server.default'))
     const showServerSettings = Boolean(server.requireServerUrl || server.serverUrl)
     const loginPanel = (
         <div className="viby-login-login-panel">
             <form onSubmit={handleSubmit} autoComplete="off" className="viby-login-login-panel__form">
                 <div className="viby-login-login-panel__header">
-                    <h1 id={ACCESS_TOKEN_TITLE_ID}>{t('login.panel.inputLabel')}</h1>
+                    <h1 id={PAIRING_CODE_TITLE_ID}>{t('login.panel.inputLabel')}</h1>
                 </div>
                 <Input
-                    id={ACCESS_TOKEN_INPUT_NAME}
-                    type="password"
-                    name={ACCESS_TOKEN_INPUT_NAME}
-                    aria-labelledby={ACCESS_TOKEN_TITLE_ID}
-                    value={accessToken}
-                    onChange={handleAccessTokenChange}
+                    id={PAIRING_CODE_INPUT_NAME}
+                    type="text"
+                    name={PAIRING_CODE_INPUT_NAME}
+                    aria-labelledby={PAIRING_CODE_TITLE_ID}
+                    aria-describedby={hasLoginError ? PAIRING_CODE_ERROR_ID : undefined}
+                    aria-invalid={hasLoginError ? true : undefined}
+                    value={pairingCode}
+                    onChange={handlePairingCodeChange}
                     placeholder={t('login.placeholder')}
-                    autoComplete={ACCESS_TOKEN_AUTOCOMPLETE}
+                    autoComplete={PAIRING_CODE_AUTOCOMPLETE}
                     autoCapitalize="none"
                     autoCorrect="off"
                     spellCheck={false}
-                    inputMode="text"
+                    inputMode="numeric"
                     data-1p-ignore="true"
                     data-lpignore="true"
                     disabled={isLoading}
                     className={`${ACCESS_TOKEN_INPUT_CLASS_NAME} viby-login-access-key-input`}
                 />
 
-                {displayError && (
-                    <InlineNotice
-                        tone={loginErrorPreset.tone}
-                        title={loginErrorPreset.title}
-                        description={displayError}
-                        className="text-left"
-                    />
-                )}
+                <span id={PAIRING_CODE_ERROR_ID} className="sr-only">
+                    {externalError || ''}
+                </span>
 
                 <Button
                     type="submit"
-                    disabled={isLoading || !accessToken.trim()}
+                    disabled={isLoading || pairingCode.replace(/\D/g, '').length !== 6}
                     aria-busy={isLoading}
                     size="lg"
                     className="viby-login-submit"
@@ -224,6 +264,8 @@ export function LoginPrompt(props: LoginPromptProps): JSX.Element {
                                         value={serverInput}
                                         onChange={handleServerInputChange}
                                         placeholder={t('login.server.placeholder')}
+                                        aria-describedby={serverError ? HUB_SERVER_ERROR_ID : undefined}
+                                        aria-invalid={serverError ? true : undefined}
                                         className={HUB_INPUT_CLASS_NAME}
                                     />
                                     <div className="ds-login-server-hint text-[var(--app-hint)]">
@@ -231,13 +273,15 @@ export function LoginPrompt(props: LoginPromptProps): JSX.Element {
                                     </div>
                                 </div>
 
-                                {serverError && (
-                                    <InlineNotice
-                                        tone={loginServerErrorPreset.tone}
-                                        title={loginServerErrorPreset.title}
-                                        description={serverError}
-                                    />
-                                )}
+                                {serverError ? (
+                                    <p
+                                        id={HUB_SERVER_ERROR_ID}
+                                        role="alert"
+                                        className="ds-field-error text-xs leading-5"
+                                    >
+                                        {serverError}
+                                    </p>
+                                ) : null}
 
                                 <div className="flex items-center justify-end gap-2">
                                     {server.serverUrl && (

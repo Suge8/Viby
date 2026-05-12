@@ -142,3 +142,75 @@
     font-size: 0.6875rem;
     line-height: 1rem;
 }
+
+.ds-reconnect-notice-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    padding: 0.25rem;
+    border-radius: 999px;
+}
+
+.ds-reconnect-notice-icon-rail {
+    position: relative;
+    width: 1.05rem;
+    height: 0.32rem;
+    border-radius: 999px;
+    overflow: hidden;
+    background: color-mix(in srgb, var(--ds-brand) 16%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ds-brand) 8%, transparent);
+}
+
+.ds-reconnect-notice-icon-fill {
+    position: absolute;
+    inset: 0;
+    width: 38%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, color-mix(in srgb, var(--ds-brand) 80%, transparent), var(--ds-brand));
+    animation: ds-reconnect-notice-fill 1.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+.ds-reconnect-notice-icon-fill::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, #ffffff 55%, transparent) 50%, transparent);
+    transform: translateX(-120%);
+    animation: ds-reconnect-notice-sheen 1.4s ease-in-out infinite;
+}
+
+@keyframes ds-reconnect-notice-fill {
+    0% {
+        transform: translateX(-12%);
+        width: 38%;
+    }
+    65%,
+    100% {
+        transform: translateX(180%);
+        width: 50%;
+    }
+}
+
+@keyframes ds-reconnect-notice-sheen {
+    0% {
+        transform: translateX(-120%);
+    }
+    65%,
+    100% {
+        transform: translateX(220%);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ds-reconnect-notice-icon-fill,
+    .ds-reconnect-notice-icon-fill::after {
+        animation: none;
+        transform: none;
+    }
+    .ds-reconnect-notice-icon-fill {
+        width: 60%;
+    }
+}

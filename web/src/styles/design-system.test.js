@@ -34,6 +34,19 @@ describe('design-system mobile chat route layout', () => {
         expect(css).toContain('text-align: center;')
     })
 
+    it('keeps one native-feel app shell owner for ambient canvas and sessions panes', () => {
+        const css = readDesignSystemCss()
+
+        expect(css).toContain('.app-shell::before')
+        expect(css).toContain('background: var(--ds-canvas);')
+        expect(css).toContain('.app-route-layer')
+        expect(css).toContain('z-index: 1;')
+        expect(css).toContain('.ds-native-sessions-shell')
+        expect(css).toContain('.ds-sessions-list-pane')
+        expect(css).toContain('--ds-native-sidebar:')
+        expect(css).toContain('--ds-native-shadow-strong:')
+    })
+
     it('keeps mobile chat routes on the internal thread viewport while the composer stays fixed', () => {
         const css = readDesignSystemCss()
 

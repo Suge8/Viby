@@ -19,6 +19,16 @@ describe('useAuthSource', () => {
         })
     })
 
+    it('ignores URL token query secrets', () => {
+        window.history.replaceState(null, '', '/?token=url-token')
+
+        const { result } = renderHook(() => useAuthSource('https://hub-a.test'))
+
+        expect(result.current.authSource).toBeNull()
+        expect(window.location.search).toBe('')
+        expect(window.localStorage.getItem('viby_access_token::https://hub-a.test')).toBeNull()
+    })
+
     it('switches to the next baseUrl source immediately on rerender', () => {
         window.localStorage.setItem('viby_access_token::https://hub-a.test', 'token-a')
         window.localStorage.setItem('viby_access_token::https://hub-b.test', 'token-b')

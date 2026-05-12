@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { authenticateWithAccessToken } from '@/api/authClient'
+import { authenticateWithAccessToken, authenticateWithDevice, authenticateWithPairingCode } from '@/api/authClient'
 import type { ApiClient } from '@/api/client'
+import { resolveClientPlatform } from '@/lib/clientPlatform'
 import { subscribeForegroundPulse } from '@/lib/foregroundPulse'
 import type { AuthResponse } from '@/types/api'
 import {
@@ -12,7 +13,10 @@ import {
     writeStoredSessionToken,
 } from './authSessionToken'
 
-export type AuthSource = { type: 'accessToken'; token: string }
+export type AuthSource =
+    | { type: 'accessToken'; token: string }
+    | { type: 'pairingCode'; code: string }
+    | { type: 'device'; deviceId: string; secret: string }
 
 const SESSION_REFRESH_DEBOUNCE_MS = 15_000
 const SESSION_REFRESH_RETRY_MS = 15_000
@@ -94,7 +98,13 @@ export function useAuth(
                 lastRefreshAttemptRef.current = now
 
                 try {
-                    const auth = await authenticateWithAccessToken(baseUrl, source.token)
+                    const platform = resolveClientPlatform()
+                    const auth =
+                        source.type === 'pairingCode'
+                            ? await authenticateWithPairingCode(baseUrl, source.code, { platform })
+                            : source.type === 'device'
+                              ? await authenticateWithDevice(baseUrl, source.deviceId, source.secret)
+                              : await authenticateWithAccessToken(baseUrl, source.token, { platform })
                     tokenRef.current = auth.token
                     setToken(auth.token)
                     setUser(auth.user)

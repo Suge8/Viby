@@ -1,14 +1,15 @@
 import { useCallback, useMemo, useState } from 'react'
 import { readBrowserStorageItem, removeBrowserStorageItem, writeBrowserStorageItem } from '@/lib/browserStorage'
 import { type BrowserLocalStorageKey, getAccessTokenStorageKey } from '@/lib/storage/storageRegistry'
+import { clearStoredDeviceBinding, readStoredDeviceBinding } from './deviceBindingStorage'
 import type { AuthSource } from './useAuth'
 
-function getTokenFromUrlParams(): string | null {
-    if (typeof window === 'undefined') {
-        return null
-    }
-    const query = new URLSearchParams(window.location.search)
-    return query.get('token')
+function removeTokenFromUrlParams(): void {
+    if (typeof window === 'undefined') return
+    const url = new URL(window.location.href)
+    if (!url.searchParams.has('token')) return
+    url.searchParams.delete('token')
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
 }
 
 function readStoredAccessToken(key: BrowserLocalStorageKey): string | null {
@@ -24,18 +25,12 @@ function clearStoredAccessToken(key: BrowserLocalStorageKey): void {
 }
 
 function resolveAuthSource(accessTokenKey: BrowserLocalStorageKey): AuthSource | null {
-    const urlToken = getTokenFromUrlParams()
-    if (urlToken) {
-        writeStoredAccessToken(accessTokenKey, urlToken)
-        return { type: 'accessToken', token: urlToken }
-    }
+    removeTokenFromUrlParams()
+    const storedDevice = readStoredDeviceBinding(accessTokenKey)
+    if (storedDevice) return { type: 'device', ...storedDevice }
 
     const storedToken = readStoredAccessToken(accessTokenKey)
-    if (storedToken) {
-        return { type: 'accessToken', token: storedToken }
-    }
-
-    return null
+    return storedToken ? { type: 'accessToken', token: storedToken } : null
 }
 
 type AuthSourceState = {
@@ -52,19 +47,19 @@ function createAuthSourceState(accessTokenKey: BrowserLocalStorageKey): AuthSour
 
 export function useAuthSource(baseUrl: string): {
     authSource: AuthSource | null
-    setAccessToken: (token: string) => void
+    setPairingCode: (code: string) => void
     clearAuth: () => void
 } {
     const accessTokenKey = useMemo(() => getAccessTokenStorageKey(baseUrl), [baseUrl])
     const [state, setState] = useState<AuthSourceState>(() => createAuthSourceState(accessTokenKey))
     const authSource = state.accessTokenKey === accessTokenKey ? state.authSource : resolveAuthSource(accessTokenKey)
 
-    const setAccessToken = useCallback(
-        (token: string) => {
-            writeStoredAccessToken(accessTokenKey, token)
+    const setPairingCode = useCallback(
+        (code: string) => {
+            clearStoredAccessToken(accessTokenKey)
             setState({
                 accessTokenKey,
-                authSource: { type: 'accessToken', token },
+                authSource: { type: 'pairingCode', code },
             })
         },
         [accessTokenKey]
@@ -72,6 +67,7 @@ export function useAuthSource(baseUrl: string): {
 
     const clearAuth = useCallback(() => {
         clearStoredAccessToken(accessTokenKey)
+        clearStoredDeviceBinding(accessTokenKey)
         setState({
             accessTokenKey,
             authSource: null,
@@ -80,7 +76,7 @@ export function useAuthSource(baseUrl: string): {
 
     return {
         authSource,
-        setAccessToken,
+        setPairingCode,
         clearAuth,
     }
 }

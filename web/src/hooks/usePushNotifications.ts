@@ -3,6 +3,7 @@ import type { ApiClient } from '@/api/client'
 import { subscribeForegroundPulse } from '@/lib/foregroundPulse'
 import { shouldRegisterServiceWorkerForOrigin } from '@/lib/runtimeAssetPolicy'
 import { reportWebRuntimeError } from '@/lib/runtimeDiagnostics'
+import { waitForRuntimeServiceWorkerRegistration } from '@/lib/runtimeServiceWorkerRegistration'
 
 export type PushNotificationsError =
     | 'permission-blocked'
@@ -14,6 +15,7 @@ export type PushNotificationsError =
 function isPushSupported(): boolean {
     return (
         typeof window !== 'undefined' &&
+        import.meta.env.PROD &&
         shouldRegisterServiceWorkerForOrigin(window.location.origin) &&
         'serviceWorker' in navigator &&
         'PushManager' in window &&
@@ -64,7 +66,16 @@ async function getPushRegistration(): Promise<ServiceWorkerRegistration | null> 
         return null
     }
 
-    return (await navigator.serviceWorker.getRegistration()) ?? null
+    const registration = await navigator.serviceWorker.getRegistration()
+    if (registration) return registration
+
+    const bootRegistration = await waitForRuntimeServiceWorkerRegistration()
+    if (!bootRegistration) return null
+
+    const serviceWorker = navigator.serviceWorker as ServiceWorkerContainer & {
+        ready?: Promise<ServiceWorkerRegistration>
+    }
+    return serviceWorker.ready ? await serviceWorker.ready : bootRegistration
 }
 
 export function usePushNotifications(api: ApiClient | null) {

@@ -9,7 +9,11 @@ vi.mock('@/hooks/useFinalizeBootShell', () => ({
 }))
 
 vi.mock('@/api/authClient', () => ({
-    authenticateWithAccessToken: vi.fn(),
+    authenticateWithPairingCode: vi.fn(),
+}))
+
+vi.mock('@/lib/notice-center', () => ({
+    useNoticeCenter: () => ({ addToast: vi.fn() }),
 }))
 
 function createServerConfig(): LoginPromptServerConfig {
@@ -46,7 +50,9 @@ describe('LoginPrompt', () => {
         expect(screen.queryByText('Agent 留在你的机器上。')).not.toBeInTheDocument()
         expect(screen.queryByText(/Vibe Coding/)).not.toBeInTheDocument()
         expect(screen.queryByRole('link', { name: '查看 GitHub 项目' })).not.toBeInTheDocument()
-        expect(screen.getByLabelText('访问密钥')).toBeInTheDocument()
+        expect(screen.queryByText('Viby')).not.toBeInTheDocument()
+        expect(screen.queryByText('电脑配对码')).not.toBeInTheDocument()
+        expect(screen.getByLabelText('输入配对码')).toBeInTheDocument()
         expect(screen.getByRole('button', { name: '进入' })).toBeInTheDocument()
         expect(screen.queryByRole('button', { name: /Hub/ })).not.toBeInTheDocument()
     })

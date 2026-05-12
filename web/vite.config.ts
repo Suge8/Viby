@@ -123,6 +123,11 @@ export default defineConfig({
     },
     plugins: [
         react(),
+        // The manifest link in dist/index.html is patched in
+        // `scripts/finalizeInjectManifest.ts` to add
+        // `crossorigin="use-credentials"` after vite-plugin-pwa runs, since
+        // any `transformIndexHtml` hook here would be overwritten by the
+        // plugin's own injection step.
         VitePWA({
             registerType: 'autoUpdate',
             includeAssets: ['favicon.ico', 'apple-touch-icon-180x180.png', 'mask-icon.svg'],
@@ -185,6 +190,7 @@ export default defineConfig({
             { find: '@', replacement: resolve(__dirname, 'src') },
             { find: '@viby/protocol/messages', replacement: resolveProtocolModule('messages.ts') },
             { find: '@viby/protocol/modes', replacement: resolveProtocolModule('modes.ts') },
+            { find: '@viby/protocol/deviceAuth', replacement: resolveProtocolModule('deviceAuth.ts') },
             { find: '@viby/protocol/pairing', replacement: resolveProtocolModule('pairing/index.ts') },
             { find: '@viby/protocol/schemas', replacement: resolveProtocolModule('schemas.ts') },
             { find: '@viby/protocol/types', replacement: resolveProtocolModule('types.ts') },
