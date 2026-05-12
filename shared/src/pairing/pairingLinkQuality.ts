@@ -3,7 +3,7 @@ export type PairingLinkTone = 'success' | 'warning' | 'neutral'
 export type PairingDeviceLinkTone = PairingLinkTone | 'danger'
 export type PairingLinkLatencyTier = 'fast' | 'steady' | 'slow' | 'unknown'
 export type PairingDeviceChannel = 'local' | 'link' | 'scan'
-export type PairingDeviceLinkBridgePhase = 'idle' | 'connecting' | 'paused' | 'ready' | 'error'
+export type PairingDeviceLinkBridgePhase = 'connecting' | 'ready' | 'fatal'
 export type PairingDeviceLinkPhase =
     | 'direct'
     | 'relay'
@@ -260,12 +260,8 @@ function buildLiveDeviceLinkStatus(bridge: PairingDeviceLinkBridgeInput): Pairin
             return buildReadyDeviceLinkStatus(bridge.stats)
         case 'connecting':
             return { phase: 'handshaking', title: '正在握手', tone: 'neutral', latencyMs: null }
-        case 'paused':
-            return { phase: 'paused', title: '等待回连', tone: 'warning', latencyMs: null }
-        case 'error':
+        case 'fatal':
             return { phase: 'failed', title: '链路异常', tone: 'danger', latencyMs: null }
-        case 'idle':
-            return null
     }
 }
 

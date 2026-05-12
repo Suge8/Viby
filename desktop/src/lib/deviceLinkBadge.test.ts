@@ -118,13 +118,7 @@ describe('buildDeviceLinkStatus', () => {
             title: '正在握手',
         })
 
-        const paused = buildDeviceLinkSnapshot(bridgeState({ phase: 'paused' }))
-        expect(buildDeviceLinkStatus(pairingDevice(), paused)).toMatchObject({
-            phase: 'paused',
-            title: '等待回连',
-        })
-
-        const failed = buildDeviceLinkSnapshot(bridgeState({ phase: 'error' }))
+        const failed = buildDeviceLinkSnapshot(bridgeState({ phase: 'fatal' }))
         expect(buildDeviceLinkStatus(pairingDevice(), failed)).toMatchObject({
             phase: 'failed',
             title: '链路异常',

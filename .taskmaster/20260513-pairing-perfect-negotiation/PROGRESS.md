@@ -15,17 +15,17 @@
 
 > Resume from here after compaction / restart.
 
-- **Current milestone**: #5 — Phase E Desktop Bridge Rewrite
-- **Current status**: Phase D DONE；Phase E TODO
-- **Last completed**: #4 Phase D Broker Forwarder
-- **Current artifact**: `pairing/src/ws.ts`
+- **Current milestone**: #6 — Phase F Web RemotePeerSession
+- **Current status**: Phase E DONE；Phase F TODO
+- **Last completed**: #5 Phase E Desktop Bridge Rewrite
+- **Current artifact**: `desktop/src/lib/pairingBridgeController.ts`
 - **Claimed by**: `none`
 - **Lease until**: `none`
 - **Write scope**: `none`
 - **Handoff**: `none`
-- **Key context**: Phase D broker is raw forwarder only (`description/candidate/bye`), `ws.ts` 118 lines. Store no longer tracks websocket online state. Shared session schema now accepts `active` and legacy states; `migrateLegacyState()` maps `waiting/claimed/connected` to `active`.
+- **Key context**: Phase E desktop bridge now uses shared `createPairingTransport`; counted bridge runtime files total 200 lines. RPC owner files renamed to `pairingPeer*`. Desktop bridge phase is `connecting | ready | fatal`. RM1/RM3/RM4/RM7/RM8 deferred to Phase K bulk run.
 - **Known issues**: 真机回归矩阵需要 iPhone Safari + 桌面端联调；自动化只是保底。D/E/F 发布必须协调 staging 24h burn-in。
-- **Next action**: 取 row 5 (`tasks/05-desktop-bridge`)，desktop bridge 切到 shared transport；D/E/F 仍不得单独 prod 部署，等 E+F 后 staging burn-in。
+- **Next action**: 取 row 6 (`tasks/06-web-peer-session`)，Web guest 切到 shared transport；D/E/F 仍不得单独 prod 部署，等 F 后 staging burn-in。
 
 ---
 
@@ -153,4 +153,14 @@
 - Added `wsForwarder.test.ts`; updated websocket/redis tests for active-state broker.
 - Validation: `bun run --cwd pairing typecheck`; `bun run --cwd pairing test`; line/grep guards ✅
 - Real-device RM: D/E/F staging burn-in deferred until E+F complete; no prod deploy.
+- Commit: pending.
+
+## Phase E Complete — 2026-05-12T20:05:00Z
+
+- Desktop bridge now runs on shared `createPairingTransport`; lifecycle files counted by guard total 200 lines.
+- Removed legacy rebuild/ready/peer-left/signal socket/candidate queue/ICE recovery helpers.
+- Renamed RPC owner files to `pairingPeer*` and updated tests/imports.
+- Collapsed desktop bridge phase to `connecting | ready | fatal`; updated UI/link badge projections.
+- Validation: desktop typecheck/test; shared typecheck/link-quality focused test; line/grep guards ✅
+- Real-device RM: RM1/RM3/RM4/RM7/RM8 deferred to Phase K bulk run.
 - Commit: pending.

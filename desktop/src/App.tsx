@@ -40,7 +40,7 @@ import { buildEntryPreviewModel } from '@/lib/entryMode'
 import { deriveHubViewState } from '@/lib/hubSnapshot'
 import { buildLanEntryQrModel } from '@/lib/lanEntryQr'
 
-const IDLE_BRIDGE_STATE_PHASE = 'idle' as const
+const IDLE_BRIDGE_STATE_PHASE = 'connecting' as const
 
 export function App(): JSX.Element {
     const hub = useHubController()

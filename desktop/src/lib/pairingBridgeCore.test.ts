@@ -5,7 +5,7 @@ import {
     isPairingHeartbeat,
     parsePairingPeerRequest,
     serializePairingSyncEvent,
-} from './pairingBridgeCore'
+} from './pairingPeerRpcCore'
 
 describe('pairingBridgeCore', () => {
     it('maps session list requests onto the narrow remote summary contract', async () => {

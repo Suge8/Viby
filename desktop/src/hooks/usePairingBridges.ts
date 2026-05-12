@@ -12,7 +12,7 @@ import type { DesktopPairingSession, HubRuntimeStatus, PairingBridgeState } from
  * actually disappeared.
  */
 const IDLE_BRIDGE_STATE: PairingBridgeState = {
-    phase: 'idle',
+    phase: 'connecting',
     message: null,
     pairing: null,
     stats: null,

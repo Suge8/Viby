@@ -10,7 +10,7 @@ import {
     PairingPeerUploadResultSchema,
 } from '@viby/protocol/pairing'
 import type { LocalHubPairingClient } from './localHubPairingClient'
-import { successResponse } from './pairingBridgeResponseSupport'
+import { successResponse } from './pairingPeerResponseSupport'
 
 export async function executePairingPeerPeripheralRequest(
     client: LocalHubPairingClient,

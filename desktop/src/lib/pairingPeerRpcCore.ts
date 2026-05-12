@@ -38,8 +38,8 @@ import {
 } from '@viby/protocol/pairing'
 import type { SyncEvent } from '@viby/protocol/types'
 import type { LocalHubPairingClient } from './localHubPairingClient'
-import { executePairingPeerPeripheralRequest } from './pairingBridgePeripheralRequests'
-import { errorResponse, successResponse, toRemoteSessionSummary } from './pairingBridgeResponseSupport'
+import { executePairingPeerPeripheralRequest } from './pairingPeerPeripheralRequests'
+import { errorResponse, successResponse, toRemoteSessionSummary } from './pairingPeerResponseSupport'
 export function serializePairingPeerMessage(message: PairingPeerMessage | PairingPeerResponse): string {
     return JSON.stringify(PairingPeerMessageSchema.parse(message))
 }

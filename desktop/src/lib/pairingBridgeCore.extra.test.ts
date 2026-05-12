@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import type { PairingPeerRequest } from '@viby/protocol/pairing'
-import { executePairingPeerRequest, parsePairingPeerRequest, serializePairingPeerMessage } from './pairingBridgeCore'
+import { executePairingPeerRequest, parsePairingPeerRequest, serializePairingPeerMessage } from './pairingPeerRpcCore'
 
 function parseRequest(payload: PairingPeerRequest) {
     return parsePairingPeerRequest(JSON.stringify(payload))

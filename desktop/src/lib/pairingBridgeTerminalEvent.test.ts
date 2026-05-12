@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { serializePairingTerminalEvent } from './pairingBridgeCore'
+import { serializePairingTerminalEvent } from './pairingPeerRpcCore'
 
 describe('serializePairingTerminalEvent', () => {
     it('serializes terminal ready events through the shared peer envelope', () => {

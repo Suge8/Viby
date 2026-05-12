@@ -48,7 +48,7 @@ describe('buildPairingDeviceLinkStatus', () => {
         ).toEqual({ phase: 'measuring', title: '已连接', tone: 'success', latencyMs: null })
     })
 
-    it('surfaces handshake, paused, and failed lifecycle states from the bridge', () => {
+    it('surfaces handshake and failed lifecycle states from the bridge', () => {
         expect(
             buildPairingDeviceLinkStatus({
                 channel: 'scan',
@@ -61,15 +61,7 @@ describe('buildPairingDeviceLinkStatus', () => {
             buildPairingDeviceLinkStatus({
                 channel: 'scan',
                 active: true,
-                bridge: { phase: 'paused', stats: null },
-            })
-        ).toEqual({ phase: 'paused', title: '等待回连', tone: 'warning', latencyMs: null })
-
-        expect(
-            buildPairingDeviceLinkStatus({
-                channel: 'scan',
-                active: true,
-                bridge: { phase: 'error', stats: null },
+                bridge: { phase: 'fatal', stats: null },
             })
         ).toEqual({ phase: 'failed', title: '链路异常', tone: 'danger', latencyMs: null })
     })
@@ -100,15 +92,7 @@ describe('buildPairingDeviceLinkStatus', () => {
         ).toEqual({ phase: 'handshaking', title: '正在重选点对点路径', tone: 'neutral', latencyMs: null })
     })
 
-    it('falls back to channel labels when the bridge is idle or absent', () => {
-        expect(
-            buildPairingDeviceLinkStatus({
-                channel: 'scan',
-                active: true,
-                bridge: { phase: 'idle', stats: null },
-            })
-        ).toEqual({ phase: 'public', title: '公网', tone: 'success', latencyMs: null })
-
+    it('falls back to channel labels when the bridge is absent', () => {
         expect(buildPairingDeviceLinkStatus({ channel: 'scan', active: false, bridge: null })).toEqual({
             phase: 'public',
             title: '公网',

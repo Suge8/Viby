@@ -81,7 +81,7 @@ export interface PairingBridgeStats {
 }
 
 export interface PairingBridgeState {
-    phase: 'idle' | 'connecting' | 'paused' | 'ready' | 'error'
+    phase: 'connecting' | 'ready' | 'fatal'
     message: string | null
     pairing: PairingSessionSnapshot | null
     stats?: PairingBridgeStats | null
