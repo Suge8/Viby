@@ -1,23 +1,11 @@
 import chalk from 'chalk'
-import type { CommandDefinition, CommandContext } from './types'
+import { runHubProcess } from '../../../hub/src/runtime/runProcess'
+import { printCliAccessSummary } from './hubAccessSummary'
+import { applyHubFlagsToEnv, HubFlagError, parseHubFlags } from './hubFlags'
+import type { CommandContext, CommandDefinition } from './types'
 
-function parseHubArgs(args: string[]): { host?: string; port?: string } {
-    const result: { host?: string; port?: string } = {}
-
-    for (let i = 0; i < args.length; i++) {
-        const arg = args[i]
-        if (arg === '--host' && i + 1 < args.length) {
-            result.host = args[++i]
-        } else if (arg === '--port' && i + 1 < args.length) {
-            result.port = args[++i]
-        } else if (arg.startsWith('--host=')) {
-            result.host = arg.slice('--host='.length)
-        } else if (arg.startsWith('--port=')) {
-            result.port = arg.slice('--port='.length)
-        }
-    }
-
-    return result
+function isFromDesktop(): boolean {
+    return process.env.VIBY_LAUNCH_SOURCE === 'desktop'
 }
 
 export const hubCommand: CommandDefinition = {
@@ -25,21 +13,26 @@ export const hubCommand: CommandDefinition = {
     requiresRuntimeAssets: true,
     run: async (context: CommandContext) => {
         try {
-            const { host, port } = parseHubArgs(context.commandArgs)
+            const flags = parseHubFlags(context.commandArgs)
+            applyHubFlagsToEnv(flags)
 
-            if (host) {
-                process.env.VIBY_LISTEN_HOST = host
-            }
-            if (port) {
-                process.env.VIBY_LISTEN_PORT = port
-            }
-            await import('../../../hub/src/index')
+            await runHubProcess({
+                onReady: async (status) => {
+                    if (isFromDesktop()) return
+                    await printCliAccessSummary(status)
+                },
+            })
         } catch (error) {
+            if (error instanceof HubFlagError) {
+                console.error(chalk.red('Error:'), error.message)
+                console.error(chalk.gray('Run `viby help` to see available flags.'))
+                process.exit(1)
+            }
             console.error(chalk.red('Error:'), error instanceof Error ? error.message : 'Unknown error')
             if (process.env.DEBUG) {
                 console.error(error)
             }
             process.exit(1)
         }
-    }
+    },
 }

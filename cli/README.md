@@ -14,13 +14,19 @@
 ## 常用命令
 
 ```bash
-viby hub
+viby hub                启动中枢（默认 0.0.0.0 + 公网配对开启）
+viby hub --local        仅监听 127.0.0.1（不暴露局域网）
+viby hub --lan          监听 0.0.0.0（局域网 + 本机）
+viby hub --no-public    关闭公网配对 broker
+viby hub --host/--port  覆盖绑定地址或端口
 viby mcp
 viby auth login
 viby auth status
 viby doctor
 viby runner status
 ```
+
+`viby hub` 启动 ready 后会打印当前可用入口：本机 URL、局域网 URL（带终端二维码）、公网配对状态。`--local / --lan / --public / --no-public` 标志映射到环境变量 `VIBY_LISTEN_HOST / VIBY_PUBLIC_ACCESS_ENABLED`，由 `settings.toml` 统一持久化。
 
 ## 产品边界
 

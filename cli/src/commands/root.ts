@@ -8,7 +8,12 @@ function printRootHelp(): void {
 ${chalk.bold('viby')} - hub-first AI coding agent control
 
 ${chalk.bold('Usage:')}
-  viby hub               Start the hub
+  viby hub               Start the hub (binds 0.0.0.0 + public broker by default)
+  viby hub --local       Bind 127.0.0.1 only (no LAN exposure)
+  viby hub --lan         Bind 0.0.0.0 (LAN + local)
+  viby hub --no-public   Disable public pairing broker
+  viby hub --host <h>    Override bind host
+  viby hub --port <p>    Override bind port
   viby auth status       Show current auth configuration
   viby auth login        Save CLI_API_TOKEN locally
   viby auth logout       Clear saved credentials
