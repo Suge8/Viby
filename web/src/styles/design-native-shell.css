@@ -1,0 +1,149 @@
+.app-shell {
+    isolation: isolate;
+    overflow: hidden;
+    background: var(--ds-canvas);
+}
+
+.app-shell::before {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    content: "";
+    background:
+        var(--ds-canvas-ambient), linear-gradient(var(--ds-native-grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--ds-native-grid) 1px, transparent 1px);
+    background-size:
+        auto,
+        72px 72px,
+        72px 72px;
+    opacity: 0.82;
+}
+
+.app-route-layer {
+    position: relative;
+    z-index: 1;
+}
+
+.ds-native-sessions-shell {
+    background: transparent;
+}
+
+.ds-sessions-list-pane {
+    background: var(--ds-canvas);
+}
+
+.ds-sessions-detail-pane {
+    background: transparent;
+}
+
+.ds-session-route-page-surface {
+    background: var(--app-bg);
+}
+
+.ds-sessions-shell-header {
+    background: color-mix(in srgb, var(--ds-panel-strong) 78%, transparent);
+    -webkit-backdrop-filter: blur(18px);
+    backdrop-filter: blur(18px);
+}
+
+.ds-sessions-shell-header-row {
+    min-height: 3.125rem;
+}
+
+.ds-session-list-native-controls {
+    border-color: color-mix(in srgb, var(--ds-border-default) 78%, transparent);
+    background: color-mix(in srgb, var(--ds-panel-strong) 74%, transparent);
+    box-shadow: var(--ds-shadow-soft);
+    -webkit-backdrop-filter: blur(18px);
+    backdrop-filter: blur(18px);
+}
+
+.session-list-item,
+.ds-session-list-new-button {
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+}
+
+.ds-message-surface-user {
+    background:
+        radial-gradient(circle at 80% 0%, color-mix(in srgb, var(--ds-accent-lime) 18%, transparent), transparent 38%),
+        linear-gradient(
+            135deg,
+            color-mix(in srgb, var(--ds-brand) 20%, var(--ds-panel-strong)) 0%,
+            color-mix(in srgb, var(--ds-brand) 12%, var(--ds-panel-strong)) 100%
+        );
+}
+
+@media (min-width: 1024px) {
+    .ds-native-sessions-shell {
+        background: transparent;
+    }
+
+    .ds-sessions-list-pane {
+        border-right: 1px solid var(--ds-native-separator);
+        background:
+            radial-gradient(
+                circle at 22% 0%,
+                color-mix(in srgb, var(--ds-accent-gold) 11%, transparent),
+                transparent 32%
+            ),
+            linear-gradient(
+                180deg,
+                var(--ds-native-sidebar),
+                color-mix(in srgb, var(--ds-native-sidebar) 88%, var(--ds-canvas))
+            );
+        box-shadow: 14px 0 44px rgba(31, 27, 20, 0.06);
+    }
+
+    .ds-sessions-list-pane::before {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        content: "";
+        background:
+            linear-gradient(var(--ds-native-grid) 1px, transparent 1px),
+            linear-gradient(90deg, var(--ds-native-grid) 1px, transparent 1px);
+        background-size: 64px 64px;
+        opacity: 0.42;
+    }
+
+    .ds-sessions-list-pane > * {
+        position: relative;
+        z-index: 1;
+    }
+
+    .ds-sessions-shell-header {
+        background: transparent;
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+    }
+
+    .ds-session-route-page-surface,
+    .session-chat-page {
+        background: transparent;
+    }
+
+    .ds-surface-route-header {
+        background: color-mix(in srgb, var(--ds-canvas) 72%, transparent);
+        -webkit-backdrop-filter: blur(18px);
+        backdrop-filter: blur(18px);
+    }
+
+    .ds-composer-surface {
+        border-color: color-mix(in srgb, var(--ds-border-default) 72%, transparent);
+        box-shadow: var(--ds-native-shadow-strong);
+    }
+}
+
+@media (max-width: 767px) {
+    .app-shell[data-viby-route="session-chat"]::before {
+        opacity: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .app-shell::before {
+        background: var(--ds-canvas-ambient);
+    }
+}
