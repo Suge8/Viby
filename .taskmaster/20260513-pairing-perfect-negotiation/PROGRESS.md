@@ -15,17 +15,17 @@
 
 > Resume from here after compaction / restart.
 
-- **Current milestone**: #3 — Phase C Pairing Transport
-- **Current status**: Phase B DONE；Phase C TODO
-- **Last completed**: #2 Phase B PerfectNegotiation engine
-- **Current artifact**: `shared/src/pairing/perfectNegotiation.ts`
+- **Current milestone**: #4 — Phase D Broker Forwarder
+- **Current status**: Phase C DONE；Phase D TODO
+- **Last completed**: #3 Phase C Pairing Transport
+- **Current artifact**: `shared/src/pairing/pairingTransport.ts`
 - **Claimed by**: `none`
 - **Lease until**: `none`
 - **Write scope**: `none`
 - **Handoff**: `none`
-- **Key context**: Phase B added an 80-line event-driven perfect-negotiation engine using explicit `createOffer/createAnswer + setLocalDescription(desc)`. It does not call transport recovery APIs and does not listen to connection/ICE state events. Phase A V2 signal contract remains additive.
+- **Key context**: Phase C added shared `createPairingTransport` (177 lines): stable external-store snapshot, `untilReady`, wakeable reconnect backoff, V2 signal socket, and transport-owned ICE restart/foreground hooks. Existing desktop/web legacy restartIce remains for later E/F cleanup per plan.
 - **Known issues**: 真机回归矩阵需要 iPhone Safari + 桌面端联调；自动化只是保底。D/E/F 发布必须协调 staging 24h burn-in。
-- **Next action**: 取 row 3 (`tasks/03-pairing-transport`)，实现 shared createPairingTransport；ICE recovery/foreground hooks belong there.
+- **Next action**: 取 row 4 (`tasks/04-broker-forwarder`)，forwarder 化 broker；D/E/F 是协调发布单元，Phase D 完成后不得单独 prod 部署。
 
 ---
 
@@ -126,4 +126,13 @@
 - Exported engine from `shared/src/pairing/index.ts`.
 - Validation: `bun run --cwd shared typecheck`; grep guard for transport recovery terms empty; `bun run --cwd shared test -t perfectNegotiation` ✅
 - Real-device RM: not applicable for Phase B.
+- Commit: pending.
+
+## Phase C Complete — 2026-05-12T18:45:00Z
+
+- Added `shared/src/pairing/pairingTransport.ts` long-lived peer + short-lived socket transport (177 lines).
+- Added `shared/src/pairing/pairingTransport.test.ts` for store contract, untilReady, reconnect/backoff, foreground wake, ICE restart ownership, bye fatal, getWsUrl retry, guest datachannel event.
+- Exported transport from `shared/src/pairing/index.ts`.
+- Validation: `bun run --cwd shared typecheck`; `bun run --cwd shared test -t pairingTransport`; line count 177 ✅
+- Real-device RM: not applicable for Phase C.
 - Commit: pending.
