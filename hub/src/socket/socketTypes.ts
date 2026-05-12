@@ -3,6 +3,7 @@ import type { DefaultEventsMap, Server, Socket } from 'socket.io'
 
 export type SocketData = {
     userId?: number
+    deviceId?: string
     webSubscription?: {
         all: boolean
         sessionId: string | null

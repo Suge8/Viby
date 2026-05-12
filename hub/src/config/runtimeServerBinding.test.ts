@@ -4,7 +4,7 @@ import { createServer, type Server } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { parseVibyLocalSettingsToml } from '@viby/protocol/localSettings'
-import { findAvailablePort, isAddressInUseError, persistResolvedListenPort } from './runtimeServerBinding'
+import { findAvailablePort, isAddressInUseError, resolveFallbackRuntimePublicUrl } from './runtimeServerBinding'
 
 const tempDirs: string[] = []
 const servers: Server[] = []
@@ -73,7 +73,7 @@ async function bindRandomServer(): Promise<number> {
 }
 
 describe('runtimeServerBinding', () => {
-    it('finds a new port and persists the resolved listen port', async () => {
+    it('finds a new port and keeps fallback port runtime-only', async () => {
         const occupiedPort = await bindRandomServer()
         const dataDir = await mkdtemp(join(tmpdir(), 'viby-runtime-binding-'))
         tempDirs.push(dataDir)
@@ -84,7 +84,7 @@ describe('runtimeServerBinding', () => {
         const fallbackPort = await findAvailablePort('127.0.0.1')
         expect(fallbackPort).not.toBe(occupiedPort)
 
-        const preferredBrowserUrl = await persistResolvedListenPort({
+        const preferredBrowserUrl = await resolveFallbackRuntimePublicUrl({
             dataDir,
             listenHost: '127.0.0.1',
             previousPort: occupiedPort,
@@ -92,9 +92,9 @@ describe('runtimeServerBinding', () => {
         })
 
         const persisted = parseVibyLocalSettingsToml(await Bun.file(settingsFile).text())
-        expect(persisted.listenPort).toBe(fallbackPort)
-        expect(persisted.apiUrl).toBe(`http://127.0.0.1:${fallbackPort}`)
-        expect(persisted.publicUrl).toBe(`http://127.0.0.1:${fallbackPort}`)
+        expect(persisted.listenPort).toBe(occupiedPort)
+        expect(persisted.apiUrl).toBe(`http://localhost:${occupiedPort}`)
+        expect(persisted.publicUrl).toBe(`http://localhost:${occupiedPort}`)
         expect(preferredBrowserUrl).toBe(`http://127.0.0.1:${fallbackPort}`)
     })
 
@@ -107,7 +107,7 @@ describe('runtimeServerBinding', () => {
         await writeFile(settingsFile, createSettingsToml(occupiedPort, 'https://hub.example.test'))
 
         const fallbackPort = await findAvailablePort('127.0.0.1')
-        const preferredBrowserUrl = await persistResolvedListenPort({
+        const preferredBrowserUrl = await resolveFallbackRuntimePublicUrl({
             dataDir,
             listenHost: '127.0.0.1',
             previousPort: occupiedPort,
@@ -115,7 +115,8 @@ describe('runtimeServerBinding', () => {
         })
 
         const persisted = parseVibyLocalSettingsToml(await Bun.file(settingsFile).text())
-        expect(persisted.apiUrl).toBe(`http://127.0.0.1:${fallbackPort}`)
+        expect(persisted.listenPort).toBe(occupiedPort)
+        expect(persisted.apiUrl).toBe(`http://localhost:${occupiedPort}`)
         expect(persisted.publicUrl).toBe('https://hub.example.test')
         expect(preferredBrowserUrl).toBe('https://hub.example.test')
     })

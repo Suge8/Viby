@@ -42,9 +42,12 @@ export class StoreSchemaManager {
         this.migrationSupport.assertRequiredTablesPresent()
         this.migrationSupport.ensureSessionConfigColumns()
         this.migrationSupport.ensureMessageInvocationColumns()
+        this.migrationSupport.ensureDeviceAuthColumns()
         this.migrationSupport.assertRequiredSessionColumnsPresent()
         this.migrationSupport.assertRequiredMessageColumnsPresent()
     }
+
+    private static readonly PRESENCE_PURGE_FROM_VERSION = 20
 
     private getUserVersion(): number {
         const row = this.db.prepare('PRAGMA user_version').get() as { user_version: number } | undefined
@@ -75,7 +78,11 @@ export class StoreSchemaManager {
         try {
             createStoreSchema(this.db)
             this.migrationSupport.ensureMessageInvocationColumns()
+            this.migrationSupport.ensureDeviceAuthColumns()
             this.migrationSupport.normalizeLegacySessionMetadataContracts()
+            if (currentVersion < StoreSchemaManager.PRESENCE_PURGE_FROM_VERSION) {
+                this.migrationSupport.purgeLegacyDeviceAuthRows()
+            }
             this.setUserVersion(SCHEMA_VERSION)
             this.db.exec('COMMIT')
         } catch (error) {

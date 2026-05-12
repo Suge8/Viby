@@ -9,6 +9,7 @@ import { SessionStreamManager } from '../sync/sessionStreamManager'
 import type { SyncEvent } from '../sync/syncEngine'
 import { parseAccessToken } from '../utils/accessToken'
 import { constantTimeEquals } from '../utils/crypto'
+import { DevicePresenceTracker } from './devicePresence'
 import { registerCliHandlers } from './handlers/cli'
 import { registerTerminalHandlers } from './handlers/terminal'
 import { registerWebHandlers } from './handlers/web'
@@ -19,6 +20,7 @@ import { WebRealtimeManager } from './webRealtimeManager'
 
 const jwtPayloadSchema = z.object({
     uid: z.number(),
+    did: z.string().min(1).max(200).optional(),
 })
 
 const DEFAULT_IDLE_TIMEOUT_MS = 15 * 60_000
@@ -109,6 +111,7 @@ export function createSocketServer(deps: SocketServerDeps): {
     engine: Engine
     rpcRegistry: RpcRegistry
     webRealtimeManager: WebRealtimeManager
+    devicePresence: DevicePresenceTracker
 } {
     const corsOrigins = deps.corsOrigins ?? configuration.corsOrigins
     const allowAllOrigins = corsOrigins.includes('*')
@@ -158,6 +161,7 @@ export function createSocketServer(deps: SocketServerDeps): {
     const terminalNs = io.of('/terminal')
     const webNs = io.of('/web')
     const sessionStreamManager = new SessionStreamManager()
+    const devicePresence = new DevicePresenceTracker()
     const terminalRegistry = new TerminalRegistry({
         idleTimeoutMs,
         onIdle: (entry) => {
@@ -214,6 +218,7 @@ export function createSocketServer(deps: SocketServerDeps): {
                 return next(new Error('Invalid token payload'))
             }
             socket.data.userId = parsed.data.uid
+            socket.data.deviceId = parsed.data.did
             next()
             return
         } catch {
@@ -236,11 +241,13 @@ export function createSocketServer(deps: SocketServerDeps): {
 
     const webRealtimeManager = new WebRealtimeManager(webNs, (sessionId) => sessionStreamManager.getStream(sessionId))
     webNs.use(authenticateJwtSocket)
-    webNs.on('connection', (socket) =>
+    webNs.on('connection', (socket) => {
+        devicePresence.add(socket.data.deviceId, socket.id)
+        socket.on('disconnect', () => devicePresence.remove(socket.data.deviceId, socket.id))
         registerWebHandlers(socket, {
             realtimeManager: webRealtimeManager,
         })
-    )
+    })
 
-    return { io, engine, rpcRegistry, webRealtimeManager }
+    return { io, engine, rpcRegistry, webRealtimeManager, devicePresence }
 }

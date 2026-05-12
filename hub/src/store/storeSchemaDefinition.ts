@@ -1,11 +1,11 @@
 import type { Database } from 'bun:sqlite'
 
 export const IN_MEMORY_DATABASE_PREFIX = 'file::memory:'
-export const SCHEMA_VERSION = 17
-export const AUTO_MIGRATABLE_SCHEMA_VERSIONS = [14, 15, 16] as const
+export const SCHEMA_VERSION = 20
+export const AUTO_MIGRATABLE_SCHEMA_VERSIONS = [14, 15, 16, 17, 18, 19] as const
 export type AutoMigratableSchemaVersion = (typeof AUTO_MIGRATABLE_SCHEMA_VERSIONS)[number]
 export const LEGACY_REQUIRED_TABLES = ['sessions', 'machines', 'messages', 'push_subscriptions'] as const
-export const REQUIRED_TABLES = [...LEGACY_REQUIRED_TABLES] as const
+export const REQUIRED_TABLES = [...LEGACY_REQUIRED_TABLES, 'device_auth_devices'] as const
 export const REQUIRED_SESSION_COLUMNS = [
     'permission_mode',
     'collaboration_mode',
@@ -104,5 +104,17 @@ export function createStoreSchema(db: Database): void {
             created_at INTEGER NOT NULL,
             UNIQUE(endpoint)
         );
+
+        CREATE TABLE IF NOT EXISTS device_auth_devices (
+            id TEXT PRIMARY KEY,
+            name TEXT,
+            platform TEXT,
+            channel TEXT,
+            token_hash TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            last_seen_at INTEGER NOT NULL,
+            revoked_at INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_device_auth_devices_last_seen ON device_auth_devices(last_seen_at DESC);
     `)
 }

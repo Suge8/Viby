@@ -1,7 +1,7 @@
 import type { WebSocketData } from '@socket.io/bun-engine'
 import type { Server as BunServer } from 'bun'
 import { getOrCreateJwtSecret } from '../config/jwtSecret'
-import { findAvailablePort, isAddressInUseError, persistResolvedListenPort } from '../config/runtimeServerBinding'
+import { findAvailablePort, isAddressInUseError, resolveFallbackRuntimePublicUrl } from '../config/runtimeServerBinding'
 import { getOrCreateVapidKeys } from '../config/vapidKeys'
 import { createConfiguration } from '../configuration'
 import { buildStartupMessage, formatSource, normalizeOrigins, resolveLocalApiUrl } from '../hubHelpers'
@@ -91,7 +91,15 @@ export function createHubProcessController(): HubProcessController {
             listenHost: getConfig().listenHost,
             listenPort: runtimeListenPort,
             publicUrl: runtimePublicUrl,
+            publicAccessEnabled: getConfig().publicAccessEnabled,
             corsOrigins,
+            getActiveDeviceIds: () => currentSocketServer.devicePresence.activeDeviceIds(),
+            pairingPresence: {
+                set: (deviceId, alive) => {
+                    if (alive) currentSocketServer.devicePresence.add(deviceId, 'pairing-bridge')
+                    else currentSocketServer.devicePresence.remove(deviceId, 'pairing-bridge')
+                },
+            },
         })
     }
 
@@ -155,7 +163,7 @@ export function createHubProcessController(): HubProcessController {
             portFallbackMessage = `默认端口 ${config.listenPort} 已被占用，已自动切换到 ${runtimeListenPort}。`
             console.warn(`[Web] ${portFallbackMessage}`)
 
-            runtimePublicUrl = await persistResolvedListenPort({
+            runtimePublicUrl = await resolveFallbackRuntimePublicUrl({
                 dataDir: config.dataDir,
                 listenHost: config.listenHost,
                 previousPort: config.listenPort,
@@ -170,6 +178,10 @@ export function createHubProcessController(): HubProcessController {
             listenHost: config.listenHost,
             listenPort: runtimeListenPort,
             localHubUrl,
+            publicUrl: runtimePublicUrl,
+            publicAccessEnabled: config.publicAccessEnabled,
+            pairingBrokerUrl: config.pairingBrokerUrl,
+            pairingCode: config.pairingCode,
             cliApiToken: config.cliApiToken,
             settingsFile: config.settingsFile,
             launchSource,

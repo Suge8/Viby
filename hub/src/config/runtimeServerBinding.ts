@@ -1,6 +1,6 @@
 import { createServer } from 'node:net'
 import { resolveDefaultPublicApiUrl, resolveLocalApiUrl } from '../hubHelpers'
-import { getSettingsFile, readSettingsOrThrow, type Settings, writeSettings } from './settings'
+import { getSettingsFile, readSettingsOrThrow, type Settings } from './settings'
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '0.0.0.0', '::', '::1', '[::1]'])
 
@@ -14,16 +14,10 @@ function isLoopbackUrl(value: string, port: number): boolean {
     }
 }
 
-function shouldRewritePublicUrl(settings: Settings, previousPort: number): boolean {
-    if (!settings.publicUrl) {
-        return true
-    }
-
-    if (isLoopbackUrl(settings.publicUrl, previousPort)) {
-        return true
-    }
-
-    return settings.apiUrl === settings.publicUrl
+function hasCustomPublicUrl(settings: Settings, previousPort: number): settings is Settings & { publicUrl: string } {
+    if (!settings.publicUrl) return false
+    if (isLoopbackUrl(settings.publicUrl, previousPort)) return false
+    return settings.apiUrl !== settings.publicUrl
 }
 
 export function isAddressInUseError(error: unknown): boolean {
@@ -56,29 +50,20 @@ export async function findAvailablePort(listenHost: string): Promise<number> {
     })
 }
 
-export async function persistResolvedListenPort(options: {
+export async function resolveFallbackRuntimePublicUrl(options: {
     dataDir: string
     listenHost: string
     previousPort: number
     resolvedPort: number
 }): Promise<string> {
-    const localHubUrl = resolveLocalApiUrl(options.listenHost, options.resolvedPort)
-
     if (options.previousPort === options.resolvedPort) {
-        return localHubUrl
+        return resolveLocalApiUrl(options.listenHost, options.resolvedPort)
     }
 
-    const settingsFile = getSettingsFile(options.dataDir)
-    const settings = await readSettingsOrThrow(settingsFile)
-
-    settings.listenHost = options.listenHost
-    settings.listenPort = options.resolvedPort
-    settings.apiUrl = localHubUrl
-
-    if (shouldRewritePublicUrl(settings, options.previousPort)) {
-        settings.publicUrl = resolveDefaultPublicApiUrl(options.listenHost, options.resolvedPort)
+    const settings = await readSettingsOrThrow(getSettingsFile(options.dataDir))
+    if (hasCustomPublicUrl(settings, options.previousPort)) {
+        return settings.publicUrl
     }
 
-    await writeSettings(settingsFile, settings)
-    return settings.publicUrl ?? localHubUrl
+    return resolveDefaultPublicApiUrl(options.listenHost, options.resolvedPort)
 }

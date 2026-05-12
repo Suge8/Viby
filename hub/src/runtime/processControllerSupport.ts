@@ -34,7 +34,10 @@ export function buildProcessWebServerOptions(options: {
     listenHost: string
     listenPort: number
     publicUrl: string
+    publicAccessEnabled: boolean
     corsOrigins: string[]
+    getActiveDeviceIds?: StartWebServerOptions['getActiveDeviceIds']
+    pairingPresence?: StartWebServerOptions['pairingPresence']
 }): StartWebServerOptions {
     return {
         getSyncEngine: options.getSyncEngine,
@@ -46,7 +49,10 @@ export function buildProcessWebServerOptions(options: {
         listenHost: options.listenHost,
         listenPort: options.listenPort,
         publicUrl: options.publicUrl,
+        publicAccessEnabled: options.publicAccessEnabled,
         corsOrigins: options.corsOrigins,
+        getActiveDeviceIds: options.getActiveDeviceIds,
+        pairingPresence: options.pairingPresence,
     }
 }
 
@@ -57,11 +63,13 @@ export function logHubStartupConfiguration(config: {
     listenHost: string
     listenPort: number
     publicUrl: string
+    publicAccessEnabled: boolean
     sources: {
         cliApiToken: ConfigSource | 'generated'
         listenHost: ConfigSource | 'generated'
         listenPort: ConfigSource | 'generated'
         publicUrl: ConfigSource | 'generated'
+        publicAccessEnabled: ConfigSource | 'generated'
     }
     formatSource: (source: ConfigSource | 'generated') => string
 }): void {
@@ -84,4 +92,7 @@ export function logHubStartupConfiguration(config: {
     console.log(`[Hub] VIBY_LISTEN_HOST: ${config.listenHost} (${config.formatSource(config.sources.listenHost)})`)
     console.log(`[Hub] VIBY_LISTEN_PORT: ${config.listenPort} (${config.formatSource(config.sources.listenPort)})`)
     console.log(`[Hub] VIBY_PUBLIC_URL: ${config.publicUrl} (${config.formatSource(config.sources.publicUrl)})`)
+    console.log(
+        `[Hub] VIBY_PUBLIC_ACCESS_ENABLED: ${config.publicAccessEnabled} (${config.formatSource(config.sources.publicAccessEnabled)})`
+    )
 }

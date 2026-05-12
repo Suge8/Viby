@@ -135,4 +135,58 @@ describe('store schema migration', () => {
             `This build only runs the ${AUTO_MIGRATABLE_SCHEMA_VERSION_LABEL} migrations automatically.`
         )
     })
+
+    it('migrates legacy device rows into the v20 presence model by adding columns and purging scan + revoked tombstones', async () => {
+        const dbPath = await createTempDbPath()
+        const db = new Database(dbPath, { create: true, readwrite: true, strict: true })
+        // Recreate the v18 device_auth_devices shape (no platform/channel columns).
+        db.exec(`
+            CREATE TABLE device_auth_devices (
+                id TEXT PRIMARY KEY,
+                name TEXT,
+                token_hash TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                last_seen_at INTEGER NOT NULL,
+                revoked_at INTEGER
+            );
+            CREATE TABLE sessions (
+                id TEXT PRIMARY KEY, tag TEXT, machine_id TEXT,
+                created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+                metadata TEXT, metadata_version INTEGER DEFAULT 1,
+                agent_state TEXT, agent_state_version INTEGER DEFAULT 1,
+                model TEXT, model_reasoning_effort TEXT, codex_service_tier TEXT,
+                permission_mode TEXT, collaboration_mode TEXT,
+                next_message_seq INTEGER NOT NULL DEFAULT 1,
+                todos TEXT, todos_updated_at INTEGER,
+                latest_activity_at INTEGER, latest_activity_kind TEXT, latest_completed_reply_at INTEGER,
+                active INTEGER DEFAULT 0, active_at INTEGER, seq INTEGER DEFAULT 0
+            );
+            CREATE TABLE machines (id TEXT PRIMARY KEY, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, metadata TEXT, metadata_version INTEGER DEFAULT 1, runner_state TEXT, runner_state_version INTEGER DEFAULT 1, active INTEGER DEFAULT 0, active_at INTEGER, seq INTEGER DEFAULT 0);
+            CREATE TABLE messages (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, content TEXT NOT NULL, created_at INTEGER NOT NULL, seq INTEGER NOT NULL, local_id TEXT, invoked_at INTEGER);
+            CREATE TABLE push_subscriptions (id INTEGER PRIMARY KEY AUTOINCREMENT, endpoint TEXT NOT NULL, p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at INTEGER NOT NULL, UNIQUE(endpoint));
+        `)
+        db.exec(
+            `INSERT INTO device_auth_devices (id, name, token_hash, created_at, last_seen_at, revoked_at) VALUES
+                ('pairing:p1', '公网扫码设备', 'hash1', 1, 1, NULL),
+                ('abc-uuid', 'Phone', 'hash2', 2, 2, NULL),
+                ('zombie', 'OldPhone', 'hash3', 3, 3, 4)`
+        )
+        db.exec('PRAGMA user_version = 18')
+        db.close()
+
+        const store = new Store(dbPath)
+        const migratedDb = getStoreDatabase(store)
+        try {
+            const rows = migratedDb
+                .prepare('SELECT id, name, platform, channel FROM device_auth_devices ORDER BY id')
+                .all() as Array<{ id: string; name: string | null; platform: string | null; channel: string | null }>
+            // v20 presence cleanup removes both legacy soft-revoked rows and any
+            // scan-channel rows so the new bridge-driven presence is the only truth.
+            expect(rows).toEqual([{ id: 'abc-uuid', name: 'Phone', platform: null, channel: 'link' }])
+            const userVersion = migratedDb.prepare('PRAGMA user_version').get() as { user_version: number }
+            expect(userVersion.user_version).toBe(SCHEMA_VERSION)
+        } finally {
+            migratedDb.close()
+        }
+    })
 })

@@ -10,6 +10,7 @@
  * - VIBY_LISTEN_HOST: Host/IP to bind the HTTP service (default: 127.0.0.1)
  * - VIBY_LISTEN_PORT: Port for HTTP service (default: 37173)
  * - VIBY_PUBLIC_URL: Public URL for external access
+ * - VIBY_PUBLIC_ACCESS_ENABLED: Enable public Hub and pairing access (default: true)
  * - CORS_ORIGINS: Comma-separated CORS origins
  * - PAIRING_BROKER_URL: Public pairing broker base URL
  * - PAIRING_CREATE_TOKEN: Optional shared secret for pairing session creation
@@ -18,6 +19,7 @@
  * - DB_PATH: SQLite database path (default: {VIBY_HOME}/viby.db)
  */
 
+import { randomInt } from 'node:crypto'
 import { existsSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -31,6 +33,7 @@ export interface ConfigSources {
     listenHost: ConfigSource
     listenPort: ConfigSource
     publicUrl: ConfigSource
+    publicAccessEnabled: ConfigSource
     corsOrigins: ConfigSource
     pairingBrokerUrl: ConfigSource
     pairingCreateToken: ConfigSource
@@ -38,8 +41,11 @@ export interface ConfigSources {
 }
 
 class Configuration {
-    /** CLI auth token (shared secret) */
+    /** CLI auth token (internal automation secret) */
     public cliApiToken: string
+
+    /** Short user-facing code for device pairing */
+    public readonly pairingCode: string
 
     /** Source of CLI API token */
     public cliApiTokenSource: 'env' | 'file' | 'generated' | ''
@@ -64,6 +70,9 @@ class Configuration {
 
     /** Public URL for external access */
     public readonly publicUrl: string
+
+    /** Whether public Hub and pairing access are enabled */
+    public readonly publicAccessEnabled: boolean
 
     /** Allowed CORS origins for the web app + Socket.IO (comma-separated env override) */
     public readonly corsOrigins: string[]
@@ -92,9 +101,12 @@ class Configuration {
         this.listenHost = serverSettings.listenHost
         this.listenPort = serverSettings.listenPort
         this.publicUrl = serverSettings.publicUrl
+        this.publicAccessEnabled = serverSettings.publicAccessEnabled
         this.corsOrigins = serverSettings.corsOrigins
         this.pairingBrokerUrl = serverSettings.pairingBrokerUrl
         this.pairingCreateToken = serverSettings.pairingCreateToken
+
+        this.pairingCode = String(randomInt(0, 1_000_000)).padStart(6, '0')
 
         // CLI API token - will be set by _setCliApiToken() before create() returns
         this.cliApiToken = ''

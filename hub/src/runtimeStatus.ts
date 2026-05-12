@@ -12,6 +12,10 @@ interface HubRuntimeStatusWriterOptions {
     listenHost: string
     listenPort: number
     localHubUrl: string
+    publicUrl: string
+    publicAccessEnabled: boolean
+    pairingBrokerUrl: string | null
+    pairingCode: string
     cliApiToken: string
     settingsFile: string
     launchSource?: HubLaunchSource
@@ -38,6 +42,10 @@ function createBaseStatus(options: HubRuntimeStatusWriterOptions): HubRuntimeSta
         listenPort: options.listenPort,
         localHubUrl: options.localHubUrl,
         preferredBrowserUrl: options.localHubUrl,
+        publicUrl: options.publicUrl,
+        publicAccessEnabled: options.publicAccessEnabled,
+        pairingBrokerUrl: options.pairingBrokerUrl,
+        pairingCode: options.pairingCode,
         cliApiToken: options.cliApiToken,
         settingsFile: options.settingsFile,
         dataDir: options.dataDir,

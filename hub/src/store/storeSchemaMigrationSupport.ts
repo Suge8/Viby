@@ -85,6 +85,39 @@ export class StoreSchemaMigrationSupport {
         }
     }
 
+    ensureDeviceAuthColumns(): void {
+        const missingColumns = this.getMissingTableColumns('device_auth_devices', ['platform', 'channel'])
+        if (missingColumns.includes('platform')) {
+            this.db.exec('ALTER TABLE device_auth_devices ADD COLUMN platform TEXT')
+        }
+        if (missingColumns.includes('channel')) {
+            this.db.exec('ALTER TABLE device_auth_devices ADD COLUMN channel TEXT')
+            this.db.exec(
+                "UPDATE device_auth_devices SET channel = 'scan' WHERE id LIKE 'pairing:%' AND channel IS NULL"
+            )
+            this.db.exec(
+                "UPDATE device_auth_devices SET channel = 'link' WHERE id NOT LIKE 'pairing:%' AND channel IS NULL"
+            )
+        }
+        // Clear legacy placeholder names so the UI derives a meaningful title
+        // from platform / channel instead of displaying stale hardcoded strings.
+        this.db.exec(
+            "UPDATE device_auth_devices SET name = NULL WHERE name IN ('公网扫码设备', 'Device', 'Device PWA', '未命名设备')"
+        )
+    }
+
+    /**
+     * v20 presence cleanup: hard-delete all soft-revoked tombstones and every
+     * scan-channel row. scan devices are reconstructed by the desktop bridge
+     * `POST /api/device-auth/pairing-presence` on the next data channel open,
+     * so dropping stale rows is the cheapest way to converge on the new
+     * single-source-of-truth active model.
+     */
+    purgeLegacyDeviceAuthRows(): void {
+        this.db.exec('DELETE FROM device_auth_devices WHERE revoked_at IS NOT NULL')
+        this.db.exec("DELETE FROM device_auth_devices WHERE channel = 'scan'")
+    }
+
     assertRequiredSessionColumnsPresent(): void {
         const missingColumns = this.getMissingTableColumns('sessions', REQUIRED_SESSION_COLUMNS)
         if (missingColumns.length > 0) {
