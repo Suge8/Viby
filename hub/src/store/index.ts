@@ -2,12 +2,14 @@ import { Database } from 'bun:sqlite'
 import { chmodSync, closeSync, existsSync, mkdirSync, openSync } from 'node:fs'
 import { dirname } from 'node:path'
 
+import { DeviceAuthStore } from './deviceAuthStore'
 import { MachineStore } from './machineStore'
 import { MessageStore } from './messageStore'
 import { PushStore } from './pushStore'
 import { SessionStore } from './sessionStore'
 import { initializeStoreSchema } from './storeSchemaSupport'
 
+export { DeviceAuthStore } from './deviceAuthStore'
 export { MachineStore } from './machineStore'
 export { MessageStore } from './messageStore'
 export { PushStore } from './pushStore'
@@ -28,6 +30,7 @@ export class Store {
     private db: Database
     private readonly dbPath: string
 
+    readonly devices: DeviceAuthStore
     readonly sessions: SessionStore
     readonly machines: MachineStore
     readonly messages: MessageStore
@@ -67,6 +70,7 @@ export class Store {
             }
         }
 
+        this.devices = new DeviceAuthStore(this.db)
         this.sessions = new SessionStore(this.db)
         this.machines = new MachineStore(this.db)
         this.messages = new MessageStore(this.db)

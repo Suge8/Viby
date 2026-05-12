@@ -52,6 +52,32 @@ describe('pairing routes', () => {
         expect(json.hostToken).toBe('host-token')
     })
 
+    it('rejects pairing creation when public access is disabled', async () => {
+        const app = new Hono<WebAppEnv>()
+        app.route(
+            '/api',
+            createPairingRoutes(
+                {
+                    isConfigured: () => true,
+                    createPairing: async () => {
+                        throw new Error('unreachable')
+                    },
+                },
+                () => null,
+                false
+            )
+        )
+
+        const response = await app.request('/api/pairings', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({}),
+        })
+
+        expect(response.status).toBe(403)
+        expect(await response.json()).toEqual({ error: 'Public access is disabled', code: 'public_access_disabled' })
+    })
+
     it('returns 503 when the broker is not configured', async () => {
         const app = new Hono<WebAppEnv>()
         app.route(

@@ -17,6 +17,7 @@ export interface Settings {
     listenHost?: string
     listenPort?: number
     publicUrl?: string
+    publicAccessEnabled?: boolean
     corsOrigins?: string[]
     pairingBrokerUrl?: string
     pairingCreateToken?: string

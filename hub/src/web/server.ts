@@ -14,8 +14,10 @@ import type { SyncEngine } from '../sync/syncEngine'
 import { isBunCompiled } from '../utils/bunCompiled'
 import { type EmbeddedWebAsset, loadEmbeddedAssetMap } from './embeddedAssets'
 import { createAuthMiddleware, type WebAppEnv } from './middleware/auth'
+import { createPublicAccessDisabledResponse, isAllowedByPublicAccessPolicy } from './publicAccessPolicy'
 import { createAuthRoutes } from './routes/auth'
 import { createCliRoutes } from './routes/cli'
+import { createDeviceAuthRoutes } from './routes/deviceAuth'
 import { createGitRoutes } from './routes/git'
 import { createMessagesRoutes } from './routes/messages'
 import { createPairingRoutes } from './routes/pairing'
@@ -103,7 +105,10 @@ function createWebApp(options: {
     store: Store
     vapidPublicKey: string
     corsOrigins?: string[]
+    publicAccessEnabled: boolean
     embeddedAssetMap: Map<string, EmbeddedWebAsset> | null
+    getActiveDeviceIds?: () => Set<string>
+    pairingPresence?: import('./routes/deviceAuth').PairingPresenceSink
 }): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
@@ -112,13 +117,21 @@ function createWebApp(options: {
     // Health check endpoint (no auth required)
     app.get('/health', (c) => c.json({ status: 'ok', protocolVersion: PROTOCOL_VERSION }))
 
+    app.use('*', async (c, next) => {
+        if (!isAllowedByPublicAccessPolicy(c.req.raw, options.publicAccessEnabled)) {
+            return createPublicAccessDisabledResponse()
+        }
+        return await next()
+    })
+
     const corsMiddleware = createApiCorsMiddleware(options.corsOrigins ?? [])
     app.use('/api/*', corsMiddleware)
     app.use('/cli/*', corsMiddleware)
 
     app.route('/cli', createCliRoutes(options.getSyncEngine))
 
-    app.route('/api', createAuthRoutes(options.jwtSecret))
+    app.route('/api', createAuthRoutes(options.jwtSecret, options.store.devices))
+    app.route('/api', createDeviceAuthRoutes(options.jwtSecret, options.store.devices))
 
     app.use('/api/*', createAuthMiddleware(options.jwtSecret))
     app.route('/api', createSessionsRoutes(options.getSyncEngine, options.getSessionStream))
@@ -126,7 +139,18 @@ function createWebApp(options: {
     app.route('/api', createPermissionsRoutes(options.getSyncEngine))
     app.route('/api', createRuntimeRoutes(options.getSyncEngine))
     app.route('/api', createGitRoutes(options.getSyncEngine))
-    app.route('/api', createPairingRoutes(createPairingBrokerClient(), options.getSyncEngine))
+    app.route(
+        '/api',
+        createPairingRoutes(createPairingBrokerClient(), options.getSyncEngine, options.publicAccessEnabled)
+    )
+    app.route(
+        '/api',
+        createDeviceAuthRoutes(options.jwtSecret, options.store.devices, {
+            protectedRoutes: true,
+            getActiveDeviceIds: options.getActiveDeviceIds,
+            pairingPresence: options.pairingPresence,
+        })
+    )
     app.route('/api', createPushRoutes(options.store, options.vapidPublicKey))
 
     if (options.embeddedAssetMap) {
@@ -216,7 +240,10 @@ export type StartWebServerOptions = {
     listenHost: string
     listenPort: number
     publicUrl: string
+    publicAccessEnabled: boolean
     corsOrigins?: string[]
+    getActiveDeviceIds?: () => Set<string>
+    pairingPresence?: import('./routes/deviceAuth').PairingPresenceSink
 }
 
 export async function createWebServerFetch(
@@ -231,13 +258,19 @@ export async function createWebServerFetch(
         store: options.store,
         vapidPublicKey: options.vapidPublicKey,
         corsOrigins: options.corsOrigins,
+        publicAccessEnabled: options.publicAccessEnabled,
         embeddedAssetMap,
+        getActiveDeviceIds: options.getActiveDeviceIds,
+        pairingPresence: options.pairingPresence,
     })
 
     const socketHandler = options.socketEngine.handler()
     return (req, server) => {
         const url = new URL(req.url)
         if (url.pathname.startsWith('/socket.io/')) {
+            if (!isAllowedByPublicAccessPolicy(req, options.publicAccessEnabled)) {
+                return createPublicAccessDisabledResponse()
+            }
             return socketHandler.fetch(req, server)
         }
         return app.fetch(req)

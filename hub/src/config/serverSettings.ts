@@ -8,6 +8,7 @@
  * it will be saved to settings.toml for future use
  */
 
+import { isLocalNetworkHostname } from '@viby/protocol/networkScope'
 import { DEFAULT_VIBY_LISTEN_HOST, DEFAULT_VIBY_LISTEN_PORT } from '@viby/protocol/runtimeDefaults'
 import {
     buildLocalOriginAliases,
@@ -22,6 +23,7 @@ export interface ServerSettings {
     listenHost: string
     listenPort: number
     publicUrl: string
+    publicAccessEnabled: boolean
     corsOrigins: string[]
     pairingBrokerUrl: string | null
     pairingCreateToken: string | null
@@ -33,6 +35,7 @@ export interface ServerSettingsResult {
         listenHost: 'env' | 'file' | 'default'
         listenPort: 'env' | 'file' | 'default'
         publicUrl: 'env' | 'file' | 'default'
+        publicAccessEnabled: 'env' | 'file' | 'default'
         corsOrigins: 'env' | 'file' | 'default'
         pairingBrokerUrl: 'env' | 'file' | 'default'
         pairingCreateToken: 'env' | 'file' | 'default'
@@ -84,6 +87,20 @@ function hasConfiguredCorsOrigins(origins: string[] | undefined): origins is [st
     return Array.isArray(origins) && origins.length > 0
 }
 
+function parseBooleanSetting(value: string, name: string): boolean {
+    const normalized = value.trim().toLowerCase()
+    if (['1', 'true', 'yes', 'on'].includes(normalized)) return true
+    if (['0', 'false', 'no', 'off'].includes(normalized)) return false
+    throw new Error(`${name} must be true or false`)
+}
+
+function validatePublicUrlSecurity(publicUrl: string, publicAccessEnabled: boolean): void {
+    if (!publicAccessEnabled) return
+    const parsed = new URL(publicUrl)
+    if (parsed.protocol === 'https:' || isLocalNetworkHostname(parsed.hostname)) return
+    throw new Error('VIBY_PUBLIC_URL must use HTTPS for public hosts')
+}
+
 function shouldReadPublicUrlFromFile(
     listenHostSource: ServerSettingsResult['sources']['listenHost'],
     publicUrl: string | undefined
@@ -109,6 +126,7 @@ export async function loadServerSettings(dataDir: string): Promise<ServerSetting
         listenHost: 'default',
         listenPort: 'default',
         publicUrl: 'default',
+        publicAccessEnabled: 'default',
         corsOrigins: 'default',
         pairingBrokerUrl: 'default',
         pairingCreateToken: 'default',
@@ -159,6 +177,21 @@ export async function loadServerSettings(dataDir: string): Promise<ServerSetting
         publicUrl = settings.publicUrl
         sources.publicUrl = 'file'
     }
+
+    let publicAccessEnabled = true
+    if (process.env.VIBY_PUBLIC_ACCESS_ENABLED?.trim()) {
+        publicAccessEnabled = parseBooleanSetting(process.env.VIBY_PUBLIC_ACCESS_ENABLED, 'VIBY_PUBLIC_ACCESS_ENABLED')
+        sources.publicAccessEnabled = 'env'
+        if (settings.publicAccessEnabled === undefined) {
+            settings.publicAccessEnabled = publicAccessEnabled
+            needsSave = true
+        }
+    } else if (settings.publicAccessEnabled !== undefined) {
+        publicAccessEnabled = settings.publicAccessEnabled
+        sources.publicAccessEnabled = 'file'
+    }
+
+    validatePublicUrlSecurity(publicUrl, publicAccessEnabled)
 
     // corsOrigins: env > file > derived from publicUrl
     let corsOrigins: string[]
@@ -212,6 +245,7 @@ export async function loadServerSettings(dataDir: string): Promise<ServerSetting
             listenHost,
             listenPort,
             publicUrl,
+            publicAccessEnabled,
             corsOrigins,
             pairingBrokerUrl,
             pairingCreateToken,

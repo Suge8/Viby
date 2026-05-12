@@ -9,6 +9,7 @@ const SERVER_SETTINGS_ENV_KEYS = [
     'VIBY_LISTEN_HOST',
     'VIBY_LISTEN_PORT',
     'VIBY_PUBLIC_URL',
+    'VIBY_PUBLIC_ACCESS_ENABLED',
     'CORS_ORIGINS',
     'PAIRING_BROKER_URL',
     'PAIRING_CREATE_TOKEN',
@@ -49,6 +50,7 @@ function createSettingsToml(port: number): string {
         'listen_host = "127.0.0.1"',
         `listen_port = ${port}`,
         'public_url = ""',
+        'public_access_enabled = false',
         'cors_origins = []',
         'pairing_broker_url = "https://pair.example.com"',
         'pairing_create_token = "pair-secret"',
@@ -76,6 +78,7 @@ describe('loadServerSettings', () => {
 
         expect(result.settings.listenPort).toBe(3007)
         expect(result.settings.publicUrl).toBe('http://127.0.0.1:3007')
+        expect(result.settings.publicAccessEnabled).toBe(false)
         expect(result.settings.pairingBrokerUrl).toBe('https://pair.example.com')
         expect(result.settings.pairingCreateToken).toBe('pair-secret')
         expect(result.settings.corsOrigins).toEqual([
@@ -99,6 +102,7 @@ describe('loadServerSettings', () => {
 
         const result = await loadServerSettings(dataDir)
 
+        expect(result.settings.publicAccessEnabled).toBe(true)
         expect(result.settings.pairingBrokerUrl).toBe('https://pair.viby.run/')
         expect(result.settings.pairingCreateToken).toBe('pair-token')
         expect(result.sources.pairingBrokerUrl).toBe('env')
@@ -121,5 +125,25 @@ describe('loadServerSettings', () => {
         expect(result.settings.listenHost).toBe('192.168.12.34')
         expect(result.settings.publicUrl).toBe('http://192.168.12.34:37173')
         expect(result.sources.publicUrl).toBe('default')
+    })
+
+    it('rejects public HTTP hub URLs while public access is enabled', async () => {
+        const dataDir = await mkdtemp(join(tmpdir(), 'viby-server-settings-'))
+        tempDirs.push(dataDir)
+        process.env.VIBY_PUBLIC_URL = 'http://hub.example.com'
+
+        await expect(loadServerSettings(dataDir)).rejects.toThrow('VIBY_PUBLIC_URL must use HTTPS for public hosts')
+    })
+
+    it('defaults public access on and accepts env override', async () => {
+        const dataDir = await mkdtemp(join(tmpdir(), 'viby-server-settings-'))
+        tempDirs.push(dataDir)
+        process.env.VIBY_PUBLIC_ACCESS_ENABLED = 'false'
+
+        const result = await loadServerSettings(dataDir)
+
+        expect(result.settings.publicAccessEnabled).toBe(false)
+        expect(result.sources.publicAccessEnabled).toBe('env')
+        expect(result.savedToFile).toBe(true)
     })
 })
