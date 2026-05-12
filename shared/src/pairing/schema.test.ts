@@ -20,7 +20,6 @@ import {
     PairingReconnectChallengeResponseSchema,
     PairingReconnectRequestSchema,
     PairingTelemetryRequestSchema,
-    readPairingSignalTransportId,
     resolvePairingLinkTransport,
 } from './schema'
 
@@ -205,15 +204,6 @@ describe('pairing peer rpc schema', () => {
                 params: { endpoint: 'https://push.example', keys: { p256dh: 'p', auth: 'a' } },
             }).kind
         ).toBe('request')
-    })
-
-    it('reads optional signaling transport identity without trusting malformed payloads', () => {
-        expect(readPairingSignalTransportId({ transportId: 'guest-transport-1', pairing: {} })).toBe(
-            'guest-transport-1'
-        )
-        expect(readPairingSignalTransportId({ transportId: '' })).toBeNull()
-        expect(readPairingSignalTransportId({ transportId: 1 })).toBeNull()
-        expect(readPairingSignalTransportId(null)).toBeNull()
     })
 
     it('accepts reconnect requests with an optional signed device proof', () => {

@@ -4,19 +4,9 @@ import { AppCacheUnavailableError } from '@/lib/storage/appCacheDb'
 import { APP_CACHE_STORES } from '@/lib/storage/storageRegistry'
 import { createRemotePairingUserError, RemotePeerConnectError } from './remotePairingErrors'
 import { RemotePairingHttpError } from './remotePairingHttp'
-import {
-    getRemoteReconnectDelay,
-    isRecoverableRemotePairingError,
-    REMOTE_RECONNECT_MAX_DELAY_MS,
-} from './remotePairingRecovery'
+import { isRecoverableRemotePairingError } from './remotePairingRecovery'
 
 describe('remotePairingRecovery', () => {
-    it('caps reconnect backoff without losing the first retry window', () => {
-        expect(getRemoteReconnectDelay(0)).toBe(300)
-        expect(getRemoteReconnectDelay(1)).toBe(600)
-        expect(getRemoteReconnectDelay(20)).toBe(REMOTE_RECONNECT_MAX_DELAY_MS)
-    })
-
     it('keeps transient transport and broker failures in the reconnect path', () => {
         expect(
             isRecoverableRemotePairingError(new RemotePeerConnectError('socket', 'remotePairing.error.closedRetrying'))

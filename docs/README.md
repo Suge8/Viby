@@ -20,6 +20,7 @@ README 只保留产品入口；复杂边界和运行约束统一收口到这里�
 - `docs/architecture/react-virtuoso-chat-scroll-migration.md`：Web chat transcript 迁移到 `react-virtuoso` 的重构设计、目标架构、删除路径与验证矩阵
 - `docs/architecture/pairing-broker.md`：扫码配对、remote DataChannel、broker 与 ICE 方案
 - `docs/architecture/pairing-presence.md`：设备 active 单一事实源、scan 在线由 desktop bridge map 判定、revoke 硬删与 v20 数据迁移
+- `docs/architecture/pairing-reconnection.md`：Perfect Negotiation、长寿命 PeerConnection、短寿命 signaling socket 与 ICE restart 恢复链
 - `docs/architecture/unified-pairing-auth.md`：配对码统一认证、设备绑定、访问密钥退出产品主路径设计
 
 ## 开发边界

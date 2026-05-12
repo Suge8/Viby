@@ -16,13 +16,13 @@
 > Resume from here after compaction / restart.
 
 - **Current milestone**: #11 — Phase K legacy cleanup + final regression
-- **Current status**: Phase J DONE；Phase K TODO
+- **Current status**: Phase K automated cleanup DONE；manual RM BLOCKED
 - **Last completed**: #10 Phase J presence migration
 - **Current artifact**: `.taskmaster/20260513-pairing-perfect-negotiation/tasks/11-legacy-cleanup/`
 - **Claimed by**: `none`
 - **Lease until**: `none`
 - **Write scope**: `none`
-- **Handoff**: Phase K must run legacy schema cleanup, docs rewrite, harness checks, and real-device RM bulk run.
+- **Handoff**: Code/docs/harness/deploy done. Only RM1-RM12 real-device manual acceptance remains.
 - **Key context**: Phase F web guest now uses shared `createPairingTransport` via `RemotePeerSession` (transport stack 401 lines). Legacy guest signal/negotiation/liveness modules deleted. `mapByeToErrorKey()` added. D/E/F code is merged locally but not deployed; staging burn-in still pending.
 - **Known issues**: 真机回归矩阵需要 iPhone Safari + 桌面端联调；自动化只是保底。D/E/F 发布必须协调 staging 24h burn-in。
 - **Next action**: 取 row 10 (`tasks/10-presence-migration`)，迁移 presence 事实源。
@@ -217,3 +217,13 @@
 - Validation: `bun run --cwd desktop typecheck` ✅; `bun run --cwd desktop test` ✅; `bun run --cwd hub typecheck` ✅; `bun run --cwd hub test` ✅.
 - Real-device RM7/RM11 deferred to Phase K bulk run.
 - Commit: pending.
+
+
+## Phase K Automated Complete / Manual RM Blocked — 2026-05-12T20:15:00Z
+
+- Legacy signal schema residue removed; grep over shared/pairing/desktop/web/hub pairing scopes is clean.
+- Added line-count guard and front-end coverage audit to `harness:check`; current transport total 1473/1800.
+- Docs updated: broker, presence, reconnection, hub/web boundaries, internal ledger.
+- Full automated validation passed: shared typecheck/test; pairing test; desktop typecheck/test; web typecheck/test/build; hub test; `harness:check`; `test:scripts`; line guard.
+- Production broker deployed to `1panel-main`; verified service active, local health, and `https://pair.viby.run/ready`.
+- Blocker: RM1-RM12 require real iPhone Safari/PWA/manual browser operation. No attached device/browser surface exists in this API session, so Epic is not truthfully final-closed.

@@ -9,21 +9,6 @@ export type PairingSessionState = z.infer<typeof PairingSessionStateSchema>
 export const PairingApprovalStatusSchema = z.enum(['pending', 'approved']).nullable()
 export type PairingApprovalStatus = z.infer<typeof PairingApprovalStatusSchema>
 
-export const PairingSignalTypeSchema = z.enum([
-    'join',
-    'offer',
-    'answer',
-    'candidate',
-    'state',
-    'ready',
-    'peer-left',
-    'expire',
-    'ping',
-    'pong',
-    'error',
-])
-export type PairingSignalType = z.infer<typeof PairingSignalTypeSchema>
-
 export const PairingMetadataSchema = z.record(z.string(), z.unknown())
 export type PairingMetadata = z.infer<typeof PairingMetadataSchema>
 
@@ -101,28 +86,6 @@ export const PairingVerifyCodeRequestSchema = z.object({
     code: z.string().regex(/^\d{6}$/),
 })
 export type PairingVerifyCodeRequest = z.infer<typeof PairingVerifyCodeRequestSchema>
-
-export const PairingSignalSchema = z.object({
-    id: z.string().min(1).optional(),
-    pairingId: z.string().min(1),
-    type: PairingSignalTypeSchema,
-    from: PairingRoleSchema.optional(),
-    to: PairingRoleSchema.optional(),
-    payload: z.unknown().optional(),
-    reason: z.string().min(1).optional(),
-    at: z.number().int().nonnegative().optional(),
-})
-export type PairingSignal = z.infer<typeof PairingSignalSchema>
-
-export const PairingSignalTransportPayloadSchema = z.object({
-    transportId: z.string().trim().min(1).max(64).optional(),
-})
-export type PairingSignalTransportPayload = z.infer<typeof PairingSignalTransportPayloadSchema>
-
-export function readPairingSignalTransportId(payload: unknown): string | null {
-    const parsed = PairingSignalTransportPayloadSchema.safeParse(payload)
-    return parsed.success ? (parsed.data.transportId ?? null) : null
-}
 
 export const PairingErrorPayloadSchema = z.object({
     code: z.string().min(1),
