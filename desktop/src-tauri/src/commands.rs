@@ -2,6 +2,7 @@ use arboard::Clipboard;
 use tauri::AppHandle;
 
 use crate::pairing;
+use crate::settings;
 use crate::state::{DesktopPairingSession, HubSnapshot, StartHubOptions};
 use crate::supervisor;
 
@@ -48,13 +49,23 @@ pub fn copy_text(text: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn get_pairing_session() -> Result<Option<DesktopPairingSession>, String> {
-    run_blocking(pairing::read_pairing_session).await
+pub async fn set_public_access_enabled(enabled: bool) -> Result<(), String> {
+    run_blocking(move || settings::write_public_access_enabled(enabled)).await
 }
 
 #[tauri::command]
-pub async fn clear_pairing_session() -> Result<(), String> {
-    run_blocking(pairing::clear_pairing_session).await
+pub async fn get_pairing_sessions() -> Result<Vec<DesktopPairingSession>, String> {
+    run_blocking(pairing::read_pairing_sessions).await
+}
+
+#[tauri::command]
+pub async fn clear_pairing_sessions() -> Result<(), String> {
+    run_blocking(pairing::clear_pairing_sessions).await
+}
+
+#[tauri::command]
+pub async fn remove_pairing_session(pairing_id: String) -> Result<(), String> {
+    run_blocking(move || pairing::remove_pairing_session(&pairing_id)).await
 }
 
 #[tauri::command]

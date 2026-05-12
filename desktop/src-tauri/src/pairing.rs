@@ -6,7 +6,7 @@ use serde::Deserialize;
 use serde_json::json;
 use tauri::AppHandle;
 
-pub use crate::pairing_storage::{clear_pairing_session, read_pairing_session};
+pub use crate::pairing_storage::{clear_pairing_sessions, read_pairing_sessions, remove_pairing_session};
 use crate::pairing_storage::{persist_pairing_session, persist_pairing_session_if_changed};
 use crate::state::{DesktopPairingSession, HubRuntimePhase, HubSnapshot, PairingSessionSnapshot};
 use crate::supervisor::refresh_snapshot;
@@ -188,9 +188,9 @@ pub fn delete_pairing_session(pairing: DesktopPairingSession) -> Result<(), Stri
 
     let status = response.status();
     let body = response.text().map_err(|error| error.to_string())?;
-    if !status.is_success() {
+    if !status.is_success() && status.as_u16() != 404 {
         return Err(parse_http_error(status, &body));
     }
 
-    clear_pairing_session()
+    remove_pairing_session(&pairing.pairing.id)
 }

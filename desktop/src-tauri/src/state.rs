@@ -9,6 +9,10 @@ pub const DEFAULT_VIBY_LISTEN_HOST: &str = "127.0.0.1";
 pub const DEFAULT_VIBY_LISTEN_PORT: u16 = 37173;
 pub const LAN_LISTEN_HOST: &str = "0.0.0.0";
 
+fn default_public_access_enabled() -> bool {
+    true
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum DesktopEntryMode {
@@ -36,6 +40,7 @@ impl StartHubOptions {
 pub struct HubStartupConfig {
     pub listen_host: String,
     pub listen_port: u16,
+    pub public_access_enabled: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
@@ -64,6 +69,14 @@ pub struct HubRuntimeStatus {
     pub listen_port: u16,
     pub local_hub_url: String,
     pub preferred_browser_url: String,
+    #[serde(default)]
+    pub public_url: String,
+    #[serde(default = "default_public_access_enabled")]
+    pub public_access_enabled: bool,
+    #[serde(default)]
+    pub pairing_broker_url: Option<String>,
+    #[serde(default)]
+    pub pairing_code: Option<String>,
     pub cli_api_token: String,
     pub settings_file: String,
     pub data_dir: String,
@@ -72,7 +85,7 @@ pub struct HubRuntimeStatus {
     pub message: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct PairingParticipantSnapshot {
     pub token_hint: Option<String>,
@@ -80,9 +93,11 @@ pub struct PairingParticipantSnapshot {
     pub public_key: Option<String>,
     pub connected_at: Option<u64>,
     pub last_seen_at: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PairingSessionSnapshot {
     pub id: String,

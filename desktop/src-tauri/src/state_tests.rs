@@ -23,6 +23,13 @@ fn parse_startup_config(raw: &str) -> Result<crate::state::HubStartupConfig, Str
         config.listen_port = listen_port as u16;
     }
 
+    if let Some(public_access_enabled) = parsed
+        .get("public_access_enabled")
+        .and_then(|value| value.as_bool())
+    {
+        config.public_access_enabled = public_access_enabled;
+    }
+
     Ok(config)
 }
 
@@ -63,6 +70,10 @@ fn make_status(pid: u32, launch_source: Option<&str>) -> HubRuntimeStatus {
         listen_port: 3006,
         local_hub_url: "http://127.0.0.1:3006".to_string(),
         preferred_browser_url: "http://127.0.0.1:3006".to_string(),
+        public_url: "http://127.0.0.1:3006".to_string(),
+        public_access_enabled: true,
+        pairing_broker_url: Some("https://pair.example.com".to_string()),
+        pairing_code: Some("123456".to_string()),
         cli_api_token: "token".to_string(),
         settings_file: "/tmp/settings.toml".to_string(),
         data_dir: "/tmp".to_string(),
@@ -184,12 +195,14 @@ fn parse_startup_config_reads_listen_host_and_port() {
         r#"
         listen_host = "0.0.0.0"
         listen_port = 4123
+        public_access_enabled = false
         "#,
     )
     .expect("config should parse");
 
     assert_eq!(config.listen_host, "0.0.0.0");
     assert_eq!(config.listen_port, 4123);
+    assert!(!config.public_access_enabled);
 }
 
 #[test]
@@ -204,4 +217,8 @@ fn parse_startup_config_falls_back_to_defaults_when_keys_are_missing() {
 
     assert_eq!(config.listen_host, default_config.listen_host);
     assert_eq!(config.listen_port, default_config.listen_port);
+    assert_eq!(
+        config.public_access_enabled,
+        default_config.public_access_enabled
+    );
 }

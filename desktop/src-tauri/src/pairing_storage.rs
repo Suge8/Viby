@@ -3,13 +3,20 @@ use std::fs::OpenOptions;
 use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
 
+use serde_json::Value as JsonValue;
+
 use crate::launch::resolve_shared_viby_home_dir;
 use crate::state::DesktopPairingSession;
 
-const PAIRING_SESSION_FILE_NAME: &str = "desktop-pairing-session.json";
+const PAIRING_SESSIONS_FILE_NAME: &str = "desktop-pairing-sessions.json";
+const LEGACY_PAIRING_SESSION_FILE_NAME: &str = "desktop-pairing-session.json";
 
-fn pairing_session_file_path() -> Result<PathBuf, String> {
-    Ok(resolve_shared_viby_home_dir()?.join(PAIRING_SESSION_FILE_NAME))
+fn sessions_file_path() -> Result<PathBuf, String> {
+    Ok(resolve_shared_viby_home_dir()?.join(PAIRING_SESSIONS_FILE_NAME))
+}
+
+fn legacy_single_session_file_path() -> Result<PathBuf, String> {
+    Ok(resolve_shared_viby_home_dir()?.join(LEGACY_PAIRING_SESSION_FILE_NAME))
 }
 
 fn temp_file_path(path: &Path) -> Result<PathBuf, String> {
@@ -84,11 +91,66 @@ fn remove_file_if_exists(path: &Path) -> Result<(), String> {
     }
 }
 
+fn parse_sessions_payload(raw: &str) -> Vec<DesktopPairingSession> {
+    let parsed = match serde_json::from_str::<JsonValue>(raw) {
+        Ok(value) => value,
+        Err(_) => return Vec::new(),
+    };
+    if parsed.is_array() {
+        return serde_json::from_value::<Vec<DesktopPairingSession>>(parsed).unwrap_or_default();
+    }
+    if parsed.is_object() {
+        return serde_json::from_value::<DesktopPairingSession>(parsed)
+            .map(|session| vec![session])
+            .unwrap_or_default();
+    }
+    Vec::new()
+}
+
+fn migrate_legacy_single_session_file_if_present() -> Result<(), String> {
+    let legacy_path = legacy_single_session_file_path()?;
+    let raw = match fs::read_to_string(&legacy_path) {
+        Ok(raw) => raw,
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error.to_string()),
+    };
+    let sessions = parse_sessions_payload(&raw);
+    if !sessions.is_empty() {
+        write_sessions(&sessions)?;
+    }
+    remove_file_if_exists(&legacy_path)
+}
+
+fn write_sessions(sessions: &[DesktopPairingSession]) -> Result<(), String> {
+    let payload =
+        serde_json::to_vec(&sessions.to_vec()).map_err(|error| error.to_string())?;
+    write_private_file(&sessions_file_path()?, &payload)
+}
+
+pub fn read_pairing_sessions() -> Result<Vec<DesktopPairingSession>, String> {
+    migrate_legacy_single_session_file_if_present()?;
+    let path = sessions_file_path()?;
+    let raw = match fs::read_to_string(&path) {
+        Ok(raw) => raw,
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(error.to_string()),
+    };
+    let sessions = parse_sessions_payload(&raw);
+    if sessions.is_empty() {
+        remove_file_if_exists(&path)?;
+    }
+    Ok(sessions)
+}
+
 pub fn persist_pairing_session(pairing: &DesktopPairingSession) -> Result<(), String> {
-    write_private_file(
-        &pairing_session_file_path()?,
-        &serde_json::to_vec(pairing).map_err(|error| error.to_string())?,
-    )
+    let mut sessions = read_pairing_sessions()?;
+    if let Some(existing) = sessions.iter_mut().find(|item| item.pairing.id == pairing.pairing.id)
+    {
+        *existing = pairing.clone();
+    } else {
+        sessions.push(pairing.clone());
+    }
+    write_sessions(&sessions)
 }
 
 pub fn persist_pairing_session_if_changed(
@@ -101,23 +163,19 @@ pub fn persist_pairing_session_if_changed(
     persist_pairing_session(next)
 }
 
-pub fn read_pairing_session() -> Result<Option<DesktopPairingSession>, String> {
-    let path = pairing_session_file_path()?;
-    let raw = match fs::read_to_string(&path) {
-        Ok(raw) => raw,
-        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(error.to_string()),
-    };
-
-    match serde_json::from_str::<DesktopPairingSession>(&raw) {
-        Ok(pairing) => Ok(Some(pairing)),
-        Err(_) => {
-            remove_file_if_exists(&path)?;
-            Ok(None)
-        }
+pub fn remove_pairing_session(pairing_id: &str) -> Result<(), String> {
+    let sessions = read_pairing_sessions()?;
+    let next: Vec<DesktopPairingSession> = sessions
+        .into_iter()
+        .filter(|session| session.pairing.id != pairing_id)
+        .collect();
+    if next.is_empty() {
+        return remove_file_if_exists(&sessions_file_path()?);
     }
+    write_sessions(&next)
 }
 
-pub fn clear_pairing_session() -> Result<(), String> {
-    remove_file_if_exists(&pairing_session_file_path()?)
+pub fn clear_pairing_sessions() -> Result<(), String> {
+    remove_file_if_exists(&sessions_file_path()?)?;
+    remove_file_if_exists(&legacy_single_session_file_path()?)
 }

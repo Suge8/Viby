@@ -22,12 +22,14 @@ const STARTING_MESSAGE: &str = "Hub process is launching.";
 struct SettingsFile {
     listen_host: Option<String>,
     listen_port: Option<u16>,
+    public_access_enabled: Option<bool>,
 }
 
 pub(crate) fn default_startup_config() -> HubStartupConfig {
     HubStartupConfig {
         listen_host: DEFAULT_VIBY_LISTEN_HOST.to_string(),
         listen_port: DEFAULT_VIBY_LISTEN_PORT,
+        public_access_enabled: true,
     }
 }
 
@@ -62,6 +64,10 @@ fn read_startup_config() -> Result<HubStartupConfig, String> {
             return Err("listen_port must be greater than 0".to_string());
         }
         config.listen_port = listen_port;
+    }
+
+    if let Some(public_access_enabled) = parsed.public_access_enabled {
+        config.public_access_enabled = public_access_enabled;
     }
 
     Ok(config)
@@ -182,7 +188,11 @@ fn build_launching_status(
         listen_host: startup_config.listen_host.clone(),
         listen_port: startup_config.listen_port,
         local_hub_url: local_hub_url.clone(),
-        preferred_browser_url: local_hub_url,
+        preferred_browser_url: local_hub_url.clone(),
+        public_url: local_hub_url,
+        public_access_enabled: startup_config.public_access_enabled,
+        pairing_broker_url: None,
+        pairing_code: None,
         cli_api_token: String::new(),
         settings_file: settings_file.display().to_string(),
         data_dir: data_dir.display().to_string(),

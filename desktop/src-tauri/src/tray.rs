@@ -9,8 +9,8 @@ use crate::state::{show_main_window, DesktopState};
 use crate::supervisor;
 
 pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
-    let show_item = MenuItem::with_id(app, "show", "显示 Viby", true, None::<&str>)?;
-    let open_item = MenuItem::with_id(app, "open", "打开入口", true, None::<&str>)?;
+    let show_item = MenuItem::with_id(app, "show", "显示窗口", true, None::<&str>)?;
+    let open_item = MenuItem::with_id(app, "open", "打开网页", true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show_item, &open_item, &quit_item])?;
 

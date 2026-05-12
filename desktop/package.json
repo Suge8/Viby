@@ -11,7 +11,7 @@
         "prepare:icons": "node ../scripts/generate-brand-assets.mjs",
         "prepare:sidecar": "node ./scripts/prepare-sidecar.mjs",
         "repair:tauri-target": "node ./scripts/repair-tauri-target.mjs",
-        "tauri:dev": "bun run repair:tauri-target && bun run prepare:icons && tauri dev",
+        "tauri:dev": "bun run --cwd .. build:single-exe && bun run repair:tauri-target && bun run prepare:icons && bun run prepare:sidecar && tauri dev",
         "tauri:build": "VIBY_HARNESS_SCOPE=desktop bun run --cwd .. harness:check && bun run repair:tauri-target && bun run prepare:icons && tauri build"
     },
     "dependencies": {

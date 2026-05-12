@@ -3,6 +3,7 @@ mod launch;
 mod lifecycle;
 mod pairing;
 mod pairing_storage;
+mod settings;
 mod snapshot;
 mod state;
 mod supervisor;
@@ -34,8 +35,10 @@ pub fn run() {
             commands::open_preferred_url,
             commands::open_url,
             commands::copy_text,
-            commands::get_pairing_session,
-            commands::clear_pairing_session,
+            commands::set_public_access_enabled,
+            commands::get_pairing_sessions,
+            commands::clear_pairing_sessions,
+            commands::remove_pairing_session,
             commands::create_pairing_session,
             commands::approve_pairing_session,
             commands::refresh_pairing_session,

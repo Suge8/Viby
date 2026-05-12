@@ -15,6 +15,7 @@
         "allow-open-preferred-url",
         "allow-open-url",
         "allow-copy-text",
+        "allow-set-public-access-enabled",
         "allow-get-pairing-session",
         "allow-clear-pairing-session",
         "allow-create-pairing-session",
