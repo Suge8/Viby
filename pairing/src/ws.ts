@@ -1,26 +1,7 @@
-import {
-    type PairingSessionRecord,
-    type PairingSignal,
-    PairingSignalSchema,
-    readPairingSignalTransportId,
-} from '@viby/protocol/pairing'
+import type { PairingByeReason } from '@viby/protocol/pairing'
 import { buildPairingConnectionKey, PairingConnectionIndex } from './wsConnectionIndex'
 import { createPairingDisconnectGrace } from './wsDisconnectGrace'
-import {
-    CLIENT_MESSAGE_TYPES,
-    createEmptyState,
-    emitError,
-    emitExpired,
-    emitPeerLeft,
-    emitPong,
-    emitReady,
-    emitState,
-    emitStateToSocket,
-    normalizeSignal,
-    oppositeRole,
-    readRawText,
-    sendSignal,
-} from './wsSupport'
+import { createEmptyState, oppositeRole, readRawText, sendBye } from './wsSupport'
 import type {
     ConnectionState,
     PairingConnection,
@@ -31,7 +12,7 @@ import type {
 
 export type { PairingConnection, PairingSocketHubOptions, PairingSocketLike } from './wsTypes'
 
-const CONNECTION_TOUCH_MIN_INTERVAL_MS = 15_000
+const SOCKET_OPEN = 1
 
 export class PairingSocketHub {
     private readonly connections = new Map<string, ConnectionState>()
@@ -41,26 +22,19 @@ export class PairingSocketHub {
     constructor(private readonly options: PairingSocketHubOptions) {
         this.disconnectGrace = createPairingDisconnectGrace({
             disconnectGraceMs: options.disconnectGraceMs,
-            finalize: (connection) => this.finalizeDisconnect(connection),
-            onError: (error) => options.logger?.error?.('Failed to finalize pairing disconnect.', error),
+            onExpire: (connection) => this.collectEmptySession(connection.pairingId),
         })
     }
 
-    async attach(
-        pairingId: string,
-        tokenHash: string,
-        socket: PairingSocketLike,
-        transportId: string | null = null
-    ): Promise<PairingConnection | null> {
+    async attach(pairingId: string, tokenHash: string, socket: PairingSocketLike): Promise<PairingConnection | null> {
         const identity = await this.options.store.getSessionByTokenHash(tokenHash)
         if (!identity || identity.session.id !== pairingId) {
-            socket.close(1008, 'unauthorized')
+            socket.close(1008, 'invalid_token')
             return null
         }
-
-        const session = identity.session
-        if (session.state === 'deleted' || session.state === 'expired') {
-            socket.close(1008, 'pairing-unavailable')
+        if (identity.session.state === 'deleted' || identity.session.state === 'expired') {
+            sendBye(socket, 'pairing_unavailable')
+            socket.close(1000, 'pairing_unavailable')
             return null
         }
 
@@ -68,224 +42,77 @@ export class PairingSocketHub {
         this.disconnectGrace.cancel(state, identity.role)
         const existing = state.sockets.get(identity.role)
         if (existing && existing !== socket) {
-            const existingConnection = this.connectionIndex.resolve(existing)
-            if (existingConnection) {
-                this.connectionIndex.deleteConnection(existingConnection.connectionKey)
-            }
+            this.connectionIndex.deleteSocket(existing)
             existing.close(1012, 'replaced')
         }
 
-        const connectionKey = buildPairingConnectionKey(pairingId, identity.role, tokenHash)
-        const connection: PairingConnection = {
-            connectionKey,
+        const connection = {
+            connectionKey: buildPairingConnectionKey(pairingId, identity.role, tokenHash),
             pairingId,
             role: identity.role,
             tokenHash,
             socket,
-            transportId,
-            lastTouchedAt: this.now(),
         }
         state.sockets.set(identity.role, socket)
         this.connectionIndex.set(socket, connection)
-
-        const attached = await this.options.store.markConnected(pairingId, identity.role, this.now())
-        if (attached) emitState(connection, this.now(), attached)
-        if (attached?.state === 'connected') {
-            emitReady(state, pairingId, this.now(), attached, {
-                role: identity.role,
-                transportId: connection.transportId,
-            })
-        }
-
         return connection
     }
 
-    async handleMessage(
-        socket: PairingSocketLike,
-        rawData: string | ArrayBuffer | SharedArrayBuffer | Blob
-    ): Promise<void> {
+    async handleMessage(socket: PairingSocketLike, rawData: string | ArrayBuffer | SharedArrayBuffer | Blob): Promise<void> {
         const connection = this.connectionIndex.resolve(socket)
         if (!connection) {
             socket.close(1008, 'not-attached')
             return
         }
-
         const rawText = await readRawText(rawData)
-        if (!rawText) {
-            emitError(connection, this.now(), 'invalid-payload', 'Expected a text JSON message.')
-            return
-        }
-
-        let parsedSignal: ReturnType<typeof PairingSignalSchema.safeParse>
-        try {
-            parsedSignal = PairingSignalSchema.safeParse(JSON.parse(rawText))
-        } catch {
-            emitError(connection, this.now(), 'invalid-json', 'Expected JSON payload.')
-            return
-        }
-
-        const parsed = parsedSignal
-        if (!parsed.success) {
-            emitError(connection, this.now(), 'invalid-signal', 'Signal payload did not match the pairing schema.')
-            return
-        }
-
-        const signal = parsed.data
-        await this.touchConnectionIfDue(connection)
-
-        if (!CLIENT_MESSAGE_TYPES.has(signal.type)) {
-            emitError(connection, this.now(), 'invalid-client-message', `Client messages cannot use "${signal.type}".`)
-            return
-        }
-
-        if (signal.type === 'ping') {
-            emitPong(socket, connection.pairingId, connection.role, this.now(), signal)
-            return
-        }
-
-        if (signal.type === 'join') {
-            connection.transportId = readPairingSignalTransportId(signal.payload) ?? connection.transportId
-            const current = await this.options.store.getSession(connection.pairingId)
-            if (current) {
-                emitState(connection, this.now(), current)
-                if (current.state === 'connected') {
-                    const state = this.getConnectionState(connection.pairingId)
-                    emitReady(state, connection.pairingId, this.now(), current, {
-                        role: connection.role,
-                        transportId: connection.transportId,
-                    })
-                }
-            }
-            return
-        }
-
-        const payload = normalizeSignal(signal, connection.pairingId, connection.role, this.now())
-        this.forwardSignal(payload)
+        if (!rawText) return
+        const target = this.connections.get(connection.pairingId)?.sockets.get(oppositeRole(connection.role))
+        if (target?.readyState === SOCKET_OPEN) target.send(rawText)
     }
 
     async detach(socket: PairingSocketLike): Promise<void> {
         const connection = this.connectionIndex.resolve(socket)
-        if (!connection) {
-            return
-        }
-
+        if (!connection) return
         this.connectionIndex.deleteSocket(socket)
-        this.connectionIndex.deleteConnection(connection.connectionKey)
         const state = this.connections.get(connection.pairingId)
-        if (!state) {
-            return
-        }
-
-        const currentSocket = state.sockets.get(connection.role)
-        if (!currentSocket || (currentSocket !== socket && connection.socket !== currentSocket)) {
-            return
-        }
-
-        this.connectionIndex.deleteSocket(currentSocket)
+        if (!state || state.sockets.get(connection.role) !== connection.socket) return
         state.sockets.delete(connection.role)
         this.disconnectGrace.schedule(state, connection)
     }
 
-    async closeSession(
-        pairingId: string,
-        snapshot: PairingSessionRecord,
-        reason: 'deleted' | 'expired'
-    ): Promise<void> {
+    async notifyBye(pairingId: string, reason: PairingByeReason): Promise<void> {
         const state = this.connections.get(pairingId)
-        if (!state) {
-            return
-        }
-
+        if (!state) return
         this.connectionIndex.deleteSession(pairingId, state.sockets.values())
-        emitExpired(state, pairingId, this.now(), snapshot, reason)
+        for (const socket of state.sockets.values()) {
+            sendBye(socket, reason)
+            socket.close(1000, reason)
+        }
         this.disconnectGrace.clearAll(state)
         state.sockets.clear()
         this.connections.delete(pairingId)
     }
 
-    broadcastState(pairingId: string, session: PairingSessionRecord): void {
-        const state = this.connections.get(pairingId)
-        if (!state) {
-            return
-        }
-
-        const at = this.now()
-        for (const [role, socket] of state.sockets) {
-            emitStateToSocket(socket, pairingId, role, at, session)
-        }
-
-        if (session.state === 'connected') {
-            emitReady(state, pairingId, at, session)
-        }
-    }
-
     snapshot(): PairingSocketHubSnapshot {
-        const snapshot = {
-            activeSessions: this.connections.size,
-            activeSockets: 0,
-            pairedSessions: 0,
-            disconnectGraceTimers: 0,
-        }
+        const snapshot = { activeSessions: this.connections.size, activeSockets: 0, pairedSessions: 0, disconnectGraceTimers: 0 }
         for (const state of this.connections.values()) {
             snapshot.activeSockets += state.sockets.size
             snapshot.disconnectGraceTimers += state.disconnectTimers.size
-            if (state.sockets.size === 2) {
-                snapshot.pairedSessions += 1
-            }
+            if (state.sockets.size === 2) snapshot.pairedSessions += 1
         }
         return snapshot
     }
 
-    private forwardSignal(signal: PairingSignal): void {
-        const state = this.getConnectionState(signal.pairingId)
-        const targetRole = signal.to ?? oppositeRole(signal.from ?? 'host')
-        const targetSocket = state.sockets.get(targetRole)
-
-        if (targetSocket && targetSocket.readyState === 1) {
-            sendSignal(targetSocket, signal)
-        }
-    }
-
-    private async finalizeDisconnect(connection: PairingConnection): Promise<void> {
-        const state = this.connections.get(connection.pairingId)
-        if (!state || state.sockets.has(connection.role)) {
-            return
-        }
-
-        await this.options.store.markDisconnected(connection.pairingId, connection.role, this.now())
-        const current = await this.options.store.getSession(connection.pairingId)
-        const peer = state.sockets.get(oppositeRole(connection.role))
-        if (current && peer && peer.readyState === 1) {
-            emitPeerLeft(peer, connection.pairingId, oppositeRole(connection.role), this.now(), current)
-        }
-
-        if (state.sockets.size === 0 && state.disconnectTimers.size === 0) {
-            this.connections.delete(connection.pairingId)
-        }
+    private collectEmptySession(pairingId: string): void {
+        const state = this.connections.get(pairingId)
+        if (state && state.sockets.size === 0 && state.disconnectTimers.size === 0) this.connections.delete(pairingId)
     }
 
     private getConnectionState(pairingId: string): ConnectionState {
         const existing = this.connections.get(pairingId)
-        if (existing) {
-            return existing
-        }
-
+        if (existing) return existing
         const created = createEmptyState()
         this.connections.set(pairingId, created)
         return created
-    }
-
-    private now(): number {
-        return this.options.now?.() ?? Date.now()
-    }
-
-    private async touchConnectionIfDue(connection: PairingConnection): Promise<void> {
-        const now = this.now()
-        if (now - connection.lastTouchedAt < CONNECTION_TOUCH_MIN_INTERVAL_MS) {
-            return
-        }
-
-        connection.lastTouchedAt = now
-        await this.options.store.touchConnection(connection.pairingId, connection.role, now)
     }
 }

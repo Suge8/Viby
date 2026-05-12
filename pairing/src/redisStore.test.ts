@@ -112,9 +112,9 @@ describe('RedisPairingStore', () => {
         adapter.failNextCompareAndSet(sessionKey(session.id))
         now = 1_050
 
-        const updated = await store.markConnected(session.id, 'host', now)
+        const updated = await store.renewSession(session.id, now + 2_000, now)
 
-        expect(updated?.host.connectedAt).toBe(now)
+        expect(updated?.expiresAt).toBe(now + 2_000)
         expect(
             adapter.compareAndSetCalls.filter((call) => call.key === sessionKey(session.id)).length
         ).toBeGreaterThanOrEqual(3)

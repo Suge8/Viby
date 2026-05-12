@@ -8,7 +8,6 @@ import {
     PairingStatusResponseSchema,
     type PairingVerifyCodeRequest,
     PairingVerifyCodeResponseSchema,
-    readPairingSignalTransportId,
     toPairingSessionSnapshot,
     toPairingSessionSnapshotForRole,
 } from '@viby/protocol/pairing'
@@ -157,8 +156,6 @@ export function registerPairingSessionRoutes(
             return rejectPairingRequest(c, options, 'claim_rejected', 409, 'Pairing session could not be claimed')
         }
 
-        options.socketHub.broadcastState(pairingId, stored)
-
         const response = PairingClaimResponseSchema.parse({
             pairing: toPairingSessionSnapshotForRole(stored, 'guest'),
             guestToken,
@@ -201,7 +198,6 @@ export function registerPairingSessionRoutes(
             return rejectPairingRequest(c, options, 'approve_rejected', 409, 'Pairing session is not ready')
         }
 
-        options.socketHub.broadcastState(pairingId, approved)
         logPairingAudit(options, 'approve', {
             ip: getClientAddress(c),
             pairingId,
@@ -235,7 +231,7 @@ export function registerPairingSessionRoutes(
             return rejectPairingRequest(c, options, 'delete_rejected', 404, 'Pairing session not found')
         }
 
-        await options.socketHub.closeSession(pairingId, deleted, 'deleted')
+        await options.socketHub.notifyBye(pairingId, 'user_revoked')
         logPairingAudit(options, 'delete', {
             ip: getClientAddress(c),
             pairingId,
@@ -281,7 +277,6 @@ export function registerPairingSessionRoutes(
             )
         }
 
-        options.socketHub.broadcastState(pairingId, approved)
         logPairingAudit(options, 'approve', {
             ip: getClientAddress(c),
             pairingId,
@@ -301,8 +296,6 @@ export function registerPairingSessionRoutes(
             const pairingId = c.req.param('id')
             const token = c.req.query('token')
             const tokenHash = token ? hashPairingSecret(token) : null
-            const transportId = readPairingSignalTransportId({ transportId: c.req.query('transportId') })
-
             return {
                 async onOpen(_event, ws) {
                     if (!tokenHash) {
@@ -310,7 +303,7 @@ export function registerPairingSessionRoutes(
                         return
                     }
 
-                    await options.socketHub.attach(pairingId, tokenHash, toPairingSocket(ws), transportId)
+                    await options.socketHub.attach(pairingId, tokenHash, toPairingSocket(ws))
                 },
                 async onMessage(event, ws) {
                     await options.socketHub.handleMessage(toPairingSocket(ws), event.data)

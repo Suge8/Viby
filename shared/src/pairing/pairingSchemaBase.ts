@@ -3,7 +3,7 @@ import { z } from 'zod'
 export const PairingRoleSchema = z.enum(['host', 'guest'])
 export type PairingRole = z.infer<typeof PairingRoleSchema>
 
-export const PairingSessionStateSchema = z.enum(['waiting', 'claimed', 'connected', 'deleted', 'expired'])
+export const PairingSessionStateSchema = z.enum(['active', 'waiting', 'claimed', 'connected', 'deleted', 'expired'])
 export type PairingSessionState = z.infer<typeof PairingSessionStateSchema>
 
 export const PairingApprovalStatusSchema = z.enum(['pending', 'approved']).nullable()

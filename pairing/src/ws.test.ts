@@ -1,6 +1,5 @@
 import { describe, expect, it, mock } from 'bun:test'
-import type { PairingSignal } from '@viby/protocol/pairing'
-import { PairingSessionRecordSchema } from '@viby/protocol/pairing'
+import { PairingSessionRecordSchema, type PairingSignalV2 } from '@viby/protocol/pairing'
 import { createParticipantRecord } from './httpSupport'
 import { MemoryPairingStore } from './memoryStore'
 import { PairingSocketHub } from './ws'
@@ -10,7 +9,7 @@ function createSessionRecord(now: number) {
     const host = createParticipantRecord({ token: 'host-secret', label: 'Host device' })
     return PairingSessionRecordSchema.parse({
         id: 'pairing-ws-1',
-        state: 'waiting',
+        state: 'active',
         createdAt: now,
         updatedAt: now,
         expiresAt: now + 10_000,
@@ -24,36 +23,32 @@ function createSessionRecord(now: number) {
 }
 
 function createSocket(): PairingSocketLike & {
-    sent: PairingSignal[]
+    sent: unknown[]
     closeCalls: Array<{ code?: number; reason?: string }>
 } {
-    const sent: PairingSignal[] = []
+    const sent: unknown[] = []
     const closeCalls: Array<{ code?: number; reason?: string }> = []
     return {
         readyState: 1,
         sent,
         closeCalls,
-        send: mock((data: string) => {
-            sent.push(JSON.parse(data) as PairingSignal)
-        }),
-        close: mock((code?: number, reason?: string) => {
-            closeCalls.push({ code, reason })
-        }),
+        send: mock((payload: string) => sent.push(JSON.parse(payload) as unknown)),
+        close: mock((code?: number, reason?: string) => closeCalls.push({ code, reason })),
     }
 }
 
-function cloneSocketView(socket: ReturnType<typeof createSocket>): PairingSocketLike & {
-    sent: PairingSignal[]
-    closeCalls: Array<{ code?: number; reason?: string }>
-} {
-    return {
-        readyState: socket.readyState,
-        sent: socket.sent,
-        closeCalls: socket.closeCalls,
-        data: socket.data,
-        send: socket.send,
-        close: socket.close,
-    }
+function cloneSocketView(socket: ReturnType<typeof createSocket>): PairingSocketLike {
+    return { readyState: socket.readyState, data: socket.data, send: socket.send, close: socket.close }
+}
+
+async function createClaimedStore(now: number) {
+    const store = new MemoryPairingStore(() => now)
+    const session = createSessionRecord(now)
+    const guest = createParticipantRecord({ token: 'guest-secret', label: 'Phone' })
+    await store.createSession(session)
+    await store.claimSession(session.id, guest, '123456')
+    await store.approveSession(session.id, now)
+    return { store, session, guest }
 }
 
 describe('PairingSocketHub', () => {
@@ -65,106 +60,7 @@ describe('PairingSocketHub', () => {
         const attached = await hub.attach('pairing-missing', 'unknown-token', socket)
 
         expect(attached).toBeNull()
-        expect(socket.closeCalls).toEqual([{ code: 1008, reason: 'unauthorized' }])
-    })
-
-    it('drops volatile peer signals while the target role is absent', async () => {
-        const now = 1_000
-        const store = new MemoryPairingStore(() => now)
-        const session = createSessionRecord(now)
-        const guest = createParticipantRecord({ token: 'guest-secret', label: 'Phone' })
-        await store.createSession(session)
-        const claimed = await store.claimSession(session.id, guest, '123456')
-        expect(claimed?.guest?.tokenHash).toBe(guest.tokenHash)
-        await store.approveSession(session.id, now)
-
-        const hub = new PairingSocketHub({ store, now: () => now })
-        const hostSocket = createSocket()
-        const guestSocket = createSocket()
-
-        await hub.attach(session.id, session.host.tokenHash, hostSocket)
-        hostSocket.sent.length = 0
-        await hub.handleMessage(
-            hostSocket,
-            JSON.stringify({ pairingId: session.id, type: 'offer', payload: { sdp: 'stale-offer-sdp' } })
-        )
-        await hub.attach(session.id, guest.tokenHash, guestSocket, 'guest-transport-1')
-
-        expect(guestSocket.sent.some((signal) => signal.type === 'offer')).toBe(false)
-        expect(guestSocket.sent.some((signal) => signal.type === 'state')).toBe(true)
-        expect(guestSocket.sent.some((signal) => signal.type === 'ready')).toBe(true)
-        expect(
-            hostSocket.sent.some(
-                (signal) =>
-                    signal.type === 'ready' &&
-                    signal.from === 'guest' &&
-                    (signal.payload as { transportId?: string }).transportId === 'guest-transport-1'
-            )
-        ).toBe(true)
-    })
-
-    it('keeps a closed peer connected through disconnect grace before notifying the remaining peer', async () => {
-        const now = 1_000
-        const store = new MemoryPairingStore(() => now)
-        const session = createSessionRecord(now)
-        const guest = createParticipantRecord({ token: 'guest-secret', label: 'Phone' })
-        await store.createSession(session)
-        await store.claimSession(session.id, guest, '123456')
-        await store.approveSession(session.id, now)
-
-        const hub = new PairingSocketHub({ store, now: () => now, disconnectGraceMs: 1 })
-        const hostSocket = createSocket()
-        const guestSocket = createSocket()
-
-        await hub.attach(session.id, session.host.tokenHash, hostSocket)
-        await hub.attach(session.id, guest.tokenHash, guestSocket)
-        hostSocket.sent.length = 0
-        guestSocket.sent.length = 0
-
-        await hub.detach(guestSocket)
-
-        expect(hostSocket.sent.some((signal) => signal.type === 'peer-left')).toBe(false)
-        expect((await store.getSession(session.id))?.guest?.connectedAt).toBe(now)
-
-        await new Promise((resolve) => setTimeout(resolve, 5))
-
-        expect(hostSocket.sent.some((signal) => signal.type === 'peer-left')).toBe(true)
-        expect((await store.getSession(session.id))?.guest?.connectedAt).toBeUndefined()
-        expect(guestSocket.sent).toHaveLength(0)
-    })
-
-    it('cancels disconnect grace when the same role comes back before timeout', async () => {
-        const now = 1_000
-        const store = new MemoryPairingStore(() => now)
-        const session = createSessionRecord(now)
-        const guest = createParticipantRecord({ token: 'guest-secret', label: 'Phone' })
-        await store.createSession(session)
-        await store.claimSession(session.id, guest, '123456')
-        await store.approveSession(session.id, now)
-
-        const hub = new PairingSocketHub({ store, now: () => now, disconnectGraceMs: 20 })
-        const hostSocket = createSocket()
-        const firstGuestSocket = createSocket()
-        const secondGuestSocket = createSocket()
-
-        await hub.attach(session.id, session.host.tokenHash, hostSocket)
-        await hub.attach(session.id, guest.tokenHash, firstGuestSocket)
-        hostSocket.sent.length = 0
-
-        await hub.detach(firstGuestSocket)
-        await hub.attach(session.id, guest.tokenHash, secondGuestSocket, 'guest-transport-2')
-        await new Promise((resolve) => setTimeout(resolve, 30))
-
-        expect(hostSocket.sent.some((signal) => signal.type === 'peer-left')).toBe(false)
-        expect(
-            hostSocket.sent.some(
-                (signal) =>
-                    signal.type === 'ready' &&
-                    signal.from === 'guest' &&
-                    (signal.payload as { transportId?: string }).transportId === 'guest-transport-2'
-            )
-        ).toBe(true)
-        expect((await store.getSession(session.id))?.guest?.connectedAt).toBe(now)
+        expect(socket.closeCalls).toEqual([{ code: 1008, reason: 'invalid_token' }])
     })
 
     it('replaces an existing socket when the same role attaches again', async () => {
@@ -172,7 +68,6 @@ describe('PairingSocketHub', () => {
         const store = new MemoryPairingStore(() => now)
         const session = createSessionRecord(now)
         await store.createSession(session)
-
         const hub = new PairingSocketHub({ store, now: () => now })
         const firstHostSocket = createSocket()
         const secondHostSocket = createSocket()
@@ -184,12 +79,11 @@ describe('PairingSocketHub', () => {
         expect(secondHostSocket.closeCalls).toHaveLength(0)
     })
 
-    it('ignores stale close callbacks from sockets replaced by the same role', async () => {
+    it('ignores stale callbacks from sockets replaced by the same role', async () => {
         const now = 1_000
         const store = new MemoryPairingStore(() => now)
         const session = createSessionRecord(now)
         await store.createSession(session)
-
         const hub = new PairingSocketHub({ store, now: () => now })
         const firstHostSocket = createSocket()
         const secondHostSocket = createSocket()
@@ -197,130 +91,73 @@ describe('PairingSocketHub', () => {
         await hub.attach(session.id, session.host.tokenHash, firstHostSocket)
         await hub.attach(session.id, session.host.tokenHash, secondHostSocket)
         await hub.detach(firstHostSocket)
+        await hub.handleMessage(secondHostSocket, JSON.stringify({ type: 'candidate', candidate: { candidate: 'x' } }))
 
-        const loaded = await store.getSession(session.id)
-        expect(loaded?.host.connectedAt).toBe(now)
-
-        await hub.handleMessage(secondHostSocket, JSON.stringify({ pairingId: session.id, type: 'ping' }))
         expect(secondHostSocket.closeCalls).toHaveLength(0)
     })
 
-    it('throttles connection touch writes so host heartbeats do not starve claim updates', async () => {
-        let now = 1_000
-        const store = new MemoryPairingStore(() => now)
-        const touchConnection = mock(store.touchConnection.bind(store))
-        store.touchConnection = touchConnection
-        const session = createSessionRecord(now)
-        await store.createSession(session)
-
-        const hub = new PairingSocketHub({ store, now: () => now })
-        const hostSocket = createSocket()
-        await hub.attach(session.id, session.host.tokenHash, hostSocket)
-
-        now = 1_001
-        await hub.handleMessage(hostSocket, JSON.stringify({ pairingId: session.id, type: 'ping' }))
-        expect(touchConnection).toHaveBeenCalledTimes(0)
-
-        now = 16_001
-        await hub.handleMessage(hostSocket, JSON.stringify({ pairingId: session.id, type: 'ping' }))
-        expect(touchConnection).toHaveBeenCalledTimes(1)
-    })
-
-    it('accepts message and close callbacks that arrive with a different websocket wrapper identity', async () => {
+    it('accepts message and close callbacks with a websocket wrapper identity', async () => {
         const now = 1_000
         const store = new MemoryPairingStore(() => now)
         const session = createSessionRecord(now)
         await store.createSession(session)
-
         const hub = new PairingSocketHub({ store, now: () => now, disconnectGraceMs: 1 })
         const hostOpenSocket = createSocket()
         await hub.attach(session.id, session.host.tokenHash, hostOpenSocket)
 
-        const hostMessageSocket = cloneSocketView(hostOpenSocket)
-        hostMessageSocket.data = hostOpenSocket.data
-        await hub.handleMessage(hostMessageSocket, JSON.stringify({ pairingId: session.id, type: 'ping' }))
-
-        expect(hostOpenSocket.closeCalls).toHaveLength(0)
-
-        const hostCloseSocket = cloneSocketView(hostOpenSocket)
-        hostCloseSocket.data = hostOpenSocket.data
-        await hub.detach(hostCloseSocket)
+        await hub.handleMessage(cloneSocketView(hostOpenSocket), JSON.stringify({ type: 'candidate', candidate: { candidate: 'x' } }))
+        await hub.detach(cloneSocketView(hostOpenSocket))
         await new Promise((resolve) => setTimeout(resolve, 5))
 
-        const loaded = await store.getSession(session.id)
-        expect(loaded?.host.connectedAt).toBeUndefined()
+        expect(hostOpenSocket.closeCalls).toHaveLength(0)
+        expect(hub.snapshot().activeSessions).toBe(0)
     })
 
     it('reports active websocket pressure without exposing session data', async () => {
         const now = 1_000
-        const store = new MemoryPairingStore(() => now)
-        const session = createSessionRecord(now)
-        const guest = createParticipantRecord({ token: 'guest-secret', label: 'Phone' })
-        await store.createSession(session)
-        await store.claimSession(session.id, guest, '123456')
-        await store.approveSession(session.id, now)
-
+        const { store, session, guest } = await createClaimedStore(now)
         const hub = new PairingSocketHub({ store, now: () => now, disconnectGraceMs: 20 })
         const hostSocket = createSocket()
         const guestSocket = createSocket()
 
         await hub.attach(session.id, session.host.tokenHash, hostSocket)
-        expect(hub.snapshot()).toEqual({
-            activeSessions: 1,
-            activeSockets: 1,
-            pairedSessions: 0,
-            disconnectGraceTimers: 0,
-        })
-
+        expect(hub.snapshot()).toEqual({ activeSessions: 1, activeSockets: 1, pairedSessions: 0, disconnectGraceTimers: 0 })
         await hub.attach(session.id, guest.tokenHash, guestSocket)
-        expect(hub.snapshot()).toEqual({
-            activeSessions: 1,
-            activeSockets: 2,
-            pairedSessions: 1,
-            disconnectGraceTimers: 0,
-        })
-
+        expect(hub.snapshot()).toEqual({ activeSessions: 1, activeSockets: 2, pairedSessions: 1, disconnectGraceTimers: 0 })
         await hub.detach(guestSocket)
-        expect(hub.snapshot()).toEqual({
-            activeSessions: 1,
-            activeSockets: 1,
-            pairedSessions: 0,
-            disconnectGraceTimers: 1,
-        })
+        expect(hub.snapshot()).toEqual({ activeSessions: 1, activeSockets: 1, pairedSessions: 0, disconnectGraceTimers: 1 })
     })
 
-    it('emits expire and closes sockets when a session is closed', async () => {
+    it('forwards raw V2 signals only when the opposite role is online', async () => {
         const now = 1_000
-        const store = new MemoryPairingStore(() => now)
-        const session = createSessionRecord(now)
-        const guest = createParticipantRecord({ token: 'guest-secret', label: 'Phone' })
-        await store.createSession(session)
-        const claimed = await store.claimSession(session.id, guest, '123456')
-        const approved = await store.approveSession(session.id, now)
-        expect(claimed?.guest?.tokenHash).toBe(guest.tokenHash)
-        expect(approved?.approvalStatus).toBe('approved')
-
+        const { store, session, guest } = await createClaimedStore(now)
         const hub = new PairingSocketHub({ store, now: () => now })
         const hostSocket = createSocket()
         const guestSocket = createSocket()
+        const signal: PairingSignalV2 = { type: 'description', description: { type: 'offer', sdp: 'v=0' } }
 
         await hub.attach(session.id, session.host.tokenHash, hostSocket)
+        await hub.handleMessage(hostSocket, JSON.stringify(signal))
+        expect(guestSocket.sent).toHaveLength(0)
         await hub.attach(session.id, guest.tokenHash, guestSocket)
-        hostSocket.sent.length = 0
-        guestSocket.sent.length = 0
+        await hub.handleMessage(hostSocket, JSON.stringify(signal))
+        expect(guestSocket.sent).toEqual([signal])
+    })
 
-        await hub.closeSession(
-            session.id,
-            {
-                ...approved!,
-                state: 'deleted',
-            },
-            'deleted'
-        )
+    it('sends bye and closes sockets on explicit notification', async () => {
+        const now = 1_000
+        const { store, session, guest } = await createClaimedStore(now)
+        const hub = new PairingSocketHub({ store, now: () => now })
+        const hostSocket = createSocket()
+        const guestSocket = createSocket()
+        await hub.attach(session.id, session.host.tokenHash, hostSocket)
+        await hub.attach(session.id, guest.tokenHash, guestSocket)
 
-        expect(hostSocket.sent.some((signal) => signal.type === 'expire')).toBe(true)
-        expect(guestSocket.sent.some((signal) => signal.type === 'expire')).toBe(true)
-        expect(hostSocket.closeCalls).toContainEqual({ code: 1000, reason: 'deleted' })
-        expect(guestSocket.closeCalls).toContainEqual({ code: 1000, reason: 'deleted' })
+        await hub.notifyBye(session.id, 'pairing_unavailable')
+
+        expect(hostSocket.sent).toContainEqual({ type: 'bye', reason: 'pairing_unavailable' })
+        expect(guestSocket.sent).toContainEqual({ type: 'bye', reason: 'pairing_unavailable' })
+        expect(hostSocket.closeCalls).toContainEqual({ code: 1000, reason: 'pairing_unavailable' })
+        expect(guestSocket.closeCalls).toContainEqual({ code: 1000, reason: 'pairing_unavailable' })
     })
 })

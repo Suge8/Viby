@@ -15,17 +15,17 @@
 
 > Resume from here after compaction / restart.
 
-- **Current milestone**: #4 — Phase D Broker Forwarder
-- **Current status**: BLOCKED（write_scope / shared schema conflict）
-- **Last completed**: #3 Phase C Pairing Transport
-- **Current artifact**: `shared/src/pairing/pairingTransport.ts`
+- **Current milestone**: #5 — Phase E Desktop Bridge Rewrite
+- **Current status**: Phase D DONE；Phase E TODO
+- **Last completed**: #4 Phase D Broker Forwarder
+- **Current artifact**: `pairing/src/ws.ts`
 - **Claimed by**: `none`
 - **Lease until**: `none`
 - **Write scope**: `none`
 - **Handoff**: `none`
-- **Key context**: Phase C added shared `createPairingTransport` (177 lines): stable external-store snapshot, `untilReady`, wakeable reconnect backoff, V2 signal socket, and transport-owned ICE restart/foreground hooks. Existing desktop/web legacy restartIce remains for later E/F cleanup per plan.
+- **Key context**: Phase D broker is raw forwarder only (`description/candidate/bye`), `ws.ts` 118 lines. Store no longer tracks websocket online state. Shared session schema now accepts `active` and legacy states; `migrateLegacyState()` maps `waiting/claimed/connected` to `active`.
 - **Known issues**: 真机回归矩阵需要 iPhone Safari + 桌面端联调；自动化只是保底。D/E/F 发布必须协调 staging 24h burn-in。
-- **Next action**: 取 row 4 (`tasks/04-broker-forwarder`)，forwarder 化 broker；D/E/F 是协调发布单元，Phase D 完成后不得单独 prod 部署。
+- **Next action**: 取 row 5 (`tasks/05-desktop-bridge`)，desktop bridge 切到 shared transport；D/E/F 仍不得单独 prod 部署，等 E+F 后 staging burn-in。
 
 ---
 
@@ -138,10 +138,19 @@
 - Commit: pending.
 
 
-## BLOCKED — 2026-05-12T18:55:00Z — Phase D
+## Resolved Block — 2026-05-12T19:25:00Z — Phase D
 
 - **Blocker**: SPEC requires broker session state shrink to `active | deleted | expired`, but `PairingSessionRecordSchema` / `PairingSessionStateSchema` in `shared/src/pairing/pairingSchemaBase.ts` only allow `waiting | claimed | connected | deleted | expired`.
 - **Why severe**: `pairing/src/redisStoreSessionSupport.ts` parses persisted sessions with shared schema. If Phase D writes `active`, Redis-loaded sessions fail schema parse and get deleted. Fix requires changing shared schema, which is outside Phase D `write_scope`.
 - **Second scope conflict**: removing `markConnected / markDisconnected / touchConnection` requires `pairing/src/storeTypes.ts`, `pairing/src/redisStore.ts`, `pairing/src/redisStore.test.ts`, and HTTP route calls to `broadcastState/closeSession` to change; these are not in Phase D `write_scope`.
 - **Tried**: inspected `ws.ts`, `wsSupport.ts`, `wsDisconnectGrace.ts`, `storeSupport.ts`, `memoryStore.ts`, `storeTypes.ts`, `redisStore.ts`, `redisStoreSessionSupport.ts`, `httpSessionRoutes.ts`, `httpPwaHandoffRoutes.ts`, and existing `ws.test.ts`; confirmed this is not a local typo.
 - **Needed decision**: expand Phase D write_scope to include shared schema + store interface/redis/http route touchpoints, or change SPEC to keep legacy state enum until Phase K.
+
+## Phase D Complete — 2026-05-12T19:25:00Z
+
+- Rewrote broker websocket hub to pure raw signal forwarder; `pairing/src/ws.ts` = 118 lines.
+- Removed broker ready/state/peer-left/connection tracking paths and store online methods.
+- Added `wsForwarder.test.ts`; updated websocket/redis tests for active-state broker.
+- Validation: `bun run --cwd pairing typecheck`; `bun run --cwd pairing test`; line/grep guards ✅
+- Real-device RM: D/E/F staging burn-in deferred until E+F complete; no prod deploy.
+- Commit: pending.

@@ -5,8 +5,7 @@ export const DEFAULT_PARTICIPANT_DISCONNECT_GRACE_MS = PAIRING_MOBILE_DISCONNECT
 
 export function createPairingDisconnectGrace(options: {
     disconnectGraceMs?: number
-    finalize: (connection: PairingConnection) => Promise<void>
-    onError?: (error: unknown) => void
+    onExpire: (connection: PairingConnection) => void
 }) {
     const delayMs = options.disconnectGraceMs ?? DEFAULT_PARTICIPANT_DISCONNECT_GRACE_MS
 
@@ -21,7 +20,7 @@ export function createPairingDisconnectGrace(options: {
         cancel(state, connection.role)
         const timer = setTimeout(() => {
             state.disconnectTimers.delete(connection.role)
-            options.finalize(connection).catch(options.onError)
+            options.onExpire(connection)
         }, delayMs)
         state.disconnectTimers.set(connection.role, timer)
     }

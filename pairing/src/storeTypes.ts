@@ -35,9 +35,6 @@ export interface PairingStore {
         shortCode: string
     ): Promise<PairingSessionRecord | null>
     approveSession(pairingId: string, at: number): Promise<PairingSessionRecord | null>
-    markConnected(pairingId: string, role: PairingRole, at: number): Promise<PairingSessionRecord | null>
-    touchConnection(pairingId: string, role: PairingRole, at: number): Promise<PairingSessionRecord | null>
-    markDisconnected(pairingId: string, role: PairingRole, at: number): Promise<PairingSessionRecord | null>
     renewSession(pairingId: string, expiresAt: number, at: number): Promise<PairingSessionRecord | null>
     bindGuestDeviceKey(pairingId: string, publicKey: string, at: number): Promise<PairingSessionRecord | null>
     rotateGuestToken(

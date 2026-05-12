@@ -27,7 +27,6 @@ import {
     isActiveState,
     sessionKey,
     tokenIndexKey,
-    updateParticipant,
     updateState,
 } from './storeSupport'
 import type {
@@ -102,7 +101,7 @@ export class RedisPairingStore implements PairingStore {
         }
 
         const session = await this.getSession(index.pairingId)
-        if (!session || !isActiveState(session.state)) {
+        if (!session || session.state === 'expired') {
             await this.adapter.del(tokenIndexKey(tokenHash))
             return null
         }
@@ -159,18 +158,6 @@ export class RedisPairingStore implements PairingStore {
                 approvalStatus: 'approved',
             })
         })
-    }
-
-    async markConnected(pairingId: string, role: PairingRole, at: number): Promise<PairingSessionRecord | null> {
-        return this.updateParticipantState(pairingId, role, at, { connectedAt: at, lastSeenAt: at })
-    }
-
-    async touchConnection(pairingId: string, role: PairingRole, at: number): Promise<PairingSessionRecord | null> {
-        return this.updateParticipantState(pairingId, role, at, { lastSeenAt: at })
-    }
-
-    async markDisconnected(pairingId: string, role: PairingRole, at: number): Promise<PairingSessionRecord | null> {
-        return this.updateParticipantState(pairingId, role, at, { connectedAt: undefined, lastSeenAt: at })
     }
 
     async renewSession(pairingId: string, expiresAt: number, at: number): Promise<PairingSessionRecord | null> {
@@ -281,24 +268,6 @@ export class RedisPairingStore implements PairingStore {
 
         await clearSessionSideKeys(this.adapter, session)
         return session
-    }
-
-    async updateParticipantState(
-        pairingId: string,
-        role: PairingRole,
-        at: number,
-        patch: Partial<Pick<PairingParticipantRecord, 'connectedAt' | 'lastSeenAt'>>
-    ): Promise<PairingSessionRecord | null> {
-        return this.updateSession(pairingId, async (current) => {
-            if (!isActiveState(current.state)) {
-                return null
-            }
-
-            return updateState({
-                ...updateParticipant(current, role, patch),
-                updatedAt: at,
-            })
-        })
     }
 
     async updateSession(

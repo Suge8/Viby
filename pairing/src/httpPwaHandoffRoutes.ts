@@ -131,7 +131,6 @@ export function registerPairingPwaHandoffRoutes(
             return rejectPairingCode(c, options, 'claim_rejected', 410, 'pairing_unavailable')
         }
 
-        options.socketHub.broadcastState(pairingId, recovered)
         logPairingAudit(options, 'pwa_handoff_claim', { ip: getClientAddress(c), pairingId })
         return c.json(
             PairingClaimResponseSchema.parse({

@@ -14,8 +14,6 @@ export interface PairingConnection {
     role: PairingRole
     tokenHash: string
     socket: PairingSocketLike
-    transportId: string | null
-    lastTouchedAt: number
 }
 
 export interface PairingSocketHubOptions {

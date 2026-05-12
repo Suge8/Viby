@@ -13,13 +13,11 @@ import {
     isActiveState,
     type PairingTokenIndex,
     reconnectChallengeKey,
-    updateParticipant,
     updateState,
 } from './storeSupport'
 import type { PairingHandoffTicketRecord, PairingReconnectChallengeRecord, PairingStore } from './storeTypes'
 
 const RECONNECT_CHALLENGE_ROLES: readonly PairingRole[] = ['host', 'guest']
-type ConnectionUpdateMode = 'connected' | 'touched' | 'disconnected'
 
 export class MemoryPairingStore implements PairingStore {
     private readonly sessions = new Map<string, PairingSessionRecord>()
@@ -71,7 +69,7 @@ export class MemoryPairingStore implements PairingStore {
         }
 
         const session = await this.getSession(index.pairingId)
-        if (!session || !isActiveState(session.state)) {
+        if (!session || session.state === 'expired') {
             this.tokenIndex.delete(tokenHash)
             return null
         }
@@ -128,18 +126,6 @@ export class MemoryPairingStore implements PairingStore {
 
         this.sessions.set(pairingId, next)
         return cloneSession(next)
-    }
-
-    async markConnected(pairingId: string, role: PairingRole, at: number): Promise<PairingSessionRecord | null> {
-        return this.updateConnection(pairingId, role, at, 'connected')
-    }
-
-    async touchConnection(pairingId: string, role: PairingRole, at: number): Promise<PairingSessionRecord | null> {
-        return this.updateConnection(pairingId, role, at, 'touched')
-    }
-
-    async markDisconnected(pairingId: string, role: PairingRole, at: number): Promise<PairingSessionRecord | null> {
-        return this.updateConnection(pairingId, role, at, 'disconnected')
     }
 
     async renewSession(pairingId: string, expiresAt: number, at: number): Promise<PairingSessionRecord | null> {
@@ -262,43 +248,4 @@ export class MemoryPairingStore implements PairingStore {
         return cloneSession(next)
     }
 
-    private buildConnectionPatch(
-        at: number,
-        mode: ConnectionUpdateMode
-    ): Partial<Pick<PairingParticipantRecord, 'connectedAt' | 'lastSeenAt'>> {
-        switch (mode) {
-            case 'connected':
-                return { connectedAt: at, lastSeenAt: at }
-            case 'disconnected':
-                return { connectedAt: undefined, lastSeenAt: at }
-            default:
-                return { lastSeenAt: at }
-        }
-    }
-
-    async updateConnection(
-        pairingId: string,
-        role: PairingRole,
-        at: number,
-        mode: ConnectionUpdateMode
-    ): Promise<PairingSessionRecord | null> {
-        const session = this.sessions.get(pairingId)
-        if (!session) {
-            return null
-        }
-
-        const normalized = expireIfNeeded(session, this.now(), this.tokenIndex)
-        if (!isActiveState(normalized.state)) {
-            this.sessions.set(pairingId, normalized)
-            return null
-        }
-
-        const updated = updateState({
-            ...updateParticipant(normalized, role, this.buildConnectionPatch(at, mode)),
-            updatedAt: at,
-        })
-
-        this.sessions.set(pairingId, updated)
-        return cloneSession(updated)
-    }
 }
