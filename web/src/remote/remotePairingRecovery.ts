@@ -1,4 +1,6 @@
 import { PAIRING_REMOTE_RECONNECT_BASE_DELAY_MS, PAIRING_REMOTE_RECONNECT_MAX_DELAY_MS } from '@viby/protocol'
+import { isBrowserStorageUnavailableError } from '@/lib/browserStorage'
+import { isAppCacheUnavailableError } from '@/lib/storage/appCacheDb'
 import { RemotePairingHttpError } from './remotePairingHttp'
 import { RemotePeerConnectError } from './remotePairingSignal'
 
@@ -27,5 +29,6 @@ export function isRecoverableRemotePairingError(error: unknown): boolean {
             error.serverError === RECONNECT_CHALLENGE_EXPIRED
         )
     }
+    if (isBrowserStorageUnavailableError(error) || isAppCacheUnavailableError(error)) return true
     return error instanceof TypeError
 }

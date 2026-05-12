@@ -145,6 +145,10 @@ export type AuthResponse = {
         firstName?: string
         lastName?: string
     }
+    device?: {
+        id: string
+        secret?: string
+    }
 }
 
 export type SessionsResponse = { sessions: SessionSummary[] }

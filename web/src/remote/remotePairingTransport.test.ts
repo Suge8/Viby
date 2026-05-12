@@ -1,3 +1,8 @@
+import {
+    PAIRING_CONNECT_TIMEOUT_MS,
+    PAIRING_PEER_HEARTBEAT_ACK_TIMEOUT_MS,
+    PAIRING_PEER_HEARTBEAT_INTERVAL_MS,
+} from '@viby/protocol'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { resetBrowserLifecycleForTests } from '@/lib/browserLifecycle'
 import { resetForegroundPulseForTests } from '@/lib/foregroundPulse'
@@ -12,7 +17,7 @@ import {
     resetFakeRemoteTransport,
 } from './remotePairingTransportTestHarness'
 
-const CONNECT_TIMEOUT_MS = 30_000
+const CONNECT_TIMEOUT_MS = PAIRING_CONNECT_TIMEOUT_MS
 const SIGNAL_RECONNECT_DELAY_MS = 1_000
 
 function readJoinTransportId(socket: FakeWebSocket | undefined): string | null {
@@ -190,7 +195,7 @@ describe('remotePairingTransport', () => {
         expect(FakeWebSocket.instances[0]?.sent.some((payload) => payload.includes('"type":"answer"'))).toBe(false)
     })
 
-    it('notifies the controller when the ready data channel closes', async () => {
+    it('schedules disconnect grace when the ready data channel closes', async () => {
         const pending = connectRemotePeer({ pairingId: 'pairing-1', wsUrl: 'wss://pair.example/ws', iceServers: [] })
         FakeWebSocket.instances[0]?.open()
         const channel = new FakeDataChannel()
@@ -201,11 +206,15 @@ describe('remotePairingTransport', () => {
 
         bridge.onClose(onClose)
         channel.close()
+
+        expect(onClose).not.toHaveBeenCalled()
+
+        await vi.advanceTimersByTimeAsync(PEER_DISCONNECTED_GRACE_MS)
 
         expect(onClose).toHaveBeenCalledWith(expect.objectContaining({ code: 'remotePairing.error.closedRetrying' }))
     })
 
-    it('replays a close event that happens before the controller subscribes', async () => {
+    it('emits close immediately when peer connection is already closed', async () => {
         const pending = connectRemotePeer({ pairingId: 'pairing-1', wsUrl: 'wss://pair.example/ws', iceServers: [] })
         FakeWebSocket.instances[0]?.open()
         const channel = new FakeDataChannel()
@@ -214,8 +223,11 @@ describe('remotePairingTransport', () => {
         const bridge = await pending
         const onClose = vi.fn()
 
-        channel.close()
         bridge.onClose(onClose)
+        if (FakePeerConnection.instance) {
+            FakePeerConnection.instance.connectionState = 'closed'
+        }
+        channel.close()
 
         expect(onClose).toHaveBeenCalledWith(expect.objectContaining({ code: 'remotePairing.error.closedRetrying' }))
     })
@@ -227,13 +239,21 @@ describe('remotePairingTransport', () => {
         FakePeerConnection.instance?.attachChannel(channel)
         channel.open()
         const bridge = await pending
+        const onClose = vi.fn()
+        bridge.onClose(onClose)
 
         const listRequest = bridge.listSessions().catch((error: unknown) => error)
-        await vi.advanceTimersByTimeAsync(PEER_REQUEST_TIMEOUT_MS)
+        channel.emit('message', new MessageEvent('message', { data: JSON.stringify({ kind: 'heartbeat' }) }))
+        await vi.advanceTimersByTimeAsync(PAIRING_PEER_HEARTBEAT_INTERVAL_MS)
+        channel.emit('message', new MessageEvent('message', { data: JSON.stringify({ kind: 'heartbeat' }) }))
+        await vi.advanceTimersByTimeAsync(PEER_REQUEST_TIMEOUT_MS - PAIRING_PEER_HEARTBEAT_INTERVAL_MS)
 
         await expect(listRequest).resolves.toMatchObject({ code: 'remotePairing.error.peerTimeout' })
+        expect(onClose).toHaveBeenCalledWith(expect.objectContaining({ code: 'remotePairing.error.closedRetrying' }))
 
-        const sent = JSON.parse(channel.sent[0] ?? '{}') as { id?: string }
+        const sent = JSON.parse(channel.sent.find((payload) => payload.includes('"kind":"request"')) ?? '{}') as {
+            id?: string
+        }
         channel.emit(
             'message',
             new MessageEvent('message', {
@@ -246,7 +266,25 @@ describe('remotePairingTransport', () => {
             })
         )
 
-        expect(channel.sent).toHaveLength(1)
+        const nonHeartbeatSent = channel.sent.filter((payload) => !payload.includes('"heartbeat"'))
+        expect(nonHeartbeatSent).toHaveLength(1)
+    })
+
+    it('probes before peer RPC so a stale ready bridge reconnects before the request timeout', async () => {
+        const pending = connectRemotePeer({ pairingId: 'pairing-1', wsUrl: 'wss://pair.example/ws', iceServers: [] })
+        FakeWebSocket.instances[0]?.open()
+        const channel = new FakeDataChannel()
+        FakePeerConnection.instance?.attachChannel(channel)
+        channel.open()
+        const bridge = await pending
+        const onClose = vi.fn()
+        bridge.onClose(onClose)
+
+        const request = bridge.listSessions().catch((error: unknown) => error)
+        await vi.advanceTimersByTimeAsync(PAIRING_PEER_HEARTBEAT_ACK_TIMEOUT_MS + 1)
+
+        await expect(request).resolves.toMatchObject({ code: 'remotePairing.error.closedRetrying' })
+        expect(onClose).toHaveBeenCalledWith(expect.objectContaining({ code: 'remotePairing.error.closedRetrying' }))
     })
 
     it('clears peer RPC pending state when DataChannel send throws', async () => {
@@ -256,12 +294,31 @@ describe('remotePairingTransport', () => {
         FakePeerConnection.instance?.attachChannel(channel)
         channel.open()
         const bridge = await pending
+        const onClose = vi.fn()
+        bridge.onClose(onClose)
         channel.sendError = new Error('send failed')
 
         const request = bridge.listSessions().catch((error: unknown) => error)
         await vi.advanceTimersByTimeAsync(PEER_REQUEST_TIMEOUT_MS)
 
         await expect(request).resolves.toMatchObject({ message: 'send failed' })
+        expect(onClose).toHaveBeenCalledWith(expect.objectContaining({ code: 'remotePairing.error.closedRetrying' }))
+    })
+
+    it('rejects the initial bridge when the health probe cannot be sent', async () => {
+        const pending = connectRemotePeer({
+            pairingId: 'pairing-1',
+            wsUrl: 'wss://pair.example/ws',
+            iceServers: [],
+        }).catch((error: unknown) => error)
+        FakeWebSocket.instances[0]?.open()
+        const channel = new FakeDataChannel()
+        FakePeerConnection.instance?.attachChannel(channel)
+        channel.sendError = new Error('probe failed')
+
+        channel.open()
+
+        await expect(pending).resolves.toMatchObject({ code: 'remotePairing.error.closedRetrying' })
     })
 
     it('keeps a disconnected WebRTC peer alive through the recovery grace window', async () => {
@@ -274,6 +331,7 @@ describe('remotePairingTransport', () => {
         const onClose = vi.fn()
 
         bridge.onClose(onClose)
+        channel.emit('message', new MessageEvent('message', { data: JSON.stringify({ kind: 'heartbeat' }) }))
         FakePeerConnection.instance?.setConnectionState('disconnected')
         await vi.advanceTimersByTimeAsync(PEER_DISCONNECTED_GRACE_MS - 1)
 
@@ -324,5 +382,69 @@ describe('remotePairingTransport', () => {
                 code: 'remotePairing.error.hostClosed',
             })
         )
+    })
+
+    it('marks the bridge closed when heartbeat ack is missed', async () => {
+        const pending = connectRemotePeer({ pairingId: 'pairing-1', wsUrl: 'wss://pair.example/ws', iceServers: [] })
+        FakeWebSocket.instances[0]?.open()
+        const channel = new FakeDataChannel()
+        FakePeerConnection.instance?.attachChannel(channel)
+        channel.open()
+        const bridge = await pending
+        const onClose = vi.fn()
+        bridge.onClose(onClose)
+
+        await vi.advanceTimersByTimeAsync(PAIRING_PEER_HEARTBEAT_INTERVAL_MS)
+        await vi.advanceTimersByTimeAsync(PAIRING_PEER_HEARTBEAT_ACK_TIMEOUT_MS + 1)
+
+        expect(onClose).toHaveBeenCalledWith(expect.objectContaining({ code: 'remotePairing.error.closedRetrying' }))
+    })
+
+    it('keeps the data channel warm with periodic heartbeats', async () => {
+        const pending = connectRemotePeer({ pairingId: 'pairing-1', wsUrl: 'wss://pair.example/ws', iceServers: [] })
+        FakeWebSocket.instances[0]?.open()
+        const channel = new FakeDataChannel()
+        FakePeerConnection.instance?.attachChannel(channel)
+        channel.open()
+        await pending
+        channel.emit('message', new MessageEvent('message', { data: JSON.stringify({ kind: 'heartbeat' }) }))
+
+        const baseline = channel.sent.length
+        await vi.advanceTimersByTimeAsync(PAIRING_PEER_HEARTBEAT_INTERVAL_MS)
+
+        const heartbeats = channel.sent.slice(baseline).filter((payload) => payload.includes('"heartbeat"'))
+        expect(heartbeats.length).toBeGreaterThan(0)
+    })
+
+    it('stops sending heartbeats once the bridge is closed', async () => {
+        const pending = connectRemotePeer({ pairingId: 'pairing-1', wsUrl: 'wss://pair.example/ws', iceServers: [] })
+        FakeWebSocket.instances[0]?.open()
+        const channel = new FakeDataChannel()
+        FakePeerConnection.instance?.attachChannel(channel)
+        channel.open()
+        const bridge = await pending
+
+        bridge.close()
+        const baseline = channel.sent.length
+        await vi.advanceTimersByTimeAsync(PAIRING_PEER_HEARTBEAT_INTERVAL_MS * 3)
+
+        expect(channel.sent.length).toBe(baseline)
+    })
+
+    it('rejoins signaling when WebRTC enters the disconnected state', async () => {
+        const pending = connectRemotePeer({ pairingId: 'pairing-1', wsUrl: 'wss://pair.example/ws', iceServers: [] })
+        FakeWebSocket.instances[0]?.open()
+        const channel = new FakeDataChannel()
+        FakePeerConnection.instance?.attachChannel(channel)
+        channel.open()
+        await pending
+
+        const initialJoinCount =
+            FakeWebSocket.instances[0]?.sent.filter((payload) => payload.includes('"type":"join"')).length ?? 0
+        FakePeerConnection.instance?.setConnectionState('disconnected')
+
+        const laterJoins =
+            FakeWebSocket.instances[0]?.sent.filter((payload) => payload.includes('"type":"join"')).length ?? 0
+        expect(laterJoins).toBeGreaterThan(initialJoinCount)
     })
 })

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+    buildRemoteReconnectNoticeSpec,
+    buildRemoteStatusSpec,
     shouldBlockRemoteReadyShellInteraction,
     shouldRenderRemoteReadyShell,
     shouldShowRemoteReconnectNotice,
@@ -48,5 +50,32 @@ describe('remotePairingViewModel', () => {
         expect(shouldShowRemoteReconnectNotice({ kind: 'reconnecting' }, true)).toBe(true)
         expect(shouldShowRemoteReconnectNotice({ kind: 'booting' }, true)).toBe(true)
         expect(shouldShowRemoteReconnectNotice({ kind: 'ready' }, true)).toBe(false)
+    })
+
+    it('uses one reconnect notice copy instead of attempt-based escalation', () => {
+        expect(buildRemoteReconnectNoticeSpec()).toEqual({
+            tone: 'info',
+            titleKey: 'remotePairing.reconnectNotice.title',
+        })
+    })
+
+    it('collapses raw transport errors into a small status surface set', () => {
+        expect(buildRemoteStatusSpec(null)).toEqual({ messageKey: null, retry: false })
+        expect(buildRemoteStatusSpec('remotePairing.error.closed')).toEqual({
+            messageKey: 'remotePairing.error.fallback',
+            retry: true,
+        })
+        expect(buildRemoteStatusSpec('remotePairing.error.expired')).toEqual({
+            messageKey: 'remotePairing.error.scanAgain',
+            retry: false,
+        })
+        expect(buildRemoteStatusSpec('remotePairing.error.hostUnavailable')).toEqual({
+            messageKey: 'remotePairing.error.hostClosed',
+            retry: true,
+        })
+        expect(buildRemoteStatusSpec('remotePairing.error.p2pTimedOut')).toEqual({
+            messageKey: 'remotePairing.error.p2pBlocked',
+            retry: true,
+        })
     })
 })

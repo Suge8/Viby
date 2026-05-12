@@ -9,14 +9,19 @@ function renderWithI18n(element: ReactElement): void {
 }
 
 describe('RemotePairingScreens', () => {
-    it('renders the cold connection surface as a centered busy status', async () => {
+    it('renders cold remote reconnect with a pairing-specific connecting surface', async () => {
         renderWithI18n(<RemotePairingStatusScreen message={null} onRetry={vi.fn()} />)
 
-        await screen.findByText('Connecting to your computer')
-        const status = screen.getByRole('status')
-        expect(status).toHaveTextContent('Connecting to your computer')
-        expect(status).toHaveTextContent('Rebuilding the secure link')
+        expect(await screen.findByRole('heading', { name: 'Connecting to your computer' })).toBeInTheDocument()
+        expect(screen.getByRole('progressbar')).toBeInTheDocument()
+        expect(screen.getByText('Pairing')).toBeInTheDocument()
         expect(screen.queryByRole('button', { name: 'Reconnect' })).not.toBeInTheDocument()
+    })
+
+    it('renders the connecting surface with the active phase step', async () => {
+        renderWithI18n(<RemotePairingStatusScreen message={null} phase="connecting" />)
+
+        expect(screen.getByText('Opening secure channel')).toBeInTheDocument()
     })
 
     it('renders retryable errors with one explicit retry action', async () => {

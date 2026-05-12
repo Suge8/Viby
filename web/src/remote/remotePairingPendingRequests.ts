@@ -13,7 +13,11 @@ function toError(error: unknown): Error {
     return error instanceof Error ? error : createRemotePairingCodedError('remotePairing.error.peerRequestFailed')
 }
 
-export function createRemotePeerPendingRequests(): {
+type PendingRequestOptions = {
+    onTransportFailure?: (error: Error) => void
+}
+
+export function createRemotePeerPendingRequests(options: PendingRequestOptions = {}): {
     rejectAll: (error: Error) => void
     request: <T>(
         channel: RTCDataChannel | null,
@@ -47,13 +51,17 @@ export function createRemotePeerPendingRequests(): {
         parse: (value: unknown) => T
     ): Promise<T> {
         if (!channel || channel.readyState !== 'open') {
-            return Promise.reject(createRemotePairingCodedError('remotePairing.error.peerNotConnected'))
+            const error = createRemotePairingCodedError('remotePairing.error.peerNotConnected')
+            options.onTransportFailure?.(error)
+            return Promise.reject(error)
         }
 
         return new Promise<T>((resolve, reject) => {
             const timeoutId = window.setTimeout(() => {
                 pending.delete(request.id)
-                reject(createRemotePairingCodedError('remotePairing.error.peerTimeout'))
+                const error = createRemotePairingCodedError('remotePairing.error.peerTimeout')
+                reject(error)
+                options.onTransportFailure?.(error)
             }, PEER_REQUEST_TIMEOUT_MS)
 
             pending.set(request.id, {
@@ -71,7 +79,9 @@ export function createRemotePeerPendingRequests(): {
                 channel.send(JSON.stringify(request))
             } catch (error) {
                 deletePending(request.id)
-                reject(toError(error))
+                const normalized = toError(error)
+                reject(normalized)
+                options.onTransportFailure?.(normalized)
             }
         })
     }

@@ -9,8 +9,10 @@ import type { SyncEvent } from '@/types/api'
 import { uploadRemoteFile } from './remotePairingBinaryUpload'
 import type { RemotePeerBridge } from './remotePairingBridgeTypes'
 import { handleRemotePeerChannelMessage } from './remotePairingChannelMessages'
+import { createRemotePairingDataChannelHealth } from './remotePairingDataChannelHealth'
 import { createRemotePairingCodedError } from './remotePairingErrors'
 import { createRemoteForegroundSignalAck } from './remotePairingForegroundSignalAck'
+import { createRemotePairingLivenessProbe } from './remotePairingLivenessProbe'
 import { createRemotePairingNegotiation } from './remotePairingNegotiation'
 import { createPeerDisconnectGrace } from './remotePairingPeerDisconnect'
 import { createRemotePeerPendingRequests } from './remotePairingPendingRequests'
@@ -27,13 +29,27 @@ import { createRemotePeerTransportBridge } from './remotePairingTransportBridge'
 import { buildTransportSocketUrl, createRemoteTransportId } from './remotePairingTransportSupport'
 export type RemotePeerConnectOptions = { pairingId: string; wsUrl: string; iceServers: PairingIceServer[] }
 
+function createFastIcePeer(iceServers: PairingIceServer[]): RTCPeerConnection {
+    return new RTCPeerConnection({ iceServers, iceCandidatePoolSize: 4, bundlePolicy: 'max-bundle' })
+}
+function tryRestartIce(peer: RTCPeerConnection): void {
+    if (peer.connectionState === 'closed' || peer.connectionState === 'new') return
+    if (typeof peer.restartIce !== 'function') return
+    try {
+        peer.restartIce()
+    } catch {}
+}
+
 export async function connectRemotePeer(options: RemotePeerConnectOptions): Promise<RemotePeerBridge> {
-    const peer = new RTCPeerConnection({ iceServers: options.iceServers })
+    const peer = createFastIcePeer(options.iceServers)
     const transportId = createRemoteTransportId()
     const listeners = new Set<(event: SyncEvent) => void>()
     const terminalListeners = new Set<(event: PairingPeerTerminalEventPayload) => void>()
     const closeListeners = new Set<(error: Error) => void>()
-    const pendingRequests = createRemotePeerPendingRequests()
+    const pendingRequests = createRemotePeerPendingRequests({
+        onTransportFailure: () =>
+            emitRemoteClose(new RemotePeerConnectError('closed', 'remotePairing.error.closedRetrying')),
+    })
     let socket: WebSocket | null = null
     let dataChannel: RTCDataChannel | null = null
     let foregroundSignalAck: ReturnType<typeof createRemoteForegroundSignalAck> | null = null
@@ -51,10 +67,19 @@ export async function connectRemotePeer(options: RemotePeerConnectOptions): Prom
         getConnectionState: () => peer.connectionState,
         onExpired: () => emitRemoteClose(new RemotePeerConnectError('closed', 'remotePairing.error.closedRetrying')),
     })
+    const livenessProbe = createRemotePairingLivenessProbe({
+        onStale: () => emitRemoteClose(new RemotePeerConnectError('closed', 'remotePairing.error.closedRetrying')),
+    })
+    const dataChannelHealth = createRemotePairingDataChannelHealth({
+        getChannel: () => dataChannel,
+        onStale: () => emitRemoteClose(new RemotePeerConnectError('closed', 'remotePairing.error.closedRetrying')),
+    })
 
     function emitRemoteClose(error: Error): void {
         if (closedByClient || closeEmitted) return
         peerDisconnectGrace.clear()
+        dataChannelHealth.stop()
+        livenessProbe.dispose()
         closeEmitted = true
         closedError = error
         pendingRequests.rejectAll(error)
@@ -72,6 +97,7 @@ export async function connectRemotePeer(options: RemotePeerConnectOptions): Prom
         foregroundSignalAck?.clear()
     }
     function requestPeer<T>(request: PairingPeerRequest, parse: (value: unknown) => T): Promise<T> {
+        dataChannelHealth.sendHeartbeat()
         return pendingRequests.request(dataChannel, request, parse)
     }
     function uploadFile(sessionId: string, file: File, mimeType: string) {
@@ -121,6 +147,13 @@ export async function connectRemotePeer(options: RemotePeerConnectOptions): Prom
             signalTimers?.scheduleReconnect()
         }
 
+        function probeDataChannel(): void {
+            dataChannelHealth.sendHeartbeat()
+        }
+
+        // iOS freezes WebRTC in background; stale NAT mappings make the
+        // normal liveness window (~4s probe + 8-15s peer grace) too slow.
+        // Kick ICE restart up front so a healthy DTLS session resumes in 1-3s.
         function handlePageWake(): void {
             if (closedByClient || !openedChannel) return
             if (socket?.readyState === WebSocket.OPEN) {
@@ -131,6 +164,12 @@ export async function connectRemotePeer(options: RemotePeerConnectOptions): Prom
             }
             if (readySettled && dataChannel?.readyState !== 'open') {
                 emitRemoteClose(new RemotePeerConnectError('closed', 'remotePairing.error.closedRetrying'))
+                return
+            }
+            if (readySettled) tryRestartIce(peer)
+            if (readySettled) {
+                probeDataChannel()
+                livenessProbe.arm()
             }
         }
         function openSignalSocket(): void {
@@ -146,6 +185,7 @@ export async function connectRemotePeer(options: RemotePeerConnectOptions): Prom
             nextSocket.addEventListener('message', (event) => {
                 if (socket !== nextSocket) return
                 foregroundSignalAck?.clear()
+                livenessProbe.noteInbound()
                 signalMessageQueue = signalMessageQueue
                     .then(() => handleSignalMessage(event))
                     .catch(handleSignalMessageError)
@@ -216,12 +256,24 @@ export async function connectRemotePeer(options: RemotePeerConnectOptions): Prom
             dataChannel = channel
             channel.addEventListener('open', () => {
                 openedChannel = true
+                if (!dataChannelHealth.start()) {
+                    finish(() => reject(new RemotePeerConnectError('closed', 'remotePairing.error.closedRetrying')))
+                    return
+                }
                 finish(resolve)
             })
-            channel.addEventListener('close', () =>
-                emitRemoteClose(new RemotePeerConnectError('closed', 'remotePairing.error.closedRetrying'))
-            )
+            channel.addEventListener('close', () => {
+                dataChannelHealth.stop()
+                if (closedByClient) return
+                if (peer.connectionState === 'closed' || peer.connectionState === 'failed') {
+                    emitRemoteClose(new RemotePeerConnectError('closed', 'remotePairing.error.closedRetrying'))
+                    return
+                }
+                peerDisconnectGrace.schedule()
+            })
             channel.addEventListener('message', (messageEvent) => {
+                dataChannelHealth.noteInbound()
+                livenessProbe.noteInbound()
                 handleRemotePeerChannelMessage({
                     data: messageEvent.data,
                     pendingRequests,
@@ -239,6 +291,12 @@ export async function connectRemotePeer(options: RemotePeerConnectOptions): Prom
             if (peer.connectionState === 'disconnected') {
                 if (readySettled) {
                     peerDisconnectGrace.schedule()
+                    // Restart ICE in parallel with `join`: whoever gathers
+                    // fresh candidates first restores the pair to `connected`.
+                    tryRestartIce(peer)
+                    if (socket?.readyState === WebSocket.OPEN) {
+                        sendJoin()
+                    }
                 }
                 return
             }
@@ -267,7 +325,9 @@ export async function connectRemotePeer(options: RemotePeerConnectOptions): Prom
     } catch (error) {
         removeWakeListeners()
         stopSignalTimers()
+        dataChannelHealth.stop()
         peerDisconnectGrace.clear()
+        livenessProbe.dispose()
         peer.close()
         const activeSocket = socket as WebSocket | null
         activeSocket?.close()
@@ -284,7 +344,9 @@ export async function connectRemotePeer(options: RemotePeerConnectOptions): Prom
             closedByClient = true
             removeWakeListeners()
             stopSignalTimers()
+            dataChannelHealth.stop()
             peerDisconnectGrace.clear()
+            livenessProbe.dispose()
             pendingRequests.rejectAll(createRemotePairingCodedError('remotePairing.error.closed'))
             closeListeners.clear()
             dataChannel?.close()

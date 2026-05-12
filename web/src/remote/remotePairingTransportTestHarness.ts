@@ -82,10 +82,15 @@ export class FakePeerConnection extends FakeEventTarget {
     connectionState: RTCPeerConnectionState = 'new'
     signalingState: RTCSignalingState = 'stable'
     remoteDescription: RTCSessionDescription | null = null
+    iceRestartCount = 0
 
     constructor() {
         super()
         FakePeerConnection.instance = this
+    }
+
+    restartIce(): void {
+        this.iceRestartCount += 1
     }
 
     async setRemoteDescription(description: RTCSessionDescriptionInit): Promise<void> {

@@ -1,6 +1,6 @@
-import { PAIRING_MOBILE_DISCONNECT_GRACE_MS } from '@viby/protocol'
+import { PAIRING_PEER_DISCONNECT_CLIENT_GRACE_MS } from '@viby/protocol'
 
-export const PEER_DISCONNECTED_GRACE_MS = PAIRING_MOBILE_DISCONNECT_GRACE_MS
+export const PEER_DISCONNECTED_GRACE_MS = PAIRING_PEER_DISCONNECT_CLIENT_GRACE_MS
 
 export function createPeerDisconnectGrace(options: {
     getConnectionState: () => RTCPeerConnectionState

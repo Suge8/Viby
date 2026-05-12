@@ -17,6 +17,9 @@ export function handleRemotePeerChannelMessage(options: {
     if (!message) {
         return
     }
+    if (message.kind === 'heartbeat') {
+        return
+    }
     if (message.kind === 'event') {
         const parsed = PairingPeerEventSchema.parse(message)
         if (parsed.event === 'sync-event') {

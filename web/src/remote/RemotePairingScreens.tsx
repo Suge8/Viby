@@ -3,7 +3,9 @@ import { ConnectionStatePage } from '@/components/ConnectionStatePage'
 import { Spinner } from '@/components/Spinner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import type { RemoteConnectingPhase } from '@/lib/remoteConnectingPhase'
 import { useTranslation } from '@/lib/use-translation'
+import { RemoteConnectingScreen } from './RemoteConnectingScreen'
 
 function normalizeCode(input: string): string {
     return input.replace(/\D/g, '').slice(0, 6)
@@ -27,11 +29,7 @@ export function RemotePairingCodeScreen(props: { onSubmit: (code: string) => voi
     }
 
     return (
-        <ConnectionStatePage
-            eyebrow="Viby"
-            title={t('remotePairing.code.title')}
-            description={t('remotePairing.code.description')}
-        >
+        <ConnectionStatePage title={t('remotePairing.code.title')}>
             <form onSubmit={handleSubmit} className="ds-connection-form">
                 <Input
                     autoFocus
@@ -53,23 +51,23 @@ export function RemotePairingCodeScreen(props: { onSubmit: (code: string) => voi
     )
 }
 
-export function RemotePairingStatusScreen(props: { message: string | null; onRetry?: () => void }): JSX.Element {
+export function RemotePairingConnectingScreen(props: { phase: RemoteConnectingPhase }): JSX.Element {
+    return <RemoteConnectingScreen phase={props.phase} />
+}
+
+export function RemotePairingStatusScreen(props: {
+    message: string | null
+    onRetry?: () => void
+    phase?: RemoteConnectingPhase
+}): JSX.Element {
     const { t } = useTranslation()
 
     if (!props.message) {
-        return (
-            <ConnectionStatePage
-                busy
-                eyebrow="Viby"
-                title={t('remotePairing.connecting.title')}
-                description={t('remotePairing.connecting.description')}
-            />
-        )
+        return <RemoteConnectingScreen phase={props.phase ?? 'pairing'} />
     }
 
     return (
         <ConnectionStatePage
-            eyebrow="Viby"
             title={t('remotePairing.error.title')}
             description={props.message}
             actions={

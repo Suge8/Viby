@@ -1,23 +1,39 @@
 import {
     hasPairingWorkspaceIntent,
+    PAIRING_PWA_HANDOFF_PARAM,
     type PairingClaimResponse,
     PairingClaimResponseSchema,
+    PairingDeviceReconnectChallengeRequestSchema,
+    PairingDeviceReconnectRequestSchema,
     type PairingHttpErrorCode,
+    PairingPwaHandoffClaimRequestSchema,
+    PairingPwaHandoffTicketRequestSchema,
+    PairingPwaHandoffTicketResponseSchema,
     PairingReconnectChallengeResponseSchema,
     type PairingReconnectResponse,
     PairingReconnectResponseSchema,
     type PairingVerifyCodeResponse,
     PairingVerifyCodeResponseSchema,
 } from '@viby/protocol'
-import { readBrowserStorageItem, removeBrowserStorageItem, writeBrowserStorageItem } from '@/lib/browserStorage'
+import {
+    readBrowserStorageItem,
+    readBrowserStorageItemOrThrow,
+    removeBrowserStorageItem,
+    writeBrowserStorageItem,
+} from '@/lib/browserStorage'
+import { DEVICE_PLATFORM_DISPLAY_LABELS, resolveClientPlatform } from '@/lib/clientPlatform'
 import { getPairingGuestTokenStorageKey, LOCAL_STORAGE_KEYS } from '@/lib/storage/storageRegistry'
-import { createReconnectDeviceProof, loadPairingDeviceIdentity } from '@/remote/remotePairingDevice'
+import {
+    createReconnectDeviceProof,
+    loadCachedPairingDeviceIdentity,
+    loadPairingDeviceIdentity,
+} from '@/remote/remotePairingDevice'
 import { requestRemotePairingPersistentStorage } from '@/remote/remotePairingStoragePersistence'
 import type { RemotePairingErrorKey } from './remotePairingErrors'
 
 export type PairingRemoteAuth = PairingClaimResponse | PairingReconnectResponse
 
-type PairingHttpContext = 'claim' | 'reconnect' | 'verifyCode'
+type PairingHttpContext = 'claim' | 'handoff' | 'reconnect' | 'verifyCode'
 
 const PAIRING_HTTP_TIMEOUT_MS = 8_000
 
@@ -33,17 +49,27 @@ export class RemotePairingHttpError extends Error {
     }
 }
 
+/**
+ * Stored guest token is only invalid when broker proves it is. The 410 with
+ * code `pairing_reconnect_challenge_expired` is a 60s nonce timeout on a
+ * still-valid token: wiping the token there used to bounce cellular hand-over
+ * users to the rescan screen even though the broker session was alive.
+ */
 export function isInvalidStoredPairingCredential(error: RemotePairingHttpError): boolean {
-    return (
-        error.status === 410 ||
-        (error.status === 403 &&
-            (error.serverCode === 'pairing_invalid_token' ||
-                error.serverCode === 'pairing_invalid_device_proof' ||
-                (!error.serverCode &&
-                    (error.serverError === 'Invalid pairing token' ||
-                        error.serverError === 'Missing or invalid device proof' ||
-                        error.serverError === 'Device proof verification failed'))))
-    )
+    if (error.status === 410) {
+        return error.serverCode !== 'pairing_reconnect_challenge_expired'
+    }
+    if (error.status === 403) {
+        return (
+            error.serverCode === 'pairing_invalid_token' ||
+            error.serverCode === 'pairing_invalid_device_proof' ||
+            (!error.serverCode &&
+                (error.serverError === 'Invalid pairing token' ||
+                    error.serverError === 'Missing or invalid device proof' ||
+                    error.serverError === 'Device proof verification failed'))
+        )
+    }
+    return false
 }
 
 export function readRemotePairingId(pathname: string, search = ''): string | null {
@@ -64,13 +90,35 @@ export function clearRemotePairingId(): void {
     removeBrowserStorageItem('local', LOCAL_STORAGE_KEYS.remoteActivePairing)
 }
 
-export function getPairingTicketFromLocation(): string | null {
-    return new URLSearchParams(window.location.hash.slice(1)).get('ticket')
+function getHashParam(key: string): string | null {
+    return new URLSearchParams(window.location.hash.slice(1)).get(key)
 }
 
-export function scrubPairingTicketFromUrl(): void {
-    const { pathname, search } = window.location
-    window.history.replaceState({}, '', `${pathname}${search}`)
+function getSearchParam(key: string): string | null {
+    return new URLSearchParams(window.location.search).get(key)
+}
+
+export function getPairingTicketFromLocation(): string | null {
+    return getHashParam('ticket')
+}
+
+// Handoff is delivered through the manifest `start_url` query parameter
+// because iOS WebKit standalone PWAs strip the URL fragment from the launch
+// URL on cold start, leaving any fragment-based handoff invisible to the
+// React app. Older PWAs installed during the fragment-based experiment still
+// launch with `#handoff=...`, so fragment stays as a back-compat read.
+export function getPairingHandoffTicketFromLocation(): string | null {
+    return getSearchParam(PAIRING_PWA_HANDOFF_PARAM) ?? getHashParam(PAIRING_PWA_HANDOFF_PARAM)
+}
+
+// The URL fragment only ever carries one-time launch secrets (claim ticket or
+// PWA handoff); both have no meaning after consumption. We drop the entire
+// fragment and strip any handoff query param while preserving unrelated query.
+export function scrubPairingLaunchSecretFromUrl(): void {
+    const searchParams = new URLSearchParams(window.location.search)
+    searchParams.delete(PAIRING_PWA_HANDOFF_PARAM)
+    const nextSearch = searchParams.toString()
+    window.history.replaceState({}, '', `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}`)
 }
 
 export function getPairingTokenKey(pairingId: string): string {
@@ -78,7 +126,7 @@ export function getPairingTokenKey(pairingId: string): string {
 }
 
 function readStoredGuestToken(pairingId: string): string | null {
-    return readBrowserStorageItem('local', getPairingGuestTokenStorageKey(pairingId))
+    return readBrowserStorageItemOrThrow('local', getPairingGuestTokenStorageKey(pairingId))
 }
 
 function storeGuestToken(pairingId: string, token: string): void {
@@ -134,6 +182,7 @@ function readPairingHttpErrorCode(payload: unknown): PairingHttpErrorCode | null
         case 'pairing_unavailable':
         case 'pairing_invalid_device_proof':
         case 'pairing_reconnect_challenge_expired':
+        case 'pairing_invalid_handoff_ticket':
         case 'pairing_rate_limited':
             return code
         default:
@@ -175,10 +224,79 @@ async function readJsonPayload(response: Response): Promise<unknown> {
 
 export async function claimRemotePairing(pairingId: string, ticket: string): Promise<PairingClaimResponse> {
     const identity = await loadPairingDeviceIdentity(pairingId)
+    const platform = resolveClientPlatform()
     const response = await postJson(
         'claim',
         `/pairings/${encodeURIComponent(pairingId)}/claim`,
-        { ticket, label: 'Phone', publicKey: identity.publicKey },
+        {
+            ticket,
+            label: DEVICE_PLATFORM_DISPLAY_LABELS[platform],
+            publicKey: identity.publicKey,
+            metadata: { platform },
+        },
+        (payload) => PairingClaimResponseSchema.parse(payload)
+    )
+    storeGuestToken(pairingId, response.guestToken)
+    await requestRemotePairingPersistentStorage()
+    return response
+}
+
+export async function recoverRemotePairingByDevice(pairingId: string): Promise<PairingClaimResponse | null> {
+    const identity = await loadCachedPairingDeviceIdentity(pairingId)
+    if (!identity) return null
+
+    const challengeResponse = await postJson(
+        'reconnect',
+        `/pairings/${encodeURIComponent(pairingId)}/device-reconnect-challenge`,
+        PairingDeviceReconnectChallengeRequestSchema.parse({ publicKey: identity.publicKey }),
+        (payload) => PairingReconnectChallengeResponseSchema.parse(payload)
+    )
+    const deviceProof = await createReconnectDeviceProof(pairingId, identity, challengeResponse.challenge.nonce)
+    const response = await postJson(
+        'reconnect',
+        `/pairings/${encodeURIComponent(pairingId)}/device-reconnect`,
+        PairingDeviceReconnectRequestSchema.parse({ deviceProof }),
+        (payload) => PairingClaimResponseSchema.parse(payload)
+    )
+    storeGuestToken(pairingId, response.guestToken)
+    await requestRemotePairingPersistentStorage()
+    return response
+}
+
+export async function createRemotePwaHandoff(
+    pairingId: string
+): Promise<{ expiresAt: number; handoffTicket: string } | null> {
+    const token = readStoredGuestToken(pairingId)
+    if (!token) return null
+
+    const identity = await loadPairingDeviceIdentity(pairingId)
+    const challengeResponse = await postJson(
+        'reconnect',
+        `/pairings/${encodeURIComponent(pairingId)}/reconnect-challenge`,
+        { token },
+        (payload) => PairingReconnectChallengeResponseSchema.parse(payload)
+    )
+    const deviceProof = await createReconnectDeviceProof(pairingId, identity, challengeResponse.challenge.nonce)
+    const response = await postJson(
+        'handoff',
+        `/pairings/${encodeURIComponent(pairingId)}/pwa-handoff-ticket`,
+        PairingPwaHandoffTicketRequestSchema.parse({ token, deviceProof }),
+        (payload) => PairingPwaHandoffTicketResponseSchema.parse(payload)
+    )
+    return response
+}
+
+export async function claimRemotePwaHandoff(pairingId: string, handoffTicket: string): Promise<PairingClaimResponse> {
+    const identity = await loadPairingDeviceIdentity(pairingId)
+    const platform = resolveClientPlatform()
+    const response = await postJson(
+        'handoff',
+        `/pairings/${encodeURIComponent(pairingId)}/pwa-handoff-claim`,
+        PairingPwaHandoffClaimRequestSchema.parse({
+            handoffTicket,
+            label: DEVICE_PLATFORM_DISPLAY_LABELS[platform],
+            publicKey: identity.publicKey,
+        }),
         (payload) => PairingClaimResponseSchema.parse(payload)
     )
     storeGuestToken(pairingId, response.guestToken)

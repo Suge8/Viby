@@ -4,14 +4,18 @@ import { readBrowserStorageItem } from '@/lib/browserStorage'
 import { getPairingGuestTokenStorageKey, LOCAL_STORAGE_KEYS } from '@/lib/storage/storageRegistry'
 import {
     claimRemotePairing,
+    claimRemotePwaHandoff,
     clearRemotePairingId,
     clearStoredGuestToken,
+    createRemotePwaHandoff,
     getGuestToken,
+    getPairingHandoffTicketFromLocation,
     getPairingTicketFromLocation,
     readRemotePairingId,
     reconnectRemotePairing,
+    recoverRemotePairingByDevice,
     rememberRemotePairingId,
-    scrubPairingTicketFromUrl,
+    scrubPairingLaunchSecretFromUrl,
     verifyRemotePairingCode,
 } from './remotePairingHttp'
 
@@ -23,6 +27,7 @@ const deviceProof = {
 }
 
 vi.mock('@/remote/remotePairingDevice', () => ({
+    loadCachedPairingDeviceIdentity: vi.fn(async () => ({ publicKey: 'phone-public-key', privateKeyJwk: {} })),
     loadPairingDeviceIdentity: vi.fn(async () => ({ publicKey: 'phone-public-key', privateKeyJwk: {} })),
     createReconnectDeviceProof: vi.fn(async () => deviceProof),
 }))
@@ -38,7 +43,7 @@ function pairingSnapshot(overrides: Partial<PairingSessionSnapshot> = {}): Pairi
         shortCode: null,
         approvalStatus: 'pending' as const,
         host: { label: 'Desktop' },
-        guest: { label: 'Phone' },
+        guest: { label: 'Device' },
         ...overrides,
     }
 }
@@ -69,16 +74,29 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+    vi.restoreAllMocks()
     vi.unstubAllGlobals()
 })
 
 describe('remotePairingHttp', () => {
-    it('reads and removes the one-time ticket from the QR URL without touching the path', () => {
+    it('reads and removes one-time launch secrets from the URL without touching the path', () => {
         expect(getPairingTicketFromLocation()).toBe('ticket-1')
 
-        scrubPairingTicketFromUrl()
+        scrubPairingLaunchSecretFromUrl()
 
         expect(window.location.pathname).toBe('/p/pairing-1')
+        expect(window.location.hash).toBe('')
+
+        // New PWA installs deliver the handoff in the URL query because iOS
+        // WebKit standalone PWAs strip the launch URL fragment on cold start;
+        // query takes precedence over the back-compat fragment path.
+        window.history.replaceState({}, '', '/p/pairing-1?handoff=query-handoff&keep=1#handoff=legacy-fragment-handoff')
+        expect(getPairingHandoffTicketFromLocation()).toBe('query-handoff')
+
+        scrubPairingLaunchSecretFromUrl()
+
+        expect(window.location.pathname).toBe('/p/pairing-1')
+        expect(window.location.search).toBe('?keep=1')
         expect(window.location.hash).toBe('')
     })
 
@@ -114,7 +132,12 @@ describe('remotePairingHttp', () => {
             expect.objectContaining({
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({ ticket: 'ticket-1', label: 'Phone', publicKey: 'phone-public-key' }),
+                body: JSON.stringify({
+                    ticket: 'ticket-1',
+                    label: '设备',
+                    publicKey: 'phone-public-key',
+                    metadata: { platform: 'unknown' },
+                }),
                 signal: expect.any(AbortSignal),
             })
         )
@@ -222,6 +245,91 @@ describe('remotePairingHttp', () => {
 
     it('returns null when the device has not claimed the pairing yet', async () => {
         expect(await reconnectRemotePairing('pairing-1')).toBeNull()
+    })
+
+    it('surfaces localStorage read failures during reconnect instead of returning missing credentials', async () => {
+        vi.stubGlobal('localStorage', {
+            getItem: () => {
+                throw new DOMException('blocked', 'SecurityError')
+            },
+        })
+
+        await expect(reconnectRemotePairing('pairing-1')).rejects.toMatchObject({
+            name: 'BrowserStorageUnavailableError',
+        })
+    })
+
+    it('recovers a missing guest token with the stored device key', async () => {
+        const fetchMock = installFetch([
+            jsonResponse({ role: 'guest', challenge: { nonce: 'nonce-1', issuedAt: 1, expiresAt: 2 } }),
+            jsonResponse({
+                pairing: pairingSnapshot({ approvalStatus: 'approved' }),
+                guestToken: 'guest-token-recovered',
+                wsUrl: 'wss://pair.example/ws',
+                iceServers: [{ urls: 'stun:stun.example.com:3478' }],
+            }),
+        ])
+
+        const response = await recoverRemotePairingByDevice('pairing-1')
+
+        expect(response?.guestToken).toBe('guest-token-recovered')
+        expect(readBrowserStorageItem('local', getPairingGuestTokenStorageKey('pairing-1'))).toBe(
+            'guest-token-recovered'
+        )
+        expect(fetchMock).toHaveBeenNthCalledWith(
+            1,
+            '/pairings/pairing-1/device-reconnect-challenge',
+            expect.objectContaining({ body: JSON.stringify({ publicKey: 'phone-public-key' }) })
+        )
+        expect(fetchMock).toHaveBeenNthCalledWith(
+            2,
+            '/pairings/pairing-1/device-reconnect',
+            expect.objectContaining({ body: JSON.stringify({ deviceProof }) })
+        )
+    })
+
+    it('creates a one-time PWA install handoff ticket from the bound browser credential', async () => {
+        window.localStorage.setItem(getPairingGuestTokenStorageKey('pairing-1'), 'guest-token-1')
+        const fetchMock = installFetch([
+            jsonResponse({ role: 'guest', challenge: { nonce: 'nonce-1', issuedAt: 1, expiresAt: 2 } }),
+            jsonResponse({ handoffTicket: 'handoff-ticket-1', expiresAt: 3 }),
+        ])
+
+        await expect(createRemotePwaHandoff('pairing-1')).resolves.toEqual({
+            handoffTicket: 'handoff-ticket-1',
+            expiresAt: 3,
+        })
+        expect(fetchMock).toHaveBeenNthCalledWith(
+            2,
+            '/pairings/pairing-1/pwa-handoff-ticket',
+            expect.objectContaining({ body: JSON.stringify({ token: 'guest-token-1', deviceProof }) })
+        )
+    })
+
+    it('claims a PWA handoff into fresh standalone storage and stores the rotated guest token', async () => {
+        const fetchMock = installFetch([
+            jsonResponse({
+                pairing: pairingSnapshot({ approvalStatus: 'approved' }),
+                guestToken: 'guest-token-pwa',
+                wsUrl: 'wss://pair.example/ws',
+                iceServers: [{ urls: 'stun:stun.example.com:3478' }],
+            }),
+        ])
+
+        const response = await claimRemotePwaHandoff('pairing-1', 'handoff-ticket-1')
+
+        expect(response.guestToken).toBe('guest-token-pwa')
+        expect(readBrowserStorageItem('local', getPairingGuestTokenStorageKey('pairing-1'))).toBe('guest-token-pwa')
+        expect(fetchMock).toHaveBeenCalledWith(
+            '/pairings/pairing-1/pwa-handoff-claim',
+            expect.objectContaining({
+                body: JSON.stringify({
+                    handoffTicket: 'handoff-ticket-1',
+                    label: '设备',
+                    publicKey: 'phone-public-key',
+                }),
+            })
+        )
     })
 
     it('exposes the live guest token for both claim and reconnect auth payloads', () => {

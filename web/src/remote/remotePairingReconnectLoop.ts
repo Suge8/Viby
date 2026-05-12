@@ -1,11 +1,32 @@
+import { PAIRING_BOOT_STUCK_RESCUE_MS, PAIRING_REMOTE_RECONNECT_MAX_ATTEMPTS } from '@viby/protocol'
 import type { MutableRefObject } from 'react'
 import type { RemotePeerBridge } from './remotePairingBridgeTypes'
 import { getRemoteReconnectDelay } from './remotePairingRecovery'
 
 type RemoteReconnectState = { kind: string }
 
-export function shouldRequestRemoteForegroundReconnect(state: RemoteReconnectState): boolean {
-    return state.kind === 'reconnecting'
+export type RemoteForegroundReconnectContext = {
+    state: RemoteReconnectState
+    bootStartedAt: number
+    now: number
+    stuckRescueMs?: number
+}
+
+export function shouldRequestRemoteForegroundReconnect(context: RemoteForegroundReconnectContext): boolean {
+    if (context.state.kind === 'reconnecting') return true
+    if (context.state.kind === 'error') return true
+    if (context.state.kind === 'booting') {
+        const threshold = context.stuckRescueMs ?? PAIRING_BOOT_STUCK_RESCUE_MS
+        return context.now - context.bootStartedAt >= threshold
+    }
+    return false
+}
+
+export function shouldGiveUpRemoteReconnect(
+    attempt: number,
+    maxAttempts = PAIRING_REMOTE_RECONNECT_MAX_ATTEMPTS
+): boolean {
+    return attempt >= maxAttempts
 }
 
 export function createRemotePairingReconnectLoop(options: {
@@ -16,6 +37,7 @@ export function createRemotePairingReconnectLoop(options: {
     setBooting: () => void
     setReconnecting: () => void
     bumpAttempt: () => void
+    onGiveUp: () => void
 }) {
     function clearTimer(): void {
         if (options.reconnectTimerRef.current !== null) {
@@ -33,9 +55,22 @@ export function createRemotePairingReconnectLoop(options: {
         options.bumpAttempt()
     }
 
+    function forceFreshAttempt(): void {
+        clearTimer()
+        options.bootGenerationRef.current += 1
+        options.reconnectAttemptRef.current = 0
+        options.setBooting()
+        options.bumpAttempt()
+    }
+
     function scheduleReconnect(): void {
         if (options.stateRef.current.kind === 'reconnecting') return
         clearTimer()
+        if (shouldGiveUpRemoteReconnect(options.reconnectAttemptRef.current)) {
+            options.reconnectAttemptRef.current = 0
+            options.onGiveUp()
+            return
+        }
         options.setReconnecting()
         options.reconnectTimerRef.current = window.setTimeout(() => {
             options.reconnectTimerRef.current = null
@@ -53,5 +88,5 @@ export function createRemotePairingReconnectLoop(options: {
         return true
     }
 
-    return { clearTimer, requestReconnect, scheduleReconnect, isStale, closeIfStale }
+    return { clearTimer, requestReconnect, forceFreshAttempt, scheduleReconnect, isStale, closeIfStale }
 }

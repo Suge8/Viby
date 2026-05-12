@@ -1,16 +1,27 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { readBrowserStorageItem, writeBrowserStorageItem } from '@/lib/browserStorage'
-import { getPairingDeviceStorageKey } from '@/lib/storage/storageRegistry'
+import { readAppCacheRecord, writeAppCacheRecord } from '@/lib/storage/appCacheDb'
+import { APP_CACHE_STORES, getPairingDeviceStorageKey } from '@/lib/storage/storageRegistry'
 import {
     clearPairingDeviceIdentity,
     createReconnectDeviceProof,
+    loadCachedPairingDeviceIdentity,
     loadPairingDeviceIdentity,
 } from './remotePairingDevice'
 
 const publicKey = {} as CryptoKey
-const privateKey = {} as CryptoKey
-const importedPrivateKey = {} as CryptoKey
+const privateKey = createMockPrivateKey()
+const importedPrivateKey = createMockPrivateKey()
 const privateKeyJwk = { kty: 'EC', crv: 'P-256', d: 'd-value' }
+
+function createMockPrivateKey(): CryptoKey {
+    return {
+        algorithm: { name: 'ECDSA', namedCurve: 'P-256' },
+        extractable: false,
+        type: 'private',
+        usages: ['sign'],
+    } as CryptoKey
+}
 
 function toArrayBuffer(bytes: number[]): ArrayBuffer {
     return new Uint8Array(bytes).buffer
@@ -21,9 +32,6 @@ function installCrypto() {
     const exportKey = vi.fn(async (format: string, key: CryptoKey) => {
         if (format === 'spki' && key === publicKey) {
             return toArrayBuffer([1, 2, 3])
-        }
-        if (format === 'jwk' && key === privateKey) {
-            return privateKeyJwk
         }
         throw new Error('unexpected export')
     })
@@ -51,33 +59,82 @@ afterEach(() => {
 })
 
 describe('remotePairingDevice', () => {
-    it('loads a cached device identity from the registered browser storage key', async () => {
-        const identity = {
+    it('loads a cached non-extractable device key from IndexedDB', async () => {
+        await writeAppCacheRecord(APP_CACHE_STORES.pairingDeviceKeys, 'pairing-1', {
+            createdAt: 1,
+            privateKey,
             publicKey: 'cached-public-key',
-            privateKeyJwk,
-        }
-        writeBrowserStorageItem('local', getPairingDeviceStorageKey('pairing-1'), JSON.stringify(identity))
+        })
         const cryptoMocks = installCrypto()
 
-        await expect(loadPairingDeviceIdentity('pairing-1')).resolves.toEqual(identity)
+        await expect(loadCachedPairingDeviceIdentity('pairing-1')).resolves.toEqual({
+            privateKey: expect.objectContaining({ type: 'private' }),
+            publicKey: 'cached-public-key',
+        })
+
+        expect(cryptoMocks.generateKey).not.toHaveBeenCalled()
+        expect(cryptoMocks.importKey).not.toHaveBeenCalled()
+    })
+
+    it('migrates a legacy localStorage device secret into IndexedDB', async () => {
+        writeBrowserStorageItem(
+            'local',
+            getPairingDeviceStorageKey('pairing-1'),
+            JSON.stringify({ publicKey: 'cached-public-key', privateKeyJwk })
+        )
+        const cryptoMocks = installCrypto()
+
+        await expect(loadPairingDeviceIdentity('pairing-1')).resolves.toEqual({
+            privateKey: importedPrivateKey,
+            publicKey: 'cached-public-key',
+        })
+
+        expect(cryptoMocks.generateKey).not.toHaveBeenCalled()
+        expect(cryptoMocks.importKey).toHaveBeenCalledWith(
+            'jwk',
+            privateKeyJwk,
+            { name: 'ECDSA', namedCurve: 'P-256' },
+            false,
+            ['sign']
+        )
+        expect(JSON.parse(readBrowserStorageItem('local', getPairingDeviceStorageKey('pairing-1')) ?? '{}')).toEqual({
+            publicKey: 'cached-public-key',
+            store: 'indexeddb',
+            version: 1,
+        })
+        await expect(readAppCacheRecord(APP_CACHE_STORES.pairingDeviceKeys, 'pairing-1')).resolves.toMatchObject({
+            publicKey: 'cached-public-key',
+        })
+    })
+
+    it('returns null for device recovery when no cached identity exists', async () => {
+        const cryptoMocks = installCrypto()
+
+        await expect(loadCachedPairingDeviceIdentity('pairing-1')).resolves.toBeNull()
 
         expect(cryptoMocks.generateKey).not.toHaveBeenCalled()
     })
 
-    it('creates and stores a new ECDSA device identity when no cache exists', async () => {
+    it('creates and stores a new non-extractable ECDSA device key when no cache exists', async () => {
         const cryptoMocks = installCrypto()
 
         const identity = await loadPairingDeviceIdentity('pairing-1')
 
         expect(identity).toEqual({
+            privateKey,
             publicKey: 'AQID',
-            privateKeyJwk,
         })
-        expect(cryptoMocks.generateKey).toHaveBeenCalledWith({ name: 'ECDSA', namedCurve: 'P-256' }, true, [
+        expect(cryptoMocks.generateKey).toHaveBeenCalledWith({ name: 'ECDSA', namedCurve: 'P-256' }, false, [
             'sign',
             'verify',
         ])
-        expect(readBrowserStorageItem('local', getPairingDeviceStorageKey('pairing-1'))).toBe(JSON.stringify(identity))
+        expect(cryptoMocks.exportKey).toHaveBeenCalledWith('spki', publicKey)
+        expect(readBrowserStorageItem('local', getPairingDeviceStorageKey('pairing-1'))).toBe(
+            JSON.stringify({ publicKey: 'AQID', store: 'indexeddb', version: 1 })
+        )
+        await expect(readAppCacheRecord(APP_CACHE_STORES.pairingDeviceKeys, 'pairing-1')).resolves.toMatchObject({
+            publicKey: 'AQID',
+        })
     })
 
     it('replaces invalid cached identity data with a fresh identity', async () => {
@@ -91,24 +148,29 @@ describe('remotePairingDevice', () => {
     })
 
     it('replaces cached identities that cannot sign reconnect proofs', async () => {
-        writeBrowserStorageItem(
-            'local',
-            getPairingDeviceStorageKey('pairing-1'),
-            JSON.stringify({ publicKey: 'cached-public-key', privateKeyJwk: {} })
-        )
+        await writeAppCacheRecord(APP_CACHE_STORES.pairingDeviceKeys, 'pairing-1', {
+            createdAt: 1,
+            privateKey: {
+                algorithm: { name: 'ECDSA', namedCurve: 'P-256' },
+                extractable: true,
+                type: 'public',
+                usages: ['verify'],
+            } as CryptoKey,
+            publicKey: 'cached-public-key',
+        })
         const cryptoMocks = installCrypto()
 
         const identity = await loadPairingDeviceIdentity('pairing-1')
 
-        expect(identity).toEqual({ publicKey: 'AQID', privateKeyJwk })
+        expect(identity).toEqual({ publicKey: 'AQID', privateKey })
         expect(cryptoMocks.generateKey).toHaveBeenCalledTimes(1)
     })
 
     it('signs reconnect challenges with the stored private key and canonical payload', async () => {
         const cryptoMocks = installCrypto()
         const identity = {
+            privateKey,
             publicKey: 'cached-public-key',
-            privateKeyJwk,
         }
 
         const proof = await createReconnectDeviceProof('pairing-1', identity, 'nonce-1')
@@ -119,23 +181,24 @@ describe('remotePairingDevice', () => {
             signedAt: expect.any(Number),
             signature: 'BAUG',
         })
-        expect(cryptoMocks.importKey).toHaveBeenCalledWith(
-            'jwk',
-            privateKeyJwk,
-            { name: 'ECDSA', namedCurve: 'P-256' },
-            false,
-            ['sign']
-        )
+        expect(cryptoMocks.importKey).not.toHaveBeenCalled()
         const signCalls = cryptoMocks.sign.mock.calls as unknown as [unknown, unknown, BufferSource][]
         const signPayload = signCalls[0]?.[2]
+        expect(signCalls[0]?.[1]).toBe(privateKey)
         expect(new TextDecoder().decode(signPayload)).toBe(`pairing-1:nonce-1:${proof.signedAt}`)
     })
 
-    it('clears the pairing device identity through the storage owner', () => {
+    it('clears the pairing device identity through the storage owner', async () => {
         writeBrowserStorageItem('local', getPairingDeviceStorageKey('pairing-1'), JSON.stringify({ publicKey: 'x' }))
+        await writeAppCacheRecord(APP_CACHE_STORES.pairingDeviceKeys, 'pairing-1', {
+            createdAt: 1,
+            privateKey,
+            publicKey: 'cached-public-key',
+        })
 
-        clearPairingDeviceIdentity('pairing-1')
+        await clearPairingDeviceIdentity('pairing-1')
 
         expect(readBrowserStorageItem('local', getPairingDeviceStorageKey('pairing-1'))).toBeNull()
+        await expect(readAppCacheRecord(APP_CACHE_STORES.pairingDeviceKeys, 'pairing-1')).resolves.toBeNull()
     })
 })

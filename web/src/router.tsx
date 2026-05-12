@@ -78,7 +78,7 @@ function RouteSuspense(props: RouteSuspenseProps): React.JSX.Element {
 
 function FilesRoutePage(): React.JSX.Element {
     return (
-        <RouteSuspense kind="files" variant="inline">
+        <RouteSuspense kind="workspace" variant="inline">
             <FilesPage />
         </RouteSuspense>
     )
@@ -86,7 +86,7 @@ function FilesRoutePage(): React.JSX.Element {
 
 function FileRoutePage(): React.JSX.Element {
     return (
-        <RouteSuspense kind="files" variant="inline">
+        <RouteSuspense kind="workspace" variant="inline">
             <FilePage />
         </RouteSuspense>
     )
@@ -94,7 +94,7 @@ function FileRoutePage(): React.JSX.Element {
 
 function TerminalRoutePage(): React.JSX.Element {
     return (
-        <RouteSuspense kind="terminal" variant="inline">
+        <RouteSuspense kind="workspace" variant="inline">
             <TerminalPage />
         </RouteSuspense>
     )
