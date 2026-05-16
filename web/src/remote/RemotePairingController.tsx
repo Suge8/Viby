@@ -5,7 +5,6 @@ import type { PairingTransportState } from '@viby/protocol/pairing'
 import { type JSX, useCallback, useEffect, useRef, useState } from 'react'
 import { useFinalizeBootShell } from '@/hooks/useFinalizeBootShell'
 import { useNoticeCenter } from '@/lib/notice-center'
-import { queryKeys } from '@/lib/query-keys'
 import { RemotePairingControllerView } from '@/remote/RemotePairingControllerView'
 import { clearRetainedReady, getRetainedReady, setRetainedReady } from '@/remote/RemotePairingPersistence'
 import type { RemotePairingReadyConnection } from '@/remote/RemotePairingReadyShell'
@@ -93,10 +92,9 @@ export function RemotePairingController(props: RemotePairingControllerProps): JS
             setState({ kind: 'running', ready })
             await bridge.untilReady()
             await setRetainedReady(props.pairingId, Date.now())
-            queryClient.removeQueries({ queryKey: queryKeys.runtime, exact: true })
             return ready
         },
-        [props.pairingId, queryClient]
+        [props.pairingId]
     )
 
     useEffect(() => {

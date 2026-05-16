@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { queryKeys } from '@/lib/query-keys'
 import { RemotePairingController } from './RemotePairingController'
 
 const route = vi.hoisted(() => ({ pathname: '/sessions', href: '/sessions' }))
@@ -71,13 +72,15 @@ vi.mock('@/remote/RemotePeerSession', () => ({
     }),
 }))
 
-function renderController(): void {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+function renderController(
+    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+): QueryClient {
     render(
         <QueryClientProvider client={queryClient}>
             <RemotePairingController pairingId="pairing-1" />
         </QueryClientProvider>
     )
+    return queryClient
 }
 
 function approvedAuth() {
@@ -115,6 +118,16 @@ describe('RemotePairingController', () => {
         retained.value = { lastReadyAt: 1 }
         renderController()
         expect(await screen.findByTestId('ready-shell')).toBeInTheDocument()
+    })
+
+    it('does not clear the remote runtime cache after transport readiness', async () => {
+        const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        const runtimeResponse = { runtime: { id: 'remote-p2p', active: true } }
+        queryClient.setQueryData(queryKeys.runtime, runtimeResponse)
+        renderController(queryClient)
+        await screen.findByTestId('ready-shell')
+        await waitFor(() => expect(setRetainedReady).toHaveBeenCalled())
+        expect(queryClient.getQueryData(queryKeys.runtime)).toBe(runtimeResponse)
     })
 
     it('moves to first pairing when IDB and guest token are absent', async () => {
