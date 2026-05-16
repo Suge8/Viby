@@ -105,7 +105,10 @@ describe('PairingSocketHub', () => {
         const hostOpenSocket = createSocket()
         await hub.attach(session.id, session.host.tokenHash, hostOpenSocket)
 
-        await hub.handleMessage(cloneSocketView(hostOpenSocket), JSON.stringify({ type: 'candidate', candidate: { candidate: 'x' } }))
+        await hub.handleMessage(
+            cloneSocketView(hostOpenSocket),
+            JSON.stringify({ type: 'candidate', candidate: { candidate: 'x' } })
+        )
         await hub.detach(cloneSocketView(hostOpenSocket))
         await new Promise((resolve) => setTimeout(resolve, 5))
 
@@ -121,11 +124,26 @@ describe('PairingSocketHub', () => {
         const guestSocket = createSocket()
 
         await hub.attach(session.id, session.host.tokenHash, hostSocket)
-        expect(hub.snapshot()).toEqual({ activeSessions: 1, activeSockets: 1, pairedSessions: 0, disconnectGraceTimers: 0 })
+        expect(hub.snapshot()).toEqual({
+            activeSessions: 1,
+            activeSockets: 1,
+            pairedSessions: 0,
+            disconnectGraceTimers: 0,
+        })
         await hub.attach(session.id, guest.tokenHash, guestSocket)
-        expect(hub.snapshot()).toEqual({ activeSessions: 1, activeSockets: 2, pairedSessions: 1, disconnectGraceTimers: 0 })
+        expect(hub.snapshot()).toEqual({
+            activeSessions: 1,
+            activeSockets: 2,
+            pairedSessions: 1,
+            disconnectGraceTimers: 0,
+        })
         await hub.detach(guestSocket)
-        expect(hub.snapshot()).toEqual({ activeSessions: 1, activeSockets: 1, pairedSessions: 0, disconnectGraceTimers: 1 })
+        expect(hub.snapshot()).toEqual({
+            activeSessions: 1,
+            activeSockets: 1,
+            pairedSessions: 0,
+            disconnectGraceTimers: 1,
+        })
     })
 
     it('forwards raw V2 signals only when the opposite role is online', async () => {

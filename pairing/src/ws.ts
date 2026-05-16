@@ -58,7 +58,10 @@ export class PairingSocketHub {
         return connection
     }
 
-    async handleMessage(socket: PairingSocketLike, rawData: string | ArrayBuffer | SharedArrayBuffer | Blob): Promise<void> {
+    async handleMessage(
+        socket: PairingSocketLike,
+        rawData: string | ArrayBuffer | SharedArrayBuffer | Blob
+    ): Promise<void> {
         const connection = this.connectionIndex.resolve(socket)
         if (!connection) {
             socket.close(1008, 'not-attached')
@@ -94,7 +97,12 @@ export class PairingSocketHub {
     }
 
     snapshot(): PairingSocketHubSnapshot {
-        const snapshot = { activeSessions: this.connections.size, activeSockets: 0, pairedSessions: 0, disconnectGraceTimers: 0 }
+        const snapshot = {
+            activeSessions: this.connections.size,
+            activeSockets: 0,
+            pairedSessions: 0,
+            disconnectGraceTimers: 0,
+        }
         for (const state of this.connections.values()) {
             snapshot.activeSockets += state.sockets.size
             snapshot.disconnectGraceTimers += state.disconnectTimers.size

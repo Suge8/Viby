@@ -1,61 +1,36 @@
-import { computePairingReconnectDelay } from './pairingTiming'
-import { createPerfectNegotiation, type RTCPeerConnection as NegotiationPeer } from './perfectNegotiation'
-import { PairingSignalV2Schema, type PairingByeReason, type PairingSignalV2 } from './pairingSignal'
+import { type PairingByeReason, type PairingSignalV2, PairingSignalV2Schema } from './pairingSignal'
+import { computePairingReconnectDelay, PAIRING_ICE_RESTART_MIN_INTERVAL_MS } from './pairingTiming'
+import type {
+    PairingPeer,
+    PairingSocket,
+    PairingTransportHandle,
+    PairingTransportOptions,
+    PairingTransportState,
+    RTCIceServer,
+} from './pairingTransportTypes'
+import { createPerfectNegotiation } from './perfectNegotiation'
+
+export type {
+    PairingPeer,
+    PairingSocket,
+    PairingTransportHandle,
+    PairingTransportOptions,
+    PairingTransportState,
+    RTCDataChannel,
+    RTCIceServer,
+} from './pairingTransportTypes'
 
 const SOCKET_OPEN = 1
 const ICE_RESTART_STATES = new Set(['disconnected', 'failed'])
-
-export type PairingTransportState = { kind: 'connecting'; attempt: number } | { kind: 'ready' } | { kind: 'fatal'; reason: PairingByeReason | 'closed' }
-export interface RTCIceServer { urls: string | string[]; username?: string; credential?: string }
-export interface RTCDataChannel { readyState?: string }
-export interface PairingSocket {
-    readyState: number
-    onopen: (() => void) | null
-    onclose: (() => void) | null
-    onerror: (() => void) | null
-    onmessage: ((event: { data: string }) => void) | null
-    send(data: string): void
-    close(): void
-}
-export interface PairingPeer extends NegotiationPeer {
-    iceConnectionState: string
-    connectionState: string
-    onicecandidate: ((event: { candidate: PairingSignalV2 extends { type: 'candidate'; candidate: infer C } ? C | null : never }) => void) | null
-    onconnectionstatechange: (() => void) | null
-    oniceconnectionstatechange: (() => void) | null
-    ondatachannel: ((event: { channel: RTCDataChannel }) => void) | null
-    createDataChannel(label: string, options: { ordered: boolean }): RTCDataChannel
-    restartIce(): void
-    close(): void
-}
-export interface PairingTransportOptions {
-    pairingId: string
-    polite: boolean
-    iceServers: RTCIceServer[]
-    getWsUrl(): Promise<string>
-    createDataChannel: boolean
-    onChannel(channel: RTCDataChannel): void
-    onSignalReceived?: (raw: unknown) => void
-    socketFactory?: (url: string) => PairingSocket
-    peerFactory?: (iceServers: RTCIceServer[]) => PairingPeer
-    now?: () => number
-    randomJitter?: () => number
-}
-export interface PairingTransportHandle {
-    dispose(): void
-    requestIceRestart(): void
-    untilReady(): Promise<void>
-    notifyForeground(): void
-    subscribe(listener: () => void): () => void
-    getSnapshot(): PairingTransportState
-    getPeer(): PairingPeer
-}
 
 export function createPairingTransport(options: PairingTransportOptions): PairingTransportHandle {
     const peer = (options.peerFactory ?? createDefaultPeer)(options.iceServers)
     let state: PairingTransportState = { kind: 'connecting', attempt: 0 }
     let disposed = false
     let socket: PairingSocket | null = null
+    const pendingSignals: string[] = []
+    const now = options.now ?? Date.now
+    let lastIceRestartAt = -Infinity
     let wakeSleep: (() => void) | null = null
     let readyPromise: Promise<void> | null = null
     let resolveReady: (() => void) | null = null
@@ -70,10 +45,18 @@ export function createPairingTransport(options: PairingTransportOptions): Pairin
         if (peer.connectionState === 'closed') close('closed')
     }
     peer.oniceconnectionstatechange = () => {
-        if (peer.iceConnectionState === 'failed') peer.restartIce()
+        if (peer.iceConnectionState === 'failed') maybeRestartIce()
     }
     void connectLoop()
-    return { dispose: () => close('closed'), requestIceRestart, untilReady, notifyForeground, subscribe, getSnapshot: () => state, getPeer: () => peer }
+    return {
+        dispose: () => close('closed'),
+        requestIceRestart,
+        untilReady,
+        notifyForeground,
+        subscribe,
+        getSnapshot: () => state,
+        getPeer: () => peer,
+    }
 
     function commitState(next: PairingTransportState) {
         if (sameState(state, next)) return
@@ -96,7 +79,12 @@ export function createPairingTransport(options: PairingTransportOptions): Pairin
         return readyPromise
     }
     function send(signal: PairingSignalV2) {
-        if (socket?.readyState === SOCKET_OPEN) socket.send(JSON.stringify(signal))
+        const payload = JSON.stringify(signal)
+        if (socket?.readyState === SOCKET_OPEN) {
+            socket.send(payload)
+            return
+        }
+        pendingSignals.push(payload)
     }
     async function connectLoop() {
         let attempt = 0
@@ -104,13 +92,18 @@ export function createPairingTransport(options: PairingTransportOptions): Pairin
             try {
                 const url = await options.getWsUrl()
                 if (disposed) return
-                socket = (options.socketFactory ?? createDefaultSocket)(url)
-                await bindSocket(socket, () => { attempt = 0; commitState({ kind: 'connecting', attempt: 0 }) })
+                const nextSocket = (options.socketFactory ?? createDefaultSocket)(url)
+                socket = nextSocket
+                await bindSocket(nextSocket, () => {
+                    flushPendingSignals(nextSocket)
+                    attempt = 0
+                    if (!isPeerReady()) commitState({ kind: 'connecting', attempt: 0 })
+                })
             } catch (_) {}
             if (disposed) return
-            if (ICE_RESTART_STATES.has(peer.iceConnectionState)) peer.restartIce()
+            if (ICE_RESTART_STATES.has(peer.iceConnectionState)) maybeRestartIce()
             attempt += 1
-            commitState({ kind: 'connecting', attempt })
+            if (!isPeerReady()) commitState({ kind: 'connecting', attempt })
             await sleep(backoff(attempt))
         }
     }
@@ -130,17 +123,18 @@ export function createPairingTransport(options: PairingTransportOptions): Pairin
         await negotiation.onSignal(signal)
     }
     function requestIceRestart() {
-        if (peer.connectionState !== 'closed') peer.restartIce()
+        maybeRestartIce()
     }
     function notifyForeground() {
         if (socket?.readyState !== SOCKET_OPEN) return wakeSleep?.()
-        if (ICE_RESTART_STATES.has(peer.iceConnectionState)) peer.restartIce()
+        if (ICE_RESTART_STATES.has(peer.iceConnectionState)) maybeRestartIce()
     }
     function close(reason: PairingByeReason | 'closed') {
         if (disposed) return
         disposed = true
         wakeSleep?.()
         socket?.close()
+        pendingSignals.length = 0
         peer.close()
         negotiation.dispose()
         commitState({ kind: 'fatal', reason })
@@ -160,13 +154,38 @@ export function createPairingTransport(options: PairingTransportOptions): Pairin
     function backoff(attempt: number) {
         return computePairingReconnectDelay(attempt, options.randomJitter)
     }
+
+    function isPeerReady() {
+        return peer.connectionState === 'connected'
+    }
+
+    function flushPendingSignals(target: PairingSocket) {
+        if (pendingSignals.length === 0) return
+        if (target.readyState !== SOCKET_OPEN) return
+        for (const payload of pendingSignals) target.send(payload)
+        pendingSignals.length = 0
+    }
+
+    function maybeRestartIce(): void {
+        if (peer.connectionState === 'closed') return
+        const at = now()
+        if (at - lastIceRestartAt < PAIRING_ICE_RESTART_MIN_INTERVAL_MS) return
+        lastIceRestartAt = at
+        peer.restartIce()
+    }
 }
 
 function sameState(left: PairingTransportState, right: PairingTransportState) {
-    return left.kind === right.kind && ('attempt' in left ? left.attempt === (right as { attempt?: number }).attempt : true) && ('reason' in left ? left.reason === (right as { reason?: string }).reason : true)
+    return (
+        left.kind === right.kind &&
+        ('attempt' in left ? left.attempt === (right as { attempt?: number }).attempt : true) &&
+        ('reason' in left ? left.reason === (right as { reason?: string }).reason : true)
+    )
 }
 function createDefaultPeer(iceServers: RTCIceServer[]) {
-    const globalPeer = globalThis as unknown as { RTCPeerConnection: new (config: { iceServers: RTCIceServer[] }) => PairingPeer }
+    const globalPeer = globalThis as unknown as {
+        RTCPeerConnection: new (config: { iceServers: RTCIceServer[] }) => PairingPeer
+    }
     return new globalPeer.RTCPeerConnection({ iceServers })
 }
 function createDefaultSocket(url: string) {

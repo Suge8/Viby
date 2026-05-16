@@ -30,3 +30,9 @@
 - `bun run --cwd web build` ✅
 - Line guard: `RemotePairingController.tsx` 188; `pairingTransport.ts` 175.
 - RM9 real-device regression deferred to Phase K bulk run.
+
+## Hotfix Follow-up — 2026-05-16T08:15:00Z
+
+- Reconnect notice now reflects transport/channel readiness: remote queries pause while channel ACK is missing and resume only after true ready.
+- Heartbeat ACK timeout ignores stale timer callbacks caused by iOS background suspension and re-probes on foreground.
+- Validation: web focused tests + build; shared timing/transport tests ✅

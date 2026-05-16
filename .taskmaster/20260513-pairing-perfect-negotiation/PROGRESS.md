@@ -227,3 +227,15 @@
 - Full automated validation passed: shared typecheck/test; pairing test; desktop typecheck/test; web typecheck/test/build; hub test; `harness:check`; `test:scripts`; line guard.
 - Production broker deployed to `1panel-main`; verified service active, local health, and `https://pair.viby.run/ready`.
 - Blocker: RM1-RM12 require real iPhone Safari/PWA/manual browser operation. No attached device/browser surface exists in this API session, so Epic is not truthfully final-closed.
+
+## PWA Reconnect / Request Failure Hotfix — 2026-05-16T08:15:00Z
+
+- Root cause: Web resumed remote runtime queries on `RTCPeerConnection` ready before RTCDataChannel round-trip readiness, producing `远程请求失败请重试` after PWA cold start / iOS background resume.
+- Fixed guest readiness: `RemotePeerSession.untilReady()` waits for transport ready + DataChannel heartbeat ACK; snapshots expose `connecting` until ACK; fatal/close rejects pending readiness; stale iOS-suspended heartbeat timers send a fresh probe before ICE restart.
+- Fixed host readiness: desktop bridge requires channel activity before `ready`; heartbeat echoes mark active; SCTP DataChannel close creates a replacement DataChannel on the same long-lived PeerConnection.
+- Hardened shared transport: socket-down negotiation signals are buffered and flushed after reconnect; ICE restart is throttled in transport; perfect-negotiation caches candidates that arrive before remote SDP.
+- PWA icon assets regenerated/verified from `brand-logo-tight.png`; production `pwa-192x192.png` byte-matches local.
+- Validation: web typecheck + focused tests + build; desktop typecheck/test; shared typecheck + pairingTransport/perfectNegotiation/pairingTiming tests; pairing typecheck/test; `bun run harness:check`; `bun run build:pairing`.
+- Production deploy: `HK-4c8g:/opt/viby-pairing`, bundle sha256 `37ef1c567ac59619d6d46a39cdacf96db738bbc1fb9737b5496669c22279a3ea`, index.js sha256 `ba11a823c6129b9cb6ff8045e41e2e4fb904a498e87961da5cd66b52ae97a2b1`, backup `/opt/viby-pairing-backups/viby-pairing-20260516081206.tar.gz`.
+- Production checks: service active; local/public `/ready`; health script; served asset `assets/index-gxIHbcco.js`; manifest; icon byte match; local create/delete smoke.
+- Still blocked: RM1-RM12 need manual iPhone Safari/PWA acceptance before Epic final close.

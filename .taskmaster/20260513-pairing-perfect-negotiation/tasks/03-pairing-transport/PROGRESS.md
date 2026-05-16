@@ -25,3 +25,10 @@
     - `wc -l shared/src/pairing/pairingTransport.ts` = 177 ✅
 - **Real-device RM**: not applicable for Phase C; no RM rows listed.
 - **Commit**: pending.
+
+## Hotfix Follow-up — 2026-05-16T08:15:00Z
+
+- Split transport types into `pairingTransportTypes.ts` to keep runtime file under guard.
+- Buffered local `description/candidate` signals while signaling socket is down; flushes on next socket open.
+- Added transport-owned ICE restart throttle and foreground wake path; PeerConnection remains long-lived.
+- Validation: `bun run --cwd shared typecheck`; `bun run --cwd shared test -- pairingTransport pairingTiming` ✅

@@ -89,9 +89,10 @@ export function RemotePairingController(props: RemotePairingControllerProps): JS
             })
             const ready = { bridge, token }
             readyRef.current = ready
-            setState({ kind: 'running', ready })
+            setState({ kind: 'hydrating' })
             await bridge.untilReady()
             await setRetainedReady(props.pairingId, Date.now())
+            setState({ kind: 'running', ready })
             return ready
         },
         [props.pairingId]

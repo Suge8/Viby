@@ -39,7 +39,9 @@ vi.mock('@/remote/RemotePairingScreens', () => ({
     RemotePairingStatusScreen: () => <div data-testid="status" />,
 }))
 vi.mock('@/remote/RemotePairingReadyShell', () => ({
-    RemotePairingReadyShell: () => <div data-testid="ready-shell" />,
+    RemotePairingReadyShell: (props: { enableRuntime: boolean }) => (
+        <div data-testid="ready-shell" data-runtime-enabled={String(props.enableRuntime)} />
+    ),
 }))
 vi.mock('@/remote/RemotePairingHydrateSkeleton', () => ({
     RemotePairingHydrateSkeleton: () => <div data-testid="hydrate" />,
@@ -129,7 +131,19 @@ describe('RemotePairingController', () => {
     it('moves to running when retained ready exists', async () => {
         retained.value = { lastReadyAt: 1 }
         renderController()
-        expect(await screen.findByTestId('ready-shell')).toBeInTheDocument()
+        expect(await screen.findByTestId('ready-shell')).toHaveAttribute('data-runtime-enabled', 'true')
+    })
+
+    it('keeps the retained workspace runtime disabled until the peer channel is ready', async () => {
+        let resolveReady!: () => void
+        session.untilReady.mockImplementation(
+            () => new Promise<undefined>((resolve) => (resolveReady = () => resolve(undefined)))
+        )
+        renderController()
+
+        expect(await screen.findByTestId('ready-shell')).toHaveAttribute('data-runtime-enabled', 'false')
+        act(() => resolveReady())
+        await waitFor(() => expect(screen.getByTestId('ready-shell')).toHaveAttribute('data-runtime-enabled', 'true'))
     })
 
     it('does not clear the remote runtime cache after transport readiness', async () => {

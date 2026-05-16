@@ -30,6 +30,7 @@ export function createPerfectNegotiation(options: PerfectNegotiationOptions): Pe
     let makingOffer = false
     let ignoreOffer = false
     let isSettingRemoteAnswerPending = false
+    const pendingCandidates: Candidate[] = []
     async function sendOffer() {
         try {
             makingOffer = true
@@ -47,6 +48,22 @@ export function createPerfectNegotiation(options: PerfectNegotiationOptions): Pe
         await peer.setLocalDescription(answer)
         if (active && peer.localDescription) send({ type: 'description', description: peer.localDescription })
     }
+    async function flushPendingCandidates(): Promise<void> {
+        if (!active || pendingCandidates.length === 0) return
+        const candidates = pendingCandidates.splice(0, pendingCandidates.length)
+        for (let index = 0; index < candidates.length; index++) {
+            const candidate = candidates[index]
+            try {
+                await peer.addIceCandidate(candidate)
+            } catch (error) {
+                if (isInvalidStateError(error)) {
+                    pendingCandidates.unshift(...candidates.slice(index))
+                    return
+                }
+                throw error
+            }
+        }
+    }
     async function onDescription(description: Description) {
         const readyForOffer = !makingOffer && (peer.signalingState === 'stable' || isSettingRemoteAnswerPending)
         const offerCollision = description.type === 'offer' && !readyForOffer
@@ -58,6 +75,7 @@ export function createPerfectNegotiation(options: PerfectNegotiationOptions): Pe
         } finally {
             isSettingRemoteAnswerPending = false
         }
+        await flushPendingCandidates()
         if (active && description.type === 'offer') await answerOffer()
     }
     async function onSignal(signal: PairingSignalV2) {
@@ -66,7 +84,12 @@ export function createPerfectNegotiation(options: PerfectNegotiationOptions): Pe
         try {
             await peer.addIceCandidate(signal.candidate)
         } catch (error) {
-            if (!ignoreOffer) throw error
+            if (ignoreOffer) return
+            if (isInvalidStateError(error)) {
+                pendingCandidates.push(signal.candidate)
+                return
+            }
+            throw error
         }
     }
     peer.addEventListener('negotiationneeded', sendOffer)
@@ -74,7 +97,12 @@ export function createPerfectNegotiation(options: PerfectNegotiationOptions): Pe
         onSignal,
         dispose: () => {
             active = false
+            pendingCandidates.length = 0
             peer.removeEventListener('negotiationneeded', sendOffer)
         },
     }
+}
+
+function isInvalidStateError(error: unknown): boolean {
+    return typeof error === 'object' && error !== null && (error as { name?: unknown }).name === 'InvalidStateError'
 }

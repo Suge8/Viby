@@ -25,7 +25,13 @@ export const PAIRING_DESKTOP_TRANSPORT_RECOVERY_MS = 15_000
 export const PAIRING_FOREGROUND_LIVENESS_PROBE_TIMEOUT_MS = 4_000
 
 export function computePairingReconnectDelay(attempt: number, random = Math.random): number {
-    const cappedDelay = Math.min(PAIRING_REMOTE_RECONNECT_BASE_DELAY_MS * 2 ** Math.max(0, attempt), PAIRING_REMOTE_RECONNECT_MAX_DELAY_MS)
-    const jitter = cappedDelay === PAIRING_REMOTE_RECONNECT_MAX_DELAY_MS ? -random() * PAIRING_REMOTE_RECONNECT_JITTER_RATIO : (random() * 2 - 1) * PAIRING_REMOTE_RECONNECT_JITTER_RATIO
+    const cappedDelay = Math.min(
+        PAIRING_REMOTE_RECONNECT_BASE_DELAY_MS * 2 ** Math.max(0, attempt),
+        PAIRING_REMOTE_RECONNECT_MAX_DELAY_MS
+    )
+    const jitter =
+        cappedDelay === PAIRING_REMOTE_RECONNECT_MAX_DELAY_MS
+            ? -random() * PAIRING_REMOTE_RECONNECT_JITTER_RATIO
+            : (random() * 2 - 1) * PAIRING_REMOTE_RECONNECT_JITTER_RATIO
     return cappedDelay * (1 + jitter)
 }

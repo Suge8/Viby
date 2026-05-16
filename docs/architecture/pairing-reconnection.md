@@ -19,11 +19,12 @@ start
   ├─ open/reopen signaling socket
   ├─ host create DataChannel / guest wait ondatachannel
   ├─ signal description/candidate through broker forwarder
-  ├─ DataChannel open + heartbeat/RPC ready
+  ├─ DataChannel open
+  ├─ heartbeat round-trip ack marks RPC ready
   └─ keep peer alive across socket reconnect / ICE restart
 ```
 
-Transport 暴露 stable handle：`subscribe()`、`getSnapshot()`、`untilReady()`、`notifyForeground()`、`send()`、`close()`。
+Transport 暴露 stable handle：`subscribe()`、`getSnapshot()`、`untilReady()`、`notifyForeground()`、`requestIceRestart()`、`dispose()`。
 
 ## 长寿命 peer / 短寿命 socket
 
@@ -49,14 +50,9 @@ ICE restart 属于 transport 层。`perfectNegotiation.ts` 不直接调用 `rest
 
 ## Signal ordering
 
-Candidate 可能早于 remote SDP 到达。Transport 负责排队：
+Candidate 可能早于 remote SDP 到达。Perfect-negotiation engine 缓存 candidate，`setRemoteDescription` 成功后 flush。
 
-```text
-candidate before description → queue
-setRemoteDescription success → flush queued candidates
-```
-
-旧 socket 的迟到 message 必须丢弃；broker 不做 durable queue。
+Signaling socket 断开时，transport 只缓存本端待发 `description/candidate`，新 socket open 后 flush。broker 不做 durable queue。
 
 ## UI 语义
 
@@ -66,4 +62,6 @@ Web retained-ready 后刷新/息屏恢复不回全屏 boot：
 - `running`：workspace 保留 + compact reconnect notice
 - `fatal`：不可恢复错误
 
-Desktop scan 在线由 bridge phase 判定：`ready` 在线；`connecting/fatal` 不在线。
+Remote workspace 只在 `RTCPeerConnection ready + DataChannel heartbeat ack` 后恢复查询；否则 transport snapshot 映射为 `connecting`，避免 UI 先显示已恢复再出现“远程请求失败”。
+
+Desktop scan 在线由 bridge phase 判定：`ready` 在线；`connecting/fatal` 不在线。Desktop host DataChannel close 时在同一个 PeerConnection 上创建 replacement channel，不重建 peer。

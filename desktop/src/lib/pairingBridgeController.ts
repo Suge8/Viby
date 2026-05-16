@@ -1,5 +1,11 @@
 import { createPairingTransport, type PairingTransportHandle } from '@viby/protocol/pairing'
-import type { DesktopPairingSession, HubRuntimeStatus, PairingBridgeState, PairingIceServer } from '@/types'
+import type {
+    DesktopPairingSession,
+    HubRuntimeStatus,
+    PairingBridgeState,
+    PairingBridgeStats,
+    PairingIceServer,
+} from '@/types'
 import { LocalHubPairingClient } from './localHubPairingClient'
 import { attachPairingDataChannel, HubPausedError, isHubPausedError } from './pairingBridgeControllerSupport'
 import { startPairingBridgeStats } from './pairingBridgeStats'
@@ -8,14 +14,27 @@ function toIceServers(servers: PairingIceServer[]): RTCIceServer[] {
     return servers.map((server) => ({ urls: server.urls, username: server.username, credential: server.credential }))
 }
 
-function bridgeStateFromTransport(transport: PairingTransportHandle, base: DesktopPairingSession): PairingBridgeState {
+function bridgeStateFromTransport(options: {
+    transport: PairingTransportHandle
+    base: DesktopPairingSession
+    channelReady: boolean
+    stats: PairingBridgeStats | null
+}): PairingBridgeState {
+    const { transport, base, channelReady, stats } = options
     const state = transport.getSnapshot()
-    if (state.kind === 'ready') return { phase: 'ready', message: '已连接', pairing: base.pairing }
+    if (state.kind === 'ready' && channelReady)
+        return { phase: 'ready', message: '已连接', pairing: base.pairing, stats }
     if (state.kind === 'fatal') return { phase: 'fatal', message: state.reason, pairing: base.pairing, stats: null }
     return {
         phase: 'connecting',
-        message: state.attempt > 0 ? `正在握手（${state.attempt}）` : '正在握手',
+        message:
+            state.kind === 'ready'
+                ? '正在建立数据通道'
+                : state.attempt > 0
+                  ? `正在握手（${state.attempt}）`
+                  : '正在握手',
         pairing: base.pairing,
+        stats,
     }
 }
 
@@ -59,8 +78,13 @@ export function startPairingBridge(options: {
     let disposed = false
     let eventStreamAbort: AbortController | null = null
     let channel: RTCDataChannel | null = null
+    let channelOpen = false
+    let channelActive = false
+    let latestStats: PairingBridgeStats | null = null
+    let fatalMessage: string | null = null
     const client = createDeferredHubClient(options.getStatus)
-    const transport = createPairingTransport({
+    let transport: PairingTransportHandle | null = null
+    transport = createPairingTransport({
         pairingId: options.pairing.pairing.id,
         polite: false,
         iceServers: toIceServers(options.pairing.iceServers),
@@ -69,22 +93,25 @@ export function startPairingBridge(options: {
         onChannel: attachChannel,
     })
     const stats = startPairingBridgeStats({
-        getPeer: () => transport.getPeer() as unknown as RTCPeerConnection,
-        setStats: (nextStats) =>
-            options.onStateChange({ ...bridgeStateFromTransport(transport, options.pairing), stats: nextStats }),
+        getPeer: () => {
+            if (!transport) throw new Error('pairing transport is not ready')
+            return transport.getPeer() as unknown as RTCPeerConnection
+        },
+        setStats: (nextStats) => {
+            latestStats = nextStats
+            emitBridgeState()
+        },
         reportError: reportAsyncError,
     })
-    const unsubscribe = transport.subscribe(() =>
-        options.onStateChange(bridgeStateFromTransport(transport, options.pairing))
-    )
-    options.onStateChange({ phase: 'connecting', message: '正在握手', pairing: options.pairing.pairing, stats: null })
+    const unsubscribe = transport.subscribe(emitBridgeState)
+    emitBridgeState()
 
     return () => {
         disposed = true
         unsubscribe()
         stopEventStream()
         stats.dispose()
-        transport.dispose()
+        transport?.dispose()
         channel?.close()
         try {
             client.closeAllTerminals()
@@ -95,25 +122,68 @@ export function startPairingBridge(options: {
 
     function reportAsyncError(message: string, error: unknown): void {
         if (disposed || isHubPausedError(error)) return
-        options.onStateChange({
-            phase: 'fatal',
-            message: `${message}${error instanceof Error ? error.message : String(error)}`,
-            pairing: options.pairing.pairing,
-            stats: null,
-        })
+        fatalMessage = `${message}${error instanceof Error ? error.message : String(error)}`
+        emitBridgeState()
     }
 
     function attachChannel(nextChannel: RTCDataChannel): void {
         channel = nextChannel
+        channelOpen = nextChannel.readyState === 'open'
+        channelActive = false
+        emitBridgeState()
         attachPairingDataChannel({
             channel: nextChannel,
             getClient: () => client,
             isDisposed: () => disposed,
-            setBridgeState: (state) => options.onStateChange({ pairing: options.pairing.pairing, ...state }),
+            onChannelOpen: () => {
+                if (channel !== nextChannel) return
+                channelOpen = true
+                emitBridgeState()
+            },
+            onChannelActive: () => {
+                if (channel !== nextChannel) return
+                channelActive = true
+                emitBridgeState()
+            },
+            onChannelClosed: () => {
+                if (channel !== nextChannel) return
+                channelOpen = false
+                channelActive = false
+                replaceClosedChannel()
+                transport?.requestIceRestart()
+                emitBridgeState()
+            },
             startEventStream,
             stopEventStream,
             reportAsyncError,
         })
+    }
+
+    function replaceClosedChannel(): void {
+        const peer = transport?.getPeer() as unknown as RTCPeerConnection | undefined
+        if (!peer || peer.connectionState === 'closed') return
+        attachChannel(peer.createDataChannel('control', { ordered: true }))
+    }
+
+    function emitBridgeState(): void {
+        if (disposed || !transport) return
+        if (fatalMessage) {
+            options.onStateChange({
+                phase: 'fatal',
+                message: fatalMessage,
+                pairing: options.pairing.pairing,
+                stats: null,
+            })
+            return
+        }
+        options.onStateChange(
+            bridgeStateFromTransport({
+                transport,
+                base: options.pairing,
+                channelReady: channelOpen && channelActive,
+                stats: latestStats,
+            })
+        )
     }
 
     async function startEventStream(activeChannel: RTCDataChannel): Promise<void> {

@@ -8,6 +8,7 @@ export function handleRemotePeerChannelMessage(options: {
     pendingRequests: RemotePeerPendingRequests
     syncListeners: ReadonlySet<(event: SyncEvent) => void>
     terminalListeners: ReadonlySet<(event: PairingPeerTerminalEventPayload) => void>
+    onHeartbeat?: () => void
 }): void {
     if (typeof options.data !== 'string') {
         return
@@ -18,6 +19,7 @@ export function handleRemotePeerChannelMessage(options: {
         return
     }
     if (message.kind === 'heartbeat') {
+        options.onHeartbeat?.()
         return
     }
     if (message.kind === 'event') {

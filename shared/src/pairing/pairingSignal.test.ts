@@ -26,7 +26,9 @@ describe('pairingSignalV2', () => {
 
     it('accepts every native description type', () => {
         for (const descriptionType of ['offer', 'answer', 'pranswer', 'rollback'] as const) {
-            expect(PairingSignalV2Schema.parse({ type: 'description', description: { type: descriptionType } })).toEqual({
+            expect(
+                PairingSignalV2Schema.parse({ type: 'description', description: { type: descriptionType } })
+            ).toEqual({
                 type: 'description',
                 description: { type: descriptionType },
             })

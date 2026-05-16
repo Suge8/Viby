@@ -24,3 +24,9 @@
     - `bun run --cwd shared test -t perfectNegotiation` ✅
 - **Real-device RM**: not applicable for Phase B; no RM rows listed.
 - **Commit**: pending.
+
+## Hotfix Follow-up — 2026-05-16T08:15:00Z
+
+- Added candidate buffering for `InvalidStateError` when ICE arrives before remote SDP; flush runs after `setRemoteDescription` succeeds.
+- Kept Phase B boundary intact: no `restartIce`, no connection-state listeners, explicit `createOffer/createAnswer` + `setLocalDescription(desc)` remains.
+- Validation: `bun run --cwd shared typecheck`; `bun run --cwd shared test -- perfectNegotiation` ✅

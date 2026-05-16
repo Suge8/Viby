@@ -14,6 +14,7 @@ class MockPeer {
     remoteDescriptions: Description[] = []
     candidates: Candidate[] = []
     failCandidate = false
+    rejectCandidatesBeforeRemoteDescription = false
     private listeners = new Set<Listener>()
     private offerWaiter: (() => void) | null = null
 
@@ -41,13 +42,14 @@ class MockPeer {
     }
 
     async createOffer(): Promise<Description> {
-        if (this.offerWaiter) await new Promise<void>((resolve) => {
-            const previous = this.offerWaiter
-            this.offerWaiter = () => {
-                previous?.()
-                resolve()
-            }
-        })
+        if (this.offerWaiter)
+            await new Promise<void>((resolve) => {
+                const previous = this.offerWaiter
+                this.offerWaiter = () => {
+                    previous?.()
+                    resolve()
+                }
+            })
         return { type: 'offer', sdp: 'local-offer' }
     }
 
@@ -68,6 +70,11 @@ class MockPeer {
     }
 
     async addIceCandidate(candidate: Candidate) {
+        if (this.rejectCandidatesBeforeRemoteDescription && !this.remoteDescription) {
+            const error = new Error('no remote description') as Error & { name?: string }
+            error.name = 'InvalidStateError'
+            throw error
+        }
         if (this.failCandidate) throw new Error('candidate rejected')
         this.candidates.push(candidate)
     }
@@ -119,7 +126,9 @@ describe('perfectNegotiation', () => {
         const offerTask = peer.triggerNegotiation()
         await handle.onSignal({ type: 'description', description: { type: 'offer', sdp: 'remote-offer' } })
         peer.failCandidate = true
-        await expect(handle.onSignal({ type: 'candidate', candidate: { candidate: 'late-candidate' } })).resolves.toBeUndefined()
+        await expect(
+            handle.onSignal({ type: 'candidate', candidate: { candidate: 'late-candidate' } })
+        ).resolves.toBeUndefined()
         peer.releaseOffer()
         await offerTask
         expect(peer.remoteDescriptions).toEqual([])
@@ -128,6 +137,17 @@ describe('perfectNegotiation', () => {
     it('passes candidates to the peer before SDP', async () => {
         const { handle, peer } = createHarness(true)
         await handle.onSignal({ type: 'candidate', candidate: { candidate: 'early-candidate' } })
+        expect(peer.candidates).toEqual([{ candidate: 'early-candidate' }])
+    })
+
+    it('retries candidates rejected until remote SDP is set', async () => {
+        const { handle, peer } = createHarness(true)
+        peer.rejectCandidatesBeforeRemoteDescription = true
+        await expect(
+            handle.onSignal({ type: 'candidate', candidate: { candidate: 'early-candidate' } })
+        ).resolves.toBeUndefined()
+        expect(peer.candidates).toEqual([])
+        await handle.onSignal({ type: 'description', description: { type: 'offer', sdp: 'remote-offer' } })
         expect(peer.candidates).toEqual([{ candidate: 'early-candidate' }])
     })
 

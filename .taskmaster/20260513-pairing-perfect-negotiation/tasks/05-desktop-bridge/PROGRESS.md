@@ -33,3 +33,10 @@
     - `bun run --cwd shared typecheck && bun run --cwd shared test -t buildPairingDeviceLinkStatus` ✅
 - **Real-device RM**: RM1/RM3/RM4/RM7/RM8 deferred to phase K bulk run; no device access in this session.
 - **Commit**: pending.
+
+## Hotfix Follow-up — 2026-05-16T08:15:00Z
+
+- Desktop bridge no longer reports ready on peer-ready alone; it waits for DataChannel open + guest heartbeat/business activity.
+- Host echoes heartbeat frames and marks the channel active only after real traffic.
+- If SCTP DataChannel closes while PeerConnection is still live, host creates a replacement DataChannel on the same peer and triggers ICE restart.
+- Validation: `bun run --cwd desktop typecheck`; `bun run --cwd desktop test` ✅

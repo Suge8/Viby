@@ -173,3 +173,11 @@
 | RM12 | 2026-05-12 | ⏸️ 未跑 | 同上。 |
 
 自动化覆盖：shared typecheck/test、pairing test、desktop typecheck/test、web typecheck/test/build、hub test、harness:check、test:scripts、line guard 全过。生产 broker 已部署并验证 `systemctl is-active viby-pairing`、本机 health、`https://pair.viby.run/ready`。
+
+## Hotfix validation record — 2026-05-16T08:15:00Z
+
+| RM# | 日期 | 结果 | 备注 |
+|---|---|---|---|
+| RM1-RM12 | 2026-05-16 | ⏸️ 未跑 | API session 无可操作真机；自动化、生产部署、health、manifest、icon、create/delete smoke 已完成。重点待人工验证：PWA 后台 <5min 返回不再卡死；PWA 冷启动不再显示“远程请求失败请重试”；主屏图标为 brand logo。 |
+
+生产部署：`HK-4c8g:/opt/viby-pairing`，bundle sha256 `37ef1c567ac59619d6d46a39cdacf96db738bbc1fb9737b5496669c22279a3ea`，index.js sha256 `ba11a823c6129b9cb6ff8045e41e2e4fb904a498e87961da5cd66b52ae97a2b1`。

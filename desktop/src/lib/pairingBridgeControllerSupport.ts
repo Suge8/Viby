@@ -1,4 +1,3 @@
-import type { PairingBridgeState, PairingSessionSnapshot } from '@/types'
 import type { LocalHubPairingClient } from './localHubPairingClient'
 import {
     executePairingPeerRequest,
@@ -7,10 +6,6 @@ import {
     serializePairingPeerMessage,
     serializePairingTerminalEvent,
 } from './pairingPeerRpcCore'
-
-type BridgeStateSetter = (
-    state: Omit<PairingBridgeState, 'pairing'> & { pairing?: PairingSessionSnapshot | null }
-) => void
 
 export class HubPausedError extends Error {
     readonly code = 'hub_paused'
@@ -52,36 +47,52 @@ export function attachPairingDataChannel(options: {
     channel: RTCDataChannel
     getClient: () => LocalHubPairingClient
     isDisposed: () => boolean
-    setBridgeState: BridgeStateSetter
+    onChannelOpen: () => void
+    onChannelActive: () => void
+    onChannelClosed: () => void
     startEventStream: (channel: RTCDataChannel) => Promise<void>
     stopEventStream: () => void
     reportAsyncError: (message: string, error: unknown) => void
 }): void {
-    const { channel, getClient, isDisposed, setBridgeState, startEventStream, stopEventStream, reportAsyncError } =
-        options
+    const {
+        channel,
+        getClient,
+        isDisposed,
+        onChannelOpen,
+        onChannelActive,
+        onChannelClosed,
+        startEventStream,
+        stopEventStream,
+        reportAsyncError,
+    } = options
     channel.addEventListener('open', () => {
+        onChannelOpen()
         void startEventStream(channel).catch((error) => reportAsyncError('配对事件流启动失败：', error))
     })
     channel.addEventListener('close', () => {
         stopEventStream()
         closeAllTerminals(getClient)
-        if (!isDisposed()) setBridgeState({ phase: 'connecting', message: '正在握手' })
+        if (!isDisposed()) onChannelClosed()
     })
     channel.addEventListener('message', (event) => {
         const rawData = typeof event.data === 'string' ? event.data : ''
         if (rawData && isPairingHeartbeat(rawData)) {
+            onChannelActive()
             if (channel.readyState === 'open') channel.send(rawData)
-            setBridgeState({ phase: 'ready', message: '已连接' })
             return
         }
         void handleMessage(event.data).catch((error) => reportAsyncError('配对请求处理失败：', error))
     })
 
     async function handleMessage(data: unknown): Promise<void> {
-        if (typeof data !== 'string' && (await acceptUploadChunk(getClient, data))) return
+        if (typeof data !== 'string' && (await acceptUploadChunk(getClient, data))) {
+            onChannelActive()
+            return
+        }
         let request: ReturnType<typeof parsePairingPeerRequest> | null = null
         try {
             request = parsePairingPeerRequest(typeof data === 'string' ? data : '')
+            onChannelActive()
             const response = await executePairingPeerRequest(getClient(), request, {
                 emitTerminalEvent: (terminalEvent) => {
                     if (channel.readyState === 'open') channel.send(serializePairingTerminalEvent(terminalEvent))

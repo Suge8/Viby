@@ -11,8 +11,12 @@ function socket(): PairingSocketLike & { sent: unknown[]; closed: Array<{ code?:
         readyState: 1,
         sent: [],
         closed: [],
-        send(data: string) { this.sent.push(JSON.parse(data) as unknown) },
-        close(code?: number, reason?: string) { this.closed.push({ code, reason }) },
+        send(data: string) {
+            this.sent.push(JSON.parse(data) as unknown)
+        },
+        close(code?: number, reason?: string) {
+            this.closed.push({ code, reason })
+        },
     }
 }
 
@@ -20,8 +24,17 @@ async function setup(now = 1_000) {
     const host = createParticipantRecord({ token: 'host-secret' })
     const guest = createParticipantRecord({ token: 'guest-secret' })
     const session = PairingSessionRecordSchema.parse({
-        id: 'p1', state: 'active', createdAt: now, updatedAt: now, expiresAt: now + 10_000,
-        ticketExpiresAt: now + 5_000, shortCode: null, approvalStatus: null, ticketHash: 'ticket-hash', host, guest: null,
+        id: 'p1',
+        state: 'active',
+        createdAt: now,
+        updatedAt: now,
+        expiresAt: now + 10_000,
+        ticketExpiresAt: now + 5_000,
+        shortCode: null,
+        approvalStatus: null,
+        ticketHash: 'ticket-hash',
+        host,
+        guest: null,
     })
     const store = new MemoryPairingStore(() => now)
     await store.createSession(session)
@@ -34,7 +47,8 @@ describe('PairingSocketHub forwarder', () => {
     it('forwards raw description signals between attached peers', async () => {
         const { store, session, guest } = await setup()
         const hub = new PairingSocketHub({ store })
-        const hostSocket = socket(), guestSocket = socket()
+        const hostSocket = socket(),
+            guestSocket = socket()
         const signal: PairingSignalV2 = { type: 'description', description: { type: 'offer', sdp: 'v=0' } }
         await hub.attach(session.id, session.host.tokenHash, hostSocket)
         await hub.attach(session.id, guest.tokenHash, guestSocket)
@@ -54,7 +68,8 @@ describe('PairingSocketHub forwarder', () => {
     it('notifies bye to both peers and closes sockets', async () => {
         const { store, session, guest } = await setup()
         const hub = new PairingSocketHub({ store })
-        const hostSocket = socket(), guestSocket = socket()
+        const hostSocket = socket(),
+            guestSocket = socket()
         await hub.attach(session.id, session.host.tokenHash, hostSocket)
         await hub.attach(session.id, guest.tokenHash, guestSocket)
         await hub.notifyBye(session.id, 'pairing_unavailable')
@@ -75,7 +90,8 @@ describe('PairingSocketHub forwarder', () => {
     it('replaces a same-role socket', async () => {
         const { store, session } = await setup()
         const hub = new PairingSocketHub({ store })
-        const first = socket(), second = socket()
+        const first = socket(),
+            second = socket()
         await hub.attach(session.id, session.host.tokenHash, first)
         await hub.attach(session.id, session.host.tokenHash, second)
         expect(first.closed).toContainEqual({ code: 1012, reason: 'replaced' })
@@ -90,8 +106,17 @@ describe('PairingSocketHub forwarder', () => {
         const now = 1_000
         const host = createParticipantRecord({ token: 'host-secret' })
         const session = PairingSessionRecordSchema.parse({
-            id: 'deleted-p1', state: 'deleted', createdAt: now, updatedAt: now, expiresAt: now + 10_000,
-            ticketExpiresAt: now + 5_000, shortCode: null, approvalStatus: null, ticketHash: 'ticket-hash', host, guest: null,
+            id: 'deleted-p1',
+            state: 'deleted',
+            createdAt: now,
+            updatedAt: now,
+            expiresAt: now + 10_000,
+            ticketExpiresAt: now + 5_000,
+            shortCode: null,
+            approvalStatus: null,
+            ticketHash: 'ticket-hash',
+            host,
+            guest: null,
         })
         const store = new MemoryPairingStore(() => now)
         await store.createSession(session)

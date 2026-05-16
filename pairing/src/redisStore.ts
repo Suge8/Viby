@@ -21,14 +21,7 @@ import {
     replaceStoredSession,
     ttlSecondsFromExpiry,
 } from './redisStoreSessionSupport'
-import {
-    cloneSession,
-    expireIfNeeded,
-    isActiveState,
-    sessionKey,
-    tokenIndexKey,
-    updateState,
-} from './storeSupport'
+import { cloneSession, expireIfNeeded, isActiveState, sessionKey, tokenIndexKey, updateState } from './storeSupport'
 import type {
     PairingHandoffTicketRecord,
     PairingReconnectChallengeRecord,

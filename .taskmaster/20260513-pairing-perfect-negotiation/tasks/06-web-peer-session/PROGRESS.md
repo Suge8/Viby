@@ -36,3 +36,11 @@
     - old transport/timeout/restart grep empty ✅
 - **Real-device RM**: RM1/RM2/RM3/RM5/RM6/RM8/RM10 deferred to phase K bulk run; no device access in this session.
 - **Commit**: pending.
+
+## Hotfix Follow-up — 2026-05-16T08:15:00Z
+
+- `RemotePeerSession` now treats DataChannel readiness as heartbeat round-trip ACK, not `open`/peer ready.
+- `getSnapshot()` maps transport-ready-but-channel-unacked to `connecting`; `untilReady()` waits for both layers.
+- iOS background-stale heartbeat timeouts send a fresh probe after foreground instead of instantly restarting ICE.
+- `RemotePairingController` stays `hydrating` until channel ACK, so remote queries cannot fire into a half-open channel.
+- Validation: `bun run --cwd web typecheck`; focused `RemotePairingController|RemotePeerSession|handleRemotePeerChannelMessage|createRemotePeerApiClient|remotePairingViewModel`; `bun run --cwd web build` ✅

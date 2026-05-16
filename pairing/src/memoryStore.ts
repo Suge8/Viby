@@ -247,5 +247,4 @@ export class MemoryPairingStore implements PairingStore {
         this.sessions.set(pairingId, next)
         return cloneSession(next)
     }
-
 }
