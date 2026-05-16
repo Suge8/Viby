@@ -42,8 +42,26 @@ function writeSessions(queryClient: QueryClient, response: SessionsResponse): vo
     queryClient.setQueryData(queryKeys.sessions, response)
 }
 
+function buildRemoteRuntimeResponse(): RuntimeResponse {
+    return {
+        runtime: {
+            id: 'remote-p2p',
+            active: true,
+            metadata: {
+                host: 'desktop',
+                platform: globalThis.navigator?.platform || 'web',
+                vibyCliVersion: 'remote',
+                displayName: 'Viby Desktop',
+                capabilities: [MACHINE_BROWSE_DIRECTORY_CAPABILITY],
+            },
+        },
+    }
+}
+
 export function createRemotePeerApiClient(options: RemoteApiOptions): ApiClient {
     const latestViews = new Map<string, SessionViewSnapshot>()
+    const remoteRuntime = buildRemoteRuntimeResponse()
+    options.queryClient.setQueryData(queryKeys.runtime, remoteRuntime)
 
     async function openView(sessionId: string): Promise<SessionViewSnapshot> {
         const view = await options.bridge.openSession({ sessionId })
@@ -162,19 +180,7 @@ export function createRemotePeerApiClient(options: RemoteApiOptions): ApiClient 
             return await options.bridge.getCommandCapabilities({ sessionId: _sessionId, revision })
         },
         async getRuntime(): Promise<RuntimeResponse> {
-            return {
-                runtime: {
-                    id: 'remote-p2p',
-                    active: true,
-                    metadata: {
-                        host: 'desktop',
-                        platform: navigator.platform || 'web',
-                        vibyCliVersion: 'remote',
-                        displayName: 'Viby Desktop',
-                        capabilities: [MACHINE_BROWSE_DIRECTORY_CAPABILITY],
-                    },
-                },
-            }
+            return remoteRuntime
         },
         async getRuntimeCapabilities(
             input?: RuntimeCapabilityRequest & { signal?: AbortSignal }

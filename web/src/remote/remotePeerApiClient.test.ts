@@ -3,6 +3,13 @@ import { queryKeys } from '@/lib/query-keys'
 import { createApiHarness } from './remotePeerApiClient.test.support'
 
 describe('createRemotePeerApiClient', () => {
+    it('overwrites stale local runtime cache with the synthetic remote runtime', () => {
+        const { queryClient } = createApiHarness()
+        expect(queryClient.getQueryData(queryKeys.runtime)).toMatchObject({
+            runtime: { id: 'remote-p2p', active: true },
+        })
+    })
+
     it('maps remote session summaries into the normal SessionsResponse contract', async () => {
         const { api, queryClient } = createApiHarness()
 
