@@ -6,11 +6,16 @@ import {
 } from './remotePairingViewModel'
 
 describe('remotePairingViewModel', () => {
-    it('shows reconnect chrome only while the retained workspace is running', () => {
-        expect(shouldShowRemoteReconnectNotice({ kind: 'running' })).toBe(true)
-        expect(shouldShowRemoteReconnectNotice({ kind: 'hydrating' })).toBe(false)
-        expect(shouldShowRemoteReconnectNotice({ kind: 'first-pairing' })).toBe(false)
-        expect(shouldShowRemoteReconnectNotice({ kind: 'fatal' })).toBe(false)
+    it('shows reconnect chrome only while a running workspace transport is reconnecting', () => {
+        expect(shouldShowRemoteReconnectNotice({ state: { kind: 'running' }, transportKind: 'connecting' })).toBe(true)
+        expect(shouldShowRemoteReconnectNotice({ state: { kind: 'running' }, transportKind: 'ready' })).toBe(false)
+        expect(shouldShowRemoteReconnectNotice({ state: { kind: 'hydrating' }, transportKind: 'connecting' })).toBe(
+            false
+        )
+        expect(shouldShowRemoteReconnectNotice({ state: { kind: 'first-pairing' }, transportKind: 'connecting' })).toBe(
+            false
+        )
+        expect(shouldShowRemoteReconnectNotice({ state: { kind: 'fatal' }, transportKind: 'connecting' })).toBe(false)
     })
 
     it('blocks workspace actions outside the running state', () => {

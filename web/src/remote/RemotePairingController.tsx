@@ -49,7 +49,7 @@ export function RemotePairingController(props: RemotePairingControllerProps): JS
     const activeReady = state.kind === 'running' ? state.ready : readyRef.current
     const showReconnectNoticeRaw = useRemoteReconnectNotice({
         attempt: transportState.kind === 'connecting' ? transportState.attempt : 0,
-        reconnecting: shouldShowRemoteReconnectNotice(state),
+        reconnecting: shouldShowRemoteReconnectNotice({ state, transportKind: transportState.kind }),
         onStop: activeReady
             ? () => {
                   activeReady.bridge.close()

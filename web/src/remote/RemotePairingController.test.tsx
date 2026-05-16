@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { queryKeys } from '@/lib/query-keys'
 import { RemotePairingController } from './RemotePairingController'
@@ -9,11 +9,16 @@ const auth = vi.hoisted(() => ({ value: null as unknown, resolve: vi.fn() }))
 const retained = vi.hoisted(() => ({ value: null as { lastReadyAt: number } | null, reject: false }))
 const clearRetainedReady = vi.hoisted(() => vi.fn(async () => undefined))
 const setRetainedReady = vi.hoisted(() => vi.fn(async () => undefined))
+const queryOnline = vi.hoisted(() => ({
+    pause: vi.fn(),
+    resume: vi.fn(),
+}))
 const session = vi.hoisted(() => ({
     onClose: null as null | ((error: Error) => void),
+    transportListener: null as null | (() => void),
     untilReady: vi.fn(async () => undefined),
     close: vi.fn(),
-    snapshot: { kind: 'connecting', attempt: 0 } as const,
+    snapshot: { kind: 'connecting', attempt: 0 } as { kind: 'connecting'; attempt: number } | { kind: 'ready' },
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -24,8 +29,8 @@ vi.mock('@/hooks/useFinalizeBootShell', () => ({ useFinalizeBootShell: vi.fn() }
 vi.mock('@/lib/use-translation', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
 vi.mock('@/lib/notice-center', () => ({ useNoticeCenter: () => ({ addToast: vi.fn() }), usePersistentNotice: vi.fn() }))
 vi.mock('@/remote/remotePairingQueryOnlineState', () => ({
-    pauseRemotePairingQueries: vi.fn(),
-    resumeRemotePairingQueries: vi.fn(),
+    pauseRemotePairingQueries: queryOnline.pause,
+    resumeRemotePairingQueries: queryOnline.resume,
 }))
 vi.mock('@/remote/remotePairingPwaHandoffWarmup', () => ({ useRemotePairingPwaHandoffWarmup: () => 'ready' }))
 vi.mock('@/components/AppInstallPromptLayer', () => ({ AppInstallPromptLayer: () => <div data-testid="install" /> }))
@@ -66,7 +71,10 @@ vi.mock('@/remote/RemotePeerSession', () => ({
                 return vi.fn()
             },
             untilReady: session.untilReady,
-            transportSubscribe: (_listener: () => void) => vi.fn(),
+            transportSubscribe: (listener: () => void) => {
+                session.transportListener = listener
+                return vi.fn()
+            },
             getSnapshot: () => session.snapshot,
         }
     }),
@@ -100,7 +108,11 @@ describe('RemotePairingController', () => {
         auth.resolve.mockResolvedValue(approvedAuth())
         clearRetainedReady.mockClear()
         setRetainedReady.mockClear()
+        queryOnline.pause.mockClear()
+        queryOnline.resume.mockClear()
         session.onClose = null
+        session.transportListener = null
+        session.snapshot = { kind: 'connecting', attempt: 0 }
         session.untilReady.mockResolvedValue(undefined)
         session.close.mockClear()
     })
@@ -128,6 +140,26 @@ describe('RemotePairingController', () => {
         await screen.findByTestId('ready-shell')
         await waitFor(() => expect(setRetainedReady).toHaveBeenCalled())
         expect(queryClient.getQueryData(queryKeys.runtime)).toBe(runtimeResponse)
+    })
+
+    it('resumes remote queries when the transport leaves reconnecting state', async () => {
+        renderController()
+        await screen.findByTestId('ready-shell')
+        await waitFor(() => expect(queryOnline.pause).toHaveBeenCalled())
+        queryOnline.pause.mockClear()
+        queryOnline.resume.mockClear()
+
+        act(() => {
+            session.snapshot = { kind: 'ready' }
+            session.transportListener?.()
+        })
+
+        await waitFor(() =>
+            expect(queryOnline.resume).toHaveBeenCalledWith(expect.any(Object), {
+                refetch: true,
+            })
+        )
+        expect(queryOnline.pause).not.toHaveBeenCalled()
     })
 
     it('moves to first pairing when IDB and guest token are absent', async () => {

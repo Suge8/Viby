@@ -18,8 +18,11 @@ const FINAL_SCAN_ERRORS = new Set<RemotePairingErrorKey>([
     'remotePairing.error.pairingUnavailable',
 ])
 
-export function shouldShowRemoteReconnectNotice(state: RemotePairingRenderState): boolean {
-    return state.kind === 'running'
+export function shouldShowRemoteReconnectNotice(options: {
+    state: RemotePairingRenderState
+    transportKind: 'connecting' | 'ready' | 'fatal'
+}): boolean {
+    return options.state.kind === 'running' && options.transportKind === 'connecting'
 }
 
 export function shouldBlockRemoteReadyShellInteraction(state: RemotePairingRenderState): boolean {
