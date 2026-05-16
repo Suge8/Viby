@@ -23,7 +23,10 @@ function makeBridgeState(pairingId: string, phase: PairingBridgeState['phase']):
     }
 }
 
-function makeSession(pairingId: string): DesktopPairingSession {
+function makeSession(
+    pairingId: string,
+    approvalStatus: DesktopPairingSession['pairing']['approvalStatus'] = 'approved'
+): DesktopPairingSession {
     return {
         pairing: {
             id: pairingId,
@@ -33,7 +36,7 @@ function makeSession(pairingId: string): DesktopPairingSession {
             expiresAt: 9_999,
             ticketExpiresAt: 9_999,
             shortCode: null,
-            approvalStatus: 'approved',
+            approvalStatus,
             host: {},
             guest: null,
         },
@@ -70,7 +73,16 @@ describe('usePairingBridges support — bridge map invariants', () => {
         expect(bridges.has('gone')).toBe(false)
     })
 
-    it('bridge lifecycle key ignores Hub status and changes only with enabled/pairings', () => {
+    it('bridge lifecycle key ignores unapproved drafts so stale bridge state cannot mask the 6-digit code', () => {
+        const approved = makeSession('approved', 'approved')
+        const pending = makeSession('pending', 'pending')
+        const invite = makeSession('invite', null)
+        expect(buildPairingBridgeLifecycleKey({ enabled: true, pairings: [approved, pending, invite] })).toBe(
+            buildPairingBridgeLifecycleKey({ enabled: true, pairings: [approved] })
+        )
+    })
+
+    it('bridge lifecycle key ignores Hub status and changes only with enabled/approved pairings', () => {
         const first = [makeSession('first')]
         expect(buildPairingBridgeLifecycleKey({ enabled: true, pairings: first })).toBe(
             buildPairingBridgeLifecycleKey({ enabled: true, pairings: first })

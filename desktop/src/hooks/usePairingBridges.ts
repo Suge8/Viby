@@ -22,8 +22,18 @@ function getReadyStatus(status: HubRuntimeStatus | undefined): HubRuntimeStatus 
     return status?.phase === 'ready' ? status : null
 }
 
+function isApprovedPairing(session: DesktopPairingSession): boolean {
+    return session.pairing.approvalStatus === 'approved'
+}
+
+function getBridgePairings(pairings: readonly DesktopPairingSession[]): DesktopPairingSession[] {
+    return pairings.filter(isApprovedPairing)
+}
+
 function buildPairingsKey(pairings: readonly DesktopPairingSession[]): string {
-    return pairings.map((session) => `${session.pairing.id}:${session.wsUrl}`).join('|')
+    return getBridgePairings(pairings)
+        .map((session) => `${session.pairing.id}:${session.wsUrl}`)
+        .join('|')
 }
 
 export function buildPairingBridgeLifecycleKey(options: {
@@ -45,7 +55,7 @@ export function usePairingBridges(options: {
 
     const pairingsKey = buildPairingBridgeLifecycleKey(options)
     const enabled = options.enabled
-    const pairings = options.pairings
+    const pairings = getBridgePairings(options.pairings)
 
     useEffect(() => {
         const teardownAll = (): void => {
