@@ -160,10 +160,12 @@ export function App(): JSX.Element {
     }, [draftPairing, draftBridge.phase, hub.publicAccessEnabled, pairingDialogOpen, pairings])
 
     useEffect(() => {
-        if (!pairingDialogOpen || draftBridge.phase !== 'ready') return
+        if (!pairingDialogOpen) return
+        const paired = draftPairing?.pairing.approvalStatus === 'approved' || draftBridge.phase === 'ready'
+        if (!paired) return
         const timeoutId = window.setTimeout(() => setPairingDialogOpen(false), PAIRING_SUCCESS_DISMISS_MS)
         return () => window.clearTimeout(timeoutId)
-    }, [draftBridge.phase, pairingDialogOpen])
+    }, [draftBridge.phase, draftPairing?.pairing.approvalStatus, pairingDialogOpen])
 
     const handleHubSwitch = (): void => {
         if (viewState.ready) {
