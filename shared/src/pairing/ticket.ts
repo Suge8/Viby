@@ -13,6 +13,13 @@ export function buildPairingWsUrl(baseUrl: string, pairingId: string, token: str
     return url.toString()
 }
 
+export function buildPairingTunnelUrl(baseUrl: string, pairingId: string, token: string): string {
+    const url = new URL(`/pairings/${pairingId}/tunnel`, baseUrl)
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+    url.searchParams.set('token', token)
+    return url.toString()
+}
+
 export function readPairingTicketFromUrl(url: string): string | null {
     const parsedUrl = new URL(url)
     if (!parsedUrl.hash) {

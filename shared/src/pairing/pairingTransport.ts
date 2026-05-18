@@ -20,8 +20,10 @@ export type {
     RTCIceServer,
 } from './pairingTransportTypes'
 
-const SOCKET_OPEN = 1
+const SOCKET_OPEN = 1,
+    ICE_CANDIDATE_POOL_SIZE = 4
 const ICE_RESTART_STATES = new Set(['disconnected', 'failed'])
+type DefaultPeerConfig = { bundlePolicy: 'max-bundle'; iceCandidatePoolSize: number; iceServers: RTCIceServer[] }
 
 export function createPairingTransport(options: PairingTransportOptions): PairingTransportHandle {
     const peer = (options.peerFactory ?? createDefaultPeer)(options.iceServers)
@@ -154,7 +156,6 @@ export function createPairingTransport(options: PairingTransportOptions): Pairin
     function backoff(attempt: number) {
         return computePairingReconnectDelay(attempt, options.randomJitter)
     }
-
     function isPeerReady() {
         return peer.connectionState === 'connected'
     }
@@ -184,9 +185,13 @@ function sameState(left: PairingTransportState, right: PairingTransportState) {
 }
 function createDefaultPeer(iceServers: RTCIceServer[]) {
     const globalPeer = globalThis as unknown as {
-        RTCPeerConnection: new (config: { iceServers: RTCIceServer[] }) => PairingPeer
+        RTCPeerConnection: new (config: DefaultPeerConfig) => PairingPeer
     }
-    return new globalPeer.RTCPeerConnection({ iceServers })
+    return new globalPeer.RTCPeerConnection({
+        bundlePolicy: 'max-bundle',
+        iceCandidatePoolSize: ICE_CANDIDATE_POOL_SIZE,
+        iceServers,
+    })
 }
 function createDefaultSocket(url: string) {
     const globalSocket = globalThis as unknown as { WebSocket: new (url: string) => PairingSocket }

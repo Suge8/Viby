@@ -12,18 +12,33 @@ import {
     PairingPeerGitCommandResultSchema,
     PairingPeerListSessionsResultSchema,
     PairingPeerMessageSchema,
+    PairingPeerMethodSchema,
     PairingPeerOpenSessionResultSchema,
     PairingPeerPathsExistResultSchema,
+    PairingPeerRequestSchema,
     PairingPwaHandoffClaimRequestSchema,
     PairingPwaHandoffTicketRequestSchema,
     PairingPwaHandoffTicketResponseSchema,
     PairingReconnectChallengeResponseSchema,
     PairingReconnectRequestSchema,
+    PairingSessionStateSchema,
     PairingTelemetryRequestSchema,
     resolvePairingLinkTransport,
 } from './schema'
 
 describe('pairing peer rpc schema', () => {
+    it('keeps broker session states on the canonical v2 set only', () => {
+        expect(PairingSessionStateSchema.options).toEqual(['active', 'waiting', 'deleted', 'expired'])
+        expect(PairingSessionStateSchema.safeParse('claimed').success).toBe(false)
+        expect(PairingSessionStateSchema.safeParse('connected').success).toBe(false)
+    })
+
+    it('derives peer method names from the request schemas instead of a second list', () => {
+        const requestMethods = PairingPeerRequestSchema.options.map((schema) => schema.shape.method.value)
+        expect(PairingPeerMethodSchema.options).toEqual(requestMethods)
+        expect(new Set(PairingPeerMethodSchema.options).size).toBe(PairingPeerMethodSchema.options.length)
+    })
+
     it('accepts narrow remote session summaries for session lists', () => {
         const parsed = PairingPeerListSessionsResultSchema.parse({
             sessions: [
