@@ -7,6 +7,7 @@
 @import "./styles-device.css";
 @import "./styles-settings.css";
 @import "./styles-agents.css";
+@import "./styles-agent-config.css";
 @import "./styles-agent-models.css";
 @import "./styles-detail.css";
 @import "./styles-motion.css";

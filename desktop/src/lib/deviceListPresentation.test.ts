@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'bun:test'
 import type { DeviceAuthDevice } from '@/lib/deviceAuthSummary'
 import type { DeviceLinkSnapshotMap } from '@/lib/deviceLinkBadge'
-import { getConnectedDevices } from './deviceListPresentation'
+import type { DesktopPairingSession } from '@/types'
+import { buildDevicePresentation, getConnectedDevices } from './deviceListPresentation'
 
 function device(overrides: Partial<DeviceAuthDevice>): DeviceAuthDevice {
     return {
@@ -19,6 +20,28 @@ function device(overrides: Partial<DeviceAuthDevice>): DeviceAuthDevice {
 
 const noLinks: DeviceLinkSnapshotMap = new Map()
 
+function pairingSession(pairingId: string, approvalStatus: DesktopPairingSession['pairing']['approvalStatus']) {
+    return {
+        pairing: {
+            id: pairingId,
+            state: 'active',
+            createdAt: 1,
+            updatedAt: 2,
+            expiresAt: 9_999,
+            ticketExpiresAt: 9_999,
+            shortCode: null,
+            approvalStatus,
+            host: {},
+            guest: { label: 'iPhone', lastSeenAt: 3, metadata: { platform: 'ios' } },
+        },
+        hostToken: `host-${pairingId}`,
+        pairingUrl: `https://example.test/p/${pairingId}`,
+        wsUrl: `wss://example.test/ws/${pairingId}`,
+        tunnelUrl: `wss://example.test/tunnel/${pairingId}`,
+        iceServers: [],
+    } satisfies DesktopPairingSession
+}
+
 describe('deviceListPresentation', () => {
     it('counts link/local devices from hub active state', () => {
         const connected = device({ id: 'connected', channel: 'link', active: true })
@@ -35,5 +58,18 @@ describe('deviceListPresentation', () => {
             ['pairing:connecting', { deviceId: 'pairing:connecting', phase: 'connecting', stats: null }],
         ])
         expect(getConnectedDevices([ready, connecting], links)).toEqual([ready])
+    })
+
+    it('projects approved scan pairings before Hub device rows arrive', () => {
+        const links: DeviceLinkSnapshotMap = new Map([
+            ['pairing:ready', { deviceId: 'pairing:ready', phase: 'ready', stats: null }],
+        ])
+        const devices = buildDevicePresentation(
+            [],
+            [pairingSession('ready', 'approved'), pairingSession('pending', 'pending')]
+        )
+
+        expect(devices).toMatchObject([{ id: 'pairing:ready', name: 'iPhone', platform: 'ios', channel: 'scan' }])
+        expect(getConnectedDevices(devices, links).map((row) => row.id)).toEqual(['pairing:ready'])
     })
 })

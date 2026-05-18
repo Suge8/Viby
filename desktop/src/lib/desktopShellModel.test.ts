@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import type { DesktopPairingSession } from '@/types'
-import {
-    buildDeviceCount,
-    buildHubSwitchModel,
-    getPairingInviteRenewDelay,
-    shouldPollPairingSnapshot,
-} from './desktopShellModel'
+import { buildHubSwitchModel, getPairingInviteRenewDelay, shouldPollPairingSnapshot } from './desktopShellModel'
 
 const pairingFixture: DesktopPairingSession = {
     pairing: {
@@ -23,6 +18,7 @@ const pairingFixture: DesktopPairingSession = {
     hostToken: 'host-token',
     pairingUrl: 'https://pair.example.com/p/pairing-1#ticket=secret',
     wsUrl: 'wss://pair.example.com/pairings/pairing-1/ws?token=host-token',
+    tunnelUrl: 'wss://pair.example.com/pairings/pairing-1/tunnel?token=host-token',
     iceServers: [],
 }
 
@@ -48,12 +44,6 @@ describe('desktopShellModel', () => {
             label: '关闭中',
             disabled: true,
         })
-    })
-
-    it('counts devices only from Hub device auth summary', () => {
-        expect(buildDeviceCount(false, 1)).toBe(0)
-        expect(buildDeviceCount(true, 0)).toBe(0)
-        expect(buildDeviceCount(true, 2)).toBe(2)
     })
 
     it('renews only unclaimed QR invites shortly before ticket expiry', () => {

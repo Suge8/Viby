@@ -2,16 +2,22 @@ import {
     AGENT_FLAVORS,
     type AgentAvailability,
     type AgentAvailabilityCode,
+    type AgentConfigDriver,
+    type AgentConfigResponse,
     type AgentFlavor,
     getAgentSupportLink,
+    type RestoreAgentConfigRequest,
     type RuntimeAgentCapabilitySnapshot,
+    type SaveAgentConfigRequest,
 } from '@viby/protocol'
 import { AnimatePresence, LayoutGroup, m } from 'motion/react'
 import { type JSX, useEffect, useMemo, useState } from 'react'
+import { AgentConfigPanel } from '@/components/AgentConfigPanel'
 import { AgentModelPanel, AgentModelToggle, shouldShowAgentModels } from '@/components/AgentModelDropdown'
 import { AGENT_ITEM_MOTION, AgentStatusIcon, AgentStatusText } from '@/components/AgentPresenceMotion'
 import { LinkIcon, RefreshIcon, SpinnerIcon } from '@/components/icons'
 import type { AgentAvailabilityErrorCode } from '@/hooks/useAgentAvailability'
+import type { AgentConfigErrorCode } from '@/hooks/useAgentConfig'
 import { AGENT_DESCRIPTION_KEYS, AGENT_ICONS, AGENT_LABELS } from '@/lib/agentPresentation'
 import type { DesktopCopy } from '@/lib/desktopCopy'
 
@@ -19,10 +25,18 @@ const STATUS_TRANSITION = { duration: 0.22, ease: [0.22, 1, 0.36, 1] } as const
 type CodingAgentsPageProps = {
     agents: readonly AgentAvailability[]
     capabilities: readonly RuntimeAgentCapabilitySnapshot[]
+    configError: AgentConfigErrorCode | null
+    configLoading: boolean
+    configResponse: AgentConfigResponse | null
+    configRestoringDriver: AgentConfigDriver | null
+    configSavingDriver: AgentConfigDriver | null
     copy: DesktopCopy
     error: AgentAvailabilityErrorCode | null
     loading: boolean
+    language: 'zh' | 'en'
     refreshing: boolean
+    onRestoreAgentConfig(request: RestoreAgentConfigRequest): Promise<boolean>
+    onSaveAgentConfig(request: SaveAgentConfigRequest): Promise<boolean>
     onLoadAgentCapability(driver: AgentFlavor): void
     onOpenUrl(url: string): void
     onRefresh(): void
@@ -220,6 +234,7 @@ function AgentRow(props: {
 
 export function CodingAgentsPage(props: CodingAgentsPageProps): JSX.Element {
     const [expandedDriver, setExpandedDriver] = useState<AgentFlavor | null>(null)
+    const [activeView, setActiveView] = useState<'status' | 'config'>('status')
     const agentsByDriver = useMemo(() => new Map(props.agents.map((agent) => [agent.driver, agent])), [props.agents])
     const capabilitiesByDriver = useMemo(
         () => new Map(props.capabilities.map((entry) => [entry.driver, entry])),
@@ -231,7 +246,9 @@ export function CodingAgentsPage(props: CodingAgentsPageProps): JSX.Element {
     )
     const [displayDrivers, setDisplayDrivers] = useState<AgentFlavor[]>(() => [...AGENT_FLAVORS])
     const hasRuntimeSnapshot = props.agents.length > 0 || props.capabilities.length > 0
-    const showRefresh = props.error === 'check_failed' || props.loading || props.refreshing || hasRuntimeSnapshot
+    const showRefresh =
+        activeView === 'status' &&
+        (props.error === 'check_failed' || props.loading || props.refreshing || hasRuntimeSnapshot)
 
     useEffect(() => {
         if (hasRuntimeSnapshot && !props.loading && !props.refreshing) setDisplayDrivers(orderedDrivers)
@@ -241,8 +258,28 @@ export function CodingAgentsPage(props: CodingAgentsPageProps): JSX.Element {
         <div className="desktop-page desktop-agents-page" aria-busy={props.loading || props.refreshing}>
             <div className="desktop-page-toolbar desktop-agent-toolbar">
                 <div className="desktop-agent-toolbar-left">
+                    <div
+                        className="desktop-agent-view-switch"
+                        role="tablist"
+                        aria-label={props.copy.agentViewSwitchLabel}
+                    >
+                        <button
+                            type="button"
+                            className={activeView === 'status' ? 'is-active' : ''}
+                            onClick={() => setActiveView('status')}
+                        >
+                            {props.copy.agentStatusTab}
+                        </button>
+                        <button
+                            type="button"
+                            className={activeView === 'config' ? 'is-active' : ''}
+                            onClick={() => setActiveView('config')}
+                        >
+                            {props.copy.agentConfigTab}
+                        </button>
+                    </div>
                     <AnimatePresence initial={false}>
-                        {props.error ? (
+                        {activeView === 'status' && props.error ? (
                             <m.div key="notice" className="desktop-inline-notice is-error" {...AGENT_ITEM_MOTION}>
                                 {getErrorLabel(props.copy, props.error)}
                             </m.div>
@@ -276,24 +313,39 @@ export function CodingAgentsPage(props: CodingAgentsPageProps): JSX.Element {
             </div>
 
             <LayoutGroup>
-                <m.div className="desktop-agent-list" role="list" aria-label={props.copy.agentsListLabel} layout>
-                    {displayDrivers.map((driver) => (
-                        <AgentRow
-                            key={driver}
-                            agent={agentsByDriver.get(driver) ?? null}
-                            capability={capabilitiesByDriver.get(driver) ?? null}
-                            copy={props.copy}
-                            driver={driver}
-                            expanded={expandedDriver === driver}
-                            loading={props.loading}
-                            onLoadAgentCapability={props.onLoadAgentCapability}
-                            onOpenUrl={props.onOpenUrl}
-                            onToggleModels={(nextDriver) =>
-                                setExpandedDriver((current) => (current === nextDriver ? null : nextDriver))
-                            }
-                        />
-                    ))}
-                </m.div>
+                {activeView === 'status' ? (
+                    <m.div className="desktop-agent-list" role="list" aria-label={props.copy.agentsListLabel} layout>
+                        {displayDrivers.map((driver) => (
+                            <AgentRow
+                                key={driver}
+                                agent={agentsByDriver.get(driver) ?? null}
+                                capability={capabilitiesByDriver.get(driver) ?? null}
+                                copy={props.copy}
+                                driver={driver}
+                                expanded={expandedDriver === driver}
+                                loading={props.loading}
+                                onLoadAgentCapability={props.onLoadAgentCapability}
+                                onOpenUrl={props.onOpenUrl}
+                                onToggleModels={(nextDriver) =>
+                                    setExpandedDriver((current) => (current === nextDriver ? null : nextDriver))
+                                }
+                            />
+                        ))}
+                    </m.div>
+                ) : (
+                    <AgentConfigPanel
+                        copy={props.copy}
+                        error={props.configError}
+                        language={props.language}
+                        loading={props.configLoading}
+                        response={props.configResponse}
+                        restoringDriver={props.configRestoringDriver}
+                        savingDriver={props.configSavingDriver}
+                        onRefresh={props.onRefresh}
+                        onRestore={(driver, backupPath) => props.onRestoreAgentConfig({ driver, backupPath })}
+                        onSave={props.onSaveAgentConfig}
+                    />
+                )}
             </LayoutGroup>
         </div>
     )

@@ -62,6 +62,7 @@ export interface DesktopPairingSession {
     hostToken: string
     pairingUrl: string
     wsUrl: string
+    tunnelUrl: string
     iceServers: PairingIceServer[]
 }
 
@@ -77,6 +78,7 @@ export interface PairingBridgeStats {
     localCandidateType: string | null
     remoteCandidateType: string | null
     currentRoundTripTimeMs: number | null
+    sampledAt?: number | null
     restartCount: number
 }
 

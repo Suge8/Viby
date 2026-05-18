@@ -9,6 +9,7 @@ import { CheckIcon } from '@/components/icons'
 import { DesktopMotionProvider, PageTransition, ToastLayer } from '@/components/motion'
 import { SettingsPanel } from '@/components/SettingsPanel'
 import { useAgentAvailability } from '@/hooks/useAgentAvailability'
+import { useAgentConfig } from '@/hooks/useAgentConfig'
 import { useDesktopPairings } from '@/hooks/useDesktopPairings'
 import { useDesktopToast } from '@/hooks/useDesktopToast'
 import { useDesktopUpdates } from '@/hooks/useDesktopUpdates'
@@ -29,20 +30,18 @@ import {
     writeThemePreference,
 } from '@/lib/desktopPreferences'
 import {
-    buildDeviceCount,
     buildHubSwitchModel,
     COPY_FEEDBACK_DURATION_MS,
     PAIRING_SUCCESS_DISMISS_MS,
     shouldPollPairingSnapshot,
 } from '@/lib/desktopShellModel'
 import { buildDeviceLinkSnapshots } from '@/lib/deviceLinkBadge'
-import { getConnectedDevices } from '@/lib/deviceListPresentation'
+import { buildDevicePresentation, getConnectedDevices } from '@/lib/deviceListPresentation'
 import { buildEntryPreviewModel } from '@/lib/entryMode'
 import { deriveHubViewState } from '@/lib/hubSnapshot'
 import { buildLanEntryQrModel } from '@/lib/lanEntryQr'
 
 const IDLE_BRIDGE_STATE_PHASE = 'connecting' as const
-
 export function App(): JSX.Element {
     const hub = useHubController()
     const pairings = useDesktopPairings()
@@ -64,6 +63,7 @@ export function App(): JSX.Element {
     const status = hub.snapshot?.status
     const viewState = deriveHubViewState(hub.snapshot)
     const agentAvailability = useAgentAvailability(status, viewState.ready, activePage === 'agents')
+    const agentConfig = useAgentConfig(status, viewState.ready, activePage === 'agents')
     const bridges = usePairingBridges({
         pairings: pairings.pairings,
         status,
@@ -102,10 +102,8 @@ export function App(): JSX.Element {
     const copy = DESKTOP_COPY[language]
     const lanEntryQr = buildLanEntryQrModel({ entryPreview, publicAccessEnabled: hub.publicAccessEnabled })
     const lanEntryQrUrl = lanEntryQr?.url ?? null
-    const activeDeviceCount = buildDeviceCount(
-        deviceSummary.loaded,
-        getConnectedDevices(deviceSummary.devices, deviceLinks).length
-    )
+    const devices = buildDevicePresentation(deviceSummary.devices, pairings.pairings)
+    const activeDeviceCount = getConnectedDevices(devices, deviceLinks).length
     const deviceActionVisible = hub.publicAccessEnabled || Boolean(lanEntryQr)
     const deviceActionLabel = lanEntryQr ? copy.lanEntryQrAction : copy.deviceTitle
     const notice = hub.actionError || pairings.actionError || hub.snapshot?.lastError || null
@@ -185,12 +183,6 @@ export function App(): JSX.Element {
         writeLanguagePreference(globalThis.localStorage, preference)
     }
 
-    /**
-     * "Add another device": always creates a brand-new pairing session in the
-     * desktop pairings map without touching anything already paired. The old
-     * `recreatePairing` flow that deleted the broker session is gone — it was
-     * exactly why scanning a second phone kicked off the first one.
-     */
     const handlePairingAction = (): void => {
         if (!hub.publicAccessEnabled) {
             if (lanEntryQr) setLanEntryDialogOpen(true)
@@ -219,13 +211,9 @@ export function App(): JSX.Element {
         if (deviceId.startsWith('pairing:')) {
             const pairingId = deviceId.slice('pairing:'.length)
             if (pairings.pairingIds.has(pairingId)) {
-                // Step 1: broker DELETE (tells the phone to bail immediately) +
-                // local storage / state remove + bridge dispose.
                 await pairings.deletePairing(pairingId)
             }
         }
-        // Step 2: hub-side hard delete so the device row drops from the list
-        // even when the deleted pairing was a stale local-only record.
         await deviceSummary.revokeDevice(deviceId)
         showToast('已取消配对', COPY_FEEDBACK_DURATION_MS, 'success')
     }
@@ -280,7 +268,7 @@ export function App(): JSX.Element {
                                 entryPreview={entryPreview}
                                 publicEntry={publicEntry}
                                 activeDeviceCount={activeDeviceCount}
-                                devices={deviceSummary.devices}
+                                devices={devices}
                                 deviceLinks={deviceLinks}
                                 deviceActionLabel={deviceActionLabel}
                                 deviceActionVisible={deviceActionVisible}
@@ -290,21 +278,35 @@ export function App(): JSX.Element {
                                 onRevokeDevice={handleRevokeDevice}
                             />
                         ) : null}
-
                         {activePage === 'agents' ? (
                             <CodingAgentsPage
                                 agents={agentAvailability.agents}
                                 capabilities={agentAvailability.capabilities}
+                                configError={agentConfig.error}
+                                configLoading={agentConfig.loading}
+                                configResponse={agentConfig.response}
+                                configRestoringDriver={agentConfig.restoringDriver}
+                                configSavingDriver={agentConfig.savingDriver}
                                 copy={copy}
                                 error={agentAvailability.error}
+                                language={language}
                                 loading={agentAvailability.loading}
                                 refreshing={agentAvailability.refreshing}
                                 onLoadAgentCapability={agentAvailability.loadAgentCapability}
                                 onOpenUrl={(url) => void hub.openUrl(url)}
                                 onRefresh={agentAvailability.refresh}
+                                onRestoreAgentConfig={async (request) => {
+                                    const restored = await agentConfig.restore(request)
+                                    if (restored) showToast(copy.agentConfigSaved, COPY_FEEDBACK_DURATION_MS, 'success')
+                                    return Boolean(restored)
+                                }}
+                                onSaveAgentConfig={async (request) => {
+                                    const saved = await agentConfig.save(request)
+                                    if (saved) showToast(copy.agentConfigSaved, COPY_FEEDBACK_DURATION_MS, 'success')
+                                    return Boolean(saved)
+                                }}
                             />
                         ) : null}
-
                         {activePage === 'settings' ? (
                             <SettingsPanel
                                 copy={copy}
