@@ -1,6 +1,8 @@
 import { Slot } from '@radix-ui/react-slot'
 import { cva, type VariantProps } from 'class-variance-authority'
 import * as React from 'react'
+import { Spinner } from '@/components/Spinner'
+import { useButtonPending } from '@/components/ui/buttonPending'
 import { cn } from '@/lib/utils'
 
 const BUTTON_PRESS_STYLE_SCALE_VAR = {
@@ -53,6 +55,7 @@ export interface ButtonProps
     extends React.ButtonHTMLAttributes<HTMLButtonElement>,
         VariantProps<typeof buttonVariants> {
     asChild?: boolean
+    pending?: boolean
     pressStyle?: ButtonPressStyle
     pointerEffect?: ButtonPointerEffect
 }
@@ -124,6 +127,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function 
         onPointerLeave,
         onPointerMove,
         onPointerUp,
+        pending: controlledPending = false,
         style,
         ...props
     },
@@ -134,13 +138,16 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function 
     const resolvedPressScale = getButtonPressScale(resolvedPressStyle)
     const resolvedPointerEffect = getButtonPointerEffect(resolvedPressStyle, pointerEffect)
     const Comp = asChild ? Slot : 'button'
+    const [pending, handlePendingClick] = useButtonPending(onClick, controlledPending)
+    const disabled = props.disabled || pending
+    const iconOnly = size === 'icon' || size === 'iconXs' || size === 'iconSm' || size === 'iconLg'
     const classNames = cn(buttonVariants({ variant: resolvedVariant, size, className }))
     const resolvedStyle = React.useMemo<React.CSSProperties>(
         () => ({
             ...style,
-            ['--ds-button-press-scale' as '--ds-button-press-scale']: props.disabled ? 1 : resolvedPressScale,
+            ['--ds-button-press-scale' as '--ds-button-press-scale']: disabled ? 1 : resolvedPressScale,
         }),
-        [props.disabled, resolvedPressScale, style]
+        [disabled, resolvedPressScale, style]
     )
 
     const handlePointerMove = React.useCallback(
@@ -204,9 +211,9 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function 
         (event: React.MouseEvent<HTMLButtonElement>) => {
             // Some navigation flows commit on click and may skip a trailing pointer-up.
             setButtonPressedState(event.currentTarget, false)
-            onClick?.(event)
+            handlePendingClick(event)
         },
-        [onClick]
+        [handlePendingClick]
     )
 
     if (asChild) {
@@ -217,8 +224,12 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function 
                 data-button-appearance={getButtonAppearance(resolvedVariant)}
                 data-button-press-style={resolvedPressStyle}
                 data-button-pointer-effect={resolvedPointerEffect}
+                data-pending={pending ? 'true' : undefined}
                 style={resolvedStyle}
                 {...props}
+                aria-busy={pending || props['aria-busy'] || undefined}
+                disabled={disabled}
+                onClick={handleClick}
             >
                 {children}
             </Comp>
@@ -231,9 +242,12 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function 
             type={props.type ?? 'button'}
             className={classNames}
             ref={ref}
+            disabled={disabled}
+            aria-busy={pending || props['aria-busy'] || undefined}
             data-button-appearance={getButtonAppearance(resolvedVariant)}
             data-button-press-style={resolvedPressStyle}
             data-button-pointer-effect={resolvedPointerEffect}
+            data-pending={pending ? 'true' : undefined}
             style={resolvedStyle}
             onClick={handleClick}
             onPointerMove={handlePointerMove}
@@ -248,7 +262,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function 
                 className="relative z-10 inline-flex items-center justify-center"
                 style={{ gap: 'inherit' }}
             >
-                {children}
+                {pending ? <Spinner size="sm" label={null} className="text-current" /> : null}
+                {iconOnly && pending ? null : children}
             </span>
         </button>
     )

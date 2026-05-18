@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { Button } from '@/components/ui/button'
 
@@ -58,6 +58,23 @@ describe('Button', () => {
 
         fireEvent.click(button)
         expect(button).not.toHaveAttribute('data-pressed')
+    })
+
+    it('shows pending feedback and suppresses duplicate async clicks', async () => {
+        let resolve!: () => void
+        const onClick = vi.fn(() => new Promise<void>((done) => (resolve = done)))
+        render(<Button onClick={onClick}>Send</Button>)
+
+        const button = screen.getByRole('button', { name: 'Send' })
+        fireEvent.click(button)
+        fireEvent.click(button)
+
+        expect(onClick).toHaveBeenCalledTimes(1)
+        expect(button).toBeDisabled()
+        expect(button).toHaveAttribute('aria-busy', 'true')
+
+        resolve()
+        await waitFor(() => expect(button).not.toBeDisabled())
     })
 
     it('keeps shared button sizes fully rounded for a more tactile global button shape', () => {
