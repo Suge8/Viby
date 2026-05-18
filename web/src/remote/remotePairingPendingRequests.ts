@@ -17,15 +17,12 @@ type PendingRequestOptions = {
     onTransportFailure?: (error: Error) => void
 }
 
-export function createRemotePeerPendingRequests(options: PendingRequestOptions = {}): {
-    rejectAll: (error: Error) => void
-    request: <T>(
-        channel: RTCDataChannel | null,
-        request: PairingPeerRequest,
-        parse: (value: unknown) => T
-    ) => Promise<T>
-    resolveResponse: (response: PairingPeerResponse) => void
-} {
+export interface RemotePeerMessageSender {
+    readonly readyState: string
+    send(data: string): void
+}
+
+export function createRemotePeerPendingRequests(options: PendingRequestOptions = {}) {
     const pending = new Map<string, PendingRequest>()
 
     function deletePending(id: string): PendingRequest | null {
@@ -46,11 +43,11 @@ export function createRemotePeerPendingRequests(options: PendingRequestOptions =
     }
 
     function requestPeer<T>(
-        channel: RTCDataChannel | null,
+        sender: RemotePeerMessageSender | null,
         request: PairingPeerRequest,
         parse: (value: unknown) => T
     ): Promise<T> {
-        if (!channel || channel.readyState !== 'open') {
+        if (!sender || sender.readyState !== 'open') {
             const error = createRemotePairingCodedError('remotePairing.error.peerRequestFailed')
             options.onTransportFailure?.(error)
             return Promise.reject(error)
@@ -76,7 +73,7 @@ export function createRemotePeerPendingRequests(options: PendingRequestOptions =
                 reject,
             })
             try {
-                channel.send(JSON.stringify(request))
+                sender.send(JSON.stringify(request))
             } catch (error) {
                 deletePending(request.id)
                 const normalized = toError(error)
@@ -88,9 +85,7 @@ export function createRemotePeerPendingRequests(options: PendingRequestOptions =
 
     function resolveResponse(response: PairingPeerResponse): void {
         const request = deletePending(response.id)
-        if (!request) {
-            return
-        }
+        if (!request) return
         if (response.ok) {
             request.resolve(response.result)
             return

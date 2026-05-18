@@ -25,8 +25,11 @@ export function shouldShowRemoteReconnectNotice(options: {
     return options.state.kind === 'running' && options.transportKind === 'connecting'
 }
 
-export function shouldBlockRemoteReadyShellInteraction(state: RemotePairingRenderState): boolean {
-    return state.kind !== 'running'
+export function shouldBlockRemoteReadyShellInteraction(
+    state: RemotePairingRenderState,
+    reconnecting: boolean
+): boolean {
+    return reconnecting || state.kind !== 'running'
 }
 
 export function buildRemoteReconnectNotice(options: {

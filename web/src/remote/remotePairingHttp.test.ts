@@ -35,7 +35,7 @@ vi.mock('@/remote/remotePairingDevice', () => ({
 function pairingSnapshot(overrides: Partial<PairingSessionSnapshot> = {}): PairingSessionSnapshot {
     return {
         id: 'pairing-1',
-        state: 'claimed' as const,
+        state: 'active' as const,
         createdAt: 1,
         updatedAt: 2,
         expiresAt: 3,
@@ -119,6 +119,7 @@ describe('remotePairingHttp', () => {
                 pairing: pairingSnapshot(),
                 guestToken: 'guest-token-1',
                 wsUrl: 'wss://pair.example/ws',
+                tunnelUrl: 'wss://pair.example/tunnel',
                 iceServers: [{ urls: 'stun:stun.example.com:3478' }],
             }),
         ])
@@ -173,6 +174,7 @@ describe('remotePairingHttp', () => {
                 pairing: pairingSnapshot({ approvalStatus: 'approved' }),
                 role: 'guest',
                 wsUrl: 'wss://pair.example/ws',
+                tunnelUrl: 'wss://pair.example/tunnel',
                 iceServers: [{ urls: 'stun:stun.example.com:3478' }],
             }),
         ])
@@ -266,6 +268,7 @@ describe('remotePairingHttp', () => {
                 pairing: pairingSnapshot({ approvalStatus: 'approved' }),
                 guestToken: 'guest-token-recovered',
                 wsUrl: 'wss://pair.example/ws',
+                tunnelUrl: 'wss://pair.example/tunnel',
                 iceServers: [{ urls: 'stun:stun.example.com:3478' }],
             }),
         ])
@@ -312,6 +315,7 @@ describe('remotePairingHttp', () => {
                 pairing: pairingSnapshot({ approvalStatus: 'approved' }),
                 guestToken: 'guest-token-pwa',
                 wsUrl: 'wss://pair.example/ws',
+                tunnelUrl: 'wss://pair.example/tunnel',
                 iceServers: [{ urls: 'stun:stun.example.com:3478' }],
             }),
         ])
@@ -340,6 +344,7 @@ describe('remotePairingHttp', () => {
                 pairing: pairingSnapshot(),
                 guestToken: 'claim-token',
                 wsUrl: 'wss://pair.example/ws',
+                tunnelUrl: 'wss://pair.example/tunnel',
                 iceServers: [],
             })
         ).toBe('claim-token')
@@ -348,6 +353,7 @@ describe('remotePairingHttp', () => {
                 pairing: pairingSnapshot(),
                 role: 'guest',
                 wsUrl: 'wss://pair.example/ws',
+                tunnelUrl: 'wss://pair.example/tunnel',
                 iceServers: [],
             })
         ).toBe('stored-token')

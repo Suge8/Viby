@@ -19,9 +19,10 @@ describe('remotePairingViewModel', () => {
     })
 
     it('blocks workspace actions outside the running state', () => {
-        expect(shouldBlockRemoteReadyShellInteraction({ kind: 'running' })).toBe(false)
-        expect(shouldBlockRemoteReadyShellInteraction({ kind: 'hydrating' })).toBe(true)
-        expect(shouldBlockRemoteReadyShellInteraction({ kind: 'fatal' })).toBe(true)
+        expect(shouldBlockRemoteReadyShellInteraction({ kind: 'running' }, false)).toBe(false)
+        expect(shouldBlockRemoteReadyShellInteraction({ kind: 'running' }, true)).toBe(true)
+        expect(shouldBlockRemoteReadyShellInteraction({ kind: 'hydrating' }, false)).toBe(true)
+        expect(shouldBlockRemoteReadyShellInteraction({ kind: 'fatal' }, false)).toBe(true)
     })
 
     it('collapses status errors into a small surface set', () => {

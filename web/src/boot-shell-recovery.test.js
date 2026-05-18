@@ -54,10 +54,16 @@ describe('index.html boot recovery guard', () => {
         expect(html).toContain("recovery: '正在恢复刚才的会话…'")
     })
 
-    it('hides the boot shell on recovery reloads after this tab has already revealed the app once', () => {
+    it('hides the boot shell on recovery reloads after this tab has already revealed the app once outside pairing boot routes', () => {
         const html = readIndexHtml()
 
         expect(html).toContain("var APP_SHELL_REVEALED_KEY = 'viby-app-shell-revealed'")
+        expect(html).toContain('function isPairingBootRoute()')
+        expect(html).toContain("window.location.pathname.indexOf('/p/') === 0")
+        expect(html).toContain("new URLSearchParams(window.location.search).get('remote') === '1'")
+        expect(html).toContain(
+            "if (!isPairingBootRoute() && sessionStorage.getItem(APP_SHELL_REVEALED_KEY) === 'done')"
+        )
         expect(html).toContain("document.documentElement.setAttribute('data-boot-shell-hidden', 'true')")
         expect(html).toContain('html[data-boot-shell-hidden="true"] #app-boot-shell')
     })

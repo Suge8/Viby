@@ -6,21 +6,16 @@ import { type JSX, useCallback, useEffect, useRef, useState } from 'react'
 import { useFinalizeBootShell } from '@/hooks/useFinalizeBootShell'
 import { useNoticeCenter } from '@/lib/notice-center'
 import { RemotePairingControllerView } from '@/remote/RemotePairingControllerView'
-import { clearRetainedReady, getRetainedReady, setRetainedReady } from '@/remote/RemotePairingPersistence'
+import { setRetainedReady } from '@/remote/RemotePairingPersistence'
 import type { RemotePairingReadyConnection } from '@/remote/RemotePairingReadyShell'
 import { RemotePeerSession } from '@/remote/RemotePeerSession'
-import { isRemotePairingApproved, resolveRemotePairingAuth } from '@/remote/remotePairingAuthFlow'
-import {
-    clearStoredGuestToken,
-    type PairingRemoteAuth,
-    rememberRemotePairingId,
-    verifyRemotePairingCode,
-} from '@/remote/remotePairingHttp'
+import { clearRetainedReadySoon, useRemotePairingBoot } from '@/remote/remotePairingBoot'
+import { clearStoredGuestToken, type PairingRemoteAuth, verifyRemotePairingCode } from '@/remote/remotePairingHttp'
 import { useRemotePairingPwaHandoffWarmup } from '@/remote/remotePairingPwaHandoffWarmup'
 import { pauseRemotePairingQueries, resumeRemotePairingQueries } from '@/remote/remotePairingQueryOnlineState'
 import { getRemotePairingErrorKeyOrFallback, type RemotePairingErrorKey } from './remotePairingErrors'
 import { useRemoteReconnectNotice } from './remotePairingReconnectNotice'
-import { shouldShowRemoteReconnectNotice } from './remotePairingViewModel'
+import { shouldBlockRemoteReadyShellInteraction, shouldShowRemoteReconnectNotice } from './remotePairingViewModel'
 
 type FirstPairingState = { kind: 'first-pairing'; auth: PairingRemoteAuth; token: string; submitting: boolean }
 export type RemoteState =
@@ -31,10 +26,6 @@ export type RemoteState =
 
 const CONNECTING_SNAPSHOT = { kind: 'connecting', attempt: 0 } as const
 
-function clearRetainedReadySoon(pairingId: string): void {
-    queueMicrotask(() => clearRetainedReady(pairingId).catch(() => undefined))
-}
-
 type RemotePairingControllerProps = { pairingId: string }
 export function RemotePairingController(props: RemotePairingControllerProps): JSX.Element | null {
     const router = useRouter()
@@ -44,6 +35,7 @@ export function RemotePairingController(props: RemotePairingControllerProps): JS
     const locationUrl = new URL(locationHref, 'https://viby.local')
     const { addToast } = useNoticeCenter()
     const [state, setState] = useState<RemoteState>({ kind: 'hydrating' })
+    const [bootAttempt, setBootAttempt] = useState(0)
     const [transportState, setTransportState] = useState<PairingTransportState>(CONNECTING_SNAPSHOT)
     const readyRef = useRef<RemotePairingReadyConnection | null>(null)
     const activeReady = state.kind === 'running' ? state.ready : readyRef.current
@@ -59,7 +51,7 @@ export function RemotePairingController(props: RemotePairingControllerProps): JS
             : undefined,
     })
 
-    useFinalizeBootShell()
+    useFinalizeBootShell(state.kind !== 'hydrating' || activeReady !== null)
 
     useEffect(() => {
         if (!activeReady) return setTransportState(CONNECTING_SNAPSHOT)
@@ -85,12 +77,19 @@ export function RemotePairingController(props: RemotePairingControllerProps): JS
             const bridge = new RemotePeerSession({
                 pairingId: props.pairingId,
                 wsUrl: auth.wsUrl,
+                tunnelUrl: auth.tunnelUrl,
                 iceServers: auth.iceServers,
             })
             const ready = { bridge, token }
             readyRef.current = ready
             setState({ kind: 'hydrating' })
-            await bridge.untilReady()
+            try {
+                await bridge.untilReady()
+            } catch (error) {
+                if (readyRef.current === ready) readyRef.current = null
+                bridge.close()
+                throw error
+            }
             await setRetainedReady(props.pairingId, Date.now())
             setState({ kind: 'running', ready })
             return ready
@@ -98,32 +97,7 @@ export function RemotePairingController(props: RemotePairingControllerProps): JS
         [props.pairingId]
     )
 
-    useEffect(() => {
-        let disposed = false
-        rememberRemotePairingId(props.pairingId)
-        async function boot(): Promise<void> {
-            let retained = null
-            try {
-                retained = await getRetainedReady(props.pairingId)
-            } catch {
-                retained = null
-            }
-            const { auth, token } = await resolveRemotePairingAuth(props.pairingId)
-            if (disposed) return
-            if (!isRemotePairingApproved(auth)) {
-                if (!retained) setState({ kind: 'first-pairing', auth, token, submitting: false })
-                else setState({ kind: 'fatal', errorKey: 'remotePairing.error.regenerateQr' })
-                return
-            }
-            await startSession(auth, token)
-        }
-        boot().catch((error) => {
-            if (!disposed) setState({ kind: 'fatal', errorKey: getRemotePairingErrorKeyOrFallback(error) })
-        })
-        return () => {
-            disposed = true
-        }
-    }, [props.pairingId, startSession])
+    useRemotePairingBoot({ bootAttempt, pairingId: props.pairingId, setState, startSession })
 
     useEffect(() => {
         return () => {
@@ -171,6 +145,13 @@ export function RemotePairingController(props: RemotePairingControllerProps): JS
         [addToast, props.pairingId, startSession, state]
     )
 
+    const handleRetry = useCallback(() => {
+        closeReady()
+        clearRetainedReadySoon(props.pairingId)
+        setState({ kind: 'hydrating' })
+        setBootAttempt((attempt) => attempt + 1)
+    }, [closeReady, props.pairingId])
+
     const pwaHandoffStatus = useRemotePairingPwaHandoffWarmup({
         pairingId: props.pairingId,
         active: state.kind === 'running',
@@ -179,6 +160,8 @@ export function RemotePairingController(props: RemotePairingControllerProps): JS
         <RemotePairingControllerView
             activeReady={activeReady}
             installPromptVisible={!showReconnectNoticeRaw && !!activeReady && pwaHandoffStatus === 'ready'}
+            interactionBlocked={shouldBlockRemoteReadyShellInteraction(state, showReconnectNoticeRaw)}
+            onRetry={handleRetry}
             onVerify={handleVerify}
             pathname={pathname}
             state={state}

@@ -1,15 +1,18 @@
 import { type JSX } from 'react'
 import { AppInstallPromptLayer } from '@/components/AppInstallPromptLayer'
+import { useTranslation } from '@/lib/use-translation'
 import { RemotePairingHydrateSkeleton } from '@/remote/RemotePairingHydrateSkeleton'
 import type { RemotePairingReadyConnection } from '@/remote/RemotePairingReadyShell'
 import { RemotePairingReadyShell } from '@/remote/RemotePairingReadyShell'
 import { RemotePairingCodeScreen, RemotePairingStatusScreen } from '@/remote/RemotePairingScreens'
 import { type RemoteState } from './RemotePairingController'
-import { buildRemoteStatusSpec, shouldBlockRemoteReadyShellInteraction } from './remotePairingViewModel'
+import { buildRemoteStatusSpec } from './remotePairingViewModel'
 
 type ControllerViewProps = {
     activeReady: RemotePairingReadyConnection | null
     installPromptVisible: boolean
+    interactionBlocked: boolean
+    onRetry(): void
     onVerify(code: string): void
     pathname: string
     state: RemoteState
@@ -17,12 +20,16 @@ type ControllerViewProps = {
 
 export function RemotePairingControllerView(props: ControllerViewProps): JSX.Element | null {
     const { activeReady, state } = props
-    if (activeReady && props.pathname.startsWith('/sessions')) {
+    const { t } = useTranslation()
+    if (activeReady) {
+        if (!props.pathname.startsWith('/sessions')) {
+            return <RemotePairingStatusScreen message={null} phase="pairing" />
+        }
         return (
             <>
                 <RemotePairingReadyShell
                     enableRuntime={state.kind === 'running'}
-                    interactionBlocked={shouldBlockRemoteReadyShellInteraction(state)}
+                    interactionBlocked={props.interactionBlocked}
                     pathname={props.pathname}
                     ready={activeReady}
                 />
@@ -40,5 +47,11 @@ export function RemotePairingControllerView(props: ControllerViewProps): JSX.Ele
     }
     if (state.kind !== 'fatal') return null
     const spec = buildRemoteStatusSpec(state.errorKey)
-    return <RemotePairingStatusScreen message={spec.messageKey} phase="pairing" />
+    return (
+        <RemotePairingStatusScreen
+            message={spec.messageKey ? t(spec.messageKey) : null}
+            onRetry={spec.retry ? props.onRetry : undefined}
+            phase="pairing"
+        />
+    )
 }

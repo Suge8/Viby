@@ -233,6 +233,11 @@
                 var BOOT_RECOVERY_SURFACE_OWNER_KEY = 'viby-boot-recovery-surface-owner'
                 var APP_SHELL_REVEALED_KEY = 'viby-app-shell-revealed'
 
+                function isPairingBootRoute() {
+                    return window.location.pathname.indexOf('/p/') === 0
+                        || new URLSearchParams(window.location.search).get('remote') === '1'
+                }
+
                 try {
                     if (document.wasDiscarded) {
                         sessionStorage.setItem(RECOVERY_KEY, JSON.stringify({
@@ -241,7 +246,7 @@
                         }))
                     }
 
-                    if (sessionStorage.getItem(APP_SHELL_REVEALED_KEY) === 'done') {
+                    if (!isPairingBootRoute() && sessionStorage.getItem(APP_SHELL_REVEALED_KEY) === 'done') {
                         document.documentElement.setAttribute('data-boot-shell-hidden', 'true')
                     }
 

@@ -12,7 +12,6 @@ async function loadAppFloatingNoticeLayerModule() {
 }
 
 const LazyAppFloatingNoticeLayer = lazy(loadAppFloatingNoticeLayerModule)
-const REMOTE_TRANSPORT_STATS_INTERVAL_MS = 15_000
 
 type RemotePairingRuntimeProps = {
     api: ApiClient
@@ -26,7 +25,6 @@ export function RemotePairingRuntime(props: RemotePairingRuntimeProps): JSX.Elem
         let disposed = false
         let firstSample = true
         let reportedStatsFailure = false
-        let statsTimer: ReturnType<typeof setInterval> | undefined
 
         handleConnect({ initial: true, recovered: false, transport: null })
 
@@ -58,15 +56,9 @@ export function RemotePairingRuntime(props: RemotePairingRuntimeProps): JSX.Elem
         }
 
         void sampleTransport()
-        statsTimer = setInterval(() => {
-            void sampleTransport()
-        }, REMOTE_TRANSPORT_STATS_INTERVAL_MS)
 
         return () => {
             disposed = true
-            if (statsTimer !== undefined) {
-                clearInterval(statsTimer)
-            }
         }
     }, [handleConnect, props.bridge])
 
