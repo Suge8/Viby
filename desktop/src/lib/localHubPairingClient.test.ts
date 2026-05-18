@@ -113,6 +113,13 @@ describe('LocalHubPairingClient', () => {
 
     it('forwards runtime project requests to the authenticated local Hub API', async () => {
         const calls: Array<{ url: string; body?: string }> = []
+        const version = {
+            status: 'supported' as const,
+            supportedVersion: '0.130.0',
+            source: 'test',
+            installedVersion: '0.130.0',
+            checkedAt: 1,
+        }
         const fetchImpl = async (input: string | URL, init?: RequestInit): Promise<Response> => {
             const url = String(input)
             calls.push({ url, body: init?.body as string | undefined })
@@ -124,6 +131,35 @@ describe('LocalHubPairingClient', () => {
             }
             if (url.endsWith('/api/runtime/paths/exists')) {
                 return jsonResponse({ exists: { '/repo': true } })
+            }
+            if (url.endsWith('/api/runtime/agent-config')) {
+                return jsonResponse({
+                    agents: [
+                        { driver: 'codex', path: '/home/user/.codex/config.toml', exists: true, values: {}, version },
+                    ],
+                })
+            }
+            if (url.endsWith('/api/runtime/agent-config/codex')) {
+                return jsonResponse({
+                    agent: {
+                        driver: 'codex',
+                        path: '/home/user/.codex/config.toml',
+                        exists: true,
+                        values: { 'codex.model': 'gpt-5.4' },
+                        version,
+                    },
+                })
+            }
+            if (url.endsWith('/api/runtime/agent-config/codex/restore')) {
+                return jsonResponse({
+                    agent: {
+                        driver: 'codex',
+                        path: '/home/user/.codex/config.toml',
+                        exists: true,
+                        values: { 'codex.model': 'gpt-5.2' },
+                        version,
+                    },
+                })
             }
             if (url.endsWith('/api/runtime/spawn')) {
                 return jsonResponse({ type: 'success', sessionId: 'session-1' })
@@ -141,6 +177,27 @@ describe('LocalHubPairingClient', () => {
 
         await expect(client.browseRuntimeDirectory('/repo')).resolves.toMatchObject({ success: true })
         await expect(client.checkRuntimePathsExists(['/repo'])).resolves.toEqual({ exists: { '/repo': true } })
+        await expect(client.getAgentConfig()).resolves.toMatchObject({ agents: [{ driver: 'codex' }] })
+        await expect(
+            client.saveAgentConfig({ driver: 'codex', values: { 'codex.model': 'gpt-5.4' } })
+        ).resolves.toMatchObject({
+            agent: {
+                driver: 'codex',
+                path: '/home/user/.codex/config.toml',
+                exists: true,
+                values: { 'codex.model': 'gpt-5.4' },
+            },
+        })
+        await expect(
+            client.restoreAgentConfig({ driver: 'codex', backupPath: '/home/user/.codex/config.toml.bak' })
+        ).resolves.toMatchObject({
+            agent: {
+                driver: 'codex',
+                path: '/home/user/.codex/config.toml',
+                exists: true,
+                values: { 'codex.model': 'gpt-5.2' },
+            },
+        })
         await expect(client.spawnSession({ directory: '/repo', agent: 'codex' })).resolves.toEqual({
             type: 'success',
             session: { id: 'session-1' },
@@ -149,6 +206,12 @@ describe('LocalHubPairingClient', () => {
         expect(calls.map((call) => call.url)).toContain('http://127.0.0.1:37173/api/runtime/directory?path=%2Frepo')
         expect(calls.find((call) => call.url.endsWith('/api/runtime/paths/exists'))?.body).toBe(
             JSON.stringify({ paths: ['/repo'] })
+        )
+        expect(calls.find((call) => call.url.endsWith('/api/runtime/agent-config/codex'))?.body).toBe(
+            JSON.stringify({ driver: 'codex', values: { 'codex.model': 'gpt-5.4' } })
+        )
+        expect(calls.find((call) => call.url.endsWith('/api/runtime/agent-config/codex/restore'))?.body).toBe(
+            JSON.stringify({ driver: 'codex', backupPath: '/home/user/.codex/config.toml.bak' })
         )
     })
 })

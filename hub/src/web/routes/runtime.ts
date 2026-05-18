@@ -4,7 +4,9 @@ import {
     LocalSessionCatalogRequestSchema,
     LocalSessionExportRequestSchema,
     ResolveAgentLaunchConfigRequestSchema,
+    RestoreAgentConfigRequestSchema,
     RuntimeCapabilityRequestSchema,
+    SaveAgentConfigRequestSchema,
 } from '@viby/protocol'
 import {
     CodexCollaborationModeSchema,
@@ -103,6 +105,62 @@ export function createRuntimeRoutes(getSyncEngine: () => SyncEngine | null): Hon
 
         return c.json(await engine.listAgentAvailability(runtime.id, parsed.data))
     })
+
+    app.get('/runtime/agent-config', async (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) {
+            return engine
+        }
+
+        const runtime = requireActiveLocalRuntime(c, engine)
+        if (runtime instanceof Response) {
+            return runtime
+        }
+
+        return c.json(await engine.loadAgentConfigFiles(runtime.id))
+    })
+
+    app.put('/runtime/agent-config/:driver', createJsonBodyValidator(SaveAgentConfigRequestSchema), async (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) {
+            return engine
+        }
+
+        const runtime = requireActiveLocalRuntime(c, engine)
+        if (runtime instanceof Response) {
+            return runtime
+        }
+
+        const body = c.req.valid('json')
+        if (body.driver !== c.req.param('driver')) {
+            return c.json({ error: 'Driver mismatch' }, 400)
+        }
+
+        return c.json({ agent: await engine.saveAgentConfigFile(runtime.id, body) })
+    })
+
+    app.post(
+        '/runtime/agent-config/:driver/restore',
+        createJsonBodyValidator(RestoreAgentConfigRequestSchema),
+        async (c) => {
+            const engine = requireSyncEngine(c, getSyncEngine)
+            if (engine instanceof Response) {
+                return engine
+            }
+
+            const runtime = requireActiveLocalRuntime(c, engine)
+            if (runtime instanceof Response) {
+                return runtime
+            }
+
+            const body = c.req.valid('json')
+            if (body.driver !== c.req.param('driver')) {
+                return c.json({ error: 'Driver mismatch' }, 400)
+            }
+
+            return c.json({ agent: await engine.restoreAgentConfigFile(runtime.id, body) })
+        }
+    )
 
     app.post('/runtime/spawn', createJsonBodyValidator(spawnBodySchema), async (c) => {
         const engine = requireSyncEngine(c, getSyncEngine)

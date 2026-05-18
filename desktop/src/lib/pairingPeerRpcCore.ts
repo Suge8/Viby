@@ -1,5 +1,6 @@
 import type {
     PairingPeerAgentAvailabilityResult,
+    PairingPeerAgentConfigResult,
     PairingPeerAgentLaunchConfigResult,
     PairingPeerBrowseDirectoryResult,
     PairingPeerListSessionsResult,
@@ -9,14 +10,17 @@ import type {
     PairingPeerPathsExistResult,
     PairingPeerRequest,
     PairingPeerResponse,
+    PairingPeerRestoreAgentConfigResult,
     PairingPeerResumeSessionResult,
     PairingPeerRuntimeCapabilityResult,
+    PairingPeerSaveAgentConfigResult,
     PairingPeerSendMessageResult,
     PairingPeerSpawnSessionResult,
     PairingPeerTerminalEventPayload,
 } from '@viby/protocol/pairing'
 import {
     PairingPeerAgentAvailabilityResultSchema,
+    PairingPeerAgentConfigResultSchema,
     PairingPeerAgentLaunchConfigResultSchema,
     PairingPeerBrowseDirectoryResultSchema,
     PairingPeerCommandCapabilitiesResultSchema,
@@ -29,9 +33,11 @@ import {
     PairingPeerPathsExistResultSchema,
     PairingPeerRequestSchema,
     PairingPeerResponseSchema,
+    PairingPeerRestoreAgentConfigResultSchema,
     PairingPeerResumeSessionResultSchema,
     PairingPeerRuntimeCapabilityResultSchema,
     PairingPeerRuntimeLocalSessionsResultSchema,
+    PairingPeerSaveAgentConfigResultSchema,
     PairingPeerSendMessageResultSchema,
     PairingPeerSessionResultSchema,
     PairingPeerSpawnSessionResultSchema,
@@ -237,6 +243,24 @@ export async function executePairingPeerRequest(
             case 'runtime.agent-availability': {
                 const result: PairingPeerAgentAvailabilityResult = PairingPeerAgentAvailabilityResultSchema.parse(
                     await client.getRuntimeAgentAvailability(request.params ?? {})
+                )
+                return successResponse(request.id, result)
+            }
+            case 'runtime.agent-config': {
+                const result: PairingPeerAgentConfigResult = PairingPeerAgentConfigResultSchema.parse(
+                    await client.getAgentConfig()
+                )
+                return successResponse(request.id, result)
+            }
+            case 'runtime.save-agent-config': {
+                const result: PairingPeerSaveAgentConfigResult = PairingPeerSaveAgentConfigResultSchema.parse(
+                    await client.saveAgentConfig(request.params)
+                )
+                return successResponse(request.id, result)
+            }
+            case 'runtime.restore-agent-config': {
+                const result: PairingPeerRestoreAgentConfigResult = PairingPeerRestoreAgentConfigResultSchema.parse(
+                    await client.restoreAgentConfig(request.params)
                 )
                 return successResponse(request.id, result)
             }

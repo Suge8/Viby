@@ -10,6 +10,7 @@ import type {
 } from '@viby/protocol/pairing'
 import type {
     AgentAvailabilityResponse,
+    AgentConfigResponse,
     CodexCollaborationMode,
     CodexServiceTier,
     CommandCapabilitiesResponse,
@@ -22,8 +23,12 @@ import type {
     PermissionMode,
     ResolveAgentLaunchConfigRequest,
     ResolveAgentLaunchConfigResponse,
+    RestoreAgentConfigRequest,
+    RestoreAgentConfigResponse,
     RuntimeCapabilityRequest,
     RuntimeCapabilityResponse,
+    SaveAgentConfigRequest,
+    SaveAgentConfigResponse,
     Session,
     SessionSummary,
     SessionViewSnapshot,
@@ -33,11 +38,14 @@ import type { LocalHubPairingRequestJson } from './localHubPairingRequest'
 import {
     browseRuntimeDirectory,
     checkRuntimePathsExists,
+    getAgentConfig,
     getRuntimeAgentAvailability,
     getRuntimeCapabilities,
     importRuntimeLocalSession,
     listRuntimeLocalSessions,
     resolveAgentLaunchConfig,
+    restoreAgentConfig,
+    saveAgentConfig,
 } from './localHubPairingRuntimeClient'
 import {
     approvePermission,
@@ -189,6 +197,15 @@ export class LocalHubPairingClient extends LocalHubPairingClientCore {
     }
     async getRuntimeAgentAvailability(input: ListAgentAvailabilityRequest = {}): Promise<AgentAvailabilityResponse> {
         return await getRuntimeAgentAvailability(this.request, input)
+    }
+    async getAgentConfig(): Promise<AgentConfigResponse> {
+        return await getAgentConfig(this.request)
+    }
+    async saveAgentConfig(input: SaveAgentConfigRequest): Promise<SaveAgentConfigResponse> {
+        return await saveAgentConfig(this.request, input)
+    }
+    async restoreAgentConfig(input: RestoreAgentConfigRequest): Promise<RestoreAgentConfigResponse> {
+        return await restoreAgentConfig(this.request, input)
     }
     async checkRuntimePathsExists(paths: string[]): Promise<{ exists: Record<string, boolean> }> {
         return await checkRuntimePathsExists(this.request, paths)

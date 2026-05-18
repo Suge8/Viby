@@ -2,6 +2,7 @@ import type {
     ListAgentAvailabilityRequest,
     LocalSessionExportRequest,
     PairingPeerAgentAvailabilityResult,
+    PairingPeerAgentConfigResult,
     PairingPeerAgentLaunchConfigResult,
     PairingPeerApprovePermissionParams,
     PairingPeerBrowseDirectoryParams,
@@ -36,10 +37,12 @@ import type {
     PairingPeerPushUnsubscribeParams,
     PairingPeerRenameSessionParams,
     PairingPeerRequest,
+    PairingPeerRestoreAgentConfigResult,
     PairingPeerResumeSessionParams,
     PairingPeerResumeSessionResult,
     PairingPeerRuntimeCapabilityResult,
     PairingPeerRuntimeLocalSessionsResult,
+    PairingPeerSaveAgentConfigResult,
     PairingPeerSearchFilesParams,
     PairingPeerSendMessageParams,
     PairingPeerSendMessageResult,
@@ -50,7 +53,9 @@ import type {
     PairingPeerTerminalEventPayload,
     PairingPeerUploadResult,
     ResolveAgentLaunchConfigRequest,
+    RestoreAgentConfigRequest,
     RuntimeCapabilityRequest,
+    SaveAgentConfigRequest,
 } from '@viby/protocol'
 import type { SyncEvent } from '@/types/api'
 import type { RemotePeerTransportStats } from './remotePairingStats'
@@ -80,6 +85,9 @@ export type RemotePeerBridge = {
     denyPermission: (params: PairingPeerDenyPermissionParams) => Promise<void>
     getRuntimeCapabilities: (params?: RuntimeCapabilityRequest) => Promise<PairingPeerRuntimeCapabilityResult>
     getRuntimeAgentAvailability: (params?: ListAgentAvailabilityRequest) => Promise<PairingPeerAgentAvailabilityResult>
+    getAgentConfig: () => Promise<PairingPeerAgentConfigResult>
+    saveAgentConfig: (params: SaveAgentConfigRequest) => Promise<PairingPeerSaveAgentConfigResult>
+    restoreAgentConfig: (params: RestoreAgentConfigRequest) => Promise<PairingPeerRestoreAgentConfigResult>
     checkRuntimePathsExists: (params: PairingPeerPathsExistParams) => Promise<PairingPeerPathsExistResult>
     browseRuntimeDirectory: (params?: PairingPeerBrowseDirectoryParams) => Promise<PairingPeerBrowseDirectoryResult>
     resolveAgentLaunchConfig: (params: ResolveAgentLaunchConfigRequest) => Promise<PairingPeerAgentLaunchConfigResult>

@@ -1,4 +1,4 @@
-import type { LocalSessionCatalog, LocalSessionExportSnapshot } from '@viby/protocol/types'
+import type { AgentConfigFileState, LocalSessionCatalog, LocalSessionExportSnapshot } from '@viby/protocol/types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiMachineClient } from './apiMachine'
 import type { Machine, MachineMetadata } from './types'
@@ -57,6 +57,22 @@ const { sockets, ioMock } = vi.hoisted(() => {
         ioMock: hoistedIoMock,
     }
 })
+
+function agentConfigState(values: AgentConfigFileState['values'] = {}): AgentConfigFileState {
+    return {
+        driver: 'codex',
+        path: '/tmp/config.toml',
+        exists: true,
+        values,
+        version: {
+            status: 'supported',
+            supportedVersion: '0.130.0',
+            source: 'test',
+            installedVersion: '0.130.0',
+            checkedAt: 1,
+        },
+    }
+}
 
 vi.mock('socket.io-client', () => ({
     io: ioMock,
@@ -145,6 +161,9 @@ describe('ApiMachineClient', () => {
             listLocalSessions,
             exportLocalSession,
             listAgentAvailability,
+            loadAgentConfigFiles: vi.fn(async () => ({ agents: [] })),
+            saveAgentConfigFile: vi.fn(async () => agentConfigState()),
+            restoreAgentConfigFile: vi.fn(async () => agentConfigState()),
             stopSession: vi.fn(() => true),
             requestShutdown: vi.fn(),
         })
@@ -235,6 +254,9 @@ describe('ApiMachineClient', () => {
             listLocalSessions,
             exportLocalSession,
             listAgentAvailability,
+            loadAgentConfigFiles: vi.fn(async () => ({ agents: [] })),
+            saveAgentConfigFile: vi.fn(async () => agentConfigState()),
+            restoreAgentConfigFile: vi.fn(async () => agentConfigState()),
             stopSession: vi.fn(() => false),
             requestShutdown,
         })
@@ -250,6 +272,58 @@ describe('ApiMachineClient', () => {
 
         client.shutdown()
         expect(socket.close).toHaveBeenCalledTimes(1)
+    })
+
+    it('forwards agent config RPC through the machine bridge', async () => {
+        const saveAgentConfigFile = vi.fn(async () => agentConfigState({ 'codex.model': 'gpt-5.4' }))
+        const client = new ApiMachineClient('token', createMachine())
+        client.setRPCHandlers({
+            spawnSession: vi.fn(async () => ({ type: 'error' as const, errorMessage: 'unused' })),
+            listLocalSessions: vi.fn(async () => ({ capabilities: [], sessions: [] })),
+            exportLocalSession: vi.fn(async () => ({
+                driver: 'claude' as const,
+                providerSessionId: 'unused',
+                title: 'unused',
+                path: '/tmp/project',
+                startedAt: 1,
+                updatedAt: 1,
+                messageCount: 0,
+                messages: [],
+            })),
+            listAgentAvailability: vi.fn(async () => ({ agents: [] })),
+            loadAgentConfigFiles: vi.fn(async () => ({ agents: [] })),
+            saveAgentConfigFile,
+            restoreAgentConfigFile: vi.fn(async () => agentConfigState()),
+            stopSession: vi.fn(() => true),
+            requestShutdown: vi.fn(),
+        })
+
+        client.connect()
+        const response = await new Promise<string>((resolve) => {
+            sockets[0].emit(
+                'rpc-request',
+                {
+                    method: 'machine-test:save-agent-config-file',
+                    params: JSON.stringify({ driver: 'codex', values: { 'codex.model': 'gpt-5.4' } }),
+                },
+                resolve
+            )
+        })
+
+        expect(saveAgentConfigFile).toHaveBeenCalledWith({ driver: 'codex', values: { 'codex.model': 'gpt-5.4' } })
+        expect(JSON.parse(response)).toEqual({
+            driver: 'codex',
+            path: '/tmp/config.toml',
+            exists: true,
+            values: { 'codex.model': 'gpt-5.4' },
+            version: {
+                status: 'supported',
+                supportedVersion: '0.130.0',
+                source: 'test',
+                installedVersion: '0.130.0',
+                checkedAt: 1,
+            },
+        })
     })
 
     it('refreshes stale machine metadata on connect before project browsing depends on it', async () => {

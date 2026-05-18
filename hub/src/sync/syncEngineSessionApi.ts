@@ -6,8 +6,10 @@ import type {
     LocalSessionExportRequest,
     PermissionMode,
     ResolveAgentLaunchConfigRequest,
+    RestoreAgentConfigRequest,
     RuntimeCapabilityRequest,
     RuntimeCapabilitySnapshot,
+    SaveAgentConfigRequest,
     Session,
 } from '@viby/protocol/types'
 import type { RuntimeSpawnValidationOptions } from '../runtime/runtimeCapabilityValidation'
@@ -174,6 +176,18 @@ export abstract class SyncEngineSessionApi extends SyncEngineReadApi {
 
     async listAgentAvailability(machineId: string, request: ListAgentAvailabilityRequest) {
         return await this.syncServices.runtimeCapabilityCache.getAgentAvailability(machineId, request)
+    }
+
+    async loadAgentConfigFiles(machineId: string) {
+        return await this.syncServices.sessionRpcFacade.loadAgentConfigFiles(machineId)
+    }
+
+    async saveAgentConfigFile(machineId: string, request: SaveAgentConfigRequest) {
+        return await this.syncServices.sessionRpcFacade.saveAgentConfigFile(machineId, request)
+    }
+
+    async restoreAgentConfigFile(machineId: string, request: RestoreAgentConfigRequest) {
+        return await this.syncServices.sessionRpcFacade.restoreAgentConfigFile(machineId, request)
     }
 
     async validateRuntimeSpawnCapability(machineId: string, options: RuntimeSpawnValidationOptions) {

@@ -1,5 +1,7 @@
 import type {
     AgentAvailabilityResponse,
+    AgentConfigFileState,
+    AgentConfigResponse,
     AgentFlavor,
     CodexCollaborationMode,
     CodexServiceTier,
@@ -13,6 +15,8 @@ import type {
     PermissionMode,
     ResolveAgentLaunchConfigRequest,
     ResolveAgentLaunchConfigResponse,
+    RestoreAgentConfigRequest,
+    SaveAgentConfigRequest,
     SessionDriver,
     SessionHandoffSnapshot,
 } from '@viby/protocol/types'
@@ -22,9 +26,12 @@ import { parseLocalSessionCatalogResponse, parseLocalSessionExportResponse } fro
 import {
     isMissingRpcHandler,
     parseAgentAvailabilityResponse,
+    parseAgentConfigFileState,
+    parseAgentConfigResponse,
     parseMachineDirectoryResponse,
     parsePathExistsResponse,
     parseResolveAgentLaunchConfigResponse,
+    parseRestoreAgentConfigResponse,
     parseSpawnSessionResult,
 } from './rpcGatewaySupport'
 import type {
@@ -192,6 +199,27 @@ export class RpcGateway {
             | AgentAvailabilityResponse
             | unknown
         return parseAgentAvailabilityResponse(result)
+    }
+
+    async loadAgentConfigFiles(machineId: string): Promise<AgentConfigResponse> {
+        const result = (await this.machineRpc(machineId, 'load-agent-config-files', {})) as
+            | AgentConfigResponse
+            | unknown
+        return parseAgentConfigResponse(result)
+    }
+
+    async saveAgentConfigFile(machineId: string, request: SaveAgentConfigRequest): Promise<AgentConfigFileState> {
+        const result = (await this.machineRpc(machineId, 'save-agent-config-file', request)) as
+            | AgentConfigFileState
+            | unknown
+        return parseAgentConfigFileState(result)
+    }
+
+    async restoreAgentConfigFile(machineId: string, request: RestoreAgentConfigRequest): Promise<AgentConfigFileState> {
+        const result = (await this.machineRpc(machineId, 'restore-agent-config-file', request)) as
+            | AgentConfigFileState
+            | unknown
+        return parseRestoreAgentConfigResponse(result)
     }
 
     async listLocalSessions(machineId: string, request: LocalSessionCatalogRequest): Promise<LocalSessionCatalog> {

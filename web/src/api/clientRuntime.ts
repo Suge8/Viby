@@ -1,5 +1,6 @@
 import type {
     AgentAvailabilityResponse,
+    AgentConfigResponse,
     AgentFlavor,
     AgentLaunchConfigResponse,
     CodexCollaborationMode,
@@ -8,6 +9,8 @@ import type {
     LocalSessionExportRequest,
     ModelReasoningEffort,
     PermissionMode,
+    RestoreAgentConfigRequest,
+    RestoreAgentConfigResponse,
     RuntimeBrowseDirectoryResponse,
     RuntimeCapabilityRequest,
     RuntimeCapabilityResponse,
@@ -15,6 +18,8 @@ import type {
     RuntimeLocalSessionsResponse,
     RuntimePathsExistsResponse,
     RuntimeResponse,
+    SaveAgentConfigRequest,
+    SaveAgentConfigResponse,
     Session,
     SpawnResponse,
 } from '@/types/api'
@@ -98,6 +103,33 @@ export async function getRuntimeAgentAvailability(
         `/api/runtime/agent-availability${queryString ? `?${queryString}` : ''}`,
         {
             signal: input?.signal,
+        }
+    )
+}
+
+export async function getAgentConfig(request: ApiClientRequest): Promise<AgentConfigResponse> {
+    return await request<AgentConfigResponse>('/api/runtime/agent-config')
+}
+
+export async function saveAgentConfig(
+    request: ApiClientRequest,
+    input: SaveAgentConfigRequest
+): Promise<SaveAgentConfigResponse> {
+    return await request<SaveAgentConfigResponse>(`/api/runtime/agent-config/${encodeURIComponent(input.driver)}`, {
+        method: 'PUT',
+        body: JSON.stringify(input),
+    })
+}
+
+export async function restoreAgentConfig(
+    request: ApiClientRequest,
+    input: RestoreAgentConfigRequest
+): Promise<RestoreAgentConfigResponse> {
+    return await request<RestoreAgentConfigResponse>(
+        `/api/runtime/agent-config/${encodeURIComponent(input.driver)}/restore`,
+        {
+            method: 'POST',
+            body: JSON.stringify(input),
         }
     )
 }

@@ -1,5 +1,6 @@
 import type {
     AgentAvailabilityResponse,
+    AgentConfigResponse,
     AgentFlavor,
     AgentLaunchConfig,
     AgentModelCapability,
@@ -40,6 +41,11 @@ export type {
     AgentAvailabilityResolution,
     AgentAvailabilityResponse,
     AgentAvailabilityStatus,
+    AgentConfigDriver,
+    AgentConfigFieldDefinition,
+    AgentConfigFieldValue,
+    AgentConfigFileState,
+    AgentConfigResponse,
     AgentFlavor,
     AgentLaunchConfig,
     AgentModelCapability,
@@ -69,10 +75,14 @@ export type {
     PiModelCapability,
     PiModelScope,
     ResolveAgentLaunchConfigResponse,
+    RestoreAgentConfigRequest,
+    RestoreAgentConfigResponse,
     ResumableSessionsPage,
     ResumableSessionsResponse,
     ResumableSessionsSnapshot,
     RuntimeCapabilityRequest,
+    SaveAgentConfigRequest,
+    SaveAgentConfigResponse,
     Session,
     SessionActivityKind,
     SessionLifecycleState,
@@ -165,6 +175,7 @@ export type MessagesResponse = {
 
 export type RuntimeResponse = { runtime: LocalRuntime | null }
 export type RuntimeAgentAvailabilityResponse = AgentAvailabilityResponse
+export type RuntimeAgentConfigResponse = AgentConfigResponse
 export type RuntimeCapabilitySnapshot = ProtocolRuntimeCapabilitySnapshot
 export type RuntimeCapabilityResponse = ProtocolRuntimeCapabilityResponse
 export type RuntimePathsExistsResponse = { exists: Record<string, boolean> }

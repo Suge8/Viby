@@ -1,6 +1,8 @@
 import type { SessionDriver, SessionHandoffSnapshot } from '@viby/protocol'
 import type {
     AgentAvailabilityResponse,
+    AgentConfigFileState,
+    AgentConfigResponse,
     AgentFlavor,
     CodexCollaborationMode,
     ListAgentAvailabilityRequest,
@@ -11,6 +13,8 @@ import type {
     PermissionMode,
     ResolveAgentLaunchConfigRequest,
     ResolveAgentLaunchConfigResponse,
+    RestoreAgentConfigRequest,
+    SaveAgentConfigRequest,
     Session,
 } from '@viby/protocol/types'
 import {
@@ -116,6 +120,18 @@ export class SessionRpcFacade {
         request: ListAgentAvailabilityRequest
     ): Promise<AgentAvailabilityResponse> {
         return await this.rpcGateway.listAgentAvailability(machineId, request)
+    }
+
+    async loadAgentConfigFiles(machineId: string): Promise<AgentConfigResponse> {
+        return await this.rpcGateway.loadAgentConfigFiles(machineId)
+    }
+
+    async saveAgentConfigFile(machineId: string, request: SaveAgentConfigRequest): Promise<AgentConfigFileState> {
+        return await this.rpcGateway.saveAgentConfigFile(machineId, request)
+    }
+
+    async restoreAgentConfigFile(machineId: string, request: RestoreAgentConfigRequest): Promise<AgentConfigFileState> {
+        return await this.rpcGateway.restoreAgentConfigFile(machineId, request)
     }
 
     async listLocalSessions(machineId: string, request: LocalSessionCatalogRequest): Promise<LocalSessionCatalog> {

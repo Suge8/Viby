@@ -3,7 +3,7 @@ import { z } from 'zod'
 export const PairingRoleSchema = z.enum(['host', 'guest'])
 export type PairingRole = z.infer<typeof PairingRoleSchema>
 
-export const PairingSessionStateSchema = z.enum(['active', 'waiting', 'claimed', 'connected', 'deleted', 'expired'])
+export const PairingSessionStateSchema = z.enum(['active', 'waiting', 'deleted', 'expired'])
 export type PairingSessionState = z.infer<typeof PairingSessionStateSchema>
 
 export const PairingApprovalStatusSchema = z.enum(['pending', 'approved']).nullable()
@@ -98,6 +98,7 @@ export const PairingCreateResponseSchema = z.object({
     hostToken: z.string().min(1),
     pairingUrl: z.string().min(1),
     wsUrl: z.string().min(1),
+    tunnelUrl: z.string().min(1),
     iceServers: z.array(PairingIceServerSchema),
 })
 export type PairingCreateResponse = z.infer<typeof PairingCreateResponseSchema>
@@ -106,6 +107,7 @@ export const PairingClaimResponseSchema = z.object({
     pairing: PairingSessionSnapshotSchema,
     guestToken: z.string().min(1),
     wsUrl: z.string().min(1),
+    tunnelUrl: z.string().min(1),
     iceServers: z.array(PairingIceServerSchema),
 })
 export type PairingClaimResponse = z.infer<typeof PairingClaimResponseSchema>
@@ -176,6 +178,7 @@ export const PairingReconnectResponseSchema = z.object({
     pairing: PairingSessionSnapshotSchema,
     role: PairingRoleSchema,
     wsUrl: z.string().min(1),
+    tunnelUrl: z.string().min(1),
     iceServers: z.array(PairingIceServerSchema),
 })
 export type PairingReconnectResponse = z.infer<typeof PairingReconnectResponseSchema>

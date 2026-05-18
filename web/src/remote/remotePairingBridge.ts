@@ -1,5 +1,6 @@
 import {
     PairingPeerAgentAvailabilityResultSchema,
+    PairingPeerAgentConfigResultSchema,
     PairingPeerAgentLaunchConfigResultSchema,
     PairingPeerBrowseDirectoryResultSchema,
     PairingPeerCommandCapabilitiesResultSchema,
@@ -14,9 +15,11 @@ import {
     PairingPeerOpenSessionResultSchema,
     PairingPeerPathsExistResultSchema,
     PairingPeerPushVapidResultSchema,
+    PairingPeerRestoreAgentConfigResultSchema,
     PairingPeerResumeSessionResultSchema,
     PairingPeerRuntimeCapabilityResultSchema,
     PairingPeerRuntimeLocalSessionsResultSchema,
+    PairingPeerSaveAgentConfigResultSchema,
     PairingPeerSendMessageResultSchema,
     PairingPeerSessionResultSchema,
     PairingPeerSpawnSessionResultSchema,
@@ -127,6 +130,21 @@ export function createRemotePeerBridge(options: {
             options.requestPeer(
                 createRemotePeerRequest('runtime.agent-availability', params),
                 PairingPeerAgentAvailabilityResultSchema.parse
+            ),
+        getAgentConfig: () =>
+            options.requestPeer(
+                createRemotePeerRequest('runtime.agent-config'),
+                PairingPeerAgentConfigResultSchema.parse
+            ),
+        saveAgentConfig: (params) =>
+            options.requestPeer(
+                createRemotePeerRequest('runtime.save-agent-config', params),
+                PairingPeerSaveAgentConfigResultSchema.parse
+            ),
+        restoreAgentConfig: (params) =>
+            options.requestPeer(
+                createRemotePeerRequest('runtime.restore-agent-config', params),
+                PairingPeerRestoreAgentConfigResultSchema.parse
             ),
         checkRuntimePathsExists: (params) =>
             options.requestPeer(

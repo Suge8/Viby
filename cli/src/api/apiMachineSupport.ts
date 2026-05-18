@@ -1,12 +1,18 @@
 import type { Update, UpdateMachineBody } from '@viby/protocol'
 import {
     type AgentAvailabilityResponse,
+    type AgentConfigFileState,
+    type AgentConfigResponse,
     type ListAgentAvailabilityRequest,
     ListAgentAvailabilityRequestSchema,
     LocalSessionCatalogRequestSchema,
     LocalSessionExportRequestSchema,
     ResolveAgentLaunchConfigRequestSchema,
     type ResolveAgentLaunchConfigResponse,
+    type RestoreAgentConfigRequest,
+    RestoreAgentConfigRequestSchema,
+    type SaveAgentConfigRequest,
+    SaveAgentConfigRequestSchema,
 } from '@viby/protocol'
 import type { LocalSessionCatalog, LocalSessionExportRequest, LocalSessionExportSnapshot } from '@viby/protocol/types'
 import type { Socket } from 'socket.io-client'
@@ -54,6 +60,9 @@ export type MachineRpcHandlers = {
     ) => Promise<LocalSessionCatalog>
     exportLocalSession: (request: LocalSessionExportRequest) => Promise<LocalSessionExportSnapshot>
     listAgentAvailability: (request: ListAgentAvailabilityRequest) => Promise<AgentAvailabilityResponse>
+    loadAgentConfigFiles: () => Promise<AgentConfigResponse>
+    saveAgentConfigFile: (request: SaveAgentConfigRequest) => Promise<AgentConfigFileState>
+    restoreAgentConfigFile: (request: RestoreAgentConfigRequest) => Promise<AgentConfigFileState>
     stopSession: (sessionId: string) => boolean
     requestShutdown: () => void
 }
@@ -216,6 +225,32 @@ export function registerMachineRpcHandlers(rpcHandlerManager: RpcHandlerManager,
                     message: error instanceof Error ? error.message : 'Failed to resolve agent launch config',
                 }
             }
+        }
+    )
+
+    rpcHandlerManager.registerHandler('load-agent-config-files', async (): Promise<AgentConfigResponse> => {
+        return await handlers.loadAgentConfigFiles()
+    })
+
+    rpcHandlerManager.registerHandler(
+        'save-agent-config-file',
+        async (params: unknown): Promise<AgentConfigFileState> => {
+            const parsed = SaveAgentConfigRequestSchema.safeParse(params)
+            if (!parsed.success) {
+                throw new Error('Invalid agent config save request')
+            }
+            return await handlers.saveAgentConfigFile(parsed.data)
+        }
+    )
+
+    rpcHandlerManager.registerHandler(
+        'restore-agent-config-file',
+        async (params: unknown): Promise<AgentConfigFileState> => {
+            const parsed = RestoreAgentConfigRequestSchema.safeParse(params)
+            if (!parsed.success) {
+                throw new Error('Invalid agent config restore request')
+            }
+            return await handlers.restoreAgentConfigFile(parsed.data)
         }
     )
 }

@@ -1,8 +1,17 @@
-import { AgentAvailabilityResponseSchema, ResolveAgentLaunchConfigResponseSchema } from '@viby/protocol'
+import {
+    AgentAvailabilityResponseSchema,
+    AgentConfigFileStateSchema,
+    AgentConfigResponseSchema,
+    ResolveAgentLaunchConfigResponseSchema,
+    RestoreAgentConfigResponseSchema,
+} from '@viby/protocol'
 import type {
     AgentAvailabilityResponse,
+    AgentConfigFileState,
+    AgentConfigResponse,
     MachineDirectoryResponse,
     ResolveAgentLaunchConfigResponse,
+    RestoreAgentConfigResponse,
 } from '@viby/protocol/types'
 import type { RpcMachineDirectoryResponse, RpcPathExistsResponse } from './rpcGatewayTypes'
 
@@ -92,4 +101,31 @@ export function parseAgentAvailabilityResponse(result: AgentAvailabilityResponse
     }
 
     throw new Error('Unexpected list-agent-availability result')
+}
+
+export function parseAgentConfigResponse(result: AgentConfigResponse | unknown): AgentConfigResponse {
+    const parsed = AgentConfigResponseSchema.safeParse(result)
+    if (parsed.success) {
+        return parsed.data
+    }
+
+    throw new Error('Unexpected load-agent-config-files result')
+}
+
+export function parseAgentConfigFileState(result: AgentConfigFileState | unknown): AgentConfigFileState {
+    const parsed = AgentConfigFileStateSchema.safeParse(result)
+    if (parsed.success) {
+        return parsed.data
+    }
+
+    throw new Error('Unexpected save-agent-config-file result')
+}
+
+export function parseRestoreAgentConfigResponse(result: RestoreAgentConfigResponse | unknown): AgentConfigFileState {
+    const parsed = RestoreAgentConfigResponseSchema.safeParse(result)
+    if (parsed.success) {
+        return parsed.data.agent
+    }
+
+    return parseAgentConfigFileState(result)
 }

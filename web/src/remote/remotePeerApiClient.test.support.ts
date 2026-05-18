@@ -10,6 +10,14 @@ type ApiHarness = {
     queryClient: QueryClient
 }
 
+const agentConfigVersion = {
+    status: 'supported' as const,
+    supportedVersion: '0.130.0',
+    source: 'test',
+    installedVersion: '0.130.0',
+    checkedAt: 1,
+}
+
 function createSession(overrides: Partial<Session> = {}): Session {
     const { codexServiceTier = null, ...restOverrides } = overrides
 
@@ -126,6 +134,35 @@ function createBridge(overrides: Partial<RemotePeerBridge> = {}): RemotePeerBrid
             },
         })),
         getRuntimeAgentAvailability: vi.fn(async () => ({ agents: [] })),
+        getAgentConfig: vi.fn(async () => ({
+            agents: [
+                {
+                    driver: 'codex' as const,
+                    path: '/home/user/.codex/config.toml',
+                    exists: true,
+                    values: {},
+                    version: agentConfigVersion,
+                },
+            ],
+        })),
+        saveAgentConfig: vi.fn(async () => ({
+            agent: {
+                driver: 'codex' as const,
+                path: '/home/user/.codex/config.toml',
+                exists: true,
+                values: { 'codex.model': 'gpt-5.4' },
+                version: agentConfigVersion,
+            },
+        })),
+        restoreAgentConfig: vi.fn(async () => ({
+            agent: {
+                driver: 'codex' as const,
+                path: '/home/user/.codex/config.toml',
+                exists: true,
+                values: { 'codex.model': 'gpt-5.2' },
+                version: agentConfigVersion,
+            },
+        })),
         checkRuntimePathsExists: vi.fn(async () => ({ exists: { '/repo': true } })),
         browseRuntimeDirectory: vi.fn(async () => ({
             success: true,

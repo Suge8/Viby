@@ -2,7 +2,14 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import type { ApiClientRequest } from './client'
-import { getRuntimeAgentAvailability, getRuntimeCapabilities, resolveAgentLaunchConfig } from './clientRuntime'
+import {
+    getAgentConfig,
+    getRuntimeAgentAvailability,
+    getRuntimeCapabilities,
+    resolveAgentLaunchConfig,
+    restoreAgentConfig,
+    saveAgentConfig,
+} from './clientRuntime'
 
 describe('clientRuntime', () => {
     it('passes agent launch config cancellation without serializing the signal', async () => {
@@ -48,5 +55,30 @@ describe('clientRuntime', () => {
                 drivers: ['claude'],
             })
         ).resolves.toEqual({ agents: [] })
+    })
+
+    it('uses the runtime agent config endpoints for load, save, and restore', async () => {
+        const request = vi.fn(async (path: string, init?: RequestInit) => {
+            if (!init) {
+                expect(path).toBe('/api/runtime/agent-config')
+                return { agents: [] }
+            }
+            if (init.method === 'PUT') {
+                expect(path).toBe('/api/runtime/agent-config/codex')
+                expect(JSON.parse(String(init.body))).toEqual({ driver: 'codex', values: { 'codex.model': 'gpt-5.4' } })
+            } else {
+                expect(path).toBe('/api/runtime/agent-config/codex/restore')
+                expect(JSON.parse(String(init.body))).toEqual({ driver: 'codex', backupPath: '/tmp/config.bak' })
+            }
+            return { agent: { driver: 'codex', path: '/tmp/config.toml', exists: true, values: {} } }
+        }) as ApiClientRequest
+
+        await expect(getAgentConfig(request)).resolves.toEqual({ agents: [] })
+        await expect(
+            saveAgentConfig(request, { driver: 'codex', values: { 'codex.model': 'gpt-5.4' } })
+        ).resolves.toEqual({ agent: { driver: 'codex', path: '/tmp/config.toml', exists: true, values: {} } })
+        await expect(restoreAgentConfig(request, { driver: 'codex', backupPath: '/tmp/config.bak' })).resolves.toEqual({
+            agent: { driver: 'codex', path: '/tmp/config.toml', exists: true, values: {} },
+        })
     })
 })

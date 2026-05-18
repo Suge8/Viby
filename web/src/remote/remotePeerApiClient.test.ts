@@ -97,6 +97,29 @@ describe('createRemotePeerApiClient', () => {
         await expect(api.getRuntimeAgentAvailability({ directory: '/repo', forceRefresh: true })).resolves.toEqual({
             agents: [],
         })
+        await expect(api.getAgentConfig()).resolves.toMatchObject({
+            agents: [{ driver: 'codex', path: '/home/user/.codex/config.toml', exists: true, values: {} }],
+        })
+        await expect(
+            api.saveAgentConfig({ driver: 'codex', values: { 'codex.model': 'gpt-5.4' } })
+        ).resolves.toMatchObject({
+            agent: {
+                driver: 'codex',
+                path: '/home/user/.codex/config.toml',
+                exists: true,
+                values: { 'codex.model': 'gpt-5.4' },
+            },
+        })
+        await expect(api.restoreAgentConfig({ driver: 'codex', backupPath: '/tmp/config.bak' })).resolves.toMatchObject(
+            {
+                agent: {
+                    driver: 'codex',
+                    path: '/home/user/.codex/config.toml',
+                    exists: true,
+                    values: { 'codex.model': 'gpt-5.2' },
+                },
+            }
+        )
         await expect(api.spawnSession({ directory: '/repo', agent: 'codex' })).resolves.toMatchObject({
             type: 'success',
             session: { id: 'session-2' },
@@ -108,6 +131,9 @@ describe('createRemotePeerApiClient', () => {
             directory: '/repo',
             forceRefresh: true,
         })
+        expect(bridge.getAgentConfig).toHaveBeenCalledWith()
+        expect(bridge.saveAgentConfig).toHaveBeenCalledWith({ driver: 'codex', values: { 'codex.model': 'gpt-5.4' } })
+        expect(bridge.restoreAgentConfig).toHaveBeenCalledWith({ driver: 'codex', backupPath: '/tmp/config.bak' })
         expect(bridge.spawnSession).toHaveBeenCalledWith({ directory: '/repo', agent: 'codex' })
     })
 

@@ -6,18 +6,23 @@ import type {
     LocalSessionExportRequest,
     ModelReasoningEffort,
     PermissionMode,
+    RestoreAgentConfigRequest,
     RuntimeCapabilityRequest,
+    SaveAgentConfigRequest,
 } from '@/types/api'
 import type { ApiClientFetchSessionSnapshot, ApiClientRequest } from './client'
 import {
     browseRuntimeDirectory,
     checkRuntimePathsExists,
+    getAgentConfig,
     getRuntime,
     getRuntimeAgentAvailability,
     getRuntimeCapabilities,
     importRuntimeLocalSession,
     listRuntimeLocalSessions,
     resolveAgentLaunchConfig,
+    restoreAgentConfig,
+    saveAgentConfig,
     spawnSession,
 } from './clientRuntime'
 
@@ -34,6 +39,15 @@ export function createApiClientRuntimeMethods(
         },
         async getRuntimeAgentAvailability(input?: ListAgentAvailabilityRequest & { signal?: AbortSignal }) {
             return await getRuntimeAgentAvailability(request, input)
+        },
+        async getAgentConfig() {
+            return await getAgentConfig(request)
+        },
+        async saveAgentConfig(input: SaveAgentConfigRequest) {
+            return await saveAgentConfig(request, input)
+        },
+        async restoreAgentConfig(input: RestoreAgentConfigRequest) {
+            return await restoreAgentConfig(request, input)
         },
         async checkRuntimePathsExists(paths: string[]) {
             return await checkRuntimePathsExists(request, paths)

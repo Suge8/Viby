@@ -22,6 +22,16 @@ function createGateway(response: unknown, method: string): RpcGateway {
     )
 }
 
+function version() {
+    return {
+        status: 'supported' as const,
+        supportedVersion: '0.130.0',
+        source: 'test',
+        installedVersion: '0.130.0',
+        checkedAt: 1,
+    }
+}
+
 describe('RpcGateway browseMachineDirectory', () => {
     it('downgrades missing browse-directory handlers into a non-500 unsupported response', async () => {
         const gateway = new RpcGateway({ of: () => ({ sockets: new Map() }) } as never, new RpcRegistry())
@@ -85,6 +95,61 @@ describe('RpcGateway browseMachineDirectory', () => {
         ).resolves.toEqual({
             type: 'error',
             message: 'spawn denied',
+        })
+    })
+
+    it('validates agent config RPC payloads through shared schemas', async () => {
+        const gateway = createGateway(
+            {
+                agents: [
+                    {
+                        driver: 'codex',
+                        path: '/home/user/.codex/config.toml',
+                        exists: true,
+                        values: { 'codex.model': 'gpt-5.4' },
+                        version: version(),
+                    },
+                ],
+            },
+            'machine-1:load-agent-config-files'
+        )
+
+        await expect(gateway.loadAgentConfigFiles('machine-1')).resolves.toEqual({
+            agents: [
+                {
+                    driver: 'codex',
+                    path: '/home/user/.codex/config.toml',
+                    exists: true,
+                    values: { 'codex.model': 'gpt-5.4' },
+                    version: version(),
+                },
+            ],
+        })
+    })
+
+    it('validates restored agent config payloads through shared schemas', async () => {
+        const gateway = createGateway(
+            {
+                driver: 'codex',
+                path: '/home/user/.codex/config.toml',
+                exists: true,
+                values: { 'codex.model': 'gpt-5.2' },
+                version: version(),
+            },
+            'machine-1:restore-agent-config-file'
+        )
+
+        await expect(
+            gateway.restoreAgentConfigFile('machine-1', {
+                driver: 'codex',
+                backupPath: '/home/user/.codex/.viby-backups/config.toml.bak',
+            })
+        ).resolves.toEqual({
+            driver: 'codex',
+            path: '/home/user/.codex/config.toml',
+            exists: true,
+            values: { 'codex.model': 'gpt-5.2' },
+            version: version(),
         })
     })
 })

@@ -44,6 +44,16 @@ function readyAgentAvailability() {
     }
 }
 
+function version() {
+    return {
+        status: 'supported' as const,
+        supportedVersion: '0.130.0',
+        source: 'test',
+        installedVersion: '0.130.0',
+        checkedAt: 1,
+    }
+}
+
 describe('runtime routes', () => {
     it('returns the local runtime snapshot', async () => {
         const engine = {
@@ -313,6 +323,161 @@ describe('runtime routes', () => {
         expect(response.status).toBe(200)
         expect(await response.json()).toEqual(readyAgentAvailability())
         expect(availabilityCalls).toEqual([{ machineId: 'machine-1', directory: undefined, forceRefresh: false }])
+    })
+
+    it('loads agent config files through the local runtime owner', async () => {
+        const calls: string[] = []
+        const engine = {
+            getMachines: () => localRuntime(),
+            loadAgentConfigFiles: async (machineId: string) => {
+                calls.push(machineId)
+                return {
+                    agents: [
+                        {
+                            driver: 'codex',
+                            path: '/home/user/.codex/config.toml',
+                            exists: true,
+                            values: { 'codex.model': 'gpt-5.4' },
+                            version: version(),
+                        },
+                    ],
+                }
+            },
+        } as unknown as Partial<SyncEngine>
+
+        const app = new Hono<WebAppEnv>()
+        app.route(
+            '/api',
+            createRuntimeRoutes(() => engine as SyncEngine)
+        )
+
+        const response = await app.request('/api/runtime/agent-config')
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toEqual({
+            agents: [
+                {
+                    driver: 'codex',
+                    path: '/home/user/.codex/config.toml',
+                    exists: true,
+                    values: { 'codex.model': 'gpt-5.4' },
+                    version: version(),
+                },
+            ],
+        })
+        expect(calls).toEqual(['machine-1'])
+    })
+
+    it('saves agent config files through the local runtime owner', async () => {
+        const calls: Array<Record<string, unknown>> = []
+        const engine = {
+            getMachines: () => localRuntime(),
+            saveAgentConfigFile: async (machineId: string, request: Record<string, unknown>) => {
+                calls.push({ machineId, ...request })
+                return {
+                    driver: 'codex',
+                    path: '/home/user/.codex/config.toml',
+                    exists: true,
+                    values: request.values,
+                    version: version(),
+                }
+            },
+        } as unknown as Partial<SyncEngine>
+
+        const app = new Hono<WebAppEnv>()
+        app.route(
+            '/api',
+            createRuntimeRoutes(() => engine as SyncEngine)
+        )
+
+        const response = await app.request('/api/runtime/agent-config/codex', {
+            method: 'PUT',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ driver: 'codex', values: { 'codex.model': 'gpt-5.4' } }),
+        })
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toEqual({
+            agent: {
+                driver: 'codex',
+                path: '/home/user/.codex/config.toml',
+                exists: true,
+                values: { 'codex.model': 'gpt-5.4' },
+                version: version(),
+            },
+        })
+        expect(calls).toEqual([{ machineId: 'machine-1', driver: 'codex', values: { 'codex.model': 'gpt-5.4' } }])
+    })
+
+    it('restores agent config backups through the local runtime owner', async () => {
+        const calls: Array<Record<string, unknown>> = []
+        const engine = {
+            getMachines: () => localRuntime(),
+            restoreAgentConfigFile: async (machineId: string, request: Record<string, unknown>) => {
+                calls.push({ machineId, ...request })
+                return {
+                    driver: 'codex',
+                    path: '/home/user/.codex/config.toml',
+                    exists: true,
+                    values: { 'codex.model': 'gpt-5.2' },
+                    version: version(),
+                }
+            },
+        } as unknown as Partial<SyncEngine>
+
+        const app = new Hono<WebAppEnv>()
+        app.route(
+            '/api',
+            createRuntimeRoutes(() => engine as SyncEngine)
+        )
+
+        const response = await app.request('/api/runtime/agent-config/codex/restore', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ driver: 'codex', backupPath: '/home/user/.codex/.viby-backups/config.toml.bak' }),
+        })
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toEqual({
+            agent: {
+                driver: 'codex',
+                path: '/home/user/.codex/config.toml',
+                exists: true,
+                values: { 'codex.model': 'gpt-5.2' },
+                version: version(),
+            },
+        })
+        expect(calls).toEqual([
+            {
+                machineId: 'machine-1',
+                driver: 'codex',
+                backupPath: '/home/user/.codex/.viby-backups/config.toml.bak',
+            },
+        ])
+    })
+
+    it('rejects mismatched agent config save drivers', async () => {
+        const engine = {
+            getMachines: () => localRuntime(),
+            saveAgentConfigFile: async () => {
+                throw new Error('should not save')
+            },
+        } as unknown as Partial<SyncEngine>
+
+        const app = new Hono<WebAppEnv>()
+        app.route(
+            '/api',
+            createRuntimeRoutes(() => engine as SyncEngine)
+        )
+
+        const response = await app.request('/api/runtime/agent-config/codex', {
+            method: 'PUT',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ driver: 'claude', values: { 'claude.model': 'sonnet' } }),
+        })
+
+        expect(response.status).toBe(400)
+        expect(await response.json()).toEqual({ error: 'Driver mismatch' })
     })
 
     it('rejects spawn when the selected agent is unavailable on this machine', async () => {

@@ -49,6 +49,9 @@ export class ApiMachineClient {
         listLocalSessions,
         exportLocalSession,
         listAgentAvailability,
+        loadAgentConfigFiles,
+        saveAgentConfigFile,
+        restoreAgentConfigFile,
         stopSession,
         requestShutdown,
     }: MachineRpcHandlers): void {
@@ -57,6 +60,9 @@ export class ApiMachineClient {
             listLocalSessions,
             exportLocalSession,
             listAgentAvailability,
+            loadAgentConfigFiles,
+            saveAgentConfigFile,
+            restoreAgentConfigFile,
             stopSession,
             requestShutdown,
         })

@@ -1,13 +1,18 @@
 import type {
     AgentAvailabilityResponse,
+    AgentConfigResponse,
     ListAgentAvailabilityRequest,
     LocalSessionCatalog,
     LocalSessionExportRequest,
     MachineDirectoryResponse,
     ResolveAgentLaunchConfigRequest,
     ResolveAgentLaunchConfigResponse,
+    RestoreAgentConfigRequest,
+    RestoreAgentConfigResponse,
     RuntimeCapabilityRequest,
     RuntimeCapabilityResponse,
+    SaveAgentConfigRequest,
+    SaveAgentConfigResponse,
     Session,
 } from '@viby/protocol/types'
 import type { LocalHubPairingRequestJson } from './localHubPairingRequest'
@@ -39,6 +44,33 @@ export async function getRuntimeAgentAvailability(
     if (input.drivers?.length) params.set('drivers', input.drivers.join(','))
     const query = params.toString()
     return await requestJson<AgentAvailabilityResponse>(`/api/runtime/agent-availability${query ? `?${query}` : ''}`)
+}
+
+export async function getAgentConfig(requestJson: LocalHubPairingRequestJson): Promise<AgentConfigResponse> {
+    return await requestJson<AgentConfigResponse>('/api/runtime/agent-config')
+}
+
+export async function saveAgentConfig(
+    requestJson: LocalHubPairingRequestJson,
+    input: SaveAgentConfigRequest
+): Promise<SaveAgentConfigResponse> {
+    return await requestJson<SaveAgentConfigResponse>(`/api/runtime/agent-config/${encodeURIComponent(input.driver)}`, {
+        method: 'PUT',
+        body: JSON.stringify(input),
+    })
+}
+
+export async function restoreAgentConfig(
+    requestJson: LocalHubPairingRequestJson,
+    input: RestoreAgentConfigRequest
+): Promise<RestoreAgentConfigResponse> {
+    return await requestJson<RestoreAgentConfigResponse>(
+        `/api/runtime/agent-config/${encodeURIComponent(input.driver)}/restore`,
+        {
+            method: 'POST',
+            body: JSON.stringify(input),
+        }
+    )
 }
 
 export async function checkRuntimePathsExists(

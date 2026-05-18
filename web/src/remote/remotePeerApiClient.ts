@@ -22,9 +22,11 @@ import type {
     PermissionMode,
     PushSubscriptionPayload,
     PushUnsubscribePayload,
+    RestoreAgentConfigRequest,
     RuntimeCapabilityRequest,
     RuntimeCapabilityResponse,
     RuntimeResponse,
+    SaveAgentConfigRequest,
     Session,
     SessionRecoveryPage,
     SessionsResponse,
@@ -204,6 +206,15 @@ export function createRemotePeerApiClient(options: RemoteApiOptions): ApiClient 
                 }),
                 input?.signal
             )
+        },
+        async getAgentConfig(input?: { signal?: AbortSignal }) {
+            return await withAbortSignal(options.bridge.getAgentConfig(), input?.signal)
+        },
+        async saveAgentConfig(input: SaveAgentConfigRequest) {
+            return await options.bridge.saveAgentConfig(input)
+        },
+        async restoreAgentConfig(input: RestoreAgentConfigRequest) {
+            return await options.bridge.restoreAgentConfig(input)
         },
         async checkRuntimePathsExists(paths: string[]): Promise<{ exists: Record<string, boolean> }> {
             return await options.bridge.checkRuntimePathsExists({ paths })

@@ -1,5 +1,12 @@
 import { z } from 'zod'
 import { AgentAvailabilityResponseSchema, ListAgentAvailabilityRequestSchema } from '../agentAvailability'
+import {
+    AgentConfigResponseSchema,
+    RestoreAgentConfigRequestSchema,
+    RestoreAgentConfigResponseSchema,
+    SaveAgentConfigRequestSchema,
+    SaveAgentConfigResponseSchema,
+} from '../agentConfig'
 import { ResolveAgentLaunchConfigRequestSchema, ResolveAgentLaunchConfigResponseSchema } from '../agentLaunchConfig'
 import { MachineDirectoryResponseSchema } from '../machineDirectory'
 import { RuntimeCapabilityRequestSchema, RuntimeCapabilityResponseSchema } from '../runtimeCapability'
@@ -58,8 +65,6 @@ import {
     PairingPeerUploadStartRequestSchema,
 } from './pairingPeerTerminalSchema'
 import { PairingErrorPayloadSchema } from './pairingSchemaBase'
-
-export { type PairingPeerMethod, PairingPeerMethodSchema } from './pairingPeerMethod'
 
 export const PairingRemoteSessionSummarySchema = z.object({
     id: z.string().min(1),
@@ -152,6 +157,15 @@ export type PairingPeerRuntimeCapabilityResult = z.infer<typeof PairingPeerRunti
 export const PairingPeerAgentAvailabilityResultSchema = AgentAvailabilityResponseSchema
 export type PairingPeerAgentAvailabilityResult = z.infer<typeof PairingPeerAgentAvailabilityResultSchema>
 
+export const PairingPeerAgentConfigResultSchema = AgentConfigResponseSchema
+export type PairingPeerAgentConfigResult = z.infer<typeof PairingPeerAgentConfigResultSchema>
+
+export const PairingPeerSaveAgentConfigResultSchema = SaveAgentConfigResponseSchema
+export type PairingPeerSaveAgentConfigResult = z.infer<typeof PairingPeerSaveAgentConfigResultSchema>
+
+export const PairingPeerRestoreAgentConfigResultSchema = RestoreAgentConfigResponseSchema
+export type PairingPeerRestoreAgentConfigResult = z.infer<typeof PairingPeerRestoreAgentConfigResultSchema>
+
 export const PairingPeerAgentLaunchConfigResultSchema = ResolveAgentLaunchConfigResponseSchema
 export type PairingPeerAgentLaunchConfigResult = z.infer<typeof PairingPeerAgentLaunchConfigResultSchema>
 
@@ -191,6 +205,18 @@ export const PairingPeerAgentAvailabilityRequestSchema = createOptionalPairingPe
     'runtime.agent-availability',
     ListAgentAvailabilityRequestSchema
 )
+export const PairingPeerAgentConfigRequestSchema = createOptionalPairingPeerRequestSchema(
+    'runtime.agent-config',
+    z.object({})
+)
+export const PairingPeerSaveAgentConfigRequestSchema = createPairingPeerRequestSchema(
+    'runtime.save-agent-config',
+    SaveAgentConfigRequestSchema
+)
+export const PairingPeerRestoreAgentConfigRequestSchema = createPairingPeerRequestSchema(
+    'runtime.restore-agent-config',
+    RestoreAgentConfigRequestSchema
+)
 export const PairingPeerPathsExistRequestSchema = createPairingPeerRequestSchema(
     'runtime.paths-exists',
     PairingPeerPathsExistParamsSchema
@@ -208,7 +234,7 @@ export const PairingPeerSpawnSessionRequestSchema = createPairingPeerRequestSche
     PairingPeerSpawnSessionParamsSchema
 )
 
-export const PairingPeerRequestSchema = z.discriminatedUnion('method', [
+const PairingPeerRequestSchemas = [
     PairingPeerListSessionsRequestSchema,
     PairingPeerOpenSessionRequestSchema,
     PairingPeerResumeSessionRequestSchema,
@@ -231,6 +257,9 @@ export const PairingPeerRequestSchema = z.discriminatedUnion('method', [
     PairingPeerDenyPermissionRequestSchema,
     PairingPeerRuntimeCapabilityRequestSchema,
     PairingPeerAgentAvailabilityRequestSchema,
+    PairingPeerAgentConfigRequestSchema,
+    PairingPeerSaveAgentConfigRequestSchema,
+    PairingPeerRestoreAgentConfigRequestSchema,
     PairingPeerPathsExistRequestSchema,
     PairingPeerBrowseDirectoryRequestSchema,
     PairingPeerAgentLaunchConfigRequestSchema,
@@ -254,8 +283,14 @@ export const PairingPeerRequestSchema = z.discriminatedUnion('method', [
     PairingPeerPushVapidRequestSchema,
     PairingPeerPushSubscribeRequestSchema,
     PairingPeerPushUnsubscribeRequestSchema,
-])
+] as const
+
+export const PairingPeerRequestSchema = z.discriminatedUnion('method', PairingPeerRequestSchemas)
 export type PairingPeerRequest = z.infer<typeof PairingPeerRequestSchema>
+export type PairingPeerMethod = PairingPeerRequest['method']
+
+const PairingPeerMethodValues = PairingPeerRequestSchemas.map((schema) => schema.shape.method.value)
+export const PairingPeerMethodSchema = z.enum(PairingPeerMethodValues as [PairingPeerMethod, ...PairingPeerMethod[]])
 
 export const PairingPeerResponseSuccessSchema = z.object({
     kind: z.literal('response'),
