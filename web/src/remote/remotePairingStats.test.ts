@@ -45,7 +45,8 @@ describe('remotePairingStats', () => {
                         { id: 'remote', timestamp: 1, type: 'remote-candidate', candidateType: 'srflx' } as RTCStats,
                     ],
                 ])
-            )
+            ),
+            123
         )
 
         expect(stats).toEqual({
@@ -53,6 +54,8 @@ describe('remotePairingStats', () => {
             localCandidateType: 'host',
             remoteCandidateType: 'srflx',
             currentRoundTripTimeMs: 18,
+            previousTransport: null,
+            sampledAt: 123,
         })
     })
 
@@ -81,7 +84,8 @@ describe('remotePairingStats', () => {
                         { id: 'remote', timestamp: 1, type: 'remote-candidate', candidateType: 'srflx' } as RTCStats,
                     ],
                 ])
-            )
+            ),
+            123
         )
 
         expect(stats.transport).toBe('relay')
@@ -113,7 +117,8 @@ describe('remotePairingStats', () => {
                     ['local', { id: 'local', timestamp: 1, type: 'local-candidate' } as RTCStats],
                     ['remote', { id: 'remote', timestamp: 1, type: 'remote-candidate' } as RTCStats],
                 ])
-            )
+            ),
+            123
         )
 
         expect(stats).toEqual({
@@ -121,6 +126,8 @@ describe('remotePairingStats', () => {
             localCandidateType: null,
             remoteCandidateType: null,
             currentRoundTripTimeMs: null,
+            previousTransport: null,
+            sampledAt: 123,
         })
     })
 })

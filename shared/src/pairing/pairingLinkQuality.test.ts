@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'bun:test'
-import { buildPairingDeviceLinkStatus } from './pairingLinkQuality'
+import {
+    buildPairingDeviceLinkStatus,
+    classifyPairingLinkQuality,
+    isPairingLinkSampleFresh,
+} from './pairingLinkQuality'
+import { PAIRING_LINK_SAMPLE_STALE_MS } from './pairingTiming'
 
 describe('buildPairingDeviceLinkStatus', () => {
     it('reports direct transport with latency when bridge is ready and stats land direct', () => {
@@ -13,6 +18,27 @@ describe('buildPairingDeviceLinkStatus', () => {
                 },
             })
         ).toEqual({ phase: 'direct', title: '点对点直连 · 28ms', tone: 'success', latencyMs: 28 })
+    })
+
+    it('hides stale latency instead of freezing an old number', () => {
+        expect(isPairingLinkSampleFresh(100, 100 + PAIRING_LINK_SAMPLE_STALE_MS + 1)).toBe(false)
+        expect(
+            classifyPairingLinkQuality({
+                transport: 'direct',
+                currentRoundTripTimeMs: 28,
+                sampledAt: 1,
+            }).roundTripTimeMs
+        ).toBeNull()
+        expect(
+            buildPairingDeviceLinkStatus({
+                channel: 'scan',
+                active: true,
+                bridge: {
+                    phase: 'ready',
+                    stats: { transport: 'direct', currentRoundTripTimeMs: 28, sampledAt: 1 },
+                },
+            })
+        ).toEqual({ phase: 'direct', title: '点对点直连', tone: 'success', latencyMs: null })
     })
 
     it('reports relay transport with latency when stats land on TURN', () => {

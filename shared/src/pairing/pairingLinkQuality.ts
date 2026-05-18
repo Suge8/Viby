@@ -1,3 +1,5 @@
+import { PAIRING_LINK_SAMPLE_STALE_MS } from './pairingTiming'
+
 export type PairingLinkTransport = 'direct' | 'relay' | 'unknown'
 export type PairingLinkTone = 'success' | 'warning' | 'neutral'
 export type PairingDeviceLinkTone = PairingLinkTone | 'danger'
@@ -22,6 +24,7 @@ const STEADY_RTT_MS = 180
 export interface PairingLinkQualityInput {
     transport: PairingLinkTransport
     currentRoundTripTimeMs: number | null
+    sampledAt?: number | null
     /**
      * Last confirmed transport (direct/relay). When the current transport is
      * `unknown` mid-renegotiation, the UI uses this to label the in-flight
@@ -99,6 +102,16 @@ function normalizeRoundTripTime(value: number | null): number | null {
     return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.round(value)) : null
 }
 
+export function isPairingLinkSampleFresh(sampledAt: number | null | undefined, now = Date.now()): boolean {
+    return typeof sampledAt !== 'number' || now - sampledAt <= PAIRING_LINK_SAMPLE_STALE_MS
+}
+
+function normalizeFreshRoundTripTime(input: PairingLinkQualityInput): number | null {
+    const roundTripTimeMs = normalizeRoundTripTime(input.currentRoundTripTimeMs)
+    if (roundTripTimeMs === null) return null
+    return isPairingLinkSampleFresh(input.sampledAt) ? roundTripTimeMs : null
+}
+
 function classifyLatency(roundTripTimeMs: number | null): PairingLinkLatencyTier {
     if (roundTripTimeMs === null) {
         return 'unknown'
@@ -124,7 +137,7 @@ function classifyTone(transport: PairingLinkTransport, latencyTier: PairingLinkL
 }
 
 export function classifyPairingLinkQuality(input: PairingLinkQualityInput): PairingLinkQuality {
-    const roundTripTimeMs = normalizeRoundTripTime(input.currentRoundTripTimeMs)
+    const roundTripTimeMs = normalizeFreshRoundTripTime(input)
     const latencyTier = classifyLatency(roundTripTimeMs)
 
     return {

@@ -54,6 +54,7 @@ function adaptBridgeInput(bridge: DeviceLinkSnapshot): PairingDeviceLinkBridgeIn
                   transport: bridge.stats.transport,
                   currentRoundTripTimeMs: bridge.stats.currentRoundTripTimeMs,
                   previousTransport: bridge.stats.previousTransport ?? null,
+                  sampledAt: bridge.stats.sampledAt ?? null,
               }
             : null,
     }

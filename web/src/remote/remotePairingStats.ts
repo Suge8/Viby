@@ -7,9 +7,14 @@ export type RemotePeerTransportStats = {
     localCandidateType: string | null
     remoteCandidateType: string | null
     currentRoundTripTimeMs: number | null
+    previousTransport?: 'direct' | 'relay' | null
+    sampledAt?: number | null
 }
 
-export async function readRemotePeerTransportStats(peer: RTCPeerConnection): Promise<RemotePeerTransportStats> {
+export async function readRemotePeerTransportStats(
+    peer: RTCPeerConnection,
+    sampledAt = Date.now()
+): Promise<RemotePeerTransportStats> {
     const report = await peer.getStats()
     const selected = resolvePairingSelectedCandidatePairStats(report)
 
@@ -19,6 +24,8 @@ export async function readRemotePeerTransportStats(peer: RTCPeerConnection): Pro
             localCandidateType: null,
             remoteCandidateType: null,
             currentRoundTripTimeMs: null,
+            previousTransport: null,
+            sampledAt,
         }
     }
 
@@ -30,5 +37,7 @@ export async function readRemotePeerTransportStats(peer: RTCPeerConnection): Pro
             typeof selected.pair.currentRoundTripTime === 'number'
                 ? Math.round(selected.pair.currentRoundTripTime * 1000)
                 : null,
+        previousTransport: null,
+        sampledAt,
     }
 }

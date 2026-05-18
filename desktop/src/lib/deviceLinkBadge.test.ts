@@ -23,7 +23,7 @@ function bridgeState(overrides: Partial<PairingBridgeState>): PairingBridgeState
         message: null,
         pairing: {
             id: 'p-1',
-            state: 'connected',
+            state: 'active',
             createdAt: 1,
             updatedAt: 1,
             expiresAt: 9_999,
@@ -88,6 +88,27 @@ describe('buildDeviceLinkStatus', () => {
             title: '点对点直连 · 28ms',
             tone: 'success',
             latencyMs: 28,
+        })
+    })
+
+    it('does not keep showing an expired latency sample', () => {
+        const snapshot = buildDeviceLinkSnapshot(
+            bridgeState({
+                stats: {
+                    transport: 'direct',
+                    localCandidateType: 'host',
+                    remoteCandidateType: 'srflx',
+                    currentRoundTripTimeMs: 5,
+                    sampledAt: 1,
+                    restartCount: 0,
+                },
+            })
+        )
+        expect(buildDeviceLinkStatus(pairingDevice(), snapshot)).toEqual({
+            phase: 'direct',
+            title: '点对点直连',
+            tone: 'success',
+            latencyMs: null,
         })
     })
 

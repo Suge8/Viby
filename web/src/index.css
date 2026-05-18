@@ -12,6 +12,8 @@
     --app-interactive-request-max-width: 30rem;
     --app-interactive-request-max-height: min(68vh, 34rem);
     --app-interactive-request-shadow: 0 20px 48px rgba(15, 23, 42, 0.22);
+    --app-remote-link-badge-mobile-bottom: 4.75rem;
+    --app-remote-link-badge-max-width: min(calc(100vw - 2rem), 14rem);
 }
 
 .interactive-request-owner-shell {
@@ -59,6 +61,67 @@ body {
     inset: 0;
     z-index: 70;
     pointer-events: none;
+}
+
+.remote-pairing-link-badge {
+    position: absolute;
+    right: calc(var(--app-safe-area-inset-right) + var(--app-overlay-edge-offset));
+    bottom: calc(var(--app-safe-area-inset-bottom) + var(--app-remote-link-badge-mobile-bottom));
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-height: 2.25rem;
+    max-width: var(--app-remote-link-badge-max-width);
+    padding: 0.42rem 0.65rem;
+    border: 1px solid var(--ds-border-default);
+    border-radius: var(--ds-radius-pill);
+    background: color-mix(in srgb, var(--ds-panel-strong) 84%, transparent);
+    box-shadow: var(--ds-shadow-soft);
+    color: var(--ds-text-primary);
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1;
+    pointer-events: none;
+    -webkit-backdrop-filter: blur(18px);
+    backdrop-filter: blur(18px);
+}
+
+.remote-pairing-link-badge-dot {
+    width: 0.48rem;
+    height: 0.48rem;
+    flex: 0 0 auto;
+    border-radius: var(--ds-radius-pill);
+    background: var(--ds-text-muted);
+    box-shadow: 0 0 0 0.22rem color-mix(in srgb, var(--ds-text-muted) 13%, transparent);
+}
+
+.remote-pairing-link-badge.is-success .remote-pairing-link-badge-dot {
+    background: var(--ds-success);
+    box-shadow: 0 0 0 0.22rem var(--ds-success-soft);
+}
+
+.remote-pairing-link-badge.is-warning .remote-pairing-link-badge-dot {
+    background: var(--ds-warning);
+    box-shadow: 0 0 0 0.22rem var(--ds-warning-soft);
+}
+
+.remote-pairing-link-badge-label,
+.remote-pairing-link-badge-latency {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.remote-pairing-link-badge-latency {
+    color: var(--ds-text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+@media (min-width: 768px) {
+    .remote-pairing-link-badge {
+        bottom: calc(var(--app-safe-area-inset-bottom) + var(--app-overlay-edge-offset));
+    }
 }
 
 @media (hover: hover) and (pointer: fine) {
