@@ -10,13 +10,7 @@
     z-index: 0;
     pointer-events: none;
     content: "";
-    background:
-        var(--ds-canvas-ambient), linear-gradient(var(--ds-native-grid) 1px, transparent 1px),
-        linear-gradient(90deg, var(--ds-native-grid) 1px, transparent 1px);
-    background-size:
-        auto,
-        72px 72px,
-        72px 72px;
+    background: var(--ds-canvas-ambient);
     opacity: 0.82;
 }
 
@@ -94,23 +88,6 @@
                 color-mix(in srgb, var(--ds-native-sidebar) 88%, var(--ds-canvas))
             );
         box-shadow: 14px 0 44px rgba(31, 27, 20, 0.06);
-    }
-
-    .ds-sessions-list-pane::before {
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-        content: "";
-        background:
-            linear-gradient(var(--ds-native-grid) 1px, transparent 1px),
-            linear-gradient(90deg, var(--ds-native-grid) 1px, transparent 1px);
-        background-size: 64px 64px;
-        opacity: 0.42;
-    }
-
-    .ds-sessions-list-pane > * {
-        position: relative;
-        z-index: 1;
     }
 
     .ds-sessions-shell-header {

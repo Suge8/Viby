@@ -325,7 +325,6 @@ export default {
     'settings.about.description': '查看应用版本与协议兼容信息。',
     'settings.about.appVersion': '应用版本',
     'settings.about.protocolVersion': '协议版本',
-
     // Misc
     'misc.collaborationMode': '执行方式',
     'misc.permissionMode': '权限模式',

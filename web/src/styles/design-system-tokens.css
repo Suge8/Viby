@@ -64,7 +64,6 @@
         radial-gradient(circle at 14% 92%, rgba(35, 165, 90, 0.08), transparent 34%);
     --ds-native-sidebar: #f3f0ea;
     --ds-native-surface-soft: #f7f4ee;
-    --ds-native-grid: rgba(31, 27, 20, 0.035);
     --ds-native-separator: rgba(31, 27, 20, 0.1);
     --ds-native-shadow: 0 18px 56px rgba(31, 27, 20, 0.08);
     --ds-native-shadow-strong: 0 28px 84px rgba(29, 24, 18, 0.14);
@@ -177,7 +176,6 @@
         radial-gradient(circle at 14% 92%, rgba(80, 185, 123, 0.1), transparent 34%);
     --ds-native-sidebar: #181914;
     --ds-native-surface-soft: #1a1c17;
-    --ds-native-grid: rgba(244, 241, 233, 0.045);
     --ds-native-separator: rgba(244, 241, 233, 0.1);
     --ds-native-shadow: 0 22px 70px rgba(0, 0, 0, 0.34);
     --ds-native-shadow-strong: 0 36px 110px rgba(0, 0, 0, 0.44);
