@@ -29,6 +29,7 @@ README 只保留产品入口；复杂边界和运行约束统一收口到这里�
 - `docs/development/web-boundaries.md`：Web/PWA 开发边界
 - `docs/development/web-native-feel.md`：Web 原生质感视觉 owner 与验证边界
 - `docs/development/pwa-install.md`：PWA 安装来源、平台提示矩阵与 owner
+- `docs/development/agent-config-studio.md`：Agent 配置可视化、真实文件写入与验证 owner
 - `docs/development/desktop-ui-shell.md`：Desktop 入口 UI 壳层、交互主路径与视觉 owner
 - `docs/development/hub-owners.md`：Hub owner 与 durable mutation 边界
 - `docs/development/cli-runtime-boundaries.md`：CLI runtime、runner、resume token 边界

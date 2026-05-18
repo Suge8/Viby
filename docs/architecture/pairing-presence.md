@@ -9,7 +9,7 @@
 - `pairingId` / `hostToken`（broker session）
 - desktop persistence 条目
 - `PairingBridgeController` 实例
-- hub `device_auth_devices` 一行
+- 可选 hub `device_auth_devices` 元数据行；UI 不等待这行存在才承认 live scan bridge
 
 ## 当前事实源
 
@@ -19,6 +19,8 @@
 - `scan`：desktop `usePairingBridges` 的 bridge phase；只有 `phase='ready'` 算在线。
 
 Hub 只保存 scan 设备元数据，不再维护 scan 在线状态。`pairing:<id>` 即使出现在 Hub presence 里也会被忽略。
+
+Desktop 设备列表投影先合并 Hub rows，再从 persisted approved pairings 合成缺失的 `pairing:<id>` scan row。这样扫码设备 bridge 已 ready、但 Hub 轮询尚未返回 scan row 时，连接页仍能实时显示正确在线数。
 
 ## 数据契约
 
@@ -63,11 +65,12 @@ link/local active ⇔ device.active && revokedAt === null
 Device popover 合并两份事实：
 
 - Hub `device_auth_devices`：设备列表、名称、平台、link/local active。
-- `usePairingBridges().deviceLinks`：scan 设备在线与链路质量。
+- Desktop persisted pairings：缺失 scan row 的兜底元数据。
+- `usePairingBridges().deviceLinks`：scan 设备在线与链路质量；route 状态事件驱动更新，RTT 只显示带 `sampledAt` 且未过期的观测样本。
 
 展示规则：
 
-- `ready` + direct/relay stats → “点对点直连/安全中转 + 延迟”
+- `ready` + direct/relay stats → “点对点直连/安全中转 + 延迟”；RTT 样本过期时保留 transport，隐藏旧延迟数字。
 - `connecting` → “正在握手”
 - `fatal` → “连接中断”
 - 没有 bridge ready 的 scan row → 不计入在线数量

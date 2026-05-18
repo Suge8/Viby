@@ -6,6 +6,7 @@
 
 - app 可见 loading owner 只认单一 surface：无内容冷启动时由 boot shell 承担；已有 retained content 时只显示顶部 compact runtime notice
 - Remote pairing UI 只认 `hydrating / first-pairing / running / fatal` 外层状态；retained-ready 存在时刷新/前台恢复必须保留 workspace shell + compact reconnect notice，禁止回全屏 boot。
+- `/p/<id>` 是 broker boot / handoff path，不是 Web workspace route；remote ready bridge 在该路径上只能显示 pairing handoff screen 并触发软跳转，只有 URL 到达 `/sessions?remote=1` 后才允许挂 `RemotePairingReadyShell`，避免 workspace router 暴露 `not found`。
 - route / chat / files / terminal 继续走 interaction-driven lazy
 - `/sessions` 默认入口壳不得继续走可见 lazy fallback；主入口壳应常驻首包或等价 eager path，lazy 留给 detail / files / terminal 等次级路由
 - post-login workspace route 只认 `/sessions` 单一 shell owner；`new / settings / :sessionId / files / file / terminal` 必须全部挂在这条壳层内，禁止再把设置页之类静态工作区 surface 挂回 root-level 独立页面
@@ -94,6 +95,7 @@
 - PWA install 提示只认 `InstallPrompt + usePWAInstall` owner；平台/来源矩阵事实源见 `docs/development/pwa-install.md`。iOS/iPadOS 不等待 `beforeinstallprompt`，只能显示轻量自定义引导并提示用户走 Safari/系统分享菜单“添加到主屏幕”；LAN HTTP 只能显示快捷方式提示并明确完整提醒能力需要 HTTPS/公网/可信本地入口；remote pairing 扫码入口也必须消费同一提示 owner，禁止另做第二套安装文案或状态。
 - 设置页通知可用性只消费 `usePushNotifications`；不可用文案必须产品化，禁止暴露 service worker / dev origin 等实现细节。
 - runtime busy / restoring / update-ready / remote pairing reconnect 只允许一条顶部 compact notice owner；compact persistent notice 的 id / priority / compact 构造只认 `web/src/lib/persistentNoticePresentation.ts`，remote pairing 文案/重试/最终错误归一只认 `web/src/remote/remotePairingViewModel.ts`，`NoticeProvider` 与 `FloatingNoticeViewport` 只允许在 app root 持有，route/runtime/pairing controller 只能发布 notice，禁止再挂第二套 provider、viewport 或随机 toast 堆叠同一系统状态；浮动 notice viewport 只认 `body > #app-overlays` 的右上角 rail，移动端和桌面端不再分裂成顶部居中/右上两套位置；remote pairing 已经进入 `/sessions` 后必须保留上一条 ready `AppReadyShell`，后台回来重连只显示 compact notice，只有首次冷连接且没有 retained workspace 时才允许整页连接面；系统状态必须用 persistent notice，用户操作反馈才用 toast；toast 默认 6s 自动消失、最多保留 3 条，不参与页面布局、不推开正文；Web 页面资源更新判定只服务生产构建里的 Service Worker origin，并只认 `__APP_BUILD_ID__`，默认等于产品版本，发布/部署系统如需 commit 级更新提示必须显式注入 `VIBY_APP_BUILD_ID`，禁止用构建时间戳制造每次 build 都更新；Vite dev server / LAN HTTP / 非 SW origin 不展示页面资源更新提示，产品更新只走 Desktop updater
+- remote pairing 链路质量可在 `RemotePairingReadyShell` 里渲染一个右下角小徽章；徽章只订阅 bridge transport owner 和轻量 stats sample，不参与路由切换，不发布 notice，不复制 direct/relay/RTT 文案。展示文案、RTT 新鲜度和候选类型归一继续只消费 shared pairing link quality owner。
 - warm session placeholder / message warm snapshot 只允许作为 preload 或 retained hint；chat ready gate 继续只认 latest message snapshot 已对齐，禁止把“已有一点内容”误判成稳定首屏
 
 ## 新建会话
@@ -107,6 +109,7 @@
 - 新建会话这类关键偏好写入若遭遇 localStorage 压力，必须优先清理 `sessions/message-window/session-attention` 这类非关键 warm cache 后重试；禁止静默吞掉失败并让关键偏好与巨型缓存共用同一失败域
 - 新建会话持久化的 model / reasoning / Codex fast-mode selection 必须保留用户原始值；live launch options 若暂时不认识该值，只允许在 options owner 里把当前值显式挂回 surface，禁止在 storage load 时静默改写成默认值
 - agent 合法值只认协议层 `AGENT_FLAVORS`，禁止 Web 侧平行维护第二份枚举
+- Agent 配置页入口只放在 `/sessions/agents`，由 workspace header 图标进入；字段、默认值、路径和保存合同只消费 shared catalog + Hub `/runtime/agent-config`，Web 不直接写用户目录、不重建 provider 配置事实源
 - 新建会话的 mode toggle、recover-local picker、history continuation 入口与 agent 选择文案只认当前 locale；禁止再在 surface 内硬编码英文产品词
 - Hub 已知会话继续只认 `History / Session List`；`New Session -> Recover Local` 只服务 Hub 未导入的本地 orphan 会话；slash / autocomplete 不得再暴露 provider-native `/resume` 产品入口
 - recover-local 只认 agent-first scan owner：用户先选单个 agent，再由同一条 `driver` 请求链扫描该 provider；禁止恢复“先扫全部 provider、前端再过滤”的第二条控制链
@@ -152,6 +155,7 @@
 - Codex Plan Mode 完成后的 plan→execute 交互也只认同一条 chat-level `ActiveInteractiveRequestOwner` surface：先基于最新 `<proposed_plan>` 与当前 collaboration mode 决定是否显示执行提示，再由该 owner 统一切回 Default mode 并发送实现 turn；桌面端呈现为 chat-pane 顶部 action bar，移动端呈现为 composer 上方 action bar；禁止在 transcript、composer、header 或 route 层并行维护第二套“执行这个计划”入口
 - Codex final plan proposal 只认 shared `<proposed_plan>` parser + Web `PlanProposalView` 单一 render owner：assistant text 先在 normalize owner 中投影成 native `proposed_plan` surface，禁止在 markdown renderer、ToolCard 或 route 层再平行加第二套标签解析
 - icon-only 按钮只认 `components/ui/button.tsx` 的 icon size owner 与 `components/ui/iconButtonStyles.ts` 的共享 surface owner；禁止在页面组件里并行维护第二套 `h/w/rounded/border/bg/shadow` 规则
+- async action pending 只认 `components/ui/button.tsx` / `plain-button.tsx` 的 primitive owner：promise-returning `onClick` 必须自动进入 `aria-busy + disabled + spinner` 并抑制重复点击；页面组件只允许传显式 `pending` 覆盖，不得各自补 guard patch 或本地双击锁
 - session list 当前选中卡片的视觉强调只认 token owner：border / shadow / theme adaptation 必须继续走 design tokens（当前为 `--app-session-selected-*`），禁止在 card 组件或页面组件里散落第二套 magic border/ring 语义
 - 卡片式 disclosure trigger 的对齐、chevron 视觉中心与展开动效只认 `components/ui/DisclosureCardSection.tsx` + shared interactive-card / collapsible owner；禁止在页面组件里各自手调第二套 `items-baseline / translate / duration`
 - session detail、message window、local notices 不并行维护第二套状态机

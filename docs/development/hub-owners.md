@@ -35,6 +35,7 @@
 - 旧的 runner-managed Copilot 随机 runtime handle 只允许在 `storeSchemaMigrationSupport` 里一次性清理；`resumeSession()` 主链不得长期保留第二条 legacy 兼容分支
 - runtime capability read-model 只认 `hub/src/runtime/runtimeCapabilityCache.ts`：scope = `machineId + directory`，snapshot 同时表达 availability、per-agent launch config、detected/expires、per-agent refreshing/error；route/service 不得绕过它直连 CLI RPC 做第二份状态
 - Hub `/runtime/capabilities` 是 Desktop/Web 统一读取入口；旧 availability / launch-config route 只能作为同一 cache owner 的投影，不得另跑检测或本地推导 provider / 目录配置
+- Hub `/runtime/agent-config` 是 Desktop/Web 统一 agent 配置入口；Hub 只校验 shared schema 并转发 CLI runtime RPC，禁止在 Hub 复制 provider config 路径、默认值或文件写入逻辑
 - Hub runtime capability cache 必须 stale-while-revalidate：有旧 snapshot 先返回，missing/expired 后台 refresh；同 machine + directory + driver + depth pending request 必须 dedupe；force refresh 不得复用已在途的 non-force 检测，必须排队穿透底层 runtime cache；per-agent refresh 独立，慢 Pi 不得阻塞其他 provider 更新
 - spawn-time 最终真实性只认 Hub -> CLI runtime owner：`POST /runtime/spawn` 必须通过 runtime capability cache force 校验 selected agent availability、selected model、reasoning/thinking option 与 auth/config；错误只暴露 code/产品文案，不返回 CLI raw reason 给 UI
 - **spawn 单一控制点**：Hub spawn API (`POST /runtime/spawn`) 必须先过 runtime capability force 校验，再在返回前调用 `ensureSessionDriver()` 确保 `driver` 和 `model` 已设置；这是唯一能保证新 session metadata 完整性的控制点
