@@ -7,6 +7,22 @@ export type {
     ListAgentAvailabilityRequest,
 } from './agentAvailability'
 export type {
+    AgentConfigBackup,
+    AgentConfigControl,
+    AgentConfigDriver,
+    AgentConfigFieldDefinition,
+    AgentConfigFieldValue,
+    AgentConfigFileStamp,
+    AgentConfigFileState,
+    AgentConfigResponse,
+    AgentConfigVersionState,
+    AgentConfigVersionStatus,
+    RestoreAgentConfigRequest,
+    RestoreAgentConfigResponse,
+    SaveAgentConfigRequest,
+    SaveAgentConfigResponse,
+} from './agentConfig'
+export type {
     AgentLaunchConfig,
     AgentLaunchConfigErrorCode,
     AgentModelCapability,

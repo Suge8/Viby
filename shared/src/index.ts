@@ -1,4 +1,5 @@
 export * from './agentAvailability'
+export * from './agentConfig'
 export * from './agentLaunchConfig'
 export * from './attachmentUpload'
 export * from './commandCapabilities'

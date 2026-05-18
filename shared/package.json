@@ -21,6 +21,7 @@
         "./runtimeDefaults": "./src/runtimeDefaults.ts",
         "./modes": "./src/modes.ts",
         "./agentLaunchConfig": "./src/agentLaunchConfig.ts",
+        "./agentConfig": "./src/agentConfig.ts",
         "./runtimeStatus": "./src/runtimeStatus.ts",
         "./utils": "./src/utils.ts",
         "./schemas": "./src/schemas.ts",
