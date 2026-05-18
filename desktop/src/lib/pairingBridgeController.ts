@@ -1,4 +1,13 @@
-import { createPairingTransport, type PairingTransportHandle } from '@viby/protocol/pairing'
+import {
+    createPairingTransport,
+    createPairingTunnelRouteState,
+    PAIRING_STATS_POLL_INTERVAL_MS,
+    type PairingTransportHandle,
+    type PairingTransportState,
+    type PairingTunnelRouteEvent,
+    type PairingTunnelRouteState,
+    reducePairingTunnelRoute,
+} from '@viby/protocol/pairing'
 import type {
     DesktopPairingSession,
     HubRuntimeStatus,
@@ -6,58 +15,19 @@ import type {
     PairingBridgeStats,
     PairingIceServer,
 } from '@/types'
-import { LocalHubPairingClient } from './localHubPairingClient'
+import { reprobeDesktopDirect } from './desktopDirectReprobe'
+import {
+    buildDesktopTunnelBridgeState,
+    readDesktopTunnelDirectCandidateEvent,
+    readDesktopTunnelRouteStats,
+} from './desktopTunnelRoute'
+import { createDeferredHubClient } from './localHubPairingDeferredClient'
 import { attachPairingDataChannel, HubPausedError, isHubPausedError } from './pairingBridgeControllerSupport'
 import { startPairingBridgeStats } from './pairingBridgeStats'
+import { type PairingRelayBridgeHandle, startPairingRelayBridge } from './pairingRelayBridge'
 
 function toIceServers(servers: PairingIceServer[]): RTCIceServer[] {
     return servers.map((server) => ({ urls: server.urls, username: server.username, credential: server.credential }))
-}
-
-function bridgeStateFromTransport(options: {
-    transport: PairingTransportHandle
-    base: DesktopPairingSession
-    channelReady: boolean
-    stats: PairingBridgeStats | null
-}): PairingBridgeState {
-    const { transport, base, channelReady, stats } = options
-    const state = transport.getSnapshot()
-    if (state.kind === 'ready' && channelReady)
-        return { phase: 'ready', message: '已连接', pairing: base.pairing, stats }
-    if (state.kind === 'fatal') return { phase: 'fatal', message: state.reason, pairing: base.pairing, stats: null }
-    return {
-        phase: 'connecting',
-        message:
-            state.kind === 'ready'
-                ? '正在建立数据通道'
-                : state.attempt > 0
-                  ? `正在握手（${state.attempt}）`
-                  : '正在握手',
-        pairing: base.pairing,
-        stats,
-    }
-}
-
-function createDeferredHubClient(getStatus: () => HubRuntimeStatus | null): LocalHubPairingClient {
-    let client: LocalHubPairingClient | null = null
-    let key = ''
-    function current(): LocalHubPairingClient {
-        const status = getStatus()
-        if (!status || status.phase !== 'ready') throw new HubPausedError()
-        const nextKey = `${status.localHubUrl}|${status.cliApiToken}`
-        if (!client || nextKey !== key) {
-            client?.closeAllTerminals()
-            client = new LocalHubPairingClient({ baseUrl: status.localHubUrl, cliApiToken: status.cliApiToken })
-            key = nextKey
-        }
-        return client
-    }
-    return new Proxy({} as LocalHubPairingClient, {
-        get: (_target, property) => {
-            const value = (current() as unknown as Record<PropertyKey, unknown>)[property]
-            return typeof value === 'function' ? value.bind(current()) : value
-        },
-    })
 }
 
 export function startPairingBridge(options: {
@@ -65,10 +35,10 @@ export function startPairingBridge(options: {
     getStatus: () => HubRuntimeStatus | null
     onStateChange: (state: PairingBridgeState) => void
 }): () => void {
-    if (typeof RTCPeerConnection === 'undefined' || typeof WebSocket === 'undefined') {
+    if (typeof WebSocket === 'undefined') {
         options.onStateChange({
             phase: 'fatal',
-            message: '当前环境不支持 WebRTC。',
+            message: '当前环境不支持远程中转。',
             pairing: options.pairing.pairing,
             stats: null,
         })
@@ -76,41 +46,72 @@ export function startPairingBridge(options: {
     }
 
     let disposed = false
-    let eventStreamAbort: AbortController | null = null
     let channel: RTCDataChannel | null = null
-    let channelOpen = false
-    let channelActive = false
     let latestStats: PairingBridgeStats | null = null
     let fatalMessage: string | null = null
+    let routeState = createPairingTunnelRouteState()
+    let directState: PairingTransportState | null = null
     const client = createDeferredHubClient(options.getStatus)
     let transport: PairingTransportHandle | null = null
-    transport = createPairingTransport({
-        pairingId: options.pairing.pairing.id,
-        polite: false,
-        iceServers: toIceServers(options.pairing.iceServers),
-        getWsUrl: async () => options.pairing.wsUrl,
-        createDataChannel: true,
-        onChannel: attachChannel,
-    })
-    const stats = startPairingBridgeStats({
-        getPeer: () => {
-            if (!transport) throw new Error('pairing transport is not ready')
-            return transport.getPeer() as unknown as RTCPeerConnection
+    let relay: PairingRelayBridgeHandle | null = null
+    const directSupported = typeof RTCPeerConnection !== 'undefined'
+    if (directSupported) {
+        transport = createPairingTransport({
+            pairingId: options.pairing.pairing.id,
+            polite: false,
+            iceServers: toIceServers(options.pairing.iceServers),
+            getWsUrl: async () => options.pairing.wsUrl,
+            createDataChannel: true,
+            onChannel: attachChannel,
+        })
+        directState = transport.getSnapshot()
+    }
+    relay = startPairingRelayBridge({
+        tunnelUrl: options.pairing.tunnelUrl,
+        getClient: () => client,
+        isDisposed: () => disposed,
+        onOpen: () => {
+            commitRoute({ type: 'relay-ready', transport: 'relay-wss' })
+            maybeReprobeDirect()
         },
-        setStats: (nextStats) => {
-            latestStats = nextStats
+        onActive: () => {
+            commitRoute({ type: 'heartbeat-ack', route: 'relay' })
+            maybeReprobeDirect()
+        },
+        onClosed: () => commitRoute({ type: 'relay-lost' }),
+        reportAsyncError,
+    })
+    const stats = transport
+        ? startPairingBridgeStats({
+              getPeer: () => {
+                  if (!transport) throw new Error('pairing transport is not ready')
+                  return transport.getPeer() as unknown as RTCPeerConnection
+              },
+              setStats: (nextStats) => {
+                  latestStats = nextStats
+              },
+              reportError: reportAsyncError,
+          })
+        : null
+    const statsSampleTimer = stats
+        ? setInterval(() => void sampleDirectStats().catch(reportDirectProbeError), PAIRING_STATS_POLL_INTERVAL_MS)
+        : null
+    const unsubscribe =
+        transport?.subscribe(() => {
+            directState = transport?.getSnapshot() ?? null
+            handleTransportState()
+            void sampleDirectStats().catch(reportDirectProbeError)
             emitBridgeState()
-        },
-        reportError: reportAsyncError,
-    })
-    const unsubscribe = transport.subscribe(emitBridgeState)
+        }) ?? (() => {})
+    void sampleDirectStats().catch(reportDirectProbeError)
     emitBridgeState()
 
     return () => {
         disposed = true
+        if (statsSampleTimer) clearInterval(statsSampleTimer)
         unsubscribe()
-        stopEventStream()
-        stats.dispose()
+        relay?.dispose()
+        stats?.dispose()
         transport?.dispose()
         channel?.close()
         try {
@@ -128,8 +129,7 @@ export function startPairingBridge(options: {
 
     function attachChannel(nextChannel: RTCDataChannel): void {
         channel = nextChannel
-        channelOpen = nextChannel.readyState === 'open'
-        channelActive = false
+        commitRoute({ type: 'direct-probe-started' })
         emitBridgeState()
         attachPairingDataChannel({
             channel: nextChannel,
@@ -137,36 +137,70 @@ export function startPairingBridge(options: {
             isDisposed: () => disposed,
             onChannelOpen: () => {
                 if (channel !== nextChannel) return
-                channelOpen = true
                 emitBridgeState()
             },
             onChannelActive: () => {
                 if (channel !== nextChannel) return
-                channelActive = true
+                commitRoute({
+                    type: 'heartbeat-ack',
+                    route: 'direct',
+                    roundTripTimeMs: latestStats?.currentRoundTripTimeMs,
+                })
+                if (latestStats) commitDirectCandidateFromStats(latestStats)
+                void sampleDirectStats().catch(reportDirectProbeError)
                 emitBridgeState()
             },
             onChannelClosed: () => {
                 if (channel !== nextChannel) return
-                channelOpen = false
-                channelActive = false
-                replaceClosedChannel()
-                transport?.requestIceRestart()
+                commitRoute({ type: 'direct-failed', reason: 'closed' })
+                maybeReprobeDirect(true)
                 emitBridgeState()
             },
-            startEventStream,
-            stopEventStream,
+            startEventStream: async () => {},
+            stopEventStream: () => {},
             reportAsyncError,
         })
     }
 
-    function replaceClosedChannel(): void {
-        const peer = transport?.getPeer() as unknown as RTCPeerConnection | undefined
-        if (!peer || peer.connectionState === 'closed') return
-        attachChannel(peer.createDataChannel('control', { ordered: true }))
+    function maybeReprobeDirect(force = false): void {
+        reprobeDesktopDirect({ attachChannel, channel, force, routeState, transport })
+    }
+
+    function commitRoute(event: PairingTunnelRouteEvent): void {
+        const previous = routeState
+        routeState = reducePairingTunnelRoute(routeState, event)
+        if (routeState !== previous) emitBridgeState()
+    }
+
+    function commitDirectCandidateFromStats(stats: PairingBridgeStats): void {
+        const event =
+            routeState.directProbe === 'probing' || routeState.activeRoute === 'direct'
+                ? readDesktopTunnelDirectCandidateEvent(stats)
+                : null
+        if (event) commitRoute(event)
+    }
+
+    async function sampleDirectStats(): Promise<void> {
+        const nextStats = await stats?.sample()
+        if (nextStats) commitDirectCandidateFromStats(nextStats)
+        emitBridgeState()
+    }
+
+    function reportDirectProbeError(error: unknown): void {
+        reportAsyncError('配对直连探测失败：', error)
+    }
+
+    function handleTransportState(): void {
+        if (
+            directState?.kind !== 'fatal' ||
+            (routeState.activeRoute !== 'direct' && routeState.directProbe === 'failed')
+        )
+            return
+        commitRoute({ type: 'direct-failed', reason: directState.reason })
     }
 
     function emitBridgeState(): void {
-        if (disposed || !transport) return
+        if (disposed) return
         if (fatalMessage) {
             options.onStateChange({
                 phase: 'fatal',
@@ -177,25 +211,12 @@ export function startPairingBridge(options: {
             return
         }
         options.onStateChange(
-            bridgeStateFromTransport({
-                transport,
+            buildDesktopTunnelBridgeState({
                 base: options.pairing,
-                channelReady: channelOpen && channelActive,
-                stats: latestStats,
+                directState,
+                routeState,
+                stats: readDesktopTunnelRouteStats(routeState, latestStats),
             })
         )
-    }
-
-    async function startEventStream(activeChannel: RTCDataChannel): Promise<void> {
-        stopEventStream()
-        const abortController = new AbortController()
-        eventStreamAbort = abortController
-        const { startPairingEventStream } = await import('./pairingEventStream')
-        await startPairingEventStream(client, activeChannel, abortController)
-    }
-
-    function stopEventStream(): void {
-        eventStreamAbort?.abort()
-        eventStreamAbort = null
     }
 }

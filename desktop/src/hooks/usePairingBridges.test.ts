@@ -9,7 +9,7 @@ function makeBridgeState(pairingId: string, phase: PairingBridgeState['phase']):
         message: null,
         pairing: {
             id: pairingId,
-            state: 'connected',
+            state: 'active',
             createdAt: 1,
             updatedAt: 2,
             expiresAt: 9_999,
@@ -30,7 +30,7 @@ function makeSession(
     return {
         pairing: {
             id: pairingId,
-            state: 'connected',
+            state: 'active',
             createdAt: 1,
             updatedAt: 2,
             expiresAt: 9_999,
@@ -43,6 +43,7 @@ function makeSession(
         hostToken: `host-${pairingId}`,
         pairingUrl: `https://example.test/p/${pairingId}`,
         wsUrl: `wss://example.test/ws/${pairingId}`,
+        tunnelUrl: `wss://example.test/tunnel/${pairingId}`,
         iceServers: [],
     }
 }

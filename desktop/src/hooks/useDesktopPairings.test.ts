@@ -13,7 +13,7 @@ function makeSession(id: string, approval: 'approved' | 'pending' | null = 'appr
     return {
         pairing: {
             id,
-            state: approval === 'approved' ? 'connected' : 'pending',
+            state: approval === 'approved' ? 'active' : 'waiting',
             createdAt: 1,
             updatedAt: 2,
             expiresAt: 9_999,
@@ -26,6 +26,7 @@ function makeSession(id: string, approval: 'approved' | 'pending' | null = 'appr
         hostToken: `host-${id}`,
         pairingUrl: `https://example.test/p/${id}`,
         wsUrl: `wss://example.test/ws/${id}`,
+        tunnelUrl: `wss://example.test/tunnel/${id}`,
         iceServers: [],
     }
 }

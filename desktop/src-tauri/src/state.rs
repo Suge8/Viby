@@ -128,6 +128,7 @@ pub struct DesktopPairingSession {
     pub host_token: String,
     pub pairing_url: String,
     pub ws_url: String,
+    pub tunnel_url: String,
     pub ice_servers: Vec<PairingIceServer>,
 }
 

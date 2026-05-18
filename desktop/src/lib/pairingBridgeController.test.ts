@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
+import { createPairingTunnelCipher, createPairingTunnelKeyFrame } from '@viby/protocol/pairing'
 import type { DesktopPairingSession, HubRuntimeStatus, PairingBridgeState } from '@/types'
 import { startPairingBridge } from './pairingBridgeController'
 
@@ -25,6 +26,10 @@ class FakeDataChannel {
 
 class FakePeer {
     readonly channels: FakeDataChannel[] = []
+    localCandidateType = 'host'
+    remoteCandidateType = 'srflx'
+    roundTripTime = 0.032
+    restartCount = 0
     get channel(): FakeDataChannel {
         return this.channels[0]
     }
@@ -52,12 +57,25 @@ class FakePeer {
     async addIceCandidate(): Promise<void> {}
     addEventListener(): void {}
     removeEventListener(): void {}
-    restartIce(): void {}
+    restartIce(): void {
+        this.restartCount += 1
+    }
     close(): void {
         this.connectionState = 'closed'
     }
     async getStats(): Promise<RTCStatsReport> {
-        return new Map() as unknown as RTCStatsReport
+        return statsReport([
+            { id: 'transport', type: 'transport', selectedCandidatePairId: 'pair' },
+            {
+                id: 'pair',
+                type: 'candidate-pair',
+                localCandidateId: 'local',
+                remoteCandidateId: 'remote',
+                currentRoundTripTime: this.roundTripTime,
+            },
+            { id: 'local', candidateType: this.localCandidateType },
+            { id: 'remote', candidateType: this.remoteCandidateType },
+        ]) as unknown as RTCStatsReport
     }
     connect(): void {
         this.connectionState = 'connected'
@@ -66,15 +84,39 @@ class FakePeer {
 }
 
 class FakeSocket {
+    static instances: FakeSocket[] = []
+    readonly sent: string[] = []
     readyState = 0
     onopen: (() => void) | null = null
     onclose: (() => void) | null = null
     onerror = null
-    onmessage = null
-    send(): void {}
+    onmessage: ((event: { data: unknown }) => void) | null = null
+    send(data: string): void {
+        this.sent.push(data)
+    }
+    emitMessage(data: unknown): void {
+        this.onmessage?.({ data })
+    }
+    constructor(readonly url = '') {
+        FakeSocket.instances.push(this)
+    }
+    open(): void {
+        this.readyState = 1
+        this.onopen?.()
+    }
     close(): void {
         this.readyState = 3
         this.onclose?.()
+    }
+}
+
+function statsReport(stats: Array<Record<string, unknown>>) {
+    const byId = new Map(stats.map((stat) => [String(stat.id), stat]))
+    return {
+        get: (id: string) => byId.get(id),
+        forEach: (callback: (stat: Record<string, unknown>) => void) => {
+            for (const stat of stats) callback(stat)
+        },
     }
 }
 
@@ -82,7 +124,7 @@ function pairingSession(): DesktopPairingSession {
     return {
         pairing: {
             id: 'pairing-1',
-            state: 'connected',
+            state: 'active',
             createdAt: 1,
             updatedAt: 2,
             expiresAt: 9_999,
@@ -95,6 +137,7 @@ function pairingSession(): DesktopPairingSession {
         hostToken: 'host-token',
         pairingUrl: 'https://example.test/p/pairing-1',
         wsUrl: 'wss://example.test/ws/pairing-1',
+        tunnelUrl: 'wss://example.test/tunnel/pairing-1',
         iceServers: [],
     }
 }
@@ -124,11 +167,12 @@ describe('startPairingBridge', () => {
 
     beforeEach(() => {
         peer = new FakePeer()
+        FakeSocket.instances = []
         globalThis.RTCPeerConnection = function RTCPeerConnection() {
             return peer
         } as unknown as typeof RTCPeerConnection
-        globalThis.WebSocket = function WebSocket() {
-            return new FakeSocket()
+        globalThis.WebSocket = function WebSocket(url: string | URL) {
+            return new FakeSocket(String(url))
         } as unknown as typeof WebSocket
     })
 
@@ -137,7 +181,7 @@ describe('startPairingBridge', () => {
         globalThis.WebSocket = originalSocket
     })
 
-    it('requires channel activity before reporting the bridge ready', async () => {
+    it('requires direct candidate proof and channel activity before reporting direct ready', async () => {
         const states: PairingBridgeState[] = []
         const cleanup = startPairingBridge({
             pairing: pairingSession(),
@@ -149,8 +193,58 @@ describe('startPairingBridge', () => {
         expect(states.at(-1)?.phase).toBe('connecting')
         expect(states.at(-1)?.message).toBe('正在建立数据通道')
         peer.channel.emit('message', JSON.stringify({ kind: 'heartbeat' }))
+        await Promise.resolve()
+        expect(states.at(-1)?.phase).toBe('connecting')
+        peer.channel.emit('message', JSON.stringify({ kind: 'heartbeat' }))
+        await Promise.resolve()
         expect(states.at(-1)?.phase).toBe('ready')
+        expect(states.at(-1)?.stats?.transport).toBe('direct')
         cleanup()
+    })
+
+    it('refreshes direct latency from the WebRTC stats ticker while the route stays direct', async () => {
+        const originalSetInterval = globalThis.setInterval
+        const originalClearInterval = globalThis.clearInterval
+        let tick: (() => void) | null = null
+        let cleared = false
+        globalThis.setInterval = ((callback: TimerHandler) => {
+            tick = () => {
+                if (typeof callback === 'function') callback()
+            }
+            return 7 as unknown as ReturnType<typeof setInterval>
+        }) as typeof setInterval
+        globalThis.clearInterval = ((id: ReturnType<typeof setInterval>) => {
+            if ((id as unknown as number) === 7) cleared = true
+        }) as typeof clearInterval
+
+        try {
+            peer.roundTripTime = 0.005
+            const states: PairingBridgeState[] = []
+            const cleanup = startPairingBridge({
+                pairing: pairingSession(),
+                getStatus: hubReady,
+                onStateChange: (state) => states.push(state),
+            })
+            await Promise.resolve()
+            peer.connect()
+            peer.channel.emit('message', JSON.stringify({ kind: 'heartbeat' }))
+            await Promise.resolve()
+            peer.channel.emit('message', JSON.stringify({ kind: 'heartbeat' }))
+            await Promise.resolve()
+            expect(states.at(-1)?.stats?.currentRoundTripTimeMs).toBe(5)
+
+            peer.roundTripTime = 0.081
+            tick?.()
+            await Promise.resolve()
+            await Promise.resolve()
+            expect(states.at(-1)?.stats?.currentRoundTripTimeMs).toBe(81)
+
+            cleanup()
+            expect(cleared).toBe(true)
+        } finally {
+            globalThis.setInterval = originalSetInterval
+            globalThis.clearInterval = originalClearInterval
+        }
     })
 
     it('creates a replacement data channel when SCTP closes on a live peer', async () => {
@@ -163,12 +257,88 @@ describe('startPairingBridge', () => {
         await Promise.resolve()
         peer.connect()
         peer.channel.emit('message', JSON.stringify({ kind: 'heartbeat' }))
+        await Promise.resolve()
+        peer.channel.emit('message', JSON.stringify({ kind: 'heartbeat' }))
+        await Promise.resolve()
         peer.channel.close()
         expect(peer.channels).toHaveLength(2)
         expect(states.at(-1)?.phase).toBe('connecting')
         peer.channels[1].emit('open')
         peer.channels[1].emit('message', JSON.stringify({ kind: 'heartbeat' }))
+        await Promise.resolve()
+        peer.channels[1].emit('message', JSON.stringify({ kind: 'heartbeat' }))
+        await Promise.resolve()
+        peer.channels[1].emit('message', JSON.stringify({ kind: 'heartbeat' }))
+        await Promise.resolve()
         expect(states.at(-1)?.phase).toBe('ready')
         cleanup()
     })
+
+    it('reprobes direct when relay becomes active after direct fallback', async () => {
+        const states: PairingBridgeState[] = []
+        const cleanup = startPairingBridge({
+            pairing: pairingSession(),
+            getStatus: hubReady,
+            onStateChange: (state) => states.push(state),
+        })
+        await Promise.resolve()
+        peer.connect()
+        peer.channel.emit('message', JSON.stringify({ kind: 'heartbeat' }))
+        await Promise.resolve()
+        peer.channel.emit('message', JSON.stringify({ kind: 'heartbeat' }))
+        await Promise.resolve()
+        peer.channel.close()
+        await pairRelaySocket(requireRelaySocket())
+        await waitForCondition(() => states.at(-1)?.stats?.transport === 'relay')
+
+        expect(peer.restartCount).toBeGreaterThan(0)
+        expect(peer.channels).toHaveLength(2)
+        cleanup()
+    })
+
+    it('reports ready through relay when native direct support is unavailable', async () => {
+        globalThis.RTCPeerConnection = undefined as unknown as typeof RTCPeerConnection
+        const states: PairingBridgeState[] = []
+        const cleanup = startPairingBridge({
+            pairing: pairingSession(),
+            getStatus: () => null,
+            onStateChange: (state) => states.push(state),
+        })
+
+        expect(states.at(-1)?.phase).toBe('connecting')
+        await pairRelaySocket(FakeSocket.instances[0])
+        await waitForCondition(() => states.at(-1)?.phase === 'ready')
+
+        expect(states.at(-1)).toMatchObject({
+            phase: 'ready',
+            stats: { transport: 'relay' },
+        })
+        cleanup()
+    })
 })
+
+async function pairRelaySocket(socket: FakeSocket): Promise<void> {
+    socket.open()
+    await waitForCondition(() => socket.sent.length > 0)
+    const localKey = JSON.parse(socket.sent[0] ?? '{}') as { publicKey: string }
+    const peerCipher = await createPairingTunnelCipher()
+    await peerCipher.receivePeerKey(localKey.publicKey)
+    socket.emitMessage(
+        JSON.stringify(createPairingTunnelKeyFrame({ id: 'peer-key', seq: 0, publicKey: peerCipher.publicKey }))
+    )
+    await waitForCondition(() => socket.sent.length > 0)
+}
+
+function requireRelaySocket(): FakeSocket {
+    const socket = FakeSocket.instances.find((entry) => entry.url.includes('/tunnel'))
+    if (!socket) throw new Error('relay socket missing')
+    return socket
+}
+
+async function waitForCondition(predicate: () => boolean): Promise<void> {
+    const deadline = Date.now() + 1_000
+    while (!predicate()) {
+        if (Date.now() > deadline) throw new Error('condition timeout')
+        await new Promise((resolve) => setTimeout(resolve, 0))
+    }
+}

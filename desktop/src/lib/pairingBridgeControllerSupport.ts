@@ -7,6 +7,11 @@ import {
     serializePairingTerminalEvent,
 } from './pairingPeerRpcCore'
 
+export type PairingPeerTextSink = {
+    readonly readyState: RTCDataChannelState | number
+    send(data: string): void
+}
+
 export class HubPausedError extends Error {
     readonly code = 'hub_paused'
     constructor() {
@@ -43,6 +48,46 @@ function serializeInvalidRequest(error: unknown): string {
     })
 }
 
+export function canSendPairingPeerText(sink: PairingPeerTextSink): boolean {
+    return sink.readyState === 'open' || sink.readyState === 1
+}
+
+export async function handlePairingPeerPayload(options: {
+    data: unknown
+    getClient: () => LocalHubPairingClient
+    onActive: () => void
+    sink: PairingPeerTextSink
+}): Promise<void> {
+    const { data, getClient, onActive, sink } = options
+    const rawData = typeof data === 'string' ? data : ''
+    if (rawData && isPairingHeartbeat(rawData)) {
+        onActive()
+        if (canSendPairingPeerText(sink)) sink.send(rawData)
+        return
+    }
+    if (typeof data !== 'string' && (await acceptUploadChunk(getClient, data))) {
+        onActive()
+        return
+    }
+
+    let request: ReturnType<typeof parsePairingPeerRequest> | null = null
+    try {
+        request = parsePairingPeerRequest(rawData)
+        onActive()
+        const response = await executePairingPeerRequest(getClient(), request, {
+            emitTerminalEvent: (terminalEvent) => {
+                if (canSendPairingPeerText(sink)) sink.send(serializePairingTerminalEvent(terminalEvent))
+            },
+        })
+        if (canSendPairingPeerText(sink)) sink.send(serializePairingPeerMessage(response))
+    } catch (error) {
+        if (!canSendPairingPeerText(sink)) return
+        sink.send(
+            request && isHubPausedError(error) ? serializeHubPausedRequest(request.id) : serializeInvalidRequest(error)
+        )
+    }
+}
+
 export function attachPairingDataChannel(options: {
     channel: RTCDataChannel
     getClient: () => LocalHubPairingClient
@@ -75,39 +120,13 @@ export function attachPairingDataChannel(options: {
         if (!isDisposed()) onChannelClosed()
     })
     channel.addEventListener('message', (event) => {
-        const rawData = typeof event.data === 'string' ? event.data : ''
-        if (rawData && isPairingHeartbeat(rawData)) {
-            onChannelActive()
-            if (channel.readyState === 'open') channel.send(rawData)
-            return
-        }
-        void handleMessage(event.data).catch((error) => reportAsyncError('配对请求处理失败：', error))
+        void handlePairingPeerPayload({
+            data: event.data,
+            getClient,
+            onActive: onChannelActive,
+            sink: channel,
+        }).catch((error) => reportAsyncError('配对请求处理失败：', error))
     })
-
-    async function handleMessage(data: unknown): Promise<void> {
-        if (typeof data !== 'string' && (await acceptUploadChunk(getClient, data))) {
-            onChannelActive()
-            return
-        }
-        let request: ReturnType<typeof parsePairingPeerRequest> | null = null
-        try {
-            request = parsePairingPeerRequest(typeof data === 'string' ? data : '')
-            onChannelActive()
-            const response = await executePairingPeerRequest(getClient(), request, {
-                emitTerminalEvent: (terminalEvent) => {
-                    if (channel.readyState === 'open') channel.send(serializePairingTerminalEvent(terminalEvent))
-                },
-            })
-            if (channel.readyState === 'open') channel.send(serializePairingPeerMessage(response))
-        } catch (error) {
-            if (channel.readyState !== 'open') return
-            channel.send(
-                request && isHubPausedError(error)
-                    ? serializeHubPausedRequest(request.id)
-                    : serializeInvalidRequest(error)
-            )
-        }
-    }
 }
 
 async function acceptUploadChunk(getClient: () => LocalHubPairingClient, data: unknown): Promise<boolean> {

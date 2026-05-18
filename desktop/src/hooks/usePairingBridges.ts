@@ -32,7 +32,7 @@ function getBridgePairings(pairings: readonly DesktopPairingSession[]): DesktopP
 
 function buildPairingsKey(pairings: readonly DesktopPairingSession[]): string {
     return getBridgePairings(pairings)
-        .map((session) => `${session.pairing.id}:${session.wsUrl}`)
+        .map((session) => `${session.pairing.id}:${session.wsUrl}:${session.tunnelUrl}`)
         .join('|')
 }
 

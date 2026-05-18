@@ -224,10 +224,52 @@ describe('pairingBridgeCore extra request coverage', () => {
 
     it('maps runtime project creation requests through the desktop Hub owner', async () => {
         const createdSession = createSessionRecord('session-created')
+        const version = {
+            status: 'supported' as const,
+            supportedVersion: '0.130.0',
+            source: 'test',
+            installedVersion: '0.130.0',
+            checkedAt: 1,
+        }
         const client = {
             getRuntimeAgentAvailability: async (input: { directory?: string }) => {
                 expect(input).toEqual({ directory: '/repo' })
                 return { agents: [] }
+            },
+            getAgentConfig: async () => ({
+                agents: [
+                    {
+                        driver: 'codex' as const,
+                        path: '/home/user/.codex/config.toml',
+                        exists: true,
+                        values: {},
+                        version,
+                    },
+                ],
+            }),
+            saveAgentConfig: async (input: { driver: string; values: Record<string, unknown> }) => {
+                expect(input).toEqual({ driver: 'codex', values: { 'codex.model': 'gpt-5.4' } })
+                return {
+                    agent: {
+                        driver: 'codex' as const,
+                        path: '/home/user/.codex/config.toml',
+                        exists: true,
+                        values: input.values,
+                        version,
+                    },
+                }
+            },
+            restoreAgentConfig: async (input: { driver: string; backupPath: string }) => {
+                expect(input).toEqual({ driver: 'codex', backupPath: '/tmp/config.bak' })
+                return {
+                    agent: {
+                        driver: 'codex' as const,
+                        path: '/home/user/.codex/config.toml',
+                        exists: true,
+                        values: { 'codex.model': 'gpt-5.2' },
+                        version,
+                    },
+                }
             },
             checkRuntimePathsExists: async (paths: string[]) => {
                 expect(paths).toEqual(['/repo'])
@@ -264,6 +306,42 @@ describe('pairingBridgeCore extra request coverage', () => {
                 })
             )
         ).resolves.toMatchObject({ ok: true, result: { agents: [] } })
+
+        await expect(
+            executePairingPeerRequest(
+                client as never,
+                parseRequest({
+                    kind: 'request',
+                    id: 'runtime-agent-config',
+                    method: 'runtime.agent-config',
+                    params: {},
+                })
+            )
+        ).resolves.toMatchObject({ ok: true, result: { agents: [{ driver: 'codex' }] } })
+
+        await expect(
+            executePairingPeerRequest(
+                client as never,
+                parseRequest({
+                    kind: 'request',
+                    id: 'runtime-save-agent-config',
+                    method: 'runtime.save-agent-config',
+                    params: { driver: 'codex', values: { 'codex.model': 'gpt-5.4' } },
+                })
+            )
+        ).resolves.toMatchObject({ ok: true, result: { agent: { driver: 'codex' } } })
+
+        await expect(
+            executePairingPeerRequest(
+                client as never,
+                parseRequest({
+                    kind: 'request',
+                    id: 'runtime-restore-agent-config',
+                    method: 'runtime.restore-agent-config',
+                    params: { driver: 'codex', backupPath: '/tmp/config.bak' },
+                })
+            )
+        ).resolves.toMatchObject({ ok: true, result: { agent: { driver: 'codex' } } })
 
         await expect(
             executePairingPeerRequest(
