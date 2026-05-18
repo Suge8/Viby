@@ -1,3 +1,4 @@
+import { PairingBrokerTunnelMessageSchema } from '@viby/protocol/pairing'
 import { createBunWebSocket } from 'hono/bun'
 import { type PairingBrokerConfig, readPairingBrokerConfig } from './config'
 import { createPairingApp, type PairingHttpOptions } from './http'
@@ -6,6 +7,7 @@ import { PairingMetrics } from './metrics'
 import { PairingRateLimiter } from './rateLimit'
 import { createConfiguredPairingStore, type PairingStore } from './store'
 import { PairingSocketHub } from './ws'
+import { shouldBufferPairingTunnelMessage } from './wsBufferPolicy'
 
 // Cookie TTL is intentionally larger than the broker handoff ticket TTL
 // because the client warmup owner rotates the cookie at the same 5-minute
@@ -18,6 +20,7 @@ export interface PairingRuntime {
     websocket: ReturnType<typeof createBunWebSocket>['websocket']
     store: PairingStore
     socketHub: PairingSocketHub
+    tunnelHub: PairingSocketHub
     dispose(): Promise<void>
 }
 
@@ -36,6 +39,17 @@ export async function createPairingRuntime(options: CreatePairingRuntimeOptions)
         now: options.now,
         logger: options.logger ?? console,
         disconnectGraceMs: options.disconnectGraceMs,
+        bufferMessages: true,
+    })
+    const tunnelHub = new PairingSocketHub({
+        store: storeLease.store,
+        now: options.now,
+        logger: options.logger ?? console,
+        disconnectGraceMs: options.disconnectGraceMs,
+        bufferMessages: true,
+        maxBufferedMessagesPerRole: 4,
+        messageSchema: PairingBrokerTunnelMessageSchema,
+        shouldBufferMessage: shouldBufferPairingTunnelMessage,
     })
     const { upgradeWebSocket, websocket } = createBunWebSocket()
     const rateLimiter = new PairingRateLimiter()
@@ -45,6 +59,7 @@ export async function createPairingRuntime(options: CreatePairingRuntimeOptions)
     const app = createPairingApp({
         store: storeLease.store,
         socketHub,
+        tunnelHub,
         publicUrl: options.publicUrl,
         sessionTtlSeconds: options.sessionTtlSeconds,
         ticketTtlSeconds: options.ticketTtlSeconds,
@@ -74,6 +89,7 @@ export async function createPairingRuntime(options: CreatePairingRuntimeOptions)
         websocket,
         store: storeLease.store,
         socketHub,
+        tunnelHub,
         dispose: storeLease.dispose,
     }
 }

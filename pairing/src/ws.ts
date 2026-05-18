@@ -1,7 +1,13 @@
-import type { PairingByeReason } from '@viby/protocol/pairing'
+import { PairingBrokerSignalMessageSchema, type PairingByeReason } from '@viby/protocol/pairing'
 import { buildPairingConnectionKey, PairingConnectionIndex } from './wsConnectionIndex'
 import { createPairingDisconnectGrace } from './wsDisconnectGrace'
-import { createEmptyState, oppositeRole, readRawText, sendBye } from './wsSupport'
+import {
+    flushPendingSocketMessages,
+    PairingPendingSocketMessages,
+    sendOrBufferSocketMessage,
+} from './wsPendingMessages'
+import { snapshotPairingSocketHub } from './wsSnapshot'
+import { createEmptyState, oppositeRole, parseSocketMessage, readRawText, sendBye } from './wsSupport'
 import type {
     ConnectionState,
     PairingConnection,
@@ -12,14 +18,16 @@ import type {
 
 export type { PairingConnection, PairingSocketHubOptions, PairingSocketLike } from './wsTypes'
 
-const SOCKET_OPEN = 1
-
 export class PairingSocketHub {
     private readonly connections = new Map<string, ConnectionState>()
     private readonly connectionIndex = new PairingConnectionIndex()
     private readonly disconnectGrace
+    private readonly messageSchema
+    private readonly pendingMessages
 
     constructor(private readonly options: PairingSocketHubOptions) {
+        this.messageSchema = options.messageSchema ?? PairingBrokerSignalMessageSchema
+        this.pendingMessages = new PairingPendingSocketMessages(options.maxBufferedMessagesPerRole)
         this.disconnectGrace = createPairingDisconnectGrace({
             disconnectGraceMs: options.disconnectGraceMs,
             onExpire: (connection) => this.collectEmptySession(connection.pairingId),
@@ -55,6 +63,13 @@ export class PairingSocketHub {
         }
         state.sockets.set(identity.role, socket)
         this.connectionIndex.set(socket, connection)
+        flushPendingSocketMessages({
+            bufferMessages: this.options.bufferMessages,
+            pairingId,
+            pendingMessages: this.pendingMessages,
+            role: identity.role,
+            socket,
+        })
         return connection
     }
 
@@ -69,8 +84,20 @@ export class PairingSocketHub {
         }
         const rawText = await readRawText(rawData)
         if (!rawText) return
-        const target = this.connections.get(connection.pairingId)?.sockets.get(oppositeRole(connection.role))
-        if (target?.readyState === SOCKET_OPEN) target.send(rawText)
+        if (!parseSocketMessage(rawText, this.messageSchema)) {
+            socket.close(1003, 'invalid-message')
+            return
+        }
+        const targetRole = oppositeRole(connection.role)
+        sendOrBufferSocketMessage({
+            bufferMessages: this.options.bufferMessages,
+            connection,
+            pendingMessages: this.pendingMessages,
+            rawText,
+            shouldBufferMessage: this.options.shouldBufferMessage,
+            target: this.connections.get(connection.pairingId)?.sockets.get(targetRole),
+            targetRole,
+        })
     }
 
     async detach(socket: PairingSocketLike): Promise<void> {
@@ -94,26 +121,19 @@ export class PairingSocketHub {
         this.disconnectGrace.clearAll(state)
         state.sockets.clear()
         this.connections.delete(pairingId)
+        this.pendingMessages.deleteSession(pairingId)
     }
 
     snapshot(): PairingSocketHubSnapshot {
-        const snapshot = {
-            activeSessions: this.connections.size,
-            activeSockets: 0,
-            pairedSessions: 0,
-            disconnectGraceTimers: 0,
-        }
-        for (const state of this.connections.values()) {
-            snapshot.activeSockets += state.sockets.size
-            snapshot.disconnectGraceTimers += state.disconnectTimers.size
-            if (state.sockets.size === 2) snapshot.pairedSessions += 1
-        }
-        return snapshot
+        return snapshotPairingSocketHub(this.connections.values(), this.connections.size)
     }
 
     private collectEmptySession(pairingId: string): void {
         const state = this.connections.get(pairingId)
-        if (state && state.sockets.size === 0 && state.disconnectTimers.size === 0) this.connections.delete(pairingId)
+        if (state && state.sockets.size === 0 && state.disconnectTimers.size === 0) {
+            this.connections.delete(pairingId)
+            this.pendingMessages.deleteSession(pairingId)
+        }
     }
 
     private getConnectionState(pairingId: string): ConnectionState {

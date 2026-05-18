@@ -19,8 +19,12 @@ export interface PairingConnection {
 export interface PairingSocketHubOptions {
     store: PairingStore
     now?: () => number
+    bufferMessages?: boolean
     disconnectGraceMs?: number
     logger?: Pick<Console, 'debug' | 'error' | 'log' | 'warn'>
+    maxBufferedMessagesPerRole?: number
+    messageSchema?: { parse(value: unknown): unknown }
+    shouldBufferMessage?: (rawText: string) => boolean
 }
 
 export interface PairingSocketHubSnapshot {

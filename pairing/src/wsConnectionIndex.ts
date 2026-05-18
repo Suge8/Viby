@@ -21,36 +21,22 @@ export class PairingConnectionIndex {
         this.socketIndex.delete(socket)
     }
 
-    deleteConnection(connectionKey: string): void {
-        this.connectionIndex.delete(connectionKey)
-    }
-
     deleteSession(pairingId: string, sockets: Iterable<PairingSocketLike>): void {
-        for (const socket of sockets) {
-            this.socketIndex.delete(socket)
-        }
+        for (const socket of sockets) this.socketIndex.delete(socket)
         for (const [connectionKey, connection] of this.connectionIndex) {
-            if (connection.pairingId === pairingId) {
-                this.connectionIndex.delete(connectionKey)
-            }
+            if (connection.pairingId === pairingId) this.connectionIndex.delete(connectionKey)
         }
     }
 
     resolve(socket: PairingSocketLike): PairingConnection | null {
         const indexed = this.socketIndex.get(socket)
-        if (indexed) {
-            return indexed
-        }
+        if (indexed) return indexed
 
         const connectionKey = this.readSocketConnectionKey(socket)
-        if (!connectionKey) {
-            return null
-        }
+        if (!connectionKey) return null
 
         const connection = this.connectionIndex.get(connectionKey)
-        if (!connection) {
-            return null
-        }
+        if (!connection) return null
 
         this.socketIndex.set(socket, connection)
         return connection

@@ -132,11 +132,13 @@ export function registerPairingPwaHandoffRoutes(
         }
 
         logPairingAudit(options, 'pwa_handoff_claim', { ip: getClientAddress(c), pairingId })
+        const urls = buildPairingUrls(options.publicUrl, pairingId, '', guestToken)
         return c.json(
             PairingClaimResponseSchema.parse({
                 pairing: toPairingSessionSnapshotForRole(recovered, 'guest'),
                 guestToken,
-                wsUrl: buildPairingUrls(options.publicUrl, pairingId, '', guestToken).wsUrl,
+                wsUrl: urls.wsUrl,
+                tunnelUrl: urls.tunnelUrl,
                 iceServers: createIceServers(options, pairingId, now),
             })
         )

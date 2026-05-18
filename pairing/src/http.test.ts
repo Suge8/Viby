@@ -3,7 +3,7 @@ import { webcrypto } from 'node:crypto'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { readPairingTicketFromUrl } from '@viby/protocol/pairing'
+import { PairingBrokerTunnelMessageSchema, readPairingTicketFromUrl } from '@viby/protocol/pairing'
 import { createBunWebSocket } from 'hono/bun'
 import { buildPairingDeviceProofPayload } from './crypto'
 import { createPairingApp } from './http'
@@ -43,11 +43,13 @@ function createTestApp(overrides?: {
     const now = overrides?.now ?? (() => 1_700_000_000_000)
     const store = new MemoryPairingStore(now)
     const socketHub = new PairingSocketHub({ store, now })
+    const tunnelHub = new PairingSocketHub({ store, now, messageSchema: PairingBrokerTunnelMessageSchema })
     const { upgradeWebSocket } = createBunWebSocket()
 
     return createPairingApp({
         store,
         socketHub,
+        tunnelHub,
         publicUrl: 'https://pair.example.com',
         sessionTtlSeconds: 3600,
         ticketTtlSeconds: 600,
@@ -140,6 +142,24 @@ describe('pairing http routes', () => {
         expect(html).not.toContain('id="composer"')
     })
 
+    it('does not expose a manifest link during PWA handoff launch so iOS cannot rotate the one-shot ticket before React consumes it', async () => {
+        const app = createTestApp({
+            webApp: {
+                indexHtml:
+                    '<!doctype html><html><head><link rel="manifest" crossorigin="use-credentials" href="/manifest.webmanifest"></head><body><div id="root"></div></body></html>',
+            },
+        })
+
+        const installResponse = await app.request('/p/pairing-web')
+        expect(await installResponse.text()).toContain('/manifest.webmanifest?pairing=pairing-web')
+
+        const launchResponse = await app.request('/p/pairing-web?handoff=handoff-ticket')
+        const launchHtml = await launchResponse.text()
+        expect(launchHtml).toContain('id="root"')
+        expect(launchHtml).not.toContain('rel="manifest"')
+        expect(launchResponse.headers.get('content-length')).toBe(String(Buffer.byteLength(launchHtml)))
+    })
+
     it('serves Web assets with cache headers and byte length', async () => {
         const assetsRoot = mkdtempSync(join(tmpdir(), 'viby-pairing-http-assets-'))
         tempRoots.push(assetsRoot)
@@ -205,6 +225,9 @@ describe('pairing http routes', () => {
         expect(created.wsUrl).toBe(
             `wss://pair.example.com/pairings/${created.pairing.id}/ws?token=${created.hostToken}`
         )
+        expect(created.tunnelUrl).toBe(
+            `wss://pair.example.com/pairings/${created.pairing.id}/tunnel?token=${created.hostToken}`
+        )
 
         const ticket = readPairingTicketFromUrl(created.pairingUrl)
         expect(ticket).toBeTruthy()
@@ -223,6 +246,7 @@ describe('pairing http routes', () => {
         const claimed = await claimResponse.json()
         expect(claimed.guestToken).toBeTruthy()
         expect(claimed.wsUrl).toContain(`/pairings/${created.pairing.id}/ws?token=`)
+        expect(claimed.tunnelUrl).toContain(`/pairings/${created.pairing.id}/tunnel?token=`)
         expect(claimed.pairing.approvalStatus).toBe('pending')
         expect(claimed.pairing.shortCode).toBeNull()
 
@@ -280,6 +304,9 @@ describe('pairing http routes', () => {
         expect(reconnected.wsUrl).toBe(
             `wss://pair.example.com/pairings/${created.pairing.id}/ws?token=${claimed.guestToken}`
         )
+        expect(reconnected.tunnelUrl).toBe(
+            `wss://pair.example.com/pairings/${created.pairing.id}/tunnel?token=${claimed.guestToken}`
+        )
 
         const deviceChallengeResponse = await app.request(
             `/pairings/${created.pairing.id}/device-reconnect-challenge`,
@@ -308,6 +335,9 @@ describe('pairing http routes', () => {
         expect(deviceRecovered.guestToken).not.toBe(claimed.guestToken)
         expect(deviceRecovered.wsUrl).toBe(
             `wss://pair.example.com/pairings/${created.pairing.id}/ws?token=${deviceRecovered.guestToken}`
+        )
+        expect(deviceRecovered.tunnelUrl).toBe(
+            `wss://pair.example.com/pairings/${created.pairing.id}/tunnel?token=${deviceRecovered.guestToken}`
         )
 
         const staleTokenResponse = await app.request(`/pairings/${created.pairing.id}/reconnect-challenge`, {
@@ -384,6 +414,9 @@ describe('pairing http routes', () => {
         expect(handoffClaimed.guestToken).not.toBe(claimed.guestToken)
         expect(handoffClaimed.wsUrl).toBe(
             `wss://pair.example.com/pairings/${created.pairing.id}/ws?token=${handoffClaimed.guestToken}`
+        )
+        expect(handoffClaimed.tunnelUrl).toBe(
+            `wss://pair.example.com/pairings/${created.pairing.id}/tunnel?token=${handoffClaimed.guestToken}`
         )
 
         const reusedHandoffResponse = await app.request(`/pairings/${created.pairing.id}/pwa-handoff-claim`, {

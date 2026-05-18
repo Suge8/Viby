@@ -1,6 +1,7 @@
 import {
     hasPairingWorkspaceIntent,
     PAIRING_NAKED_WORKSPACE_REDIRECT_URL,
+    PAIRING_PWA_HANDOFF_PARAM,
     PairingClaimRequestSchema,
     PairingCreateRequestSchema,
     PairingPwaHandoffClaimRequestSchema,
@@ -14,6 +15,7 @@ import { createPairingManifestHandler } from './httpPwaManifest'
 import { createPairingCookieRecoverHandler } from './httpPwaRecover'
 import { registerPairingReconnectRoutes } from './httpReconnectRoutes'
 import { registerPairingSessionRoutes } from './httpSessionRoutes'
+import { registerPairingSocketRoutes } from './httpSocketRoutes'
 import { authorizeCreateRequest, getNow } from './httpSupport'
 import type { PairingHttpOptions } from './httpTypes'
 import { createJsonBodyValidator } from './httpValidation'
@@ -64,9 +66,25 @@ function injectPairingManifestLink(html: string, pairingId: string): string {
     })
 }
 
-function serveWebAppHtml(c: Context, options: PairingHttpOptions, pairingId?: string): Response | Promise<Response> {
+function stripManifestLink(html: string): string {
+    return html.replace(/\s*<link rel="manifest"[^>]*>/, '')
+}
+
+function isPwaHandoffLaunch(url: string): boolean {
+    return new URL(url, 'https://pairing.local').searchParams.has(PAIRING_PWA_HANDOFF_PARAM)
+}
+
+function serveWebAppHtml(
+    c: Context,
+    options: PairingHttpOptions,
+    page: { pairingId?: string; suppressManifest?: boolean } = {}
+): Response | Promise<Response> {
     const baseHtml = readWebAppIndexHtml(options.webApp)
-    const html = pairingId ? injectPairingManifestLink(baseHtml, pairingId) : baseHtml
+    const html = page.suppressManifest
+        ? stripManifestLink(baseHtml)
+        : page.pairingId
+          ? injectPairingManifestLink(baseHtml, page.pairingId)
+          : baseHtml
     return c.html(html, 200, { 'content-length': String(Buffer.byteLength(html)) })
 }
 
@@ -103,7 +121,12 @@ export function createPairingApp(options: PairingHttpOptions): Hono {
             'content-type': 'image/png',
         })
     )
-    app.get('/p/:id', (c) => serveWebAppHtml(c, options, c.req.param('id')))
+    app.get('/p/:id', (c) =>
+        serveWebAppHtml(c, options, {
+            pairingId: c.req.param('id'),
+            suppressManifest: isPwaHandoffLaunch(c.req.url),
+        })
+    )
     app.get('/sessions', (c) =>
         serveWorkspaceApp(c.req.path, getRequestSearch(c.req.url))
             ? serveWebAppHtml(c, options)
@@ -132,6 +155,7 @@ export function createPairingApp(options: PairingHttpOptions): Hono {
         return c.json({
             ...(options.metrics?.snapshot(now) ?? { counters: {}, now }),
             websocket: options.socketHub.snapshot(),
+            tunnelWebsocket: options.tunnelHub.snapshot(),
         })
     })
 
@@ -143,6 +167,7 @@ export function createPairingApp(options: PairingHttpOptions): Hono {
             'Invalid pairing verification body'
         ),
     })
+    registerPairingSocketRoutes(app, options)
     registerPairingReconnectRoutes(app, options)
     registerPairingPwaHandoffRoutes(app, options, {
         handoffClaimBodyValidator: createJsonBodyValidator(

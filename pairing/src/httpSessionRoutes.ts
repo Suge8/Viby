@@ -30,15 +30,6 @@ import {
 } from './httpSupport'
 import type { PairingHttpOptions } from './httpTypes'
 import { createJsonBodyValidator } from './httpValidation'
-import type { PairingSocketLike } from './wsTypes'
-
-function toPairingSocket(socket: unknown): PairingSocketLike {
-    if (socket && typeof socket === 'object' && 'raw' in socket && socket.raw) {
-        return socket.raw as PairingSocketLike
-    }
-
-    return socket as PairingSocketLike
-}
 
 type PairingSessionRouteValidators = {
     createPairingBodyValidator: ReturnType<typeof createJsonBodyValidator<PairingCreateRequest>>
@@ -102,6 +93,7 @@ export function registerPairingSessionRoutes(
             hostToken: created.hostToken,
             pairingUrl: urls.pairingUrl,
             wsUrl: urls.wsUrl,
+            tunnelUrl: urls.tunnelUrl,
             iceServers: createIceServers(options, stored.id, now),
         })
 
@@ -156,10 +148,12 @@ export function registerPairingSessionRoutes(
             return rejectPairingRequest(c, options, 'claim_rejected', 409, 'Pairing session could not be claimed')
         }
 
+        const urls = buildPairingUrls(options.publicUrl, stored.id, '', guestToken)
         const response = PairingClaimResponseSchema.parse({
             pairing: toPairingSessionSnapshotForRole(stored, 'guest'),
             guestToken,
-            wsUrl: buildPairingUrls(options.publicUrl, stored.id, '', guestToken).wsUrl,
+            wsUrl: urls.wsUrl,
+            tunnelUrl: urls.tunnelUrl,
             iceServers: createIceServers(options, stored.id, now),
         })
 
@@ -289,32 +283,4 @@ export function registerPairingSessionRoutes(
             })
         )
     })
-
-    app.get(
-        '/pairings/:id/ws',
-        options.upgradeWebSocket((c) => {
-            const pairingId = c.req.param('id')
-            const token = c.req.query('token')
-            const tokenHash = token ? hashPairingSecret(token) : null
-            return {
-                async onOpen(_event, ws) {
-                    if (!tokenHash) {
-                        ws.close(1008, 'missing-token')
-                        return
-                    }
-
-                    await options.socketHub.attach(pairingId, tokenHash, toPairingSocket(ws))
-                },
-                async onMessage(event, ws) {
-                    await options.socketHub.handleMessage(toPairingSocket(ws), event.data)
-                },
-                async onClose(_event, ws) {
-                    await options.socketHub.detach(toPairingSocket(ws))
-                },
-                onError(error) {
-                    options.logger?.error?.('[Pairing] WebSocket error:', error)
-                },
-            }
-        })
-    )
 }

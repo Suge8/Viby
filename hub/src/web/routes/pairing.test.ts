@@ -35,6 +35,7 @@ describe('pairing routes', () => {
                 hostToken: 'host-token',
                 pairingUrl: 'https://pair.example.com/p/pairing-1#ticket=secret',
                 wsUrl: 'wss://pair.example.com/pairings/pairing-1/ws?token=host-token',
+                tunnelUrl: 'wss://pair.example.com/pairings/pairing-1/tunnel?token=host-token',
                 iceServers: [{ urls: 'stun:stun.example.com:3478' }],
             }),
         }

@@ -2,6 +2,7 @@ import type { PairingByeReason, PairingRole } from '@viby/protocol/pairing'
 import type { ConnectionState, PairingSocketLike } from './wsTypes'
 
 const READY_STATE_OPEN = 1
+type PairingSocketMessageSchema = { parse(value: unknown): unknown }
 
 export function createEmptyState(): ConnectionState {
     return {
@@ -25,4 +26,12 @@ export async function readRawText(rawData: string | ArrayBuffer | SharedArrayBuf
     if (rawData instanceof Blob) return await rawData.text()
     const bytes = rawData instanceof ArrayBuffer ? new Uint8Array(rawData) : new Uint8Array(rawData)
     return new TextDecoder().decode(bytes)
+}
+
+export function parseSocketMessage(rawText: string, schema: PairingSocketMessageSchema): unknown | null {
+    try {
+        return schema.parse(JSON.parse(rawText) as unknown)
+    } catch {
+        return null
+    }
 }

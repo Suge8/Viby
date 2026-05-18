@@ -12,6 +12,7 @@ export type UpgradeWebSocket = ReturnType<typeof createBunWebSocket>['upgradeWeb
 export interface PairingHttpOptions {
     store: PairingStore
     socketHub: PairingSocketHub
+    tunnelHub: PairingSocketHub
     publicUrl: string
     sessionTtlSeconds: number
     ticketTtlSeconds: number

@@ -101,12 +101,8 @@ export function decodeHandoffTicket(raw: string): PairingHandoffTicketRecord | n
     }
 }
 
-export function migrateLegacyState(state: PairingSessionRecord['state']): PairingSessionRecord['state'] {
-    return state === 'deleted' || state === 'expired' ? state : 'active'
-}
-
 export function isActiveState(state: PairingSessionRecord['state']): boolean {
-    return migrateLegacyState(state) === 'active'
+    return state === 'active' || state === 'waiting'
 }
 
 export function isApprovedSession(session: PairingSessionRecord): boolean {
@@ -114,11 +110,7 @@ export function isApprovedSession(session: PairingSessionRecord): boolean {
 }
 
 export function deriveState(session: PairingSessionRecord): PairingSessionRecord['state'] {
-    if (session.state === 'deleted' || session.state === 'expired') {
-        return session.state
-    }
-
-    return 'active'
+    return isActiveState(session.state) ? 'active' : session.state
 }
 
 export function clearTokenIndexes(session: PairingSessionRecord, tokenIndex: Map<string, PairingTokenIndex>): void {

@@ -1,4 +1,4 @@
-import { buildPairingClaimUrl, buildPairingWsUrl } from '@viby/protocol/pairing'
+import { buildPairingClaimUrl, buildPairingTunnelUrl, buildPairingWsUrl } from '@viby/protocol/pairing'
 import { generatePairingId, generatePairingSecret, hashPairingSecret, tokenHint } from './crypto'
 import {
     type PairingCreateRequest,
@@ -115,10 +115,12 @@ export function buildPairingUrls(
     token: string
 ): {
     pairingUrl: string
+    tunnelUrl: string
     wsUrl: string
 } {
     return {
         pairingUrl: buildPairingClaimUrl(baseUrl, pairingId, ticket),
+        tunnelUrl: buildPairingTunnelUrl(baseUrl, pairingId, token),
         wsUrl: buildPairingWsUrl(baseUrl, pairingId, token),
     }
 }

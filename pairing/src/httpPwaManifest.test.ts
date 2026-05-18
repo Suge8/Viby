@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { PairingBrokerTunnelMessageSchema } from '@viby/protocol/pairing'
 import { createBunWebSocket } from 'hono/bun'
 import { createPairingApp } from './http'
 import { createPairingManifestCookieSigner } from './manifestCookie'
@@ -35,12 +36,14 @@ function buildTestApp() {
     const now = () => FIXED_NOW
     const store = new MemoryPairingStore(now)
     const socketHub = new PairingSocketHub({ store, now })
+    const tunnelHub = new PairingSocketHub({ store, now, messageSchema: PairingBrokerTunnelMessageSchema })
     const { upgradeWebSocket } = createBunWebSocket()
     const manifestCookieSigner = createPairingManifestCookieSigner({ secret: COOKIE_SECRET })
     const assetsRoot = createWebRoot()
     const app = createPairingApp({
         store,
         socketHub,
+        tunnelHub,
         publicUrl: 'https://pair.example.com',
         sessionTtlSeconds: 3600,
         ticketTtlSeconds: 600,

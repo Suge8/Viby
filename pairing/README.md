@@ -1,19 +1,19 @@
 # Viby Pairing Broker
 
 `pairing/` 是 Viby 的公网配对服务。
-
 它只负责：
 
 - 创建一次性配对会话
 - 生成扫码 URL
 - 交换 WebRTC signaling
-- 下发 STUN + TURN ICE 配置；浏览器默认先走直连，打不通时才用中转
+- 转发 `/tunnel` relay frame；设备先可用，再并发升级 direct
+- 下发 STUN + TURN ICE 配置；direct 只在非 TURN candidate 证明健康后成为 active route
 - 维护可重连的会话令牌
 - guest claim 后生成配对码；桌面显示，手机输入正确后自动批准
 - guest reconnect 默认要求同设备签名证明，不再只靠裸 token
-- 托管手机端正常 Viby Web，并通过 DataChannel 接回桌面本地 Hub
+- 托管手机端正常 Viby Web，并通过 relay tunnel / direct DataChannel 接回桌面本地 Hub
 - 提供基础限流与受控 counters
-- desktop bridge 优先尝试 ICE restart，并采样链路 stats 供恢复与观测使用
+- desktop bridge 保持 relay standby，direct stale 后退回 relay，并采样链路 stats 供恢复与观测使用
 
 它不负责：
 
@@ -94,7 +94,7 @@ TURN 建议按 `UDP 3478 -> TCP 3478 -> TLS 5349` 排列；多地区就把最近
 
 ## HTTP / WS
 
-- `POST /pairings`：创建配对会话，返回 `pairingUrl`、`hostToken`、`wsUrl`
+- `POST /pairings`：创建配对会话，返回 `pairingUrl`、`hostToken`、`wsUrl`、`tunnelUrl`
 - `POST /pairings/:id/claim`：消费一次性 ticket，返回 `guestToken`
 - `POST /pairings/:id/verify-code`：guest 输入桌面显示的 6 位配对码，正确后自动批准接入
 - `POST /pairings/:id/approve`：host 侧保留调试批准接口；产品 UI 默认不暴露
@@ -105,11 +105,12 @@ TURN 建议按 `UDP 3478 -> TCP 3478 -> TLS 5349` 排列；多地区就把最近
 - `GET /ready`：返回 broker readiness，并通过 store owner 检查 Redis / memory store
 - `GET /metrics`：返回 broker counters、websocket pressure 与 transport telemetry 聚合；若配置了 `PAIRING_CREATE_TOKEN`，同样需要 Bearer 鉴权
 - `GET /pairings/:id/ws?token=...`：signaling WebSocket
+- `GET /pairings/:id/tunnel?token=...`：relay tunnel WebSocket，只转发 shared `PairingTunnelFrame`
 - `GET /p/:id#ticket=...`：手机端正常 Viby Web 入口；首次 claim，后续自动重连
 
 ## 协议
 
-共享协议定义在 `shared/src/pairing/`，并通过 `shared/src/index.ts` 统一导出。
+共享协议定义在 `shared/src/pairing/`，通过 `shared/src/index.ts` 统一导出。
 
 ## 继续阅读
 

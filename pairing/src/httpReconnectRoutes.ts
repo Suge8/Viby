@@ -149,11 +149,13 @@ export function registerPairingReconnectRoutes(app: Hono, options: PairingHttpOp
             }
 
             logPairingAudit(options, 'device_reconnect', { ip: getClientAddress(c), pairingId })
+            const urls = buildPairingUrls(options.publicUrl, pairingId, '', guestToken)
             return c.json(
                 PairingClaimResponseSchema.parse({
                     pairing: toPairingSessionSnapshotForRole(recovered, 'guest'),
                     guestToken,
-                    wsUrl: buildPairingUrls(options.publicUrl, pairingId, '', guestToken).wsUrl,
+                    wsUrl: urls.wsUrl,
+                    tunnelUrl: urls.tunnelUrl,
                     iceServers: createIceServers(options, pairingId, now),
                 })
             )
@@ -230,11 +232,13 @@ export function registerPairingReconnectRoutes(app: Hono, options: PairingHttpOp
             }
 
             logPairingAudit(options, 'reconnect', { ip: getClientAddress(c), pairingId, role: identity.role })
+            const urls = buildPairingUrls(options.publicUrl, pairingId, '', body.token)
             return c.json(
                 PairingReconnectResponseSchema.parse({
                     pairing: toPairingSessionSnapshotForRole(renewedSession, identity.role),
                     role: identity.role,
-                    wsUrl: buildPairingUrls(options.publicUrl, pairingId, '', body.token).wsUrl,
+                    wsUrl: urls.wsUrl,
+                    tunnelUrl: urls.tunnelUrl,
                     iceServers: createIceServers(options, pairingId, now),
                 })
             )

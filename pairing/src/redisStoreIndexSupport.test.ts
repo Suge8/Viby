@@ -52,7 +52,7 @@ function createSession(now: number) {
     const guest = createParticipantRecord({ token: 'guest-token', label: 'Guest' })
     return PairingSessionRecordSchema.parse({
         id: 'pairing-index-support',
-        state: 'claimed',
+        state: 'active',
         createdAt: now,
         updatedAt: now,
         expiresAt: now + 1_000,
