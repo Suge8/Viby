@@ -7,6 +7,7 @@ let sessionFileRouteModulePromise: Promise<typeof import('@/routes/sessions/file
 let sessionTerminalRouteModulePromise: Promise<typeof import('@/routes/sessions/terminal')> | null = null
 let newSessionRouteModulePromise: Promise<typeof import('@/routes/sessions/new')> | null = null
 let settingsRouteModulePromise: Promise<typeof import('@/routes/settings')> | null = null
+let agentConfigRouteModulePromise: Promise<typeof import('@/routes/agents')> | null = null
 
 export function loadSessionChatRouteModule(): Promise<typeof import('@/routes/sessions/chat')> {
     sessionChatRouteModulePromise ??= import('@/routes/sessions/chat')
@@ -42,6 +43,11 @@ export function loadSettingsRouteModule(): Promise<typeof import('@/routes/setti
     return settingsRouteModulePromise
 }
 
+export function loadAgentConfigRouteModule(): Promise<typeof import('@/routes/agents')> {
+    agentConfigRouteModulePromise ??= import('@/routes/agents')
+    return agentConfigRouteModulePromise
+}
+
 export async function preloadSessionChatRouteModuleOnly(): Promise<void> {
     await loadSessionChatRouteModule()
 }
@@ -64,4 +70,8 @@ export async function preloadSessionTerminalExperience(): Promise<void> {
     await Promise.all([loadSessionTerminalRouteModule(), loadSessionTerminalViewModule()])
 }
 
-export const SESSIONS_IDLE_PRELOADERS = [loadNewSessionRouteModule, loadSettingsRouteModule] as const
+export const SESSIONS_IDLE_PRELOADERS = [
+    loadNewSessionRouteModule,
+    loadSettingsRouteModule,
+    loadAgentConfigRouteModule,
+] as const

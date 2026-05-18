@@ -7,7 +7,12 @@ import {
     SESSIONS_IDLE_PRELOAD_DELAY_MS,
     shouldPreloadIdleSessionRoutes,
 } from '@/lib/networkPreloadPolicy'
-import { NEW_SESSION_ROUTE, SESSIONS_INDEX_ROUTE, SETTINGS_ROUTE } from '@/routes/sessions/sessionRoutePaths'
+import {
+    AGENTS_ROUTE,
+    NEW_SESSION_ROUTE,
+    SESSIONS_INDEX_ROUTE,
+    SETTINGS_ROUTE,
+} from '@/routes/sessions/sessionRoutePaths'
 import type { PreloadSessionDetailRouteOptions } from './sessionDetailRoutePreload'
 
 type IdleTask = () => void
@@ -25,7 +30,7 @@ type SessionsPaneMotionState = {
     detailPanePointerEvents: 'auto' | 'none'
 }
 
-type StaticSessionsRoute = typeof NEW_SESSION_ROUTE | typeof SETTINGS_ROUTE
+type StaticSessionsRoute = typeof NEW_SESSION_ROUTE | typeof SETTINGS_ROUTE | typeof AGENTS_ROUTE
 export type SessionIntentSource = 'focus' | 'hover' | 'press'
 export type SessionIntentRecord = {
     at: number

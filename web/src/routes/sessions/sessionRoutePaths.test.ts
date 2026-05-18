@@ -32,15 +32,18 @@ describe('sessionRoutePaths', () => {
         expect(isSessionsWorkspacePath('/sessions/settings')).toBe(true)
         expect(resolveSessionRouteParam('session-1')).toBe('session-1')
         expect(resolveSessionRouteParam('settings')).toBeNull()
+        expect(resolveSessionRouteParam('agents')).toBeNull()
         expect(resolveDirectSessionIdFromPath('/sessions/session-1')).toBe('session-1')
         expect(resolveDirectSessionIdFromPath('/sessions/new')).toBeNull()
         expect(resolveDirectSessionIdFromPath('/sessions/settings')).toBeNull()
+        expect(resolveDirectSessionIdFromPath('/sessions/agents')).toBeNull()
         expect(resolveDirectSessionIdFromPath('/sessions/session-1/files')).toBeNull()
     })
 
     it('resolves the parent workspace path without creating a second back chain', () => {
         expect(resolveSessionsParentPath('/sessions/new')).toBe('/sessions')
         expect(resolveSessionsParentPath('/sessions/settings')).toBe('/sessions')
+        expect(resolveSessionsParentPath('/sessions/agents')).toBe('/sessions')
         expect(resolveSessionsParentPath('/sessions/session-1')).toBe('/sessions')
         expect(resolveSessionsParentPath('/sessions/session-1/files')).toBe('/sessions/session-1')
         expect(resolveSessionsParentPath('/sessions/session-1/file')).toBe('/sessions/session-1/files')

@@ -1,8 +1,9 @@
 export const SESSIONS_INDEX_ROUTE = '/sessions'
 export const NEW_SESSION_ROUTE = '/sessions/new'
 export const SETTINGS_ROUTE = '/sessions/settings'
+export const AGENTS_ROUTE = '/sessions/agents'
 
-const RESERVED_SESSIONS_CHILD_SEGMENTS = new Set(['new', 'settings'])
+const RESERVED_SESSIONS_CHILD_SEGMENTS = new Set(['new', 'settings', 'agents'])
 const TRAILING_SLASH_RE = /\/+$/
 const DIRECT_SESSION_ROUTE_RE = /^\/sessions\/([^/]+)$/
 const FILE_ROUTE_SUFFIX = '/file'

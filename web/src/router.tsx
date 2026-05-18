@@ -6,6 +6,7 @@ import { RouteLoadingFallback } from '@/components/loading/RouteLoadingFallback'
 import { shouldRestoreWindowScroll } from '@/lib/appShellPresentation'
 import { SessionsIndexPage, SessionsShell } from '@/routes/sessions/SessionsShell'
 import {
+    loadAgentConfigRouteModule,
     loadNewSessionRouteModule,
     loadSessionChatRouteModule,
     loadSessionFileRouteModule,
@@ -20,6 +21,7 @@ const FilePage = lazy(loadSessionFileRouteModule)
 const TerminalPage = lazy(loadSessionTerminalRouteModule)
 const NewSessionRoutePage = lazy(loadNewSessionRouteModule)
 const SettingsPage = lazy(loadSettingsRouteModule)
+const AgentConfigPage = lazy(loadAgentConfigRouteModule)
 
 type SessionSearchTab = 'changes' | 'directories'
 type NewSessionMode = 'start' | 'recover-local'
@@ -104,6 +106,14 @@ function SettingsRoutePage(): React.JSX.Element {
     return (
         <RouteSuspense kind="workspace" variant="inline">
             <SettingsPage />
+        </RouteSuspense>
+    )
+}
+
+function AgentConfigRoutePage(): React.JSX.Element {
+    return (
+        <RouteSuspense kind="workspace" variant="inline">
+            <AgentConfigPage />
         </RouteSuspense>
     )
 }
@@ -226,12 +236,19 @@ const settingsRoute = createRoute({
     component: SettingsRoutePage,
 })
 
+const agentsRoute = createRoute({
+    getParentRoute: () => sessionsRoute,
+    path: 'agents',
+    component: AgentConfigRoutePage,
+})
+
 export const routeTree = rootRoute.addChildren([
     indexRoute,
     sessionsRoute.addChildren([
         sessionsIndexRoute,
         newSessionRoute,
         settingsRoute,
+        agentsRoute,
         sessionDetailRoute.addChildren([sessionChatRoute, sessionTerminalRoute, sessionFilesRoute, sessionFileRoute]),
     ]),
 ])

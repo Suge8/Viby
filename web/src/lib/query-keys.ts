@@ -26,6 +26,7 @@ export const queryKeys = {
     session: (sessionId: string) => ['session', sessionId] as const,
     messages: (sessionId: string) => ['messages', sessionId] as const,
     runtime: ['runtime'] as const,
+    agentConfig: ['agent-config'] as const,
     runtimeCapability: ['runtime-capability'] as const,
     runtimeCapabilities: (directory: string, drivers: string, depth: string) =>
         ['runtime-capability', directory, drivers, depth] as const,

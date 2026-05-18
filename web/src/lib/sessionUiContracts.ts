@@ -27,6 +27,8 @@ export const ROUTE_SCROLL_AREA_SELECTOR = getTestIdSelector(ROUTE_SCROLL_AREA_TE
 
 export const SESSIONS_SHELL_SETTINGS_BUTTON_TEST_ID = 'sessions-shell-settings-button'
 export const SESSIONS_SHELL_SETTINGS_BUTTON_SELECTOR = getTestIdSelector(SESSIONS_SHELL_SETTINGS_BUTTON_TEST_ID)
+export const SESSIONS_SHELL_AGENTS_BUTTON_TEST_ID = 'sessions-shell-agents-button'
+export const SESSIONS_SHELL_AGENTS_BUTTON_SELECTOR = getTestIdSelector(SESSIONS_SHELL_AGENTS_BUTTON_TEST_ID)
 
 export const SESSION_CHAT_PAGE_TEST_ID = 'session-chat-page'
 export const SESSION_CHAT_PAGE_SELECTOR = getTestIdSelector(SESSION_CHAT_PAGE_TEST_ID)

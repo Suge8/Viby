@@ -21,12 +21,17 @@ import { useTranslation } from '@/lib/use-translation'
 import { SessionsMobileCreateButton } from '@/routes/sessions/components/SessionsMobileCreateButton'
 import { SessionsShellHeader } from '@/routes/sessions/components/SessionsShellHeader'
 import {
+    AGENTS_ROUTE,
     isSessionsIndexPath,
     NEW_SESSION_ROUTE,
     resolveSessionRouteParam,
     SETTINGS_ROUTE,
 } from '@/routes/sessions/sessionRoutePaths'
-import { loadNewSessionRouteModule, loadSettingsRouteModule } from '@/routes/sessions/sessionRoutePreload'
+import {
+    loadAgentConfigRouteModule,
+    loadNewSessionRouteModule,
+    loadSettingsRouteModule,
+} from '@/routes/sessions/sessionRoutePreload'
 import { shouldClearSelectedSessionDetail } from '@/routes/sessions/sessionsShellSelectionSupport'
 import {
     buildSessionsIndexNavigation,
@@ -90,6 +95,9 @@ export function SessionsShell(): JSX.Element {
 
     const handleOpenSettings = useCallback(() => {
         runStaticRouteNavigation(navigate, SETTINGS_ROUTE, loadSettingsRouteModule())
+    }, [navigate])
+    const handleOpenAgents = useCallback(() => {
+        runStaticRouteNavigation(navigate, AGENTS_ROUTE, loadAgentConfigRouteModule())
     }, [navigate])
 
     const handleSessionListActiveSectionChange = useCallback(
@@ -173,7 +181,12 @@ export function SessionsShell(): JSX.Element {
                 style={{ pointerEvents: paneMotionState.listPanePointerEvents }}
             >
                 <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-px bg-[var(--app-divider)] lg:block" />
-                <SessionsShellHeader settingsTitle={t('settings.title')} onOpenSettings={handleOpenSettings} />
+                <SessionsShellHeader
+                    agentsTitle={t('agents.config.title')}
+                    settingsTitle={t('settings.title')}
+                    onOpenAgents={handleOpenAgents}
+                    onOpenSettings={handleOpenSettings}
+                />
 
                 <div data-testid={SESSIONS_LIST_SCROLLER_TEST_ID} className={SESSIONS_LIST_SCROLLER_CLASS_NAME}>
                     <SessionList
