@@ -4,10 +4,10 @@ import type { RunnerLocallyPersistedState } from '@/persistence'
 export type RunnerConnectionIdentity = {
     apiUrl: string
     machineId?: string
-    cliApiTokenHash?: string
+    hubOwnerTokenHash?: string
 }
 
-export function hashRunnerCliApiToken(token: string | null | undefined): string | undefined {
+export function hashRunnerHubOwnerToken(token: string | null | undefined): string | undefined {
     const trimmed = token?.trim()
     if (!trimmed) {
         return undefined
@@ -18,7 +18,7 @@ export function hashRunnerCliApiToken(token: string | null | undefined): string 
 export function isRunnerStateCompatibleWithIdentity(
     state: Pick<
         RunnerLocallyPersistedState,
-        'startedWithApiUrl' | 'startedWithMachineId' | 'startedWithCliApiTokenHash'
+        'startedWithApiUrl' | 'startedWithMachineId' | 'startedWithHubOwnerTokenHash'
     >,
     current: RunnerConnectionIdentity
 ): boolean {
@@ -30,7 +30,7 @@ export function isRunnerStateCompatibleWithIdentity(
         return false
     }
 
-    if (!current.cliApiTokenHash || state.startedWithCliApiTokenHash !== current.cliApiTokenHash) {
+    if (!current.hubOwnerTokenHash || state.startedWithHubOwnerTokenHash !== current.hubOwnerTokenHash) {
         return false
     }
 

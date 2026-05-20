@@ -17,7 +17,7 @@ import { cleanupRunnerState, isRunnerRunningCurrentlyInstalledVibyVersion, stopR
 import { startRunnerControlServer } from './controlServer'
 import { stopRunnerManagedSessions } from './managedSessionLifecycle'
 import { startRunnerHeartbeat } from './runnerHeartbeat'
-import { hashRunnerCliApiToken } from './runnerIdentity'
+import { hashRunnerHubOwnerToken } from './runnerIdentity'
 import { createSpawnSessionHandler } from './runnerSessionSpawner'
 import { createRunnerShutdownController } from './runnerShutdown'
 import { createRunnerTrackedSessionControl } from './runnerTrackedSessionControl'
@@ -113,7 +113,7 @@ export async function startRunner(): Promise<void> {
             startedWithCliMtimeMs,
             startedWithApiUrl: configuration.apiUrl,
             startedWithMachineId: machineId,
-            startedWithCliApiTokenHash: hashRunnerCliApiToken(configuration.cliApiToken),
+            startedWithHubOwnerTokenHash: hashRunnerHubOwnerToken(configuration.hubOwnerToken),
             runnerLogPath: logger.logFilePath,
         }
         writeRunnerState(fileState)

@@ -12,7 +12,7 @@ export async function buildSpawnEnvironment(
 ): Promise<Record<string, string>> {
     let env: Record<string, string> = {
         VIBY_API_URL: configuration.apiUrl,
-        CLI_API_TOKEN: configuration.cliApiToken,
+        VIBY_HUB_OWNER_TOKEN: configuration.hubOwnerToken,
     }
 
     if (options.machineId) {

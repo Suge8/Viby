@@ -68,7 +68,7 @@ runner 在创建会话时会：
 - 检查目录是否存在
 - 必要时创建目录
 - 显式透传 `permission mode`、`collaboration mode`、model 和 reasoning effort 这组 session config
-- 显式把已解析的 `apiUrl / CLI_API_TOKEN / machineId` 注入 runner-managed child，避免子进程重复走本地配置初始化
+- 显式把已解析的 `apiUrl / hub owner token / machineId` 注入 runner-managed child，避免子进程重复走本地配置初始化
 - internal session dispatch 只 lazy-load 当前 agent 对应的 provider 启动器，避免 child 冷启动先装载整套无关 provider runtime
 - 注入代理所需环境变量
 - 启动新的 `viby` 子进程，并把其生命周期绑定到当前 runner
@@ -101,7 +101,7 @@ runner 会启动一个只监听 `127.0.0.1` 的 HTTP 控制服务，供本机 CL
 
 1. 必须设置 `VIBY_RUNNER_INTEGRATION=1`
 2. 必须提供 `VIBY_RUNNER_INTEGRATION_API_URL`
-3. 必须提供 `VIBY_RUNNER_INTEGRATION_CLI_API_TOKEN`
+3. 必须提供 `VIBY_RUNNER_INTEGRATION_HUB_OWNER_TOKEN`
 
 测试启动时会强制创建临时 `VIBY_HOME`，把 `runner.state.json`、logs 和
 settings 全部写进隔离目录，不再允许默认命中真实 `~/.viby`。

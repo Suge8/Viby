@@ -10,7 +10,7 @@ import { logger } from '@/ui/logger'
 import { isProcessAlive, killProcess } from '@/utils/process'
 import packageJson from '../../package.json'
 import { getInstalledCliMtimeMs } from './cliInstallStamp'
-import { hashRunnerCliApiToken, isRunnerStateCompatibleWithIdentity } from './runnerIdentity'
+import { hashRunnerHubOwnerToken, isRunnerStateCompatibleWithIdentity } from './runnerIdentity'
 
 const DEFAULT_RUNNER_HTTP_TIMEOUT_MS = 10_000
 const RUNNER_STOP_TIMEOUT_MS = 2_000
@@ -63,14 +63,14 @@ function doesRunnerCliInstallMatchCurrentInstall(state: RunnerLocallyPersistedSt
 
 export async function resolveCurrentRunnerIdentity(): Promise<{
     apiUrl: string
-    cliApiToken: string
+    hubOwnerToken: string
     machineId?: string
 }> {
     const settings = await readSettings()
 
     return {
         apiUrl: process.env.VIBY_API_URL || settings.apiUrl || configuration.apiUrl,
-        cliApiToken: process.env.CLI_API_TOKEN || settings.cliApiToken || configuration.cliApiToken,
+        hubOwnerToken: process.env.VIBY_HUB_OWNER_TOKEN || settings.hubOwnerToken || configuration.hubOwnerToken,
         machineId: settings.machineId,
     }
 }
@@ -203,7 +203,7 @@ export async function isRunnerRunningCurrentlyInstalledVibyVersion(): Promise<bo
         const currentIdentityMatches = isRunnerStateCompatibleWithIdentity(state, {
             apiUrl: currentIdentity.apiUrl,
             machineId: currentIdentity.machineId,
-            cliApiTokenHash: hashRunnerCliApiToken(currentIdentity.cliApiToken),
+            hubOwnerTokenHash: hashRunnerHubOwnerToken(currentIdentity.hubOwnerToken),
         })
         logger.debug(`[RUNNER CONTROL] Runner identity match: ${currentIdentityMatches}`, {
             currentApiUrl: currentIdentity.apiUrl,

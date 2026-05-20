@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('@/configuration', () => ({
     configuration: {
         apiUrl: 'http://127.0.0.1:4123',
-        cliApiToken: 'runner-cli-token',
+        hubOwnerToken: 'runner-owner-token',
     },
 }))
 
@@ -22,7 +22,7 @@ describe('buildSpawnEnvironment', () => {
 
         expect(env).toMatchObject({
             VIBY_API_URL: 'http://127.0.0.1:4123',
-            CLI_API_TOKEN: 'runner-cli-token',
+            VIBY_HUB_OWNER_TOKEN: 'runner-owner-token',
             VIBY_MACHINE_ID: 'machine-1',
         })
     })
@@ -40,7 +40,7 @@ describe('buildSpawnEnvironment', () => {
 
         expect(env).toMatchObject({
             VIBY_API_URL: 'http://127.0.0.1:4123',
-            CLI_API_TOKEN: 'runner-cli-token',
+            VIBY_HUB_OWNER_TOKEN: 'runner-owner-token',
             VIBY_MACHINE_ID: 'machine-1',
             CLAUDE_CODE_OAUTH_TOKEN: 'provider-token',
         })
