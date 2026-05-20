@@ -1,28 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { configuration } from '@/configuration'
 
-const {
-    readSettingsMock,
-    clearMachineIdMock,
-    updateSettingsMock,
-    initializeApiUrlMock
-} = vi.hoisted(() => ({
+const { readSettingsMock, clearMachineIdMock, updateSettingsMock, initializeApiUrlMock } = vi.hoisted(() => ({
     readSettingsMock: vi.fn(),
     clearMachineIdMock: vi.fn(),
     updateSettingsMock: vi.fn(),
     initializeApiUrlMock: vi.fn(async () => {
         configuration._setApiUrl('https://viby.example.com')
-    })
+    }),
 }))
 
 vi.mock('@/persistence', () => ({
     readSettings: readSettingsMock,
     clearMachineId: clearMachineIdMock,
-    updateSettings: updateSettingsMock
+    updateSettings: updateSettingsMock,
 }))
 
 vi.mock('@/ui/apiUrlInit', () => ({
-    initializeApiUrl: initializeApiUrlMock
+    initializeApiUrl: initializeApiUrlMock,
 }))
 
 import { handleAuthCommand } from './auth'
@@ -43,8 +38,8 @@ describe('handleAuthCommand', () => {
     it('loads the configured api url before printing status', async () => {
         readSettingsMock.mockResolvedValue({
             apiUrl: 'https://viby.example.com',
-            cliApiToken: 'token-from-settings',
-            machineId: 'machine-123'
+            hubOwnerToken: 'token-from-settings',
+            machineId: 'machine-123',
         })
 
         const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
@@ -53,12 +48,10 @@ describe('handleAuthCommand', () => {
             await handleAuthCommand(['status'])
             expect(initializeApiUrlMock).toHaveBeenCalledOnce()
 
-            const output = logSpy.mock.calls
-                .map((call) => stripAnsi(String(call[0])))
-                .join('\n')
+            const output = logSpy.mock.calls.map((call) => stripAnsi(String(call[0]))).join('\n')
 
             expect(output).toContain('VIBY_API_URL: https://viby.example.com')
-            expect(output).toContain('CLI_API_TOKEN: set')
+            expect(output).toContain('Hub owner token: set')
             expect(output).toContain('Machine ID: machine-123')
         } finally {
             logSpy.mockRestore()

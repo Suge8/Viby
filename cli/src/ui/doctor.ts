@@ -26,7 +26,7 @@ export function getEnvironmentInfo(): Record<string, unknown> {
         VIBY_HOME: process.env.VIBY_HOME,
         VIBY_API_URL: process.env.VIBY_API_URL,
         VIBY_PROJECT_ROOT: process.env.VIBY_PROJECT_ROOT,
-        CLI_API_TOKEN_SET: Boolean(process.env.CLI_API_TOKEN),
+        HUB_OWNER_TOKEN_SET: Boolean(process.env.VIBY_HUB_OWNER_TOKEN),
         DANGEROUSLY_LOG_TO_SERVER_FOR_AI_AUTO_DEBUGGING: process.env.DANGEROUSLY_LOG_TO_SERVER_FOR_AI_AUTO_DEBUGGING,
         NODE_ENV: process.env.NODE_ENV,
         DEBUG: process.env.DEBUG,
@@ -115,7 +115,7 @@ export async function runDoctorCommand(filter?: 'all' | 'runner'): Promise<void>
         const env = getEnvironmentInfo()
         console.log(`VIBY_HOME: ${env.VIBY_HOME ? chalk.green(env.VIBY_HOME) : chalk.gray('not set')}`)
         console.log(`VIBY_API_URL: ${env.VIBY_API_URL ? chalk.green(env.VIBY_API_URL) : chalk.gray('not set')}`)
-        console.log(`CLI_API_TOKEN: ${env.CLI_API_TOKEN_SET ? chalk.green('set') : chalk.gray('not set')}`)
+        console.log(`Hub owner token env: ${env.HUB_OWNER_TOKEN_SET ? chalk.green('set') : chalk.gray('not set')}`)
         console.log(
             `DANGEROUSLY_LOG_TO_SERVER: ${env.DANGEROUSLY_LOG_TO_SERVER_FOR_AI_AUTO_DEBUGGING ? chalk.yellow('ENABLED') : chalk.gray('not set')}`
         )
@@ -127,8 +127,8 @@ export async function runDoctorCommand(filter?: 'all' | 'runner'): Promise<void>
         try {
             settings = await readSettings()
             console.log(chalk.bold('\n📄 Settings (settings.toml):'))
-            // Hide cliApiToken in output for security
-            const displaySettings = { ...settings, cliApiToken: settings.cliApiToken ? '***' : undefined }
+            // Hide hubOwnerToken in output for security
+            const displaySettings = { ...settings, hubOwnerToken: settings.hubOwnerToken ? '***' : undefined }
             console.log(chalk.gray(JSON.stringify(displaySettings, null, 2)))
         } catch (error) {
             console.log(chalk.bold('\n📄 Settings:'))
@@ -138,15 +138,15 @@ export async function runDoctorCommand(filter?: 'all' | 'runner'): Promise<void>
 
         // Authentication status (direct-connect)
         console.log(chalk.bold('\n🔐 Direct Connect Auth'))
-        const envToken = process.env.CLI_API_TOKEN
-        const settingsToken = settings.cliApiToken
+        const envToken = process.env.VIBY_HUB_OWNER_TOKEN
+        const settingsToken = settings.hubOwnerToken
         const hasToken = Boolean(envToken || settingsToken)
         const tokenSource = envToken ? 'environment variable' : settingsToken ? 'settings file' : 'none'
         if (hasToken) {
-            console.log(chalk.green(`✓ CLI_API_TOKEN is set (from ${tokenSource})`))
+            console.log(chalk.green(`✓ Hub owner token is set (from ${tokenSource})`))
         } else {
-            console.log(chalk.red('❌ CLI_API_TOKEN is not set'))
-            console.log(chalk.gray('  Run `viby auth login` to configure or set CLI_API_TOKEN env var'))
+            console.log(chalk.red('❌ Hub owner token is not set'))
+            console.log(chalk.gray('  Run `viby auth login` to configure headless CLI access'))
         }
     }
 

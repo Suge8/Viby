@@ -15,7 +15,7 @@ ${chalk.bold('Usage:')}
   viby hub --host <h>    Override bind host
   viby hub --port <p>    Override bind port
   viby auth status       Show current auth configuration
-  viby auth login        Save CLI_API_TOKEN locally
+  viby auth login        Save Hub owner token locally
   viby auth logout       Clear saved credentials
   viby doctor            Diagnose the local environment
   viby runner status     Show runner status

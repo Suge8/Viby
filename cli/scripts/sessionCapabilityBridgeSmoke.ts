@@ -4,7 +4,7 @@ import { RpcHandlerManager } from '@/api/rpc/RpcHandlerManager'
 import { registerCommonHandlers } from '@/modules/common/registerCommonHandlers'
 
 const SESSION_ID = process.env.VIBY_SMOKE_SESSION_ID
-const CLI_API_TOKEN = process.env.CLI_API_TOKEN
+const VIBY_HUB_OWNER_TOKEN = process.env.VIBY_HUB_OWNER_TOKEN
 const API_URL = process.env.VIBY_API_URL
 const WORKING_DIRECTORY = process.env.VIBY_SMOKE_WORKING_DIRECTORY
 const KEEPALIVE_INTERVAL_MS = 5_000
@@ -53,7 +53,7 @@ async function waitForConnect(socket: Socket<ServerToClientEvents, ClientToServe
 async function main(): Promise<void> {
     const sessionId = assertEnv('VIBY_SMOKE_SESSION_ID', SESSION_ID)
     const apiUrl = assertEnv('VIBY_API_URL', API_URL)
-    const token = assertEnv('CLI_API_TOKEN', CLI_API_TOKEN)
+    const token = assertEnv('VIBY_HUB_OWNER_TOKEN', VIBY_HUB_OWNER_TOKEN)
     const workingDirectory = assertEnv('VIBY_SMOKE_WORKING_DIRECTORY', WORKING_DIRECTORY)
 
     const rpcHandlerManager = new RpcHandlerManager({

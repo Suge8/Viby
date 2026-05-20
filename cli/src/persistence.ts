@@ -15,7 +15,7 @@ interface Settings {
     // All machine operations use this ID
     machineId?: string
     machineIdConfirmedByServer?: boolean
-    cliApiToken?: string
+    hubOwnerToken?: string
     // API URL for server connections (priority: env VIBY_API_URL > this > default)
     apiUrl?: string
 }
@@ -45,7 +45,7 @@ export interface RunnerLocallyPersistedState {
     startedWithCliMtimeMs?: number
     startedWithApiUrl?: string
     startedWithMachineId?: string
-    startedWithCliApiTokenHash?: string
+    startedWithHubOwnerTokenHash?: string
     lastHeartbeat?: string
     runnerLogPath?: string
 }

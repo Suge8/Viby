@@ -6,15 +6,15 @@ export async function authAndSetupMachineIfNeeded(): Promise<{
     token: string
     machineId: string
 }> {
-    if (!configuration.cliApiToken) {
-        throw new Error('CLI_API_TOKEN is required')
+    if (!configuration.hubOwnerToken) {
+        throw new Error('Hub owner token is missing. Run `viby auth login` for headless CLI access.')
     }
 
     const settings = await updateSettings((current) => {
         if (!current.machineId) {
             return {
                 ...current,
-                machineId: randomUUID()
+                machineId: randomUUID(),
             }
         }
         return current
@@ -24,6 +24,5 @@ export async function authAndSetupMachineIfNeeded(): Promise<{
         throw new Error('Failed to initialize machineId')
     }
 
-    return { token: configuration.cliApiToken, machineId: settings.machineId }
+    return { token: configuration.hubOwnerToken, machineId: settings.machineId }
 }
-

@@ -1,9 +1,9 @@
-import chalk from 'chalk'
 import os from 'node:os'
-import * as readline from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
+import * as readline from 'node:readline/promises'
+import chalk from 'chalk'
 import { configuration } from '@/configuration'
-import { readSettings, clearMachineId, updateSettings } from '@/persistence'
+import { clearMachineId, readSettings, updateSettings } from '@/persistence'
 import { initializeApiUrl } from '@/ui/apiUrlInit'
 import type { CommandDefinition } from './types'
 
@@ -18,23 +18,22 @@ export async function handleAuthCommand(args: string[]): Promise<void> {
     if (subcommand === 'status') {
         await initializeApiUrl()
         const settings = await readSettings()
-        const envToken = process.env.CLI_API_TOKEN
-        const settingsToken = settings.cliApiToken
+        const envToken = process.env.VIBY_HUB_OWNER_TOKEN
+        const settingsToken = settings.hubOwnerToken
         const hasToken = Boolean(envToken || settingsToken)
-        const tokenSource = envToken ? 'environment' : (settingsToken ? 'settings file' : 'none')
-        console.log(chalk.bold('\nDirect Connect Status\n'))
+        const tokenSource = envToken ? 'environment' : settingsToken ? 'settings file' : 'none'
+        console.log(chalk.bold('\nHeadless CLI Auth Status\n'))
         console.log(chalk.gray(`  VIBY_API_URL: ${configuration.apiUrl}`))
-        console.log(chalk.gray(`  CLI_API_TOKEN: ${hasToken ? 'set' : 'missing'}`))
-        console.log(chalk.gray(`  Token Source: ${tokenSource}`))
+        console.log(chalk.gray(`  Hub owner token: ${hasToken ? 'set' : 'missing'}`))
+        console.log(chalk.gray(`  Token source: ${tokenSource}`))
         console.log(chalk.gray(`  Machine ID: ${settings.machineId ?? 'not set'}`))
         console.log(chalk.gray(`  Host: ${os.hostname()}`))
 
         if (!hasToken) {
             console.log('')
-            console.log(chalk.yellow('  Token not configured. To get your token:'))
-            console.log(chalk.gray('    1. Check the server startup logs (first run shows generated token)'))
-            console.log(chalk.gray('    2. Read ~/.viby/settings.toml on the server'))
-            console.log(chalk.gray('    3. Ask your server administrator (if token is set via env var)'))
+            console.log(chalk.yellow('  Headless auth secret not configured. To get it:'))
+            console.log(chalk.gray('    1. Read ~/.viby/settings.toml on the Hub machine'))
+            console.log(chalk.gray('    2. Ask the Hub administrator for headless access'))
             console.log('')
             console.log(chalk.gray('  Then run: viby auth login'))
         }
@@ -44,25 +43,25 @@ export async function handleAuthCommand(args: string[]): Promise<void> {
     if (subcommand === 'login') {
         if (!process.stdin.isTTY) {
             console.error(chalk.red('Cannot prompt for token in non-TTY environment.'))
-            console.error(chalk.gray('Set CLI_API_TOKEN environment variable instead.'))
+            console.error(chalk.gray('Set the Hub owner token in your environment instead.'))
             process.exit(1)
         }
 
         const rl = readline.createInterface({ input, output })
 
         try {
-            const token = await rl.question(chalk.cyan('Enter CLI_API_TOKEN: '))
+            const token = await rl.question(chalk.cyan('Enter Hub owner token: '))
 
             if (!token.trim()) {
                 console.error(chalk.red('Token cannot be empty'))
                 process.exit(1)
             }
 
-            await updateSettings(current => ({
+            await updateSettings((current) => ({
                 ...current,
-                cliApiToken: token.trim()
+                hubOwnerToken: token.trim(),
             }))
-            configuration._setCliApiToken(token.trim())
+            configuration._setHubOwnerToken(token.trim())
             console.log(chalk.green(`\nToken saved to ${configuration.settingsFile}`))
         } finally {
             rl.close()
@@ -71,13 +70,13 @@ export async function handleAuthCommand(args: string[]): Promise<void> {
     }
 
     if (subcommand === 'logout') {
-        await updateSettings(current => ({
+        await updateSettings((current) => ({
             ...current,
-            cliApiToken: undefined
+            hubOwnerToken: undefined,
         }))
         await clearMachineId()
         console.log(chalk.green('Cleared local credentials (token and machineId).'))
-        console.log(chalk.gray('Note: If CLI_API_TOKEN is set via environment variable, it will still be used.'))
+        console.log(chalk.gray('Note: an environment-provided Hub owner token still takes priority.'))
         return
     }
 
@@ -88,17 +87,17 @@ export async function handleAuthCommand(args: string[]): Promise<void> {
 
 function showHelp(): void {
     console.log(`
-${chalk.bold('viby auth')} - Authentication management
+${chalk.bold('viby auth')} - Headless CLI authentication
 
 ${chalk.bold('Usage:')}
   viby auth status            Show current configuration
-  viby auth login             Enter and save CLI_API_TOKEN
+  viby auth login             Enter and save internal Hub owner token
   viby auth logout            Clear saved credentials
 
 ${chalk.bold('Token priority (highest to lowest):')}
-  1. CLI_API_TOKEN environment variable
+  1. VIBY_HUB_OWNER_TOKEN
   2. ~/.viby/settings.toml
-  3. Interactive prompt (on first run)
+  3. Interactive prompt
 `)
 }
 
@@ -115,5 +114,5 @@ export const authCommand: CommandDefinition = {
             }
             process.exit(1)
         }
-    }
+    },
 }

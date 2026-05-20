@@ -9,12 +9,12 @@ import { existsSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { DEFAULT_VIBY_LOCAL_API_URL } from '@viby/protocol/runtimeDefaults'
-import packageJson from '../package.json'
 import { getCliArgs } from '@/utils/cliArgs'
+import packageJson from '../package.json'
 
 class Configuration {
     private _apiUrl: string
-    private _cliApiToken: string
+    private _hubOwnerToken: string
     public readonly isRunnerProcess: boolean
 
     // Directories and paths (from persistence)
@@ -31,11 +31,11 @@ class Configuration {
     constructor() {
         // Server configuration
         this._apiUrl = process.env.VIBY_API_URL || DEFAULT_VIBY_LOCAL_API_URL
-        this._cliApiToken = process.env.CLI_API_TOKEN || ''
+        this._hubOwnerToken = process.env.VIBY_HUB_OWNER_TOKEN || ''
 
         // Check if we're running as runner based on process args
         const args = getCliArgs()
-        this.isRunnerProcess = args.length >= 2 && args[0] === 'runner' && (args[1] === 'start-sync')
+        this.isRunnerProcess = args.length >= 2 && args[0] === 'runner' && args[1] === 'start-sync'
 
         // Directory configuration - Priority: VIBY_HOME env > default home dir
         if (process.env.VIBY_HOME) {
@@ -73,12 +73,12 @@ class Configuration {
         this._apiUrl = url
     }
 
-    get cliApiToken(): string {
-        return this._cliApiToken
+    get hubOwnerToken(): string {
+        return this._hubOwnerToken
     }
 
-    _setCliApiToken(token: string): void {
-        this._cliApiToken = token
+    _setHubOwnerToken(token: string): void {
+        this._hubOwnerToken = token
     }
 }
 
