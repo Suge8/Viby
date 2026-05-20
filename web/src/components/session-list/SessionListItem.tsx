@@ -1,10 +1,12 @@
 import { resolveSessionDriver } from '@viby/protocol'
 import { memo, useCallback, useMemo } from 'react'
+import { Spinner } from '@/components/Spinner'
 import { SessionAttentionBadge } from '@/components/session-list/SessionAttentionBadge'
 import { SessionStateBadge } from '@/components/session-list/SessionStateBadge'
 import { SessionAgentBrandIcon } from '@/components/session-list/sessionAgentPresentation'
 import type { SessionListSelection } from '@/components/session-list/sessionListContracts'
 import { Button } from '@/components/ui/button'
+import { usePendingAction } from '@/components/ui/buttonPending'
 import type { FloatingActionMenuAnchorPoint } from '@/components/ui/FloatingActionMenu.contract'
 import { getInteractiveCardClassName } from '@/components/ui/interactiveCardStyles'
 import { useLongPress } from '@/hooks/useLongPress'
@@ -24,6 +26,8 @@ const SESSION_METADATA_BLOCK_CLASS_NAME = 'mt-1'
 const SESSION_META_ROW_CLASS_NAME =
     'flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-relaxed text-[var(--app-hint)]'
 const SESSION_STATUS_ROW_CLASS_NAME = 'flex shrink-0 items-center justify-end gap-1'
+const SESSION_OPENING_BADGE_CLASS_NAME =
+    'inline-flex min-h-7 items-center gap-1.5 rounded-full border border-[color:color-mix(in_srgb,var(--ds-brand)_22%,transparent)] bg-[color:color-mix(in_srgb,var(--ds-brand)_9%,var(--ds-panel-strong))] px-2.5 py-1 text-xs font-semibold text-[var(--ds-brand)] shadow-[var(--ds-shadow-soft)]'
 
 type SessionListItemProps = {
     session: SessionSummary
@@ -39,6 +43,9 @@ export const SessionListItem = memo(function SessionListItem(props: SessionListI
     const lifecycleState = session.lifecycleState
     const sessionDriver = resolveSessionDriver(session.metadata)
     const selected = selection.selectedSessionId === session.id
+    const routeOpening = selection.openingSessionId === session.id
+    const [openPending, openSession] = usePendingAction(() => selection.onSelect(session.id), routeOpening)
+    const opening = !selected && openPending
 
     const longPressHandlers = useLongPress({
         onLongPress: (point) => {
@@ -46,7 +53,7 @@ export const SessionListItem = memo(function SessionListItem(props: SessionListI
             onOpenActionMenu?.(session.id, point)
         },
         onClick: () => {
-            selection.onSelect(session.id)
+            return openSession()
         },
         threshold: SESSION_ACTION_LONG_PRESS_MS,
         enableContextMenu: true,
@@ -108,6 +115,8 @@ export const SessionListItem = memo(function SessionListItem(props: SessionListI
             variant="plain"
             size="sm"
             pressStyle="card"
+            pending={opening}
+            pendingIndicator="none"
             {...longPressHandlers}
             onFocus={() => emitIntent('focus')}
             onPointerEnter={handlePointerEnter}
@@ -137,8 +146,14 @@ export const SessionListItem = memo(function SessionListItem(props: SessionListI
                 </div>
 
                 <div className={SESSION_STATUS_ROW_CLASS_NAME}>
-                    {hasUnseenReply ? <SessionAttentionBadge compact /> : null}
-                    <SessionStateBadge presentation={presentation} />
+                    {opening ? (
+                        <SessionOpeningBadge label={t('session.opening')} />
+                    ) : (
+                        <>
+                            {hasUnseenReply ? <SessionAttentionBadge compact /> : null}
+                            <SessionStateBadge presentation={presentation} />
+                        </>
+                    )}
                 </div>
             </div>
         </Button>
@@ -151,4 +166,13 @@ function getCardToneClassName(cardClassName: string, selected: boolean): string 
     }
 
     return `${cardClassName} border-[var(--app-session-selected-border)] shadow-[var(--app-session-selected-shadow)]`
+}
+
+function SessionOpeningBadge(props: { label: string }): React.JSX.Element {
+    return (
+        <span className={SESSION_OPENING_BADGE_CLASS_NAME}>
+            <Spinner size="sm" label={null} className="text-current" />
+            <span>{props.label}</span>
+        </span>
+    )
 }

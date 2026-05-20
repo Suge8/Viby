@@ -33,7 +33,7 @@ export type UseTranscriptVirtuosoResult = {
     heightEstimates: number[]
     isHistoryActionPending: boolean
     isHistoryControlVisible: boolean
-    handleHistoryControlClick: () => void
+    handleHistoryControlClick: () => Promise<void>
     handleRangeChanged: (range: ListRange) => void
     handleAtBottomStateChange: (atBottom: boolean) => void
     handleTotalListHeightChanged: () => void

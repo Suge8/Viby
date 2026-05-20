@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createElement, Fragment, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildTranscriptRenderRows } from '@/chat/transcriptRenderRows'
@@ -297,6 +297,34 @@ describe('VibyThread layout', () => {
         expect(historyControl).toHaveAttribute('title', 'misc.previousUserMessage')
         expect(historyAnchor).toHaveClass('ds-thread-history-control-wrapper')
         expect(container.querySelector('.session-chat-thread-viewport')?.contains(historyControl)).toBe(false)
+    })
+
+    it('marks the history control pending while older messages load', async () => {
+        let resolveHistory!: () => void
+        const handleHistoryControlClick = vi.fn(() => new Promise<void>((resolve) => (resolveHistory = resolve)))
+        useTranscriptVirtuosoMock.mockReturnValue(
+            createViewportMock({
+                isHistoryControlVisible: true,
+                handleHistoryControlClick,
+            })
+        )
+
+        renderThread({
+            messageState: {
+                hasMore: true,
+            },
+        })
+
+        const historyControl = screen.getByTestId('thread-history-control')
+        fireEvent.click(historyControl)
+        fireEvent.click(historyControl)
+
+        expect(handleHistoryControlClick).toHaveBeenCalledTimes(1)
+        expect(historyControl).toBeDisabled()
+        expect(historyControl).toHaveAttribute('aria-busy', 'true')
+
+        resolveHistory()
+        await waitFor(() => expect(historyControl).not.toBeDisabled())
     })
 
     it('keeps the transcript visible while loading the entry shell', () => {

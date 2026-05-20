@@ -1,5 +1,6 @@
 import { memo } from 'react'
-import { BrandMarkIcon, SendIcon, SpinnerIcon, StopIcon } from '@/components/icons'
+import { BrandMarkIcon, SendIcon, StopIcon } from '@/components/icons'
+import { Spinner } from '@/components/Spinner'
 import { useTranslation } from '@/lib/use-translation'
 import type { SessionStatePresentation } from './sessionStatePresentation'
 
@@ -28,7 +29,7 @@ export const SessionStateBadge = memo(function SessionStateBadge(props: SessionS
 function getBadgeIcon(iconName: SessionStatePresentation['badgeIconName']): React.JSX.Element {
     switch (iconName) {
         case 'processing':
-            return <SpinnerIcon className="h-4 w-4 animate-spin motion-reduce:animate-none" strokeWidth={3.2} />
+            return <Spinner size="sm" label={null} className="text-current" />
         case 'awaitingInput':
             return <SendIcon className="h-4 w-4" />
         case 'history':

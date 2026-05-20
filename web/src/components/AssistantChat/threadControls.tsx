@@ -56,7 +56,7 @@ export function getThreadStageClassName(options: { reserveHistoryControlInset: b
 export function ThreadBottomControl(props: {
     count: number
     visible: boolean
-    onClick: () => void
+    onClick: () => unknown
 }): React.JSX.Element {
     const { t } = useTranslation()
     const accessibleLabel = getThreadBottomControlAccessibleLabel({
@@ -101,7 +101,7 @@ export function ThreadHistoryControl(props: {
     visible: boolean
     loading: boolean
     disabled: boolean
-    onClick: () => void
+    onClick: () => unknown
 }): React.JSX.Element {
     const { t } = useTranslation()
 
@@ -124,9 +124,7 @@ export function ThreadHistoryControl(props: {
                 onPointerDown={(event) => {
                     event.preventDefault()
                 }}
-                onClick={() => {
-                    props.onClick()
-                }}
+                onClick={props.onClick}
                 disabled={props.disabled || !props.visible}
                 aria-busy={props.loading}
                 aria-label={label}

@@ -149,9 +149,7 @@ export function QueuedMessagesBar({
                                     aria-label={t('queuedMessages.cancel')}
                                     title={t('queuedMessages.cancel')}
                                     className={cn(canceling ? 'opacity-50' : null)}
-                                    onClick={() => {
-                                        void cancelQueuedMessage(message.localId)
-                                    }}
+                                    onClick={() => cancelQueuedMessage(message.localId)}
                                 >
                                     <FeatureCloseIcon className="h-4 w-4" />
                                 </Button>

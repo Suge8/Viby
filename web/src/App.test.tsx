@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '@/App'
 import { recordPendingAppRecovery } from '@/lib/appRecovery'
 import { resetPendingRuntimeUpdate } from '@/lib/runtimeUpdateChannel'
+import { LOCAL_STORAGE_KEYS } from '@/lib/storage/storageRegistry'
 
 const useMatchRouteMock = vi.fn()
 const useLocationMock = vi.fn()
@@ -225,6 +226,30 @@ describe('App', () => {
 
             expect(await screen.findByText('remotePairing.error.scanAgain')).toBeInTheDocument()
             expect(screen.queryByTestId('login-prompt')).not.toBeInTheDocument()
+        } finally {
+            fetchMock.mockRestore()
+        }
+    })
+
+    it('does not let a stale stored pairing id bypass the remote workspace recovery owner', async () => {
+        useLocationMock.mockReturnValue({ pathname: '/sessions', search: '?remote=1', hash: '' })
+        useAuthMock.mockReturnValue({ token: null, api: null, isLoading: false, error: null })
+        window.localStorage.setItem(LOCAL_STORAGE_KEYS.remoteActivePairing, 'stale-pairing')
+        const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+            new Response(JSON.stringify({ code: 'pairing_cookie_missing' }), {
+                status: 401,
+                headers: { 'content-type': 'application/json' },
+            })
+        )
+
+        try {
+            render(<App />)
+
+            expect(await screen.findByText('remotePairing.error.scanAgain')).toBeInTheDocument()
+            expect(fetchMock).toHaveBeenCalledWith(
+                '/pairings/cookie-recover',
+                expect.objectContaining({ cache: 'no-store' })
+            )
         } finally {
             fetchMock.mockRestore()
         }

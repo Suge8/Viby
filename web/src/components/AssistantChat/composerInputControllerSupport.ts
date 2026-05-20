@@ -10,6 +10,7 @@ import type {
 } from 'react'
 import type { Suggestion } from '@/hooks/useActiveSuggestions'
 import type { PermissionMode } from '@/types/api'
+import type { ComposerEnterBehavior } from './composerEnterBehavior'
 
 type NextPermissionModeOptions = {
     permissionMode: PermissionMode
@@ -36,6 +37,7 @@ export type ComposerHapticFeedback = (type?: 'light' | 'success' | 'error') => v
 export type UseComposerInputControllerOptions = {
     api: ComposerApi
     composerText: string
+    enterBehavior: ComposerEnterBehavior
     canSend: boolean
     isTouch: boolean
     threadIsRunning: boolean

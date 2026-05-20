@@ -200,7 +200,7 @@ export function useSessionChatRouteModel(options: SessionChatRouteModelOptions):
         (route: SessionWorkspaceRoute) => {
             const target = getSessionWorkspaceNavigationTarget(route, sessionId)
 
-            runPreloadedNavigation(
+            return runPreloadedNavigation(
                 target.preload,
                 () => {
                     void navigate({
@@ -214,10 +214,10 @@ export function useSessionChatRouteModel(options: SessionChatRouteModelOptions):
         [navigate, sessionId]
     )
     const handleViewFiles = useCallback(() => {
-        navigateToSessionWorkspaceRoute(SESSION_WORKSPACE_FILES_ROUTE)
+        return navigateToSessionWorkspaceRoute(SESSION_WORKSPACE_FILES_ROUTE)
     }, [navigateToSessionWorkspaceRoute])
     const handleViewTerminal = useCallback(() => {
-        navigateToSessionWorkspaceRoute(SESSION_WORKSPACE_TERMINAL_ROUTE)
+        return navigateToSessionWorkspaceRoute(SESSION_WORKSPACE_TERMINAL_ROUTE)
     }, [navigateToSessionWorkspaceRoute])
     const handleSuggestionAction = useCallback(
         (suggestion: Suggestion) => {

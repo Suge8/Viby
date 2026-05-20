@@ -86,6 +86,8 @@ describe('QueuedMessagesBar', () => {
 
         expect(api.cancelQueuedMessages).toHaveBeenCalledTimes(1)
         expect(api.cancelQueuedMessages).toHaveBeenCalledWith('session-1', ['local-1'])
+        expect(cancelButton).toBeDisabled()
+        expect(cancelButton).toHaveAttribute('aria-busy', 'true')
 
         await act(async () => {
             deferred.resolve(['local-1'])

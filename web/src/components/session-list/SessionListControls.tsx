@@ -40,7 +40,7 @@ type SessionListControlsModel = {
 
 type SessionListControlsActions = {
     onChange: (tabId: SessionListSectionId) => void
-    onCreate: () => void
+    onCreate: () => unknown
     onSearchChange: (value: string) => void
 }
 
