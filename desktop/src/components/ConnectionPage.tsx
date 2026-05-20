@@ -1,11 +1,11 @@
 import { type JSX } from 'react'
 import hubBootAnimationUrl from '@/assets/hub-boot.lottie?url'
 import monkeySeeAnimationUrl from '@/assets/monkey-see.lottie?url'
+import { DesktopToggle } from '@/components/DesktopToggle'
 import { DeviceCount } from '@/components/DeviceCount'
 import { CopyIcon, DeviceIcon, DoorIcon, LinkIcon, PowerIcon, QrIcon } from '@/components/icons'
 import { LottiePlayer } from '@/components/LottiePlayer'
 import { OverlayTransition, PageTransition, StaggerGroup, StaggerItem } from '@/components/motion'
-import { shouldShowDeviceAllAccessOffHint } from '@/lib/connectionAccessHint'
 import type { DesktopCopy } from '@/lib/desktopCopy'
 import type { DeviceAuthDevice } from '@/lib/deviceAuthSummary'
 import type { DeviceLinkSnapshotMap } from '@/lib/deviceLinkBadge'
@@ -26,11 +26,14 @@ type ConnectionPageProps = {
     activeDeviceCount: number
     devices: DeviceAuthDevice[]
     deviceLinks: DeviceLinkSnapshotMap
+    publicAccessEnabled: boolean
+    publicAccessDisabled: boolean
     deviceActionLabel: string
     deviceActionVisible: boolean
     viewState: HubViewState
     onOpenEntry(url: string): void
     onPairingAction(): void
+    onPublicAccessChange(value: boolean): void
     onRevokeDevice(deviceId: string): void | Promise<void>
 }
 
@@ -125,10 +128,6 @@ function ConnectionUnavailable(props: ConnectionPageProps): JSX.Element {
 }
 
 function DeviceCard(props: ConnectionPageProps): JSX.Element {
-    const showAllAccessOffHint = shouldShowDeviceAllAccessOffHint({
-        deviceActionVisible: props.deviceActionVisible,
-        activeDeviceCount: props.activeDeviceCount,
-    })
     return (
         <StaggerItem className="desktop-feature-card desktop-mobile-card">
             <div className="desktop-card-heading">
@@ -150,7 +149,6 @@ function DeviceCard(props: ConnectionPageProps): JSX.Element {
                     </span>
                 </button>
             ) : null}
-            {showAllAccessOffHint ? <p className="desktop-device-hint">{props.copy.deviceHintAllAccessOff}</p> : null}
             <DeviceCount
                 count={props.activeDeviceCount}
                 devices={props.devices}
@@ -172,10 +170,30 @@ function AccessHelpPopover(props: { copy: DesktopCopy }): JSX.Element {
                 <LinkIcon />
                 <span>{props.copy.accessHelpLan}</span>
             </div>
-            <div className="desktop-access-help-item">
-                <DeviceIcon />
-                <span>{props.copy.accessHelpLocal}</span>
+        </div>
+    )
+}
+
+function PublicAccessControl(props: ConnectionPageProps): JSX.Element {
+    const titleId = 'desktop-public-access-label'
+    const hint = props.publicAccessEnabled ? props.copy.publicAccessOnHint : props.copy.publicAccessOffHint
+    return (
+        <div className={`desktop-public-access-control ${props.publicAccessEnabled ? 'is-on' : 'is-off'}`}>
+            <div className="desktop-public-access-copy">
+                <span className="desktop-public-access-icon" aria-hidden="true">
+                    {props.publicAccessEnabled ? <QrIcon /> : <LinkIcon />}
+                </span>
+                <div>
+                    <strong id={titleId}>{props.copy.publicAccessTitle}</strong>
+                    <span>{hint}</span>
+                </div>
             </div>
+            <DesktopToggle
+                checked={props.publicAccessEnabled}
+                disabled={props.publicAccessDisabled}
+                labelId={titleId}
+                onClick={() => props.onPublicAccessChange(!props.publicAccessEnabled)}
+            />
         </div>
     )
 }
@@ -195,6 +213,7 @@ function AccessCard(props: ConnectionPageProps): JSX.Element {
                 </button>
                 <AccessHelpPopover copy={props.copy} />
             </div>
+            <PublicAccessControl {...props} />
             <div className="desktop-entry-row">
                 <div className="desktop-entry-copy">
                     {props.publicEntry ? (

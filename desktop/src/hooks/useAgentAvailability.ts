@@ -24,13 +24,13 @@ const AUTO_REFRESH_TTL_MS = 60_000
 const REFRESHING_POLL_MS = 900
 
 function createClient(status?: HubRuntimeStatus): LocalHubPairingClient | null {
-    if (!status?.localHubUrl || !status.cliApiToken) return null
-    return new LocalHubPairingClient({ baseUrl: status.localHubUrl, cliApiToken: status.cliApiToken })
+    if (!status?.localHubUrl || !status.hubOwnerToken) return null
+    return new LocalHubPairingClient({ baseUrl: status.localHubUrl, hubOwnerToken: status.hubOwnerToken })
 }
 
 function createSourceKey(status: HubRuntimeStatus | undefined, ready: boolean): string {
-    return ready && status?.localHubUrl && status.cliApiToken
-        ? `${status.localHubUrl}\0${status.cliApiToken}`
+    return ready && status?.localHubUrl && status.hubOwnerToken
+        ? `${status.localHubUrl}\0${status.hubOwnerToken}`
         : 'offline'
 }
 
@@ -58,7 +58,7 @@ export function useAgentAvailability(
     const sourceKey = createSourceKey(status, ready)
     const client = useMemo(
         () => (ready ? createClient(status) : null),
-        [ready, status?.cliApiToken, status?.localHubUrl]
+        [ready, status?.hubOwnerToken, status?.localHubUrl]
     )
     const [agents, setAgents] = useState<readonly AgentAvailability[]>([])
     const [capabilities, setCapabilities] = useState<readonly RuntimeAgentCapabilitySnapshot[]>([])

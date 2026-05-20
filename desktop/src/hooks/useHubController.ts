@@ -9,9 +9,7 @@ import {
     startHub,
     stopHub,
 } from '@/lib/desktopApi'
-import { readEntryModePreference, writeEntryModePreference } from '@/lib/desktopPreferences'
 import type { HubAction } from '@/lib/desktopShellModel'
-import { deriveInitialEntryMode } from '@/lib/entryMode'
 import {
     applyHubSnapshot,
     DESKTOP_PREVIEW_MESSAGE,
@@ -19,17 +17,15 @@ import {
     resolvePublicAccessEnabled,
     runHubAction,
 } from '@/lib/hubControllerSupport'
-import type { DesktopEntryMode, HubSnapshot } from '@/types'
+import type { HubSnapshot } from '@/types'
 
 interface HubControllerState {
     snapshot: HubSnapshot | null
     busy: boolean
     hubBusy: boolean
     hubAction: HubAction
-    entryMode: DesktopEntryMode
     publicAccessEnabled: boolean
     actionError: string | null
-    setEntryMode: (value: DesktopEntryMode) => void
     setPublicAccessEnabled: (value: boolean) => Promise<void>
     refresh: () => Promise<void>
     start: () => Promise<void>
@@ -43,30 +39,19 @@ export function useHubController(): HubControllerState {
     const [busy, setBusy] = useState<boolean>(false)
     const [hubBusy, setHubBusy] = useState<boolean>(false)
     const [hubAction, setHubAction] = useState<HubAction>(null)
-    const [entryMode, setEntryModeState] = useState<DesktopEntryMode>(() =>
-        readEntryModePreference(globalThis.localStorage)
-    )
     const [publicAccessEnabled, setPublicAccessEnabledState] = useState(true)
     const [actionError, setActionError] = useState<string | null>(null)
     const tauriRuntimeAvailable = isTauriRuntimeAvailable()
 
-    const setEntryMode = useCallback((value: DesktopEntryMode): void => {
-        setEntryModeState(value)
-        writeEntryModePreference(globalThis.localStorage, value)
-    }, [])
-
     const applySnapshot = useCallback(
-        (nextSnapshot: HubSnapshot, useInitialEntryMode = false) => {
+        (nextSnapshot: HubSnapshot) => {
             applyHubSnapshot(nextSnapshot, {
                 setSnapshot,
                 setActionError,
             })
             setPublicAccessEnabledState(resolvePublicAccessEnabled(nextSnapshot))
-            if (useInitialEntryMode && nextSnapshot.running) {
-                setEntryMode(deriveInitialEntryMode(nextSnapshot))
-            }
         },
-        [setActionError, setEntryMode, setSnapshot]
+        [setActionError, setSnapshot]
     )
 
     const refresh = useCallback(async (): Promise<void> => {
@@ -92,7 +77,7 @@ export function useHubController(): HubControllerState {
 
                 const nextSnapshot = await getHubSnapshot()
                 if (!stopped) {
-                    applySnapshot(nextSnapshot, true)
+                    applySnapshot(nextSnapshot)
                 }
             } catch (error) {
                 if (!stopped) {
@@ -124,15 +109,18 @@ export function useHubController(): HubControllerState {
 
     const setPublicAccessEnabled = useCallback(
         async (value: boolean): Promise<void> => {
-            if (snapshot?.running) {
-                setActionError('中枢运行中，关闭后可更改公网访问。')
+            if (value === publicAccessEnabled) {
                 return
             }
 
             const previousValue = publicAccessEnabled
+            const shouldRestart = snapshot?.running === true
             setPublicAccessEnabledState(value)
             const ok = await runAction(async () => {
                 await persistPublicAccessEnabled(value)
+                if (!shouldRestart) return
+                await stopHub()
+                return await startHub()
             })
             if (!ok) setPublicAccessEnabledState(previousValue)
         },
@@ -143,12 +131,12 @@ export function useHubController(): HubControllerState {
         setHubBusy(true)
         setHubAction('start')
         try {
-            await runAction(() => startHub({ entryMode }))
+            await runAction(() => startHub())
         } finally {
             setHubBusy(false)
             setHubAction(null)
         }
-    }, [entryMode, runAction])
+    }, [runAction])
 
     const stop = useCallback(async (): Promise<void> => {
         setHubBusy(true)
@@ -194,10 +182,8 @@ export function useHubController(): HubControllerState {
         busy,
         hubBusy,
         hubAction,
-        entryMode,
         publicAccessEnabled,
         actionError,
-        setEntryMode,
         setPublicAccessEnabled,
         refresh,
         start,

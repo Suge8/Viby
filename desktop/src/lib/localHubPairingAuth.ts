@@ -4,7 +4,7 @@ export async function authenticateLocalHub(options: {
     jwtToken: string | null
     setJwtToken: (token: string | null) => void
     baseUrl: string
-    cliApiToken: string
+    hubOwnerToken: string
     fetchImpl: FetchLike
     parseErrorMessage: (status: number, bodyText: string) => string
 }): Promise<string> {
@@ -12,7 +12,7 @@ export async function authenticateLocalHub(options: {
     const response = await options.fetchImpl(`${options.baseUrl}/api/auth`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ accessToken: options.cliApiToken }),
+        body: JSON.stringify({ accessToken: options.hubOwnerToken }),
     })
     const bodyText = await response.text().catch(() => '')
     if (!response.ok) throw new Error(options.parseErrorMessage(response.status, bodyText))

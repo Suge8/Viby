@@ -40,7 +40,7 @@ const snapshotFixture: HubSnapshot = {
         publicUrl: 'http://127.0.0.1:37173',
         publicAccessEnabled: true,
         pairingBrokerUrl: 'https://pair.viby.run',
-        cliApiToken: 'token',
+        hubOwnerToken: 'token',
         settingsFile: '/tmp/settings.toml',
         dataDir: '/tmp',
         startedAt: '2026-03-24T00:00:00.000Z',
@@ -104,11 +104,11 @@ describe('desktopApi', () => {
         expect(invokeMock).toHaveBeenCalledWith('open_url', { url: 'http://192.168.12.34:37173' })
     })
 
-    it('starts the hub with the selected entry mode', async () => {
+    it('starts the desktop-managed hub through the dedicated command', async () => {
         invokeMock.mockResolvedValueOnce(snapshotFixture)
 
-        await expect(desktopApi.startHub({ entryMode: 'lan' })).resolves.toBe(snapshotFixture)
-        expect(invokeMock).toHaveBeenCalledWith('start_hub', { options: { entryMode: 'lan' } })
+        await expect(desktopApi.startHub()).resolves.toBe(snapshotFixture)
+        expect(invokeMock).toHaveBeenCalledWith('start_hub', undefined)
     })
 
     it('persists the public access switch through the dedicated desktop command', async () => {

@@ -23,13 +23,13 @@ type AgentConfigState = {
 }
 
 function createClient(status?: HubRuntimeStatus): LocalHubPairingClient | null {
-    if (!status?.localHubUrl || !status.cliApiToken) return null
-    return new LocalHubPairingClient({ baseUrl: status.localHubUrl, cliApiToken: status.cliApiToken })
+    if (!status?.localHubUrl || !status.hubOwnerToken) return null
+    return new LocalHubPairingClient({ baseUrl: status.localHubUrl, hubOwnerToken: status.hubOwnerToken })
 }
 
 function createSourceKey(status: HubRuntimeStatus | undefined, ready: boolean): string {
-    return ready && status?.localHubUrl && status.cliApiToken
-        ? `${status.localHubUrl}\0${status.cliApiToken}`
+    return ready && status?.localHubUrl && status.hubOwnerToken
+        ? `${status.localHubUrl}\0${status.hubOwnerToken}`
         : 'offline'
 }
 
@@ -41,7 +41,7 @@ export function useAgentConfig(
     const sourceKey = createSourceKey(status, ready)
     const client = useMemo(
         () => (ready ? createClient(status) : null),
-        [ready, status?.cliApiToken, status?.localHubUrl]
+        [ready, status?.hubOwnerToken, status?.localHubUrl]
     )
     const [response, setResponse] = useState<AgentConfigResponse | null>(null)
     const [error, setError] = useState<AgentConfigErrorCode | null>(null)

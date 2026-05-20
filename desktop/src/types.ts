@@ -1,6 +1,7 @@
+import type { PairingTunnelDirectBlockedReason, PairingTunnelTransport } from '@viby/protocol/pairing'
+
 export type HubRuntimePhase = 'starting' | 'ready' | 'stopped' | 'error'
 export type HubLaunchSource = 'desktop' | 'cli'
-export type DesktopEntryMode = 'local' | 'lan'
 
 export interface HubStartupConfig {
     listenHost: string
@@ -20,7 +21,7 @@ export interface HubRuntimeStatus {
     publicAccessEnabled: boolean
     pairingBrokerUrl?: string | null
     pairingCode?: string
-    cliApiToken: string
+    hubOwnerToken: string
     settingsFile: string
     dataDir: string
     startedAt: string
@@ -68,6 +69,7 @@ export interface DesktopPairingSession {
 
 export interface PairingBridgeStats {
     transport: 'direct' | 'relay' | 'unknown'
+    transportMode: PairingTunnelTransport | 'unknown'
     /**
      * Last confirmed transport (only ever `direct` or `relay`). Used by the
      * UI to render in-flight transition messages such as "由中转切换至点对点”
@@ -78,7 +80,10 @@ export interface PairingBridgeStats {
     localCandidateType: string | null
     remoteCandidateType: string | null
     currentRoundTripTimeMs: number | null
-    sampledAt?: number | null
+    sampledAt: number
+    staleAfterMs: number
+    routeRevision: number
+    directBlockedReason?: PairingTunnelDirectBlockedReason | null
     restartCount: number
 }
 

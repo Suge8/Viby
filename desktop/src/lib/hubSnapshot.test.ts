@@ -22,7 +22,7 @@ const startingSnapshot: HubSnapshot = {
         publicUrl: 'http://127.0.0.1:37173',
         publicAccessEnabled: true,
         pairingBrokerUrl: 'https://pair.viby.run',
-        cliApiToken: '',
+        hubOwnerToken: '',
         settingsFile: '/tmp/settings.toml',
         dataDir: '/tmp',
         startedAt: '2026-04-26T00:00:00.000Z',

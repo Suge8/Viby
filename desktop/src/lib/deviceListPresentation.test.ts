@@ -72,4 +72,22 @@ describe('deviceListPresentation', () => {
         expect(devices).toMatchObject([{ id: 'pairing:ready', name: 'iPhone', platform: 'ios', channel: 'scan' }])
         expect(getConnectedDevices(devices, links).map((row) => row.id)).toEqual(['pairing:ready'])
     })
+
+    it('keeps browser and installed PWA handoff under the same scan device row', () => {
+        const staleBrowserRow = device({
+            id: 'pairing:phone',
+            name: 'Browser tab',
+            platform: 'unknown',
+            channel: 'scan',
+        })
+        const links: DeviceLinkSnapshotMap = new Map([
+            ['pairing:phone', { deviceId: 'pairing:phone', phase: 'ready', stats: null }],
+        ])
+        const devices = buildDevicePresentation([staleBrowserRow], [pairingSession('phone', 'approved')])
+
+        expect(devices).toEqual([
+            expect.objectContaining({ id: 'pairing:phone', name: 'iPhone', platform: 'ios', channel: 'scan' }),
+        ])
+        expect(getConnectedDevices(devices, links).map((row) => row.id)).toEqual(['pairing:phone'])
+    })
 })

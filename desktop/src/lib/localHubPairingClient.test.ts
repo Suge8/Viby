@@ -37,7 +37,7 @@ describe('LocalHubPairingClient', () => {
 
         const client = new LocalHubPairingClient({
             baseUrl: 'http://127.0.0.1:37173',
-            cliApiToken: 'cli-token',
+            hubOwnerToken: 'owner-token',
             fetchImpl: fetchImpl as typeof fetch,
         })
 
@@ -69,7 +69,7 @@ describe('LocalHubPairingClient', () => {
 
         const client = new LocalHubPairingClient({
             baseUrl: 'http://127.0.0.1:37173',
-            cliApiToken: 'cli-token',
+            hubOwnerToken: 'owner-token',
             fetchImpl: fetchImpl as typeof fetch,
         })
 
@@ -105,7 +105,7 @@ describe('LocalHubPairingClient', () => {
 
         const client = new LocalHubPairingClient({
             baseUrl: 'http://127.0.0.1:37173',
-            cliApiToken: 'cli-token',
+            hubOwnerToken: 'owner-token',
         })
 
         await expect(client.listSessions()).resolves.toEqual([])
@@ -171,7 +171,7 @@ describe('LocalHubPairingClient', () => {
         }
         const client = new LocalHubPairingClient({
             baseUrl: 'http://127.0.0.1:37173',
-            cliApiToken: 'cli-token',
+            hubOwnerToken: 'owner-token',
             fetchImpl: fetchImpl as typeof fetch,
         })
 

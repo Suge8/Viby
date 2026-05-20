@@ -1,4 +1,4 @@
-import type { PairingDeviceLinkStatus } from '@viby/protocol/pairing'
+import { describePairingDirectBlockedReason, type PairingDeviceLinkStatus } from '@viby/protocol/pairing'
 import { type JSX, useCallback, useEffect, useRef, useState } from 'react'
 import type { DeviceAuthDevice } from '@/lib/deviceAuthSummary'
 import { formatDevicePlatform, formatDeviceTitle } from '@/lib/deviceDisplay'
@@ -12,6 +12,15 @@ function buildDeviceHeadline(device: DeviceAuthDevice, linkStatus: PairingDevice
     return `${title} / ${linkStatus.title}`
 }
 
+function buildDeviceLinkDetail(
+    device: DeviceAuthDevice,
+    links: DeviceLinkSnapshotMap,
+    status: PairingDeviceLinkStatus
+): string {
+    const reason = describePairingDirectBlockedReason(links.get(device.id)?.stats?.directBlockedReason)
+    return reason ? `${status.title} · ${reason}` : status.title
+}
+
 function DeviceRow(props: {
     device: DeviceAuthDevice
     links: DeviceLinkSnapshotMap
@@ -21,6 +30,7 @@ function DeviceRow(props: {
     const { device } = props
     const { icon } = formatDevicePlatform(device.platform)
     const linkStatus = buildDeviceLinkStatus(device, props.links.get(device.id) ?? null)
+    const linkDetail = buildDeviceLinkDetail(device, props.links, linkStatus)
     return (
         <div className="desktop-device-row">
             <span className={`desktop-device-dot is-${linkStatus.tone}`} />
@@ -29,7 +39,7 @@ function DeviceRow(props: {
             </span>
             <div>
                 <strong>{buildDeviceHeadline(device, linkStatus)}</strong>
-                <small>{linkStatus.title}</small>
+                <small>{linkDetail}</small>
             </div>
             <button type="button" disabled={props.revoking} onClick={() => props.onRevokeDevice(device.id)}>
                 {props.revoking ? '取消中…' : '取消配对'}

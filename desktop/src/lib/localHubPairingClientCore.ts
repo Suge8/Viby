@@ -10,7 +10,7 @@ export type FetchLike = typeof fetch
 
 export type LocalHubPairingClientOptions = {
     baseUrl: string
-    cliApiToken: string
+    hubOwnerToken: string
     fetchImpl?: FetchLike
 }
 
@@ -42,12 +42,12 @@ function parseErrorMessage(status: number, bodyText: string): string {
 export class LocalHubPairingClientCore {
     protected readonly baseUrl: string
     protected readonly fetchImpl: FetchLike
-    private readonly cliApiToken: string
+    private readonly hubOwnerToken: string
     private jwtToken: string | null = null
 
     constructor(options: LocalHubPairingClientOptions) {
         this.baseUrl = trimBaseUrl(options.baseUrl)
-        this.cliApiToken = options.cliApiToken
+        this.hubOwnerToken = options.hubOwnerToken
         this.fetchImpl = options.fetchImpl ?? createDefaultFetch()
     }
 
@@ -102,7 +102,7 @@ export class LocalHubPairingClientCore {
                 this.jwtToken = token
             },
             baseUrl: this.baseUrl,
-            cliApiToken: this.cliApiToken,
+            hubOwnerToken: this.hubOwnerToken,
             fetchImpl: this.fetchImpl,
             parseErrorMessage,
         })

@@ -8,10 +8,10 @@ export function createDeferredHubClient(getStatus: () => HubRuntimeStatus | null
     function current(): LocalHubPairingClient {
         const status = getStatus()
         if (!status || status.phase !== 'ready') throw new HubPausedError()
-        const nextKey = `${status.localHubUrl}|${status.cliApiToken}`
+        const nextKey = `${status.localHubUrl}|${status.hubOwnerToken}`
         if (!client || nextKey !== key) {
             client?.closeAllTerminals()
-            client = new LocalHubPairingClient({ baseUrl: status.localHubUrl, cliApiToken: status.cliApiToken })
+            client = new LocalHubPairingClient({ baseUrl: status.localHubUrl, hubOwnerToken: status.hubOwnerToken })
             key = nextKey
         }
         return client

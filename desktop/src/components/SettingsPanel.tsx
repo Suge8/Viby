@@ -1,12 +1,11 @@
 import type { JSX, ReactNode } from 'react'
 import { DesktopSegmentedControl } from '@/components/DesktopSegmentedControl'
+import { DesktopToggle } from '@/components/DesktopToggle'
 import {
     DoorIcon,
     DownloadIcon,
     GithubIcon,
     LanguageIcon,
-    LinkIcon,
-    QrIcon,
     RefreshIcon,
     SpinnerIcon,
     ThemeLightIcon,
@@ -15,25 +14,16 @@ import { StaggerGroup, StaggerItem } from '@/components/motion'
 import type { DesktopUpdateActions, DesktopUpdateState } from '@/hooks/useDesktopUpdates'
 import type { DesktopCopy } from '@/lib/desktopCopy'
 import type { LanguagePreference, ThemePreference } from '@/lib/desktopPreferences'
-import type { DesktopEntryMode } from '@/types'
 
 const PROJECT_URL = 'https://github.com/Suge8/Viby'
 
 interface SettingsPanelProps {
     updates: DesktopUpdateState & DesktopUpdateActions
     copy: DesktopCopy
-    entryMode: DesktopEntryMode
-    entryModeDisabled: boolean
-    entryModeLocked: boolean
-    publicAccessDisabled: boolean
-    publicAccessEnabled: boolean
-    publicAccessLocked: boolean
     languagePreference: LanguagePreference
     themePreference: ThemePreference
-    onEntryModeChange(value: DesktopEntryMode): void
     onLanguagePreferenceChange(value: LanguagePreference): void
     onOpenUrl(url: string): void
-    onPublicAccessChange(value: boolean): void
     onThemePreferenceChange(value: ThemePreference): void
 }
 
@@ -89,42 +79,13 @@ function SettingsCta(props: { disabled?: boolean; icon: ReactNode; label: string
     )
 }
 
-function SettingsToggle(props: {
-    checked: boolean
-    disabled?: boolean
-    labelId?: string
-    onClick(): void
-}): JSX.Element {
-    return (
-        <button
-            type="button"
-            className={`desktop-settings-toggle ${props.checked ? 'is-on' : ''}`}
-            role="switch"
-            aria-checked={props.checked}
-            aria-labelledby={props.labelId}
-            disabled={props.disabled}
-            onClick={props.onClick}
-        >
-            <span />
-        </button>
-    )
-}
-
 export function SettingsPanel({
     updates,
     copy,
-    entryMode,
-    entryModeDisabled,
-    entryModeLocked,
-    publicAccessDisabled,
-    publicAccessEnabled,
-    publicAccessLocked,
     languagePreference,
     themePreference,
-    onEntryModeChange,
     onLanguagePreferenceChange,
     onOpenUrl,
-    onPublicAccessChange,
     onThemePreferenceChange,
 }: SettingsPanelProps): JSX.Element {
     const busy = updates.phase === 'checking' || updates.phase === 'installing'
@@ -154,32 +115,6 @@ export function SettingsPanel({
                     />
                 </StaggerItem>
 
-                <StaggerItem className="desktop-settings-row">
-                    <SettingHeader
-                        icon={<QrIcon />}
-                        title={copy.settingsPublicTitle}
-                        hint={publicAccessLocked ? copy.settingsPublicLocked : copy.settingsPublicHint}
-                    />
-                    <SettingsToggle
-                        checked={publicAccessEnabled}
-                        disabled={publicAccessDisabled}
-                        onClick={() => onPublicAccessChange(!publicAccessEnabled)}
-                    />
-                </StaggerItem>
-
-                <StaggerItem className="desktop-settings-row">
-                    <SettingHeader
-                        icon={<LinkIcon />}
-                        title={copy.settingsLanTitle}
-                        hint={entryModeLocked ? copy.settingsLanLocked : copy.settingsLanHint}
-                    />
-                    <SettingsToggle
-                        checked={entryMode === 'lan'}
-                        disabled={entryModeDisabled}
-                        onClick={() => onEntryModeChange(entryMode === 'lan' ? 'local' : 'lan')}
-                    />
-                </StaggerItem>
-
                 <StaggerItem className="desktop-settings-update">
                     <SettingHeader
                         icon={<DownloadIcon />}
@@ -189,7 +124,7 @@ export function SettingsPanel({
                     <div className="desktop-settings-update-actions">
                         <div className="desktop-settings-inline-toggle">
                             <span id="desktop-auto-update-label">{copy.settingsAutoUpdateTitle}</span>
-                            <SettingsToggle
+                            <DesktopToggle
                                 checked={updates.autoCheckEnabled}
                                 labelId="desktop-auto-update-label"
                                 onClick={() => updates.setAutoCheckEnabled(!updates.autoCheckEnabled)}

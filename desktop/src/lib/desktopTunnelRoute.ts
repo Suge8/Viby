@@ -1,6 +1,14 @@
 import type { PairingTransportState, PairingTunnelRouteEvent, PairingTunnelRouteState } from '@viby/protocol/pairing'
-import { readPairingTunnelTelemetry, resolvePairingTunnelDirectCandidateType } from '@viby/protocol/pairing'
+import {
+    PAIRING_LINK_SAMPLE_STALE_MS,
+    readPairingTunnelTelemetry,
+    resolvePairingTunnelDirectCandidateType,
+} from '@viby/protocol/pairing'
 import type { DesktopPairingSession, PairingBridgeState, PairingBridgeStats } from '@/types'
+
+function freshTelemetryRoundTrip(telemetry: ReturnType<typeof readPairingTunnelTelemetry>): number | null {
+    return telemetry.roundTripSampledAt ? telemetry.roundTripTimeMs : null
+}
 
 export function buildDesktopTunnelBridgeState(options: {
     base: DesktopPairingSession
@@ -34,25 +42,42 @@ export function readDesktopTunnelRouteStats(
     directStats: PairingBridgeStats | null
 ): PairingBridgeStats | null {
     const telemetry = readPairingTunnelTelemetry(routeState)
-    if (telemetry.activeRoute === 'relay') {
+    if (telemetry.activeTransport === 'relay-wss') {
         return {
             transport: 'relay',
+            transportMode: 'relay-wss',
             previousTransport: null,
             localCandidateType: null,
             remoteCandidateType: null,
-            currentRoundTripTimeMs: telemetry.roundTripTimeMs,
+            currentRoundTripTimeMs: freshTelemetryRoundTrip(telemetry),
+            sampledAt: telemetry.roundTripSampledAt ?? Date.now(),
+            staleAfterMs: PAIRING_LINK_SAMPLE_STALE_MS,
+            routeRevision: telemetry.routeRevision,
+            directBlockedReason: telemetry.directBlockedReason,
             restartCount: telemetry.directProbeFailures,
         }
     }
     if (telemetry.activeRoute === 'direct') {
-        return directStats && directStats.transport === 'direct'
-            ? { ...directStats, restartCount: telemetry.directProbeFailures }
+        const transport = telemetry.activeTransport === 'turn-webrtc' ? 'relay' : 'direct'
+        return directStats && directStats.transport === transport
+            ? {
+                  ...directStats,
+                  transportMode: telemetry.activeTransport ?? directStats.transportMode,
+                  routeRevision: telemetry.routeRevision,
+                  directBlockedReason: telemetry.directBlockedReason,
+                  restartCount: telemetry.directProbeFailures,
+              }
             : {
-                  transport: 'direct',
+                  transport,
+                  transportMode: telemetry.activeTransport ?? 'unknown',
                   previousTransport: null,
                   localCandidateType: telemetry.directCandidateType,
                   remoteCandidateType: null,
-                  currentRoundTripTimeMs: telemetry.roundTripTimeMs,
+                  currentRoundTripTimeMs: freshTelemetryRoundTrip(telemetry),
+                  sampledAt: telemetry.roundTripSampledAt ?? Date.now(),
+                  staleAfterMs: PAIRING_LINK_SAMPLE_STALE_MS,
+                  routeRevision: telemetry.routeRevision,
+                  directBlockedReason: telemetry.directBlockedReason,
                   restartCount: telemetry.directProbeFailures,
               }
     }
@@ -62,6 +87,11 @@ export function readDesktopTunnelRouteStats(
 export function readDesktopTunnelDirectCandidateEvent(stats: PairingBridgeStats): PairingTunnelRouteEvent | null {
     const candidateType = resolvePairingTunnelDirectCandidateType(stats)
     return candidateType
-        ? { type: 'direct-candidate-selected', candidateType, roundTripTimeMs: stats.currentRoundTripTimeMs }
+        ? {
+              type: 'direct-candidate-selected',
+              candidateType,
+              roundTripTimeMs: stats.currentRoundTripTimeMs,
+              sampledAt: stats.sampledAt,
+          }
         : null
 }

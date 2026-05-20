@@ -38,7 +38,7 @@ export function buildDevicePresentation(
     for (const session of pairings) {
         if (session.pairing.approvalStatus !== 'approved') continue
         const id = pairingDeviceId(session.pairing.id)
-        if (!rows.has(id)) rows.set(id, pairingDevice(session))
+        rows.set(id, pairingDevice(session))
     }
     return [...rows.values()]
 }

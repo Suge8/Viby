@@ -46,7 +46,7 @@ export function useDeviceAuthSummary(
     const [summary, setSummary] = useState<DeviceAuthSummary>({ activeCount: 0, devices: [] })
     const [loaded, setLoaded] = useState(false)
     const [error, setError] = useState<string | null>(null)
-    const key = enabled && isReady(status) ? `${status.localHubUrl}|${status.cliApiToken}` : 'idle'
+    const key = enabled && isReady(status) ? `${status.localHubUrl}|${status.hubOwnerToken}` : 'idle'
     const ownedIds = options.pairingDeviceIds
     const { pairingResolved } = options
 

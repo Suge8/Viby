@@ -7,6 +7,7 @@ const lanEntry: EntryPreviewModel = {
     displayLabel: '局域网地址',
     displayValue: '192.168.1.8:37173',
     openUrl: 'http://192.168.1.8:37173',
+    entries: [{ label: '局域网地址', value: '192.168.1.8:37173', url: 'http://192.168.1.8:37173' }],
     isPreview: false,
 }
 

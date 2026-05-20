@@ -1,11 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { check, type Update } from '@tauri-apps/plugin-updater'
-import type { DesktopEntryMode, DesktopPairingSession, HubSnapshot } from '@/types'
-
-interface StartHubOptions {
-    entryMode: DesktopEntryMode
-}
+import type { DesktopPairingSession, HubSnapshot } from '@/types'
 
 export interface DesktopUpdateInfo {
     version: string
@@ -70,8 +66,8 @@ export async function getHubSnapshot(): Promise<HubSnapshot> {
     return await invokeDesktopCommand<HubSnapshot>('get_hub_snapshot')
 }
 
-export async function startHub(options: StartHubOptions): Promise<HubSnapshot> {
-    return await invokeDesktopCommand<HubSnapshot>('start_hub', { options })
+export async function startHub(): Promise<HubSnapshot> {
+    return await invokeDesktopCommand<HubSnapshot>('start_hub')
 }
 
 export async function stopHub(): Promise<HubSnapshot> {

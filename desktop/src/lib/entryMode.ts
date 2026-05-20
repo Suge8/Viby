@@ -4,11 +4,13 @@ import {
     type HubAccessScope,
     isWildcardListenHost,
 } from '@viby/protocol/hubAccessEntries'
-import type { DesktopEntryMode, HubSnapshot, HubStartupConfig } from '@/types'
+import type { HubSnapshot, HubStartupConfig } from '@/types'
 
-const LOCAL_LISTEN_HOST = '127.0.0.1'
+const DESKTOP_LISTEN_HOST = '0.0.0.0'
+const LOCAL_PREVIEW_HOST = '127.0.0.1'
 const DEFAULT_PREVIEW_LISTEN_PORT = 37173
 const PREVIEW_ADDRESS_LABEL = '启动后地址'
+type EntryMode = 'local' | 'lan'
 
 const SCOPE_LABEL: Record<HubAccessScope, string> = {
     public: '公网地址',
@@ -23,7 +25,7 @@ export interface EntryPreviewAddress {
 }
 
 export interface EntryPreviewModel {
-    mode: DesktopEntryMode
+    mode: EntryMode
     displayLabel: string
     displayValue: string
     secondaryLabel?: string
@@ -50,50 +52,50 @@ function entryFromAccess(entry: HubAccessEntry): EntryPreviewAddress {
     return toEntry(entry.scope, entry.url)
 }
 
+function shouldShowDesktopEntry(entry: HubAccessEntry, status: NonNullable<HubSnapshot['status']>): boolean {
+    if (entry.scope === 'local') return false
+    if (entry.scope === 'public' && status.pairingBrokerUrl?.trim()) return false
+    return true
+}
+
 function getStartupConfig(snapshot: HubSnapshot | null): HubStartupConfig {
     return (
         snapshot?.startupConfig ?? {
-            listenHost: LOCAL_LISTEN_HOST,
+            listenHost: DESKTOP_LISTEN_HOST,
             listenPort: DEFAULT_PREVIEW_LISTEN_PORT,
             publicAccessEnabled: true,
         }
     )
 }
 
-export function deriveEntryModeFromListenHost(listenHost: string | undefined): DesktopEntryMode {
+export function deriveEntryModeFromListenHost(listenHost: string | undefined): EntryMode {
     return listenHost && isWildcardListenHost(listenHost) ? 'lan' : 'local'
-}
-
-export function deriveInitialEntryMode(snapshot: HubSnapshot | null): DesktopEntryMode {
-    if (snapshot?.running && snapshot.status) {
-        return deriveEntryModeFromListenHost(snapshot.status.listenHost)
-    }
-
-    return deriveEntryModeFromListenHost(getStartupConfig(snapshot).listenHost)
 }
 
 export function buildEntryPreviewModel(snapshot: HubSnapshot | null): EntryPreviewModel {
     const status = snapshot?.status
     if (status && snapshot?.running) {
         const mode = deriveEntryModeFromListenHost(status.listenHost)
-        const entries = buildHubAccessEntries(status).map(entryFromAccess)
+        const entries = buildHubAccessEntries(status)
+            .filter((entry) => shouldShowDesktopEntry(entry, status))
+            .map(entryFromAccess)
         const [primary, secondary] = entries
 
         return {
             mode,
-            displayLabel: primary.label,
-            displayValue: primary.value,
+            displayLabel: primary?.label ?? '',
+            displayValue: primary?.value ?? '',
             secondaryLabel: secondary?.label,
             secondaryValue: secondary?.value,
             secondaryOpenUrl: secondary?.url,
-            openUrl: primary.url,
+            openUrl: primary?.url,
             entries,
             isPreview: false,
         }
     }
 
     const startupConfig = getStartupConfig(snapshot)
-    const displayValue = formatHttpOrigin(LOCAL_LISTEN_HOST, startupConfig.listenPort)
+    const displayValue = formatHttpOrigin(LOCAL_PREVIEW_HOST, startupConfig.listenPort)
 
     return {
         mode: deriveEntryModeFromListenHost(startupConfig.listenHost),

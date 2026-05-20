@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import type { PairingBridgeState } from '@/types'
+import type { PairingBridgeState, PairingBridgeStats } from '@/types'
 import type { DeviceAuthDevice } from './deviceAuthSummary'
 import { buildDeviceLinkSnapshot, buildDeviceLinkStatus } from './deviceLinkBadge'
 
@@ -38,6 +38,23 @@ function bridgeState(overrides: Partial<PairingBridgeState>): PairingBridgeState
     }
 }
 
+function bridgeStats(overrides: Partial<PairingBridgeStats>): PairingBridgeStats {
+    return {
+        transport: 'direct',
+        transportMode: 'direct-webrtc',
+        previousTransport: null,
+        localCandidateType: null,
+        remoteCandidateType: null,
+        currentRoundTripTimeMs: null,
+        sampledAt: 123,
+        staleAfterMs: Number.MAX_SAFE_INTEGER,
+        routeRevision: 0,
+        directBlockedReason: null,
+        restartCount: 0,
+        ...overrides,
+    }
+}
+
 describe('buildDeviceLinkSnapshot', () => {
     it('returns null when the bridge has no pairing', () => {
         const snapshot = buildDeviceLinkSnapshot({ phase: 'connecting', message: null, pairing: null, stats: null })
@@ -47,25 +64,24 @@ describe('buildDeviceLinkSnapshot', () => {
     it('keys the snapshot by the pairing-derived device id', () => {
         const snapshot = buildDeviceLinkSnapshot(
             bridgeState({
-                stats: {
+                stats: bridgeStats({
                     transport: 'direct',
                     localCandidateType: 'host',
                     remoteCandidateType: 'srflx',
                     currentRoundTripTimeMs: 28,
-                    restartCount: 0,
-                },
+                }),
             })
         )
         expect(snapshot).toEqual({
             deviceId: 'pairing:p-1',
             phase: 'ready',
-            stats: {
+            stats: bridgeStats({
                 transport: 'direct',
+                transportMode: 'direct-webrtc',
                 localCandidateType: 'host',
                 remoteCandidateType: 'srflx',
                 currentRoundTripTimeMs: 28,
-                restartCount: 0,
-            },
+            }),
         })
     })
 })
@@ -74,13 +90,12 @@ describe('buildDeviceLinkStatus', () => {
     it('shows direct transport with latency when the device matches the bridge', () => {
         const snapshot = buildDeviceLinkSnapshot(
             bridgeState({
-                stats: {
+                stats: bridgeStats({
                     transport: 'direct',
                     localCandidateType: 'host',
                     remoteCandidateType: 'srflx',
                     currentRoundTripTimeMs: 28,
-                    restartCount: 0,
-                },
+                }),
             })
         )
         expect(buildDeviceLinkStatus(pairingDevice(), snapshot)).toEqual({
@@ -94,14 +109,14 @@ describe('buildDeviceLinkStatus', () => {
     it('does not keep showing an expired latency sample', () => {
         const snapshot = buildDeviceLinkSnapshot(
             bridgeState({
-                stats: {
+                stats: bridgeStats({
                     transport: 'direct',
                     localCandidateType: 'host',
                     remoteCandidateType: 'srflx',
                     currentRoundTripTimeMs: 5,
                     sampledAt: 1,
-                    restartCount: 0,
-                },
+                    staleAfterMs: 1,
+                }),
             })
         )
         expect(buildDeviceLinkStatus(pairingDevice(), snapshot)).toEqual({
@@ -115,13 +130,13 @@ describe('buildDeviceLinkStatus', () => {
     it('shows relay transport when bridge stats land on TURN', () => {
         const snapshot = buildDeviceLinkSnapshot(
             bridgeState({
-                stats: {
+                stats: bridgeStats({
                     transport: 'relay',
+                    transportMode: 'turn-webrtc',
                     localCandidateType: 'relay',
                     remoteCandidateType: 'srflx',
                     currentRoundTripTimeMs: 120,
-                    restartCount: 0,
-                },
+                }),
             })
         )
         expect(buildDeviceLinkStatus(pairingDevice(), snapshot)).toEqual({

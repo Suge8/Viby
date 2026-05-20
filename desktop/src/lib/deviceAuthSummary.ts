@@ -33,7 +33,7 @@ async function readJson(response: Response): Promise<unknown> {
 }
 
 function authCacheKey(status: HubRuntimeStatus): string {
-    return `${status.localHubUrl}|${status.cliApiToken}`
+    return `${status.localHubUrl}|${status.hubOwnerToken}`
 }
 
 async function getAuthToken(status: HubRuntimeStatus, fetchImpl: FetchImpl): Promise<string> {
@@ -44,7 +44,7 @@ async function getAuthToken(status: HubRuntimeStatus, fetchImpl: FetchImpl): Pro
     const authResponse = await fetchImpl(apiUrl(status, '/api/auth'), {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ accessToken: status.cliApiToken }),
+        body: JSON.stringify({ accessToken: status.hubOwnerToken }),
     })
     if (!authResponse.ok) throw new Error('Hub device summary auth failed.')
 

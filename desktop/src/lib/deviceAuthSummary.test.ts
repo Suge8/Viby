@@ -11,7 +11,7 @@ const status: HubRuntimeStatus = {
     preferredBrowserUrl: 'http://127.0.0.1:3000/',
     publicUrl: '',
     publicAccessEnabled: true,
-    cliApiToken: 'cli-token',
+    hubOwnerToken: 'owner-token',
     settingsFile: '',
     dataDir: '',
     startedAt: '',
