@@ -19,6 +19,7 @@ export function hasComposerControls(config: ComposerConfigState, handlers: Compo
             (handlers.onCollaborationModeChange && sessionDriver === 'codex') ||
             (handlers.onModelChange && supportsLiveModelSelectionForDriver(sessionDriver)) ||
             (handlers.onModelReasoningEffortChange && supportsLiveModelReasoningEffortForDriver(sessionDriver)) ||
+            Boolean(handlers.onEnterBehaviorChange) ||
             (Boolean(config.switchTargetDrivers?.length) && Boolean(handlers.onSwitchSessionDriver))
     )
 }

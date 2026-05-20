@@ -4,6 +4,7 @@ import {
     supportsLiveModelSelectionForDriver,
 } from '@viby/protocol'
 import { useMemo } from 'react'
+import { COMPOSER_ENTER_BEHAVIORS, type ComposerEnterBehavior } from '@/components/AssistantChat/composerEnterBehavior'
 import { buildComposerControlSections } from '@/components/AssistantChat/composerPanelSections'
 import type { ComposerActionHandlers, ComposerConfigState } from '@/components/AssistantChat/composerTypes'
 import { type ComposerHaptic, useComposerPlatform } from '@/components/AssistantChat/useComposerPlatform'
@@ -32,6 +33,14 @@ type UseComposerLiveConfigOptions = {
 }
 
 const CODEX_REASONING_EFFORT_SET = new Set<CodexReasoningEffort>(['low', 'medium', 'high', 'xhigh'])
+
+function getComposerEnterBehaviorOptions(t: (key: string) => string): ComposerPanelOption<ComposerEnterBehavior>[] {
+    return COMPOSER_ENTER_BEHAVIORS.map((value) => ({
+        value,
+        label: t(`composer.enterBehavior.${value}.label`),
+        description: t(`composer.enterBehavior.${value}.description`),
+    }))
+}
 
 function normalizeCodexReasoningEffort(value: ModelReasoningEffort | null): CodexReasoningEffort | null {
     if (!value || !CODEX_REASONING_EFFORT_SET.has(value as CodexReasoningEffort)) {
@@ -81,6 +90,7 @@ export function useComposerLiveConfig(options: UseComposerLiveConfigOptions): re
         availableReasoningEfforts = null,
         modelReasoningEffort = null,
         codexServiceTier = null,
+        enterBehavior = 'enter-to-send',
         sessionDriver = null,
         switchTargetDrivers = null,
         switchDriverPending = false,
@@ -111,6 +121,7 @@ export function useComposerLiveConfig(options: UseComposerLiveConfigOptions): re
             sessionDriver === 'codex' ? getLocalizedCodexServiceTierOptions(t) : [],
         [sessionDriver, t]
     )
+    const enterBehaviorOptions = useMemo(() => getComposerEnterBehaviorOptions(t), [t])
     const reasoningEffortOptions = useMemo(
         () =>
             getComposerReasoningEffortOptions(
@@ -142,6 +153,7 @@ export function useComposerLiveConfig(options: UseComposerLiveConfigOptions): re
     const showCodexServiceTierSettings = Boolean(
         options.handlers.onCodexServiceTierChange && sessionDriver === 'codex' && codexServiceTierOptions.length > 0
     )
+    const showEnterBehaviorSettings = Boolean(options.handlers.onEnterBehaviorChange)
 
     return useMemo(
         () =>
@@ -156,6 +168,8 @@ export function useComposerLiveConfig(options: UseComposerLiveConfigOptions): re
                     runAction(options.handlers.onModelReasoningEffortChange, value),
                 onCodexServiceTierChange: (value: CodexServiceTier | null) =>
                     runAction(options.handlers.onCodexServiceTierChange, value),
+                onEnterBehaviorChange: (value: ComposerEnterBehavior) =>
+                    runAction(options.handlers.onEnterBehaviorChange, value),
                 onPermissionChange: (value: PermissionMode) =>
                     runAction(options.handlers.onPermissionModeChange, value),
                 sessionDriver,
@@ -176,12 +190,15 @@ export function useComposerLiveConfig(options: UseComposerLiveConfigOptions): re
                 modelReasoningEffort,
                 codexServiceTier,
                 codexServiceTierOptions,
+                enterBehavior,
+                enterBehaviorOptions,
                 permissionMode,
                 permissionModeOptions,
                 reasoningEffortOptions,
                 showCollaborationSettings,
                 showModelSettings,
                 showCodexServiceTierSettings,
+                showEnterBehaviorSettings,
                 showPermissionSettings,
                 showReasoningEffortSettings,
                 t,
@@ -194,11 +211,14 @@ export function useComposerLiveConfig(options: UseComposerLiveConfigOptions): re
             modelReasoningEffort,
             codexServiceTier,
             codexServiceTierOptions,
+            enterBehavior,
+            enterBehaviorOptions,
             options.controlsDisabled,
             options.handlers.onCollaborationModeChange,
             options.handlers.onModelChange,
             options.handlers.onModelReasoningEffortChange,
             options.handlers.onCodexServiceTierChange,
+            options.handlers.onEnterBehaviorChange,
             options.handlers.onPermissionModeChange,
             options.handlers.onSwitchSessionDriver,
             options.onClose,
@@ -209,6 +229,7 @@ export function useComposerLiveConfig(options: UseComposerLiveConfigOptions): re
             showCollaborationSettings,
             showModelSettings,
             showCodexServiceTierSettings,
+            showEnterBehaviorSettings,
             showPermissionSettings,
             showReasoningEffortSettings,
             sessionDriver,

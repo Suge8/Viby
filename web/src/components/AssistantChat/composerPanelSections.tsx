@@ -7,6 +7,7 @@ import {
     FeatureAgentIcon as AgentIcon,
     FeatureGitBranchIcon as CollaborationIcon,
     FeatureRocketIcon as FastIcon,
+    FeatureKeyboardIcon as KeyboardIcon,
     FeatureModelIcon as ModelIcon,
     FeatureBulbIcon as ReasoningIcon,
     FeatureShieldIcon as ShieldIcon,
@@ -16,6 +17,7 @@ import type { ComposerPanelOption } from '@/lib/sessionConfigPresentation'
 import {
     COMPOSER_CODEX_SERVICE_TIER_SECTION_TEST_ID,
     COMPOSER_COLLABORATION_SECTION_TEST_ID,
+    COMPOSER_ENTER_BEHAVIOR_SECTION_TEST_ID,
     COMPOSER_MODEL_SECTION_TEST_ID,
     COMPOSER_PERMISSION_SECTION_TEST_ID,
     COMPOSER_REASONING_SECTION_TEST_ID,
@@ -23,6 +25,7 @@ import {
     getComposerSwitchTargetTestId,
 } from '@/lib/sessionUiContracts'
 import type { CodexCollaborationMode, CodexServiceTier, ModelReasoningEffort, PermissionMode } from '@/types/api'
+import type { ComposerEnterBehavior } from './composerEnterBehavior'
 
 type Translate = (key: string, params?: Record<string, string | number>) => string
 
@@ -56,11 +59,14 @@ type BuildComposerControlSectionsOptions = {
     modelReasoningEffort: ModelReasoningEffort | null
     codexServiceTier: CodexServiceTier | null
     codexServiceTierOptions: readonly ComposerPanelOption<CodexServiceTier | null>[]
+    enterBehavior: ComposerEnterBehavior
+    enterBehaviorOptions: readonly ComposerPanelOption<ComposerEnterBehavior>[]
     sessionDriver: SessionDriver | null
     onCollaborationChange: (mode: CodexCollaborationMode) => void
     onModelChange: (model: string | null) => void
     onModelReasoningEffortChange: (modelReasoningEffort: ModelReasoningEffort | null) => void
     onCodexServiceTierChange: (codexServiceTier: CodexServiceTier | null) => void
+    onEnterBehaviorChange: (behavior: ComposerEnterBehavior) => void
     onPermissionChange: (mode: PermissionMode) => void
     switchTargetDrivers?: readonly SameSessionSwitchTargetDriver[] | null
     switchDriverPending?: boolean
@@ -71,6 +77,7 @@ type BuildComposerControlSectionsOptions = {
     showCollaborationSettings: boolean
     showModelSettings: boolean
     showCodexServiceTierSettings: boolean
+    showEnterBehaviorSettings: boolean
     showPermissionSettings: boolean
     showReasoningEffortSettings: boolean
     t: Translate
@@ -196,6 +203,21 @@ export function buildComposerControlSections(options: BuildComposerControlSectio
                       options: options.codexServiceTierOptions,
                       selectedValue: options.codexServiceTier,
                       onSelect: options.onCodexServiceTierChange,
+                  },
+                  options.controlsDisabled,
+                  options.t
+              )
+            : null,
+        options.showEnterBehaviorSettings
+            ? buildComposerSettingsSection(
+                  {
+                      key: 'enter-behavior',
+                      icon: <KeyboardIcon className="h-4 w-4" />,
+                      testId: COMPOSER_ENTER_BEHAVIOR_SECTION_TEST_ID,
+                      title: options.t('composer.enterBehavior.title'),
+                      options: options.enterBehaviorOptions,
+                      selectedValue: options.enterBehavior,
+                      onSelect: options.onEnterBehaviorChange,
                   },
                   options.controlsDisabled,
                   options.t

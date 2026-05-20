@@ -4,6 +4,7 @@ import { Fragment } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/lib/i18n-context'
 import {
+    COMPOSER_ENTER_BEHAVIOR_SECTION_TEST_ID,
     COMPOSER_MODEL_SECTION_TEST_ID,
     COMPOSER_SWITCH_AGENT_SECTION_TEST_ID,
     getComposerSwitchTargetTestId,
@@ -19,6 +20,7 @@ function renderSections(options?: {
     switchTargetDrivers?: readonly SameSessionSwitchTargetDriver[] | null
     switchDriverPending?: boolean
     showModelSettings?: boolean
+    showEnterBehaviorSettings?: boolean
     showReasoningEffortSettings?: boolean
     showCollaborationSettings?: boolean
     showPermissionSettings?: boolean
@@ -32,11 +34,17 @@ function renderSections(options?: {
         modelReasoningEffort: null,
         codexServiceTier: null,
         codexServiceTierOptions: [{ value: null, label: 'Default' }],
+        enterBehavior: 'enter-to-send',
+        enterBehaviorOptions: [
+            { value: 'enter-to-send', label: 'Enter sends' },
+            { value: 'modifier-enter-to-send', label: 'Ctrl+Enter sends' },
+        ],
         sessionDriver: options?.sessionDriver ?? 'codex',
         onCollaborationChange: vi.fn(),
         onModelChange: vi.fn(),
         onModelReasoningEffortChange: vi.fn(),
         onCodexServiceTierChange: vi.fn(),
+        onEnterBehaviorChange: vi.fn(),
         onPermissionChange: vi.fn(),
         switchTargetDrivers: options?.switchTargetDrivers,
         switchDriverPending: options?.switchDriverPending ?? false,
@@ -46,6 +54,7 @@ function renderSections(options?: {
         reasoningEffortOptions: [{ value: null, label: 'Default' }],
         showCollaborationSettings: options?.showCollaborationSettings ?? false,
         showCodexServiceTierSettings: false,
+        showEnterBehaviorSettings: options?.showEnterBehaviorSettings ?? false,
         showModelSettings: options?.showModelSettings ?? false,
         showPermissionSettings: options?.showPermissionSettings ?? false,
         showReasoningEffortSettings: options?.showReasoningEffortSettings ?? false,
@@ -55,6 +64,7 @@ function renderSections(options?: {
                 'misc.reasoningEffort': 'Reasoning',
                 'misc.collaborationMode': 'Execution mode',
                 'misc.permissionMode': 'Permission',
+                'composer.enterBehavior.title': 'Enter key',
                 'composer.switchAgent': 'Switch agent',
                 'composer.currentAgent': `Current ${params?.driver ?? 'unknown'}`,
                 'composer.switchDriver': `Switch to ${params?.driver ?? 'unknown'}`,
@@ -133,10 +143,11 @@ describe('buildComposerControlSections', () => {
             showModelSettings: true,
             showReasoningEffortSettings: true,
             showCollaborationSettings: true,
+            showEnterBehaviorSettings: true,
             showPermissionSettings: true,
         })
 
-        const labels = ['Switch agent', 'Model', 'Reasoning', 'Execution mode', 'Permission'].map((text) =>
+        const labels = ['Switch agent', 'Model', 'Reasoning', 'Enter key', 'Execution mode', 'Permission'].map((text) =>
             screen.getByText(text)
         )
 
@@ -147,5 +158,6 @@ describe('buildComposerControlSections', () => {
         }
 
         expect(screen.getByTestId(COMPOSER_MODEL_SECTION_TEST_ID)).toBeInTheDocument()
+        expect(screen.getByTestId(COMPOSER_ENTER_BEHAVIOR_SECTION_TEST_ID)).toBeInTheDocument()
     })
 })

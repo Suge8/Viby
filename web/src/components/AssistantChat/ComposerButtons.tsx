@@ -1,7 +1,8 @@
 import type { RefObject } from 'react'
 import { ComposerAttachmentButton } from '@/components/AssistantChat/ComposerAttachmentButton'
 import { FeatureControlsIcon as ControlsIcon } from '@/components/featureIcons'
-import { SendIcon, SpinnerIcon, StopIcon } from '@/components/icons'
+import { SendIcon, StopIcon } from '@/components/icons'
+import { Spinner } from '@/components/Spinner'
 import { Button } from '@/components/ui/button'
 import { ICON_ONLY_BUTTON_NEUTRAL_SURFACE_CLASS_NAME } from '@/components/ui/iconButtonStyles'
 import { COMPOSER_CONTROLS_BUTTON_TEST_ID, COMPOSER_PRIMARY_ACTION_BUTTON_TEST_ID } from '@/lib/sessionUiContracts'
@@ -66,7 +67,7 @@ function getPrimaryButtonPresentation(
 
     if (props.busy) {
         return {
-            icon: <SpinnerIcon className="h-4 w-4 animate-spin" />,
+            icon: <Spinner size="sm" label={null} className="text-current" />,
             label: t('composer.stopping'),
         }
     }

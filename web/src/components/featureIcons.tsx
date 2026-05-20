@@ -11,6 +11,7 @@ import {
     GitBranch,
     GitCompare,
     Globe,
+    Keyboard,
     Languages,
     Lightbulb,
     Monitor,
@@ -254,6 +255,16 @@ export function FeatureMonitorIcon(props: AppIconProps) {
 export function FeatureBulbIcon(props: AppIconProps) {
     return (
         <Lightbulb
+            {...props}
+            className={withDefaultClassName(props.className)}
+            strokeWidth={getDefaultStrokeWidth(props)}
+        />
+    )
+}
+
+export function FeatureKeyboardIcon(props: AppIconProps) {
+    return (
+        <Keyboard
             {...props}
             className={withDefaultClassName(props.className)}
             strokeWidth={getDefaultStrokeWidth(props)}
