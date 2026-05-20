@@ -35,6 +35,7 @@ function createControllerOptions(overrides?: ControllerOverrides): Parameters<ty
         autocompleteSuggestions,
         canSend,
         composerText,
+        enterBehavior,
         haptic,
         isTouch,
         model,
@@ -61,6 +62,7 @@ function createControllerOptions(overrides?: ControllerOverrides): Parameters<ty
                 }),
             } as never),
         composerText: composerText ?? '',
+        enterBehavior: enterBehavior ?? 'enter-to-send',
         canSend: canSend ?? true,
         isTouch: isTouch ?? false,
         threadIsRunning: threadIsRunning ?? false,
@@ -237,6 +239,46 @@ describe('useComposerInputController', () => {
 
         expect(preventDefault).not.toHaveBeenCalled()
         expect(send).not.toHaveBeenCalled()
+    })
+
+    it('uses Ctrl Enter for send when Enter is configured for new lines', () => {
+        const onSendRequest = vi.fn()
+        const preventDefault = vi.fn()
+
+        activeSuggestionsMock.mockReturnValue([[], -1, vi.fn(), vi.fn(), vi.fn()])
+
+        const { result } = renderHook(() =>
+            useComposerInputController(
+                createControllerOptions({
+                    composerText: 'hello',
+                    enterBehavior: 'modifier-enter-to-send',
+                    onSendRequest,
+                })
+            )
+        )
+
+        result.current.handleKeyDown({
+            key: 'Enter',
+            shiftKey: false,
+            ctrlKey: false,
+            metaKey: false,
+            altKey: false,
+            nativeEvent: { isComposing: false },
+            preventDefault,
+        } as never)
+
+        result.current.handleKeyDown({
+            key: 'Enter',
+            shiftKey: false,
+            ctrlKey: true,
+            metaKey: false,
+            altKey: false,
+            nativeEvent: { isComposing: false },
+            preventDefault,
+        } as never)
+
+        expect(preventDefault).toHaveBeenCalledOnce()
+        expect(onSendRequest).toHaveBeenCalledOnce()
     })
 
     it('ignores Enter when the browser reports the IME 229 fallback code', () => {

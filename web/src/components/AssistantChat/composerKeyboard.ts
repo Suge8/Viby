@@ -1,8 +1,10 @@
 import { type ImeKeyboardEventSnapshot, isImeKeyboardCompositionActive } from '@/lib/imeInputGuards'
+import type { ComposerEnterBehavior } from './composerEnterBehavior'
 
 const COMPOSER_SEND_KEY = 'Enter'
 
 type ComposerKeyboardInput = {
+    enterBehavior: ComposerEnterBehavior
     key: string
     shiftKey: boolean
     altKey: boolean
@@ -21,11 +23,15 @@ export function shouldComposerSendFromKeyboard(input: ComposerKeyboardInput): bo
         return false
     }
 
-    if (input.altKey || input.ctrlKey || input.metaKey || input.shiftKey || input.isTouch) {
+    if (input.altKey || input.shiftKey || input.isTouch) {
         return false
     }
 
-    return true
+    if (input.enterBehavior === 'modifier-enter-to-send') {
+        return input.ctrlKey || input.metaKey
+    }
+
+    return !input.ctrlKey && !input.metaKey
 }
 
 export function isComposerCompositionActive(state: ComposerCompositionState): boolean {

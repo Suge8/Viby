@@ -1,5 +1,6 @@
 import type { SameSessionSwitchTargetDriver, SessionDriver } from '@viby/protocol'
 import type { AssistantReplyingPhase } from '@/components/AssistantChat/assistantReplyingPhase'
+import type { ComposerEnterBehavior } from '@/components/AssistantChat/composerEnterBehavior'
 import type { Suggestion } from '@/hooks/useActiveSuggestions'
 import type {
     CodexCollaborationMode,
@@ -26,6 +27,7 @@ export type ComposerConfigState = {
     switchTargetDrivers?: readonly SameSessionSwitchTargetDriver[] | null
     switchDriverPending?: boolean
     attachmentsSupported?: boolean
+    enterBehavior?: ComposerEnterBehavior
 }
 
 export type ComposerActionHandlers = {
@@ -34,6 +36,7 @@ export type ComposerActionHandlers = {
     onModelChange?: (model: string | null) => void
     onModelReasoningEffortChange?: (modelReasoningEffort: ModelReasoningEffort | null) => void
     onCodexServiceTierChange?: (codexServiceTier: CodexServiceTier | null) => void
+    onEnterBehaviorChange?: (behavior: ComposerEnterBehavior) => void
     onSwitchSessionDriver?: (targetDriver: SameSessionSwitchTargetDriver) => void | Promise<void>
     autocompleteSuggestions?: (query: string) => Promise<Suggestion[]>
     autocompleteRefreshKey?: number

@@ -1,4 +1,5 @@
 import type { Suggestion } from '@/hooks/useActiveSuggestions'
+import type { ComposerEnterBehavior } from './composerEnterBehavior'
 
 export type ComposerAttachment = {
     status: { type: string }
@@ -13,8 +14,11 @@ export function defaultSuggestionHandler(): Promise<Suggestion[]> {
     return Promise.resolve([])
 }
 
-export function getComposerEnterKeyHint(isTouch: boolean): 'enter' | 'send' {
-    if (isTouch) {
+export function getComposerEnterKeyHint(
+    isTouch: boolean,
+    enterBehavior: ComposerEnterBehavior = 'enter-to-send'
+): 'enter' | 'send' {
+    if (isTouch || enterBehavior === 'modifier-enter-to-send') {
         return TOUCH_COMPOSER_ENTER_KEY_HINT
     }
 

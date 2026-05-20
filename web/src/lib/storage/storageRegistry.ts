@@ -1,6 +1,7 @@
 export const LOCAL_STORAGE_KEYS = {
     appearance: 'viby-appearance',
     appBuildId: 'viby-app-build-id',
+    composerEnterBehavior: 'viby:composer:enter-behavior',
     fontScale: 'viby-font-scale',
     hubUrl: 'viby_hub_url',
     lastOpenedSession: 'viby:last-opened-session',

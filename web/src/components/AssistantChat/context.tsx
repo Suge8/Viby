@@ -25,3 +25,7 @@ export function useVibyChatContext(): VibyChatContextValue {
     }
     return ctx
 }
+
+export function useOptionalVibyChatContext(): VibyChatContextValue | null {
+    return useContext(VibyChatContext)
+}

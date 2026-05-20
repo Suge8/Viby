@@ -6,6 +6,7 @@ describe('composerKeyboard', () => {
         expect(
             shouldComposerSendFromKeyboard({
                 key: 'Enter',
+                enterBehavior: 'enter-to-send',
                 shiftKey: false,
                 altKey: false,
                 ctrlKey: false,
@@ -17,6 +18,7 @@ describe('composerKeyboard', () => {
         expect(
             shouldComposerSendFromKeyboard({
                 key: 'Enter',
+                enterBehavior: 'enter-to-send',
                 shiftKey: true,
                 altKey: false,
                 ctrlKey: false,
@@ -28,6 +30,7 @@ describe('composerKeyboard', () => {
         expect(
             shouldComposerSendFromKeyboard({
                 key: 'Enter',
+                enterBehavior: 'enter-to-send',
                 shiftKey: false,
                 altKey: false,
                 ctrlKey: false,
@@ -39,6 +42,7 @@ describe('composerKeyboard', () => {
         expect(
             shouldComposerSendFromKeyboard({
                 key: 'Enter',
+                enterBehavior: 'enter-to-send',
                 shiftKey: false,
                 altKey: true,
                 ctrlKey: false,
@@ -50,6 +54,7 @@ describe('composerKeyboard', () => {
         expect(
             shouldComposerSendFromKeyboard({
                 key: 'Enter',
+                enterBehavior: 'enter-to-send',
                 shiftKey: false,
                 altKey: false,
                 ctrlKey: true,
@@ -61,6 +66,7 @@ describe('composerKeyboard', () => {
         expect(
             shouldComposerSendFromKeyboard({
                 key: 'Enter',
+                enterBehavior: 'enter-to-send',
                 shiftKey: false,
                 altKey: false,
                 ctrlKey: false,
@@ -74,6 +80,7 @@ describe('composerKeyboard', () => {
         expect(
             shouldComposerSendFromKeyboard({
                 key: 'Tab',
+                enterBehavior: 'enter-to-send',
                 shiftKey: false,
                 altKey: false,
                 ctrlKey: false,
@@ -81,6 +88,44 @@ describe('composerKeyboard', () => {
                 isTouch: false,
             })
         ).toBe(false)
+    })
+
+    it('supports Enter newline mode with Ctrl or Meta Enter as the send shortcut', () => {
+        expect(
+            shouldComposerSendFromKeyboard({
+                key: 'Enter',
+                enterBehavior: 'modifier-enter-to-send',
+                shiftKey: false,
+                altKey: false,
+                ctrlKey: false,
+                metaKey: false,
+                isTouch: false,
+            })
+        ).toBe(false)
+
+        expect(
+            shouldComposerSendFromKeyboard({
+                key: 'Enter',
+                enterBehavior: 'modifier-enter-to-send',
+                shiftKey: false,
+                altKey: false,
+                ctrlKey: true,
+                metaKey: false,
+                isTouch: false,
+            })
+        ).toBe(true)
+
+        expect(
+            shouldComposerSendFromKeyboard({
+                key: 'Enter',
+                enterBehavior: 'modifier-enter-to-send',
+                shiftKey: false,
+                altKey: false,
+                ctrlKey: false,
+                metaKey: true,
+                isTouch: false,
+            })
+        ).toBe(true)
     })
 
     it('treats explicit composition state as authoritative for IME safety', () => {

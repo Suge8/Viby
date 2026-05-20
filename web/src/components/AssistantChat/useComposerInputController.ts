@@ -50,6 +50,7 @@ export function useComposerInputController(
     const {
         api,
         composerText,
+        enterBehavior,
         canSend,
         isTouch,
         threadIsRunning,
@@ -187,6 +188,7 @@ export function useComposerInputController(
                     altKey: event.altKey,
                     ctrlKey: event.ctrlKey,
                     metaKey: event.metaKey,
+                    enterBehavior,
                     isTouch,
                 })
             ) {
@@ -213,6 +215,7 @@ export function useComposerInputController(
         [
             canSend,
             clearSuggestions,
+            enterBehavior,
             handleSuggestionSelect,
             haptic,
             moveDown,

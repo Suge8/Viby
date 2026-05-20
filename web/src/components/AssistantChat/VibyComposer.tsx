@@ -16,6 +16,7 @@ import { AssistantReplyingIndicator } from '@/components/AssistantChat/Assistant
 import { AttachmentItem } from '@/components/AssistantChat/AttachmentItem'
 import { ComposerButtons } from '@/components/AssistantChat/ComposerButtons'
 import { ComposerSuggestionsOverlay } from '@/components/AssistantChat/ComposerSuggestionsOverlay'
+import { useComposerEnterBehaviorPreference } from '@/components/AssistantChat/composerEnterBehavior'
 import type { ComposerPanelId, VibyComposerModel } from '@/components/AssistantChat/composerTypes'
 import {
     getComposerPermissionModes,
@@ -97,13 +98,18 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
     const { haptic, isTouch } = useComposerPlatform()
 
     const abortDisabled = isAborting || !threadIsRunning
-    const showControlsButton = useMemo(
-        () => hasComposerControls(composerModel.config, composerModel.handlers),
-        [composerModel.config, composerModel.handlers]
-    )
     const permissionModes = useMemo(() => getComposerPermissionModes(sessionDriver), [sessionDriver])
     const [openPanel, setOpenPanel] = useState<ComposerPanelId | null>(null)
     const [hasRequestedControlsOverlay, setHasRequestedControlsOverlay] = useState(false)
+    const [enterBehavior, setEnterBehavior] = useComposerEnterBehaviorPreference()
+    const showControlsButton = useMemo(
+        () =>
+            hasComposerControls(composerModel.config, {
+                ...composerModel.handlers,
+                onEnterBehaviorChange: setEnterBehavior,
+            }),
+        [composerModel.config, composerModel.handlers, setEnterBehavior]
+    )
 
     useEffect(() => {
         if (!isAborting) return
@@ -150,6 +156,7 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
     const composerInput = useComposerInputController({
         api,
         composerText,
+        enterBehavior,
         canSend,
         isTouch,
         threadIsRunning,
@@ -250,9 +257,13 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
                     <Suspense fallback={null}>
                         <LazyComposerControlsOverlay
                             anchorRef={controlsButtonAnchorRef}
-                            config={composerModel.config}
+                            config={{
+                                ...composerModel.config,
+                                enterBehavior,
+                            }}
                             handlers={{
                                 ...composerModel.handlers,
+                                onEnterBehaviorChange: setEnterBehavior,
                             }}
                             controlsDisabled={controlsDisabled || switchDriverPending}
                             onClose={() => setOpenPanel(null)}
@@ -274,7 +285,7 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
                             autoFocus={!controlsDisabled && !isTouch}
                             placeholder={composerPlaceholder}
                             disabled={controlsDisabled}
-                            enterKeyHint={getComposerEnterKeyHint(isTouch)}
+                            enterKeyHint={getComposerEnterKeyHint(isTouch, enterBehavior)}
                             maxRows={5}
                             submitOnEnter={false}
                             cancelOnEscape={false}
