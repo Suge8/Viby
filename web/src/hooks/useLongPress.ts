@@ -6,14 +6,14 @@ const LONG_PRESS_MOVE_TOLERANCE_PX = 10
 
 type UseLongPressOptions = {
     onLongPress: (point: { x: number; y: number }) => void
-    onClick?: () => void
+    onClick?: () => unknown
     threshold?: number
     disabled?: boolean
     enableContextMenu?: boolean
 }
 
 type UseLongPressHandlers = {
-    onClick: React.MouseEventHandler
+    onClick: (event: React.MouseEvent) => unknown
     onPointerCancel: React.PointerEventHandler
     onPointerDown: React.PointerEventHandler
     onPointerLeave: React.PointerEventHandler
@@ -165,23 +165,23 @@ export function useLongPress(options: UseLongPressOptions): UseLongPressHandlers
         [finishPress]
     )
 
-    const onClickHandler = useCallback<React.MouseEventHandler>(
-        (event) => {
+    const onClickHandler = useCallback(
+        (event: React.MouseEvent) => {
             if (suppressClickRef.current) {
                 clearTimer()
                 resetInteractionState()
                 event.preventDefault()
                 event.stopPropagation()
-                return
+                return undefined
             }
 
             clearTimer()
             resetPointerState()
             didLongPressRef.current = false
-            onClick?.()
+            return onClick?.()
         },
         [clearTimer, onClick, resetInteractionState, resetPointerState]
-    )
+    ) satisfies (event: React.MouseEvent) => unknown
 
     const onContextMenu = useCallback<React.MouseEventHandler>(
         (event) => {

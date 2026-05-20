@@ -17,6 +17,7 @@ const BUTTON_PRESS_STYLE_SCALE_VAR = {
 
 type ButtonPressStyle = keyof typeof BUTTON_PRESS_STYLE_SCALE_VAR
 type ButtonPointerEffect = 'default' | 'none'
+type ButtonPendingIndicator = 'inline' | 'none'
 
 const buttonVariants = cva(
     'ds-button inline-flex min-h-[var(--ds-touch-target)] items-center justify-center whitespace-nowrap rounded-full text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-brand)] focus-visible:ring-offset-2 focus-visible:ring-offset-transparent disabled:pointer-events-none disabled:opacity-50',
@@ -56,6 +57,7 @@ export interface ButtonProps
         VariantProps<typeof buttonVariants> {
     asChild?: boolean
     pending?: boolean
+    pendingIndicator?: ButtonPendingIndicator
     pressStyle?: ButtonPressStyle
     pointerEffect?: ButtonPointerEffect
 }
@@ -128,6 +130,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function 
         onPointerMove,
         onPointerUp,
         pending: controlledPending = false,
+        pendingIndicator = 'inline',
         style,
         ...props
     },
@@ -140,6 +143,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function 
     const Comp = asChild ? Slot : 'button'
     const [pending, handlePendingClick] = useButtonPending(onClick, controlledPending)
     const disabled = props.disabled || pending
+    const showInlinePending = pending && pendingIndicator === 'inline'
     const iconOnly = size === 'icon' || size === 'iconXs' || size === 'iconSm' || size === 'iconLg'
     const classNames = cn(buttonVariants({ variant: resolvedVariant, size, className }))
     const resolvedStyle = React.useMemo<React.CSSProperties>(
@@ -262,8 +266,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function 
                 className="relative z-10 inline-flex items-center justify-center"
                 style={{ gap: 'inherit' }}
             >
-                {pending ? <Spinner size="sm" label={null} className="text-current" /> : null}
-                {iconOnly && pending ? null : children}
+                {showInlinePending ? <Spinner size="sm" label={null} className="text-current" /> : null}
+                {iconOnly && showInlinePending ? null : children}
             </span>
         </button>
     )

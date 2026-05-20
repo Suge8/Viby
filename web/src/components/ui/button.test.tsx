@@ -77,6 +77,44 @@ describe('Button', () => {
         await waitFor(() => expect(button).not.toBeDisabled())
     })
 
+    it('clears pending after rejected async clicks and allows retry', async () => {
+        let reject!: (error: Error) => void
+        const onClick = vi.fn(() => new Promise<void>((_resolve, rejectPromise) => (reject = rejectPromise)))
+        render(<Button onClick={onClick}>Retry</Button>)
+
+        const button = screen.getByRole('button', { name: 'Retry' })
+        fireEvent.click(button)
+
+        expect(button).toBeDisabled()
+        reject(new Error('network failed'))
+
+        await waitFor(() => expect(button).not.toBeDisabled())
+        fireEvent.click(button)
+
+        expect(onClick).toHaveBeenCalledTimes(2)
+    })
+
+    it('allows owner components to place pending feedback themselves', async () => {
+        let resolve!: () => void
+        const onClick = vi.fn(() => new Promise<void>((done) => (resolve = done)))
+        render(
+            <Button onClick={onClick} pendingIndicator="none">
+                Open session
+            </Button>
+        )
+
+        const button = screen.getByRole('button', { name: 'Open session' })
+        fireEvent.click(button)
+
+        expect(button).toBeDisabled()
+        expect(button).toHaveAttribute('aria-busy', 'true')
+        expect(button).toHaveTextContent('Open session')
+        expect(button.querySelector('svg')).toBeNull()
+
+        resolve()
+        await waitFor(() => expect(button).not.toBeDisabled())
+    })
+
     it('keeps shared button sizes fully rounded for a more tactile global button shape', () => {
         render(
             <>

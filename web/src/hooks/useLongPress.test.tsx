@@ -91,6 +91,15 @@ describe('useLongPress', () => {
         expect(clickEvent.stopPropagation).not.toHaveBeenCalled()
     })
 
+    it('returns the short-click result so Button can track async mouse clicks', () => {
+        const clickResult = Promise.resolve()
+        const onClick = vi.fn(() => clickResult)
+        const onLongPress = vi.fn()
+        const handlers = setupLongPressHarness({ onClick, onLongPress })
+
+        expect(handlers.onClick(createMouseEvent())).toBe(clickResult)
+    })
+
     it('suppresses the follow-up click when the pointer moves beyond tolerance', () => {
         vi.useFakeTimers()
         const onClick = vi.fn()

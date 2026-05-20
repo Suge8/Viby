@@ -16,7 +16,6 @@ import {
     EllipsisVertical,
     FolderOpen,
     Info,
-    LoaderCircle,
     LockKeyhole,
     MessageCircleMore,
     MessageCircleQuestionMark,
@@ -309,16 +308,6 @@ export function RunnerIcon(props: AppIconProps) {
 export function WorkspaceIcon(props: AppIconProps) {
     return (
         <PanelsTopLeft
-            {...props}
-            className={withDefaultClassName(props.className)}
-            strokeWidth={getDefaultStrokeWidth(props)}
-        />
-    )
-}
-
-export function SpinnerIcon(props: AppIconProps) {
-    return (
-        <LoaderCircle
             {...props}
             className={withDefaultClassName(props.className)}
             strokeWidth={getDefaultStrokeWidth(props)}

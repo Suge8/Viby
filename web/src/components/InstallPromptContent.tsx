@@ -112,7 +112,7 @@ export function createInstallPromptViewModel(
 export function InstallBanner(props: {
     model: InstallBannerModel
     primaryActionRef?: Ref<HTMLButtonElement>
-    onPrimaryAction: () => void
+    onPrimaryAction: () => unknown
     onDismiss: () => void
 }): JSX.Element {
     return (

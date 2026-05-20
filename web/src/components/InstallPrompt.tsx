@@ -81,7 +81,7 @@ export function InstallPrompt({ suppressed = false }: InstallPromptProps): JSX.E
                 <InstallBanner
                     model={promptModel.banner}
                     primaryActionRef={bannerPrimaryActionRef}
-                    onPrimaryAction={() => void handlePrimaryAction()}
+                    onPrimaryAction={handlePrimaryAction}
                     onDismiss={handleDismiss}
                 />
             )}

@@ -9,7 +9,7 @@ export type LongPressHandlers = ReturnType<typeof useLongPress>
 type LongPressHarnessProps = {
     disabled?: boolean
     enableContextMenu?: boolean
-    onClick?: () => void
+    onClick?: () => unknown
     onLongPress?: (point: { x: number; y: number }) => void
     onReady: (handlers: LongPressHandlers) => void
 }

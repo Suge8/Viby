@@ -1,5 +1,5 @@
 import { useNavigate } from '@tanstack/react-router'
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo } from 'react'
 import { createPortal } from 'react-dom'
 import { AppNotice } from '@/components/AppNotice'
 import { getNoticeToneIcon } from '@/components/InlineNotice'
@@ -17,10 +17,11 @@ const DEFAULT_VIEWPORT_WIDTH_CLASS_NAME = 'w-[min(calc(100vw-2.5rem),20rem)] sm:
 const COMPACT_VIEWPORT_WIDTH_CLASS_NAME = 'w-[min(calc(100vw-4.25rem),14rem)] sm:w-[min(calc(100vw-2rem),16rem)]'
 const NOTICE_BUTTON_CLASS_NAME =
     'pointer-events-auto block w-full border-transparent bg-transparent px-0 py-0 text-left outline-none shadow-none [&>[data-button-content]]:w-full'
+const NOTICE_PENDING_BUTTON_CLASS_NAME = `${NOTICE_BUTTON_CLASS_NAME} data-[pending=true]:cursor-progress data-[pending=true]:opacity-80`
 
 type FloatingNoticeCardProps = {
     notice: Notice
-    onNavigate: (href: string, id: string) => void
+    onNavigate: (href: string, id: string) => unknown
     onPress: (handler: () => void | Promise<void>, id: string) => Promise<void>
 }
 
@@ -32,8 +33,6 @@ function getViewportClassName(hasOnlyCompactNotices: boolean): string {
 }
 
 const FloatingNoticeCard = memo(function FloatingNoticeCard(props: FloatingNoticeCardProps) {
-    const [isPending, setIsPending] = useState(false)
-    const isMountedRef = useRef(true)
     const icon = props.notice.icon ?? getNoticeToneIcon(props.notice.tone)
     const href = props.notice.href
     const onPress = props.notice.onPress
@@ -49,34 +48,13 @@ const FloatingNoticeCard = memo(function FloatingNoticeCard(props: FloatingNotic
         />
     )
 
-    useEffect(() => {
-        return () => {
-            isMountedRef.current = false
-        }
-    }, [])
-
     if (!href && onPress) {
         return (
             <Button
                 type="button"
                 variant="ghost"
-                className={`${NOTICE_BUTTON_CLASS_NAME} disabled:cursor-progress disabled:opacity-80`}
-                disabled={isPending}
-                aria-busy={isPending}
-                onClick={async () => {
-                    if (isPending) {
-                        return
-                    }
-
-                    setIsPending(true)
-                    try {
-                        await props.onPress(onPress, props.notice.id)
-                    } finally {
-                        if (isMountedRef.current) {
-                            setIsPending(false)
-                        }
-                    }
-                }}
+                className={NOTICE_PENDING_BUTTON_CLASS_NAME}
+                onClick={() => props.onPress(onPress, props.notice.id)}
             >
                 {content}
             </Button>
@@ -114,7 +92,7 @@ export function FloatingNoticeViewport() {
             notice={notice}
             onNavigate={(href, id) => {
                 dismissNotice(id)
-                void navigate({ to: href })
+                return navigate({ to: href })
             }}
             onPress={async (handler, id) => {
                 try {
