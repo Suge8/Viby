@@ -1,5 +1,5 @@
 import { FeatureEditIcon as EditIcon, FeatureTrashIcon as TrashIcon } from '@/components/featureIcons'
-import { StopIcon } from '@/components/icons'
+import { PlusIcon, StopIcon } from '@/components/icons'
 import {
     getAvailableSessionActionIds,
     type SessionActionAvailabilityState,
@@ -46,6 +46,18 @@ function createRenameMenuItem(
         label: t('session.action.rename'),
         icon: <EditIcon className={DEFAULT_MENU_ICON_CLASS_NAME} />,
         onSelect: () => onSelect('rename'),
+    })
+}
+
+function createNewSessionMenuItem(
+    t: (key: string, params?: Record<string, string | number>) => string,
+    onSelect: (actionId: SessionActionId) => void
+): FloatingActionMenuItem {
+    return createSessionActionMenuItem({
+        id: 'new-session',
+        label: t('session.action.newHere'),
+        icon: <PlusIcon className={DEFAULT_MENU_ICON_CLASS_NAME} />,
+        onSelect: () => onSelect('new-session'),
     })
 }
 
@@ -100,6 +112,8 @@ function getSessionActionMenuItems(
 ): FloatingActionMenuItem[] {
     return getAvailableSessionActionIds(session).map((actionId) => {
         switch (actionId) {
+            case 'new-session':
+                return createNewSessionMenuItem(t, onActionSelect)
             case 'stop':
                 return createStopMenuItem(t, onActionSelect)
             case 'rename':

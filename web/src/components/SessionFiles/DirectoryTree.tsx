@@ -43,7 +43,7 @@ function DirectoryNode(props: {
     label: string
     depth: number
     emptyLabel: string
-    onOpenFile: (path: string) => void
+    onOpenFile: (path: string) => unknown
     expanded: Set<string>
     onToggle: (path: string) => void
 }) {
@@ -146,7 +146,7 @@ export function DirectoryTree(props: {
     api: ApiClient | null
     sessionId: string
     rootLabel: string
-    onOpenFile: (path: string) => void
+    onOpenFile: (path: string) => unknown
 }) {
     const { t } = useTranslation()
     const [expanded, setExpanded] = useState<Set<string>>(() => new Set(['']))

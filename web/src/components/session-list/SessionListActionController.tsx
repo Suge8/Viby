@@ -22,13 +22,14 @@ type SessionListActionControllerProps = {
     anchorPoint: FloatingActionMenuAnchorPoint
     callbacks: {
         onDismiss: () => void
+        onNewSessionInDirectory?: (directory: string) => unknown
     }
 }
 
 export function SessionListActionController(props: SessionListActionControllerProps): React.JSX.Element {
     const { t } = useTranslation()
     const { api, session, anchorPoint, callbacks } = props
-    const { onDismiss } = callbacks
+    const { onDismiss, onNewSessionInDirectory } = callbacks
     const [surface, setSurface] = useState<SessionActionSurface>({ kind: 'menu' })
     const sessionId = session.id
     const title = getSessionTitle(session)
@@ -41,16 +42,28 @@ export function SessionListActionController(props: SessionListActionControllerPr
         setSurface({ kind: 'menu' })
     }, [sessionId])
 
-    const handleMenuActionSelect = useCallback((actionId: SessionActionId) => {
-        if (actionId === 'rename') {
-            setSurface({ kind: 'rename' })
-            return
-        }
+    const handleMenuActionSelect = useCallback(
+        (actionId: SessionActionId) => {
+            if (actionId === 'new-session') {
+                const directory = session.metadata?.path?.trim()
+                if (directory) {
+                    onNewSessionInDirectory?.(directory)
+                }
+                onDismiss()
+                return
+            }
 
-        if (isConfirmableSessionActionId(actionId)) {
-            setSurface({ kind: 'confirm', dialogKind: actionId })
-        }
-    }, [])
+            if (actionId === 'rename') {
+                setSurface({ kind: 'rename' })
+                return
+            }
+
+            if (isConfirmableSessionActionId(actionId)) {
+                setSurface({ kind: 'confirm', dialogKind: actionId })
+            }
+        },
+        [onDismiss, onNewSessionInDirectory, session.metadata?.path]
+    )
 
     const handleConfirm = useCallback(async () => {
         switch (dialogKind) {
@@ -75,6 +88,7 @@ export function SessionListActionController(props: SessionListActionControllerPr
                 }}
                 session={{
                     lifecycleState: session.lifecycleState,
+                    hasDirectory: Boolean(session.metadata?.path?.trim()),
                 }}
                 onActionSelect={handleMenuActionSelect}
             />

@@ -7,7 +7,7 @@ type ProjectPickerControlButtonProps = {
     icon: React.JSX.Element
     label: string
     isDisabled?: boolean
-    onClick: () => void
+    onClick: () => unknown
     className?: string
 }
 

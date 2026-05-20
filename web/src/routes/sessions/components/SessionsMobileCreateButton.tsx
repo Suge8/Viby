@@ -12,7 +12,7 @@ type SessionsMobileCreateButtonProps = {
     visible: boolean
     testId: string
     title: string
-    onClick: () => void
+    onClick: () => unknown
 }
 
 export function SessionsMobileCreateButton(props: SessionsMobileCreateButtonProps): JSX.Element | null {

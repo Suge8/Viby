@@ -6,8 +6,8 @@ import { useTranslation } from '@/lib/use-translation'
 
 type SessionsEmptyStateProps = {
     hasSessions: boolean
-    onCreate: () => void
-    onOpenSettings: () => void
+    onCreate: () => unknown
+    onOpenSettings: () => unknown
 }
 
 const SESSIONS_EMPTY_STATE_BRAND_MARK_CLASS_NAME = `ds-stage-empty-icon h-24 w-24 ${STAGE_BRAND_MARK_NEUTRAL_TONE_CLASS_NAME} sm:h-28 sm:w-28`

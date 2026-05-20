@@ -1,14 +1,11 @@
 import { FolderOpenIcon, TerminalIcon } from '@/components/icons'
 import { FloatingActionMenu } from '@/components/ui/FloatingActionMenu'
-import type {
-    FloatingActionMenuAnchorPoint,
-    FloatingActionMenuItem
-} from '@/components/ui/FloatingActionMenu.contract'
+import type { FloatingActionMenuAnchorPoint, FloatingActionMenuItem } from '@/components/ui/FloatingActionMenu.contract'
 import { useTranslation } from '@/lib/use-translation'
 
 type SessionHeaderNavigation = {
-    onViewFiles?: () => void
-    onViewTerminal?: () => void
+    onViewFiles?: () => unknown
+    onViewTerminal?: () => unknown
 }
 
 type SessionHeaderActionMenuProps = {
@@ -21,13 +18,17 @@ type SessionHeaderActionMenuProps = {
 
 const HEADER_MENU_ICON_CLASS_NAME = 'text-[var(--app-hint)]'
 
+function isFinallyThenable(value: unknown): value is { finally(onFinally: () => void): unknown } {
+    return typeof value === 'object' && value !== null && typeof (value as { finally?: unknown }).finally === 'function'
+}
+
 function createHeaderMenuItem(
     onClose: () => void,
     action: {
         id: string
         label: string
         icon: React.JSX.Element
-        onSelect?: () => void
+        onSelect?: () => unknown
     }
 ): FloatingActionMenuItem | null {
     if (!action.onSelect) {
@@ -39,9 +40,18 @@ function createHeaderMenuItem(
         label: action.label,
         icon: action.icon,
         onSelect: () => {
-            onClose()
-            action.onSelect?.()
-        }
+            try {
+                const result = action.onSelect?.()
+                if (isFinallyThenable(result)) {
+                    return result.finally(onClose)
+                }
+                onClose()
+                return result
+            } catch (error) {
+                onClose()
+                throw error
+            }
+        },
     }
 }
 
@@ -55,20 +65,18 @@ function buildHeaderMenuItems(
             id: 'files',
             label: t('files.title'),
             icon: <FolderOpenIcon className={HEADER_MENU_ICON_CLASS_NAME} />,
-            onSelect: navigation.onViewFiles
+            onSelect: navigation.onViewFiles,
         }),
         createHeaderMenuItem(onClose, {
             id: 'terminal',
             label: t('terminal.title'),
             icon: <TerminalIcon className={HEADER_MENU_ICON_CLASS_NAME} />,
-            onSelect: navigation.onViewTerminal
-        })
+            onSelect: navigation.onViewTerminal,
+        }),
     ].filter((item): item is FloatingActionMenuItem => item !== null)
 }
 
-export default function SessionHeaderActionMenu(
-    props: SessionHeaderActionMenuProps
-): React.JSX.Element | null {
+export default function SessionHeaderActionMenu(props: SessionHeaderActionMenuProps): React.JSX.Element | null {
     const { t } = useTranslation()
     const items = buildHeaderMenuItems(props.onClose, props.navigation, t)
 
@@ -84,7 +92,7 @@ export default function SessionHeaderActionMenu(
             content={{
                 heading: t('session.more'),
                 items,
-                menuId: props.menuId
+                menuId: props.menuId,
             }}
         />
     )

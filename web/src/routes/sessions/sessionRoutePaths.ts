@@ -22,6 +22,12 @@ export function buildSessionHref(sessionId: string): string {
     return `${SESSIONS_INDEX_ROUTE}/${sessionId}`
 }
 
+export function buildNewSessionDirectoryHref(directory: string): string {
+    const params = new URLSearchParams()
+    params.set('directory', directory)
+    return `${NEW_SESSION_ROUTE}?${params.toString()}`
+}
+
 export function buildSessionFilesPath(sessionId: string): string {
     return `${buildSessionHref(sessionId)}/files`
 }

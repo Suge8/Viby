@@ -9,8 +9,8 @@ export function ActionButtons(props: {
     isDisabled: boolean
     createLabel?: string
     pendingLabel?: string
-    onCancel: () => void
-    onCreate: () => void
+    onCancel: () => unknown
+    onCreate: () => unknown
 }) {
     const { t } = useTranslation()
 

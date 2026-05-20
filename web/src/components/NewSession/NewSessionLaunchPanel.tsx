@@ -50,7 +50,7 @@ type LaunchPanelProps = {
         onReasoningEffortChange: (value: ModelReasoningEffortSelection) => void
         onCodexServiceTierChange: (value: CodexServiceTierSelection) => void
         onYoloModeChange: (checked: boolean) => void
-        onRefreshAgentAvailability: () => void
+        onRefreshAgentAvailability: () => unknown
     }
 }
 

@@ -121,12 +121,15 @@ export const ProjectPickerDialog = memo(function ProjectPickerDialog(
                                 <ProjectPickerControlButton
                                     icon={
                                         <RefreshIcon
-                                            className={cn('h-4 w-4', browser.isRefreshing ? 'animate-spin' : '')}
+                                            className={cn(
+                                                'h-4 w-4',
+                                                browser.isRefreshing ? 'animate-spin motion-reduce:animate-none' : ''
+                                            )}
                                         />
                                     }
                                     label={t('newSession.projectPicker.refresh')}
                                     isDisabled={!props.isSupported || props.isDisabled || browser.isNavigating}
-                                    onClick={() => void browser.refresh()}
+                                    onClick={() => browser.refresh()}
                                 />
                                 <ProjectPickerControlButton
                                     icon={<CloseIcon className="h-4 w-4" />}

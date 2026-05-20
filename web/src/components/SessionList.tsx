@@ -33,14 +33,16 @@ type SessionListEmptyLabelOptions = {
 
 type SessionListActions = {
     onSessionIntent?: (sessionId: string, source: 'focus' | 'hover' | 'press') => void
-    onSelect: (sessionId: string) => void
-    onNewSession: () => void
+    onSelect: (sessionId: string) => unknown
+    onNewSession: () => unknown
+    onNewSessionInDirectory?: (directory: string) => unknown
 }
 
 type SessionListProps = {
     sessions: readonly SessionSummary[]
     api: ApiClient | null
     actions: SessionListActions
+    openingSessionId?: string | null
     selectedSessionId?: string | null
     preferredSectionId?: SessionListSectionId | null
     activeSectionId?: SessionListSectionId | null
@@ -54,6 +56,7 @@ function SessionListComponent(props: SessionListProps): React.JSX.Element {
         api,
         actions,
         onActiveSectionChange,
+        openingSessionId = null,
         preferredSectionId = null,
         selectedSessionId = null,
         sessions,
@@ -122,9 +125,10 @@ function SessionListComponent(props: SessionListProps): React.JSX.Element {
         () => ({
             onIntent: actions.onSessionIntent,
             onSelect: actions.onSelect,
+            openingSessionId,
             selectedSessionId,
         }),
-        [actions.onSessionIntent, actions.onSelect, selectedSessionId]
+        [actions.onSessionIntent, actions.onSelect, openingSessionId, selectedSessionId]
     )
 
     useEffect(() => {
@@ -194,6 +198,7 @@ function SessionListComponent(props: SessionListProps): React.JSX.Element {
                     anchorPoint={actionTarget.anchorPoint}
                     callbacks={{
                         onDismiss: handleDismissActionController,
+                        onNewSessionInDirectory: actions.onNewSessionInDirectory,
                     }}
                 />
             ) : null}

@@ -30,6 +30,7 @@ export function NewSession(props: {
     api: ApiClient
     runtime: LocalRuntime
     initialMode?: NewSessionMode
+    initialDirectory?: string
     onSuccess: (sessionId: string) => Promise<void> | void
     onCancel: () => void
 }): React.JSX.Element {
@@ -82,6 +83,7 @@ export function NewSession(props: {
         sessionType,
         t,
         getRecentPaths,
+        initialDirectory: props.initialDirectory,
     })
 
     const {
@@ -202,8 +204,8 @@ export function NewSession(props: {
         : isCreateOpening
           ? t('newSession.opening')
           : undefined
-    const handleRefreshAgentAvailability = useCallback((): void => {
-        void Promise.all([refetchAgentAvailability(), refetchAgentLaunchConfig()])
+    const handleRefreshAgentAvailability = useCallback((): Promise<unknown> => {
+        return Promise.all([refetchAgentAvailability(), refetchAgentLaunchConfig()])
     }, [refetchAgentAvailability, refetchAgentLaunchConfig])
 
     return (

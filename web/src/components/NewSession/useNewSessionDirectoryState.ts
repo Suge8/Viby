@@ -54,15 +54,27 @@ type UseNewSessionDirectoryStateOptions = {
     sessionType: SessionType
     t: (key: string) => string
     getRecentPaths: () => string[]
+    initialDirectory?: string
 }
 
 export function useNewSessionDirectoryState(options: UseNewSessionDirectoryStateOptions): DirectoryStateResult {
     const { api, getRecentPaths, isDisabled, runtime, sessionType, sessions, t } = options
-    const [directory, setDirectory] = useState('')
+    const initialDirectory = options.initialDirectory?.trim() ?? ''
+    const [directory, setDirectory] = useState(initialDirectory)
     const [directoryCreationConfirmed, setDirectoryCreationConfirmed] = useState(false)
     const [knownPathChecksEnabled, setKnownPathChecksEnabled] = useState(false)
-    const hasPrefilledRecentPath = useRef(false)
+    const hasPrefilledRecentPath = useRef(initialDirectory.length > 0)
     const recentPaths = useMemo(() => getRecentPaths(), [getRecentPaths])
+
+    useEffect(() => {
+        if (!initialDirectory) {
+            return
+        }
+
+        hasPrefilledRecentPath.current = true
+        setDirectory(initialDirectory)
+    }, [initialDirectory])
+
     useEffect(() => {
         if (hasPrefilledRecentPath.current) {
             return

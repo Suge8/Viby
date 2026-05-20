@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SessionList } from '@/components/SessionList'
 import { I18nProvider } from '@/lib/i18n-context'
@@ -22,7 +22,7 @@ if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
 }
 
 vi.mock('@/hooks/useLongPress', () => ({
-    useLongPress: (options: { onClick?: () => void; onLongPress?: (point: { x: number; y: number }) => void }) => ({
+    useLongPress: (options: { onClick?: () => unknown; onLongPress?: (point: { x: number; y: number }) => void }) => ({
         onClick: options.onClick,
         onPointerCancel: vi.fn(),
         onPointerDown: vi.fn(),
@@ -65,7 +65,7 @@ vi.mock('@/components/SessionActionMenu', () => ({
         onActionSelect,
     }: {
         overlay: { isOpen: boolean }
-        onActionSelect: (actionId: 'rename' | 'stop' | 'delete') => void
+        onActionSelect: (actionId: 'new-session' | 'rename' | 'stop' | 'delete') => void
     }) => {
         if (!overlay.isOpen) {
             return null
@@ -73,6 +73,9 @@ vi.mock('@/components/SessionActionMenu', () => ({
 
         return (
             <>
+                <button type="button" onClick={() => onActionSelect('new-session')}>
+                    new-session-action
+                </button>
                 <button type="button" onClick={() => onActionSelect('rename')}>
                     rename-action
                 </button>
@@ -136,7 +139,10 @@ function createSessionSummary(): SessionSummary {
     }
 }
 
-function renderSessionList(onSelect: (sessionId: string) => void = vi.fn()): void {
+function renderSessionList(
+    onSelect: (sessionId: string) => unknown = vi.fn(),
+    onNewSessionInDirectory: (directory: string) => unknown = vi.fn()
+): void {
     render(
         <I18nProvider>
             <SessionList
@@ -147,6 +153,7 @@ function renderSessionList(onSelect: (sessionId: string) => void = vi.fn()): voi
                 actions={{
                     onSelect,
                     onNewSession: vi.fn(),
+                    onNewSessionInDirectory,
                 }}
             />
         </I18nProvider>
@@ -174,6 +181,24 @@ describe('SessionList action flow', () => {
         expect(stopSessionMock).not.toHaveBeenCalled()
     })
 
+    it('marks the session card pending while async selection preloads the route', async () => {
+        let resolveSelect!: () => void
+        const onSelect = vi.fn(() => new Promise<void>((resolve) => (resolveSelect = resolve)))
+        renderSessionList(onSelect)
+
+        const card = screen.getByRole('button', { name: /needs review/i })
+        fireEvent.click(card)
+        fireEvent.click(card)
+
+        expect(onSelect).toHaveBeenCalledTimes(1)
+        expect(card).toBeDisabled()
+        expect(card).toHaveAttribute('aria-busy', 'true')
+        expect(card.textContent).toMatch(/Opening|session\.opening/)
+
+        resolveSelect()
+        await waitFor(() => expect(card).not.toBeDisabled())
+    })
+
     it('keeps the action controller mounted long enough to open the rename dialog on the first click', async () => {
         renderSessionList()
 
@@ -186,6 +211,20 @@ describe('SessionList action flow', () => {
 
         expect(screen.getByText('rename-dialog-open')).toBeInTheDocument()
         expect(stopSessionMock).not.toHaveBeenCalled()
+    })
+
+    it('opens a new-session route from the selected session directory', async () => {
+        const onNewSessionInDirectory = vi.fn()
+        renderSessionList(vi.fn(), onNewSessionInDirectory)
+
+        fireEvent.contextMenu(screen.getByRole('button', { name: /needs review/i }), {
+            clientX: 24,
+            clientY: 36,
+        })
+
+        fireEvent.click(await screen.findByRole('button', { name: 'new-session-action' }))
+
+        expect(onNewSessionInDirectory).toHaveBeenCalledWith(TEST_PROJECT_PATH)
     })
 
     it('keeps the action controller mounted long enough to open the delete confirm dialog', async () => {

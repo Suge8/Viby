@@ -119,6 +119,8 @@ vi.mock('@/lib/use-translation', () => ({
                     return 'History only'
                 case 'session.more':
                     return 'More actions'
+                case 'session.opening':
+                    return 'Opening'
                 case 'session.time.justNow':
                     return 'Just now'
                 default:

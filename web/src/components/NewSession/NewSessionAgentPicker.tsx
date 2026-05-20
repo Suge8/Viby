@@ -21,7 +21,7 @@ type AgentPickerProps = {
     availabilityRefreshing: boolean
     availabilityError?: string | null
     onAgentChange: (agent: AgentType) => void
-    onRefresh: () => void
+    onRefresh: () => unknown
 }
 
 const AGENT_ACCENT_CLASS_NAME: Record<AgentType, string> = {

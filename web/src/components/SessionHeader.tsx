@@ -18,8 +18,8 @@ import type { Session } from '@/types/api'
 
 type SessionHeaderNavigation = {
     onBack: () => void
-    onViewFiles?: () => void
-    onViewTerminal?: () => void
+    onViewFiles?: () => unknown
+    onViewTerminal?: () => unknown
 }
 
 type SessionHeaderProps = {

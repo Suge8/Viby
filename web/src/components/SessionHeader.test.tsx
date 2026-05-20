@@ -1,16 +1,24 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SESSION_CHAT_HEADER_STAGE_TEST_ID } from '@/lib/sessionUiContracts'
 import { renderWithI18n } from '@/test/i18n'
 import { SessionHeader } from './SessionHeader'
 
 type SessionHeaderRenderOptions = {
-    onViewFiles?: () => void
-    onViewTerminal?: () => void
+    onViewFiles?: () => unknown
+    onViewTerminal?: () => unknown
 }
 
 function getMoreButton(): HTMLElement {
     return screen.getByTitle(/^(session\.more|More actions)$/i)
+}
+
+function createDeferred(): { promise: Promise<void>; resolve: () => void } {
+    let resolve!: () => void
+    const promise = new Promise<void>((done) => {
+        resolve = done
+    })
+    return { promise, resolve }
 }
 
 async function renderHeader(options?: SessionHeaderRenderOptions) {
@@ -170,6 +178,25 @@ describe('SessionHeader', () => {
                 expect(onViewTerminal).toHaveBeenCalledOnce()
             })
         })
+    })
+
+    it('keeps async more-menu navigation pending until the action commits', async () => {
+        const pending = createDeferred()
+        const onViewFiles = vi.fn(() => pending.promise)
+        await renderHeader({ onViewFiles })
+
+        fireEvent.click(getMoreButton())
+        const filesMenuItem = await screen.findByRole('menuitem', { name: 'Files' })
+        fireEvent.click(filesMenuItem)
+        fireEvent.click(filesMenuItem)
+
+        expect(onViewFiles).toHaveBeenCalledTimes(1)
+        expect(filesMenuItem).toBeDisabled()
+        expect(filesMenuItem).toHaveAttribute('aria-busy', 'true')
+        expect(screen.getByRole('menu')).toBeInTheDocument()
+
+        pending.resolve()
+        await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
     })
 
     it('hides the more button when chat navigation actions are unavailable', async () => {

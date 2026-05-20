@@ -12,7 +12,7 @@ const BRAND_TITLE_CLASS_NAME = 'ds-sessions-shell-header-title'
 
 type SessionsHeaderActionButtonProps = {
     title: string
-    onClick: () => void
+    onClick: () => unknown
     className?: string
     testId?: string
     children: JSX.Element
@@ -21,8 +21,8 @@ type SessionsHeaderActionButtonProps = {
 type SessionsShellHeaderProps = {
     agentsTitle: string
     settingsTitle: string
-    onOpenAgents: () => void
-    onOpenSettings: () => void
+    onOpenAgents: () => unknown
+    onOpenSettings: () => unknown
 }
 
 function SessionsHeaderActionButton(props: SessionsHeaderActionButtonProps): JSX.Element {
