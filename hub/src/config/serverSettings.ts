@@ -9,7 +9,11 @@
  */
 
 import { isLocalNetworkHostname } from '@viby/protocol/networkScope'
-import { DEFAULT_VIBY_LISTEN_HOST, DEFAULT_VIBY_LISTEN_PORT } from '@viby/protocol/runtimeDefaults'
+import {
+    DEFAULT_PAIRING_BROKER_URL,
+    DEFAULT_VIBY_LISTEN_HOST,
+    DEFAULT_VIBY_LISTEN_PORT,
+} from '@viby/protocol/runtimeDefaults'
 import {
     buildLocalOriginAliases,
     isLoopbackOrigin,
@@ -209,7 +213,7 @@ export async function loadServerSettings(dataDir: string): Promise<ServerSetting
         corsOrigins = deriveCorsOrigins(listenHost, listenPort, publicUrl)
     }
 
-    let pairingBrokerUrl: string | null = null
+    let pairingBrokerUrl: string | null = DEFAULT_PAIRING_BROKER_URL
     if (process.env.PAIRING_BROKER_URL?.trim()) {
         pairingBrokerUrl = process.env.PAIRING_BROKER_URL.trim()
         sources.pairingBrokerUrl = 'env'

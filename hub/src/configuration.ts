@@ -6,8 +6,8 @@
  * they are automatically saved for future use
  *
  * Optional environment variables:
- * - CLI_API_TOKEN: Shared secret for viby CLI authentication (auto-generated if not set)
- * - VIBY_LISTEN_HOST: Host/IP to bind the HTTP service (default: 127.0.0.1)
+ * - VIBY_HUB_OWNER_TOKEN: Internal Hub owner secret (auto-generated if not set)
+ * - VIBY_LISTEN_HOST: Host/IP to bind the HTTP service (default: 0.0.0.0)
  * - VIBY_LISTEN_PORT: Port for HTTP service (default: 37173)
  * - VIBY_PUBLIC_URL: Public URL for external access
  * - VIBY_PUBLIC_ACCESS_ENABLED: Enable public Hub and pairing access (default: true)
@@ -23,7 +23,7 @@ import { randomInt } from 'node:crypto'
 import { existsSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { getOrCreateCliApiToken } from './config/cliApiToken'
+import { getOrCreateHubOwnerToken } from './config/hubOwnerToken'
 import { loadServerSettings, type ServerSettings, type ServerSettingsResult } from './config/serverSettings'
 import { getSettingsFile } from './config/settings'
 
@@ -37,21 +37,21 @@ export interface ConfigSources {
     corsOrigins: ConfigSource
     pairingBrokerUrl: ConfigSource
     pairingCreateToken: ConfigSource
-    cliApiToken: 'env' | 'file' | 'generated'
+    hubOwnerToken: 'env' | 'file' | 'generated'
 }
 
 class Configuration {
-    /** CLI auth token (internal automation secret) */
-    public cliApiToken: string
+    /** Internal owner token for local Hub management APIs */
+    public hubOwnerToken: string
 
     /** Short user-facing code for device pairing */
     public readonly pairingCode: string
 
-    /** Source of CLI API token */
-    public cliApiTokenSource: 'env' | 'file' | 'generated' | ''
+    /** Source of Hub owner token */
+    public hubOwnerTokenSource: 'env' | 'file' | 'generated' | ''
 
-    /** Whether CLI API token was newly generated (for first-run display) */
-    public cliApiTokenIsNew: boolean
+    /** Whether Hub owner token was newly generated (for first-run display) */
+    public hubOwnerTokenIsNew: boolean
 
     /** Path to settings.toml file */
     public readonly settingsFile: string
@@ -108,12 +108,12 @@ class Configuration {
 
         this.pairingCode = String(randomInt(0, 1_000_000)).padStart(6, '0')
 
-        // CLI API token - will be set by _setCliApiToken() before create() returns
-        this.cliApiToken = ''
-        this.cliApiTokenSource = ''
-        this.cliApiTokenIsNew = false
+        // Hub owner token - will be set by _setHubOwnerToken() before create() returns
+        this.hubOwnerToken = ''
+        this.hubOwnerTokenSource = ''
+        this.hubOwnerTokenIsNew = false
 
-        // Store sources for logging (cliApiToken will be set by _setCliApiToken)
+        // Store sources for logging (hubOwnerToken will be set by _setHubOwnerToken)
         this.sources = {
             ...sources,
         } as ConfigSources
@@ -149,19 +149,19 @@ class Configuration {
         // 4. Create configuration instance
         const config = new Configuration(dataDir, dbPath, settingsResult.settings, settingsResult.sources)
 
-        // 5. Load CLI API token
-        const tokenResult = await getOrCreateCliApiToken(dataDir)
-        config._setCliApiToken(tokenResult.token, tokenResult.source, tokenResult.isNew)
+        // 5. Load Hub owner token
+        const tokenResult = await getOrCreateHubOwnerToken(dataDir)
+        config._setHubOwnerToken(tokenResult.token, tokenResult.source, tokenResult.isNew)
 
         return config
     }
 
-    /** Set CLI API token (called during async initialization) */
-    _setCliApiToken(token: string, source: 'env' | 'file' | 'generated', isNew: boolean): void {
-        this.cliApiToken = token
-        this.cliApiTokenSource = source
-        this.cliApiTokenIsNew = isNew
-        ;(this.sources as { cliApiToken: string }).cliApiToken = source
+    /** Set Hub owner token (called during async initialization) */
+    _setHubOwnerToken(token: string, source: 'env' | 'file' | 'generated', isNew: boolean): void {
+        this.hubOwnerToken = token
+        this.hubOwnerTokenSource = source
+        this.hubOwnerTokenIsNew = isNew
+        ;(this.sources as { hubOwnerToken: string }).hubOwnerToken = source
     }
 }
 

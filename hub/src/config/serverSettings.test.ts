@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { DEFAULT_PAIRING_BROKER_URL } from '@viby/protocol/runtimeDefaults'
 import { loadServerSettings } from './serverSettings'
 
 const tempDirs: string[] = []
@@ -45,7 +46,7 @@ afterEach(async () => {
 
 function createSettingsToml(port: number): string {
     return [
-        'cli_api_token = "token"',
+        'hub_owner_token = "token"',
         `api_url = "http://localhost:${port}"`,
         'listen_host = "127.0.0.1"',
         `listen_port = ${port}`,
@@ -67,6 +68,19 @@ function createSettingsToml(port: number): string {
 }
 
 describe('loadServerSettings', () => {
+    it('defaults to the product pairing broker without shell env', async () => {
+        const dataDir = await mkdtemp(join(tmpdir(), 'viby-server-settings-'))
+        tempDirs.push(dataDir)
+
+        const result = await loadServerSettings(dataDir)
+
+        expect(result.settings.pairingBrokerUrl).toBe(DEFAULT_PAIRING_BROKER_URL)
+        expect(result.settings.pairingCreateToken).toBeNull()
+        expect(result.sources.pairingBrokerUrl).toBe('default')
+        expect(result.sources.pairingCreateToken).toBe('default')
+        expect(result.savedToFile).toBe(false)
+    })
+
     it('reads the configured port directly from settings.toml', async () => {
         const dataDir = await mkdtemp(join(tmpdir(), 'viby-server-settings-'))
         tempDirs.push(dataDir)

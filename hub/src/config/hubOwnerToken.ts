@@ -1,7 +1,7 @@
 /**
- * CLI API Token management
+ * Hub owner token management
  *
- * Handles automatic generation and persistence of CLI_API_TOKEN.
+ * Handles automatic generation and persistence of VIBY_HUB_OWNER_TOKEN.
  * Priority: environment variable > settings.toml > auto-generate
  */
 
@@ -11,7 +11,7 @@ import { parseAccessToken } from '../utils/accessToken'
 import { getOrCreateSettingsValue } from './generators'
 import { getSettingsFile, readSettings, writeSettings } from './settings'
 
-export interface CliApiTokenResult {
+export interface HubOwnerTokenResult {
     token: string
     source: 'env' | 'file' | 'generated'
     isNew: boolean
@@ -42,41 +42,41 @@ function isWeakToken(token: string): boolean {
     return weakPatterns.some((p) => p.test(token))
 }
 
-type CliApiTokenSource = 'env' | 'file'
+type HubOwnerTokenSource = 'env' | 'file'
 
-function normalizeCliApiToken(rawToken: string, source: CliApiTokenSource): { token: string; didStrip: boolean } {
+function normalizeHubOwnerToken(rawToken: string, source: HubOwnerTokenSource): { token: string; didStrip: boolean } {
     const parsed = parseAccessToken(rawToken)
     if (!parsed) {
         throw new Error(
-            `CLI_API_TOKEN from ${source} is invalid. Single-user mode no longer accepts namespace suffixes.`
+            `VIBY_HUB_OWNER_TOKEN from ${source} is invalid. Single-user mode no longer accepts namespace suffixes.`
         )
     }
     return { token: parsed, didStrip: false }
 }
 
 /**
- * Get or create CLI API token
+ * Get or create Hub owner token
  *
  * Priority:
- * 1. CLI_API_TOKEN environment variable (highest - backward compatible)
- * 2. settings.toml cliApiToken field
+ * 1. VIBY_HUB_OWNER_TOKEN environment variable (advanced override)
+ * 2. settings.toml hub_owner_token field
  * 3. Auto-generate and save to settings.toml
  */
-export async function getOrCreateCliApiToken(dataDir: string): Promise<CliApiTokenResult> {
+export async function getOrCreateHubOwnerToken(dataDir: string): Promise<HubOwnerTokenResult> {
     const settingsFile = getSettingsFile(dataDir)
 
-    // 1. Environment variable has highest priority (backward compatible)
-    const envToken = process.env.CLI_API_TOKEN
+    // 1. Environment variable has highest priority for headless automation.
+    const envToken = process.env.VIBY_HUB_OWNER_TOKEN
     if (envToken) {
-        const normalized = normalizeCliApiToken(envToken, 'env')
+        const normalized = normalizeHubOwnerToken(envToken, 'env')
         if (isWeakToken(normalized.token)) {
-            reportHubRuntimeWarning('CLI_API_TOKEN appears to be weak. Consider using a stronger secret.')
+            reportHubRuntimeWarning('VIBY_HUB_OWNER_TOKEN appears to be weak. Consider using a stronger secret.')
         }
 
         // Persist env token to file if not already saved (prevents token loss on env var issues)
         const settings = await readSettings(settingsFile)
-        if (settings !== null && !settings.cliApiToken) {
-            settings.cliApiToken = normalized.token
+        if (settings !== null && !settings.hubOwnerToken) {
+            settings.hubOwnerToken = normalized.token
             await writeSettings(settingsFile, settings)
         }
 
@@ -86,18 +86,18 @@ export async function getOrCreateCliApiToken(dataDir: string): Promise<CliApiTok
     const result = await getOrCreateSettingsValue({
         settingsFile,
         readValue: (settings) => {
-            if (!settings.cliApiToken) {
+            if (!settings.hubOwnerToken) {
                 return null
             }
-            const normalized = normalizeCliApiToken(settings.cliApiToken, 'file')
+            const normalized = normalizeHubOwnerToken(settings.hubOwnerToken, 'file')
             if (normalized.didStrip) {
-                settings.cliApiToken = normalized.token
+                settings.hubOwnerToken = normalized.token
                 return { value: normalized.token, writeBack: true }
             }
             return { value: normalized.token }
         },
         writeValue: (settings, value) => {
-            settings.cliApiToken = value
+            settings.hubOwnerToken = value
         },
         generate: generateSecureToken,
     })

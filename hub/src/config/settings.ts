@@ -7,7 +7,7 @@ import { reportHubRuntimeError } from '../runtime/runtimeDiagnostics'
 export interface Settings {
     machineId?: string
     machineIdConfirmedByServer?: boolean
-    cliApiToken?: string
+    hubOwnerToken?: string
     apiUrl?: string
     vapidKeys?: {
         publicKey: string

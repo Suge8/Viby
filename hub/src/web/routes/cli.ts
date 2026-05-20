@@ -83,7 +83,7 @@ export function createCliRoutes(getSyncEngine: () => SyncEngine | null): Hono<Cl
 
         const token = parsed.data.replace(/^Bearer\s+/i, '')
         const parsedToken = parseAccessToken(token)
-        if (!parsedToken || !constantTimeEquals(parsedToken, configuration.cliApiToken)) {
+        if (!parsedToken || !constantTimeEquals(parsedToken, configuration.hubOwnerToken)) {
             return c.json({ error: 'Invalid token' }, 401)
         }
 

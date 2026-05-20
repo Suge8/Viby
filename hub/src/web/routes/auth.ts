@@ -26,7 +26,7 @@ export function createAuthRoutes(jwtSecret: Uint8Array, devices?: DeviceAuthStor
     app.post('/auth', createJsonBodyValidator(authBodySchema), async (c) => {
         const body = c.req.valid('json')
         const parsedToken = parseAccessToken(body.accessToken)
-        if (!parsedToken || !constantTimeEquals(parsedToken, configuration.cliApiToken)) {
+        if (!parsedToken || !constantTimeEquals(parsedToken, configuration.hubOwnerToken)) {
             const rateLimitResponse = enforceAuthFailureRateLimit(c)
             if (rateLimitResponse) return rateLimitResponse
             return c.json({ error: 'Invalid access token' }, 401)

@@ -37,7 +37,7 @@ afterEach(async () => {
 
 function createSettingsToml(port: number, publicUrl = `http://localhost:${port}`): string {
     return [
-        'cli_api_token = "token"',
+        'hub_owner_token = "token"',
         `api_url = "http://localhost:${port}"`,
         'listen_host = "127.0.0.1"',
         `listen_port = ${port}`,
