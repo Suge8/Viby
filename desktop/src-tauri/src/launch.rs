@@ -6,7 +6,7 @@ use std::process::{Child, Command, Stdio};
 
 use tauri::{AppHandle, Manager};
 
-use crate::state::StartHubOptions;
+use crate::state::{HubStartupConfig, DEFAULT_VIBY_LISTEN_HOST};
 
 const BUN_EXECUTABLE: &str = "bun";
 const SHARED_VIBY_HOME_DIR: &str = ".viby";
@@ -130,9 +130,18 @@ fn configure_shared_home_environment(command: &mut Command) -> Result<(), String
     Ok(())
 }
 
-fn configure_hub_runtime_environment(command: &mut Command, options: &StartHubOptions) {
+fn configure_hub_runtime_environment(command: &mut Command, startup_config: &HubStartupConfig) {
     command.env("VIBY_LAUNCH_SOURCE", "desktop");
-    command.env("VIBY_LISTEN_HOST", options.listen_host());
+    command.env("VIBY_LISTEN_HOST", DEFAULT_VIBY_LISTEN_HOST);
+    command.env("VIBY_LISTEN_PORT", startup_config.listen_port.to_string());
+    command.env(
+        "VIBY_PUBLIC_ACCESS_ENABLED",
+        if startup_config.public_access_enabled {
+            "true"
+        } else {
+            "false"
+        },
+    );
 }
 
 fn append_hub_args(command: &mut Command) {
@@ -156,36 +165,28 @@ fn create_packaged_cli_command(app: &AppHandle) -> Result<Command, String> {
     Ok(command)
 }
 
-pub fn create_cli_command(app: &AppHandle) -> Result<Command, String> {
-    if cfg!(debug_assertions) {
-        return create_dev_cli_command();
-    }
-
-    create_packaged_cli_command(app)
-}
-
-fn spawn_dev_hub(options: &StartHubOptions) -> Result<Child, String> {
+fn spawn_dev_hub(startup_config: &HubStartupConfig) -> Result<Child, String> {
     let mut command = create_dev_cli_command()?;
     append_hub_args(&mut command);
-    configure_hub_runtime_environment(&mut command, options);
+    configure_hub_runtime_environment(&mut command, startup_config);
     configure_spawn_command(&mut command)?;
     command.spawn().map_err(|error| error.to_string())
 }
 
-fn spawn_packaged_hub(app: &AppHandle, options: &StartHubOptions) -> Result<Child, String> {
+fn spawn_packaged_hub(app: &AppHandle, startup_config: &HubStartupConfig) -> Result<Child, String> {
     let mut command = create_packaged_cli_command(app)?;
     append_hub_args(&mut command);
-    configure_hub_runtime_environment(&mut command, options);
+    configure_hub_runtime_environment(&mut command, startup_config);
     configure_spawn_command(&mut command)?;
     command.spawn().map_err(|error| error.to_string())
 }
 
-pub fn spawn_hub_process(app: &AppHandle, options: &StartHubOptions) -> Result<Child, String> {
+pub fn spawn_hub_process(app: &AppHandle, startup_config: &HubStartupConfig) -> Result<Child, String> {
     if cfg!(debug_assertions) {
-        return spawn_dev_hub(options);
+        return spawn_dev_hub(startup_config);
     }
 
-    spawn_packaged_hub(app, options)
+    spawn_packaged_hub(app, startup_config)
 }
 
 fn resolve_packaged_sidecar_path(app: &AppHandle) -> Result<PathBuf, String> {

@@ -3,7 +3,7 @@ use tauri::AppHandle;
 
 use crate::pairing;
 use crate::settings;
-use crate::state::{DesktopPairingSession, HubSnapshot, StartHubOptions};
+use crate::state::{DesktopPairingSession, HubSnapshot};
 use crate::supervisor;
 
 async fn run_blocking<T>(
@@ -23,8 +23,8 @@ pub async fn get_hub_snapshot(app: AppHandle) -> Result<HubSnapshot, String> {
 }
 
 #[tauri::command]
-pub async fn start_hub(app: AppHandle, options: StartHubOptions) -> Result<HubSnapshot, String> {
-    run_blocking(move || supervisor::start_hub(&app, &options)).await
+pub async fn start_hub(app: AppHandle) -> Result<HubSnapshot, String> {
+    run_blocking(move || supervisor::start_hub(&app)).await
 }
 
 #[tauri::command]

@@ -270,11 +270,14 @@ export function App(): JSX.Element {
                                 activeDeviceCount={activeDeviceCount}
                                 devices={devices}
                                 deviceLinks={deviceLinks}
+                                publicAccessDisabled={busy}
+                                publicAccessEnabled={hub.publicAccessEnabled}
                                 deviceActionLabel={deviceActionLabel}
                                 deviceActionVisible={deviceActionVisible}
                                 viewState={viewState}
                                 onOpenEntry={(url) => void hub.openUrl(url)}
                                 onPairingAction={handlePairingAction}
+                                onPublicAccessChange={(value) => void hub.setPublicAccessEnabled(value)}
                                 onRevokeDevice={handleRevokeDevice}
                             />
                         ) : null}
@@ -310,17 +313,9 @@ export function App(): JSX.Element {
                         {activePage === 'settings' ? (
                             <SettingsPanel
                                 copy={copy}
-                                entryMode={hub.entryMode}
-                                entryModeDisabled={busy || viewState.running}
-                                entryModeLocked={viewState.running}
-                                publicAccessDisabled={busy || viewState.running}
-                                publicAccessLocked={viewState.running}
-                                publicAccessEnabled={hub.publicAccessEnabled}
                                 languagePreference={languagePreference}
                                 themePreference={themePreference}
-                                onEntryModeChange={hub.setEntryMode}
                                 onLanguagePreferenceChange={setLanguagePreference}
-                                onPublicAccessChange={(value) => void hub.setPublicAccessEnabled(value)}
                                 onOpenUrl={(url) => void hub.openUrl(url)}
                                 onThemePreferenceChange={setThemePreference}
                                 updates={updates}

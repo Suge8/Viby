@@ -83,7 +83,7 @@ pub fn create_pairing_session(app: &AppHandle) -> Result<DesktopPairingSession, 
 
     let auth_response = client
         .post(format!("{}/api/auth", status.local_hub_url))
-        .json(&json!({ "accessToken": status.cli_api_token }))
+        .json(&json!({ "accessToken": status.hub_owner_token }))
         .send()
         .map_err(|error| error.to_string())?;
 

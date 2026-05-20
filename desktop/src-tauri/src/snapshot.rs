@@ -193,7 +193,7 @@ fn build_launching_status(
         public_access_enabled: startup_config.public_access_enabled,
         pairing_broker_url: None,
         pairing_code: None,
-        cli_api_token: String::new(),
+        hub_owner_token: String::new(),
         settings_file: settings_file.display().to_string(),
         data_dir: data_dir.display().to_string(),
         started_at: timestamp.clone(),

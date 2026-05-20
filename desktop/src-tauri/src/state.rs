@@ -5,34 +5,11 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
 pub const HUB_SNAPSHOT_EVENT: &str = "desktop://hub-snapshot";
-pub const DEFAULT_VIBY_LISTEN_HOST: &str = "127.0.0.1";
+pub const DEFAULT_VIBY_LISTEN_HOST: &str = "0.0.0.0";
 pub const DEFAULT_VIBY_LISTEN_PORT: u16 = 37173;
-pub const LAN_LISTEN_HOST: &str = "0.0.0.0";
 
 fn default_public_access_enabled() -> bool {
     true
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum DesktopEntryMode {
-    Local,
-    Lan,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct StartHubOptions {
-    pub entry_mode: DesktopEntryMode,
-}
-
-impl StartHubOptions {
-    pub fn listen_host(&self) -> &'static str {
-        match self.entry_mode {
-            DesktopEntryMode::Local => DEFAULT_VIBY_LISTEN_HOST,
-            DesktopEntryMode::Lan => LAN_LISTEN_HOST,
-        }
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -77,7 +54,7 @@ pub struct HubRuntimeStatus {
     pub pairing_broker_url: Option<String>,
     #[serde(default)]
     pub pairing_code: Option<String>,
-    pub cli_api_token: String,
+    pub hub_owner_token: String,
     pub settings_file: String,
     pub data_dir: String,
     pub started_at: String,

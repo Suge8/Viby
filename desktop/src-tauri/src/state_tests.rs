@@ -74,7 +74,7 @@ fn make_status(pid: u32, launch_source: Option<&str>) -> HubRuntimeStatus {
         public_access_enabled: true,
         pairing_broker_url: Some("https://pair.example.com".to_string()),
         pairing_code: Some("123456".to_string()),
-        cli_api_token: "token".to_string(),
+        hub_owner_token: "token".to_string(),
         settings_file: "/tmp/settings.toml".to_string(),
         data_dir: "/tmp".to_string(),
         started_at: "2026-03-20T00:00:00.000Z".to_string(),
@@ -209,7 +209,7 @@ fn parse_startup_config_reads_listen_host_and_port() {
 fn parse_startup_config_falls_back_to_defaults_when_keys_are_missing() {
     let config = parse_startup_config(
         r#"
-        cli_api_token = "token"
+        hub_owner_token = "token"
         "#,
     )
     .expect("config should parse");

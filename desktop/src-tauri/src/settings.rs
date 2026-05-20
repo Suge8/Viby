@@ -56,11 +56,11 @@ mod tests {
     #[test]
     fn inserts_public_access_before_sections() {
         let next = upsert_root_bool(
-            "cli_api_token = \"x\"\n\n[system]\n",
+            "hub_owner_token = \"x\"\n\n[system]\n",
             "public_access_enabled",
             false,
         );
-        assert!(next.contains("cli_api_token = \"x\"\n\npublic_access_enabled = false\n[system]"));
+        assert!(next.contains("hub_owner_token = \"x\"\n\npublic_access_enabled = false\n[system]"));
     }
 
     #[test]
