@@ -24,12 +24,12 @@ const STEADY_RTT_MS = 180
 export interface PairingLinkQualityInput {
     transport: PairingLinkTransport
     currentRoundTripTimeMs: number | null
+    directBlockedReason?: string | null
     sampledAt?: number | null
+    staleAfterMs?: number | null
     /**
      * Last confirmed transport (direct/relay). When the current transport is
-     * `unknown` mid-renegotiation, the UI uses this to label the in-flight
-     * direction (e.g. "由中转切换至点对点”). When the current transport is
-     * settled and matches `previousTransport`, no transition copy is shown.
+     * `unknown` mid-renegotiation, the UI uses this to label direction.
      */
     previousTransport?: 'direct' | 'relay' | null
 }
@@ -102,14 +102,20 @@ function normalizeRoundTripTime(value: number | null): number | null {
     return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.round(value)) : null
 }
 
-export function isPairingLinkSampleFresh(sampledAt: number | null | undefined, now = Date.now()): boolean {
-    return typeof sampledAt !== 'number' || now - sampledAt <= PAIRING_LINK_SAMPLE_STALE_MS
+export function isPairingLinkSampleFresh(
+    sampledAt: number | null | undefined,
+    now = Date.now(),
+    staleAfterMs = PAIRING_LINK_SAMPLE_STALE_MS
+): boolean {
+    return typeof sampledAt === 'number' && now - sampledAt <= staleAfterMs
 }
 
 function normalizeFreshRoundTripTime(input: PairingLinkQualityInput): number | null {
     const roundTripTimeMs = normalizeRoundTripTime(input.currentRoundTripTimeMs)
     if (roundTripTimeMs === null) return null
-    return isPairingLinkSampleFresh(input.sampledAt) ? roundTripTimeMs : null
+    return isPairingLinkSampleFresh(input.sampledAt, Date.now(), input.staleAfterMs ?? PAIRING_LINK_SAMPLE_STALE_MS)
+        ? roundTripTimeMs
+        : null
 }
 
 function classifyLatency(roundTripTimeMs: number | null): PairingLinkLatencyTier {
@@ -165,6 +171,23 @@ export function describePairingLinkTransport(input: PairingLinkTransportInput | 
             return '安全中转'
         default:
             return '检测链路'
+    }
+}
+
+export function describePairingDirectBlockedReason(reason: string | null | undefined): string | null {
+    switch (reason) {
+        case 'turn-candidate':
+            return '网络只能选到 TURN 中转'
+        case 'missing-ack':
+            return '直连探测还在确认心跳'
+        case 'direct-slower-than-relay':
+            return 'WebRTC 路径比当前中转慢'
+        case 'ice-failed':
+            return '直连 ICE 失败'
+        case 'heartbeat-missed':
+            return '直连心跳丢失'
+        default:
+            return null
     }
 }
 
@@ -228,15 +251,9 @@ export function resolvePairingSelectedCandidatePairStats(
 
 function buildReadyDeviceLinkStatus(stats: PairingLinkQualityInput | null): PairingDeviceLinkStatus {
     if (!stats) {
-        // Bridge has reached `ready` but the first stats sample has not
-        // landed yet (polling is every ~10s). The device is genuinely
-        // connected, so display a success-toned label instead of the older
-        // “正在测速” wording that made the row look stuck mid-handshake.
         return { phase: 'measuring', title: '已连接', tone: 'success', latencyMs: null }
     }
 
-    // Mid-transition: ICE renegotiation cleared the selected candidate pair.
-    // Show the *direction* the user is heading so the UI never looks frozen.
     if (stats.transport === 'unknown' && stats.previousTransport) {
         return stats.previousTransport === 'direct'
             ? { phase: 'handshaking', title: '正在重选点对点路径', tone: 'neutral', latencyMs: null }
@@ -326,9 +343,10 @@ export function buildPairingLinkPresentation(
     }
 
     if (quality.transport === 'relay') {
+        const reason = describePairingDirectBlockedReason(input.directBlockedReason)
         return {
             title: `安全中转${latencyText}`,
-            detail: '两边网络不能直连时自动绕路；能正常用，不用手动设置。',
+            detail: reason ? `${reason}；已自动走安全中转。` : '两边网络不能直连时自动绕路；能正常用，不用手动设置。',
             tone: quality.tone,
         }
     }

@@ -1,5 +1,9 @@
 import { type PairingByeReason, type PairingSignalV2, PairingSignalV2Schema } from './pairingSignal'
-import { computePairingReconnectDelay, PAIRING_ICE_RESTART_MIN_INTERVAL_MS } from './pairingTiming'
+import {
+    computePairingReconnectDelay,
+    PAIRING_ICE_DISCONNECTED_RESTART_DELAY_MS,
+    PAIRING_ICE_RESTART_MIN_INTERVAL_MS,
+} from './pairingTiming'
 import type {
     PairingPeer,
     PairingSocket,
@@ -38,6 +42,7 @@ export function createPairingTransport(options: PairingTransportOptions): Pairin
     let resolveReady: (() => void) | null = null
     let rejectReady: ((error: Error) => void) | null = null
     const listeners = new Set<() => void>()
+    let disconnectedRestartTimer: ReturnType<typeof setTimeout> | null = null
     const negotiation = createPerfectNegotiation({ peer, polite: options.polite, send })
     if (options.createDataChannel) options.onChannel(peer.createDataChannel('control', { ordered: true }))
     else peer.ondatachannel = (event) => options.onChannel(event.channel)
@@ -47,7 +52,12 @@ export function createPairingTransport(options: PairingTransportOptions): Pairin
         if (peer.connectionState === 'closed') close('closed')
     }
     peer.oniceconnectionstatechange = () => {
-        if (peer.iceConnectionState === 'failed') maybeRestartIce()
+        if (peer.iceConnectionState === 'failed') {
+            maybeRestartIce()
+            return
+        }
+        if (peer.iceConnectionState === 'disconnected') scheduleDisconnectedRestart()
+        else clearDisconnectedRestart()
     }
     void connectLoop()
     return {
@@ -135,6 +145,7 @@ export function createPairingTransport(options: PairingTransportOptions): Pairin
         if (disposed) return
         disposed = true
         wakeSleep?.()
+        clearDisconnectedRestart()
         socket?.close()
         pendingSignals.length = 0
         peer.close()
@@ -170,9 +181,29 @@ export function createPairingTransport(options: PairingTransportOptions): Pairin
     function maybeRestartIce(): void {
         if (peer.connectionState === 'closed') return
         const at = now()
-        if (at - lastIceRestartAt < PAIRING_ICE_RESTART_MIN_INTERVAL_MS) return
+        const elapsedMs = at - lastIceRestartAt
+        if (elapsedMs < PAIRING_ICE_RESTART_MIN_INTERVAL_MS) {
+            clearDisconnectedRestart()
+            if (peer.iceConnectionState === 'disconnected') {
+                scheduleDisconnectedRestart(PAIRING_ICE_RESTART_MIN_INTERVAL_MS - elapsedMs)
+            }
+            return
+        }
+        clearDisconnectedRestart()
         lastIceRestartAt = at
         peer.restartIce()
+    }
+    function scheduleDisconnectedRestart(delayMs = PAIRING_ICE_DISCONNECTED_RESTART_DELAY_MS): void {
+        if (disconnectedRestartTimer) return
+        disconnectedRestartTimer = setTimeout(() => {
+            disconnectedRestartTimer = null
+            if (peer.iceConnectionState === 'disconnected') maybeRestartIce()
+        }, delayMs)
+    }
+    function clearDisconnectedRestart(): void {
+        if (!disconnectedRestartTimer) return
+        clearTimeout(disconnectedRestartTimer)
+        disconnectedRestartTimer = null
     }
 }
 

@@ -81,20 +81,22 @@ describe('pairingTunnelRoute', () => {
         })
     })
 
-    it('does not promote TURN relay candidates as direct P2P', () => {
+    it('promotes TURN relay candidates as WebRTC relay, not P2P', () => {
         const state = applyEvents([
-            { type: 'relay-ready' },
+            { type: 'relay-ready', roundTripTimeMs: 80 },
             { type: 'direct-probe-started' },
-            { type: 'direct-candidate-selected', candidateType: 'relay' },
+            { type: 'direct-candidate-selected', candidateType: 'relay', roundTripTimeMs: 40 },
             { type: 'heartbeat-ack', route: 'direct', roundTripTimeMs: 40 },
             { type: 'heartbeat-ack', route: 'direct', roundTripTimeMs: 38 },
         ])
 
         expect(state).toMatchObject({
-            activeRoute: 'relay',
-            directProbe: 'failed',
-            directProbeFailures: 1,
-            routeSwitches: 0,
+            activeRoute: 'direct',
+            activeTransport: 'turn-webrtc',
+            directProbe: 'usable',
+            directBlockedReason: 'turn-candidate',
+            directProbeFailures: 0,
+            routeSwitches: 1,
         })
     })
 
@@ -118,7 +120,7 @@ describe('pairingTunnelRoute', () => {
         })
     })
 
-    it('demotes active direct when the selected candidate becomes TURN relay', () => {
+    it('moves active direct to WebRTC relay when the selected candidate becomes TURN relay', () => {
         const state = applyEvents([
             { type: 'relay-ready' },
             { type: 'direct-probe-started' },
@@ -130,9 +132,11 @@ describe('pairingTunnelRoute', () => {
 
         expect(state).toMatchObject({
             phase: 'ready',
-            activeRoute: 'relay',
-            directProbe: 'failed',
-            directProbeFailures: 1,
+            activeRoute: 'direct',
+            activeTransport: 'turn-webrtc',
+            directProbe: 'usable',
+            directBlockedReason: 'turn-candidate',
+            directProbeFailures: 0,
             routeSwitches: 2,
         })
     })
@@ -182,22 +186,81 @@ describe('pairingTunnelRoute', () => {
         })
     })
 
-    it('keeps relay when direct RTT does not beat relay by enough margin', () => {
+    it('promotes direct when P2P is usable and not much slower than relay', () => {
         const state = applyEvents([
             { type: 'relay-ready', roundTripTimeMs: 70 },
             { type: 'direct-probe-started' },
-            { type: 'direct-candidate-selected', candidateType: 'srflx', roundTripTimeMs: 68 },
-            { type: 'heartbeat-ack', route: 'direct', roundTripTimeMs: 68 },
-            { type: 'heartbeat-ack', route: 'direct', roundTripTimeMs: 66 },
-            { type: 'heartbeat-ack', route: 'direct', roundTripTimeMs: 66 },
+            { type: 'direct-candidate-selected', candidateType: 'srflx', roundTripTimeMs: 95 },
+            { type: 'heartbeat-ack', route: 'direct', roundTripTimeMs: 95 },
+            { type: 'heartbeat-ack', route: 'direct', roundTripTimeMs: 96 },
+        ])
+
+        expect(state).toMatchObject({
+            phase: 'ready',
+            activeRoute: 'direct',
+            activeTransport: 'direct-webrtc',
+            directProbe: 'usable',
+            routeSwitches: 1,
+            roundTripTimeMs: 96,
+        })
+    })
+
+    it('keeps WSS relay when TURN relay is not faster', () => {
+        const state = applyEvents([
+            { type: 'relay-ready', roundTripTimeMs: 70 },
+            { type: 'direct-probe-started' },
+            { type: 'direct-candidate-selected', candidateType: 'relay', roundTripTimeMs: 85 },
+            { type: 'heartbeat-ack', route: 'direct', roundTripTimeMs: 85 },
+            { type: 'heartbeat-ack', route: 'direct', roundTripTimeMs: 85 },
         ])
 
         expect(state).toMatchObject({
             phase: 'ready',
             activeRoute: 'relay',
+            activeTransport: 'relay-wss',
             directProbe: 'probing',
+            directBlockedReason: 'direct-slower-than-relay',
             routeSwitches: 0,
-            roundTripTimeMs: 70,
+        })
+    })
+
+    it('demotes active TURN WebRTC when WSS relay becomes faster', () => {
+        const state = applyEvents([
+            { type: 'relay-ready', roundTripTimeMs: 90, sampledAt: 1_000 },
+            { type: 'direct-probe-started' },
+            { type: 'direct-candidate-selected', candidateType: 'relay', roundTripTimeMs: 40, sampledAt: 1_100 },
+            { type: 'heartbeat-ack', route: 'direct', roundTripTimeMs: 40, sampledAt: 1_120 },
+            { type: 'heartbeat-ack', route: 'direct', roundTripTimeMs: 40, sampledAt: 1_140 },
+            { type: 'heartbeat-ack', route: 'relay', roundTripTimeMs: 35, sampledAt: 1_200 },
+            { type: 'heartbeat-ack', route: 'direct', roundTripTimeMs: 70, sampledAt: 1_240 },
+        ])
+
+        expect(state).toMatchObject({
+            activeRoute: 'relay',
+            activeTransport: 'relay-wss',
+            directBlockedReason: 'direct-slower-than-relay',
+            roundTripTimeMs: 35,
+            roundTripSampledAt: 1_200,
+        })
+    })
+
+    it('keeps relay RTT freshness while direct is active', () => {
+        const state = applyEvents([
+            { type: 'relay-ready', roundTripTimeMs: 80, sampledAt: 1_000 },
+            { type: 'direct-probe-started' },
+            { type: 'direct-candidate-selected', candidateType: 'srflx', roundTripTimeMs: 40, sampledAt: 1_100 },
+            { type: 'heartbeat-ack', route: 'direct', roundTripTimeMs: 40, sampledAt: 1_120 },
+            { type: 'heartbeat-ack', route: 'direct', roundTripTimeMs: 40, sampledAt: 1_140 },
+            { type: 'heartbeat-ack', route: 'relay', roundTripTimeMs: 85, sampledAt: 1_200 },
+            { type: 'heartbeat-missed', route: 'direct' },
+            { type: 'heartbeat-missed', route: 'direct' },
+        ])
+
+        expect(state).toMatchObject({
+            activeRoute: 'relay',
+            activeTransport: 'relay-wss',
+            roundTripTimeMs: 85,
+            roundTripSampledAt: 1_200,
         })
     })
 
@@ -222,9 +285,12 @@ describe('pairingTunnelRoute', () => {
             directProbe: 'probing',
             directCandidateType: null,
             roundTripTimeMs: null,
+            roundTripSampledAt: null,
             missedAcks: 0,
             routeSwitches: 0,
+            routeRevision: 0,
             directProbeFailures: 0,
+            directBlockedReason: 'missing-ack',
         })
     })
 
@@ -242,6 +308,17 @@ describe('pairingTunnelRoute', () => {
         expect(shouldReprobePairingDirect(relayReady)).toBe(true)
         expect(shouldReprobePairingDirect(probing)).toBe(false)
         expect(shouldReprobePairingDirect(directReady)).toBe(false)
+        expect(
+            shouldReprobePairingDirect(
+                applyEvents([
+                    { type: 'relay-ready', roundTripTimeMs: 80 },
+                    { type: 'direct-probe-started' },
+                    { type: 'direct-candidate-selected', candidateType: 'relay', roundTripTimeMs: 40 },
+                    { type: 'heartbeat-ack', route: 'direct' },
+                    { type: 'heartbeat-ack', route: 'direct' },
+                ])
+            )
+        ).toBe(true)
     })
 
     it('normalizes observed ICE stats into direct probe candidate events', () => {

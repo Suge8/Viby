@@ -89,6 +89,7 @@ class MockPeer implements PairingPeer {
     }
     disconnectIce() {
         this.iceConnectionState = 'disconnected'
+        this.oniceconnectionstatechange?.()
     }
     emitDataChannel(channel: RTCDataChannel) {
         this.ondatachannel?.({ channel })
@@ -108,15 +109,16 @@ async function openWhenBound(socket: MockSocket) {
     socket.open()
 }
 
-function waitFor(assertion: () => void) {
+function waitFor(assertion: () => void, timeoutMs = 200) {
     return new Promise<void>((resolve, reject) => {
         let tries = 0
+        const maxTries = Math.ceil(timeoutMs / 5)
         const tick = () => {
             try {
                 assertion()
                 resolve()
             } catch (error) {
-                tries++ > 40 ? reject(error) : setTimeout(tick, 5)
+                tries++ > maxTries ? reject(error) : setTimeout(tick, 5)
             }
         }
         tick()
@@ -277,6 +279,26 @@ describe('pairingTransport', () => {
         transport.notifyForeground()
         expect(peer.restartCount).toBe(1)
         expect(socket.closeCount).toBe(0)
+        transport.dispose()
+    })
+
+    it('restarts ICE when disconnected persists', async () => {
+        const socket = new MockSocket(),
+            peer = new MockPeer()
+        const transport = createPairingTransport({
+            pairingId: 'p',
+            polite: true,
+            iceServers: [],
+            getWsUrl: async () => 'u',
+            createDataChannel: false,
+            onChannel: () => {},
+            socketFactory: () => socket,
+            peerFactory: () => peer,
+        })
+        await openWhenBound(socket)
+        peer.disconnectIce()
+        expect(peer.restartCount).toBe(0)
+        await waitFor(() => expect(peer.restartCount).toBe(1), 1_000)
         transport.dispose()
     })
 

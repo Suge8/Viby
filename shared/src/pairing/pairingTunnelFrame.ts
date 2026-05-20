@@ -3,11 +3,20 @@ import { z } from 'zod'
 export const PairingTunnelRouteSchema = z.enum(['relay', 'direct'])
 export type PairingTunnelRoute = z.infer<typeof PairingTunnelRouteSchema>
 
-export const PairingTunnelTransportSchema = z.enum(['relay-wss', 'direct-webrtc'])
+export const PairingTunnelTransportSchema = z.enum(['relay-wss', 'direct-webrtc', 'turn-webrtc'])
 export type PairingTunnelTransport = z.infer<typeof PairingTunnelTransportSchema>
 
 export const PairingTunnelCandidateTypeSchema = z.enum(['host', 'srflx', 'prflx', 'relay'])
 export type PairingTunnelCandidateType = z.infer<typeof PairingTunnelCandidateTypeSchema>
+
+export const PairingTunnelDirectBlockedReasonSchema = z.enum([
+    'turn-candidate',
+    'missing-ack',
+    'direct-slower-than-relay',
+    'ice-failed',
+    'heartbeat-missed',
+])
+export type PairingTunnelDirectBlockedReason = z.infer<typeof PairingTunnelDirectBlockedReasonSchema>
 
 export const PairingTunnelTelemetrySchema = z.object({
     activeRoute: PairingTunnelRouteSchema.nullable(),
@@ -16,9 +25,12 @@ export const PairingTunnelTelemetrySchema = z.object({
     directProbe: z.enum(['idle', 'probing', 'usable', 'failed']),
     directCandidateType: PairingTunnelCandidateTypeSchema.nullable(),
     roundTripTimeMs: z.number().int().nonnegative().nullable(),
+    roundTripSampledAt: z.number().int().positive().nullable(),
     missedAcks: z.number().int().nonnegative(),
     routeSwitches: z.number().int().nonnegative(),
+    routeRevision: z.number().int().nonnegative(),
     directProbeFailures: z.number().int().nonnegative(),
+    directBlockedReason: PairingTunnelDirectBlockedReasonSchema.nullable(),
 })
 export type PairingTunnelTelemetry = z.infer<typeof PairingTunnelTelemetrySchema>
 
