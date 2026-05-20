@@ -27,6 +27,11 @@ function createApplicationServerKey(seed: number): Uint8Array {
     return Uint8Array.from({ length: 65 }, (_, index) => (seed + index) % 255)
 }
 
+function toBase64Url(value: Uint8Array): string {
+    const binary = String.fromCharCode(...value)
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
 function installNotificationMock(permission: NotificationPermission): MockNotification {
     const notification = {
         permission,
@@ -173,6 +178,46 @@ describe('usePushNotifications', () => {
         expect(pushManager.subscribe).toHaveBeenCalledTimes(1)
         expect(api.subscribePushNotifications).toHaveBeenCalledWith({
             endpoint: 'https://push.example.com/fresh',
+            keys: {
+                p256dh: 'p256dh-key',
+                auth: 'auth-key',
+            },
+        })
+    })
+
+    it('preloads the VAPID key once so enabling notifications can reuse the prepared key', async () => {
+        installNotificationMock('granted')
+        const applicationServerKey = createApplicationServerKey(40)
+        const subscription = createSubscription({
+            endpoint: 'https://push.example.com/preloaded',
+            applicationServerKey,
+        })
+        const pushManager = {
+            getSubscription: vi.fn<() => Promise<PushSubscription | null>>().mockResolvedValue(null),
+            subscribe: vi.fn<() => Promise<PushSubscription>>().mockResolvedValue(subscription),
+        }
+        installPushSupport(pushManager)
+
+        const api = {
+            getPushVapidPublicKey: vi.fn().mockResolvedValue({
+                publicKey: toBase64Url(applicationServerKey),
+            }),
+            subscribePushNotifications: vi.fn().mockResolvedValue(undefined),
+            unsubscribePushNotifications: vi.fn().mockResolvedValue(undefined),
+        }
+
+        const { result } = renderHook(() => usePushNotifications(api as never))
+
+        await waitFor(() => expect(api.getPushVapidPublicKey).toHaveBeenCalledTimes(1))
+
+        await act(async () => {
+            await result.current.enableNotifications()
+        })
+
+        expect(api.getPushVapidPublicKey).toHaveBeenCalledTimes(1)
+        expect(pushManager.subscribe).toHaveBeenCalledTimes(1)
+        expect(api.subscribePushNotifications).toHaveBeenCalledWith({
+            endpoint: 'https://push.example.com/preloaded',
             keys: {
                 p256dh: 'p256dh-key',
                 auth: 'auth-key',

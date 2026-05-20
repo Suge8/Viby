@@ -12,6 +12,13 @@ export type PushNotificationsError =
     | 'unsubscribe-failed'
     | null
 
+type ApplicationServerKeyCacheEntry = {
+    key: Uint8Array | null
+    promise: Promise<Uint8Array> | null
+}
+
+const applicationServerKeyCache = new WeakMap<ApiClient, ApplicationServerKeyCacheEntry>()
+
 function isPushSupported(): boolean {
     return (
         typeof window !== 'undefined' &&
@@ -59,6 +66,42 @@ function hasMatchingApplicationServerKey(subscription: PushSubscription, expecte
     }
 
     return true
+}
+
+function getApplicationServerKeyCacheEntry(api: ApiClient): ApplicationServerKeyCacheEntry {
+    const existing = applicationServerKeyCache.get(api)
+    if (existing) {
+        return existing
+    }
+
+    const entry: ApplicationServerKeyCacheEntry = { key: null, promise: null }
+    applicationServerKeyCache.set(api, entry)
+    return entry
+}
+
+async function loadApplicationServerKey(api: ApiClient): Promise<Uint8Array> {
+    const entry = getApplicationServerKeyCacheEntry(api)
+    if (entry.key) {
+        return entry.key
+    }
+    if (entry.promise) {
+        return await entry.promise
+    }
+
+    const promise = api.getPushVapidPublicKey().then(({ publicKey }) => {
+        const key = base64UrlToUint8Array(publicKey)
+        entry.key = key
+        return key
+    })
+    entry.promise = promise
+
+    try {
+        return await promise
+    } finally {
+        if (entry.promise === promise) {
+            entry.promise = null
+        }
+    }
 }
 
 async function getPushRegistration(): Promise<ServiceWorkerRegistration | null> {
@@ -125,6 +168,16 @@ export function usePushNotifications(api: ApiClient | null) {
         })
     }, [refreshSubscription])
 
+    useEffect(() => {
+        if (!api || !isPushSupported()) {
+            return
+        }
+
+        void loadApplicationServerKey(api).catch((error) => {
+            reportWebRuntimeError('Failed to preload push notification key.', error)
+        })
+    }, [api])
+
     const subscribeWithCurrentPermission = useCallback(async (): Promise<boolean> => {
         if (!api || !isPushSupported()) {
             return false
@@ -145,8 +198,7 @@ export function usePushNotifications(api: ApiClient | null) {
             }
 
             const existing = await registration.pushManager.getSubscription()
-            const { publicKey } = await api.getPushVapidPublicKey()
-            const applicationServerKey = base64UrlToUint8Array(publicKey)
+            const applicationServerKey = await loadApplicationServerKey(api)
             let subscription = existing
 
             if (subscription && !hasMatchingApplicationServerKey(subscription, applicationServerKey)) {

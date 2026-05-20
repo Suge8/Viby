@@ -47,6 +47,15 @@ describe('index.html boot recovery guard', () => {
         expect(html).not.toContain('正在准备你的工作区…')
     })
 
+    it('keeps the boot document free of render-blocking third-party font stylesheets', () => {
+        const html = readIndexHtml()
+
+        expect(html).not.toContain('fonts.googleapis.com')
+        expect(html).not.toContain('fonts.gstatic.com')
+        expect(html).not.toContain('Manrope')
+        expect(html).not.toContain('Outfit')
+    })
+
     it('preserves explicit recovery copy for restore-mode launches', () => {
         const html = readIndexHtml()
 
@@ -59,13 +68,21 @@ describe('index.html boot recovery guard', () => {
 
         expect(html).toContain("var APP_SHELL_REVEALED_KEY = 'viby-app-shell-revealed'")
         expect(html).toContain('function isPairingBootRoute()')
+        expect(html).toContain('function hasSearchParam(name, value)')
         expect(html).toContain("window.location.pathname.indexOf('/p/') === 0")
-        expect(html).toContain("new URLSearchParams(window.location.search).get('remote') === '1'")
-        expect(html).toContain(
-            "if (!isPairingBootRoute() && sessionStorage.getItem(APP_SHELL_REVEALED_KEY) === 'done')"
-        )
+        expect(html).toContain("hasSearchParam('remote', '1')")
+        expect(html).toContain("document.documentElement.setAttribute('data-boot-pairing', 'true')")
+        expect(html).toContain("else if (sessionStorage.getItem(APP_SHELL_REVEALED_KEY) === 'done')")
         expect(html).toContain("document.documentElement.setAttribute('data-boot-shell-hidden', 'true')")
         expect(html).toContain('html[data-boot-shell-hidden="true"] #app-boot-shell')
+    })
+
+    it('shows explicit boot copy on remote pairing launches so slow CSS or JS never looks like a dead white page', () => {
+        const html = readIndexHtml()
+
+        expect(html).toContain("pairing: 'Waking Viby…'")
+        expect(html).toContain("pairing: '叫醒 Viby…'")
+        expect(html).toContain("document.documentElement.getAttribute('data-boot-pairing') === 'true'")
     })
 
     it('queues an explicit runtime update instead of auto-reloading revealed apps on asset failure', () => {

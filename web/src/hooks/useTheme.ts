@@ -7,6 +7,10 @@ type ColorScheme = 'light' | 'dark'
 export type AppearancePreference = 'system' | 'dark' | 'light'
 
 const APPEARANCE_KEY = LOCAL_STORAGE_KEYS.appearance
+const THEME_COLOR_BY_SCHEME: Record<ColorScheme, string> = {
+    light: '#fbfaf6',
+    dark: '#1c1c1e',
+}
 
 function isBrowser(): boolean {
     return typeof window !== 'undefined' && typeof document !== 'undefined'
@@ -65,8 +69,30 @@ function getColorScheme(): ColorScheme {
     return 'light'
 }
 
+export function getThemeColorForScheme(scheme: ColorScheme): string {
+    return THEME_COLOR_BY_SCHEME[scheme]
+}
+
+export function syncThemeColorMeta(scheme: ColorScheme): void {
+    if (!isBrowser()) {
+        return
+    }
+
+    const meta =
+        document.querySelector<HTMLMetaElement>('meta[name="theme-color"]') ??
+        document.head.appendChild(document.createElement('meta'))
+    meta.setAttribute('name', 'theme-color')
+    meta.setAttribute('content', getThemeColorForScheme(scheme))
+    meta.removeAttribute('media')
+}
+
 function applyTheme(scheme: ColorScheme): void {
+    if (!isBrowser()) {
+        return
+    }
+
     document.documentElement.setAttribute('data-theme', scheme)
+    syncThemeColorMeta(scheme)
 }
 
 let currentScheme: ColorScheme = getColorScheme()

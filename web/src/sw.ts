@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 
+import { buildWebPushNotificationDisplay, type WebPushNotificationPayload } from '@viby/protocol'
 import { ExpirationPlugin } from 'workbox-expiration'
 import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching'
 import { registerRoute } from 'workbox-routing'
@@ -12,19 +13,6 @@ import {
 
 declare const self: ServiceWorkerGlobalScope & {
     __WB_MANIFEST: Array<string | { url: string; revision?: string }>
-}
-
-type PushPayload = {
-    title: string
-    body?: string
-    icon?: string
-    badge?: string
-    tag?: string
-    data?: {
-        type?: string
-        sessionId?: string
-        url?: string
-    }
 }
 
 const API_SESSIONS_CACHE_NAME = 'api-sessions'
@@ -204,27 +192,14 @@ registerRoute(
 )
 
 self.addEventListener('push', (event) => {
-    const payload = event.data?.json() as PushPayload | undefined
+    const payload = event.data?.json() as WebPushNotificationPayload | undefined
     if (!payload) {
         return
     }
 
-    const title = payload.title || 'Viby'
-    const body = payload.body ?? ''
-    const icon = payload.icon ?? '/pwa-192x192.png'
-    const badge = payload.badge ?? '/pwa-64x64.png'
-    const data = payload.data
-    const tag = payload.tag
+    const notification = buildWebPushNotificationDisplay(payload)
 
-    event.waitUntil(
-        self.registration.showNotification(title, {
-            body,
-            icon,
-            badge,
-            data,
-            tag,
-        })
-    )
+    event.waitUntil(self.registration.showNotification(notification.title, notification.options))
 })
 
 self.addEventListener('notificationclick', (event) => {

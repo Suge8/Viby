@@ -2,6 +2,7 @@ import { access, readFile, rename, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { injectManifest } from 'workbox-build'
 import { buildAppShellPrecacheManifest } from '../src/lib/swPrecacheManifest'
+import { deferRenderBlockingStylesheets } from './indexHtmlPostBuildSupport'
 
 const DIST_DIR = resolve(import.meta.dir, '..', 'dist')
 const SERVICE_WORKER_CANDIDATES = ['sw.js', 'sw.mjs'] as const
@@ -53,7 +54,13 @@ async function finalizeInjectManifest(): Promise<void> {
     console.log(`[build] finalized service worker manifest injection: ${result.count} entries, ${result.size} bytes`)
 }
 
-async function patchManifestLinkCredentials(): Promise<void> {
+function patchManifestLinkCredentials(html: string): string {
+    return html.replace(/<link rel="manifest"([^>]*?)>/g, (match, attrs) =>
+        attrs.includes('crossorigin=') ? match : `<link rel="manifest" crossorigin="use-credentials"${attrs}>`
+    )
+}
+
+async function patchIndexHtmlFiles(): Promise<void> {
     // The Web App Manifest fetch defaults to credentials=omit, which means the
     // browser drops the broker-issued pairing manifest cookie when iOS Safari
     // hits `/manifest.webmanifest`. Forcing `crossorigin="use-credentials"`
@@ -68,15 +75,13 @@ async function patchManifestLinkCredentials(): Promise<void> {
             continue
         }
         const original = await readFile(filePath, 'utf8')
-        const patched = original.replace(/<link rel="manifest"([^>]*?)>/g, (match, attrs) =>
-            attrs.includes('crossorigin=') ? match : `<link rel="manifest" crossorigin="use-credentials"${attrs}>`
-        )
+        const patched = patchManifestLinkCredentials(deferRenderBlockingStylesheets(original))
         if (patched !== original) {
             await writeFile(filePath, patched, 'utf8')
-            console.log(`[build] patched manifest link credentials in ${fileName}`)
+            console.log(`[build] patched index HTML runtime entrypoints in ${fileName}`)
         }
     }
 }
 
 await finalizeInjectManifest()
-await patchManifestLinkCredentials()
+await patchIndexHtmlFiles()
