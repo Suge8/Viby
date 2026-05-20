@@ -1,5 +1,6 @@
 import {
     classifyPairingLinkQuality,
+    describePairingDirectBlockedReason,
     describePairingLinkTransport,
     formatPairingRoundTripTime,
 } from '@viby/protocol/pairing'
@@ -16,13 +17,15 @@ type RemotePairingLinkBadgeProps = {
 function buildBadgeModel(stats: RemotePeerTransportStats | null): {
     label: string
     latency: string
+    reason: string | null
     tone: 'success' | 'warning' | 'neutral'
 } {
-    if (!stats) return { label: '检测链路', latency: '测速中', tone: 'neutral' }
+    if (!stats) return { label: '检测链路', latency: '测速中', reason: null, tone: 'neutral' }
     const quality = classifyPairingLinkQuality(stats)
     return {
         label: describePairingLinkTransport(stats),
         latency: formatPairingRoundTripTime(quality.roundTripTimeMs) ?? '测速中',
+        reason: describePairingDirectBlockedReason(stats.directBlockedReason),
         tone: quality.tone,
     }
 }
@@ -34,7 +37,12 @@ export function RemotePairingLinkBadge(props: RemotePairingLinkBadgeProps): JSX.
     if (!overlayRoot) return null
 
     return createPortal(
-        <div className={`remote-pairing-link-badge is-${model.tone}`} aria-live="polite">
+        <div
+            className={`remote-pairing-link-badge is-${model.tone}`}
+            aria-label={model.reason ? `${model.label}，${model.latency}，${model.reason}` : undefined}
+            aria-live="polite"
+            title={model.reason ?? undefined}
+        >
             <span className="remote-pairing-link-badge-dot" aria-hidden="true" />
             <span className="remote-pairing-link-badge-label">{model.label}</span>
             <span className="remote-pairing-link-badge-latency">{model.latency}</span>

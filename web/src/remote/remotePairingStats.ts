@@ -1,14 +1,24 @@
-import { resolvePairingLinkTransport, resolvePairingSelectedCandidatePairStats } from '@viby/protocol/pairing'
+import {
+    PAIRING_LINK_SAMPLE_STALE_MS,
+    type PairingTunnelDirectBlockedReason,
+    type PairingTunnelTransport,
+    resolvePairingLinkTransport,
+    resolvePairingSelectedCandidatePairStats,
+} from '@viby/protocol/pairing'
 
 export type RemotePeerTransport = 'direct' | 'relay' | 'unknown'
 
 export type RemotePeerTransportStats = {
     transport: RemotePeerTransport
+    transportMode: PairingTunnelTransport | 'unknown'
     localCandidateType: string | null
     remoteCandidateType: string | null
     currentRoundTripTimeMs: number | null
     previousTransport?: 'direct' | 'relay' | null
-    sampledAt?: number | null
+    sampledAt: number
+    staleAfterMs: number
+    routeRevision: number
+    directBlockedReason?: PairingTunnelDirectBlockedReason | null
 }
 
 export async function readRemotePeerTransportStats(
@@ -21,16 +31,21 @@ export async function readRemotePeerTransportStats(
     if (!selected) {
         return {
             transport: 'unknown',
+            transportMode: 'unknown',
             localCandidateType: null,
             remoteCandidateType: null,
             currentRoundTripTimeMs: null,
             previousTransport: null,
             sampledAt,
+            staleAfterMs: PAIRING_LINK_SAMPLE_STALE_MS,
+            routeRevision: 0,
         }
     }
 
+    const transport = resolvePairingLinkTransport(selected)
     return {
-        transport: resolvePairingLinkTransport(selected),
+        transport,
+        transportMode: transport === 'direct' ? 'direct-webrtc' : transport === 'relay' ? 'turn-webrtc' : 'unknown',
         localCandidateType: selected.localCandidateType,
         remoteCandidateType: selected.remoteCandidateType,
         currentRoundTripTimeMs:
@@ -39,5 +54,7 @@ export async function readRemotePeerTransportStats(
                 : null,
         previousTransport: null,
         sampledAt,
+        staleAfterMs: PAIRING_LINK_SAMPLE_STALE_MS,
+        routeRevision: 0,
     }
 }

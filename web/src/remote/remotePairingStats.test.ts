@@ -51,11 +51,14 @@ describe('remotePairingStats', () => {
 
         expect(stats).toEqual({
             transport: 'direct',
+            transportMode: 'direct-webrtc',
             localCandidateType: 'host',
             remoteCandidateType: 'srflx',
             currentRoundTripTimeMs: 18,
             previousTransport: null,
             sampledAt: 123,
+            staleAfterMs: 15_000,
+            routeRevision: 0,
         })
     })
 
@@ -123,11 +126,14 @@ describe('remotePairingStats', () => {
 
         expect(stats).toEqual({
             transport: 'unknown',
+            transportMode: 'unknown',
             localCandidateType: null,
             remoteCandidateType: null,
             currentRoundTripTimeMs: null,
             previousTransport: null,
             sampledAt: 123,
+            staleAfterMs: 15_000,
+            routeRevision: 0,
         })
     })
 })

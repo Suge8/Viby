@@ -1,4 +1,9 @@
-import type { PairingIceServer, PairingPeerRequest, PairingPeerTerminalEventPayload } from '@viby/protocol'
+import type {
+    PairingIceServer,
+    PairingPeerHeartbeat,
+    PairingPeerRequest,
+    PairingPeerTerminalEventPayload,
+} from '@viby/protocol'
 import {
     createPairingTransport,
     createPairingTunnelRouteState,
@@ -162,13 +167,28 @@ export class RemotePeerSession {
             pendingRequests: this.pendingRequests,
             syncListeners: this.syncListeners,
             terminalListeners: this.terminalListeners,
-            onHeartbeat: () => this.handleRouteHeartbeat(route, channel),
+            onHeartbeat: (heartbeat) => this.handleRouteHeartbeat(route, heartbeat, channel),
         })
     }
 
-    private handleRouteHeartbeat(route: 'direct' | 'relay', channel?: RTCDataChannel): void {
+    private handleRouteHeartbeat(
+        route: 'direct' | 'relay',
+        heartbeat: PairingPeerHeartbeat,
+        channel?: RTCDataChannel
+    ): void {
+        if (!heartbeat.ack) {
+            const payload = JSON.stringify({ ...heartbeat, ack: true })
+            if (route === 'direct' && channel?.readyState === 'open') channel.send(payload)
+            else if (route === 'relay' && this.relay.readyState === 'open') this.relay.send(payload)
+            return
+        }
         if (route === 'direct' && channel) return this.handleHeartbeatAck(channel)
-        this.commitRoute({ type: 'heartbeat-ack', route: 'relay', roundTripTimeMs: this.relayHeartbeat.markAck() })
+        this.commitRoute({
+            type: 'heartbeat-ack',
+            route: 'relay',
+            roundTripTimeMs: this.relayHeartbeat.markAck(),
+            sampledAt: Date.now(),
+        })
         this.maybeReprobeDirect()
     }
     private getActiveSender(): { readonly readyState: string; send(data: string): void } | null {

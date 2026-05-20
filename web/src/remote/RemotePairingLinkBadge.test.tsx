@@ -28,6 +28,22 @@ function bridgeWithStats(initialStats: RemotePeerTransportStats): TestBridge {
     } as unknown as TestBridge
 }
 
+function transportStats(overrides: Partial<RemotePeerTransportStats>): RemotePeerTransportStats {
+    return {
+        transport: 'direct',
+        transportMode: 'direct-webrtc',
+        localCandidateType: null,
+        remoteCandidateType: null,
+        currentRoundTripTimeMs: null,
+        previousTransport: null,
+        sampledAt: Date.now(),
+        staleAfterMs: 15_000,
+        routeRevision: 0,
+        directBlockedReason: null,
+        ...overrides,
+    }
+}
+
 describe('RemotePairingLinkBadge', () => {
     afterEach(() => {
         cleanup()
@@ -35,13 +51,15 @@ describe('RemotePairingLinkBadge', () => {
     })
 
     it('renders the current transport and latency from the bridge owner', async () => {
-        const bridge = bridgeWithStats({
-            transport: 'direct',
-            localCandidateType: 'host',
-            remoteCandidateType: 'srflx',
-            currentRoundTripTimeMs: 42,
-            sampledAt: Date.now(),
-        })
+        const bridge = bridgeWithStats(
+            transportStats({
+                transport: 'direct',
+                localCandidateType: 'host',
+                remoteCandidateType: 'srflx',
+                currentRoundTripTimeMs: 42,
+                sampledAt: Date.now(),
+            })
+        )
 
         render(<RemotePairingLinkBadge bridge={bridge} />)
 
@@ -50,27 +68,47 @@ describe('RemotePairingLinkBadge', () => {
     })
 
     it('updates from transport subscription without owning a second route state', async () => {
-        const bridge = bridgeWithStats({
-            transport: 'direct',
-            localCandidateType: 'host',
-            remoteCandidateType: 'srflx',
-            currentRoundTripTimeMs: 42,
-            sampledAt: Date.now(),
-        })
+        const bridge = bridgeWithStats(
+            transportStats({
+                transport: 'direct',
+                localCandidateType: 'host',
+                remoteCandidateType: 'srflx',
+                currentRoundTripTimeMs: 42,
+                sampledAt: Date.now(),
+            })
+        )
 
         render(<RemotePairingLinkBadge bridge={bridge} />)
         await screen.findByText('42ms')
 
-        bridge.setStats({
-            transport: 'relay',
-            localCandidateType: null,
-            remoteCandidateType: null,
-            currentRoundTripTimeMs: 128,
-            sampledAt: Date.now(),
-        })
+        bridge.setStats(
+            transportStats({
+                transport: 'relay',
+                transportMode: 'turn-webrtc',
+                localCandidateType: null,
+                remoteCandidateType: null,
+                currentRoundTripTimeMs: 128,
+                sampledAt: Date.now(),
+            })
+        )
         act(() => bridge.emitTransport())
 
         await waitFor(() => expect(screen.getByText('安全中转')).toBeInTheDocument())
         expect(screen.getByText('128ms')).toBeInTheDocument()
+    })
+
+    it('exposes the reason when direct cannot promote', async () => {
+        const bridge = bridgeWithStats(
+            transportStats({
+                transport: 'relay',
+                transportMode: 'turn-webrtc',
+                currentRoundTripTimeMs: 128,
+                directBlockedReason: 'turn-candidate',
+            })
+        )
+
+        render(<RemotePairingLinkBadge bridge={bridge} />)
+
+        expect(await screen.findByLabelText('安全中转，128ms，网络只能选到 TURN 中转')).toBeInTheDocument()
     })
 })

@@ -19,9 +19,12 @@ const FINAL_SCAN_ERRORS = new Set<RemotePairingErrorKey>([
 ])
 
 export function shouldShowRemoteReconnectNotice(options: {
+    readyWorkspaceVisible: boolean
     state: RemotePairingRenderState
     transportKind: 'connecting' | 'ready' | 'fatal'
 }): boolean {
+    if (!options.readyWorkspaceVisible) return false
+    if (options.state.kind === 'hydrating') return true
     return options.state.kind === 'running' && options.transportKind === 'connecting'
 }
 
@@ -45,7 +48,7 @@ export function buildRemoteReconnectNotice(options: {
         description:
             options.attempt > 2
                 ? options.t('remotePairing.reconnectNotice.attemptCount', { count: options.attempt })
-                : options.t('remotePairing.reconnectNotice.phase.finalizing'),
+                : undefined,
         icon: <ReconnectingNoticeIcon />,
         action: showStop ? (
             <Button type="button" size="sm" variant="ghost" onClick={options.onStop}>
