@@ -4,10 +4,15 @@ import { PermissionHandler } from './permissionHandler'
 
 function createHandler() {
     const unshiftCalls: unknown[][] = []
+    let permissionRpc:
+        | ((response: { id: string; approved: boolean; answers?: Record<string, string[]> }) => void)
+        | null = null
     const session = {
         client: {
             rpcHandlerManager: {
-                registerHandler() {},
+                registerHandler(_method: string, handler: typeof permissionRpc) {
+                    permissionRpc = handler
+                },
             },
             updateAgentState(
                 handler: (state: {
@@ -27,6 +32,12 @@ function createHandler() {
     }
     return {
         handler: new PermissionHandler(session as never),
+        respondToPermission: (response: { id: string; approved: boolean; answers?: Record<string, string[]> }) => {
+            if (!permissionRpc) {
+                throw new Error('permission RPC was not registered')
+            }
+            permissionRpc(response)
+        },
         unshiftCalls,
     }
 }
@@ -42,5 +53,27 @@ describe('PermissionHandler', () => {
 
         expect(result).toEqual({ behavior: 'deny', message: PLAN_FAKE_REJECT })
         expect(unshiftCalls).toEqual([[PLAN_FAKE_RESTART, { permissionMode: 'bypassPermissions' }]])
+    })
+
+    it('denies Claude question answers that cannot be mapped to question text', async () => {
+        const { handler, respondToPermission } = createHandler()
+        const input = { questions: [] }
+
+        handler.onMessage({
+            type: 'assistant',
+            message: {
+                content: [{ type: 'tool_use', id: 'tool-1', name: 'AskUserQuestion', input }],
+            },
+        } as never)
+
+        const resultPromise = handler.handleToolCall('AskUserQuestion', input, 'default' as never, {
+            signal: new AbortController().signal,
+        })
+        respondToPermission({ id: 'tool-1', approved: true, answers: { '0': ['Yes'] } })
+
+        await expect(resultPromise).resolves.toEqual({
+            behavior: 'deny',
+            message: 'No matching question answers were provided.',
+        })
     })
 })

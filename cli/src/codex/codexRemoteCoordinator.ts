@@ -37,6 +37,7 @@ export class CodexRemoteCoordinator {
     readonly state: CodexRemoteRuntimeState = {
         currentThreadId: null,
         currentTurnId: null,
+        activeChildTurns: new Map(),
         suppressedTurnIds: [],
         suppressAnonymousTurnEvents: false,
         turnInFlight: false,

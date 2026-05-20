@@ -35,25 +35,48 @@ export function buildAskUserQuestionUpdatedInput(
     input: unknown,
     answers: Record<string, string[]> | Record<string, { answers: string[] }>
 ): Record<string, unknown> {
-    const flatAnswers: Record<string, string[]> = {}
+    const indexedAnswers: Record<string, string[]> = {}
     for (const [key, value] of Object.entries(answers)) {
         if (Array.isArray(value)) {
-            flatAnswers[key] = value
+            indexedAnswers[key] = value
             continue
         }
         if (value && typeof value === 'object' && 'answers' in value) {
-            flatAnswers[key] = value.answers
+            indexedAnswers[key] = value.answers
         }
     }
 
     if (!isObject(input)) {
-        return { answers: flatAnswers }
+        return { answers: {} }
+    }
+
+    const claudeAnswers: Record<string, string> = {}
+    const questions = Array.isArray(input.questions) ? input.questions : []
+    for (let index = 0; index < questions.length; index += 1) {
+        const rawQuestion = questions[index]
+        if (!isObject(rawQuestion) || typeof rawQuestion.question !== 'string') {
+            continue
+        }
+        const question = rawQuestion.question.trim()
+        const selections = indexedAnswers[String(index)]
+        if (!question || !selections || selections.length === 0) {
+            continue
+        }
+        const normalizedSelections = selections.map((selection) => selection.trim()).filter(Boolean)
+        if (normalizedSelections.length === 0) {
+            continue
+        }
+        claudeAnswers[question] = normalizedSelections.join(',')
     }
 
     return {
         ...input,
-        answers: flatAnswers,
+        answers: claudeAnswers,
     }
+}
+
+export function hasAskUserQuestionMappedAnswers(input: Record<string, unknown>): boolean {
+    return isObject(input.answers) && Object.keys(input.answers).length > 0
 }
 
 export function buildRequestUserInputUpdatedInput(input: unknown, answers: unknown): Record<string, unknown> {

@@ -5,6 +5,7 @@ import {
     type CodexRemoteRuntimeState,
     delay,
     extractNotificationThreadId,
+    extractNotificationTurnId,
     getResumeWarmupRetryDelayMs,
     isAbortSuppressedNotificationMethod,
     RUNNER_RESUME_WARMUP_MAX_ATTEMPTS,
@@ -31,6 +32,7 @@ export function registerCodexNotificationHandler(options: {
 
         const notificationThreadId = extractNotificationThreadId(params)
         if (state.currentThreadId && notificationThreadId && notificationThreadId !== state.currentThreadId) {
+            trackChildTurn(state, method, params, notificationThreadId)
             logger.debug(
                 `[Codex] Ignoring notification for non-current thread ${notificationThreadId}; ` +
                     `active=${state.currentThreadId}; method=${method}`
@@ -42,6 +44,24 @@ export function registerCodexNotificationHandler(options: {
             handleCodexEvent(asRecord(event) ?? { type: undefined })
         }
     })
+}
+
+function trackChildTurn(state: CodexRemoteRuntimeState, method: string, params: unknown, threadId: string): void {
+    if (!state.turnInFlight) {
+        return
+    }
+
+    if (method === 'turn/started') {
+        const turnId = extractNotificationTurnId(params)
+        if (turnId) {
+            state.activeChildTurns.set(threadId, turnId)
+        }
+        return
+    }
+
+    if (method === 'turn/completed' || method === 'error') {
+        state.activeChildTurns.delete(threadId)
+    }
 }
 
 export async function warmupCodexRemoteThread(options: {

@@ -38,6 +38,7 @@ export type QueuedMessage = { message: string; mode: EnhancedMode; isolate: bool
 export type CodexRemoteRuntimeState = {
     currentThreadId: string | null
     currentTurnId: string | null
+    activeChildTurns: Map<string, string>
     suppressedTurnIds: string[]
     suppressAnonymousTurnEvents: boolean
     turnInFlight: boolean
@@ -130,6 +131,37 @@ export function extractNotificationThreadId(value: unknown): string | null {
 
     const msgItem = asRecord(msg?.item)
     return asString(msgItem?.threadId ?? msgItem?.thread_id ?? asRecord(msgItem?.thread)?.id)
+}
+
+export function extractNotificationTurnId(value: unknown): string | null {
+    const record = asRecord(value)
+    if (!record) {
+        return null
+    }
+
+    const direct = asString(record.turnId ?? record.turn_id)
+    if (direct) {
+        return direct
+    }
+
+    const turn = asRecord(record.turn)
+    if (turn) {
+        return asString(turn.turnId ?? turn.turn_id ?? turn.id)
+    }
+
+    const item = asRecord(record.item)
+    if (item) {
+        return asString(item.turnId ?? item.turn_id ?? asRecord(item.turn)?.id)
+    }
+
+    const msg = asRecord(record.msg)
+    const msgTurnId = asString(msg?.turnId ?? msg?.turn_id)
+    if (msgTurnId) {
+        return msgTurnId
+    }
+
+    const msgItem = asRecord(msg?.item)
+    return asString(msgItem?.turnId ?? msgItem?.turn_id ?? asRecord(msgItem?.turn)?.id)
 }
 
 export function buildMcpToolName(server: unknown, tool: unknown): string | null {

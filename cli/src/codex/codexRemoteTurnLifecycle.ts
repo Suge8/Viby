@@ -22,16 +22,27 @@ export async function abortCodexTurn(options: {
             rememberSuppressedTurn(options.state, options.state.currentTurnId)
         }
         options.state.suppressAnonymousTurnEvents = true
-        if (options.state.currentThreadId && options.state.currentTurnId) {
-            await options.appServerClient
-                .interruptTurn({
-                    threadId: options.state.currentThreadId,
-                    turnId: options.state.currentTurnId,
+        const turnsToInterrupt = collectActiveTurns(options.state)
+        const interruptResults = await Promise.allSettled(
+            turnsToInterrupt.map((turn) =>
+                options.appServerClient.interruptTurn({
+                    threadId: turn.threadId,
+                    turnId: turn.turnId,
                 })
-                .catch((error) => {
-                    logger.debug('[Codex] Error interrupting app-server turn:', error)
-                })
+            )
+        )
+        for (let index = 0; index < interruptResults.length; index += 1) {
+            const result = interruptResults[index]
+            const turn = turnsToInterrupt[index]
+            if (result.status === 'fulfilled') {
+                continue
+            }
+            logger.debug(
+                `[Codex] Error interrupting ${turn.role} app-server turn ` + `${turn.turnId} on ${turn.threadId}:`,
+                result.reason
+            )
         }
+        options.state.activeChildTurns.clear()
         options.state.currentTurnId = null
         options.abortController.abort()
         options.resetQueue()
@@ -43,6 +54,21 @@ export async function abortCodexTurn(options: {
     } finally {
         options.replaceAbortController(new AbortController())
     }
+}
+
+function collectActiveTurns(state: CodexRemoteRuntimeState): Array<{
+    threadId: string
+    turnId: string
+    role: 'parent' | 'child'
+}> {
+    const turns: Array<{ threadId: string; turnId: string; role: 'parent' | 'child' }> = []
+    if (state.currentThreadId && state.currentTurnId) {
+        turns.push({ threadId: state.currentThreadId, turnId: state.currentTurnId, role: 'parent' })
+    }
+    for (const [threadId, turnId] of state.activeChildTurns) {
+        turns.push({ threadId, turnId, role: 'child' })
+    }
+    return turns
 }
 
 export function applyTurnStartResponse(state: CodexRemoteRuntimeState, turnResponse: unknown): void {

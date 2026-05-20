@@ -14,6 +14,7 @@ import { getToolDescriptor } from './getToolDescriptor'
 import {
     buildAskUserQuestionUpdatedInput,
     buildRequestUserInputUpdatedInput,
+    hasAskUserQuestionMappedAnswers,
     isAllowedBashCommand,
     isAskUserQuestionToolName,
     isQuestionToolName,
@@ -92,9 +93,16 @@ export class PermissionHandler extends BasePermissionHandler<PermissionResponse,
                 completion.status = 'denied'
                 completion.reason = completion.reason ?? 'No answers were provided.'
             } else {
+                const updatedInput = buildAskUserQuestionUpdatedInput(pending.input, answers)
+                if (!hasAskUserQuestionMappedAnswers(updatedInput)) {
+                    pending.resolve({ behavior: 'deny', message: 'No matching question answers were provided.' })
+                    completion.status = 'denied'
+                    completion.reason = completion.reason ?? 'No matching question answers were provided.'
+                    return completion
+                }
                 pending.resolve({
                     behavior: 'allow',
-                    updatedInput: buildAskUserQuestionUpdatedInput(pending.input, answers),
+                    updatedInput,
                 })
             }
             return completion
