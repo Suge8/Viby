@@ -26,7 +26,7 @@ export const LOGIN_INPUT_SELECTOR = 'input[name="accessToken"]'
 const LOGIN_SUBMIT_SELECTOR = 'button[type="submit"]'
 
 export async function runAppLikeRouteFlows(options: {
-    cliApiToken: string
+    hubOwnerToken: string
     outputDir: string
     page: Page
     probeDurationMs: number
@@ -46,7 +46,7 @@ export async function runAppLikeRouteFlows(options: {
             probeDurationMs: options.probeDurationMs,
             allowLoginVisible: true,
             action: async () => {
-                await options.page.locator(LOGIN_INPUT_SELECTOR).fill(options.cliApiToken)
+                await options.page.locator(LOGIN_INPUT_SELECTOR).fill(options.hubOwnerToken)
                 await options.page.locator(LOGIN_SUBMIT_SELECTOR).click()
             },
             ready: async () => {

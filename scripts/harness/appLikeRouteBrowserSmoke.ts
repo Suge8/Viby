@@ -37,7 +37,7 @@ const HUB_READY_TIMEOUT_MS = 60_000
 const WEB_READY_TIMEOUT_MS = 60_000
 const ROUTE_SETTLE_TIMEOUT_MS = 12_000
 const PROBE_DURATION_MS = 1_200
-const CLI_API_TOKEN = process.env.VIBY_APP_LIKE_BROWSER_SMOKE_CLI_API_TOKEN || `viby-app-like-${timestamp}`
+const VIBY_HUB_OWNER_TOKEN = process.env.VIBY_APP_LIKE_BROWSER_SMOKE_HUB_OWNER_TOKEN || `viby-app-like-${timestamp}`
 const SESSION_ALPHA_NAME = 'Route Smoke Alpha'
 const SESSION_BETA_NAME = 'Route Smoke Beta'
 const RUNTIME_ID = 'smoke-runtime'
@@ -61,7 +61,7 @@ async function main(): Promise<void> {
 
     try {
         app = await startIsolatedBrowserApp({
-            cliApiToken: CLI_API_TOKEN,
+            hubOwnerToken: VIBY_HUB_OWNER_TOKEN,
             hubReadyTimeoutMs: HUB_READY_TIMEOUT_MS,
             outputDir,
             repoRoot,
@@ -73,14 +73,14 @@ async function main(): Promise<void> {
             alphaSessionName: SESSION_ALPHA_NAME,
             alphaPrefillStoredMessages: buildRichTranscriptSeedMessages(APP_LIKE_PREFILL_TURN_COUNT),
             betaSessionName: SESSION_BETA_NAME,
-            cliApiToken: CLI_API_TOKEN,
+            hubOwnerToken: VIBY_HUB_OWNER_TOKEN,
             hubUrl: app.hubUrl,
             outputDir,
             runtimeId: RUNTIME_ID,
             vibyHomeDir: app.vibyHomeDir,
         })
         fakeCliRuntime = await createFakeCliRuntime({
-            cliApiToken: CLI_API_TOKEN,
+            hubOwnerToken: VIBY_HUB_OWNER_TOKEN,
             hubUrl: app.hubUrl,
             repoRoot,
             routeSettleTimeoutMs: ROUTE_SETTLE_TIMEOUT_MS,
@@ -106,7 +106,7 @@ async function main(): Promise<void> {
 
         flowArtifacts.push(
             ...(await runAppLikeRouteFlows({
-                cliApiToken: CLI_API_TOKEN,
+                hubOwnerToken: VIBY_HUB_OWNER_TOKEN,
                 outputDir,
                 page,
                 probeDurationMs: PROBE_DURATION_MS,

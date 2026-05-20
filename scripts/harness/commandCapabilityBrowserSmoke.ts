@@ -30,7 +30,7 @@ const outputDir = resolve(
 const HUB_READY_TIMEOUT_MS = 60_000
 const WEB_READY_TIMEOUT_MS = 60_000
 const COMMAND_REFRESH_TIMEOUT_MS = 20_000
-const CLI_API_TOKEN = process.env.VIBY_COMMAND_CAPABILITY_SMOKE_CLI_API_TOKEN || `viby-smoke-${timestamp}`
+const VIBY_HUB_OWNER_TOKEN = process.env.VIBY_COMMAND_CAPABILITY_SMOKE_HUB_OWNER_TOKEN || `viby-smoke-${timestamp}`
 const SHARED_VIBY_HOME_DIR = '.viby'
 
 function createTomlCommand(description: string, prompt: string): string {
@@ -140,7 +140,7 @@ async function main(): Promise<void> {
 
     try {
         app = await startIsolatedBrowserApp({
-            cliApiToken: CLI_API_TOKEN,
+            hubOwnerToken: VIBY_HUB_OWNER_TOKEN,
             hubReadyTimeoutMs: HUB_READY_TIMEOUT_MS,
             outputDir,
             repoRoot,
@@ -150,7 +150,7 @@ async function main(): Promise<void> {
         targetUrlBase = `${app.webUrl}/sessions`
 
         const auth = await postJson<{ token: string }>(`${app.hubUrl}/api/auth`, {
-            body: { accessToken: CLI_API_TOKEN },
+            body: { accessToken: VIBY_HUB_OWNER_TOKEN },
         })
         const seededSession = await postJson<{
             session: {
@@ -158,7 +158,7 @@ async function main(): Promise<void> {
             }
         }>(`${app.hubUrl}/cli/sessions`, {
             headers: {
-                authorization: `Bearer ${CLI_API_TOKEN}`,
+                authorization: `Bearer ${VIBY_HUB_OWNER_TOKEN}`,
             },
             body: {
                 tag: 'command-capability-smoke',
@@ -170,13 +170,13 @@ async function main(): Promise<void> {
             },
         })
         const sessionId = seededSession.session.id
-        const targetUrl = `${targetUrlBase}/${sessionId}?hub=${encodeURIComponent(app.hubUrl)}&token=${encodeURIComponent(CLI_API_TOKEN)}`
+        const targetUrl = `${targetUrlBase}/${sessionId}?hub=${encodeURIComponent(app.hubUrl)}&token=${encodeURIComponent(VIBY_HUB_OWNER_TOKEN)}`
 
         bridgeProcess = startLoggedProcess({
             repoRoot,
             args: ['run', '--cwd', 'cli', 'scripts/sessionCapabilityBridgeSmoke.ts'],
             env: {
-                CLI_API_TOKEN,
+                VIBY_HUB_OWNER_TOKEN,
                 VIBY_API_URL: app.hubUrl,
                 VIBY_HOME: app.vibyHomeDir,
                 VIBY_SMOKE_SESSION_ID: sessionId,

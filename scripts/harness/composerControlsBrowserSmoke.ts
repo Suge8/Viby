@@ -50,7 +50,8 @@ const outputDir = resolve(
 const HUB_READY_TIMEOUT_MS = 60_000
 const WEB_READY_TIMEOUT_MS = 60_000
 const ROUTE_SETTLE_TIMEOUT_MS = 12_000
-const CLI_API_TOKEN = process.env.VIBY_COMPOSER_CONTROLS_BROWSER_SMOKE_CLI_API_TOKEN || `viby-controls-${timestamp}`
+const VIBY_HUB_OWNER_TOKEN =
+    process.env.VIBY_COMPOSER_CONTROLS_BROWSER_SMOKE_HUB_OWNER_TOKEN || `viby-controls-${timestamp}`
 const SESSION_NAME = 'Composer Controls Smoke'
 const RUNTIME_ID = 'composer-controls-smoke-runtime'
 const LOGIN_INPUT_SELECTOR = 'input[name="accessToken"]'
@@ -71,7 +72,7 @@ async function main(): Promise<void> {
 
     try {
         app = await startIsolatedBrowserApp({
-            cliApiToken: CLI_API_TOKEN,
+            hubOwnerToken: VIBY_HUB_OWNER_TOKEN,
             hubReadyTimeoutMs: HUB_READY_TIMEOUT_MS,
             outputDir,
             repoRoot,
@@ -82,7 +83,7 @@ async function main(): Promise<void> {
         const seededSessions = await seedRuntimeAndSessions({
             alphaSessionName: SESSION_NAME,
             betaSessionName: `${SESSION_NAME} Beta`,
-            cliApiToken: CLI_API_TOKEN,
+            hubOwnerToken: VIBY_HUB_OWNER_TOKEN,
             driver: 'claude',
             hubUrl: app.hubUrl,
             outputDir,
@@ -91,7 +92,7 @@ async function main(): Promise<void> {
             vibyHomeDir: app.vibyHomeDir,
         })
         fakeCliRuntime = await createFakeCliRuntime({
-            cliApiToken: CLI_API_TOKEN,
+            hubOwnerToken: VIBY_HUB_OWNER_TOKEN,
             hubUrl: app.hubUrl,
             repoRoot,
             routeSettleTimeoutMs: ROUTE_SETTLE_TIMEOUT_MS,
@@ -113,7 +114,7 @@ async function main(): Promise<void> {
 
         console.log('[composer-controls-smoke] login')
         await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: ROUTE_SETTLE_TIMEOUT_MS })
-        await page.locator(LOGIN_INPUT_SELECTOR).fill(CLI_API_TOKEN)
+        await page.locator(LOGIN_INPUT_SELECTOR).fill(VIBY_HUB_OWNER_TOKEN)
         await page.locator(LOGIN_SUBMIT_SELECTOR).click()
         await waitForListReady(page, ROUTE_SETTLE_TIMEOUT_MS)
 

@@ -50,7 +50,11 @@ function ensureBundle(): void {
 function createEvidenceDir(): string {
     const artifactRoot = join(repoRoot, '.artifacts', 'harness')
     const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-    const prefix = process.argv.includes('--public') ? 'pairing-public-direct-webrtc' : 'pairing-direct-webrtc'
+    const prefix = process.argv.includes('--turn')
+        ? 'pairing-public-turn-webrtc'
+        : process.argv.includes('--public')
+          ? 'pairing-public-direct-webrtc'
+          : 'pairing-direct-webrtc'
     const workDir = join(artifactRoot, `${prefix}-${stamp}`)
     mkdirSync(workDir, { recursive: true })
     return workDir
@@ -123,12 +127,27 @@ function assertDirect(result: DirectSmokeResult): void {
     }
 }
 
+function assertTurnRelay(result: DirectSmokeResult): void {
+    if (result.localCandidateType !== 'relay' || result.remoteCandidateType !== 'relay') {
+        throw new Error(`${result.role} selected non-TURN route: ${JSON.stringify(result)}`)
+    }
+}
+
+function assertTurnLatency(result: DirectSmokeResult): void {
+    const maxP95 = Number.parseInt(process.env.MAX_TURN_P95_RTT_MS || '1000', 10)
+    if (typeof result.p95RttMs === 'number' && result.p95RttMs > maxP95) {
+        throw new Error(`TURN WebRTC p95 ${result.p95RttMs}ms exceeded ${maxP95}ms`)
+    }
+}
+
 async function main(): Promise<void> {
     const publicMode = process.argv.includes('--public')
+    const turnMode = process.argv.includes('--turn')
+    if (turnMode && !publicMode) throw new Error('TURN WebRTC smoke requires --public broker with TURN configured')
     if (!publicMode) ensureBundle()
     const port = publicMode ? 0 : await pickPort()
     const createToken = publicMode ? (process.env.PAIRING_CREATE_TOKEN ?? '') : `direct-${Date.now()}`
-    if (publicMode && !createToken) throw new Error('PAIRING_CREATE_TOKEN is required for public direct smoke')
+    if (publicMode && !createToken) throw new Error('PAIRING_CREATE_TOKEN is required for public WebRTC smoke')
     const brokerUrl = publicMode ? publicBrokerUrl : `http://127.0.0.1:${port}`
     const workDir = createEvidenceDir()
     let broker: ChildProcess | null = null
@@ -168,12 +187,21 @@ async function main(): Promise<void> {
             hostWsUrl: created.wsUrl,
             guestWsUrl: claimed.wsUrl,
             iceServers: created.iceServers,
+            iceTransportPolicy: turnMode ? 'relay' : undefined,
             pingCount,
         })
-        assertDirect(host)
-        assertDirect(guest)
+        if (turnMode) {
+            assertTurnRelay(host)
+            assertTurnRelay(guest)
+            assertTurnLatency(guest)
+        } else {
+            assertDirect(host)
+            assertDirect(guest)
+        }
         const summary = {
             ok: true,
+            transportMode: turnMode ? 'turn-webrtc' : 'direct-webrtc',
+            iceTransportPolicy: turnMode ? 'relay' : 'all',
             pingCount,
             ackCount: guest.ackCount,
             p50RttMs: guest.p50RttMs,

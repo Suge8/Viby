@@ -10,20 +10,38 @@ function replay(events: PairingTunnelRouteEvent[]) {
 }
 
 describe('pairing tunnel network simulation', () => {
-    it('keeps relay usable when cellular NAT only produces TURN relay candidates', () => {
+    it('uses TURN WebRTC when cellular NAT only produces fast relay candidates', () => {
         const state = replay([
             { type: 'relay-ready', transport: 'relay-wss', roundTripTimeMs: 120 },
             { type: 'direct-probe-started' },
-            { type: 'direct-candidate-selected', candidateType: 'relay', roundTripTimeMs: 160 },
-            { type: 'heartbeat-ack', route: 'direct', roundTripTimeMs: 150 },
-            { type: 'heartbeat-ack', route: 'direct', roundTripTimeMs: 145 },
+            { type: 'direct-candidate-selected', candidateType: 'relay', roundTripTimeMs: 90 },
+            { type: 'heartbeat-ack', route: 'direct', roundTripTimeMs: 86 },
+            { type: 'heartbeat-ack', route: 'direct', roundTripTimeMs: 84 },
+        ])
+
+        expect(state).toMatchObject({
+            phase: 'ready',
+            activeRoute: 'direct',
+            activeTransport: 'turn-webrtc',
+            directBlockedReason: 'turn-candidate',
+            routeSwitches: 1,
+        })
+    })
+
+    it('keeps WSS relay when TURN WebRTC is slower', () => {
+        const state = replay([
+            { type: 'relay-ready', transport: 'relay-wss', roundTripTimeMs: 80 },
+            { type: 'direct-probe-started' },
+            { type: 'direct-candidate-selected', candidateType: 'relay', roundTripTimeMs: 130 },
+            { type: 'heartbeat-ack', route: 'direct', roundTripTimeMs: 126 },
+            { type: 'heartbeat-ack', route: 'direct', roundTripTimeMs: 124 },
         ])
 
         expect(state).toMatchObject({
             phase: 'ready',
             activeRoute: 'relay',
-            directProbe: 'failed',
-            directProbeFailures: 1,
+            activeTransport: 'relay-wss',
+            directBlockedReason: 'direct-slower-than-relay',
             routeSwitches: 0,
         })
     })

@@ -21,7 +21,7 @@ const scriptDir = fileURLToPath(new URL('.', import.meta.url))
 const repoRoot = resolve(scriptDir, '../..')
 const timestamp = new Date().toISOString().replaceAll(':', '-')
 const outputDir = resolve(repoRoot, `web/.artifacts/harness/${timestamp}-chat-bottom-bounce-repro`)
-const CLI_API_TOKEN = `viby-bounce-repro-${timestamp}`
+const VIBY_HUB_OWNER_TOKEN = `viby-bounce-repro-${timestamp}`
 const HUB_READY_TIMEOUT_MS = 60_000
 const WEB_READY_TIMEOUT_MS = 60_000
 const ROUTE_SETTLE_TIMEOUT_MS = 15_000
@@ -205,7 +205,7 @@ async function main(): Promise<void> {
 
         if (!liveMode) {
             app = await startIsolatedBrowserApp({
-                cliApiToken: CLI_API_TOKEN,
+                hubOwnerToken: VIBY_HUB_OWNER_TOKEN,
                 hubReadyTimeoutMs: HUB_READY_TIMEOUT_MS,
                 outputDir,
                 repoRoot,
@@ -215,7 +215,7 @@ async function main(): Promise<void> {
             const seeded = await seedRuntimeAndSessions({
                 alphaSessionName: SESSION_NAME,
                 betaSessionName: 'Unused Session',
-                cliApiToken: CLI_API_TOKEN,
+                hubOwnerToken: VIBY_HUB_OWNER_TOKEN,
                 hubUrl: app.hubUrl,
                 outputDir,
                 runtimeId: RUNTIME_ID,
@@ -241,7 +241,7 @@ async function main(): Promise<void> {
             sessionId = seeded.alphaSessionId
             webUrl = app.webUrl
             hubUrl = app.hubUrl
-            accessToken = CLI_API_TOKEN
+            accessToken = VIBY_HUB_OWNER_TOKEN
         }
 
         if (!sessionId || !webUrl || !hubUrl || !accessToken) {

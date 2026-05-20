@@ -14,6 +14,7 @@ export type DirectSmokeResult = {
 
 type BrowserPeerOptions = {
     iceServers: RTCIceServer[]
+    iceTransportPolicy?: RTCIceTransportPolicy
     pingCount: number
     role: 'host' | 'guest'
     wsUrl: string
@@ -34,6 +35,7 @@ export async function runBrowserPair(options: {
     guestWsUrl: string
     hostWsUrl: string
     iceServers: RTCIceServer[]
+    iceTransportPolicy?: RTCIceTransportPolicy
     pingCount: number
 }): Promise<[DirectSmokeResult, DirectSmokeResult]> {
     const browser = await chromium.launch({
@@ -48,12 +50,14 @@ export async function runBrowserPair(options: {
         await Promise.all([
             prepareBrowserPeer(hostPage, {
                 iceServers: options.iceServers,
+                iceTransportPolicy: options.iceTransportPolicy,
                 pingCount: options.pingCount,
                 role: 'host',
                 wsUrl: options.hostWsUrl,
             }),
             prepareBrowserPeer(guestPage, {
                 iceServers: options.iceServers,
+                iceTransportPolicy: options.iceTransportPolicy,
                 pingCount: options.pingCount,
                 role: 'guest',
                 wsUrl: options.guestWsUrl,
@@ -98,12 +102,12 @@ async function requestJson<T>(baseUrl: string, path: string, options: RequestIni
 }
 
 async function prepareBrowserPeer(page: Page, options: BrowserPeerOptions): Promise<void> {
-    await page.evaluate(async ({ iceServers, pingCount, role, wsUrl }) => {
+    await page.evaluate(async ({ iceServers, iceTransportPolicy, pingCount, role, wsUrl }) => {
         const samples: number[] = []
         const startedAt = Date.now()
         const events: string[] = []
         const socket = new WebSocket(wsUrl)
-        const peer = new RTCPeerConnection({ iceServers })
+        const peer = new RTCPeerConnection({ iceServers, iceTransportPolicy })
         const pendingCandidates: RTCIceCandidateInit[] = []
         let channel: RTCDataChannel | null = null
         let resolveChannel: (value: RTCDataChannel) => void = () => {}

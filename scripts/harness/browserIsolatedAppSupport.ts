@@ -185,7 +185,7 @@ export async function getJson<TResponse>(
 }
 
 export async function startIsolatedBrowserApp(options: {
-    cliApiToken: string
+    hubOwnerToken: string
     hubReadyTimeoutMs: number
     outputDir: string
     repoRoot: string
@@ -206,7 +206,7 @@ export async function startIsolatedBrowserApp(options: {
         repoRoot: options.repoRoot,
         args: ['run', '--cwd', 'hub', 'start'],
         env: {
-            CLI_API_TOKEN: options.cliApiToken,
+            VIBY_HUB_OWNER_TOKEN: options.hubOwnerToken,
             CORS_ORIGINS: webUrl,
             VIBY_HOME: vibyHomeDir,
             VIBY_LISTEN_HOST: '127.0.0.1',

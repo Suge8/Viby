@@ -21,7 +21,7 @@ export type FakeCliRuntime = {
 }
 
 export async function createFakeCliRuntime(options: {
-    cliApiToken: string
+    hubOwnerToken: string
     hubUrl: string
     repoRoot: string
     routeSettleTimeoutMs: number
@@ -32,7 +32,7 @@ export async function createFakeCliRuntime(options: {
     const { io } = await loadFakeCliSocketModule(options.repoRoot)
     const socket = io(`${options.hubUrl}/cli`, {
         auth: {
-            token: options.cliApiToken,
+            token: options.hubOwnerToken,
             sessionId: options.sessionId,
         },
         transports: ['websocket'],

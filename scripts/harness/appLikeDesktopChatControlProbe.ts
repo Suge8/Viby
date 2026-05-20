@@ -44,7 +44,7 @@ const outputDir = resolve(
 const HUB_READY_TIMEOUT_MS = 60_000
 const WEB_READY_TIMEOUT_MS = 60_000
 const ROUTE_SETTLE_TIMEOUT_MS = 12_000
-const CLI_API_TOKEN = process.env.VIBY_DESKTOP_CHAT_PROBE_CLI_API_TOKEN || `viby-desktop-chat-${timestamp}`
+const VIBY_HUB_OWNER_TOKEN = process.env.VIBY_DESKTOP_CHAT_PROBE_HUB_OWNER_TOKEN || `viby-desktop-chat-${timestamp}`
 const SESSION_NAME = 'Desktop Chat Geometry'
 const RUNTIME_ID = 'desktop-chat-geometry-runtime'
 const PREFILL_TURN_COUNT = 12
@@ -67,7 +67,7 @@ async function main(): Promise<void> {
 
     try {
         app = await startIsolatedBrowserApp({
-            cliApiToken: CLI_API_TOKEN,
+            hubOwnerToken: VIBY_HUB_OWNER_TOKEN,
             hubReadyTimeoutMs: HUB_READY_TIMEOUT_MS,
             outputDir,
             repoRoot,
@@ -77,14 +77,14 @@ async function main(): Promise<void> {
             alphaSessionName: SESSION_NAME,
             alphaPrefillStoredMessages: buildRichTranscriptSeedMessages(PREFILL_TURN_COUNT),
             betaSessionName: 'Desktop Chat Geometry Beta',
-            cliApiToken: CLI_API_TOKEN,
+            hubOwnerToken: VIBY_HUB_OWNER_TOKEN,
             hubUrl: app.hubUrl,
             outputDir,
             runtimeId: RUNTIME_ID,
             vibyHomeDir: app.vibyHomeDir,
         })
         fakeCliRuntime = await createFakeCliRuntime({
-            cliApiToken: CLI_API_TOKEN,
+            hubOwnerToken: VIBY_HUB_OWNER_TOKEN,
             hubUrl: app.hubUrl,
             repoRoot,
             routeSettleTimeoutMs: ROUTE_SETTLE_TIMEOUT_MS,
@@ -101,7 +101,7 @@ async function main(): Promise<void> {
         try {
             const targetUrl = `${app.webUrl}/sessions?hub=${encodeURIComponent(app.hubUrl)}`
             await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: ROUTE_SETTLE_TIMEOUT_MS })
-            await page.locator(LOGIN_INPUT_SELECTOR).fill(CLI_API_TOKEN)
+            await page.locator(LOGIN_INPUT_SELECTOR).fill(VIBY_HUB_OWNER_TOKEN)
             await page.locator('button[type="submit"]').click()
             await page.locator(SESSION_LIST_ITEM_SELECTOR).filter({ hasText: SESSION_NAME }).first().click()
             await page.locator(SESSION_CHAT_PAGE_SELECTOR).first().waitFor({ timeout: ROUTE_SETTLE_TIMEOUT_MS })

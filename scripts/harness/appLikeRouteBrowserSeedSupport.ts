@@ -41,7 +41,7 @@ export async function seedRuntimeAndSessions(options: {
     alphaSessionName: string
     alphaPrefillMessages?: readonly string[]
     betaSessionName: string
-    cliApiToken: string
+    hubOwnerToken: string
     driver?: string
     hubUrl: string
     outputDir: string
@@ -53,7 +53,7 @@ export async function seedRuntimeAndSessions(options: {
     const sessionFilePath = options.sessionFilePath ?? DEFAULT_SESSION_FILE_PATH
     const sessionExtraFilePath = options.sessionExtraFilePath ?? DEFAULT_SESSION_EXTRA_FILE_PATH
     const auth = await postJson<AuthResponse>(`${options.hubUrl}/api/auth`, {
-        body: { accessToken: options.cliApiToken },
+        body: { accessToken: options.hubOwnerToken },
     })
     const existingRuntime = await getJson<RuntimeResponse>(`${options.hubUrl}/api/runtime`, {
         headers: { authorization: `Bearer ${auth.token}` },
@@ -81,7 +81,7 @@ export async function seedRuntimeAndSessions(options: {
         ['app-like-route-beta', options.betaSessionName, betaWorkspace],
     ] as const) {
         const response = await postJson<SeededSessionResponse>(`${options.hubUrl}/cli/sessions`, {
-            headers: { authorization: `Bearer ${options.cliApiToken}` },
+            headers: { authorization: `Bearer ${options.hubOwnerToken}` },
             body: {
                 tag,
                 metadata: {
@@ -120,10 +120,13 @@ export async function seedRuntimeAndSessions(options: {
 }
 
 async function registerSmokeRuntime(
-    options: Pick<Parameters<typeof seedRuntimeAndSessions>[0], 'cliApiToken' | 'hubUrl' | 'runtimeId' | 'vibyHomeDir'>
+    options: Pick<
+        Parameters<typeof seedRuntimeAndSessions>[0],
+        'hubOwnerToken' | 'hubUrl' | 'runtimeId' | 'vibyHomeDir'
+    >
 ): Promise<string> {
     await postJson(`${options.hubUrl}/cli/machines`, {
-        headers: { authorization: `Bearer ${options.cliApiToken}` },
+        headers: { authorization: `Bearer ${options.hubOwnerToken}` },
         body: {
             id: options.runtimeId,
             metadata: {
