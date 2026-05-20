@@ -1,8 +1,10 @@
 :root {
     --ds-font-sans:
-        "Manrope", "Avenir Next", "SF Pro Display", "Segoe UI Variable Text", "Segoe UI", "Helvetica Neue", Arial,
-        sans-serif;
-    --ds-font-brand: "Outfit", "Avenir Next", "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", sans-serif;
+        system-ui, -apple-system, BlinkMacSystemFont, "Avenir Next", "SF Pro Display", "Segoe UI Variable Text",
+        "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --ds-font-brand:
+        system-ui, -apple-system, BlinkMacSystemFont, "Avenir Next", "SF Pro Display", "Segoe UI Variable Display",
+        "Segoe UI", sans-serif;
     --ds-font-mono: "SF Mono", "JetBrains Mono", "Consolas", monospace;
 
     --ds-radius-sm: 12px;

@@ -5,9 +5,7 @@
     justify-content: center;
     padding: max(1.5rem, env(safe-area-inset-top)) 1.5rem max(1.5rem, env(safe-area-inset-bottom));
     color: var(--app-fg);
-    background:
-        radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--ds-brand) 8%, transparent), transparent 42%),
-        var(--app-bg);
+    background: var(--app-bg);
 }
 
 .ds-connection-panel {
@@ -55,12 +53,12 @@
     font-size: clamp(1.8rem, 9vw, 2.45rem);
     font-weight: 700;
     line-height: 1.04;
-    letter-spacing: -0.055em;
+    letter-spacing: 0;
 }
 
 .ds-connecting-title {
     font-size: clamp(1.4rem, 6.6vw, 1.65rem);
-    letter-spacing: -0.038em;
+    letter-spacing: 0;
     line-height: 1.18;
     color: color-mix(in srgb, var(--ds-text-primary) 92%, var(--ds-text-secondary));
 }
