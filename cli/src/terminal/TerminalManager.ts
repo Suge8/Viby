@@ -31,7 +31,7 @@ const DEFAULT_TERMINAL_TYPE = 'xterm-256color'
 const DEFAULT_TERMINAL_COLOR = 'truecolor'
 const DEFAULT_TERMINAL_LANG = process.platform === 'darwin' ? 'en_US.UTF-8' : 'C.UTF-8'
 const SENSITIVE_ENV_KEYS = new Set([
-    'CLI_API_TOKEN',
+    'VIBY_HUB_OWNER_TOKEN',
     'VIBY_API_URL',
     'VIBY_HTTP_MCP_URL',
     'OPENAI_API_KEY',
@@ -39,6 +39,10 @@ const SENSITIVE_ENV_KEYS = new Set([
     'GEMINI_API_KEY',
     'GOOGLE_API_KEY',
 ])
+
+function getOptionalBun(): typeof Bun | null {
+    return typeof Bun === 'undefined' ? null : Bun
+}
 
 function resolveEnvNumber(name: string, fallback: number): number {
     const raw = process.env[name]
@@ -49,14 +53,49 @@ function resolveEnvNumber(name: string, fallback: number): number {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
 }
 
-function resolveShell(): string {
+function resolveWindowsShellCommand(): string[] {
+    const configuredShell = process.env.VIBY_TERMINAL_SHELL?.trim()
+    if (configuredShell) {
+        return [configuredShell]
+    }
+
+    const bun = getOptionalBun()
+    for (const candidate of ['pwsh.exe', 'powershell.exe']) {
+        try {
+            const resolved = bun?.which?.(candidate)
+            if (resolved) {
+                return [resolved, '-NoLogo']
+            }
+        } catch {}
+    }
+
+    return [process.env.ComSpec || 'cmd.exe']
+}
+
+export function resolveShellCommand(): string[] {
+    if (process.platform === 'win32') {
+        return resolveWindowsShellCommand()
+    }
     if (process.env.SHELL) {
-        return process.env.SHELL
+        return [process.env.SHELL]
     }
     if (process.platform === 'darwin') {
-        return '/bin/zsh'
+        return ['/bin/zsh']
     }
-    return '/bin/bash'
+    return ['/bin/bash']
+}
+
+export function normalizeTerminalInputForHost(data: string): string {
+    if (process.platform !== 'win32') {
+        return data
+    }
+
+    let normalized = ''
+    for (let index = 0; index < data.length; index += 1) {
+        const char = data[index]
+        normalized += char === '\n' && data[index - 1] !== '\r' ? '\r' : char
+    }
+    return normalized
 }
 
 function buildFilteredEnv(): NodeJS.ProcessEnv {
@@ -72,7 +111,7 @@ function buildFilteredEnv(): NodeJS.ProcessEnv {
     }
     env.TERM ??= DEFAULT_TERMINAL_TYPE
     env.COLORTERM ??= DEFAULT_TERMINAL_COLOR
-    env.LANG ??= DEFAULT_TERMINAL_LANG
+    env.LANG ??= process.platform === 'win32' ? 'en_US.UTF-8' : DEFAULT_TERMINAL_LANG
     return env
 }
 
@@ -103,11 +142,6 @@ export class TerminalManager {
     }
 
     create(terminalId: string, cols: number, rows: number): void {
-        if (process.platform === 'win32') {
-            this.emitError(terminalId, 'Remote terminal is not supported on Windows yet.')
-            return
-        }
-
         const existing = this.terminals.get(terminalId)
         if (existing) {
             existing.cols = cols
@@ -123,17 +157,18 @@ export class TerminalManager {
             return
         }
 
-        if (typeof Bun === 'undefined' || typeof Bun.spawn !== 'function') {
+        const bun = getOptionalBun()
+        if (!bun || typeof bun.spawn !== 'function') {
             this.emitError(terminalId, 'Terminal is unavailable in this runtime.')
             return
         }
 
         const sessionPath = this.getSessionPath() ?? getInvokedCwd()
-        const shell = resolveShell()
+        const shellCommand = resolveShellCommand()
         const decoder = new TextDecoder()
 
         try {
-            const proc = Bun.spawn([shell], {
+            const proc = bun.spawn(shellCommand, {
                 cwd: sessionPath,
                 env: this.filteredEnv,
                 terminal: {
@@ -192,7 +227,13 @@ export class TerminalManager {
             this.onReady({ sessionId: this.sessionId, terminalId })
         } catch (error) {
             logger.debug('[TERMINAL] Failed to spawn terminal', { error })
-            this.emitError(terminalId, 'Failed to spawn terminal.')
+            const message =
+                process.platform === 'win32' &&
+                error instanceof Error &&
+                error.message.includes('terminal option is not supported')
+                    ? 'Remote terminal on Windows requires Bun 1.3.14 or newer.'
+                    : 'Failed to spawn terminal.'
+            this.emitError(terminalId, message)
         }
     }
 
@@ -202,7 +243,7 @@ export class TerminalManager {
             this.emitError(terminalId, 'Terminal not found.')
             return
         }
-        runtime.terminal.write(data)
+        runtime.terminal.write(normalizeTerminalInputForHost(data))
         this.markActivity(runtime)
     }
 

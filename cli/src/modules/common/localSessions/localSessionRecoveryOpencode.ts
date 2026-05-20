@@ -1,6 +1,11 @@
 import { join } from 'node:path'
 import type { LocalSessionCatalogEntry, LocalSessionExportSnapshot } from '@viby/protocol/types'
 import {
+    closeOpencodeStorageDatabase,
+    type OpencodeStorageSource,
+    openOpencodeStorageDatabase,
+} from '@/opencode/utils/opencodeStorageDatabase'
+import {
     filenameToId,
     getMessageTimestamp,
     getNumber,
@@ -12,6 +17,12 @@ import {
     readSessionInfo,
     resolveOpencodeStorageDir,
 } from '@/opencode/utils/opencodeStorageScannerSupport'
+import {
+    listOpencodeDatabaseLocalSessionEntries,
+    loadOpencodeDatabaseCatalogEntry,
+    loadOpencodeDatabaseSnapshot,
+    resolveOpencodeDatabaseSessionInfo,
+} from './localSessionRecoveryOpencodeDatabase'
 import {
     createLocalSessionCatalogEntry,
     createLocalSessionSnapshot,
@@ -28,6 +39,7 @@ type ResolvedOpencodeSessionInfo = {
     id: string
     directory: string
     timeCreated: number | null
+    source: OpencodeStorageSource
 }
 
 async function collectOpencodeMessageText(options: {
@@ -93,9 +105,19 @@ async function resolveOpencodeSessionInfo(
     providerSessionId: string
 ): Promise<ResolvedOpencodeSessionInfo | null> {
     const storageDir = resolveOpencodeStorageDir()
+    const db = openOpencodeStorageDatabase(storageDir)
+    try {
+        const dbInfo = db ? resolveOpencodeDatabaseSessionInfo(db, workingDirectory, providerSessionId) : null
+        if (dbInfo) {
+            return { ...dbInfo, source: 'database' }
+        }
+    } finally {
+        closeOpencodeStorageDatabase(db)
+    }
+
     const sessionInfoFiles = await listSessionInfoFiles(storageDir)
     const matchedInfo = (
-        await mapWithConcurrency(sessionInfoFiles, 8, async (filePath) => {
+        await mapWithConcurrency(sessionInfoFiles, 8, async (filePath): Promise<ResolvedOpencodeSessionInfo | null> => {
             const info = await readSessionInfo(filePath)
             if (!info?.id || !info.directory) {
                 return null
@@ -105,6 +127,7 @@ async function resolveOpencodeSessionInfo(
                       id: info.id,
                       directory: info.directory,
                       timeCreated: info.timeCreated,
+                      source: 'files' as const,
                   }
                 : null
         })
@@ -116,6 +139,15 @@ async function resolveOpencodeSessionInfo(
 async function loadOpencodeSnapshotFromInfo(
     sessionInfo: ResolvedOpencodeSessionInfo
 ): Promise<LocalSessionExportSnapshot | null> {
+    if (sessionInfo.source === 'database') {
+        const db = openOpencodeStorageDatabase(resolveOpencodeStorageDir())
+        try {
+            return db ? loadOpencodeDatabaseSnapshot(db, sessionInfo) : null
+        } finally {
+            closeOpencodeStorageDatabase(db)
+        }
+    }
+
     const storageDir = resolveOpencodeStorageDir()
     const messageDir = join(storageDir, 'message', sessionInfo.id)
     const messageFiles = await listJsonFiles(messageDir)
@@ -177,6 +209,18 @@ async function loadOpencodeSnapshotFromInfo(
 }
 
 async function loadOpencodeCatalogEntry(sessionInfo: ResolvedOpencodeSessionInfo): Promise<LocalSessionCatalogEntry> {
+    if (sessionInfo.source === 'database') {
+        const db = openOpencodeStorageDatabase(resolveOpencodeStorageDir())
+        try {
+            if (!db) {
+                throw new Error(`OpenCode SQLite database unavailable for session ${sessionInfo.id}`)
+            }
+            return loadOpencodeDatabaseCatalogEntry(db, sessionInfo)
+        } finally {
+            closeOpencodeStorageDatabase(db)
+        }
+    }
+
     const storageDir = resolveOpencodeStorageDir()
     const messageDir = join(storageDir, 'message', sessionInfo.id)
     const messageFiles = await listJsonFiles(messageDir)
@@ -198,9 +242,25 @@ async function loadOpencodeCatalogEntry(sessionInfo: ResolvedOpencodeSessionInfo
 
 async function loadOpencodeSnapshots(workingDirectory: string): Promise<LocalSessionCatalogEntry[]> {
     const storageDir = resolveOpencodeStorageDir()
+    const db = openOpencodeStorageDatabase(storageDir)
+    let seenSessionIds = new Set<string>()
+    let databaseEntries: LocalSessionCatalogEntry[] = []
+    try {
+        if (db) {
+            const result = listOpencodeDatabaseLocalSessionEntries(db, workingDirectory)
+            seenSessionIds = result.sessionIds
+            databaseEntries = result.entries
+        }
+    } finally {
+        closeOpencodeStorageDatabase(db)
+    }
+
     const sessionInfoFiles = await listSessionInfoFiles(storageDir)
     const snapshots = await mapWithConcurrency(sessionInfoFiles, 8, async (filePath) => {
         const info = await readSessionInfo(filePath)
+        if (info?.id && seenSessionIds.has(info.id)) {
+            return null
+        }
         if (!info?.id || !info.directory || !isLocalSessionPathMatch(info.directory, workingDirectory)) {
             return null
         }
@@ -208,10 +268,13 @@ async function loadOpencodeSnapshots(workingDirectory: string): Promise<LocalSes
             id: info.id,
             directory: info.directory,
             timeCreated: info.timeCreated,
+            source: 'files',
         })
     })
 
-    return snapshots.filter((snapshot): snapshot is LocalSessionCatalogEntry => Boolean(snapshot))
+    return databaseEntries.concat(
+        snapshots.filter((snapshot): snapshot is LocalSessionCatalogEntry => Boolean(snapshot))
+    )
 }
 
 export async function listOpencodeLocalSessions(workingDirectory: string): Promise<LocalSessionCatalogEntry[]> {

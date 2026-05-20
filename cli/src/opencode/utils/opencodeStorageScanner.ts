@@ -3,7 +3,19 @@ import { logger } from '@/ui/logger'
 import { runDetachedTask } from '@/utils/runDetachedTask'
 import type { OpencodeHookEvent } from '../types'
 import {
-    getString,
+    closeOpencodeStorageDatabase,
+    findOpencodeDatabaseSession,
+    getOpencodeDatabaseSession,
+    type OpencodeStorageSource,
+    openOpencodeStorageDatabase,
+} from './opencodeStorageDatabase'
+import {
+    createOpencodeDatabaseScanState,
+    primeOpencodeDatabaseSession,
+    resetOpencodeDatabaseScanState,
+    scanOpencodeDatabaseMessagesAndParts,
+} from './opencodeStorageDatabaseScanner'
+import {
     listSessionInfoFiles,
     normalizePath,
     primeSessionFiles,
@@ -32,6 +44,7 @@ type OpencodeStorageScannerOptions = {
 type SessionCandidate = {
     sessionId: string
     score: number
+    source: OpencodeStorageSource
 }
 
 const DEFAULT_SESSION_START_WINDOW_MS = 2 * 60 * 1000
@@ -45,9 +58,7 @@ export async function createOpencodeStorageScanner(
     await scanner.start()
 
     return {
-        cleanup: async () => {
-            await scanner.cleanup()
-        },
+        cleanup: async () => scanner.cleanup(),
         onNewSession: (sessionId: string) => {
             runDetachedTask(
                 () => scanner.onNewSession(sessionId),
@@ -71,13 +82,16 @@ class OpencodeStorageScanner {
 
     private intervalId: ReturnType<typeof setInterval> | null = null
     private activeSessionId: string | null = null
+    private activeStorageSource: OpencodeStorageSource | null = null
     private matchFailed = false
     private warnedMissingStorage = false
     private scanning = false
+    private db: ReturnType<typeof openOpencodeStorageDatabase> = null
 
     private readonly messageRoles = new Map<string, string>()
     private readonly messageFileMtime = new Map<string, number>()
     private readonly partFileMtime = new Map<string, number>()
+    private readonly databaseScanState = createOpencodeDatabaseScanState(this.messageRoles)
 
     constructor(opts: OpencodeStorageScannerOptions) {
         this.storageDir = opts.storageDir ?? resolveOpencodeStorageDir()
@@ -90,7 +104,7 @@ class OpencodeStorageScanner {
         this.matchDeadlineMs = this.referenceTimestampMs + this.sessionStartWindowMs
         this.intervalMs = opts.intervalMs ?? DEFAULT_SCAN_INTERVAL_MS
         this.seedSessionId = opts.sessionId
-        this.activeSessionId = opts.sessionId
+        this.db = openOpencodeStorageDatabase(this.storageDir)
 
         if (!this.targetCwd && !this.seedSessionId) {
             const message = 'No cwd/sessionId available for OpenCode storage matching; scanner disabled.'
@@ -115,6 +129,8 @@ class OpencodeStorageScanner {
             clearInterval(this.intervalId)
             this.intervalId = null
         }
+        closeOpencodeStorageDatabase(this.db)
+        this.db = null
     }
 
     async onNewSession(sessionId: string): Promise<void> {
@@ -131,7 +147,8 @@ class OpencodeStorageScanner {
         this.scanning = true
         try {
             const storageReady = await this.ensureStorageDir()
-            if (!storageReady) {
+            this.db ??= openOpencodeStorageDatabase(this.storageDir)
+            if (!storageReady && !this.db) {
                 return
             }
 
@@ -190,6 +207,44 @@ class OpencodeStorageScanner {
             return
         }
 
+        const best = (await this.discoverDatabaseSessionId()) ?? (await this.discoverFileSessionId())
+        if (best) {
+            await this.setActiveSession(best.sessionId, best.source)
+            return
+        }
+
+        if (Date.now() > this.matchDeadlineMs) {
+            const message = `No OpenCode session found within ${this.sessionStartWindowMs}ms for cwd ${this.targetCwd}`
+            logger.warn(`[opencode-storage] ${message}`)
+            this.matchFailed = true
+            this.onSessionMatchFailed?.(message)
+        }
+    }
+
+    private async discoverDatabaseSessionId(): Promise<SessionCandidate | null> {
+        if (!this.db || !this.targetCwd) {
+            return null
+        }
+        try {
+            const session = findOpencodeDatabaseSession(
+                this.db,
+                this.targetCwd,
+                this.referenceTimestampMs,
+                this.sessionStartWindowMs
+            )
+            return session && session.timeCreated !== null
+                ? { sessionId: session.id, score: session.timeCreated - this.referenceTimestampMs, source: 'database' }
+                : null
+        } catch (error) {
+            logger.debug(`[opencode-storage] SQLite session discovery failed: ${error}`)
+            return null
+        }
+    }
+
+    private async discoverFileSessionId(): Promise<SessionCandidate | null> {
+        if (!(await this.ensureStorageDir())) {
+            return null
+        }
         const sessionFiles = await listSessionInfoFiles(this.storageDir)
         let best: SessionCandidate | null = null
 
@@ -213,57 +268,68 @@ class OpencodeStorageScanner {
             }
 
             if (!best || diff < best.score) {
-                best = { sessionId: info.id, score: diff }
+                best = { sessionId: info.id, score: diff, source: 'files' }
             }
         }
 
-        if (best) {
-            await this.setActiveSession(best.sessionId)
-            return
-        }
-
-        if (Date.now() > this.matchDeadlineMs) {
-            const message = `No OpenCode session found within ${this.sessionStartWindowMs}ms for cwd ${this.targetCwd}`
-            logger.warn(`[opencode-storage] ${message}`)
-            this.matchFailed = true
-            this.onSessionMatchFailed?.(message)
-        }
+        return best
     }
 
-    private async setActiveSession(sessionId: string): Promise<void> {
-        if (this.activeSessionId === sessionId) {
+    private async setActiveSession(sessionId: string, source?: OpencodeStorageSource): Promise<void> {
+        const nextSource = source ?? this.resolveStorageSource(sessionId)
+        if (this.activeSessionId === sessionId && this.activeStorageSource === nextSource) {
             return
         }
         this.activeSessionId = sessionId
+        this.activeStorageSource = nextSource
         this.messageRoles.clear()
         this.messageFileMtime.clear()
         this.partFileMtime.clear()
-        await primeSessionFiles(
-            {
-                storageDir: this.storageDir,
-                onEvent: this.onEvent,
-                messageRoles: this.messageRoles,
-                messageFileMtime: this.messageFileMtime,
-                partFileMtime: this.partFileMtime,
-            },
-            sessionId,
-            this.referenceTimestampMs,
-            REPLAY_CLOCK_SKEW_MS
-        )
+        resetOpencodeDatabaseScanState(this.databaseScanState)
+        if (nextSource === 'database') {
+            if (this.db) {
+                primeOpencodeDatabaseSession({
+                    db: this.db,
+                    sessionId,
+                    referenceTimestampMs: this.referenceTimestampMs,
+                    replayClockSkewMs: REPLAY_CLOCK_SKEW_MS,
+                    state: this.databaseScanState,
+                    onEvent: this.onEvent,
+                })
+            }
+        } else {
+            await primeSessionFiles(this.fileRuntime(), sessionId, this.referenceTimestampMs, REPLAY_CLOCK_SKEW_MS)
+        }
         this.onDiscoveredSessionId?.(sessionId)
-        logger.debug(`[opencode-storage] Tracking session ${sessionId}`)
+        logger.debug(`[opencode-storage] Tracking session ${sessionId} from ${nextSource}`)
+    }
+
+    private resolveStorageSource(sessionId: string): OpencodeStorageSource {
+        return this.db && getOpencodeDatabaseSession(this.db, sessionId) ? 'database' : 'files'
     }
 
     private async scanMessagesAndParts(sessionId: string): Promise<void> {
-        await scanMessagesAndParts(
-            {
-                storageDir: this.storageDir,
-                onEvent: this.onEvent,
-                messageRoles: this.messageRoles,
-                messageFileMtime: this.messageFileMtime,
-                partFileMtime: this.partFileMtime,
-            },
-            sessionId
-        )
+        if (this.activeStorageSource === 'database') {
+            if (this.db) {
+                scanOpencodeDatabaseMessagesAndParts({
+                    db: this.db,
+                    sessionId,
+                    state: this.databaseScanState,
+                    onEvent: this.onEvent,
+                })
+            }
+            return
+        }
+        await scanMessagesAndParts(this.fileRuntime(), sessionId)
+    }
+
+    private fileRuntime(): Parameters<typeof primeSessionFiles>[0] {
+        return {
+            storageDir: this.storageDir,
+            onEvent: this.onEvent,
+            messageRoles: this.messageRoles,
+            messageFileMtime: this.messageFileMtime,
+            partFileMtime: this.partFileMtime,
+        }
     }
 }
