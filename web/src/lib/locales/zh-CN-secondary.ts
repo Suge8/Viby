@@ -1,8 +1,8 @@
 export default {
     'chat.resumeFailed.lifecycleCommand':
-        '这个斜杠命令由 Viby 接管。Hub 已管理的会话请去历史记录继续；如果是 Viby 还没导入的本机会话，请走“新建会话 → 恢复本地会话”。',
+        '斜杠命令由 Viby 接管。已管理会话去历史记录继续；未导入本机会话走“新建会话 → 恢复本地会话”。',
     'chat.resumeFailed.resumeUnavailable':
-        '这个会话当前还没有可恢复标识。通常是旧会话、外部导入会话，或这条会话还没被 Viby 成功记录到可恢复状态。',
+        '此会话暂无可恢复标识。通常是旧会话、外部导入会话，或还未成功记录到可恢复状态。',
     'chat.resumeFailed.noMachineOnline': '当前本机 runtime 不可用，无法自动恢复。先让这台电脑上线。',
     'chat.resumeFailed.sessionNotFound': '这个会话已经找不到了。',
     'chat.resumeFailed.resumeFailed': 'Viby 已发出恢复请求，但会话没有成功重新激活。',
@@ -54,6 +54,7 @@ export default {
     'file.copyContent': '复制文件内容',
     'file.mode.diff': 'Diff',
     'file.mode.file': '文件',
+    'file.imagePreview.alt': '{fileName} 预览',
     'file.error.unknownPath': '未知路径',
     'file.error.noPath': '没有提供文件路径。',
     'file.error.binary': '该文件看起来是二进制内容，无法直接展示。',
@@ -63,17 +64,14 @@ export default {
     'file.error.diffLoad': '加载 diff 失败',
     'file.error.read': '读取文件失败',
 
-    // Code block
     'code.copy': '复制',
     'code.copied.title': '代码已复制',
     'code.copied.description': '这段代码已经进入剪贴板。',
     'code.copied.badge': '已复制',
 
-    // Diff view
     'diff.title': '差异',
     'diff.view': '查看',
 
-    // Tool card
     'tool.askQuestion': '其他',
     'tool.edit': '编辑',
     'tool.multiedit': '多文件编辑',
@@ -152,6 +150,11 @@ export default {
     'composer.controls': '设置',
     'composer.actions': '快捷操作',
     'composer.abort': '中止',
+    'composer.enterBehavior.title': 'Enter 键',
+    'composer.enterBehavior.enter-to-send.label': 'Enter 发送',
+    'composer.enterBehavior.enter-to-send.description': '按 Shift+Enter 换行。',
+    'composer.enterBehavior.modifier-enter-to-send.label': 'Ctrl+Enter 发送',
+    'composer.enterBehavior.modifier-enter-to-send.description': '按 Enter 换行。',
     'composer.switchDriver': '切换到 {driver}',
     'composer.switchDriver.pending': '正在切换到 {driver}',
     'composer.switchAgent': '切换 Agent',
