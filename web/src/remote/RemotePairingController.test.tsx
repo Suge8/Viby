@@ -10,6 +10,7 @@ const routerHistory = vi.hoisted(() => ({ replace: vi.fn() }))
 const retained = vi.hoisted(() => ({ value: null as { lastReadyAt: number } | null, reject: false }))
 const clearRetainedReady = vi.hoisted(() => vi.fn(async () => undefined))
 const setRetainedReady = vi.hoisted(() => vi.fn(async () => undefined))
+const persistentNotice = vi.hoisted(() => vi.fn())
 const queryOnline = vi.hoisted(() => ({
     pause: vi.fn(),
     resume: vi.fn(),
@@ -28,7 +29,10 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 vi.mock('@/hooks/useFinalizeBootShell', () => ({ useFinalizeBootShell: vi.fn() }))
 vi.mock('@/lib/use-translation', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
-vi.mock('@/lib/notice-center', () => ({ useNoticeCenter: () => ({ addToast: vi.fn() }), usePersistentNotice: vi.fn() }))
+vi.mock('@/lib/notice-center', () => ({
+    useNoticeCenter: () => ({ addToast: vi.fn() }),
+    usePersistentNotice: persistentNotice,
+}))
 vi.mock('@/remote/remotePairingQueryOnlineState', () => ({
     pauseRemotePairingQueries: queryOnline.pause,
     resumeRemotePairingQueries: queryOnline.resume,
@@ -37,8 +41,8 @@ vi.mock('@/remote/remotePairingPwaHandoffWarmup', () => ({ useRemotePairingPwaHa
 vi.mock('@/components/AppInstallPromptLayer', () => ({ AppInstallPromptLayer: () => <div data-testid="install" /> }))
 vi.mock('@/remote/RemotePairingScreens', () => ({
     RemotePairingCodeScreen: () => <div data-testid="code" />,
-    RemotePairingStatusScreen: (props: { message: string | null; onRetry?: () => void }) => (
-        <div data-testid="status" data-message={props.message ?? ''}>
+    RemotePairingStatusScreen: (props: { message: string | null; onRetry?: () => void; phase?: string }) => (
+        <div data-testid="status" data-message={props.message ?? ''} data-phase={props.phase ?? ''}>
             {props.onRetry ? (
                 <button type="button" data-testid="retry" onClick={props.onRetry}>
                     retry
@@ -48,16 +52,14 @@ vi.mock('@/remote/RemotePairingScreens', () => ({
     ),
 }))
 vi.mock('@/remote/RemotePairingReadyShell', () => ({
-    RemotePairingReadyShell: (props: { enableRuntime: boolean; interactionBlocked: boolean }) => (
+    RemotePairingReadyShell: (props: { enableRuntime: boolean; interactionBlocked: boolean; pathname: string }) => (
         <div
             data-testid="ready-shell"
             data-interaction-blocked={String(props.interactionBlocked)}
             data-runtime-enabled={String(props.enableRuntime)}
+            data-pathname={props.pathname}
         />
     ),
-}))
-vi.mock('@/remote/RemotePairingHydrateSkeleton', () => ({
-    RemotePairingHydrateSkeleton: () => <div data-testid="hydrate" />,
 }))
 vi.mock('@/remote/RemotePairingPersistence', () => ({
     getRetainedReady: vi.fn(async () => {
@@ -140,6 +142,7 @@ describe('RemotePairingController', () => {
         routerHistory.replace.mockClear()
         clearRetainedReady.mockClear()
         setRetainedReady.mockClear()
+        persistentNotice.mockClear()
         queryOnline.pause.mockClear()
         queryOnline.resume.mockClear()
         session.onClose = null
@@ -153,7 +156,7 @@ describe('RemotePairingController', () => {
     it('starts at hydrating and retained ready moves to running without status screen', async () => {
         retained.value = { lastReadyAt: 1 }
         renderController()
-        expect(screen.getByTestId('hydrate')).toBeInTheDocument()
+        expect(screen.getByTestId('status')).toHaveAttribute('data-phase', 'authenticating')
         await screen.findByTestId('ready-shell')
         expect(screen.queryByTestId('status')).not.toBeInTheDocument()
         expect(setRetainedReady).toHaveBeenCalledWith('pairing-1', expect.any(Number))
@@ -165,15 +168,16 @@ describe('RemotePairingController', () => {
         expect(await screen.findByTestId('ready-shell')).toHaveAttribute('data-runtime-enabled', 'true')
     })
 
-    it('keeps the handoff screen on `/p` until redirect reaches the remote workspace route', async () => {
+    it('renders the retained workspace during `/p` handoff while the URL is normalized', async () => {
         route.pathname = '/p/pairing-1'
         route.href = '/p/pairing-1?handoff=handoff-ticket'
 
         renderController()
 
         await waitFor(() => expect(routerHistory.replace).toHaveBeenCalledWith('/sessions?remote=1'))
-        expect(screen.getByTestId('status')).toBeInTheDocument()
-        expect(screen.queryByTestId('ready-shell')).not.toBeInTheDocument()
+        expect(await screen.findByTestId('ready-shell')).toHaveAttribute('data-pathname', '/sessions')
+        expect(screen.queryByTestId('status')).not.toBeInTheDocument()
+        expect(persistentNotice.mock.calls.some(([notice]) => Boolean(notice))).toBe(false)
     })
 
     it('keeps the retained workspace runtime disabled until the peer channel is ready', async () => {
@@ -184,6 +188,14 @@ describe('RemotePairingController', () => {
         renderController()
 
         expect(await screen.findByTestId('ready-shell')).toHaveAttribute('data-runtime-enabled', 'false')
+        await waitFor(() =>
+            expect(screen.getByTestId('ready-shell')).toHaveAttribute('data-interaction-blocked', 'true')
+        )
+        await waitFor(() =>
+            expect(persistentNotice.mock.calls.some(([notice]) => notice?.id === 'pairing:remote-reconnecting')).toBe(
+                true
+            )
+        )
         act(() => resolveReady())
         await waitFor(() => expect(screen.getByTestId('ready-shell')).toHaveAttribute('data-runtime-enabled', 'true'))
     })
@@ -251,9 +263,8 @@ describe('RemotePairingController', () => {
         session.untilReady.mockRejectedValueOnce(firstError).mockResolvedValueOnce(undefined)
         renderController()
 
-        expect(await screen.findByTestId('status')).toHaveAttribute(
-            'data-message',
-            'remotePairing.error.closedRetrying'
+        await waitFor(() =>
+            expect(screen.getByTestId('status')).toHaveAttribute('data-message', 'remotePairing.error.closedRetrying')
         )
         expect(screen.queryByTestId('ready-shell')).not.toBeInTheDocument()
         expect(session.close).toHaveBeenCalledTimes(1)

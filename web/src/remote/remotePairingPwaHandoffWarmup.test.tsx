@@ -31,11 +31,13 @@ describe('useRemotePairingPwaHandoffWarmup', () => {
     beforeEach(() => {
         vi.useFakeTimers({ shouldAdvanceTime: true })
         vi.resetAllMocks()
+        document.head.innerHTML = '<link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials">'
         window.history.replaceState({}, '', '/sessions?remote=1')
     })
 
     afterEach(() => {
         cleanup()
+        document.head.innerHTML = ''
         vi.useRealTimers()
     })
 
@@ -50,6 +52,47 @@ describe('useRemotePairingPwaHandoffWarmup', () => {
 
         expect(httpMock.createRemotePwaHandoff).toHaveBeenCalledTimes(1)
         expect(httpMock.createRemotePwaHandoff).toHaveBeenCalledWith('pairing-1')
+        expect(document.querySelector<HTMLLinkElement>('link[rel="manifest"]')?.getAttribute('href')).toBe(
+            '/manifest.webmanifest?pairing=pairing-1'
+        )
+    })
+
+    it('binds the manifest URL to the current pairing so iOS Chrome PWA install does not depend on browser-tab storage', async () => {
+        httpMock.createRemotePwaHandoff.mockResolvedValue({
+            handoffTicket: 'ticket-1',
+            expiresAt: Date.now() + 600_000,
+        })
+        const { unmount } = render(<WarmupProbe pairingId="pairing-1" active />)
+
+        await waitForStatus('ready')
+        expect(document.querySelector<HTMLLinkElement>('link[rel="manifest"]')?.getAttribute('href')).toBe(
+            '/manifest.webmanifest?pairing=pairing-1'
+        )
+
+        unmount()
+        expect(document.querySelector<HTMLLinkElement>('link[rel="manifest"]')?.getAttribute('href')).toBe(
+            '/manifest.webmanifest'
+        )
+    })
+
+    it('replaces a stale manifest pairing when the controller moves to a new pairing id', async () => {
+        document.head.innerHTML = '<link rel="manifest" href="/manifest.webmanifest?pairing=old">'
+        httpMock.createRemotePwaHandoff
+            .mockResolvedValueOnce({ handoffTicket: 'ticket-old', expiresAt: Date.now() + 600_000 })
+            .mockResolvedValueOnce({ handoffTicket: 'ticket-new', expiresAt: Date.now() + 600_000 })
+
+        const { rerender } = render(<WarmupProbe pairingId="pairing-1" active />)
+        await waitForStatus('ready')
+        expect(document.querySelector<HTMLLinkElement>('link[rel="manifest"]')?.getAttribute('href')).toBe(
+            '/manifest.webmanifest?pairing=pairing-1'
+        )
+
+        rerender(<WarmupProbe pairingId="pairing-2" active />)
+        await waitForStatus('ready')
+
+        expect(document.querySelector<HTMLLinkElement>('link[rel="manifest"]')?.getAttribute('href')).toBe(
+            '/manifest.webmanifest?pairing=pairing-2'
+        )
     })
 
     it('stays idle while the controller is not ready so we never burn handoff tickets prematurely', () => {

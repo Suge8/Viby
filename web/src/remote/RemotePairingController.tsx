@@ -5,6 +5,7 @@ import type { PairingTransportState } from '@viby/protocol/pairing'
 import { type JSX, useCallback, useEffect, useRef, useState } from 'react'
 import { useFinalizeBootShell } from '@/hooks/useFinalizeBootShell'
 import { useNoticeCenter } from '@/lib/notice-center'
+import type { RemoteConnectingPhase } from '@/lib/remoteConnectingPhase'
 import { RemotePairingControllerView } from '@/remote/RemotePairingControllerView'
 import { setRetainedReady } from '@/remote/RemotePairingPersistence'
 import type { RemotePairingReadyConnection } from '@/remote/RemotePairingReadyShell'
@@ -19,7 +20,7 @@ import { shouldBlockRemoteReadyShellInteraction, shouldShowRemoteReconnectNotice
 
 type FirstPairingState = { kind: 'first-pairing'; auth: PairingRemoteAuth; token: string; submitting: boolean }
 export type RemoteState =
-    | { kind: 'hydrating' }
+    | { kind: 'hydrating'; phase: RemoteConnectingPhase }
     | FirstPairingState
     | { kind: 'running'; ready: RemotePairingReadyConnection }
     | { kind: 'fatal'; errorKey: RemotePairingErrorKey }
@@ -34,14 +35,19 @@ export function RemotePairingController(props: RemotePairingControllerProps): JS
     const locationHref = useLocation({ select: (location) => location.href })
     const locationUrl = new URL(locationHref, 'https://viby.local')
     const { addToast } = useNoticeCenter()
-    const [state, setState] = useState<RemoteState>({ kind: 'hydrating' })
+    const [state, setState] = useState<RemoteState>({ kind: 'hydrating', phase: 'authenticating' })
     const [bootAttempt, setBootAttempt] = useState(0)
     const [transportState, setTransportState] = useState<PairingTransportState>(CONNECTING_SNAPSHOT)
     const readyRef = useRef<RemotePairingReadyConnection | null>(null)
     const activeReady = state.kind === 'running' ? state.ready : readyRef.current
+    const readyWorkspaceVisible = !!activeReady && pathname.startsWith('/sessions')
     const showReconnectNoticeRaw = useRemoteReconnectNotice({
         attempt: transportState.kind === 'connecting' ? transportState.attempt : 0,
-        reconnecting: shouldShowRemoteReconnectNotice({ state, transportKind: transportState.kind }),
+        reconnecting: shouldShowRemoteReconnectNotice({
+            readyWorkspaceVisible,
+            state,
+            transportKind: transportState.kind,
+        }),
         onStop: activeReady
             ? () => {
                   activeReady.bridge.close()
@@ -51,7 +57,7 @@ export function RemotePairingController(props: RemotePairingControllerProps): JS
             : undefined,
     })
 
-    useFinalizeBootShell(state.kind !== 'hydrating' || activeReady !== null)
+    useFinalizeBootShell(true)
 
     useEffect(() => {
         if (!activeReady) return setTransportState(CONNECTING_SNAPSHOT)
@@ -82,7 +88,7 @@ export function RemotePairingController(props: RemotePairingControllerProps): JS
             })
             const ready = { bridge, token }
             readyRef.current = ready
-            setState({ kind: 'hydrating' })
+            setState({ kind: 'hydrating', phase: 'connecting-computer' })
             try {
                 await bridge.untilReady()
             } catch (error) {
@@ -90,6 +96,7 @@ export function RemotePairingController(props: RemotePairingControllerProps): JS
                 bridge.close()
                 throw error
             }
+            setState({ kind: 'hydrating', phase: 'loading-workspace' })
             await setRetainedReady(props.pairingId, Date.now())
             setState({ kind: 'running', ready })
             return ready
@@ -148,7 +155,7 @@ export function RemotePairingController(props: RemotePairingControllerProps): JS
     const handleRetry = useCallback(() => {
         closeReady()
         clearRetainedReadySoon(props.pairingId)
-        setState({ kind: 'hydrating' })
+        setState({ kind: 'hydrating', phase: 'authenticating' })
         setBootAttempt((attempt) => attempt + 1)
     }, [closeReady, props.pairingId])
 

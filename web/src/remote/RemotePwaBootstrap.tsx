@@ -1,12 +1,23 @@
 import { useRouter } from '@tanstack/react-router'
+import { withPairingWorkspaceIntent } from '@viby/protocol'
 import { type JSX, useEffect, useRef, useState } from 'react'
+import { useFinalizeBootShell } from '@/hooks/useFinalizeBootShell'
+import type { RemoteConnectingPhase } from '@/lib/remoteConnectingPhase'
 import { reportWebRuntimeError } from '@/lib/runtimeDiagnostics'
 import { useTranslation } from '@/lib/use-translation'
 import { RemotePairingMissingScreen, RemotePairingStatusScreen } from './RemotePairingScreens'
 import { type PairingCookieRecoverFailure, recoverRemotePairingFromCookie } from './remotePairingCookieRecover'
+import { recoverAnyRemotePairingByDevice } from './remotePairingDeviceRecovery'
 import { claimRemotePwaHandoff, rememberRemotePairingId } from './remotePairingHttp'
 
-type BootstrapState = { kind: 'attempting' } | { kind: 'failed'; failure: PairingCookieRecoverFailure }
+type BootstrapState =
+    | { kind: 'attempting'; phase: RemoteConnectingPhase }
+    | { kind: 'failed'; failure: PairingCookieRecoverFailure }
+
+type RemotePwaBootstrapProps = {
+    fallbackPairingId?: string | null
+    onRecovered(pairingId: string): void
+}
 
 /**
  * PWA cold-start bootstrap controller. When the workspace shell launches in
@@ -18,41 +29,58 @@ type BootstrapState = { kind: 'attempting' } | { kind: 'failed'; failure: Pairin
  * overwrite the handoff ticket inside the broker store, leaving the new
  * page load to claim an already-superseded ticket and 403 out.
  *
- * After the claim succeeds the bootstrap hands control off to the
- * `RemotePairingController` by performing a soft navigation to `/p/<id>`
- * via the router's history. That triggers `AppController` to re-read the
- * pairing id from the path and mount the controller at the top of the
- * tree, so the ready-state workspace renders without any nested bootstrap
- * scaffold left over.
+ * After the claim succeeds the bootstrap hands control to the root
+ * `RemotePairingController` directly and keeps the URL on the workspace
+ * route. That avoids a second `/p/<id>` loading owner during PWA handoff.
  */
-export function RemotePwaBootstrap(): JSX.Element {
-    const router = useRouter()
+export function RemotePwaBootstrap(props: RemotePwaBootstrapProps): JSX.Element {
+    const { history } = useRouter()
     const { t } = useTranslation()
+    const { fallbackPairingId, onRecovered } = props
     const attemptedRef = useRef(false)
-    const [state, setState] = useState<BootstrapState>({ kind: 'attempting' })
+    const [attemptKey, setAttemptKey] = useState(0)
+    const [state, setState] = useState<BootstrapState>({ kind: 'attempting', phase: 'recovering-device' })
+    useFinalizeBootShell(true)
 
     useEffect(() => {
         if (attemptedRef.current) return
         attemptedRef.current = true
         let disposed = false
 
+        async function recoverFromCachedDevice(): Promise<boolean> {
+            setState({ kind: 'attempting', phase: 'recovering-device' })
+            const auth = await recoverAnyRemotePairingByDevice(fallbackPairingId ?? null)
+            if (!auth) return false
+            rememberRemotePairingId(auth.pairing.id)
+            setState({ kind: 'attempting', phase: 'loading-workspace' })
+            onRecovered(auth.pairing.id)
+            history.replace(withPairingWorkspaceIntent('/sessions'))
+            return true
+        }
+
         async function attempt(): Promise<void> {
+            setState({ kind: 'attempting', phase: 'recovering-device' })
             const result = await recoverRemotePairingFromCookie()
             if (disposed) return
             if (!result.ok) {
+                try {
+                    if (await recoverFromCachedDevice()) return
+                } catch (error) {
+                    reportWebRuntimeError('Failed to recover remote pairing from cached device keys.', error)
+                    if (!disposed) setState({ kind: 'failed', failure: { kind: 'transient' } })
+                    return
+                }
                 setState({ kind: 'failed', failure: result.failure })
                 return
             }
             try {
+                setState({ kind: 'attempting', phase: 'authenticating' })
                 await claimRemotePwaHandoff(result.value.pairingId, result.value.handoffTicket)
                 if (disposed) return
                 rememberRemotePairingId(result.value.pairingId)
-                // Soft-navigate so `AppController` re-reads the pairing id
-                // from the path and mounts the standard remote controller at
-                // the top of the tree. This avoids a full page reload (which
-                // would trigger a fresh manifest fetch and rotate the broker
-                // handoff ticket out from under the claim we just consumed).
-                router.history.replace(`/p/${encodeURIComponent(result.value.pairingId)}`)
+                setState({ kind: 'attempting', phase: 'loading-workspace' })
+                onRecovered(result.value.pairingId)
+                history.replace(withPairingWorkspaceIntent('/sessions'))
             } catch (error) {
                 reportWebRuntimeError('Failed to consume PWA handoff ticket during bootstrap.', error)
                 if (!disposed) setState({ kind: 'failed', failure: { kind: 'invalid' } })
@@ -64,10 +92,10 @@ export function RemotePwaBootstrap(): JSX.Element {
         return () => {
             disposed = true
         }
-    }, [router])
+    }, [attemptKey, fallbackPairingId, history, onRecovered])
 
     if (state.kind === 'attempting') {
-        return <RemotePairingStatusScreen message={null} phase="pairing" />
+        return <RemotePairingStatusScreen message={null} phase={state.phase} />
     }
 
     if (state.failure.kind === 'transient') {
@@ -76,7 +104,8 @@ export function RemotePwaBootstrap(): JSX.Element {
                 message={t('remotePairing.error.closedRetrying')}
                 onRetry={() => {
                     attemptedRef.current = false
-                    setState({ kind: 'attempting' })
+                    setState({ kind: 'attempting', phase: 'recovering-device' })
+                    setAttemptKey((current) => current + 1)
                 }}
             />
         )

@@ -1,4 +1,4 @@
-import { PairingPeerEventSchema, type PairingPeerTerminalEventPayload } from '@viby/protocol'
+import { PairingPeerEventSchema, type PairingPeerHeartbeat, type PairingPeerTerminalEventPayload } from '@viby/protocol'
 import type { SyncEvent } from '@/types/api'
 import type { RemotePeerPendingRequests } from './remotePairingPendingRequests'
 import { parsePeerMessage } from './remotePairingRpc'
@@ -8,7 +8,7 @@ export function handleRemotePeerChannelMessage(options: {
     pendingRequests: RemotePeerPendingRequests
     syncListeners: ReadonlySet<(event: SyncEvent) => void>
     terminalListeners: ReadonlySet<(event: PairingPeerTerminalEventPayload) => void>
-    onHeartbeat?: () => void
+    onHeartbeat?: (heartbeat: PairingPeerHeartbeat) => void
 }): void {
     if (typeof options.data !== 'string') {
         return
@@ -19,7 +19,7 @@ export function handleRemotePeerChannelMessage(options: {
         return
     }
     if (message.kind === 'heartbeat') {
-        options.onHeartbeat?.()
+        options.onHeartbeat?.(message)
         return
     }
     if (message.kind === 'event') {

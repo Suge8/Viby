@@ -1,17 +1,19 @@
 import type { PairingReconnectRequest } from '@viby/protocol'
 import {
+    getBrowserStorage,
     readBrowserStorageItem,
     readBrowserStorageItemOrThrow,
     removeBrowserStorageItem,
     writeBrowserStorageJson,
 } from '@/lib/browserStorage'
 import {
+    readAllAppCacheRecords,
     readAppCacheRecord,
     readAppCacheRecordOrThrow,
     removeAppCacheRecord,
     writeAppCacheRecord,
 } from '@/lib/storage/appCacheDb'
-import { APP_CACHE_STORES, getPairingDeviceStorageKey } from '@/lib/storage/storageRegistry'
+import { APP_CACHE_STORES, getPairingDeviceStorageKey, LOCAL_STORAGE_KEYS } from '@/lib/storage/storageRegistry'
 
 type PairingDeviceIdentity = {
     privateKey: CryptoKey
@@ -25,6 +27,7 @@ type LegacyPairingDeviceIdentity = {
 
 const DEVICE_KEY_INDEX_VERSION = 1
 const DEVICE_KEY_INDEX_STORE = 'indexeddb'
+const DEVICE_KEY_SUFFIX = ':device-key'
 
 function encodeBase64Url(bytes: Uint8Array): string {
     let binary = ''
@@ -150,6 +153,29 @@ async function createIdentity(pairingId: string): Promise<PairingDeviceIdentity>
 
 export async function loadCachedPairingDeviceIdentity(pairingId: string): Promise<PairingDeviceIdentity | null> {
     return await readCachedIdentity(pairingId, true)
+}
+
+function listLegacyPairingDeviceIds(): string[] {
+    const storage = getBrowserStorage('local')
+    if (!storage) return []
+    const ids: string[] = []
+    for (let index = 0; index < storage.length; index += 1) {
+        const key = storage.key(index)
+        if (!key?.startsWith(LOCAL_STORAGE_KEYS.pairingDevicePrefix) || !key.endsWith(DEVICE_KEY_SUFFIX)) continue
+        ids.push(key.slice(LOCAL_STORAGE_KEYS.pairingDevicePrefix.length, -DEVICE_KEY_SUFFIX.length))
+    }
+    return ids
+}
+
+export async function listCachedPairingDeviceIds(): Promise<string[]> {
+    const ids = new Set<string>()
+    for (const [pairingId] of await readAllAppCacheRecords(APP_CACHE_STORES.pairingDeviceKeys)) {
+        ids.add(pairingId)
+    }
+    for (const pairingId of listLegacyPairingDeviceIds()) {
+        ids.add(pairingId)
+    }
+    return [...ids]
 }
 
 export async function loadPairingDeviceIdentity(pairingId: string): Promise<PairingDeviceIdentity> {

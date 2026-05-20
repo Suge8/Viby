@@ -3,32 +3,36 @@ import {
     getRemoteConnectingFallbackPhase,
     getRemoteConnectingPhaseProgress,
     getRemoteConnectingPhaseStepKey,
-    getRemoteReconnectPhaseStepKey,
 } from './remoteConnectingPhase'
 
 describe('remoteConnectingPhase', () => {
     it('keeps progress monotonically increasing across phases', () => {
-        const pairing = getRemoteConnectingPhaseProgress('pairing')
-        const verify = getRemoteConnectingPhaseProgress('verify')
-        const finalizing = getRemoteConnectingPhaseProgress('finalizing')
-        expect(pairing).toBeGreaterThan(0)
-        expect(verify).toBeGreaterThan(pairing)
-        expect(finalizing).toBeGreaterThan(verify)
-        expect(finalizing).toBeLessThan(1)
+        const phases = [
+            'opening-app',
+            'recovering-device',
+            'authenticating',
+            'verifying-code',
+            'opening-relay',
+            'connecting-computer',
+            'loading-workspace',
+        ] as const
+        const progress = phases.map(getRemoteConnectingPhaseProgress)
+        expect(progress[0]).toBeGreaterThan(0)
+        for (let index = 1; index < progress.length; index += 1) {
+            expect(progress[index]).toBeGreaterThan(progress[index - 1])
+        }
+        expect(progress.at(-1)).toBeLessThan(1)
     })
 
     it('maps each phase to a step key', () => {
-        expect(getRemoteConnectingPhaseStepKey('pairing')).toBe('remotePairing.connecting.phase.pairing')
-        expect(getRemoteConnectingPhaseStepKey('verify')).toBe('remotePairing.connecting.phase.verify')
-        expect(getRemoteConnectingPhaseStepKey('finalizing')).toBe('remotePairing.connecting.phase.finalizing')
+        expect(getRemoteConnectingPhaseStepKey('opening-app')).toBe('remotePairing.connecting.phase.openingApp')
+        expect(getRemoteConnectingPhaseStepKey('verifying-code')).toBe('remotePairing.connecting.phase.verifyingCode')
+        expect(getRemoteConnectingPhaseStepKey('loading-workspace')).toBe(
+            'remotePairing.connecting.phase.loadingWorkspace'
+        )
     })
 
-    it('uses reconnect-specific copy only for finalizing', () => {
-        expect(getRemoteReconnectPhaseStepKey('pairing')).toBe('remotePairing.connecting.phase.pairing')
-        expect(getRemoteReconnectPhaseStepKey('finalizing')).toBe('remotePairing.reconnectNotice.phase.finalizing')
-    })
-
-    it('starts each attempt at pairing', () => {
-        expect(getRemoteConnectingFallbackPhase()).toBe('pairing')
+    it('starts each attempt at the app opening phase', () => {
+        expect(getRemoteConnectingFallbackPhase()).toBe('opening-app')
     })
 })

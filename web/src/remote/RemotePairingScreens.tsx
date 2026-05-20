@@ -51,10 +51,6 @@ export function RemotePairingCodeScreen(props: { onSubmit: (code: string) => voi
     )
 }
 
-export function RemotePairingConnectingScreen(props: { phase: RemoteConnectingPhase }): JSX.Element {
-    return <RemoteConnectingScreen phase={props.phase} />
-}
-
 export function RemotePairingStatusScreen(props: {
     message: string | null
     onRetry?: () => void
@@ -63,7 +59,7 @@ export function RemotePairingStatusScreen(props: {
     const { t } = useTranslation()
 
     if (!props.message) {
-        return <RemoteConnectingScreen phase={props.phase ?? 'pairing'} />
+        return <RemoteConnectingScreen phase={props.phase ?? 'opening-app'} />
     }
 
     return (

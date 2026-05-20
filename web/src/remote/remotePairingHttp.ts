@@ -73,13 +73,22 @@ export function isInvalidStoredPairingCredential(error: RemotePairingHttpError):
 }
 
 export function readRemotePairingId(pathname: string, search = ''): string | null {
+    return (
+        readRemotePairingPathId(pathname) ??
+        (hasPairingWorkspaceIntent(pathname, search) ? readStoredRemotePairingId() : null)
+    )
+}
+
+export function readRemotePairingPathId(pathname: string): string | null {
     const match = /^\/p\/([^/?#]+)$/.exec(pathname)
     if (match?.[1]) {
         return decodeURIComponent(match[1])
     }
-    return hasPairingWorkspaceIntent(pathname, search)
-        ? readBrowserStorageItem('local', LOCAL_STORAGE_KEYS.remoteActivePairing)
-        : null
+    return null
+}
+
+export function readStoredRemotePairingId(): string | null {
+    return readBrowserStorageItem('local', LOCAL_STORAGE_KEYS.remoteActivePairing)
 }
 
 export function rememberRemotePairingId(pairingId: string): void {
@@ -102,18 +111,10 @@ export function getPairingTicketFromLocation(): string | null {
     return getHashParam('ticket')
 }
 
-// Handoff is delivered through the manifest `start_url` query parameter
-// because iOS WebKit standalone PWAs strip the URL fragment from the launch
-// URL on cold start, leaving any fragment-based handoff invisible to the
-// React app. Older PWAs installed during the fragment-based experiment still
-// launch with `#handoff=...`, so fragment stays as a back-compat read.
 export function getPairingHandoffTicketFromLocation(): string | null {
     return getSearchParam(PAIRING_PWA_HANDOFF_PARAM) ?? getHashParam(PAIRING_PWA_HANDOFF_PARAM)
 }
 
-// The URL fragment only ever carries one-time launch secrets (claim ticket or
-// PWA handoff); both have no meaning after consumption. We drop the entire
-// fragment and strip any handoff query param while preserving unrelated query.
 export function scrubPairingLaunchSecretFromUrl(): void {
     const searchParams = new URLSearchParams(window.location.search)
     searchParams.delete(PAIRING_PWA_HANDOFF_PARAM)

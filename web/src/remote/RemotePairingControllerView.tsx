@@ -1,7 +1,6 @@
 import { type JSX } from 'react'
 import { AppInstallPromptLayer } from '@/components/AppInstallPromptLayer'
 import { useTranslation } from '@/lib/use-translation'
-import { RemotePairingHydrateSkeleton } from '@/remote/RemotePairingHydrateSkeleton'
 import type { RemotePairingReadyConnection } from '@/remote/RemotePairingReadyShell'
 import { RemotePairingReadyShell } from '@/remote/RemotePairingReadyShell'
 import { RemotePairingCodeScreen, RemotePairingStatusScreen } from '@/remote/RemotePairingScreens'
@@ -22,25 +21,23 @@ export function RemotePairingControllerView(props: ControllerViewProps): JSX.Ele
     const { activeReady, state } = props
     const { t } = useTranslation()
     if (activeReady) {
-        if (!props.pathname.startsWith('/sessions')) {
-            return <RemotePairingStatusScreen message={null} phase="pairing" />
-        }
+        const readyPathname = props.pathname.startsWith('/sessions') ? props.pathname : '/sessions'
         return (
             <>
                 <RemotePairingReadyShell
                     enableRuntime={state.kind === 'running'}
                     interactionBlocked={props.interactionBlocked}
-                    pathname={props.pathname}
+                    pathname={readyPathname}
                     ready={activeReady}
                 />
                 {props.installPromptVisible ? <AppInstallPromptLayer /> : null}
             </>
         )
     }
-    if (state.kind === 'hydrating') return <RemotePairingHydrateSkeleton />
+    if (state.kind === 'hydrating') return <RemotePairingStatusScreen message={null} phase={state.phase} />
     if (state.kind === 'first-pairing') {
         return state.submitting ? (
-            <RemotePairingStatusScreen message={null} phase="verify" />
+            <RemotePairingStatusScreen message={null} phase="verifying-code" />
         ) : (
             <RemotePairingCodeScreen onSubmit={props.onVerify} submitting={false} />
         )
@@ -51,7 +48,7 @@ export function RemotePairingControllerView(props: ControllerViewProps): JSX.Ele
         <RemotePairingStatusScreen
             message={spec.messageKey ? t(spec.messageKey) : null}
             onRetry={spec.retry ? props.onRetry : undefined}
-            phase="pairing"
+            phase="recovering-device"
         />
     )
 }

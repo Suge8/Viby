@@ -14,14 +14,14 @@ describe('RemotePairingScreens', () => {
 
         expect(await screen.findByRole('heading', { name: 'Connecting to your computer' })).toBeInTheDocument()
         expect(screen.getByRole('progressbar')).toBeInTheDocument()
-        expect(screen.getByText('Pairing')).toBeInTheDocument()
+        expect(screen.getByText('Waking Viby')).toBeInTheDocument()
         expect(screen.queryByRole('button', { name: 'Reconnect' })).not.toBeInTheDocument()
     })
 
     it('renders the connecting surface with the active phase step', async () => {
-        renderWithI18n(<RemotePairingStatusScreen message={null} phase="finalizing" />)
+        renderWithI18n(<RemotePairingStatusScreen message={null} phase="loading-workspace" />)
 
-        expect(screen.getByText('Almost there')).toBeInTheDocument()
+        expect(screen.getByText('Putting your sessions where you left them')).toBeInTheDocument()
     })
 
     it('renders retryable errors with one explicit retry action', async () => {

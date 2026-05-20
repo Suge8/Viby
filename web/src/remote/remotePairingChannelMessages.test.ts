@@ -21,7 +21,7 @@ describe('handleRemotePeerChannelMessage', () => {
             terminalListeners: new Set(),
             onHeartbeat,
         })
-        expect(onHeartbeat).toHaveBeenCalledOnce()
+        expect(onHeartbeat).toHaveBeenCalledWith({ kind: 'heartbeat' })
         expect(pending.resolveResponse).not.toHaveBeenCalled()
     })
 })

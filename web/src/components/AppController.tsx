@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useLocation, useRouter } from '@tanstack/react-router'
 import { hasPairingWorkspaceIntent } from '@viby/protocol'
-import { type ComponentProps, type JSX, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { type ComponentProps, type JSX, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
     AppReadyShell,
     createReadyAppSession,
@@ -19,7 +19,7 @@ import { getAppViewportRoute, isUnauthorizedAuthError } from '@/lib/appShellPres
 import { requireHubUrlForLogin } from '@/lib/runtime-config'
 import { RemotePairingController } from '@/remote/RemotePairingController'
 import { RemotePwaBootstrap } from '@/remote/RemotePwaBootstrap'
-import { readRemotePairingId } from '@/remote/remotePairingHttp'
+import { readRemotePairingPathId, readStoredRemotePairingId } from '@/remote/remotePairingHttp'
 
 const REQUIRE_SERVER_URL = requireHubUrlForLogin()
 const AUTH_QUERY_PARAM_KEYS = ['hub', 'token'] as const
@@ -48,8 +48,9 @@ export function AppController(): JSX.Element | null {
     const locationHref = useLocation({ select: (location) => location.href })
     const router = useRouter()
     const locationSearch = new URL(locationHref, 'https://viby.local').search
-    const [remotePairingId, setRemotePairingId] = useState(() => readRemotePairingId(pathname, locationSearch))
+    const [remotePairingId, setRemotePairingId] = useState(() => readRemotePairingPathId(pathname))
     const hasRemoteWorkspaceIntent = hasPairingWorkspaceIntent(pathname, locationSearch)
+    const fallbackRemotePairingId = hasRemoteWorkspaceIntent ? readStoredRemotePairingId() : null
 
     useEffect(() => {
         initializeTheme()
@@ -57,11 +58,15 @@ export function AppController(): JSX.Element | null {
     useViewportInteractionGuards()
 
     useEffect(() => {
-        const nextPairingId = readRemotePairingId(pathname, locationSearch)
+        const nextPairingId = readRemotePairingPathId(pathname)
         if (nextPairingId) {
             setRemotePairingId(nextPairingId)
         }
-    }, [locationSearch, pathname])
+    }, [pathname])
+
+    const handleRemotePwaRecovered = useCallback((pairingId: string) => {
+        setRemotePairingId(pairingId)
+    }, [])
 
     const queryClient = useQueryClient()
     const appViewportRoute = getAppViewportRoute(pathname)
@@ -88,9 +93,8 @@ export function AppController(): JSX.Element | null {
     const rootSurface = displayAppSession ? 'app' : !authSource || Boolean(authError) ? 'login' : 'pending'
     const shouldFinalizeRootBootShell =
         !remotePairingId &&
-        (hasRemoteWorkspaceIntent ||
-            rootSurface === 'login' ||
-            (rootSurface === 'app' && appViewportRoute !== 'session-chat'))
+        !hasRemoteWorkspaceIntent &&
+        (rootSurface === 'login' || (rootSurface === 'app' && appViewportRoute !== 'session-chat'))
 
     useFinalizeBootShell(shouldFinalizeRootBootShell)
 
@@ -140,7 +144,7 @@ export function AppController(): JSX.Element | null {
         // bootstrap controller asks the broker to recover the pairing via
         // the signed manifest cookie before falling back to a re-scan
         // prompt, so the common case becomes a one-round-trip auto-recovery.
-        return <RemotePwaBootstrap />
+        return <RemotePwaBootstrap fallbackPairingId={fallbackRemotePairingId} onRecovered={handleRemotePwaRecovered} />
     }
 
     if (displayAppSession) {

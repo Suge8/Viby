@@ -1,3 +1,4 @@
+import { PAIRING_PWA_MANIFEST_PAIRING_PARAM } from '@viby/protocol'
 import { useEffect, useRef, useState } from 'react'
 import { reportWebRuntimeError } from '@/lib/runtimeDiagnostics'
 import { createRemotePwaHandoff } from '@/remote/remotePairingHttp'
@@ -8,26 +9,39 @@ import { createRemotePwaHandoff } from '@/remote/remotePairingHttp'
 // expected by the broker and avoids stacking refreshes during normal use.
 const HANDOFF_REFRESH_INTERVAL_MS = 5 * 60 * 1_000
 
+const MANIFEST_LINK_SELECTOR = 'link[rel="manifest"]'
+const DEFAULT_MANIFEST_HREF = '/manifest.webmanifest'
+
 // The PWA install affordance must stay hidden until the warmup owner has
 // completed at least one authenticated round-trip with the broker, because
-// that round-trip is what sets the signed manifest cookie the server reads
-// when iOS Safari fetches `/manifest.webmanifest` at "Add to Home Screen".
+// that round-trip sets the signed manifest cookie and proves the current
+// pairing is installable.
 export type PwaHandoffStatus = 'idle' | 'preparing' | 'ready' | 'failed'
 
+function bindPairingManifestLink(pairingId: string): () => void {
+    const link = document.querySelector<HTMLLinkElement>(MANIFEST_LINK_SELECTOR)
+    if (!link) return () => undefined
+
+    const previousHref = link.getAttribute('href') ?? DEFAULT_MANIFEST_HREF
+    const nextUrl = new URL(previousHref, window.location.origin)
+    nextUrl.pathname = nextUrl.pathname || DEFAULT_MANIFEST_HREF
+    nextUrl.searchParams.set(PAIRING_PWA_MANIFEST_PAIRING_PARAM, pairingId)
+    link.setAttribute('href', `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`)
+
+    return () => {
+        if (link.isConnected) link.setAttribute('href', previousHref)
+    }
+}
+
 /**
- * Owns the lifecycle of the broker-side pairing manifest cookie while the
- * remote pairing controller is in the `ready` state. Each authenticated
- * round-trip refreshes a signed HttpOnly cookie that the broker reads when
- * iOS Safari fetches `/manifest.webmanifest` at "Add to Home Screen" time.
- * The manifest endpoint then issues a one-shot handoff ticket inline and
- * returns a personalized `start_url`, so the workspace tab no longer needs
- * to coordinate the handoff through JS DOM mutation or Service Worker
- * interception — both of which iOS Safari can silently ignore.
+ * Owns the PWA install binding while the remote pairing controller is ready.
+ * The manifest URL carries the public pairing id, which survives standalone
+ * storage isolation; the cookie stays as a second channel for platforms that
+ * preserve it during the install flow. The broker mints the one-shot handoff
+ * only when the manifest is fetched.
  *
  * The status return value gates the install banner: until at least one
- * round-trip has succeeded, the cookie is missing and iOS Safari would only
- * read the unauthenticated fallback manifest, so the install affordance
- * stays unmounted.
+ * round-trip has succeeded, the install affordance stays unmounted.
  */
 export function useRemotePairingPwaHandoffWarmup(props: { pairingId: string; active: boolean }): PwaHandoffStatus {
     const inFlightRef = useRef<Promise<unknown> | null>(null)
@@ -50,6 +64,7 @@ export function useRemotePairingPwaHandoffWarmup(props: { pairingId: string; act
         }
         const generation = generationRef.current
         let disposed = false
+        const restoreManifestLink = bindPairingManifestLink(props.pairingId)
 
         async function refresh(initial: boolean): Promise<void> {
             if (disposed || generation !== generationRef.current) return
@@ -79,6 +94,7 @@ export function useRemotePairingPwaHandoffWarmup(props: { pairingId: string; act
         return () => {
             disposed = true
             window.clearInterval(intervalId)
+            restoreManifestLink()
         }
     }, [props.active, props.pairingId])
 

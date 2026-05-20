@@ -21,10 +21,14 @@ export function useRemotePairingBoot(options: {
         let disposed = false
         rememberRemotePairingId(pairingId)
         async function boot(): Promise<void> {
+            setState({ kind: 'hydrating', phase: 'authenticating' })
             const retained = await readRetainedReady(pairingId)
             const { auth, token } = await resolveRemotePairingAuth(pairingId)
             if (disposed) return
-            if (isRemotePairingApproved(auth)) return void (await startSession(auth, token))
+            if (isRemotePairingApproved(auth)) {
+                setState({ kind: 'hydrating', phase: 'opening-relay' })
+                return void (await startSession(auth, token))
+            }
             setState(
                 retained ? { kind: 'fatal', errorKey: 'remotePairing.error.regenerateQr' } : pendingPairing(auth, token)
             )
