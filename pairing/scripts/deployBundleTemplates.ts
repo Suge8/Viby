@@ -207,6 +207,7 @@ cp pairing.env.example pairing.env
 PAIRING_PUBLIC_URL=https://pair.example.com
 PAIRING_REDIS_URL=redis://127.0.0.1:6379
 PAIRING_CREATE_TOKEN=replace-with-strong-secret
+PAIRING_MANIFEST_COOKIE_SECRET=replace-with-stable-random-secret
 PAIRING_STUN_URLS=stun:turn.example.com:3478
 PAIRING_TURN_URLS=turn:turn.example.com:3478?transport=udp,turn:turn.example.com:3478?transport=tcp,turns:turn.example.com:5349?transport=tcp
 PAIRING_TURN_STATIC_AUTH_SECRET=replace-with-coturn-static-auth-secret
@@ -260,6 +261,7 @@ sudo logrotate -d /etc/logrotate.d/viby-pairing
 
 - 不要把真实 \`pairing.env\` 提交回仓库
 - 服务器上的 \`pairing.env\` 权限建议设为 \`600\`
+- 生产必须固定 \`PAIRING_MANIFEST_COOKIE_SECRET\`，否则 broker 重启会让旧 PWA manifest cookie 失效
 - systemd 服务默认启用最小沙箱：只允许写 \`logs/\`，其余安装目录只读
 - 日志轮转使用 \`copytruncate\`，避免重启 broker 才释放旧日志文件
 - 保持默认 ICE 策略；不要在客户端强制 relay

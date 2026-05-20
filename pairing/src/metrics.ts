@@ -1,4 +1,8 @@
-import type { PairingTelemetrySample, PairingTelemetryTransport } from '@viby/protocol/pairing'
+import type {
+    PairingTelemetrySample,
+    PairingTelemetryTransport,
+    PairingTelemetryTransportMode,
+} from '@viby/protocol/pairing'
 
 export type PairingMetricName =
     | 'create_requests'
@@ -22,6 +26,8 @@ export type PairingMetricName =
 type TelemetryAggregate = {
     totalReports: number
     transportCounts: Record<PairingTelemetryTransport, number>
+    transportModeCounts: Record<PairingTelemetryTransportMode, number>
+    directBlockedReasonCounts: Record<string, number>
     maxRestartCount: number
     lastSampledAt: number | null
     roundTripTimeMsTotal: number
@@ -37,6 +43,13 @@ export class PairingMetrics {
             relay: 0,
             unknown: 0,
         },
+        transportModeCounts: {
+            'direct-webrtc': 0,
+            'turn-webrtc': 0,
+            'relay-wss': 0,
+            unknown: 0,
+        },
+        directBlockedReasonCounts: {},
         maxRestartCount: 0,
         lastSampledAt: null,
         roundTripTimeMsTotal: 0,
@@ -52,6 +65,11 @@ export class PairingMetrics {
     recordTelemetry(sample: PairingTelemetrySample): void {
         this.telemetry.totalReports += 1
         this.telemetry.transportCounts[sample.transport] += 1
+        this.telemetry.transportModeCounts[sample.transportMode] += 1
+        if (sample.directBlockedReason) {
+            this.telemetry.directBlockedReasonCounts[sample.directBlockedReason] =
+                (this.telemetry.directBlockedReasonCounts[sample.directBlockedReason] ?? 0) + 1
+        }
         this.telemetry.maxRestartCount = Math.max(this.telemetry.maxRestartCount, sample.restartCount)
         this.telemetry.lastSampledAt = sample.sampledAt
         if (typeof sample.currentRoundTripTimeMs === 'number') {
@@ -69,6 +87,8 @@ export class PairingMetrics {
             telemetry: {
                 totalReports: this.telemetry.totalReports,
                 transportCounts: this.telemetry.transportCounts,
+                transportModeCounts: this.telemetry.transportModeCounts,
+                directBlockedReasonCounts: this.telemetry.directBlockedReasonCounts,
                 maxRestartCount: this.telemetry.maxRestartCount,
                 lastSampledAt: this.telemetry.lastSampledAt,
                 averageRoundTripTimeMs:

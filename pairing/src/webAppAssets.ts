@@ -17,6 +17,9 @@ type CachedAsset = WebAppAsset & { path: string }
 
 const WEB_INDEX_FILE_NAME = 'web-index.html'
 const WEB_MANIFEST_FILE_NAME = 'manifest.webmanifest'
+const HASHED_ASSET_CACHE_CONTROL = 'public, max-age=31536000, immutable'
+const ROOT_ASSET_CACHE_CONTROL = 'public, max-age=3600'
+const SERVICE_WORKER_CACHE_CONTROL = 'no-cache'
 const WEB_ROOT_ASSET_FILE_NAMES = new Set([
     'agent-claude-favicon.png',
     'agent-claude.png',
@@ -108,6 +111,16 @@ function resolveSafeAssetPath(root: string, requestPath: string): string | null 
     return targetPath
 }
 
+function getAssetCacheControl(path: string, isHashedAsset: boolean): string {
+    if (isHashedAsset) {
+        return HASHED_ASSET_CACHE_CONTROL
+    }
+    if (path === '/sw.js') {
+        return SERVICE_WORKER_CACHE_CONTROL
+    }
+    return ROOT_ASSET_CACHE_CONTROL
+}
+
 export function readWebAppIndexHtml(options?: WebAppAssetOptions): string {
     if (options?.indexHtml) {
         return options.indexHtml
@@ -149,7 +162,7 @@ export function readWebAppAsset(requestPath: string, options?: WebAppAssetOption
     const asset = {
         body: toArrayBuffer(readFileSync(targetPath)),
         contentType: getContentType(targetPath),
-        cacheControl: isHashedAsset ? 'public, max-age=31536000, immutable' : 'public, max-age=3600',
+        cacheControl: getAssetCacheControl(safePath, isHashedAsset),
         path: targetPath,
     }
     assetCache.set(cacheKey, asset)

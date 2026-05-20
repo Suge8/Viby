@@ -25,6 +25,7 @@ describe('pairing config', () => {
                 PAIRING_TURN_URLS: 'turn:turn.example.com:3478?transport=udp,turn:turn.example.com:3478?transport=tcp',
                 PAIRING_TURN_STATIC_AUTH_SECRET: 'turn-secret',
                 PAIRING_TURN_CREDENTIAL_TTL_SECONDS: '900',
+                PAIRING_MANIFEST_COOKIE_SECRET: 'manifest-cookie-secret',
                 PAIRING_DISCONNECT_GRACE_SECONDS: '75',
             })
         ).toMatchObject({
@@ -33,6 +34,7 @@ describe('pairing config', () => {
             turnUrls: ['turn:turn.example.com:3478?transport=udp', 'turn:turn.example.com:3478?transport=tcp'],
             turnStaticAuthSecret: 'turn-secret',
             turnCredentialTtlSeconds: 900,
+            manifestCookieSecret: 'manifest-cookie-secret',
             disconnectGraceMs: 75_000,
         })
     })

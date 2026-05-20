@@ -137,6 +137,9 @@ describe('pairing http routes', () => {
 
         expect(html).toContain('id="root"')
         expect(html).toContain('/assets/index.js')
+        expect(response.headers.get('cache-control')).toBe('no-store')
+        expect(response.headers.get('pragma')).toBe('no-cache')
+        expect(response.headers.get('expires')).toBe('0')
         expect(response.headers.get('content-length')).toBe(String(Buffer.byteLength(html)))
         expect(html).not.toContain('id="sessionList"')
         expect(html).not.toContain('id="composer"')
@@ -157,6 +160,7 @@ describe('pairing http routes', () => {
         const launchHtml = await launchResponse.text()
         expect(launchHtml).toContain('id="root"')
         expect(launchHtml).not.toContain('rel="manifest"')
+        expect(launchResponse.headers.get('cache-control')).toBe('no-store')
         expect(launchResponse.headers.get('content-length')).toBe(String(Buffer.byteLength(launchHtml)))
     })
 
@@ -175,17 +179,33 @@ describe('pairing http routes', () => {
         expect(response.headers.get('content-length')).toBe(String(Buffer.byteLength('console.log("ok")')))
     })
 
+    it('serves the service worker as an unversioned asset that must revalidate', async () => {
+        const assetsRoot = mkdtempSync(join(tmpdir(), 'viby-pairing-http-sw-'))
+        tempRoots.push(assetsRoot)
+        writeFileSync(join(assetsRoot, 'web-index.html'), '<!doctype html>')
+        writeFileSync(join(assetsRoot, 'sw.js'), 'self.skipWaiting()')
+        const app = createTestApp({ webApp: { assetsRoot } })
+
+        const response = await app.request('/sw.js')
+
+        expect(response.status).toBe(200)
+        expect(response.headers.get('cache-control')).toBe('no-cache')
+        expect(response.headers.get('content-length')).toBe(String(Buffer.byteLength('self.skipWaiting()')))
+    })
+
     it('serves the Web app shell only for explicit remote workspace routes', async () => {
         const app = createTestApp()
 
         for (const path of [
             '/sessions?remote=1',
+            '/sessions?Remote=1',
             '/sessions/session-1?remote=1',
             '/sessions/session-1/files?remote=1',
         ]) {
             const response = await app.request(path)
 
             expect(response.status).toBe(200)
+            expect(response.headers.get('cache-control')).toBe('no-store')
             expect(await response.text()).toContain('id="root"')
         }
     })
@@ -657,12 +677,15 @@ describe('pairing http routes', () => {
         await app.request('/manifest.webmanifest', {
             headers: { 'user-agent': 'iPhone CriOS test', cookie: 'viby_pair_manifest=fake' },
         })
+        await app.request('/p/pairing-web?handoff=secret-ticket')
 
         expect(lines.some((line) => line.includes('/health'))).toBe(false)
         const manifestLine = lines.find((line) => line.includes('/manifest.webmanifest'))
         expect(manifestLine).toBeDefined()
         expect(manifestLine).toContain('cookie=yes')
         expect(manifestLine).toContain('iPhone CriOS test')
+        expect(lines.find((line) => line.includes('/p/pairing-web'))).toContain('handoff=%3Credacted%3E')
+        expect(lines.find((line) => line.includes('/p/pairing-web'))).not.toContain('secret-ticket')
     })
 
     it('serves the shared brand logo asset', async () => {
@@ -804,10 +827,13 @@ describe('pairing http routes', () => {
                 sample: {
                     source: 'desktop',
                     transport: 'direct',
+                    transportMode: 'direct-webrtc',
                     localCandidateType: 'host',
                     remoteCandidateType: 'srflx',
                     currentRoundTripTimeMs: 88,
                     restartCount: 2,
+                    routeRevision: 1,
+                    directBlockedReason: 'turn-candidate',
                     sampledAt: 1_700_000_000_500,
                 },
             }),
@@ -830,6 +856,12 @@ describe('pairing http routes', () => {
                 totalReports: 1,
                 transportCounts: {
                     direct: 1,
+                },
+                transportModeCounts: {
+                    'direct-webrtc': 1,
+                },
+                directBlockedReasonCounts: {
+                    'turn-candidate': 1,
                 },
                 maxRestartCount: 2,
                 averageRoundTripTimeMs: 88,
@@ -869,10 +901,13 @@ describe('pairing http routes', () => {
                 sample: {
                     source: 'desktop',
                     transport: 'direct',
+                    transportMode: 'direct-webrtc',
                     localCandidateType: 'host',
                     remoteCandidateType: 'host',
                     currentRoundTripTimeMs: 12,
                     restartCount: 0,
+                    routeRevision: 0,
+                    directBlockedReason: null,
                     sampledAt: 1_700_000_000_500,
                 },
             }),

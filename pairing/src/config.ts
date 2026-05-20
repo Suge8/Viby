@@ -20,6 +20,7 @@ const envSchema = z.object({
     PAIRING_TURN_URLS: z.string().optional(),
     PAIRING_TURN_STATIC_AUTH_SECRET: z.string().optional(),
     PAIRING_TURN_CREDENTIAL_TTL_SECONDS: z.string().optional(),
+    PAIRING_MANIFEST_COOKIE_SECRET: z.string().optional(),
     PAIRING_REDIS_URL: z.string().optional(),
     PAIRING_CREATE_TOKEN: z.string().optional(),
     PAIRING_CREATE_LIMIT_PER_MINUTE: z.string().optional(),
@@ -40,6 +41,7 @@ export interface PairingBrokerConfig {
     turnUrls: string[]
     turnStaticAuthSecret: string | null
     turnCredentialTtlSeconds: number
+    manifestCookieSecret: string | null
     redisUrl: string | null
     createToken: string | null
     createLimitPerMinute: number
@@ -101,6 +103,7 @@ export function readPairingBrokerConfig(env: Record<string, string | undefined> 
             parsed.PAIRING_TURN_CREDENTIAL_TTL_SECONDS,
             PAIRING_TURN_CREDENTIAL_TTL_SECONDS
         ),
+        manifestCookieSecret: trimNullable(parsed.PAIRING_MANIFEST_COOKIE_SECRET),
         redisUrl: trimNullable(parsed.PAIRING_REDIS_URL),
         createToken: trimNullable(parsed.PAIRING_CREATE_TOKEN),
         createLimitPerMinute: parsePositiveInt(parsed.PAIRING_CREATE_LIMIT_PER_MINUTE, 30),

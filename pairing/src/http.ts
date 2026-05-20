@@ -2,6 +2,7 @@ import {
     hasPairingWorkspaceIntent,
     PAIRING_NAKED_WORKSPACE_REDIRECT_URL,
     PAIRING_PWA_HANDOFF_PARAM,
+    PAIRING_PWA_MANIFEST_PAIRING_PARAM,
     PairingClaimRequestSchema,
     PairingCreateRequestSchema,
     PairingPwaHandoffClaimRequestSchema,
@@ -23,8 +24,19 @@ import { readWebAppAsset, readWebAppIndexHtml } from './webAppAssets'
 
 export type { PairingHttpOptions } from './httpTypes'
 
+const WEB_APP_HTML_CACHE_CONTROL = 'no-store'
+const SENSITIVE_LOG_SEARCH_PARAMS = new Set(['handoff', 'ticket', 'token'])
+
 function getRequestSearch(url: string): string {
     return new URL(url, 'https://pairing.local').search
+}
+
+function getSafeRequestSearch(url: string): string {
+    const parsed = new URL(url, 'https://pairing.local')
+    for (const key of Array.from(parsed.searchParams.keys())) {
+        if (SENSITIVE_LOG_SEARCH_PARAMS.has(key.toLowerCase())) parsed.searchParams.set(key, '<redacted>')
+    }
+    return parsed.search
 }
 
 function serveWorkspaceApp(path: string, search: string): boolean {
@@ -59,7 +71,7 @@ function redirectNakedWorkspace(c: Context): Response {
 // to that pairing; the desktop device list surfaces every binding so the
 // owner can revoke unexpected installs.
 function injectPairingManifestLink(html: string, pairingId: string): string {
-    const params = new URLSearchParams({ pairing: pairingId })
+    const params = new URLSearchParams({ [PAIRING_PWA_MANIFEST_PAIRING_PARAM]: pairingId })
     return html.replace(/<link rel="manifest"([^>]*?) href="([^"]+)"/, (match, attrs, href) => {
         const url = href.includes('?') ? `${href}&${params.toString()}` : `${href}?${params.toString()}`
         return `<link rel="manifest"${attrs} href="${url}"`
@@ -85,7 +97,12 @@ function serveWebAppHtml(
         : page.pairingId
           ? injectPairingManifestLink(baseHtml, page.pairingId)
           : baseHtml
-    return c.html(html, 200, { 'content-length': String(Buffer.byteLength(html)) })
+    return c.html(html, 200, {
+        'cache-control': WEB_APP_HTML_CACHE_CONTROL,
+        'content-length': String(Buffer.byteLength(html)),
+        expires: '0',
+        pragma: 'no-cache',
+    })
 }
 
 export function createPairingApp(options: PairingHttpOptions): Hono {
@@ -101,7 +118,7 @@ export function createPairingApp(options: PairingHttpOptions): Hono {
         if (c.req.path === '/health' || c.req.path === '/ready') return
         const logger = options.logger ?? console
         logger.info?.(
-            `[Pairing] req ${c.req.method} ${c.req.path}${new URL(c.req.url, 'https://pairing.local').search} -> ${c.res.status} (${Date.now() - startedAt}ms) cookie=${c.req.header('cookie') ? 'yes' : 'no'} ua=${c.req.header('user-agent')?.slice(0, 80) ?? ''}`
+            `[Pairing] req ${c.req.method} ${c.req.path}${getSafeRequestSearch(c.req.url)} -> ${c.res.status} (${Date.now() - startedAt}ms) cookie=${c.req.header('cookie') ? 'yes' : 'no'} ua=${c.req.header('user-agent')?.slice(0, 80) ?? ''}`
         )
     })
 

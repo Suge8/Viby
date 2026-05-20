@@ -15,6 +15,10 @@ import { shouldBufferPairingTunnelMessage } from './wsBufferPolicy'
 // window still has a valid cookie when the user opens the share sheet.
 const PAIRING_MANIFEST_COOKIE_TTL_SECONDS = 30 * 60
 
+function encodeManifestCookieSecret(secret: string | null): Uint8Array | undefined {
+    return secret ? new TextEncoder().encode(secret) : undefined
+}
+
 export interface PairingRuntime {
     app: ReturnType<typeof createPairingApp>
     websocket: ReturnType<typeof createBunWebSocket>['websocket']
@@ -54,7 +58,9 @@ export async function createPairingRuntime(options: CreatePairingRuntimeOptions)
     const { upgradeWebSocket, websocket } = createBunWebSocket()
     const rateLimiter = new PairingRateLimiter()
     const metrics = new PairingMetrics(options.now?.() ?? Date.now())
-    const manifestCookieSigner = createPairingManifestCookieSigner()
+    const manifestCookieSigner = createPairingManifestCookieSigner({
+        secret: encodeManifestCookieSecret(options.manifestCookieSecret),
+    })
 
     const app = createPairingApp({
         store: storeLease.store,

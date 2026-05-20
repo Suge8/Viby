@@ -10,9 +10,8 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
  *
  * Cookie value format: `<pairingId>.<expiresAt>.<hmac>` where hmac is
  * HMAC-SHA256(`<pairingId>.<expiresAt>`, secret) base64url-encoded. The
- * secret lives in process memory; restarting the broker invalidates every
- * outstanding cookie, which is fine because the workspace controller
- * re-issues the cookie automatically on the next 5-minute rotation.
+ * production secret comes from config so installed PWA entries survive broker
+ * restarts. Tests and local dev may omit it and use an in-process secret.
  */
 export const PAIRING_MANIFEST_COOKIE_NAME = 'viby_pair_manifest'
 const PAIRING_ID_PATTERN = /^[A-Za-z0-9_-]+$/
