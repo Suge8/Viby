@@ -8,13 +8,14 @@ import { PAIRING_LINK_SAMPLE_STALE_MS } from './pairingTiming'
 
 describe('buildPairingDeviceLinkStatus', () => {
     it('reports direct transport with latency when bridge is ready and stats land direct', () => {
+        const sampledAt = Date.now()
         expect(
             buildPairingDeviceLinkStatus({
                 channel: 'scan',
                 active: true,
                 bridge: {
                     phase: 'ready',
-                    stats: { transport: 'direct', currentRoundTripTimeMs: 28 },
+                    stats: { transport: 'direct', currentRoundTripTimeMs: 28, sampledAt },
                 },
             })
         ).toEqual({ phase: 'direct', title: '点对点直连 · 28ms', tone: 'success', latencyMs: 28 })
@@ -42,13 +43,14 @@ describe('buildPairingDeviceLinkStatus', () => {
     })
 
     it('reports relay transport with latency when stats land on TURN', () => {
+        const sampledAt = Date.now()
         expect(
             buildPairingDeviceLinkStatus({
                 channel: 'scan',
                 active: true,
                 bridge: {
                     phase: 'ready',
-                    stats: { transport: 'relay', currentRoundTripTimeMs: 120 },
+                    stats: { transport: 'relay', currentRoundTripTimeMs: 120, sampledAt },
                 },
             })
         ).toEqual({ phase: 'relay', title: '安全中转 · 120ms', tone: 'warning', latencyMs: 120 })
