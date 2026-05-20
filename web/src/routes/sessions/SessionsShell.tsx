@@ -9,6 +9,7 @@ import { useSessions } from '@/hooks/queries/useSessions'
 import { useDesktopSessionsLayout } from '@/hooks/useDesktopSessionsLayout'
 import { useFinalizeBootShell } from '@/hooks/useFinalizeBootShell'
 import { useAppContext } from '@/lib/app-context'
+import { runPreloadedNavigation } from '@/lib/navigationTransition'
 import { useNoticeCenter } from '@/lib/notice-center'
 import { getNoticePreset } from '@/lib/noticePresets'
 import { writeLastOpenedSessionId } from '@/lib/sessionEntryPreference'
@@ -18,10 +19,12 @@ import {
     SESSIONS_LIST_SCROLLER_TEST_ID,
 } from '@/lib/sessionUiContracts'
 import { useTranslation } from '@/lib/use-translation'
+import { useRemotePairingInteractionBlocked } from '@/remote/remotePairingInteractionState'
 import { SessionsMobileCreateButton } from '@/routes/sessions/components/SessionsMobileCreateButton'
 import { SessionsShellHeader } from '@/routes/sessions/components/SessionsShellHeader'
 import {
     AGENTS_ROUTE,
+    buildNewSessionDirectoryHref,
     isSessionsIndexPath,
     NEW_SESSION_ROUTE,
     resolveSessionRouteParam,
@@ -61,6 +64,7 @@ export function SessionsShell(): JSX.Element {
     const errorPreset = getNoticePreset('genericError', t)
     const { addToast } = useNoticeCenter()
     const { sessions, error, isLoading: areSessionsLoading } = useSessions(api)
+    const remoteInteractionBlocked = useRemotePairingInteractionBlocked()
 
     const sessionMatch = matchRoute({ to: '/sessions/$sessionId', fuzzy: true })
     const selectedSessionId = sessionMatch ? resolveSessionRouteParam(sessionMatch.sessionId) : null
@@ -82,7 +86,7 @@ export function SessionsShell(): JSX.Element {
     })
 
     useFinalizeBootShell(isSessionsIndex)
-    const { handleSelectSession, handleSessionIntent } = useSessionsShellPreloadOwner({
+    const { handleSelectSession, handleSessionIntent, openingSessionId } = useSessionsShellPreloadOwner({
         api,
         navigate,
         queryClient,
@@ -90,22 +94,37 @@ export function SessionsShell(): JSX.Element {
     })
 
     const handleNewSession = useCallback(() => {
-        runStaticRouteNavigation(navigate, NEW_SESSION_ROUTE, loadNewSessionRouteModule())
+        return runStaticRouteNavigation(navigate, NEW_SESSION_ROUTE, loadNewSessionRouteModule())
     }, [navigate])
+    const handleNewSessionInDirectory = useCallback(
+        (directory: string) => {
+            const recoveryHref = buildNewSessionDirectoryHref(directory)
+            return runPreloadedNavigation(
+                loadNewSessionRouteModule(),
+                () => {
+                    void navigate({
+                        to: NEW_SESSION_ROUTE,
+                        search: { directory },
+                    })
+                },
+                recoveryHref
+            )
+        },
+        [navigate]
+    )
 
     const handleOpenSettings = useCallback(() => {
-        runStaticRouteNavigation(navigate, SETTINGS_ROUTE, loadSettingsRouteModule())
+        return runStaticRouteNavigation(navigate, SETTINGS_ROUTE, loadSettingsRouteModule())
     }, [navigate])
     const handleOpenAgents = useCallback(() => {
-        runStaticRouteNavigation(navigate, AGENTS_ROUTE, loadAgentConfigRouteModule())
+        return runStaticRouteNavigation(navigate, AGENTS_ROUTE, loadAgentConfigRouteModule())
     }, [navigate])
 
     const handleSessionListActiveSectionChange = useCallback(
         (sectionId: 'running' | 'history') => {
             handleActiveSectionChange(sectionId)
-            void navigate(buildSessionsIndexNavigation(sectionId))
         },
-        [handleActiveSectionChange, navigate]
+        [handleActiveSectionChange]
     )
 
     useEffect(() => {
@@ -126,12 +145,17 @@ export function SessionsShell(): JSX.Element {
     }, [selectedSessionId])
 
     useEffect(() => {
-        if (!error || lastErrorToastRef.current === error) {
+        if (!error) {
+            lastErrorToastRef.current = null
+            return
+        }
+        if (remoteInteractionBlocked || lastErrorToastRef.current === error) {
+            lastErrorToastRef.current = error
             return
         }
         lastErrorToastRef.current = error
         addToast({ tone: errorPreset.tone, title: errorPreset.title, description: error })
-    }, [addToast, error, errorPreset.title, errorPreset.tone])
+    }, [addToast, error, errorPreset.title, errorPreset.tone, remoteInteractionBlocked])
 
     useEffect(() => {
         if (areSessionsLoading) {
@@ -193,6 +217,7 @@ export function SessionsShell(): JSX.Element {
                         activeSectionId={activeSectionId}
                         onActiveSectionChange={handleSessionListActiveSectionChange}
                         sessions={sessions}
+                        openingSessionId={openingSessionId}
                         selectedSessionId={selectedSessionId}
                         preferredSectionId={search.section}
                         api={api}
@@ -200,6 +225,7 @@ export function SessionsShell(): JSX.Element {
                             onSelect: handleSelectSession,
                             onSessionIntent: handleSessionIntent,
                             onNewSession: handleNewSession,
+                            onNewSessionInDirectory: handleNewSessionInDirectory,
                         }}
                     />
                 </div>
@@ -240,10 +266,10 @@ export function SessionsIndexPage(): JSX.Element {
     const { sessions } = useSessions(api)
     const isDesktopLayout = useDesktopSessionsLayout()
     const handleCreate = useCallback(() => {
-        runStaticRouteNavigation(navigate, NEW_SESSION_ROUTE, loadNewSessionRouteModule())
+        return runStaticRouteNavigation(navigate, NEW_SESSION_ROUTE, loadNewSessionRouteModule())
     }, [navigate])
     const handleOpenSettings = useCallback(() => {
-        runStaticRouteNavigation(navigate, SETTINGS_ROUTE, loadSettingsRouteModule())
+        return runStaticRouteNavigation(navigate, SETTINGS_ROUTE, loadSettingsRouteModule())
     }, [navigate])
 
     if (!isDesktopLayout && sessions.length > 0) {

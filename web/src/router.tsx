@@ -4,6 +4,7 @@ import { App } from '@/App'
 import type { LoadingStateKind } from '@/components/loading/loadingStatePresentation'
 import { RouteLoadingFallback } from '@/components/loading/RouteLoadingFallback'
 import { shouldRestoreWindowScroll } from '@/lib/appShellPresentation'
+import { getRouteScrollRestorationKey } from '@/lib/routeScrollRestoration'
 import { SessionsIndexPage, SessionsShell } from '@/routes/sessions/SessionsShell'
 import {
     loadAgentConfigRouteModule,
@@ -26,6 +27,10 @@ const AgentConfigPage = lazy(loadAgentConfigRouteModule)
 type SessionSearchTab = 'changes' | 'directories'
 type NewSessionMode = 'start' | 'recover-local'
 type SessionsSection = 'running' | 'history'
+type NewSessionSearch = {
+    mode?: NewSessionMode
+    directory?: string
+}
 type SessionFileSearch = {
     path: string
     staged?: boolean
@@ -50,6 +55,11 @@ function parseSessionSearchTab(search: Record<string, unknown>): SessionSearchTa
 
 function parseNewSessionMode(search: Record<string, unknown>): NewSessionMode | undefined {
     return search.mode === 'recover-local' ? 'recover-local' : undefined
+}
+
+function parseNewSessionDirectory(search: Record<string, unknown>): string | undefined {
+    const directory = typeof search.directory === 'string' ? search.directory.trim() : ''
+    return directory.length > 0 ? directory : undefined
 }
 
 function parseSessionsSection(search: Record<string, unknown>): SessionsSection | undefined {
@@ -223,9 +233,13 @@ const sessionFileRoute = createRoute({
 const newSessionRoute = createRoute({
     getParentRoute: () => sessionsRoute,
     path: 'new',
-    validateSearch: (search: Record<string, unknown>): { mode?: NewSessionMode } => {
+    validateSearch: (search: Record<string, unknown>): NewSessionSearch => {
         const mode = parseNewSessionMode(search)
-        return mode ? { mode } : {}
+        const directory = parseNewSessionDirectory(search)
+        return {
+            ...(mode ? { mode } : {}),
+            ...(directory ? { directory } : {}),
+        }
     },
     component: NewSessionRoutePageShell,
 })
@@ -260,6 +274,7 @@ export function createAppRouter(history?: RouterHistory) {
         routeTree,
         history,
         scrollRestoration: ({ location }) => shouldRestoreWindowScroll(location.pathname),
+        getScrollRestorationKey: getRouteScrollRestorationKey,
     })
 }
 

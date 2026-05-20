@@ -144,7 +144,7 @@ describe('navigationTransition', () => {
         expect(order).toEqual([])
 
         resolvePreload()
-        await task
+        await expect(task).resolves.toBe(true)
 
         expect(order).toEqual(['commit'])
         expect(commit).toHaveBeenCalledTimes(1)
@@ -154,7 +154,9 @@ describe('navigationTransition', () => {
         const commit = vi.fn()
         const { runNavigationTransitionAfterPreload } = await import('./navigationTransition')
 
-        await runNavigationTransitionAfterPreload(Promise.reject(new Error('preload failed')), commit)
+        await expect(
+            runNavigationTransitionAfterPreload(Promise.reject(new Error('preload failed')), commit)
+        ).resolves.toBe(true)
 
         expect(commit).toHaveBeenCalledTimes(1)
     })
@@ -166,11 +168,13 @@ describe('navigationTransition', () => {
         )
         const { consumePendingAppRecovery } = await import('./appRecovery')
 
-        await runNavigationTransitionAfterPreload(
-            Promise.reject(new Error('Failed to fetch dynamically imported module')),
-            commit,
-            { recoveryHref: '/sessions/session-1' }
-        )
+        await expect(
+            runNavigationTransitionAfterPreload(
+                Promise.reject(new Error('Failed to fetch dynamically imported module')),
+                commit,
+                { recoveryHref: '/sessions/session-1' }
+            )
+        ).resolves.toBe(true)
 
         expect(commit).toHaveBeenCalledTimes(1)
         expect(consumePendingAppRecovery()).toMatchObject({
@@ -197,7 +201,7 @@ describe('navigationTransition', () => {
         expect(readPendingNavigationRecoveryHref()).toBe('/sessions/session-1')
 
         resolvePreload()
-        await task
+        await expect(task).resolves.toBe(true)
 
         expect(readPendingNavigationRecoveryHref()).toBeNull()
     })
@@ -210,7 +214,7 @@ describe('navigationTransition', () => {
         const commit = vi.fn()
         const { runPreloadedNavigation, readPendingNavigationRecoveryHref } = await import('./navigationTransition')
 
-        runPreloadedNavigation(preload, commit, '/sessions/session-1/files')
+        const task = runPreloadedNavigation(preload, commit, '/sessions/session-1/files')
 
         expect(readPendingNavigationRecoveryHref()).toBe('/sessions/session-1/files')
 
@@ -219,6 +223,7 @@ describe('navigationTransition', () => {
         await vi.waitFor(() => {
             expect(commit).toHaveBeenCalledTimes(1)
         })
+        await expect(task).resolves.toBe(true)
         expect(readPendingNavigationRecoveryHref()).toBeNull()
     })
 
@@ -243,13 +248,13 @@ describe('navigationTransition', () => {
         })
 
         resolveSecond()
-        await secondTask
+        await expect(secondTask).resolves.toBe(true)
 
         expect(secondCommit).toHaveBeenCalledTimes(1)
         expect(firstCommit).not.toHaveBeenCalled()
 
         resolveFirst()
-        await firstTask
+        await expect(firstTask).resolves.toBe(false)
 
         expect(firstCommit).not.toHaveBeenCalled()
     })
@@ -269,7 +274,7 @@ describe('navigationTransition', () => {
 
         window.history.replaceState({}, '', '/sessions/new')
         resolvePreload()
-        await task
+        await expect(task).resolves.toBe(false)
 
         expect(commit).not.toHaveBeenCalled()
     })
@@ -290,7 +295,7 @@ describe('navigationTransition', () => {
         window.history.pushState({}, '', '/sessions/new')
         window.history.pushState({}, '', '/sessions')
         resolvePreload()
-        await task
+        await expect(task).resolves.toBe(false)
 
         expect(commit).not.toHaveBeenCalled()
     })

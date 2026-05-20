@@ -168,9 +168,7 @@ export default function TerminalPage(): ReactNode {
                 altActive={altActive}
                 ctrlActive={ctrlActive}
                 disabled={quickInputDisabled}
-                onPaste={() => {
-                    void handlePasteAction()
-                }}
+                onPaste={handlePasteAction}
                 onPress={handleQuickInput}
                 onToggleModifier={handleModifierToggle}
                 pasteLabel={t('button.paste')}

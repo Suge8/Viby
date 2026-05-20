@@ -243,7 +243,7 @@ export async function runNavigationTransitionAfterPreload(
     preload: PreloadedNavigationTask,
     commit: () => void,
     options: NavigationTransitionOptions = {}
-): Promise<void> {
+): Promise<boolean> {
     const navigationToken = Symbol('preloaded-navigation')
     latestPreloadedNavigationToken = navigationToken
     const recoveryToken = registerPendingNavigationRecovery(options.recoveryHref)
@@ -261,25 +261,26 @@ export async function runNavigationTransitionAfterPreload(
     }
 
     if (latestPreloadedNavigationToken !== navigationToken) {
-        return
+        return false
     }
 
     const currentSourceSnapshot = readNavigationSourceSnapshot()
     if (sourceSnapshot.visitId !== currentSourceSnapshot.visitId) {
-        return
+        return false
     }
 
     if (sourceSnapshot.href !== currentSourceSnapshot.href) {
-        return
+        return false
     }
 
     runNavigationTransition(commit, options)
+    return true
 }
 
 export function runPreloadedNavigation(
     preload: PreloadedNavigationTask,
     commit: () => void,
     recoveryHref: string
-): Promise<void> {
+): Promise<boolean> {
     return runNavigationTransitionAfterPreload(preload, commit, createNavigationTransitionOptions(recoveryHref))
 }

@@ -168,7 +168,7 @@ type TerminalQuickInputBarProps = {
     altActive: boolean
     ctrlActive: boolean
     disabled: boolean
-    onPaste: () => void
+    onPaste: () => unknown
     onPress: (sequence: string) => void
     onToggleModifier: (modifier: 'ctrl' | 'alt') => void
     pasteLabel: string

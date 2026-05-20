@@ -10,6 +10,7 @@ import { useNoticeCenter } from '@/lib/notice-center'
 import { getNoticePreset } from '@/lib/noticePresets'
 import { appendRealtimeTrace } from '@/lib/realtimeTrace'
 import { useTranslation } from '@/lib/use-translation'
+import { useRemotePairingInteractionBlocked } from '@/remote/remotePairingInteractionState'
 import {
     createSelectedSessionChatViewModel,
     type RetainedSessionChatSnapshot,
@@ -24,6 +25,7 @@ export default function SessionChatRoute(): React.JSX.Element {
     const errorPreset = getNoticePreset('genericError', t)
     const { sessionId: routeSessionId } = useParams({ from: '/sessions/$sessionId' })
     const retainedSnapshotRef = useRef<RetainedSessionChatSnapshot | null>(null)
+    const remoteInteractionBlocked = useRemotePairingInteractionBlocked()
 
     useEffect(() => {
         appendRealtimeTrace({
@@ -37,7 +39,7 @@ export default function SessionChatRoute(): React.JSX.Element {
     const navigate = useNavigate()
 
     useEffect(() => {
-        if (!sessionError) {
+        if (!sessionError || remoteInteractionBlocked) {
             return
         }
 
@@ -52,7 +54,7 @@ export default function SessionChatRoute(): React.JSX.Element {
             to: '/sessions',
             replace: true,
         })
-    }, [addToast, errorPreset.title, navigate, sessionError])
+    }, [addToast, errorPreset.title, navigate, remoteInteractionBlocked, sessionError])
 
     if (sessionError) {
         return <RouteLoadingFallback kind="workspace" testId="session-route-pending" />

@@ -1,6 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query'
 import type { useNavigate } from '@tanstack/react-router'
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ApiClient } from '@/api/client'
 import { runPreloadedNavigation } from '@/lib/navigationTransition'
 import {
@@ -30,8 +30,9 @@ type UseSessionsShellPreloadOwnerOptions = {
 }
 
 type UseSessionsShellPreloadOwnerResult = {
-    handleSelectSession: (sessionId: string) => void
+    handleSelectSession: (sessionId: string) => Promise<void> | undefined
     handleSessionIntent: (sessionId: string, source: SessionIntentSource) => void
+    openingSessionId: string | null
 }
 
 function buildSessionDetailIntentOptions(options: {
@@ -66,6 +67,8 @@ export function useSessionsShellPreloadOwner(
     options: UseSessionsShellPreloadOwnerOptions
 ): UseSessionsShellPreloadOwnerResult {
     const lastSessionIntentRef = useRef<ReturnType<typeof createSessionIntentRecord> | null>(null)
+    const [openingSessionId, setOpeningSessionId] = useState<string | null>(null)
+    const openingTokenRef = useRef<symbol | null>(null)
 
     const handleSessionIntent = useCallback(
         (sessionId: string, source: SessionIntentSource): void => {
@@ -93,12 +96,16 @@ export function useSessionsShellPreloadOwner(
     )
 
     const handleSelectSession = useCallback(
-        (sessionId: string): void => {
+        (sessionId: string): Promise<void> | undefined => {
             if (isSelectedSession(options.selectedSessionId, sessionId)) {
                 return
             }
 
-            runPreloadedNavigation(
+            const token = Symbol('session-opening')
+            openingTokenRef.current = token
+            setOpeningSessionId(sessionId)
+
+            return runPreloadedNavigation(
                 () =>
                     preloadSelectedSession({
                         api: options.api,
@@ -112,10 +119,24 @@ export function useSessionsShellPreloadOwner(
                     })
                 },
                 buildSessionHref(sessionId)
-            )
+            ).then((committed) => {
+                if (!committed && openingTokenRef.current === token) {
+                    openingTokenRef.current = null
+                    setOpeningSessionId(null)
+                }
+            })
         },
         [options.api, options.navigate, options.queryClient, options.selectedSessionId]
     )
+
+    useEffect(() => {
+        if (!openingSessionId || options.selectedSessionId !== openingSessionId) {
+            return
+        }
+
+        openingTokenRef.current = null
+        setOpeningSessionId(null)
+    }, [openingSessionId, options.selectedSessionId])
 
     useEffect(() => {
         return scheduleIdleTask(() => {
@@ -132,5 +153,6 @@ export function useSessionsShellPreloadOwner(
     return {
         handleSelectSession,
         handleSessionIntent,
+        openingSessionId,
     }
 }

@@ -131,8 +131,8 @@ export function runStaticRouteNavigation(
     navigate: ReturnType<typeof useNavigate>,
     route: StaticSessionsRoute,
     preload: Promise<unknown>
-): void {
-    runPreloadedNavigation(
+): Promise<boolean> {
+    return runPreloadedNavigation(
         preload,
         () => {
             void navigate({ to: route })

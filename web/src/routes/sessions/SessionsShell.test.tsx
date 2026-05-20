@@ -9,6 +9,7 @@ const useLocationMock = vi.fn()
 const useMatchRouteMock = vi.fn()
 const useSearchMock = vi.fn()
 const useSessionsMock = vi.fn()
+const remoteInteractionBlockedMock = vi.fn(() => false)
 const preloadSessionDetailCriticalRouteMock = vi.fn()
 const preloadSessionDetailRouteMock = vi.fn()
 const preloadSessionDetailIntentMock = vi.fn()
@@ -22,6 +23,7 @@ const queryClientMock = { prefetchQuery: vi.fn() }
 const runPreloadedNavigationMock = vi.fn()
 const runNavigationTransitionMock = vi.fn()
 const useFinalizeBootShellMock = vi.fn()
+const addToastMock = vi.fn()
 
 function createDeferred(): {
     promise: Promise<undefined>
@@ -54,6 +56,7 @@ vi.mock('@tanstack/react-query', () => ({
 
 vi.mock('@/components/SessionList', () => ({
     SessionList: (props: {
+        openingSessionId?: string | null
         actions: {
             onSelect: (sessionId: string) => void
             onSessionIntent?: (sessionId: string, source: 'focus' | 'hover' | 'press') => void
@@ -61,7 +64,7 @@ vi.mock('@/components/SessionList', () => ({
         }
         onActiveSectionChange?: (sectionId: 'running' | 'history') => void
     }) => (
-        <div data-testid="session-list">
+        <div data-testid="session-list" data-opening-session-id={props.openingSessionId ?? ''}>
             <button type="button" onClick={() => props.actions.onSessionIntent?.('session-1', 'hover')}>
                 preload-session
             </button>
@@ -141,11 +144,12 @@ vi.mock('@/lib/navigationTransition', () => ({
             await (typeof preload === 'function' ? preload() : preload)
         } catch {}
         commit()
+        return true
     },
 }))
 
 vi.mock('@/lib/notice-center', () => ({
-    useNoticeCenter: () => ({ addToast: vi.fn() }),
+    useNoticeCenter: () => ({ addToast: addToastMock }),
 }))
 
 vi.mock('@/lib/noticePresets', () => ({
@@ -159,6 +163,10 @@ vi.mock('@/lib/use-translation', () => ({
     useTranslation: () => ({
         t: (key: string) => key,
     }),
+}))
+
+vi.mock('@/remote/remotePairingInteractionState', () => ({
+    useRemotePairingInteractionBlocked: () => remoteInteractionBlockedMock(),
 }))
 
 describe('SessionsShell', () => {
@@ -195,6 +203,9 @@ describe('SessionsShell', () => {
         runPreloadedNavigationMock.mockReset()
         runNavigationTransitionMock.mockReset()
         useFinalizeBootShellMock.mockReset()
+        addToastMock.mockReset()
+        remoteInteractionBlockedMock.mockReset()
+        remoteInteractionBlockedMock.mockReturnValue(false)
         getNetworkInformationMock.mockReturnValue(null)
         shouldPreloadIdleSessionRoutesMock.mockReturnValue(false)
         useLocationMock.mockReturnValue('/sessions/session-1')
@@ -269,6 +280,7 @@ describe('SessionsShell', () => {
 
         fireEvent.click(screen.getByText('open-session'))
 
+        expect(screen.getByTestId('session-list')).toHaveAttribute('data-opening-session-id', 'session-1')
         expect(preloadSessionDetailCriticalRouteMock).toHaveBeenCalledWith({
             api: null,
             queryClient: queryClientMock,
@@ -295,6 +307,31 @@ describe('SessionsShell', () => {
                 to: '/sessions/$sessionId',
                 params: { sessionId: 'session-1' },
             })
+        })
+    })
+
+    it('keeps the selected card opening until the route selection catches up', async () => {
+        const deferred = createDeferred()
+        useLocationMock.mockReturnValue('/sessions')
+        useMatchRouteMock.mockReturnValue(false)
+        useSearchMock.mockReturnValue({ section: undefined })
+        preloadSessionDetailCriticalRouteMock.mockReturnValueOnce(deferred.promise)
+
+        const { rerender } = render(<SessionsShell />)
+
+        fireEvent.click(screen.getByText('open-session'))
+        expect(screen.getByTestId('session-list')).toHaveAttribute('data-opening-session-id', 'session-1')
+
+        deferred.resolve()
+        await waitFor(() => expect(navigateMock).toHaveBeenCalledTimes(1))
+        expect(screen.getByTestId('session-list')).toHaveAttribute('data-opening-session-id', 'session-1')
+
+        useLocationMock.mockReturnValue('/sessions/session-1')
+        useMatchRouteMock.mockReturnValue({ sessionId: 'session-1' })
+        rerender(<SessionsShell />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId('session-list')).toHaveAttribute('data-opening-session-id', '')
         })
     })
 
@@ -337,6 +374,33 @@ describe('SessionsShell', () => {
 
         expect(loadNewSessionRouteModuleMock).not.toHaveBeenCalled()
         expect(loadSettingsRouteModuleMock).not.toHaveBeenCalled()
+    })
+
+    it('suppresses stale session query toasts while remote reconnect owns the workspace', () => {
+        remoteInteractionBlockedMock.mockReturnValue(true)
+        useSessionsMock.mockReturnValue({
+            sessions: [],
+            error: 'session transport failed',
+        })
+
+        render(<SessionsShell />)
+
+        expect(addToastMock).not.toHaveBeenCalled()
+    })
+
+    it('shows session query errors outside remote reconnect', () => {
+        useSessionsMock.mockReturnValue({
+            sessions: [],
+            error: 'session load failed',
+        })
+
+        render(<SessionsShell />)
+
+        expect(addToastMock).toHaveBeenCalledWith({
+            tone: 'danger',
+            title: 'Something went wrong',
+            description: 'session load failed',
+        })
     })
 
     it('keeps explicit session navigation on the preloaded path', async () => {
@@ -569,17 +633,34 @@ describe('SessionsShell', () => {
         })
     })
 
-    it('clears the section search param when switching back to running', async () => {
+    it('keeps section tab switches local on the sessions index', () => {
+        useLocationMock.mockReturnValue('/sessions')
+        useMatchRouteMock.mockReturnValue(false)
         useSearchMock.mockReturnValue({ section: 'history' })
 
         render(<SessionsShell />)
 
         fireEvent.click(screen.getByText('show-running'))
 
+        expect(navigateMock).not.toHaveBeenCalled()
+    })
+
+    it('opens a session after a section switch without waiting for a tab URL replace', async () => {
+        useLocationMock.mockReturnValue('/sessions')
+        useMatchRouteMock.mockReturnValue(false)
+        useSearchMock.mockReturnValue({ section: undefined })
+
+        render(<SessionsShell />)
+
+        fireEvent.click(screen.getByText('show-history'))
+        expect(navigateMock).not.toHaveBeenCalled()
+
+        fireEvent.click(screen.getByText('open-session'))
+
         await waitFor(() => {
             expect(navigateMock).toHaveBeenCalledWith({
-                to: '/sessions',
-                replace: true,
+                to: '/sessions/$sessionId',
+                params: { sessionId: 'session-1' },
             })
         })
     })
