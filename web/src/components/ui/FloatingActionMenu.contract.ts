@@ -7,7 +7,7 @@ export type FloatingActionMenuAnchorPoint = {
 
 export const DEFAULT_FLOATING_ACTION_MENU_ANCHOR_POINT: Readonly<FloatingActionMenuAnchorPoint> = {
     x: 0,
-    y: 0
+    y: 0,
 }
 
 export type FloatingActionMenuItemTone = 'default' | 'danger'
@@ -16,7 +16,7 @@ export type FloatingActionMenuItem = {
     id: string
     label: string
     icon: ReactNode
-    onSelect: () => void
+    onSelect: () => unknown
     tone?: FloatingActionMenuItemTone
 }
 

@@ -28,7 +28,7 @@ type ActionButtonProps = {
     tone?: 'danger'
     loading?: boolean
     disabled: boolean
-    onClick: () => void
+    onClick: () => unknown
 }
 
 function ActionButton(props: ActionButtonProps): React.JSX.Element {
@@ -38,6 +38,8 @@ function ActionButton(props: ActionButtonProps): React.JSX.Element {
             variant={props.tone === 'danger' ? 'destructive' : 'secondary'}
             className="w-full"
             disabled={props.disabled}
+            pending={props.loading === true}
+            pendingIndicator="none"
             aria-busy={props.loading ? 'true' : 'false'}
             onClick={props.onClick}
         >
@@ -103,7 +105,7 @@ export function InteractivePermissionRequestPanel(props: InteractivePermissionRe
                             loading={loadingKey === 'approve'}
                             disabled={disabled}
                             onClick={() =>
-                                void run('approve', () =>
+                                run('approve', () =>
                                     props.api.approvePermission(props.session.id, props.request.id, {
                                         decision: 'approved',
                                     })
@@ -115,7 +117,7 @@ export function InteractivePermissionRequestPanel(props: InteractivePermissionRe
                             loading={loadingKey === 'approve-session'}
                             disabled={disabled}
                             onClick={() =>
-                                void run('approve-session', () =>
+                                run('approve-session', () =>
                                     props.api.approvePermission(props.session.id, props.request.id, {
                                         decision: 'approved_for_session',
                                     })
@@ -128,7 +130,7 @@ export function InteractivePermissionRequestPanel(props: InteractivePermissionRe
                             loading={loadingKey === 'abort'}
                             disabled={disabled}
                             onClick={() =>
-                                void run('abort', () =>
+                                run('abort', () =>
                                     props.api.denyPermission(props.session.id, props.request.id, { decision: 'abort' })
                                 )
                             }
@@ -141,9 +143,7 @@ export function InteractivePermissionRequestPanel(props: InteractivePermissionRe
                             loading={loadingKey === 'approve'}
                             disabled={disabled}
                             onClick={() =>
-                                void run('approve', () =>
-                                    props.api.approvePermission(props.session.id, props.request.id)
-                                )
+                                run('approve', () => props.api.approvePermission(props.session.id, props.request.id))
                             }
                         />
                         {canAllowAllEdits ? (
@@ -152,7 +152,7 @@ export function InteractivePermissionRequestPanel(props: InteractivePermissionRe
                                 loading={loadingKey === 'approve-edits'}
                                 disabled={disabled}
                                 onClick={() =>
-                                    void run('approve-edits', () =>
+                                    run('approve-edits', () =>
                                         props.api.approvePermission(props.session.id, props.request.id, 'acceptEdits')
                                     )
                                 }
@@ -164,7 +164,7 @@ export function InteractivePermissionRequestPanel(props: InteractivePermissionRe
                                 loading={loadingKey === 'approve-session'}
                                 disabled={disabled}
                                 onClick={() =>
-                                    void run('approve-session', () =>
+                                    run('approve-session', () =>
                                         props.api.approvePermission(props.session.id, props.request.id, {
                                             allowTools: [
                                                 buildPermissionSessionToolIdentifier(
@@ -183,7 +183,7 @@ export function InteractivePermissionRequestPanel(props: InteractivePermissionRe
                             loading={loadingKey === 'deny'}
                             disabled={disabled}
                             onClick={() =>
-                                void run('deny', () => props.api.denyPermission(props.session.id, props.request.id))
+                                run('deny', () => props.api.denyPermission(props.session.id, props.request.id))
                             }
                         />
                     </>

@@ -3,8 +3,8 @@ import type { ReactNode } from 'react'
 import type { ToolCallBlock } from '@/chat/types'
 import { CodeBlock } from '@/components/CodeBlock'
 import { DiffView } from '@/components/DiffView'
-import { FeatureRefreshIcon as RefreshIcon } from '@/components/featureIcons'
 import { ErrorIcon, LockIcon, SuccessIcon } from '@/components/icons'
+import { Spinner } from '@/components/Spinner'
 import { TextContent } from '@/components/TextContent'
 import { getToolPresentation } from '@/components/ToolCard/knownTools'
 import { getInputString, getInputStringAny, truncate } from '@/lib/toolInputUtils'
@@ -43,7 +43,7 @@ function TaskStateIcon(props: { state: ToolCallBlock['tool']['state'] }) {
     if (props.state === 'pending') {
         return <LockIcon className="h-4 w-4 text-amber-500" strokeWidth={2.05} />
     }
-    return <RefreshIcon className="h-4 w-4 animate-spin text-[var(--ds-accent-coral)]" strokeWidth={2.05} />
+    return <Spinner size="sm" label={null} className="text-[var(--ds-accent-coral)]" />
 }
 
 function getTaskSummaryChildren(block: ToolCallBlock): { visible: ToolCallBlock[]; remaining: number } | null {

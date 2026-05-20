@@ -194,7 +194,7 @@ export function InteractiveQuestionRequestPanel(props: InteractiveQuestionReques
                         {t('misc.next')}
                     </Button>
                 ) : (
-                    <Button type="button" disabled={loading} onClick={() => void handleSubmit()}>
+                    <Button type="button" disabled={loading} onClick={() => handleSubmit()}>
                         {loading ? t('misc.loading') : t('tool.submit')}
                     </Button>
                 )}

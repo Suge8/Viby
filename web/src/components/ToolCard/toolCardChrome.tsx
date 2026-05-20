@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useState } from 'react'
 import type { ToolCallBlock } from '@/chat/types'
-import { FeatureRefreshIcon as RefreshIcon } from '@/components/featureIcons'
 import { ChevronIcon, ErrorIcon, LockIcon, SuccessIcon } from '@/components/icons'
+import { Spinner } from '@/components/Spinner'
 import { truncate } from '@/lib/toolInputUtils'
 import { TOOL_SUBTITLE_TRUNCATE_LENGTH } from './toolCardRenderers'
 
@@ -40,7 +40,7 @@ export function StatusIcon(props: { state: ToolCallBlock['tool']['state'] }) {
     if (props.state === 'pending') {
         return <LockIcon className="h-3.5 w-3.5" strokeWidth={2.05} />
     }
-    return <RefreshIcon className="h-3.5 w-3.5 animate-spin" strokeWidth={2.1} />
+    return <Spinner size="sm" label={null} className="h-3.5 w-3.5 text-current" />
 }
 
 export function statusColorClass(state: ToolCallBlock['tool']['state']): string {

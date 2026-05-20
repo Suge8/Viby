@@ -101,6 +101,14 @@ function createSurfaceRef(): RefObject<HTMLDivElement | null> {
     return { current: element }
 }
 
+function createDeferred(): { promise: Promise<void>; resolve: () => void } {
+    let resolve!: () => void
+    const promise = new Promise<void>((done) => {
+        resolve = done
+    })
+    return { promise, resolve }
+}
+
 function createOwnerModel(options: {
     api: ApiClient
     session: ReturnType<typeof createTestSession>
@@ -199,6 +207,44 @@ describe('ActiveInteractiveRequestOwner', () => {
         expect(denyPermission).not.toHaveBeenCalled()
     })
 
+    it('keeps permission decisions single-flight while the request is pending', async () => {
+        const pending = createDeferred()
+        const approvePermission = vi.fn(() => pending.promise)
+        const api = {
+            approvePermission,
+            denyPermission: vi.fn(async () => undefined),
+        } as Partial<ApiClient> as ApiClient
+        const session = createTestSession({
+            id: 'session-2',
+            agentState: {
+                controlledByUser: false,
+                requests: {
+                    'permission-1': {
+                        tool: 'Bash',
+                        arguments: { cmd: 'ls -la' },
+                        createdAt: 10,
+                    },
+                },
+                completedRequests: {},
+            },
+        })
+
+        render(
+            <ActiveInteractiveRequestOwner surfaceRef={createSurfaceRef()} model={createOwnerModel({ api, session })} />
+        )
+
+        const approveButton = screen.getByRole('button', { name: 'Yes' })
+        fireEvent.click(approveButton)
+        fireEvent.click(approveButton)
+
+        expect(approvePermission).toHaveBeenCalledTimes(1)
+        expect(approveButton).toBeDisabled()
+        expect(approveButton).toHaveAttribute('aria-busy', 'true')
+
+        pending.resolve()
+        await waitFor(() => expect(approveButton).not.toBeDisabled())
+    })
+
     it('shows a centered plan execution prompt and switches to default mode before sending the implementation turn', async () => {
         const setCollaborationMode = vi.fn(async () => session)
         const onSend = vi.fn()
@@ -258,6 +304,74 @@ describe('ActiveInteractiveRequestOwner', () => {
 
         await waitFor(() => {
             expect(setCollaborationMode).toHaveBeenCalledWith('session-3', 'default')
+            expect(onSend).toHaveBeenCalledWith('Implement the plan.')
+        })
+    })
+
+    it('keeps plan execution single-flight while switching mode', async () => {
+        const pending = createDeferred()
+        const setCollaborationMode = vi.fn(() => pending.promise)
+        const onSend = vi.fn()
+        const api = {
+            setCollaborationMode,
+        } as unknown as ApiClient
+        const session = createTestSession({
+            id: 'session-3',
+            collaborationMode: 'plan',
+            active: true,
+            thinking: false,
+            agentState: {
+                controlledByUser: false,
+                requests: {},
+                completedRequests: {},
+            },
+        })
+        const messages: DecryptedMessage[] = [
+            {
+                id: 'user-1',
+                seq: 1,
+                localId: null,
+                createdAt: 10,
+                content: {
+                    role: 'user',
+                    content: { type: 'text', text: '开始计划' },
+                },
+            },
+            {
+                id: 'agent-1',
+                seq: 2,
+                localId: null,
+                createdAt: 20,
+                content: {
+                    role: 'agent',
+                    content: {
+                        type: 'codex',
+                        data: {
+                            type: 'message',
+                            message: '<proposed_plan>\n# Minimal plan\n\nRun a small smoke test.\n</proposed_plan>',
+                        },
+                    },
+                },
+            },
+        ]
+
+        render(
+            <ActiveInteractiveRequestOwner
+                surfaceRef={createSurfaceRef()}
+                model={createOwnerModel({ api, session, messages, onSend })}
+            />
+        )
+
+        const executeButton = screen.getByRole('button', { name: 'Execute this plan' })
+        fireEvent.click(executeButton)
+        fireEvent.click(executeButton)
+
+        expect(setCollaborationMode).toHaveBeenCalledTimes(1)
+        expect(executeButton).toBeDisabled()
+        expect(executeButton).toHaveAttribute('aria-busy', 'true')
+
+        pending.resolve()
+        await waitFor(() => {
             expect(onSend).toHaveBeenCalledWith('Implement the plan.')
         })
     })
