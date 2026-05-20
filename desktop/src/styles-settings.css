@@ -2,20 +2,6 @@
     .desktop-settings-page {
         --desktop-settings-action-gap: 12px;
         --desktop-settings-inline-gap: 10px;
-        --desktop-settings-toggle-height: 28px;
-        --desktop-settings-toggle-padding: 3px;
-        --desktop-settings-toggle-thumb: calc(
-            var(--desktop-settings-toggle-height) -
-            var(--desktop-settings-toggle-padding) *
-            2
-        );
-        --desktop-settings-toggle-width: calc(var(--desktop-settings-toggle-height) * 1.72);
-        --desktop-settings-toggle-travel: calc(
-            var(--desktop-settings-toggle-width) -
-            var(--desktop-settings-toggle-thumb) -
-            var(--desktop-settings-toggle-padding) *
-            2
-        );
 
         display: grid;
         align-content: start;
@@ -143,35 +129,35 @@
             inset 0 1px 0 rgba(255, 255, 255, 0.72);
     }
 
-    .desktop-settings-toggle {
+    .desktop-toggle {
         display: flex;
-        width: var(--desktop-settings-toggle-width);
-        height: var(--desktop-settings-toggle-height);
-        min-height: var(--desktop-settings-toggle-height);
+        width: var(--desktop-toggle-width);
+        height: var(--desktop-toggle-height);
+        min-height: var(--desktop-toggle-height);
         flex: 0 0 auto;
         align-items: center;
-        padding: var(--desktop-settings-toggle-padding);
+        padding: var(--desktop-toggle-padding);
         border-radius: 999px;
         background: #d9d6ce;
         box-shadow: inset 0 1px 2px rgba(31, 27, 20, 0.12);
         touch-action: manipulation;
     }
 
-    .desktop-shell[data-theme="dark"] .desktop-settings-toggle {
+    .desktop-shell[data-theme="dark"] .desktop-toggle {
         background: #3c3e34;
     }
 
-    .desktop-settings-toggle:disabled {
+    .desktop-toggle:disabled {
         opacity: 0.44;
     }
 
-    .desktop-settings-toggle.is-on:disabled {
+    .desktop-toggle.is-on:disabled {
         opacity: 1;
     }
 
-    .desktop-settings-toggle span {
-        width: var(--desktop-settings-toggle-thumb);
-        height: var(--desktop-settings-toggle-thumb);
+    .desktop-toggle span {
+        width: var(--desktop-toggle-thumb);
+        height: var(--desktop-toggle-thumb);
         border-radius: 999px;
         background: #ffffff;
         box-shadow: 0 4px 12px rgba(29, 24, 18, 0.18);
@@ -180,15 +166,15 @@
             transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
     }
 
-    .desktop-settings-toggle.is-on,
-    .desktop-shell[data-theme="dark"] .desktop-settings-toggle.is-on {
+    .desktop-toggle.is-on,
+    .desktop-shell[data-theme="dark"] .desktop-toggle.is-on {
         background: var(--desktop-success);
         box-shadow: inset 0 1px 2px rgba(18, 77, 45, 0.18);
     }
 
-    .desktop-settings-toggle.is-on span {
+    .desktop-toggle.is-on span {
         box-shadow: 0 4px 12px rgba(18, 77, 45, 0.2);
-        transform: translateX(var(--desktop-settings-toggle-travel));
+        transform: translateX(var(--desktop-toggle-travel));
     }
 
     .desktop-settings-update-actions {

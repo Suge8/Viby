@@ -146,6 +146,40 @@ export function StaggerItem(props: { children: ReactNode; className?: string; ro
     )
 }
 
+const PRESENCE_SWAP_VARIANTS: Variants = {
+    initial: { opacity: 0, y: 10, scale: 0.985 },
+    animate: {
+        opacity: 1,
+        y: 0,
+        scale: 1,
+        transition: { duration: MOTION_DURATIONS.item, ease: MOTION_EASE_EMPHASIZED },
+    },
+    exit: {
+        opacity: 0,
+        y: -6,
+        scale: 0.99,
+        transition: { duration: MOTION_DURATIONS.item * 0.65, ease: MOTION_EASE_EMPHASIZED },
+    },
+}
+
+export function PresenceSwap(props: { children: ReactNode; className?: string; switchKey: string }) {
+    return (
+        <AnimatePresence mode="wait" initial={false}>
+            <m.div
+                key={props.switchKey}
+                className={props.className}
+                variants={PRESENCE_SWAP_VARIANTS}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                style={{ willChange: 'opacity, transform' }}
+            >
+                {props.children}
+            </m.div>
+        </AnimatePresence>
+    )
+}
+
 const MODAL_VARIANTS: Variants = {
     initial: { opacity: 0, scale: 0.96, y: 12 },
     animate: {

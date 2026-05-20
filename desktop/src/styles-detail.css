@@ -6,21 +6,21 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: 18px;
+        padding: clamp(16px, 4vw, 28px);
         background: rgba(23, 23, 23, 0.38);
         backdrop-filter: blur(12px);
     }
 
     .desktop-pairing-card {
         position: relative;
-        width: min(100%, 620px);
-        padding: 32px;
+        width: min(100%, 660px);
+        padding: clamp(24px, 4vw, 34px);
         overflow: hidden;
         border: 1px solid var(--desktop-border);
-        border-radius: var(--desktop-radius-lg);
+        border-radius: 28px;
         background: rgba(255, 255, 255, 0.98);
         box-shadow:
-            0 24px 70px rgba(0, 0, 0, 0.22),
+            0 28px 78px rgba(0, 0, 0, 0.2),
             inset 0 1px 0 rgba(255, 255, 255, 0.72);
     }
 
@@ -36,8 +36,8 @@
         top: 18px;
         right: 18px;
         display: grid;
-        width: 44px;
-        height: 44px;
+        width: 42px;
+        height: 42px;
         place-items: center;
         border: 1px solid color-mix(in srgb, var(--desktop-border-strong) 70%, transparent);
         border-radius: 999px;
@@ -58,8 +58,8 @@
 
     .desktop-pairing-grid {
         display: grid;
-        grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
-        gap: 26px;
+        grid-template-columns: minmax(210px, 252px) minmax(0, 1fr);
+        gap: clamp(22px, 4vw, 34px);
         align-items: center;
     }
 
@@ -71,18 +71,18 @@
     .desktop-pairing-image {
         position: relative;
         display: grid;
-        width: min(100%, 260px);
+        width: min(100%, 252px);
         aspect-ratio: 1;
         place-items: center;
         isolation: isolate;
-        padding: 12px;
+        padding: 14px;
         border: 4px solid transparent;
-        border-radius: 30px;
+        border-radius: 28px;
         background:
             linear-gradient(180deg, #ffffff, #fbfaf6) padding-box,
-            conic-gradient(from 225deg, #2f8f5b, #e8b765, #ffffff, #64c98d, #2f8f5b) border-box;
+            conic-gradient(from 225deg, #2f8f5b, #d7a94e, #ffffff, #65c58c, #2f8f5b) border-box;
         box-shadow:
-            0 24px 62px rgba(47, 143, 91, 0.22),
+            0 20px 54px rgba(47, 143, 91, 0.18),
             0 14px 38px rgba(31, 27, 20, 0.14),
             inset 0 1px 0 rgba(255, 255, 255, 0.95);
     }
@@ -107,8 +107,9 @@
     .desktop-pairing-success {
         position: absolute;
         display: grid;
-        width: 96px;
-        height: 96px;
+        z-index: 4;
+        width: 92px;
+        height: 92px;
         place-items: center;
         border-radius: 999px;
         background: var(--desktop-success);
@@ -124,67 +125,56 @@
     .desktop-pairing-side {
         display: grid;
         justify-items: center;
-        gap: 14px;
         min-width: 0;
         text-align: center;
+    }
+
+    .desktop-pairing-stage {
+        display: grid;
+        width: 100%;
+        min-width: 0;
+        justify-items: center;
+        gap: 14px;
     }
 
     .desktop-pairing-side-top {
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        gap: 14px;
+        justify-content: center;
+        min-height: 24px;
     }
 
     .desktop-pairing-side-top > span {
         color: var(--desktop-muted);
-        font-size: clamp(1rem, 1.9vw, 1.28rem);
-        font-weight: 850;
-        letter-spacing: -0.045em;
-    }
-
-    .desktop-pairing-side-top button {
-        display: inline-flex;
-        min-height: var(--desktop-control-min);
-        flex: 0 0 auto;
-        align-items: center;
-        gap: 7px;
-        padding: 9px 13px;
-        border: 1px solid var(--desktop-border);
-        border-radius: 999px;
-        background: color-mix(in srgb, var(--desktop-surface) 82%, transparent);
-        color: var(--desktop-text);
-        font-size: 13px;
-        font-weight: 760;
-    }
-
-    .desktop-pairing-side-top button:hover {
-        border-color: var(--desktop-border-strong);
-        background: var(--desktop-surface-soft);
-        box-shadow: var(--desktop-shadow-sm);
-        transform: translateY(var(--desktop-hover-lift));
-    }
-
-    .desktop-pairing-side-top button .desktop-icon {
-        font-size: 15px;
+        font-size: 0.95rem;
+        font-weight: 780;
+        letter-spacing: 0;
     }
 
     .desktop-pairing-code {
         display: flex;
-        width: min(100%, 320px);
+        width: min(100%, 300px);
         min-width: 0;
+        min-height: 106px;
         align-items: center;
         justify-content: center;
-        gap: 12px;
-        padding: 12px 18px;
-        border: 1px solid var(--desktop-border);
-        border-radius: 24px;
-        background: var(--desktop-surface-soft);
+        gap: 10px;
+        padding: 12px 14px;
+        overflow: hidden;
+        border: 1px solid color-mix(in srgb, var(--desktop-border-strong) 72%, transparent);
+        border-radius: 22px;
+        background:
+            linear-gradient(180deg, color-mix(in srgb, var(--desktop-surface) 92%, transparent), transparent),
+            var(--desktop-surface-soft);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.5),
+            0 14px 34px color-mix(in srgb, var(--desktop-text) 9%, transparent);
     }
 
     .desktop-pairing-code .desktop-icon {
+        flex: 0 0 auto;
         color: var(--desktop-success);
-        font-size: 34px;
+        font-size: 32px;
         stroke-width: 2.2;
     }
 
@@ -192,27 +182,32 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 32px;
-        height: 32px;
-        margin-left: 4px;
+        width: 36px;
+        height: 36px;
+        flex: 0 0 36px;
         padding: 0;
-        border: none;
-        border-radius: 10px;
-        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 12px;
+        background: color-mix(in srgb, var(--desktop-surface) 78%, transparent);
         color: var(--desktop-text-muted);
         cursor: pointer;
         transition:
+            transform 120ms ease,
+            border-color 120ms ease,
             background-color 120ms ease,
             color 120ms ease;
     }
 
     .desktop-pairing-code-copy:hover {
+        border-color: var(--desktop-border);
         background: var(--desktop-surface);
         color: var(--desktop-text);
+        transform: translateY(-1px);
     }
 
     .desktop-pairing-code-copy:active {
         background: var(--desktop-border);
+        transform: scale(0.96);
     }
 
     .desktop-pairing-code-copy .desktop-icon {
@@ -221,19 +216,19 @@
     }
 
     .desktop-pairing-side strong {
+        min-width: 0;
         color: var(--desktop-text);
-        font-size: clamp(2.6rem, 7vw, 4.4rem);
-        font-weight: 860;
-        line-height: 0.96;
-        letter-spacing: -0.055em;
+        font-size: clamp(2.75rem, 5.2vw, 3.6rem);
+        font-weight: 840;
+        line-height: 0.94;
+        letter-spacing: 0;
         font-variant-numeric: tabular-nums;
         white-space: nowrap;
     }
 
-    .desktop-pairing-code.is-bound strong,
-    .desktop-pairing-code.is-paused strong {
-        font-size: clamp(2rem, 5vw, 3rem);
-        letter-spacing: -0.055em;
+    .desktop-pairing-code.is-bound strong {
+        font-size: clamp(2.1rem, 4.5vw, 2.8rem);
+        letter-spacing: 0;
     }
 
     .desktop-pairing-side small {
@@ -250,19 +245,8 @@
         font-weight: 760;
     }
 
-    .desktop-pairing-side small.is-ready,
-    .desktop-pairing-side small.is-warning {
-        border-color: var(--desktop-border);
-        background: var(--desktop-surface-soft);
-        color: var(--desktop-muted);
-    }
-
-    .desktop-pairing-side small.is-neutral {
-        color: var(--desktop-muted);
-    }
-
     .desktop-pairing-guidance {
-        max-width: 28rem;
+        max-width: 22rem;
         margin: -4px 0 0;
         color: var(--desktop-muted);
         font-size: 14px;
@@ -272,7 +256,7 @@
 
     .desktop-pairing-grid.is-connected .desktop-pairing-side strong {
         color: var(--desktop-text);
-        font-size: clamp(2.8rem, 7vw, 4.8rem);
+        font-size: clamp(2.3rem, 4.5vw, 3rem);
         animation: desktop-pairing-success-copy 480ms var(--desktop-ease-emphasized) both;
     }
 
@@ -302,19 +286,39 @@
         }
     }
 
+    @media (prefers-reduced-motion: reduce) {
+        .desktop-pairing-success,
+        .desktop-pairing-grid.is-connected .desktop-pairing-side strong {
+            animation: none;
+        }
+
+        .desktop-pairing-svg {
+            transition: none;
+        }
+    }
+
     @media (max-width: 680px) {
         .desktop-pairing-card {
-            padding: 24px;
-            border-radius: 26px;
+            padding: 22px;
+            border-radius: 24px;
         }
 
         .desktop-pairing-grid {
             grid-template-columns: 1fr;
-            gap: 24px;
+            gap: 22px;
+        }
+
+        .desktop-pairing-image {
+            width: min(100%, 236px);
+        }
+
+        .desktop-pairing-code {
+            width: min(100%, 292px);
+            min-height: 100px;
         }
 
         .desktop-pairing-side strong {
-            font-size: clamp(3rem, 16vw, 4.6rem);
+            font-size: clamp(2.8rem, 15vw, 3.55rem);
         }
     }
 }

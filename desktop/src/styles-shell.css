@@ -28,6 +28,16 @@
         --desktop-press-lift: 1px;
         --desktop-press-scale: 0.985;
         --desktop-control-min: 44px;
+        --desktop-toggle-height: 28px;
+        --desktop-toggle-padding: 3px;
+        --desktop-toggle-thumb: calc(var(--desktop-toggle-height) - var(--desktop-toggle-padding) * 2);
+        --desktop-toggle-width: calc(var(--desktop-toggle-height) * 1.72);
+        --desktop-toggle-travel: calc(
+            var(--desktop-toggle-width) -
+            var(--desktop-toggle-thumb) -
+            var(--desktop-toggle-padding) *
+            2
+        );
         --desktop-action-bg: #111312;
         --desktop-action-bg-hover: #1d201d;
         --desktop-hub-action-text: #ffffff;

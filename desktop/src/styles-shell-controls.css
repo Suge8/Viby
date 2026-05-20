@@ -7,10 +7,9 @@
     .desktop-page-action,
     .desktop-agent-action,
     .desktop-settings-cta,
-    .desktop-settings-toggle,
+    .desktop-toggle,
     .desktop-segmented-control button,
-    .desktop-pairing-close,
-    .desktop-pairing-side-top button {
+    .desktop-pairing-close {
         cursor: pointer;
         transition:
             transform var(--desktop-motion-fast) var(--desktop-ease-emphasized),
@@ -29,10 +28,9 @@
     .desktop-page-action:not(:disabled):active,
     .desktop-agent-action:active,
     .desktop-settings-cta:not(:disabled):active,
-    .desktop-settings-toggle:not(:disabled):active,
+    .desktop-toggle:not(:disabled):active,
     .desktop-segmented-control button:active,
-    .desktop-pairing-close:active,
-    .desktop-pairing-side-top button:not(:disabled):active {
+    .desktop-pairing-close:active {
         transform: translateY(var(--desktop-press-lift)) scale(var(--desktop-press-scale));
     }
 
@@ -202,6 +200,7 @@
     }
 
     .desktop-access-card > .desktop-card-heading,
+    .desktop-access-card > .desktop-public-access-control,
     .desktop-access-card > .desktop-entry-row,
     .desktop-access-card > .desktop-control-pill {
         justify-self: center;
@@ -283,12 +282,96 @@
     .desktop-copy-icon:disabled,
     .desktop-page-action:disabled,
     .desktop-settings-cta:disabled,
-    .desktop-settings-toggle:disabled,
-    .desktop-pairing-side-top button:disabled {
+    .desktop-toggle:disabled {
         cursor: not-allowed;
         opacity: 0.42;
         transform: none;
         box-shadow: none;
+    }
+
+    .desktop-public-access-control {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        width: min(100%, 360px);
+        min-width: 0;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 14px;
+        padding: 13px 16px;
+        border: 1px solid var(--desktop-border);
+        border-radius: 18px;
+        background:
+            linear-gradient(180deg, color-mix(in srgb, var(--desktop-surface) 86%, transparent), transparent),
+            var(--desktop-surface-soft);
+        box-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 46%, transparent);
+        transition:
+            border-color var(--desktop-motion-base) ease,
+            box-shadow var(--desktop-motion-base) ease,
+            background-color var(--desktop-motion-base) ease;
+    }
+
+    .desktop-public-access-control.is-on {
+        border-color: color-mix(in srgb, var(--desktop-success) 34%, var(--desktop-border));
+        box-shadow:
+            0 14px 36px color-mix(in srgb, var(--desktop-success) 14%, transparent),
+            inset 0 1px 0 color-mix(in srgb, #ffffff 50%, transparent);
+    }
+
+    .desktop-public-access-copy {
+        display: grid;
+        min-width: 0;
+        grid-template-columns: 38px minmax(0, 1fr);
+        align-items: center;
+        gap: 12px;
+    }
+
+    .desktop-public-access-copy > div {
+        display: grid;
+        min-width: 0;
+        gap: 3px;
+    }
+
+    .desktop-public-access-copy strong {
+        color: var(--desktop-text);
+        font-size: 14px;
+        font-weight: 820;
+        letter-spacing: -0.015em;
+    }
+
+    .desktop-public-access-copy span:not(.desktop-public-access-icon) {
+        color: var(--desktop-muted);
+        font-size: 12px;
+        font-weight: 680;
+        line-height: 1.35;
+    }
+
+    .desktop-public-access-icon {
+        display: grid;
+        width: 38px;
+        height: 38px;
+        place-items: center;
+        border-radius: 14px;
+        background: color-mix(in srgb, var(--desktop-success) 10%, var(--desktop-surface));
+        color: var(--desktop-success);
+        transition:
+            background-color var(--desktop-motion-base) ease,
+            color var(--desktop-motion-base) ease,
+            transform var(--desktop-motion-base) var(--desktop-ease-emphasized);
+    }
+
+    .desktop-public-access-control.is-off .desktop-public-access-icon {
+        background: color-mix(in srgb, var(--desktop-border) 60%, var(--desktop-surface));
+        color: var(--desktop-muted);
+    }
+
+    .desktop-public-access-control.is-on .desktop-public-access-icon {
+        transform: rotate(-3deg);
+    }
+
+    .desktop-public-access-icon .desktop-icon {
+        font-size: 19px;
+        stroke-width: 2.2;
     }
 
     .desktop-entry-row {
