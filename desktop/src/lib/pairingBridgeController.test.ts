@@ -152,7 +152,7 @@ function hubReady(): HubRuntimeStatus {
         preferredBrowserUrl: 'http://127.0.0.1:3000',
         publicUrl: '',
         publicAccessEnabled: false,
-        cliApiToken: 'token',
+        hubOwnerToken: 'token',
         settingsFile: '/tmp/settings.json',
         dataDir: '/tmp/viby',
         startedAt: '2026-01-01T00:00:00.000Z',
@@ -289,7 +289,7 @@ describe('startPairingBridge', () => {
         await Promise.resolve()
         peer.channel.close()
         await pairRelaySocket(requireRelaySocket())
-        await waitForCondition(() => states.at(-1)?.stats?.transport === 'relay')
+        await waitForCondition(() => peer.restartCount > 0 && peer.channels.length === 2)
 
         expect(peer.restartCount).toBeGreaterThan(0)
         expect(peer.channels).toHaveLength(2)
@@ -323,10 +323,11 @@ async function pairRelaySocket(socket: FakeSocket): Promise<void> {
     const localKey = JSON.parse(socket.sent[0] ?? '{}') as { publicKey: string }
     const peerCipher = await createPairingTunnelCipher()
     await peerCipher.receivePeerKey(localKey.publicKey)
+    const sentBeforePeerKey = socket.sent.length
     socket.emitMessage(
         JSON.stringify(createPairingTunnelKeyFrame({ id: 'peer-key', seq: 0, publicKey: peerCipher.publicKey }))
     )
-    await waitForCondition(() => socket.sent.length > 0)
+    await waitForCondition(() => socket.sent.length > sentBeforePeerKey)
 }
 
 function requireRelaySocket(): FakeSocket {

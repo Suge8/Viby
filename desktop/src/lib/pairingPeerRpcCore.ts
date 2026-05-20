@@ -3,6 +3,7 @@ import type {
     PairingPeerAgentConfigResult,
     PairingPeerAgentLaunchConfigResult,
     PairingPeerBrowseDirectoryResult,
+    PairingPeerHeartbeat,
     PairingPeerListSessionsResult,
     PairingPeerLoadAfterResult,
     PairingPeerMessage,
@@ -24,6 +25,7 @@ import {
     PairingPeerAgentLaunchConfigResultSchema,
     PairingPeerBrowseDirectoryResultSchema,
     PairingPeerCommandCapabilitiesResultSchema,
+    PairingPeerHeartbeatSchema,
     PairingPeerImportLocalSessionResultSchema,
     PairingPeerListSessionsResultSchema,
     PairingPeerLoadAfterResultSchema,
@@ -71,13 +73,16 @@ export function parsePairingPeerRequest(raw: string): PairingPeerRequest {
     return PairingPeerRequestSchema.parse(JSON.parse(raw))
 }
 
-export function isPairingHeartbeat(raw: string): boolean {
+export function parsePairingHeartbeat(raw: string): PairingPeerHeartbeat | null {
     try {
-        const value = JSON.parse(raw) as { kind?: unknown }
-        return value?.kind === 'heartbeat'
+        return PairingPeerHeartbeatSchema.parse(JSON.parse(raw))
     } catch {
-        return false
+        return null
     }
+}
+
+export function isPairingHeartbeat(raw: string): boolean {
+    return parsePairingHeartbeat(raw) !== null
 }
 export async function executePairingPeerRequest(
     client: LocalHubPairingClient,

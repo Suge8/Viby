@@ -1,7 +1,8 @@
+import type { PairingPeerHeartbeat } from '@viby/protocol/pairing'
 import type { LocalHubPairingClient } from './localHubPairingClient'
 import {
     executePairingPeerRequest,
-    isPairingHeartbeat,
+    parsePairingHeartbeat,
     parsePairingPeerRequest,
     serializePairingPeerMessage,
     serializePairingTerminalEvent,
@@ -55,14 +56,21 @@ export function canSendPairingPeerText(sink: PairingPeerTextSink): boolean {
 export async function handlePairingPeerPayload(options: {
     data: unknown
     getClient: () => LocalHubPairingClient
-    onActive: () => void
+    onActive: (sample?: { roundTripTimeMs?: number | null; sampledAt?: number | null }) => void
+    onHeartbeat?: (
+        heartbeat: PairingPeerHeartbeat
+    ) => { roundTripTimeMs?: number | null; sampledAt?: number | null } | void
     sink: PairingPeerTextSink
 }): Promise<void> {
-    const { data, getClient, onActive, sink } = options
+    const { data, getClient, onActive, onHeartbeat, sink } = options
     const rawData = typeof data === 'string' ? data : ''
-    if (rawData && isPairingHeartbeat(rawData)) {
-        onActive()
-        if (canSendPairingPeerText(sink)) sink.send(rawData)
+    const heartbeat = rawData ? parsePairingHeartbeat(rawData) : null
+    if (heartbeat) {
+        const sample = onHeartbeat?.(heartbeat) ?? undefined
+        onActive(sample)
+        if (!heartbeat.ack && canSendPairingPeerText(sink)) {
+            sink.send(serializePairingPeerMessage({ ...heartbeat, ack: true }))
+        }
         return
     }
     if (typeof data !== 'string' && (await acceptUploadChunk(getClient, data))) {

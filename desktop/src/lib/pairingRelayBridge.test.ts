@@ -78,18 +78,43 @@ describe('pairingRelayBridge', () => {
                 await peerCipher.seal({ kind: 'message', id: 'frame-1', seq: 0, payload: { kind: 'heartbeat' } })
             )
         )
-        await waitForCondition(() => findLastSent(socket, 'sealed') !== null)
+        await waitForCondition(async () => Boolean(await findSentPayload(socket, peerCipher, isHeartbeatAck)))
         await Promise.resolve()
 
         expect(onOpen).toHaveBeenCalled()
         expect(onActive).toHaveBeenCalled()
-        const sealed = findLastSent(socket, 'sealed')
-        if (!sealed) throw new Error('sealed frame missing')
-        expect(sealed.kind).toBe('sealed')
-        await expect(peerCipher.open(sealed)).resolves.toMatchObject({
-            kind: 'message',
-            payload: { kind: 'heartbeat' },
+        await expect(findSentPayload(socket, peerCipher, isHeartbeatAck)).resolves.toMatchObject({ ack: true })
+    })
+
+    it('reports relay RTT from desktop-origin heartbeat acknowledgements', async () => {
+        const onActive = mock()
+        startPairingRelayBridge({
+            tunnelUrl: 'wss://pair.example/tunnel',
+            getClient: () => client() as never,
+            isDisposed: () => false,
+            onOpen: mock(),
+            onActive,
+            onClosed: mock(),
+            reportAsyncError: mock(),
         })
+        const socket = FakeWebSocket.instances[0]
+        const peerCipher = await pairSocket(socket)
+        const heartbeat = await waitForSentPayload(socket, peerCipher, (payload) => payload.kind === 'heartbeat')
+        await new Promise((resolve) => setTimeout(resolve, 5))
+
+        socket.emitMessage(
+            JSON.stringify(
+                await peerCipher.seal({
+                    kind: 'message',
+                    id: 'frame-ack',
+                    seq: 1,
+                    payload: { ...heartbeat, ack: true },
+                })
+            )
+        )
+        await waitForCondition(() =>
+            onActive.mock.calls.some((call) => typeof call[0]?.roundTripTimeMs === 'number' && call[0].sampledAt)
+        )
     })
 
     it('rekeys when a PWA replaces the guest relay peer', async () => {
@@ -129,13 +154,8 @@ describe('pairingRelayBridge', () => {
                 })
             )
         )
-        await waitForCondition(() => findLastSent(socket, 'sealed') !== null)
-        const sealed = findLastSent(socket, 'sealed')
-        if (!sealed) throw new Error('sealed frame missing')
-        await expect(nextPeerCipher.open(sealed)).resolves.toMatchObject({
-            kind: 'message',
-            payload: { kind: 'heartbeat' },
-        })
+        await waitForCondition(async () => Boolean(await findSentPayload(socket, nextPeerCipher, isHeartbeatAck)))
+        await expect(findSentPayload(socket, nextPeerCipher, isHeartbeatAck)).resolves.toMatchObject({ ack: true })
     })
 })
 
@@ -156,12 +176,45 @@ async function waitForSent(socket: FakeWebSocket, count: number): Promise<void> 
     await waitForCondition(() => socket.sent.length >= count, `expected ${count} sent frames`)
 }
 
-function findLastSent(socket: FakeWebSocket, kind: string): PairingTunnelSealedFrame | null {
-    for (const payload of socket.sent.toReversed()) {
-        const frame = JSON.parse(payload)
-        if (frame.kind === kind) return frame
+function isHeartbeatAck(payload: Record<string, unknown>): boolean {
+    return payload.kind === 'heartbeat' && payload.ack === true
+}
+
+async function findSentPayload(
+    socket: FakeWebSocket,
+    cipher: PairingTunnelCipher,
+    predicate: (payload: Record<string, unknown>) => boolean
+): Promise<Record<string, unknown> | null> {
+    for (const frame of sentSealedFrames(socket).toReversed()) {
+        try {
+            const plain = await cipher.open(frame)
+            if (plain.kind === 'message' && isRecord(plain.payload) && predicate(plain.payload)) return plain.payload
+        } catch {}
     }
     return null
+}
+
+async function waitForSentPayload(
+    socket: FakeWebSocket,
+    cipher: PairingTunnelCipher,
+    predicate: (payload: Record<string, unknown>) => boolean
+): Promise<Record<string, unknown>> {
+    let payload: Record<string, unknown> | null = null
+    await waitForCondition(async () => {
+        payload = await findSentPayload(socket, cipher, predicate)
+        return payload !== null
+    })
+    return payload
+}
+
+function sentSealedFrames(socket: FakeWebSocket): PairingTunnelSealedFrame[] {
+    return socket.sent
+        .map((payload) => JSON.parse(payload))
+        .filter((frame): frame is PairingTunnelSealedFrame => frame.kind === 'sealed')
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null
 }
 
 function countSent(socket: FakeWebSocket, kind: string): number {
@@ -176,9 +229,12 @@ function findLastSentKey(socket: FakeWebSocket): { publicKey: string } | null {
     return null
 }
 
-async function waitForCondition(predicate: () => boolean, message = 'condition timeout'): Promise<void> {
+async function waitForCondition(
+    predicate: () => boolean | Promise<boolean>,
+    message = 'condition timeout'
+): Promise<void> {
     const deadline = Date.now() + 1_000
-    while (!predicate()) {
+    while (!(await predicate())) {
         if (Date.now() > deadline) throw new Error(message)
         await new Promise((resolve) => setTimeout(resolve, 0))
     }

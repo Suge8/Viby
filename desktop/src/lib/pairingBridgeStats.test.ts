@@ -32,9 +32,12 @@ describe('readPairingBridgeStats', () => {
 
         expect(stats).toMatchObject({
             transport: 'direct',
+            transportMode: 'direct-webrtc',
             localCandidateType: 'host',
             remoteCandidateType: 'srflx',
             currentRoundTripTimeMs: 28,
+            staleAfterMs: 15_000,
+            routeRevision: 0,
         })
     })
 
@@ -47,6 +50,7 @@ describe('readPairingBridgeStats', () => {
         )
 
         expect(stats.transport).toBe('relay')
+        expect(stats.transportMode).toBe('turn-webrtc')
         expect(stats.localCandidateType).toBe('relay')
     })
 
@@ -84,14 +88,20 @@ describe('readPairingBridgeStats', () => {
         const routeState = reducePairingTunnelRoute(createPairingTunnelRouteState(), {
             type: 'relay-ready',
             roundTripTimeMs: 118,
+            sampledAt: 123,
         })
 
         expect(readDesktopTunnelRouteStats(routeState, null)).toEqual({
             transport: 'relay',
+            transportMode: 'relay-wss',
             previousTransport: null,
             localCandidateType: null,
             remoteCandidateType: null,
             currentRoundTripTimeMs: 118,
+            sampledAt: 123,
+            staleAfterMs: 15_000,
+            routeRevision: 0,
+            directBlockedReason: null,
             restartCount: 0,
         })
     })
@@ -100,16 +110,21 @@ describe('readPairingBridgeStats', () => {
         expect(
             readDesktopTunnelDirectCandidateEvent({
                 transport: 'direct',
+                transportMode: 'direct-webrtc',
                 previousTransport: null,
                 localCandidateType: 'srflx',
                 remoteCandidateType: 'host',
                 currentRoundTripTimeMs: 42,
+                sampledAt: 123,
+                staleAfterMs: 15_000,
+                routeRevision: 0,
                 restartCount: 0,
             })
         ).toEqual({
             type: 'direct-candidate-selected',
             candidateType: 'srflx',
             roundTripTimeMs: 42,
+            sampledAt: 123,
         })
     })
 })

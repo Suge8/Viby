@@ -2,6 +2,9 @@ import {
     computePairingReconnectDelay,
     createPairingTunnelCipher,
     createPairingTunnelKeyFrame,
+    PAIRING_PEER_HEARTBEAT_ACK_TIMEOUT_MS,
+    PAIRING_PEER_HEARTBEAT_INTERVAL_MS,
+    type PairingPeerHeartbeat,
     PairingPeerMessageSchema,
     type PairingTunnelCipher,
     PairingTunnelFrameSchema,
@@ -27,7 +30,7 @@ export interface PairingRelayBridgeHandle {
 export function startPairingRelayBridge(options: {
     getClient: () => LocalHubPairingClient
     isDisposed: () => boolean
-    onActive: () => void
+    onActive: (sample?: { roundTripTimeMs?: number | null; sampledAt?: number | null }) => void
     onClosed: () => void
     onOpen: () => void
     reportAsyncError: (message: string, error: unknown) => void
@@ -42,6 +45,8 @@ export function startPairingRelayBridge(options: {
     let reconnectAttempt = 0
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null
     let eventStreamAbort: AbortController | null = null
+    let heartbeatTimer: ReturnType<typeof setInterval> | null = null
+    let pendingHeartbeat: { id: string; sentAt: number } | null = null
 
     connect()
     return {
@@ -65,6 +70,7 @@ export function startPairingRelayBridge(options: {
     function dispose(): void {
         disposed = true
         clearReconnectTimer()
+        stopHeartbeat()
         stopEventStream()
         socket?.close()
         socket = null
@@ -87,6 +93,7 @@ export function startPairingRelayBridge(options: {
             options.onClosed()
         }
         stopEventStream()
+        stopHeartbeat()
         cipher = null
         peerPublicKey = null
         if (!disposed && !options.isDisposed()) scheduleReconnect()
@@ -111,6 +118,7 @@ export function startPairingRelayBridge(options: {
             data: JSON.stringify(plainFrame.payload),
             getClient: options.getClient,
             onActive: options.onActive,
+            onHeartbeat: markHeartbeatAck,
             sink: createRelaySink(socket),
         })
     }
@@ -120,6 +128,7 @@ export function startPairingRelayBridge(options: {
         ready = true
         options.onOpen()
         startRelayEventStream()
+        startHeartbeat()
     }
 
     function requireCipher(): PairingTunnelCipher {
@@ -177,6 +186,37 @@ export function startPairingRelayBridge(options: {
     function stopEventStream(): void {
         eventStreamAbort?.abort()
         eventStreamAbort = null
+    }
+
+    function startHeartbeat(): void {
+        stopHeartbeat()
+        sendHeartbeat()
+        heartbeatTimer = setInterval(sendHeartbeat, PAIRING_PEER_HEARTBEAT_INTERVAL_MS)
+        if (typeof heartbeatTimer === 'object' && 'unref' in heartbeatTimer) heartbeatTimer.unref()
+    }
+
+    function stopHeartbeat(): void {
+        if (heartbeatTimer) clearInterval(heartbeatTimer)
+        heartbeatTimer = null
+        pendingHeartbeat = null
+    }
+
+    function sendHeartbeat(): void {
+        const activeSocket = socket
+        const now = Date.now()
+        if (!ready || !activeSocket || activeSocket.readyState !== SOCKET_OPEN) return
+        if (pendingHeartbeat && now - pendingHeartbeat.sentAt < PAIRING_PEER_HEARTBEAT_ACK_TIMEOUT_MS) return
+        const heartbeat: PairingPeerHeartbeat = { kind: 'heartbeat', id: `desktop-relay-${now}-${seq}`, sentAt: now }
+        pendingHeartbeat = { id: heartbeat.id ?? '', sentAt: now }
+        sendFrame(activeSocket, JSON.stringify(heartbeat))
+    }
+
+    function markHeartbeatAck(heartbeat: PairingPeerHeartbeat) {
+        if (!heartbeat.ack || !heartbeat.id || heartbeat.id !== pendingHeartbeat?.id) return undefined
+        const sampledAt = Date.now()
+        const roundTripTimeMs = sampledAt - pendingHeartbeat.sentAt
+        pendingHeartbeat = null
+        return { roundTripTimeMs, sampledAt }
     }
 
     function scheduleReconnect(): void {

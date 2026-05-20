@@ -24,6 +24,7 @@ import {
 import { createDeferredHubClient } from './localHubPairingDeferredClient'
 import { attachPairingDataChannel, HubPausedError, isHubPausedError } from './pairingBridgeControllerSupport'
 import { startPairingBridgeStats } from './pairingBridgeStats'
+import { startPairingBridgeTelemetry } from './pairingBridgeTelemetry'
 import { type PairingRelayBridgeHandle, startPairingRelayBridge } from './pairingRelayBridge'
 
 function toIceServers(servers: PairingIceServer[]): RTCIceServer[] {
@@ -49,6 +50,7 @@ export function startPairingBridge(options: {
     let channel: RTCDataChannel | null = null
     let latestStats: PairingBridgeStats | null = null
     let fatalMessage: string | null = null
+    let telemetryWarning: string | null = null
     let routeState = createPairingTunnelRouteState()
     let directState: PairingTransportState | null = null
     const client = createDeferredHubClient(options.getStatus)
@@ -74,8 +76,13 @@ export function startPairingBridge(options: {
             commitRoute({ type: 'relay-ready', transport: 'relay-wss' })
             maybeReprobeDirect()
         },
-        onActive: () => {
-            commitRoute({ type: 'heartbeat-ack', route: 'relay' })
+        onActive: (sample) => {
+            commitRoute({
+                type: 'heartbeat-ack',
+                route: 'relay',
+                roundTripTimeMs: sample?.roundTripTimeMs,
+                sampledAt: sample?.sampledAt,
+            })
             maybeReprobeDirect()
         },
         onClosed: () => commitRoute({ type: 'relay-lost' }),
@@ -96,6 +103,11 @@ export function startPairingBridge(options: {
     const statsSampleTimer = stats
         ? setInterval(() => void sampleDirectStats().catch(reportDirectProbeError), PAIRING_STATS_POLL_INTERVAL_MS)
         : null
+    const telemetry = startPairingBridgeTelemetry({
+        pairing: options.pairing,
+        getStats: () => readDesktopTunnelRouteStats(routeState, latestStats),
+        reportError: reportTelemetryError,
+    })
     const unsubscribe =
         transport?.subscribe(() => {
             directState = transport?.getSnapshot() ?? null
@@ -111,6 +123,7 @@ export function startPairingBridge(options: {
         if (statsSampleTimer) clearInterval(statsSampleTimer)
         unsubscribe()
         relay?.dispose()
+        telemetry.dispose()
         stats?.dispose()
         transport?.dispose()
         channel?.close()
@@ -145,6 +158,7 @@ export function startPairingBridge(options: {
                     type: 'heartbeat-ack',
                     route: 'direct',
                     roundTripTimeMs: latestStats?.currentRoundTripTimeMs,
+                    sampledAt: latestStats?.sampledAt,
                 })
                 if (latestStats) commitDirectCandidateFromStats(latestStats)
                 void sampleDirectStats().catch(reportDirectProbeError)
@@ -190,6 +204,11 @@ export function startPairingBridge(options: {
         reportAsyncError('配对直连探测失败：', error)
     }
 
+    function reportTelemetryError(message: string, error: unknown): void {
+        telemetryWarning = `${message}${error instanceof Error ? error.message : String(error)}`
+        emitBridgeState()
+    }
+
     function handleTransportState(): void {
         if (
             directState?.kind !== 'fatal' ||
@@ -210,13 +229,14 @@ export function startPairingBridge(options: {
             })
             return
         }
+        const state = buildDesktopTunnelBridgeState({
+            base: options.pairing,
+            directState,
+            routeState,
+            stats: readDesktopTunnelRouteStats(routeState, latestStats),
+        })
         options.onStateChange(
-            buildDesktopTunnelBridgeState({
-                base: options.pairing,
-                directState,
-                routeState,
-                stats: readDesktopTunnelRouteStats(routeState, latestStats),
-            })
+            telemetryWarning && state.phase === 'ready' ? { ...state, message: telemetryWarning } : state
         )
     }
 }

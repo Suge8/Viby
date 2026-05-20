@@ -1,4 +1,5 @@
 import {
+    PAIRING_LINK_SAMPLE_STALE_MS,
     type PairingLinkTransport,
     type PairingStatsReportLike,
     resolvePairingLinkTransport,
@@ -15,6 +16,7 @@ export function readPairingBridgeStats(
     const transport = selected ? resolvePairingLinkTransport(selected) : 'unknown'
     return {
         transport,
+        transportMode: transport === 'direct' ? 'direct-webrtc' : transport === 'relay' ? 'turn-webrtc' : 'unknown',
         previousTransport: resolvePreviousTransport(transport, previousTransport),
         localCandidateType: selected?.localCandidateType ?? null,
         remoteCandidateType: selected?.remoteCandidateType ?? null,
@@ -23,6 +25,8 @@ export function readPairingBridgeStats(
                 ? Math.round(selected.pair.currentRoundTripTime * 1000)
                 : null,
         sampledAt,
+        staleAfterMs: PAIRING_LINK_SAMPLE_STALE_MS,
+        routeRevision: 0,
         restartCount: 0,
     }
 }
