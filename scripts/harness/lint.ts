@@ -64,6 +64,7 @@ const requiredPaths = [
     'scripts/harness/governanceReport.ts',
     'scripts/harness/docGardening.ts',
     'scripts/harness/newCodeGate.ts',
+    'scripts/harness/pairingPwaContract.ts',
     'scripts/harness/qualityAudit.ts',
     'scripts/harness/qualityBaseline.ts',
     'scripts/harness/qualityGate.ts',

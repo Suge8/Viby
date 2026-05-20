@@ -25,7 +25,7 @@ const EXCLUDE = /\.test\.(ts|tsx)$|__tests__\//
 
 function parseMax() {
     const index = process.argv.indexOf('--max')
-    const raw = index === -1 ? '1800' : process.argv[index + 1]
+    const raw = index === -1 ? '1950' : process.argv[index + 1]
     const max = Number(raw)
     if (!Number.isInteger(max) || max <= 0) throw new Error(`Invalid --max: ${raw}`)
     return max

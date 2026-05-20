@@ -120,7 +120,11 @@ export const zodOwnerFiles = new Set([
     'cli/src/runner/controlServer.ts',
 ])
 
-export const sqlOwnerPrefixes = ['hub/src/store/', 'hub/scripts/'] as const
+export const sqlOwnerPrefixes = [
+    'hub/src/store/',
+    'hub/scripts/',
+    'cli/src/opencode/utils/opencodeStorageDatabase',
+] as const
 
 export const explicitControlSurfaceOwnerFiles = new Set([
     'cli/scripts/sessionCapabilityBridgeSmoke.ts',
@@ -148,6 +152,7 @@ export const explicitControlSurfaceOwnerFiles = new Set([
     'desktop/src/lib/pairingBridgeState.ts',
     'desktop/src/lib/pairingBridgeSignalSocket.ts',
     'desktop/src/lib/pairingBridgeStatsSupport.ts',
+    'desktop/src/lib/pairingBridgeTelemetry.ts',
     'desktop/src/lib/pairingBridgeTelemetrySupport.ts',
     'desktop/src/lib/pairingBridgeTransportSupport.ts',
     'desktop/src/lib/pairingRelayBridge.ts',

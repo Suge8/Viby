@@ -10,7 +10,7 @@ const REMOVED_PATTERNS = [
     },
     {
         root: 'web/src',
-        pattern: /remotePairing\.(connecting|reconnectNotice)\.phase\.connecting/,
+        pattern: /remotePairing\.(connecting|reconnectNotice)\.phase\.connecting['"]/,
     },
     { root: 'desktop/src/types.ts', pattern: /'idle'|'paused'/ },
     { root: 'web/src/lib/remoteConnectingPhase.ts', pattern: /'connecting'/ },

@@ -22,6 +22,7 @@ describe('governance policy helpers', () => {
         expect(isZodOwnerPath('hub/src/web/routes/sessions.ts')).toBe(true)
         expect(isZodOwnerPath('web/src/lib/foo.ts')).toBe(false)
         expect(isSqlOwnerPath('hub/src/store/messages.ts')).toBe(true)
+        expect(isSqlOwnerPath('cli/src/opencode/utils/opencodeStorageDatabase.ts')).toBe(true)
         expect(isSqlOwnerPath('hub/src/sync/foo.ts')).toBe(false)
     })
 
