@@ -45,9 +45,9 @@ export function buildNotificationActions(input: {
     notificationAvailability: 'enabled' | 'blocked' | 'disabled' | 'install-required' | 'unavailable'
     t: (key: string) => string
     isPushPending: boolean
-    onEnable: () => void
-    onDisable: () => void
-    onRefresh: () => void
+    onEnable: () => unknown
+    onDisable: () => unknown
+    onRefresh: () => unknown
 }): ReadonlyArray<SettingsActionCardAction> {
     switch (input.notificationAvailability) {
         case 'enabled':

@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 
 export type SettingsActionCardAction = {
     label: string
-    onClick: () => void
+    onClick: () => unknown
     disabled?: boolean
     variant?: ButtonProps['variant']
 }

@@ -111,9 +111,9 @@ export default function SettingsPage(): React.JSX.Element {
         },
         [setFontScale]
     )
-    const handleEnableNotifications = useCallback(() => void enableNotifications(), [enableNotifications])
-    const handleDisableNotifications = useCallback(() => void disableNotifications(), [disableNotifications])
-    const handleRefreshNotifications = useCallback(() => void refreshSubscription(), [refreshSubscription])
+    const handleEnableNotifications = useCallback(() => enableNotifications(), [enableNotifications])
+    const handleDisableNotifications = useCallback(() => disableNotifications(), [disableNotifications])
+    const handleRefreshNotifications = useCallback(() => refreshSubscription(), [refreshSubscription])
 
     const languageItems = useMemo<ReadonlyArray<SettingsSelectOption<LocalePreference>>>(
         () => buildLanguageItems(t),

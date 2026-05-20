@@ -212,9 +212,10 @@ export default function AgentConfigPage(): React.JSX.Element {
                             size="sm"
                             variant="ghost"
                             disabled={!latestBackup || isRestoring || !api || versionBlocked}
+                            pending={isRestoring}
                             onClick={() =>
                                 latestBackup &&
-                                restoreMutation.mutate({ driver: selectedDriver, backupPath: latestBackup.path })
+                                restoreMutation.mutateAsync({ driver: selectedDriver, backupPath: latestBackup.path })
                             }
                         >
                             {isRestoring ? t('agents.config.restoring') : t('agents.config.restore')}
@@ -223,8 +224,9 @@ export default function AgentConfigPage(): React.JSX.Element {
                             type="button"
                             size="sm"
                             disabled={!hasChanges || isSaving || !api || versionBlocked}
+                            pending={isSaving}
                             onClick={() =>
-                                saveMutation.mutate({
+                                saveMutation.mutateAsync({
                                     driver: selectedDriver,
                                     values: selectedPatch,
                                     expectedExists: savedState?.exists ?? false,
