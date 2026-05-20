@@ -19,6 +19,7 @@ import {
     extractCommandError,
     type FileDisplayMode,
     getPreferredFileDisplayMode,
+    getPreviewableImageMimeType,
     getUtf8ByteLength,
     isBinaryContent,
     MAX_COPYABLE_FILE_BYTES,
@@ -26,7 +27,7 @@ import {
     resolveFileLanguage,
     shouldLoadFileContent,
 } from '@/routes/sessions/filePageUtils'
-import { FileContentSkeleton, PlainFileContent } from '@/routes/sessions/filesPageViews'
+import { FileContentSkeleton, ImageFileContent, PlainFileContent } from '@/routes/sessions/filesPageViews'
 
 const LazyFileContentView = lazy(async () => import('@/routes/sessions/fileContentView'))
 
@@ -77,6 +78,11 @@ export default function FilePage(): ReactNode {
     const decodedContent = decodedContentResult.text
     const binaryFile = fileContentResult?.success ? !decodedContentResult.ok || isBinaryContent(decodedContent) : false
     const language = useMemo(() => resolveFileLanguage(filePath), [filePath])
+    const imageMimeType = useMemo(() => getPreviewableImageMimeType(filePath), [filePath])
+    const imagePreviewSrc =
+        fileContentResult?.success && imageMimeType && fileContentResult.content
+            ? `data:${imageMimeType};base64,${fileContentResult.content}`
+            : null
     const contentSizeBytes = useMemo(() => getUtf8ByteLength(decodedContent), [decodedContent])
     const canCopyContent =
         fileContentResult?.success === true &&
@@ -153,6 +159,8 @@ export default function FilePage(): ReactNode {
                         <FileContentSkeleton label={t('loading')} />
                     ) : fileError ? (
                         <div className="text-sm text-[var(--app-hint)]">{fileError}</div>
+                    ) : imagePreviewSrc ? (
+                        <ImageFileContent src={imagePreviewSrc} alt={t('file.imagePreview.alt', { fileName })} />
                     ) : binaryFile ? (
                         <div className="text-sm text-[var(--app-hint)]">{t('file.error.binary')}</div>
                     ) : activeMode === 'diff' && hasDiffContent ? (

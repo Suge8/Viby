@@ -3,6 +3,7 @@ import {
     decodeFilePath,
     extractCommandError,
     getPreferredFileDisplayMode,
+    getPreviewableImageMimeType,
     getUtf8ByteLength,
     isBinaryContent,
     resolveActiveFileDisplayMode,
@@ -22,6 +23,13 @@ describe('filePageUtils', () => {
         expect(resolveFileLanguage('script.sh')).toBe('shellscript')
     })
 
+    it('resolves previewable image MIME types from file names', () => {
+        expect(getPreviewableImageMimeType('/tmp/screenshot.PNG')).toBe('image/png')
+        expect(getPreviewableImageMimeType('photo.jpeg')).toBe('image/jpeg')
+        expect(getPreviewableImageMimeType('diagram.svg')).toBeNull()
+        expect(getPreviewableImageMimeType('README')).toBeNull()
+    })
+
     it('uses the files tab as the single preferred display mode source', () => {
         expect(getPreferredFileDisplayMode(undefined)).toBe('diff')
         expect(getPreferredFileDisplayMode('changes')).toBe('diff')
@@ -29,15 +37,19 @@ describe('filePageUtils', () => {
     })
 
     it('falls back to file mode when diff content is unavailable', () => {
-        expect(resolveActiveFileDisplayMode({
-            hasDiffContent: false,
-            preferredDisplayMode: 'diff',
-        })).toBe('file')
+        expect(
+            resolveActiveFileDisplayMode({
+                hasDiffContent: false,
+                preferredDisplayMode: 'diff',
+            })
+        ).toBe('file')
 
-        expect(resolveActiveFileDisplayMode({
-            hasDiffContent: true,
-            preferredDisplayMode: 'file',
-        })).toBe('file')
+        expect(
+            resolveActiveFileDisplayMode({
+                hasDiffContent: true,
+                preferredDisplayMode: 'file',
+            })
+        ).toBe('file')
     })
 
     it('detects binary content and counts utf8 bytes', () => {
@@ -53,32 +65,40 @@ describe('filePageUtils', () => {
     })
 
     it('only loads file content when the route actually needs it', () => {
-        expect(shouldLoadFileContent({
-            displayMode: 'diff',
-            diffResolution: 'pending',
-            diffCommandFailed: false,
-            hasDiffContent: false,
-        })).toBe(false)
+        expect(
+            shouldLoadFileContent({
+                displayMode: 'diff',
+                diffResolution: 'pending',
+                diffCommandFailed: false,
+                hasDiffContent: false,
+            })
+        ).toBe(false)
 
-        expect(shouldLoadFileContent({
-            displayMode: 'diff',
-            diffResolution: 'ready',
-            diffCommandFailed: false,
-            hasDiffContent: true,
-        })).toBe(false)
+        expect(
+            shouldLoadFileContent({
+                displayMode: 'diff',
+                diffResolution: 'ready',
+                diffCommandFailed: false,
+                hasDiffContent: true,
+            })
+        ).toBe(false)
 
-        expect(shouldLoadFileContent({
-            displayMode: 'file',
-            diffResolution: 'ready',
-            diffCommandFailed: false,
-            hasDiffContent: true,
-        })).toBe(true)
+        expect(
+            shouldLoadFileContent({
+                displayMode: 'file',
+                diffResolution: 'ready',
+                diffCommandFailed: false,
+                hasDiffContent: true,
+            })
+        ).toBe(true)
 
-        expect(shouldLoadFileContent({
-            displayMode: 'diff',
-            diffResolution: 'ready',
-            diffCommandFailed: true,
-            hasDiffContent: false,
-        })).toBe(true)
+        expect(
+            shouldLoadFileContent({
+                displayMode: 'diff',
+                diffResolution: 'ready',
+                diffCommandFailed: true,
+                hasDiffContent: false,
+            })
+        ).toBe(true)
     })
 })

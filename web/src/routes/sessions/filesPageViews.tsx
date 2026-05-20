@@ -76,7 +76,7 @@ function LineChanges(props: { added: number; removed: number }): ReactNode {
 
 type FileListRowProps = {
     icon: ReactNode
-    onOpen: () => void
+    onOpen: () => unknown
     showDivider: boolean
     subtitle: string
     title: string
@@ -105,7 +105,7 @@ const FileListRow = memo(function FileListRow(props: FileListRowProps): ReactNod
 
 type GitFileRowProps = {
     file: GitFileStatus
-    onOpen: () => void
+    onOpen: () => unknown
     rootLabel: string
     showDivider: boolean
 }
@@ -130,7 +130,7 @@ export const GitFileRow = memo(function GitFileRow(props: GitFileRowProps): Reac
 
 type SearchResultRowProps = {
     file: FileSearchItem
-    onOpen: () => void
+    onOpen: () => unknown
     rootLabel: string
     showDivider: boolean
 }
@@ -204,5 +204,22 @@ export function PlainFileContent(props: PlainFileContentProps): ReactNode {
         <CodeSurface preClassName="p-2 pr-8 text-xs">
             <PlainCodeContent code={props.content} />
         </CodeSurface>
+    )
+}
+
+type ImageFileContentProps = {
+    src: string
+    alt: string
+}
+
+export function ImageFileContent(props: ImageFileContentProps): ReactNode {
+    return (
+        <div className="overflow-auto rounded-md border border-[var(--app-divider)] bg-[var(--app-bg)] p-2">
+            <img
+                src={props.src}
+                alt={props.alt}
+                className="mx-auto max-h-[calc(100vh-14rem)] max-w-full object-contain"
+            />
+        </div>
     )
 }

@@ -9,7 +9,7 @@ import { ICON_ONLY_BUTTON_NEUTRAL_SURFACE_CLASS_NAME } from '@/components/ui/ico
 import { Input } from '@/components/ui/input'
 
 type FilesActionButtonProps = {
-    onClick: () => void
+    onClick: () => unknown
     title: string
 }
 

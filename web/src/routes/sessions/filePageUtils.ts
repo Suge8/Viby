@@ -1,9 +1,7 @@
-import {
-    CODE_LANGUAGE_ALIASES,
-} from '@/components/code-block/codeBlockLanguage'
-import type { GitCommandResponse } from '@/types/api'
-import type { FilesTab } from '@/routes/sessions/filesPageUtils'
+import { CODE_LANGUAGE_ALIASES } from '@/components/code-block/codeBlockLanguage'
 import { decodeBase64 } from '@/lib/utils'
+import type { FilesTab } from '@/routes/sessions/filesPageUtils'
+import type { GitCommandResponse } from '@/types/api'
 
 export const MAX_COPYABLE_FILE_BYTES = 1_000_000
 export type FileDisplayMode = 'diff' | 'file'
@@ -12,6 +10,16 @@ type FileDiffResolution = 'pending' | 'ready' | 'error'
 const FILE_DISPLAY_MODE_BY_TAB: Record<FilesTab, FileDisplayMode> = {
     changes: 'diff',
     directories: 'file',
+}
+const IMAGE_MIME_TYPE_BY_EXTENSION: Record<string, string> = {
+    avif: 'image/avif',
+    bmp: 'image/bmp',
+    gif: 'image/gif',
+    ico: 'image/x-icon',
+    jpeg: 'image/jpeg',
+    jpg: 'image/jpeg',
+    png: 'image/png',
+    webp: 'image/webp',
 }
 
 export function decodeFilePath(value: string): string {
@@ -35,6 +43,11 @@ export function resolveFileLanguage(path: string): string | undefined {
     }
 
     return CODE_LANGUAGE_ALIASES[extension] ?? extension
+}
+
+export function getPreviewableImageMimeType(path: string): string | null {
+    const extension = path.split('.').pop()?.toLowerCase()
+    return extension ? (IMAGE_MIME_TYPE_BY_EXTENSION[extension] ?? null) : null
 }
 
 export function getPreferredFileDisplayMode(tab: FilesTab | undefined): FileDisplayMode {

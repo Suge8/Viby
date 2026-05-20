@@ -5,14 +5,23 @@ import {
 } from '@assistant-ui/react-markdown'
 import type { ComponentPropsWithoutRef } from 'react'
 import remarkGfm from 'remark-gfm'
+import { useOptionalVibyChatContext } from '@/components/AssistantChat/context'
 import { SyntaxHighlighter } from '@/components/assistant-ui/shiki-highlighter'
 import { CopyActionButton } from '@/components/CopyActionButton'
 import { useCopyAction } from '@/hooks/useCopyAction'
 import { joinClassNames } from '@/lib/joinClassNames'
 import { useTranslation } from '@/lib/use-translation'
+import { encodeBase64 } from '@/lib/utils'
+import { buildSessionFilePath } from '@/routes/sessions/sessionRoutePaths'
+import { readMarkdownSessionFilePath, remarkLinkSessionFilePaths } from './markdownFilePathLinks'
 import { remarkDisableIndentedCode, remarkStripCjkAutolinkPunctuation } from './markdownPlugins'
 
-export const MARKDOWN_PLUGINS = [remarkDisableIndentedCode, remarkGfm, remarkStripCjkAutolinkPunctuation]
+export const MARKDOWN_PLUGINS = [
+    remarkDisableIndentedCode,
+    remarkGfm,
+    remarkStripCjkAutolinkPunctuation,
+    remarkLinkSessionFilePaths,
+]
 
 function CodeHeader(props: CodeHeaderProps) {
     const { t } = useTranslation()
@@ -67,11 +76,19 @@ function Code(props: ComponentPropsWithoutRef<'code'>) {
 }
 
 function A(props: ComponentPropsWithoutRef<'a'>) {
+    const chatContext = useOptionalVibyChatContext()
+    const href = typeof props.href === 'string' ? props.href : undefined
+    const sessionFilePath = readMarkdownSessionFilePath(href)
+    const sessionFileHref =
+        sessionFilePath && chatContext
+            ? `${buildSessionFilePath(chatContext.sessionId)}?path=${encodeURIComponent(encodeBase64(sessionFilePath))}&tab=directories`
+            : null
     const rel = props.target === '_blank' ? (props.rel ?? 'noreferrer') : props.rel
 
     return (
         <a
             {...props}
+            href={sessionFilePath ? (sessionFileHref ?? undefined) : props.href || undefined}
             rel={rel}
             className={joinClassNames('aui-md-a text-[var(--app-link)] underline', props.className)}
         />

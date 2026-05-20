@@ -63,21 +63,19 @@ export default function FilesPage(): ReactNode {
     })
 
     const handleOpenFile = useCallback(
-        (path: string, staged?: boolean) => {
+        (path: string, staged?: boolean): Promise<boolean> => {
             const search = createFileRouteSearch(path, activeTab, staged)
             const encodedPath = typeof search.path === 'string' ? search.path : ''
             const recoveryHref = buildSessionFileRecoveryHref(sessionId, encodedPath)
 
-            runPreloadedNavigation(
+            return runPreloadedNavigation(
                 loadSessionFileRouteModule(),
                 () => {
-                    runNavigationTransition(() => {
-                        void navigate({
-                            to: '/sessions/$sessionId/file',
-                            params: { sessionId },
-                            search,
-                        })
-                    }, VIEW_TRANSITION_NAVIGATION_OPTIONS)
+                    void navigate({
+                        to: '/sessions/$sessionId/file',
+                        params: { sessionId },
+                        search,
+                    })
                 },
                 recoveryHref
             )
@@ -85,22 +83,20 @@ export default function FilesPage(): ReactNode {
         [activeTab, navigate, sessionId]
     )
 
-    const handleRefresh = useCallback(() => {
+    const handleRefresh = useCallback((): Promise<unknown> => {
         if (shouldSearch) {
-            void queryClient.invalidateQueries({
+            return queryClient.invalidateQueries({
                 queryKey: queryKeys.sessionFiles(sessionId, searchQuery),
             })
-            return
         }
 
         if (activeTab === 'directories') {
-            void queryClient.invalidateQueries({
+            return queryClient.invalidateQueries({
                 queryKey: ['session-directory', sessionId],
             })
-            return
         }
 
-        void refetchGit()
+        return refetchGit()
     }, [activeTab, queryClient, refetchGit, searchQuery, sessionId, shouldSearch])
 
     const handleTabChange = useCallback(
