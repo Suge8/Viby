@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test'
 import {
     buildPairingLinkPresentation,
     classifyPairingLinkQuality,
+    describePairingDirectBlockedReason,
     describePairingLinkTransport,
     formatPairingRoundTripTime,
     PairingDeviceReconnectChallengeRequestSchema,
@@ -272,10 +273,13 @@ describe('pairing peer rpc schema', () => {
             sample: {
                 source: 'desktop',
                 transport: 'relay',
+                transportMode: 'turn-webrtc',
                 localCandidateType: 'relay',
                 remoteCandidateType: 'srflx',
                 currentRoundTripTimeMs: 92,
                 restartCount: 2,
+                routeRevision: 3,
+                directBlockedReason: 'turn-candidate',
                 sampledAt: 1_700_000_000_000,
             },
         })
@@ -285,20 +289,30 @@ describe('pairing peer rpc schema', () => {
     })
 
     it('classifies pairing link quality from transport and RTT', () => {
-        expect(classifyPairingLinkQuality({ transport: 'direct', currentRoundTripTimeMs: 38 })).toMatchObject({
+        expect(
+            classifyPairingLinkQuality({ transport: 'direct', currentRoundTripTimeMs: 38, sampledAt: Date.now() })
+        ).toMatchObject({
             tone: 'success',
             latencyTier: 'fast',
             roundTripTimeMs: 38,
         })
-        expect(classifyPairingLinkQuality({ transport: 'relay', currentRoundTripTimeMs: 120 })).toMatchObject({
+        expect(
+            classifyPairingLinkQuality({ transport: 'relay', currentRoundTripTimeMs: 120, sampledAt: Date.now() })
+        ).toMatchObject({
             tone: 'warning',
             latencyTier: 'steady',
+        })
+        expect(classifyPairingLinkQuality({ transport: 'relay', currentRoundTripTimeMs: 5 })).toMatchObject({
+            latencyTier: 'unknown',
+            roundTripTimeMs: null,
         })
         expect(classifyPairingLinkQuality({ transport: 'unknown', currentRoundTripTimeMs: null })).toMatchObject({
             tone: 'neutral',
             latencyTier: 'unknown',
         })
-        expect(classifyPairingLinkQuality({ transport: 'direct', currentRoundTripTimeMs: 240 })).toMatchObject({
+        expect(
+            classifyPairingLinkQuality({ transport: 'direct', currentRoundTripTimeMs: 240, sampledAt: Date.now() })
+        ).toMatchObject({
             tone: 'warning',
             latencyTier: 'slow',
             roundTripTimeMs: 240,
@@ -306,23 +320,40 @@ describe('pairing peer rpc schema', () => {
         expect(formatPairingRoundTripTime(37.7)).toBe('38ms')
         expect(formatPairingRoundTripTime(-1)).toBe('0ms')
         expect(describePairingLinkTransport({ transport: 'relay' })).toBe('安全中转')
+        expect(describePairingDirectBlockedReason('turn-candidate')).toBe('网络只能选到 TURN 中转')
         expect(resolvePairingLinkTransport({ localCandidateType: 'host', remoteCandidateType: 'srflx' })).toBe('direct')
         expect(resolvePairingLinkTransport({ localCandidateType: null, remoteCandidateType: 'srflx' })).toBe('unknown')
         expect(resolvePairingLinkTransport({ localCandidateType: null, remoteCandidateType: 'relay' })).toBe('relay')
-        expect(buildPairingLinkPresentation({ transport: 'direct', currentRoundTripTimeMs: 38 })).toEqual({
+        expect(
+            buildPairingLinkPresentation({ transport: 'direct', currentRoundTripTimeMs: 38, sampledAt: Date.now() })
+        ).toEqual({
             title: '点对点直连 · 延迟 38ms',
             detail: '最快路线。延迟数字越小，设备操作越跟手。',
             tone: 'success',
         })
-        expect(buildPairingLinkPresentation({ transport: 'direct', currentRoundTripTimeMs: 240 })).toEqual({
+        expect(
+            buildPairingLinkPresentation({ transport: 'direct', currentRoundTripTimeMs: 240, sampledAt: Date.now() })
+        ).toEqual({
             title: '点对点直连 · 延迟 240ms',
             detail: '最快路线。延迟数字越小，设备操作越跟手。',
             tone: 'warning',
         })
-        expect(buildPairingLinkPresentation({ transport: 'relay', currentRoundTripTimeMs: 120 })).toEqual({
+        expect(
+            buildPairingLinkPresentation({ transport: 'relay', currentRoundTripTimeMs: 120, sampledAt: Date.now() })
+        ).toEqual({
             title: '安全中转 · 延迟 120ms',
             detail: '两边网络不能直连时自动绕路；能正常用，不用手动设置。',
             tone: 'warning',
+        })
+        expect(
+            buildPairingLinkPresentation({
+                transport: 'relay',
+                currentRoundTripTimeMs: 120,
+                directBlockedReason: 'direct-slower-than-relay',
+                sampledAt: Date.now(),
+            })
+        ).toMatchObject({
+            detail: 'WebRTC 路径比当前中转慢；已自动走安全中转。',
         })
         expect(buildPairingLinkPresentation({ transport: 'unknown', currentRoundTripTimeMs: null })).toEqual({
             title: '已连接 · 正在检测链路',

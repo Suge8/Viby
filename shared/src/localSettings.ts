@@ -1,11 +1,16 @@
-import { DEFAULT_VIBY_LISTEN_HOST, DEFAULT_VIBY_LISTEN_PORT, DEFAULT_VIBY_LOCAL_API_URL } from './runtimeDefaults'
+import {
+    DEFAULT_PAIRING_BROKER_URL,
+    DEFAULT_VIBY_LISTEN_HOST,
+    DEFAULT_VIBY_LISTEN_PORT,
+    DEFAULT_VIBY_LOCAL_API_URL,
+} from './runtimeDefaults'
 
 type BunTomlParser = {
     parse(raw: string): unknown
 }
 
 export type VibyLocalSettings = {
-    cliApiToken?: string
+    hubOwnerToken?: string
     apiUrl?: string
     listenHost?: string
     listenPort?: number
@@ -142,7 +147,7 @@ export function parseVibyLocalSettingsToml(raw: string): VibyLocalSettings {
     const pushPrivateKey = readString(push, 'private_key')
 
     return {
-        cliApiToken: readString(parsed, 'cli_api_token'),
+        hubOwnerToken: readString(parsed, 'hub_owner_token'),
         apiUrl: readString(parsed, 'api_url'),
         listenHost: readString(parsed, 'listen_host'),
         listenPort: readNumber(parsed, 'listen_port'),
@@ -166,15 +171,11 @@ export function parseVibyLocalSettingsToml(raw: string): VibyLocalSettings {
 export function stringifyVibyLocalSettingsToml(settings: VibyLocalSettings): string {
     const lines: string[] = [
         '# ================================================',
-        '# 🌏 Viby Settings / 用户配置',
-        '# Edit the fields below when you need to. / 需要时只改下面这些。',
+        '# 🌏 Viby Local Runtime / 本机运行配置',
+        '# Desktop manages this file. Usually do not edit. / 桌面端会自动维护，通常不要手改。',
         '# ================================================',
         '',
     ]
-
-    lines.push('# 🔑 Shared login token / 登录令牌')
-    lines.push(`cli_api_token = ${formatTomlString(settings.cliApiToken ?? '')}`)
-    lines.push('')
 
     lines.push('# 🌐 CLI -> Hub API URL / CLI 连接 Hub 地址')
     lines.push(`api_url = ${formatTomlString(settings.apiUrl ?? DEFAULT_VIBY_LOCAL_API_URL)}`)
@@ -192,7 +193,11 @@ export function stringifyVibyLocalSettingsToml(settings: VibyLocalSettings): str
     lines.push(`cors_origins = ${formatTomlStringArray(settings.corsOrigins ?? [])}`)
     lines.push('')
     lines.push('# 📱 Pairing broker / 设备配对服务')
-    lines.push(`pairing_broker_url = ${formatTomlString(settings.pairingBrokerUrl ?? '')}`)
+    lines.push(`pairing_broker_url = ${formatTomlString(settings.pairingBrokerUrl ?? DEFAULT_PAIRING_BROKER_URL)}`)
+    lines.push('')
+    lines.push('# 🔒 Internal secrets / 内部密钥，自动生成，通常不要手改。')
+    lines.push(`hub_owner_token = ${formatTomlString(settings.hubOwnerToken ?? '')}`)
+    lines.push('# Optional private broker create token / 私有 broker 创建令牌，公共 broker 不需要。')
     lines.push(`pairing_create_token = ${formatTomlString(settings.pairingCreateToken ?? '')}`)
 
     lines.push(

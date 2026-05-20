@@ -328,6 +328,9 @@ export type PairingPeerEvent = z.infer<typeof PairingPeerEventSchema>
 
 export const PairingPeerHeartbeatSchema = z.object({
     kind: z.literal('heartbeat'),
+    ack: z.boolean().optional(),
+    id: z.string().min(1).optional(),
+    sentAt: z.number().int().nonnegative().optional(),
 })
 export type PairingPeerHeartbeat = z.infer<typeof PairingPeerHeartbeatSchema>
 

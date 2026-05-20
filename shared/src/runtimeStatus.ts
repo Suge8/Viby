@@ -15,7 +15,7 @@ export interface HubRuntimeStatus {
     publicAccessEnabled: boolean
     pairingBrokerUrl?: string | null
     pairingCode?: string
-    cliApiToken: string
+    hubOwnerToken: string
     settingsFile: string
     dataDir: string
     startedAt: string

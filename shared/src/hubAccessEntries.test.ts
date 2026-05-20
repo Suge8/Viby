@@ -14,7 +14,7 @@ function makeStatus(overrides: Partial<HubRuntimeStatus> = {}): HubRuntimeStatus
         publicAccessEnabled: true,
         pairingBrokerUrl: 'https://viby.run',
         pairingCode: '000000',
-        cliApiToken: 'token',
+        hubOwnerToken: 'token',
         settingsFile: '/tmp/settings.toml',
         dataDir: '/tmp/.viby',
         startedAt: '2026-05-12T00:00:00.000Z',

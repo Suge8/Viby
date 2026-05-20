@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { PairingTunnelDirectBlockedReasonSchema } from './pairingTunnelFrame'
 
 export const PairingRoleSchema = z.enum(['host', 'guest'])
 export type PairingRole = z.infer<typeof PairingRoleSchema>
@@ -206,14 +207,19 @@ export type PairingStatusResponse = z.infer<typeof PairingStatusResponseSchema>
 
 export const PairingTelemetryTransportSchema = z.enum(['direct', 'relay', 'unknown'])
 export type PairingTelemetryTransport = z.infer<typeof PairingTelemetryTransportSchema>
+export const PairingTelemetryTransportModeSchema = z.enum(['direct-webrtc', 'turn-webrtc', 'relay-wss', 'unknown'])
+export type PairingTelemetryTransportMode = z.infer<typeof PairingTelemetryTransportModeSchema>
 
 export const PairingTelemetrySampleSchema = z.object({
     source: z.enum(['desktop', 'guest']),
     transport: PairingTelemetryTransportSchema,
+    transportMode: PairingTelemetryTransportModeSchema,
     localCandidateType: z.string().min(1).nullable(),
     remoteCandidateType: z.string().min(1).nullable(),
     currentRoundTripTimeMs: z.number().int().nonnegative().nullable(),
     restartCount: z.number().int().nonnegative(),
+    routeRevision: z.number().int().nonnegative(),
+    directBlockedReason: PairingTunnelDirectBlockedReasonSchema.nullable().optional(),
     sampledAt: z.number().int().positive(),
 })
 export type PairingTelemetrySample = z.infer<typeof PairingTelemetrySampleSchema>

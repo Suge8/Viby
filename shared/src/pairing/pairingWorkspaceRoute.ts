@@ -10,7 +10,7 @@ export function isPairingWorkspacePath(pathname: string): boolean {
 
 export function hasPairingWorkspaceIntent(pathname: string, search: string): boolean {
     if (!isPairingWorkspacePath(pathname)) return false
-    return new URLSearchParams(search).get(PAIRING_WORKSPACE_INTENT_PARAM) === PAIRING_WORKSPACE_INTENT_VALUE
+    return readSearchParamCaseInsensitive(search, PAIRING_WORKSPACE_INTENT_PARAM) === PAIRING_WORKSPACE_INTENT_VALUE
 }
 
 export function withPairingWorkspaceIntent(href: string): string {
@@ -21,6 +21,22 @@ export function withPairingWorkspaceIntent(href: string): string {
     const pathname = queryStart === -1 ? head : head.slice(0, queryStart)
     if (!isPairingWorkspacePath(pathname)) return href
     const params = new URLSearchParams(queryStart === -1 ? '' : head.slice(queryStart + 1))
+    deleteSearchParamCaseInsensitive(params, PAIRING_WORKSPACE_INTENT_PARAM)
     params.set(PAIRING_WORKSPACE_INTENT_PARAM, PAIRING_WORKSPACE_INTENT_VALUE)
     return `${pathname}?${params.toString()}${hash}`
+}
+
+function readSearchParamCaseInsensitive(search: string, name: string): string | null {
+    const target = name.toLowerCase()
+    for (const [key, value] of new URLSearchParams(search)) {
+        if (key.toLowerCase() === target) return value
+    }
+    return null
+}
+
+function deleteSearchParamCaseInsensitive(params: URLSearchParams, name: string): void {
+    const target = name.toLowerCase()
+    for (const key of Array.from(params.keys())) {
+        if (key.toLowerCase() === target) params.delete(key)
+    }
 }
