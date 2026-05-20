@@ -182,7 +182,7 @@ export function createSocketServer(deps: SocketServerDeps): {
         const auth = socket.handshake.auth as Record<string, unknown> | undefined
         const token = typeof auth?.token === 'string' ? auth.token : null
         const parsedToken = token ? parseAccessToken(token) : null
-        if (!parsedToken || !constantTimeEquals(parsedToken, configuration.cliApiToken)) {
+        if (!parsedToken || !constantTimeEquals(parsedToken, configuration.hubOwnerToken)) {
             return next(new Error('Invalid token'))
         }
         next()

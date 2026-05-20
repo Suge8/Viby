@@ -97,6 +97,11 @@ export function createHubProcessController(): HubProcessController {
         })
     }
 
+    function closeStore(): void {
+        store?.close()
+        store = null
+    }
+
     async function initializeProcess(): Promise<void> {
         if (config) {
             return
@@ -112,7 +117,13 @@ export function createHubProcessController(): HubProcessController {
         corsOrigins = baseCorsOrigins
 
         logHubStartupConfiguration({
-            ...config,
+            hubOwnerTokenIsNew: config.hubOwnerTokenIsNew,
+            settingsFile: config.settingsFile,
+            listenHost: config.listenHost,
+            listenPort: config.listenPort,
+            publicUrl: config.publicUrl,
+            publicAccessEnabled: config.publicAccessEnabled,
+            sources: config.sources,
             formatSource,
         })
 
@@ -176,7 +187,7 @@ export function createHubProcessController(): HubProcessController {
             publicAccessEnabled: config.publicAccessEnabled,
             pairingBrokerUrl: config.pairingBrokerUrl,
             pairingCode: config.pairingCode,
-            cliApiToken: config.cliApiToken,
+            hubOwnerToken: config.hubOwnerToken,
             settingsFile: config.settingsFile,
             launchSource,
         })
@@ -256,6 +267,7 @@ export function createHubProcessController(): HubProcessController {
 
         runtimeAccessor.disposeRuntime()
         webServer?.stop()
+        closeStore()
 
         return options.exitCode ?? 0
     }
@@ -287,6 +299,7 @@ export function createHubProcessController(): HubProcessController {
         shutdownPromise = (async () => {
             const exitCode = runtimeHost ? await runtimeHost.shutdown(options) : await shutdownProcessOnly(options)
 
+            closeStore()
             runtimeHost = null
             webServer = null
             activeRuntimeStatus = null

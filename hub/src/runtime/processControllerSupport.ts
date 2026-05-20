@@ -55,15 +55,14 @@ export function buildProcessWebServerOptions(options: {
 }
 
 export function logHubStartupConfiguration(config: {
-    cliApiTokenIsNew: boolean
-    cliApiToken: string
+    hubOwnerTokenIsNew: boolean
     settingsFile: string
     listenHost: string
     listenPort: number
     publicUrl: string
     publicAccessEnabled: boolean
     sources: {
-        cliApiToken: ConfigSource | 'generated'
+        hubOwnerToken: ConfigSource | 'generated'
         listenHost: ConfigSource | 'generated'
         listenPort: ConfigSource | 'generated'
         publicUrl: ConfigSource | 'generated'
@@ -71,20 +70,19 @@ export function logHubStartupConfiguration(config: {
     }
     formatSource: (source: ConfigSource | 'generated') => string
 }): void {
-    if (config.cliApiTokenIsNew) {
+    if (config.hubOwnerTokenIsNew) {
         console.log('')
         console.log('='.repeat(70))
-        console.log('  NEW CLI_API_TOKEN GENERATED')
+        console.log('  NEW HUB OWNER TOKEN GENERATED')
         console.log('='.repeat(70))
-        console.log('')
-        console.log(`  Token: ${config.cliApiToken}`)
         console.log('')
         console.log(`  Saved to: ${config.settingsFile}`)
+        console.log('  Use `viby auth login` only for headless CLI access.')
         console.log('')
         console.log('='.repeat(70))
         console.log('')
     } else {
-        console.log(`[Hub] CLI_API_TOKEN: loaded from ${config.formatSource(config.sources.cliApiToken)}`)
+        console.log(`[Hub] Hub owner token loaded from ${config.formatSource(config.sources.hubOwnerToken)}`)
     }
 
     console.log(`[Hub] VIBY_LISTEN_HOST: ${config.listenHost} (${config.formatSource(config.sources.listenHost)})`)

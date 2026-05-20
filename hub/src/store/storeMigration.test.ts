@@ -121,7 +121,7 @@ describe('store schema migration', () => {
             const userVersion = migratedDb.prepare('PRAGMA user_version').get() as { user_version: number }
             expect(userVersion.user_version).toBe(SCHEMA_VERSION)
         } finally {
-            migratedDb.close()
+            store.close()
         }
     })
 
@@ -186,7 +186,23 @@ describe('store schema migration', () => {
             const userVersion = migratedDb.prepare('PRAGMA user_version').get() as { user_version: number }
             expect(userVersion.user_version).toBe(SCHEMA_VERSION)
         } finally {
-            migratedDb.close()
+            store.close()
+        }
+    })
+
+    it('closes the store database handle idempotently', async () => {
+        const dbPath = await createTempDbPath()
+        const store = new Store(dbPath)
+
+        store.close()
+        store.close()
+
+        const db = new Database(dbPath, { create: true, readwrite: true, strict: true })
+        try {
+            const row = db.prepare('PRAGMA user_version').get() as { user_version: number }
+            expect(row.user_version).toBe(SCHEMA_VERSION)
+        } finally {
+            db.close()
         }
     })
 })

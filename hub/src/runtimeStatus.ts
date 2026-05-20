@@ -16,7 +16,7 @@ interface HubRuntimeStatusWriterOptions {
     publicAccessEnabled: boolean
     pairingBrokerUrl: string | null
     pairingCode: string
-    cliApiToken: string
+    hubOwnerToken: string
     settingsFile: string
     launchSource?: HubLaunchSource
 }
@@ -46,7 +46,7 @@ function createBaseStatus(options: HubRuntimeStatusWriterOptions): HubRuntimeSta
         publicAccessEnabled: options.publicAccessEnabled,
         pairingBrokerUrl: options.pairingBrokerUrl,
         pairingCode: options.pairingCode,
-        cliApiToken: options.cliApiToken,
+        hubOwnerToken: options.hubOwnerToken,
         settingsFile: options.settingsFile,
         dataDir: options.dataDir,
         startedAt: now,

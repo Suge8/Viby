@@ -1,18 +1,10 @@
+import type { WebPushNotificationPayload } from '@viby/protocol'
 import * as webPush from 'web-push'
 import type { VapidKeys } from '../config/vapidKeys'
 import { reportHubRuntimeError } from '../runtime/runtimeDiagnostics'
 import type { Store } from '../store'
 
-export type PushPayload = {
-    title: string
-    body: string
-    tag?: string
-    data?: {
-        type: string
-        sessionId: string
-        url: string
-    }
-}
+export type PushPayload = WebPushNotificationPayload & { body: string }
 
 type StoredSubscription = {
     endpoint: string

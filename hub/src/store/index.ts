@@ -29,6 +29,7 @@ function isInMemoryDatabasePath(dbPath: string): boolean {
 export class Store {
     private db: Database
     private readonly dbPath: string
+    private closed = false
 
     readonly devices: DeviceAuthStore
     readonly sessions: SessionStore
@@ -75,5 +76,14 @@ export class Store {
         this.machines = new MachineStore(this.db)
         this.messages = new MessageStore(this.db)
         this.push = new PushStore(this.db)
+    }
+
+    close(): void {
+        if (this.closed) {
+            return
+        }
+
+        this.db.close()
+        this.closed = true
     }
 }
