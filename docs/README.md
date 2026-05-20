@@ -21,7 +21,7 @@ README 只保留产品入口；复杂边界和运行约束统一收口到这里�
 - `docs/architecture/pairing-broker.md`：扫码配对、remote DataChannel、broker 与 ICE 方案
 - `docs/architecture/pairing-presence.md`：设备 active 单一事实源、scan 在线由 desktop bridge map 判定、revoke 硬删与 v20 数据迁移
 - `docs/architecture/pairing-reconnection.md`：Perfect Negotiation、长寿命 PeerConnection、短寿命 signaling socket 与 ICE restart 恢复链
-- `docs/architecture/unified-pairing-auth.md`：配对码统一认证、设备绑定、访问密钥退出产品主路径设计
+- `docs/architecture/unified-pairing-auth.md`：配对码统一认证、设备绑定、内部 owner secret 退出产品主路径设计
 
 ## 开发边界
 
@@ -31,6 +31,7 @@ README 只保留产品入口；复杂边界和运行约束统一收口到这里�
 - `docs/development/pwa-install.md`：PWA 安装来源、平台提示矩阵与 owner
 - `docs/development/agent-config-studio.md`：Agent 配置可视化、真实文件写入与验证 owner
 - `docs/development/desktop-ui-shell.md`：Desktop 入口 UI 壳层、交互主路径与视觉 owner
+- `docs/development/runtime-environment.md`：运行时环境变量、保留/高级/内部配置分层
 - `docs/development/hub-owners.md`：Hub owner 与 durable mutation 边界
 - `docs/development/cli-runtime-boundaries.md`：CLI runtime、runner、resume token 边界
 - `docs/development/shared-contracts.md`：shared 合同层与 schema owner 边界

@@ -20,7 +20,7 @@
 
 Hub 只保存 scan 设备元数据，不再维护 scan 在线状态。`pairing:<id>` 即使出现在 Hub presence 里也会被忽略。
 
-Desktop 设备列表投影先合并 Hub rows，再从 persisted approved pairings 合成缺失的 `pairing:<id>` scan row。这样扫码设备 bridge 已 ready、但 Hub 轮询尚未返回 scan row 时，连接页仍能实时显示正确在线数。
+Desktop 设备列表投影以 persisted approved pairings 作为 scan 设备事实源：`pairing:<id>` row 总是由当前 pairing snapshot 覆盖，Hub rows 只补 link/local 和历史非 scan 元数据。这样浏览器 tab 安装成 PWA 后，即使 standalone storage 变成新分区，也仍然落在同一个 `pairing:<id>` 逻辑设备；扫码设备 bridge 已 ready、但 Hub 轮询尚未返回 scan row 时，连接页也能实时显示正确在线数。
 
 ## 数据契约
 
@@ -65,7 +65,7 @@ link/local active ⇔ device.active && revokedAt === null
 Device popover 合并两份事实：
 
 - Hub `device_auth_devices`：设备列表、名称、平台、link/local active。
-- Desktop persisted pairings：缺失 scan row 的兜底元数据。
+- Desktop persisted pairings：scan row 的 canonical 元数据与逻辑设备 id。
 - `usePairingBridges().deviceLinks`：scan 设备在线与链路质量；route 状态事件驱动更新，RTT 只显示带 `sampledAt` 且未过期的观测样本。
 
 展示规则：
