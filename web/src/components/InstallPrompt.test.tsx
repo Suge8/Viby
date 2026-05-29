@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PWAInstallState } from '@/hooks/usePWAInstall'
 import { I18nProvider } from '@/lib/i18n-context'
@@ -42,10 +42,13 @@ function createPWAInstallState(overrides?: Partial<PWAInstallState>): PWAInstall
 describe('InstallPrompt', () => {
     afterEach(() => {
         cleanup()
+        document.documentElement.style.removeProperty('--app-install-banner-clearance')
+        vi.restoreAllMocks()
     })
 
     beforeEach(async () => {
         vi.clearAllMocks()
+        document.documentElement.style.removeProperty('--app-install-banner-clearance')
         window.localStorage.clear()
         const { usePWAInstall } = await import('@/hooks/usePWAInstall')
         vi.mocked(usePWAInstall).mockReturnValue(createPWAInstallState())
@@ -134,6 +137,35 @@ describe('InstallPrompt', () => {
         expect(await screen.findByRole('dialog', { name: 'Install Viby' })).toBeInTheDocument()
         expect(screen.getByText('Open Safari File menu')).toBeInTheDocument()
         expect(screen.getByText('Choose Add to Dock')).toBeInTheDocument()
+    })
+
+    it('publishes banner clearance so route scrollports avoid the install banner', async () => {
+        Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 })
+        vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+            bottom: 720,
+            height: 120,
+            left: 0,
+            right: 320,
+            top: 600,
+            width: 320,
+            x: 0,
+            y: 600,
+            toJSON: () => ({}),
+        } as DOMRect)
+
+        const { rerender } = await renderInstallPrompt()
+
+        await waitFor(() => {
+            expect(document.documentElement.style.getPropertyValue('--app-install-banner-clearance')).toBe('200px')
+        })
+
+        rerender(
+            <I18nProvider>
+                <InstallPrompt suppressed />
+            </I18nProvider>
+        )
+
+        expect(document.documentElement.style.getPropertyValue('--app-install-banner-clearance')).toBe('')
     })
 
     it('dismisses the banner through the shared dismiss action', async () => {

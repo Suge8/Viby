@@ -4,9 +4,14 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 const DESIGN_SYSTEM_CSS_PATH = resolve(dirname(fileURLToPath(import.meta.url)), 'design-system.css')
+const INDEX_CSS_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '../index.css')
 
 function readDesignSystemCss() {
     return readCssWithImports(DESIGN_SYSTEM_CSS_PATH)
+}
+
+function readIndexCss() {
+    return normalizeCss(readFileSync(INDEX_CSS_PATH, 'utf8'))
 }
 
 function readCssWithImports(filePath, seen = new Set()) {
@@ -20,7 +25,11 @@ function readCssWithImports(filePath, seen = new Set()) {
         const resolvedImportPath = resolve(dirname(filePath), importPath)
         return readCssWithImports(resolvedImportPath, seen)
     })
-    return expandedCss.replaceAll('"', "'").replace(/\s+/g, ' ').trim()
+    return normalizeCss(expandedCss)
+}
+
+function normalizeCss(css) {
+    return css.replaceAll('"', "'").replace(/\s+/g, ' ').trim()
 }
 
 describe('design-system mobile chat route layout', () => {
@@ -58,6 +67,56 @@ describe('design-system mobile chat route layout', () => {
         expect(css).toContain('background: var(--app-bg);')
     })
 
+    it('pauses covered mobile pane animations while another pane owns the screen', () => {
+        const css = readDesignSystemCss()
+
+        expect(css).toContain(".sessions-mobile-list-pane[aria-hidden='true'] *")
+        expect(css).toContain(".sessions-mobile-detail-pane[aria-hidden='true'] *::after")
+        expect(css).toContain('animation-play-state: paused;')
+    })
+
+    it('keeps repeated session list cards off blur and state-shadow layers', () => {
+        const css = readDesignSystemCss()
+
+        expect(css).not.toMatch(/\.session-list-item,\s*\.ds-session-list-new-button\s*\{[^}]*backdrop-filter:/)
+        expect(css).not.toContain('--app-session-processing-shadow')
+        expect(css).not.toContain('--app-session-awaiting-shadow')
+        expect(css).not.toContain('--app-session-closed-shadow')
+        expect(css).not.toContain('--app-session-archived-shadow')
+    })
+
+    it('keeps spinner rotation isolated to its own transform layer', () => {
+        const css = readIndexCss()
+
+        expect(css).toContain('.animate-spin')
+        expect(css).toContain('contain: paint;')
+        expect(css).toContain('transform-origin: center;')
+        expect(css).toContain('will-change: transform;')
+    })
+
+    it('anchors the remote pairing link badge with one bottom expression that mirrors the outline trigger on chat and the create FAB centerline elsewhere', () => {
+        const css = readIndexCss()
+
+        // FAB-centerline baseline token must exist and be derived (no magic 1.375rem).
+        expect(css).toContain('--app-remote-link-badge-min-height: 2.25rem;')
+        expect(css).toMatch(
+            /--app-remote-link-badge-corner-baseline:\s*calc\(\s*var\(--app-overlay-edge-offset\)\s*\+\s*\(3\.5rem\s*-\s*var\(--app-remote-link-badge-min-height\)\)\s*\/\s*2\s*\)/
+        )
+
+        // The bottom expression is a single `max()` of the two anchors; the chat branch must NOT
+        // re-introduce `--app-safe-area-inset-bottom` (regression guard for the PWA offset bug).
+        expect(css).toMatch(
+            /\.remote-pairing-link-badge\s*\{[^}]*bottom:\s*max\(\s*calc\(\s*var\(--app-safe-area-inset-bottom\)\s*\+\s*var\(--app-remote-link-badge-corner-baseline\)\s*\),\s*calc\(\s*var\(--chat-composer-offset-bottom\)\s*\+\s*var\(--chat-composer-reserved-space\)\s*\+\s*var\(--chat-desktop-bottom-control-gap\)\s*\)\s*\)/
+        )
+
+        // Badge mirrors the outline trigger by living on the left rail.
+        expect(css).toMatch(/\.remote-pairing-link-badge\s*\{[^}]*left:\s*calc\(\s*var\(--app-safe-area-inset-left\)/)
+        expect(css).not.toMatch(/\.remote-pairing-link-badge\s*\{[^}]*right:/)
+
+        // The legacy magic offset must be gone.
+        expect(css).not.toContain('--app-remote-link-badge-mobile-bottom')
+    })
+
     it('keeps the mobile composer geometry free of extra safe-area rails', () => {
         const css = readDesignSystemCss()
 
@@ -72,15 +131,22 @@ describe('design-system mobile chat route layout', () => {
         expect(css).toMatch(
             /--chat-composer-occupied-space:\s*calc\(\s*var\(--chat-composer-reserved-space\)\s*\+\s*var\(--chat-composer-visual-clearance\)\s*\);/
         )
-        expect(css).toContain('calc(var(--chat-composer-occupied-space) - var(--chat-bottom-control-lift))')
     })
 
-    it('keeps mobile side controls as overlays instead of reserving a right-side rail inside the transcript lane', () => {
+    it('reserves an active-turn footer headroom so the new user turn can sit pinned at the header anchor', () => {
+        const css = readDesignSystemCss()
+
+        expect(css).toMatch(
+            /height:\s*calc\(\s*var\(--chat-composer-occupied-space\)\s*\+\s*var\(--chat-active-turn-headroom,\s*0px\)\s*\);/
+        )
+    })
+
+    it('keeps side controls as floating overlays without reserving a right-side rail inside the transcript lane', () => {
         const css = readDesignSystemCss()
 
         expect(css).not.toContain('.ds-thread-side-rail-inset')
         expect(css).toContain('.ds-thread-bottom-control-wrapper')
-        expect(css).toContain('.ds-thread-history-control-wrapper')
+        expect(css).toContain('.ds-thread-outline-trigger-wrapper')
         expect(css).toContain('pointer-events: none;')
     })
 
@@ -124,74 +190,77 @@ describe('design-system mobile chat route layout', () => {
         expect(css).toContain('backdrop-filter: var(--ds-composer-surface-blur);')
     })
 
-    it('keeps the replying indicator out of normal composer height flow', () => {
+    it('drops the legacy in-composer replying indicator anchor in favor of the transcript thinking row', () => {
         const css = readDesignSystemCss()
 
-        expect(css).toContain('.ds-replying-indicator-anchor')
-        expect(css).toContain('position: absolute;')
-        expect(css).toContain('bottom: calc(100% + 0.35rem);')
+        expect(css).not.toContain('.ds-replying-indicator-anchor')
+        expect(css).not.toContain('--ds-replying-indicator-exit-duration')
+        expect(css).toContain('.ds-replying-indicator')
     })
 
-    it('keeps the mobile bottom rail on the fixed lower rail until keyboard retreat is needed', () => {
+    it('drops the legacy mobile-only bottom-control rail tokens that fought the keyboard', () => {
         const css = readDesignSystemCss()
 
-        expect(css).toContain('.session-chat-thread-bottom-control-anchor')
-        expect(css).toContain('--chat-side-control-rest-bottom-offset:')
-        expect(css).toContain(
-            ".session-chat-layout[data-chat-keyboard-open='true'] .session-chat-thread-bottom-control-anchor"
-        )
-        expect(css).toContain('bottom: var(--chat-side-control-bottom-offset);')
-        expect(css).not.toContain('--chat-side-control-lower-top')
+        expect(css).not.toContain('--chat-side-control-rest-bottom-offset')
+        expect(css).not.toContain('--chat-side-control-bottom-offset')
+        expect(css).not.toContain('--chat-bottom-control-bottom-offset')
+        expect(css).not.toContain('--chat-bottom-control-min-offset')
+        expect(css).not.toContain('--chat-bottom-control-lift')
+        expect(css).not.toContain('--chat-side-control-upper-top')
+        expect(css).not.toContain("data-chat-keyboard-open='true'")
     })
 
-    it('anchors the bottom control without a bespoke entry animation owner', () => {
+    it('drops the dedicated history control surface and tokens once the outline owner subsumes the upward jump', () => {
         const css = readDesignSystemCss()
 
-        expect(css).toContain('.session-chat-thread-bottom-control')
-        expect(css).toContain('.ds-thread-bottom-control-wrapper')
-        expect(css).toContain('bottom: var(--chat-side-control-rest-bottom-offset);')
-        expect(css).not.toContain('thread-bottom-control-enter')
+        expect(css).not.toContain('.ds-thread-history-control')
+        expect(css).not.toContain('--ds-session-chat-history-control-layer')
+        expect(css).not.toContain('--ds-session-chat-history-control-top-desktop')
+        expect(css).not.toContain('--ds-session-chat-history-control-inset')
     })
 
-    it('keeps chat icon-only side controls fully round on mobile and desktop', () => {
+    it('keeps chat icon-only side controls fully round on both side-control families', () => {
         const css = readDesignSystemCss()
 
-        expect(css).toContain('.ds-thread-history-control')
         expect(css).toContain('.ds-thread-bottom-control')
+        expect(css).toContain('.ds-thread-outline-trigger')
         expect(css).toContain('border-radius: 999px;')
         expect(css).toContain('height: var(--chat-side-control-size);')
         expect(css).toContain('width: var(--chat-side-control-size);')
     })
 
-    it('anchors the desktop history control to the page header clear zone instead of the thread root', () => {
+    it('anchors both side controls above the composer stage with a split desktop / mobile owner', () => {
         const css = readDesignSystemCss()
 
-        expect(css).toContain('--ds-session-chat-header-layer: 30;')
-        expect(css).toContain('--chat-header-visual-clearance: 0.5rem;')
-        expect(css).toContain(
-            '--chat-header-anchor-space: calc(var(--ds-session-chat-header-clearance) + var(--chat-header-visual-clearance));'
-        )
-        expect(css).toContain('--ds-session-chat-history-control-layer: 15;')
-        expect(css).toContain('--ds-session-chat-history-control-top-desktop:')
-        expect(css).toContain('.ds-thread-history-control-wrapper')
-        expect(css).toContain('--chat-desktop-stage-center-x: 50vw;')
-        expect(css).toContain('position: fixed;')
-        expect(css).toContain('top: var(--ds-session-chat-history-control-top-desktop);')
-        expect(css).toContain('left: var(--chat-desktop-stage-center-x);')
-        expect(css).toContain('z-index: var(--ds-session-chat-history-control-layer);')
-        expect(css).not.toContain('.ds-thread-history-control-wrapper { position: absolute;')
-    })
-
-    it('anchors the desktop bottom control above the composer stage instead of the viewport edge', () => {
-        const css = readDesignSystemCss()
-
-        expect(css).toContain('--chat-composer-stage-top: 100vh;')
         expect(css).toContain('--chat-desktop-bottom-control-gap: 0.5rem;')
         expect(css).toContain('.ds-thread-bottom-control-wrapper')
+        expect(css).toContain('.ds-thread-outline-trigger-wrapper')
+        // Desktop default: composer is in-flow, anchor to measured composer rect
         expect(css).toMatch(
             /top:\s*calc\(\s*var\(--chat-composer-stage-top\)\s*-\s*var\(--chat-side-control-size\)\s*-\s*var\(--chat-desktop-bottom-control-gap\)\s*\);/
         )
         expect(css).toContain('left: var(--chat-desktop-stage-center-x);')
+        expect(css).toContain('right: var(--chat-desktop-stage-trailing-x);')
+        expect(css).toContain(
+            '--chat-desktop-stage-trailing-x: calc(100vw - var(--chat-desktop-header-stage-content-right-x, 100vw))'
+        )
+        // Mobile chat scope: composer is fixed, anchor to shared composer geometry tokens
+        expect(css).toMatch(
+            /bottom:\s*calc\(\s*var\(--chat-composer-offset-bottom\)\s*\+\s*var\(--chat-composer-reserved-space\)\s*\+\s*var\(--chat-desktop-bottom-control-gap\)\s*\);/
+        )
+        expect(css).toContain('left: 50%;')
+        expect(css).toContain('right: var(--chat-stage-trailing-x);')
+    })
+
+    it('keeps the outline popover on a single floating glass surface owner with no manual load-older button', () => {
+        const css = readDesignSystemCss()
+
+        expect(css).toContain('.ds-thread-outline-popover')
+        expect(css).toContain('transform-origin: bottom right;')
+        expect(css).toContain('.ds-thread-outline-popover-header-count')
+        expect(css).toContain('.ds-thread-outline-popover-item')
+        expect(css).toContain('.ds-thread-outline-popover-tail')
+        expect(css).not.toContain('.ds-thread-outline-popover-load-older')
     })
 
     it('does not keep the old visual viewport bottom offset padding path', () => {
@@ -232,20 +301,33 @@ describe('design-system mobile chat route layout', () => {
         expect(css).not.toContain('0 10px 24px rgba(9, 15, 35, 0.06)')
     })
 
-    it('gives inline tool cards a dedicated transcript surface instead of inheriting ds-panel shadow', () => {
+    it('gives inline tool cards a dedicated transcript surface separated from message bubbles by tone and radius', () => {
         const css = readDesignSystemCss()
 
         expect(css).toContain('.ds-tool-card-surface')
-        expect(css).toContain('border: 1px solid color-mix(in srgb, var(--ds-border-default) 72%, transparent);')
+        expect(css).toContain('border: 1px solid color-mix(in srgb, var(--ds-border-default) 36%, transparent);')
+        expect(css).toContain('border-radius: var(--ds-radius-lg);')
         expect(css).toContain('box-shadow: none;')
-        expect(css).toContain('background: color-mix(in srgb, var(--ds-panel-strong) 96%, transparent);')
+        expect(css).toContain('background: color-mix(in srgb, var(--ds-panel) 50%, transparent);')
     })
 
-    it('keeps transcript tool cards on the same rounded surface family as message bubbles', () => {
+    it('keeps user transcript bubbles on the rounded surface family', () => {
         const css = readDesignSystemCss()
 
         expect(css).toContain('.ds-message-surface')
         expect(css).toContain('border-radius: var(--ds-radius-2xl);')
+    })
+
+    it('flattens assistant transcript bubbles into paper-like flowing text without bubble chrome or clipping', () => {
+        const css = readDesignSystemCss()
+        const block = css.match(/\.ds-message-surface-assistant\s*\{[^}]+\}/)?.[0] ?? ''
+
+        expect(block).toMatch(/border-color:\s*transparent;/)
+        expect(block).toMatch(/background:\s*transparent;/)
+        // Must also neutralize inherited bubble geometry from .ds-message-surface
+        // (radius + overflow) so paper-flow text is not clipped at the corners.
+        expect(block).toMatch(/border-radius:\s*0;/)
+        expect(block).toMatch(/overflow:\s*visible;/)
     })
 
     it('defines transcript row spacing through shared row-gap classes instead of per-component outer padding', () => {

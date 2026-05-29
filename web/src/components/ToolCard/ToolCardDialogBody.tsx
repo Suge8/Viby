@@ -1,5 +1,6 @@
 import type { ToolCallBlock } from '@/chat/types'
 import { TextContent } from '@/components/TextContent'
+import { PermissionFooter } from '@/components/ToolCard/PermissionFooter'
 import { ToolJsonInspector } from '@/components/ToolCard/ToolJsonInspector'
 import { buildToolTraceItems } from '@/components/ToolCard/trace'
 import { DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -22,6 +23,7 @@ export function ToolCardDialogBody(props: {
                 <DialogTitle>{props.toolTitle}</DialogTitle>
             </DialogHeader>
             <div className="ds-dialog-scroll-body ds-dialog-scroll-body-tall mt-3 flex flex-col gap-4">
+                <PermissionFooter tool={props.block.tool} />
                 <div>
                     <div className="ds-inline-kicker">{props.inputLabel}</div>
                     <ToolJsonInspector value={props.block.tool.input} />

@@ -5,5 +5,5 @@ interface MarkdownRendererProps {
 }
 
 export function MarkdownRenderer(props: MarkdownRendererProps): React.JSX.Element {
-    return <MarkdownPrimitive content={props.content} className="text-base" />
+    return <MarkdownPrimitive content={props.content} className="text-base" codeHighlight="never" />
 }

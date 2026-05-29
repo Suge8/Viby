@@ -113,27 +113,6 @@
     transition: width 520ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.ds-connecting-rail-sheen {
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    overflow: hidden;
-}
-
-.ds-connecting-rail-sheen::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(
-        90deg,
-        transparent 0%,
-        color-mix(in srgb, #ffffff 55%, transparent) 50%,
-        transparent 100%
-    );
-    transform: translateX(-120%);
-    animation: ds-connecting-sheen 1.6s ease-in-out infinite;
-}
-
 .ds-connecting-step {
     margin: 0;
     color: var(--ds-text-muted);
@@ -155,16 +134,6 @@
     }
 }
 
-@keyframes ds-connecting-sheen {
-    0% {
-        transform: translateX(-120%);
-    }
-    65%,
-    100% {
-        transform: translateX(220%);
-    }
-}
-
 @keyframes ds-connecting-step-fade {
     0% {
         opacity: 0;
@@ -182,10 +151,6 @@
     }
     .ds-connecting-rail-fill {
         transition: none;
-    }
-    .ds-connecting-rail-sheen::after {
-        animation: none;
-        transform: none;
     }
     .ds-connecting-step {
         animation: none;

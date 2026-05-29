@@ -1,6 +1,6 @@
-import type { ToolViewProps } from '@/components/ToolCard/views/_all'
 import { isObject } from '@viby/protocol'
 import { DiffView } from '@/components/DiffView'
+import type { ToolViewProps } from '@/components/ToolCard/views/_all'
 
 function parseUnifiedDiff(unifiedDiff: string): { oldText: string; newText: string; fileName?: string } {
     const lines = unifiedDiff.split('\n')
@@ -16,11 +16,11 @@ function parseUnifiedDiff(unifiedDiff: string): { oldText: string; newText: stri
         }
 
         if (
-            line.startsWith('diff --git')
-            || line.startsWith('index ')
-            || line.startsWith('---')
-            || line.startsWith('new file mode')
-            || line.startsWith('deleted file mode')
+            line.startsWith('diff --git') ||
+            line.startsWith('index ') ||
+            line.startsWith('---') ||
+            line.startsWith('new file mode') ||
+            line.startsWith('deleted file mode')
         ) {
             continue
         }
@@ -50,7 +50,7 @@ function parseUnifiedDiff(unifiedDiff: string): { oldText: string; newText: stri
     return {
         oldText: oldLines.join('\n'),
         newText: newLines.join('\n'),
-        fileName
+        fileName,
     }
 }
 

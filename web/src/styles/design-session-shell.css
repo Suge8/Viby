@@ -1,14 +1,32 @@
 .session-chat-page {
     --ds-session-chat-header-layer: 30;
-    --ds-session-chat-history-control-layer: 15;
     --ds-session-chat-bottom-control-layer: 25;
+    --ds-session-chat-outline-control-layer: 35;
+    --ds-session-chat-outline-popover-layer: 60;
     --ds-session-chat-header-clearance: calc(env(safe-area-inset-top) + 5rem);
     --chat-header-visual-clearance: 0.5rem;
     --chat-header-anchor-space: calc(var(--ds-session-chat-header-clearance) + var(--chat-header-visual-clearance));
     --ds-session-chat-header-controls-top-gap: 0.125rem;
     --ds-session-chat-header-controls-top-gap-desktop: 0.25rem;
-    --ds-session-chat-history-control-inset: 2rem;
-    --ds-session-chat-history-control-top-desktop: calc(var(--ds-session-chat-header-clearance) + 0.25rem);
+    /* Shared chat stage grid tokens: SessionHeader's three-column grid (back
+       button │ title card │ more menu) and the desktop composer shell both
+       consume these so the composer surface lines up with the title card's
+       column and the outline trigger lines up with the more button's column. */
+    --chat-stage-side-width: 5rem;
+    --app-chat-stage-column-gap: 0.5rem;
+    /* Mobile chat stage spans the viewport so the right edge is
+       `viewport_right - safe-area - stage_padding`. Desktop chat stage may be
+       offset by the sessions sidebar, so the right rail there must align with
+       the SessionHeader more button — the canonical source is the JS-measured
+       SessionHeader stage content right edge (`--chat-desktop-header-stage-content-right-x`),
+       which already accounts for the SessionHeader stage shell `px-3` padding.
+       The fallback `100vw` keeps the trigger at the viewport right edge only on
+       the very first paint before the SessionHeader frame measurement lands. */
+    --chat-stage-trailing-x: max(
+        calc(env(safe-area-inset-right) + 0.75rem),
+        calc((100vw - var(--ds-stage-width)) / 2 + 0.75rem)
+    );
+    --chat-desktop-stage-trailing-x: calc(100vw - var(--chat-desktop-header-stage-content-right-x, 100vw));
 }
 
 .ds-sessions-shell-header {
@@ -47,19 +65,125 @@
     height: 2.75rem;
     width: 2.75rem;
     color: var(--app-hint);
+    transition:
+        color var(--ds-motion-fast) var(--ds-ease-standard),
+        background-color var(--ds-motion-base) var(--ds-ease-standard),
+        border-color var(--ds-motion-base) var(--ds-ease-standard);
 }
 
 .ds-sessions-shell-action-button:hover {
     color: var(--app-fg);
 }
 
+/* Agents button gets a subtle coral hover tint to match its icon identity */
+.ds-sessions-shell-agents-button.ds-sessions-shell-action-button:hover {
+    background-color: color-mix(in srgb, var(--ds-accent-coral) 7%, var(--ds-panel-strong));
+    border-color: color-mix(in srgb, var(--ds-accent-coral) 28%, var(--ds-border-default));
+}
+
+/* Settings icon inherits the button's color and transition (muted → fg on hover) */
 .ds-sessions-shell-action-icon {
+    transition: color var(--ds-motion-fast) var(--ds-ease-standard);
+}
+
+/* Agent config icon keeps its coral identity regardless of button hover */
+.ds-sessions-shell-action-icon--agents {
     color: var(--ds-accent-coral);
 }
 
 .ds-thread-notice {
     margin-inline: auto;
     max-width: min(100%, 32rem);
+}
+
+.ds-thread-top-anchor-spacer {
+    height: var(--chat-header-anchor-space);
+}
+
+.ds-thread-bottom-anchor-spacer {
+    height: calc(var(--chat-composer-occupied-space) + var(--chat-active-turn-headroom, 0px));
+}
+
+/*
+ * Pinned overlay confirming that an older-history prefetch is in flight while
+ * the user is still actively scrolling up. Sits inside the thread root (which
+ * is already positioned) and floats just under the floating SessionHeader so
+ * it never participates in virtuoso layout. Visibility is owned by
+ * `messageState.isLoadingMore && messageState.hasMore` via the
+ * `data-visible` attribute; pointer events stay off so the pill never blocks
+ * the underlying transcript scroll.
+ */
+/*
+ * Crossfade overlay used during session entry: the skeleton stays mounted
+ * briefly after `showSkeleton` flips false, fading out over the same window the
+ * real transcript fades in. Single owner, single phase — the skeleton element
+ * is the only thing that handles its exit; the Virtuoso side fades in via
+ * `.session-chat-thread-viewport` (see design-system-motion.css).
+ */
+.ds-thread-skeleton-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    opacity: 1;
+    transition: opacity 220ms var(--ds-ease-decelerate);
+}
+
+.ds-thread-skeleton-overlay[data-fading="true"] {
+    opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ds-thread-skeleton-overlay {
+        transition: opacity 80ms linear;
+    }
+}
+
+.ds-thread-history-loading-indicator {
+    position: absolute;
+    inset-inline: 0;
+    top: calc(var(--chat-header-anchor-space) + 0.25rem);
+    display: flex;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0;
+    transform: translateY(-4px);
+    transition:
+        opacity 140ms var(--ds-ease-decelerate),
+        transform 140ms var(--ds-ease-decelerate);
+}
+
+.ds-thread-history-loading-indicator[data-visible="true"] {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.ds-thread-history-loading-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.3rem 0.75rem 0.3rem 0.6rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--app-surface) 92%, transparent);
+    border: 1px solid color-mix(in srgb, var(--app-border) 70%, transparent);
+    box-shadow: 0 6px 18px -10px color-mix(in srgb, var(--app-foreground) 30%, transparent);
+    color: var(--app-hint);
+    font-size: 0.75rem;
+    line-height: 1;
+    backdrop-filter: blur(6px);
+}
+
+.ds-thread-history-loading-label {
+    color: var(--app-foreground);
+    font-weight: 500;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ds-thread-history-loading-indicator {
+        transition: opacity 80ms linear;
+        transform: none;
+    }
 }
 
 .ds-thread-side-control-base {
@@ -73,33 +197,68 @@
     text-align: center;
 }
 
-.ds-thread-history-control {
-    border-radius: 999px;
-}
-
-.ds-thread-history-control-wrapper {
+/* Default (desktop, tablet >= 768px): composer is in-flow inside the chat stage,
+   which itself may be offset horizontally by the sessions sidebar. Both
+   controls anchor to the JS-measured composer rect:
+     - vertical: `--chat-composer-stage-top` minus control size and gap
+     - bottom CTA horizontal center: `--chat-desktop-stage-center-x`
+     - outline trigger right rail: `--chat-desktop-stage-trailing-x`
+   Desktop has no soft keyboard, so the measured frame is stable. */
+.ds-thread-bottom-control-wrapper,
+.ds-thread-outline-trigger-wrapper {
     pointer-events: none;
     position: fixed;
-    z-index: var(--ds-session-chat-history-control-layer);
-    right: var(--chat-side-control-right-offset);
-    top: var(--chat-side-control-upper-top);
-    transform: translateY(-50%);
+    top: calc(var(--chat-composer-stage-top) - var(--chat-side-control-size) - var(--chat-desktop-bottom-control-gap));
+    bottom: auto;
+    transition: opacity var(--ds-motion-fast) var(--ds-ease-emphasized);
 }
 
 .ds-thread-bottom-control-wrapper {
-    pointer-events: none;
-    position: fixed;
     z-index: var(--ds-session-chat-bottom-control-layer);
-    right: var(--chat-side-control-right-offset);
-    bottom: var(--chat-side-control-rest-bottom-offset);
+    left: var(--chat-desktop-stage-center-x);
+    transform: translateX(-50%);
 }
 
-.ds-thread-bottom-control {
+.ds-thread-outline-trigger-wrapper {
+    z-index: var(--ds-session-chat-outline-control-layer);
+    left: auto;
+    right: var(--chat-desktop-stage-trailing-x);
+    transform: none;
+}
+
+/* Mobile chat scope: the composer is `position: fixed` (see
+   `design-system-composer.css`), so the controls anchor to the same composer
+   geometry tokens. The mobile chat stage spans the viewport, so the horizontal
+   center is the viewport center and the right rail uses the shared
+   `--chat-stage-trailing-x` (safe-area-aware). Keyboard-safe by construction:
+   both the composer and the controls read the same
+   `--chat-composer-offset-bottom` / `--chat-composer-reserved-space`. */
+@media (max-width: 767px) {
+    .app-shell[data-viby-route="session-chat"] .ds-thread-bottom-control-wrapper,
+    .app-shell[data-viby-route="session-chat"] .ds-thread-outline-trigger-wrapper {
+        top: auto;
+        bottom: calc(
+            var(--chat-composer-offset-bottom) +
+            var(--chat-composer-reserved-space) +
+            var(--chat-desktop-bottom-control-gap)
+        );
+    }
+
+    .app-shell[data-viby-route="session-chat"] .ds-thread-bottom-control-wrapper {
+        left: 50%;
+        transform: translateX(-50%);
+    }
+
+    .app-shell[data-viby-route="session-chat"] .ds-thread-outline-trigger-wrapper {
+        left: auto;
+        right: var(--chat-stage-trailing-x);
+        transform: none;
+    }
+}
+
+.ds-thread-bottom-control,
+.ds-thread-outline-trigger {
     border-radius: 999px;
-}
-
-.ds-thread-history-control,
-.ds-thread-bottom-control {
     pointer-events: auto;
 }
 
@@ -118,110 +277,571 @@
     pointer-events: none;
     opacity: 0;
     visibility: hidden;
+    transform: translate(-50%, 6px) scale(0.96);
+}
+
+.ds-thread-outline-trigger-wrapper.ds-thread-side-control-hidden {
+    transform: translateY(6px) scale(0.96);
+}
+
+.ds-thread-outline-popover {
+    position: fixed;
+    z-index: var(--ds-session-chat-outline-popover-layer);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid color-mix(in srgb, var(--ds-border-default) 90%, transparent);
+    border-radius: var(--ds-radius-2xl);
+    background: color-mix(in srgb, var(--ds-panel-strong) 98%, transparent);
+    box-shadow:
+        0 24px 64px -16px rgba(9, 15, 35, 0.32),
+        0 12px 28px -12px rgba(9, 15, 35, 0.22),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    backdrop-filter: blur(18px) saturate(160%);
+    transform-origin: bottom right;
+}
+
+.ds-thread-outline-popover-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.75rem 0.875rem 0.5rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--ds-border-default) 50%, transparent);
+}
+
+.ds-thread-outline-popover-header-title {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--app-hint);
+}
+
+.ds-thread-outline-popover-header-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    padding: 0 0.4rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--ds-brand) 14%, transparent);
+    color: var(--app-fg);
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.ds-thread-outline-popover-list {
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 0.375rem 0.375rem 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    scrollbar-gutter: stable;
+}
+
+.ds-thread-outline-popover-item {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-height: 0;
+    border: 1px solid transparent;
+    border-radius: var(--ds-radius-lg);
+    padding: 0.5rem 0.625rem;
+    text-align: left;
+    background: transparent;
+    color: var(--app-fg);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition:
+        background var(--ds-motion-fast) var(--ds-ease-emphasized),
+        border-color var(--ds-motion-fast) var(--ds-ease-emphasized),
+        transform var(--ds-motion-fast) var(--ds-ease-emphasized);
+}
+
+.ds-thread-outline-popover-item:hover {
+    background: color-mix(in srgb, var(--ds-brand) 8%, var(--app-subtle-bg));
+    border-color: color-mix(in srgb, var(--ds-brand) 16%, transparent);
+}
+
+.ds-thread-outline-popover-item:active {
+    transform: scale(0.98);
+}
+
+.ds-thread-outline-popover-loading {
+    padding: 0.5rem 0.625rem;
+    border-top: 1px solid color-mix(in srgb, var(--app-border) 50%, transparent);
+    color: var(--app-hint);
+    font-size: 0.75rem;
+    text-align: center;
+}
+
+.ds-thread-outline-popover-reveal-earlier {
+    appearance: none;
+    display: block;
+    width: 100%;
+    margin-bottom: 0.25rem;
+    border: 1px dashed color-mix(in srgb, var(--ds-border-default) 80%, transparent);
+    border-radius: var(--ds-radius-lg);
+    padding: 0.5rem 0.625rem;
+    background: transparent;
+    color: var(--app-hint);
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-align: center;
+    cursor: pointer;
+    transition:
+        background var(--ds-motion-fast) var(--ds-ease-emphasized),
+        border-color var(--ds-motion-fast) var(--ds-ease-emphasized),
+        color var(--ds-motion-fast) var(--ds-ease-emphasized);
+}
+
+.ds-thread-outline-popover-reveal-earlier:hover {
+    background: color-mix(in srgb, var(--ds-brand) 8%, var(--app-subtle-bg));
+    border-color: color-mix(in srgb, var(--ds-brand) 20%, transparent);
+    color: var(--app-fg);
+}
+
+.ds-thread-outline-popover-item-index {
+    margin-right: 0.625rem;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.375rem;
+    height: 1.375rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--ds-panel) 80%, transparent);
+    color: var(--app-hint);
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.ds-thread-outline-popover-item:hover .ds-thread-outline-popover-item-index {
+    color: var(--app-fg);
+    background: color-mix(in srgb, var(--ds-brand) 18%, var(--ds-panel) 82%);
+}
+
+.ds-thread-outline-popover-item-title {
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ds-thread-outline-popover-tail {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.625rem 0.875rem 0.25rem;
+    font-size: 0.75rem;
+    color: var(--app-hint);
+}
+
+.ds-new-section-card {
+    position: relative;
+    overflow: hidden;
+    border-radius: var(--ds-radius-2xl);
+    border: 1px solid var(--ds-border-default);
+    background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--ds-panel-strong) 96%, transparent),
+        color-mix(in srgb, var(--ds-panel) 92%, transparent)
+    );
+    padding: 0.625rem 0.875rem 0.875rem;
+    box-shadow: var(--ds-shadow-soft);
+}
+
+.ds-new-section-card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 1.75rem;
+}
+
+.ds-new-section-card-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 0.5rem;
+    background: color-mix(in srgb, currentColor 14%, var(--ds-panel-strong));
+}
+
+.ds-new-section-card-icon > svg {
+    width: 0.9375rem;
+    height: 0.9375rem;
+}
+
+.ds-new-section-card-title {
+    font-size: 0.8125rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--ds-text-primary);
+}
+
+.ds-new-section-card-action {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+}
+
+.ds-new-section-card-description {
+    margin-top: 0.375rem;
+    font-size: 0.75rem;
+    line-height: 1.25rem;
+    color: var(--ds-text-secondary);
+}
+
+.ds-new-section-card-body {
+    margin-top: 0.625rem;
 }
 
 .ds-launch-section-heading {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.375rem;
     font-size: 0.75rem;
-    font-weight: 600;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--ds-text-muted);
+    font-weight: 500;
+    color: var(--ds-text-secondary);
 }
 
 .ds-launch-select-control {
-    min-height: 3.125rem;
+    min-height: 2.75rem;
     font-weight: 500;
     transition:
         border-color var(--ds-motion-fast) var(--ds-ease-standard),
         box-shadow var(--ds-motion-fast) var(--ds-ease-standard);
 }
 
-.ds-agent-picker-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 10.5rem), 1fr));
-    grid-auto-rows: 1fr;
-    gap: 0.5rem;
-}
-
-.ds-agent-picker-card {
-    min-height: 4.5rem;
-    height: 100%;
-}
-
-.ds-agent-picker-card > [data-button-content] {
-    position: static;
-    width: 100%;
-    min-width: 0;
-    justify-content: flex-start;
-}
-
-.ds-agent-card-control,
-.ds-agent-card-action {
-    margin-left: auto;
-}
-
-.ds-agent-card-action {
-    min-height: 2rem;
-    padding: 0.25rem 0.625rem;
-    font-size: 0.75rem;
-}
-
-.ds-agent-status-pill {
-    display: inline-flex;
-    align-items: center;
-    min-height: 1.375rem;
-    border: 1px solid var(--app-badge-success-border);
-    border-radius: var(--ds-radius-pill);
-    background: var(--app-badge-success-bg);
-    padding: 0 0.5rem;
-    color: var(--app-badge-success-text);
-    font-size: 0.6875rem;
-    font-weight: 700;
-    line-height: 1;
-}
-
 .ds-launch-yolo-surface {
     border: 1px solid var(--ds-border-default);
     border-radius: var(--ds-radius-lg);
     background: color-mix(in srgb, var(--ds-panel-strong) 96%, transparent);
-    padding: 0.75rem 1rem;
+    padding: 0.5rem 0.875rem;
+    min-height: 2.75rem;
+}
+
+.ds-launch-yolo-helper {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 0.75rem;
+    line-height: 1.1;
+    color: var(--ds-text-secondary);
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.ds-directory-picker-icon-button {
+    height: 2.75rem;
+    width: 2.75rem;
+    flex-shrink: 0;
+    border-radius: var(--ds-radius-lg);
+}
+
+.ds-session-type-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.ds-session-type-segmented {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.25rem;
+    padding: 0.25rem;
+    border-radius: var(--ds-radius-lg);
+    border: 1px solid var(--app-divider);
+    background: color-mix(in srgb, var(--ds-panel-strong) 94%, transparent);
+    box-shadow: var(--ds-shadow-soft);
+}
+
+.ds-session-type-segment {
+    position: relative;
+    isolation: isolate;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    height: 2rem;
+    padding: 0 0.625rem;
+    border-radius: var(--ds-radius-md);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    transition: color var(--ds-motion-fast) var(--ds-ease-standard);
+}
+
+.ds-session-type-segment:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.ds-session-type-segment-active {
+    color: var(--ds-text-primary);
+}
+
+.ds-session-type-segment-idle {
+    color: var(--app-hint);
+}
+
+.ds-session-type-segment-idle:hover:not(:disabled) {
+    color: var(--ds-text-primary);
+}
+
+.ds-session-type-segment-pill {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: var(--ds-radius-md);
+    background: var(--ds-canvas);
+    box-shadow: var(--ds-shadow-soft);
+}
+
+.ds-agent-tile-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-auto-rows: 1fr;
+    gap: 0.5rem;
+    align-items: stretch;
+}
+
+@media (min-width: 480px) {
+    .ds-agent-tile-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
+@media (min-width: 768px) {
+    .ds-agent-tile-grid {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+}
+
+.ds-agent-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    height: 100%;
+    min-height: 5.25rem;
+    padding: 0.625rem 0.375rem;
+    border-radius: 1rem;
+    text-align: center;
+}
+
+.ds-agent-tile-icon {
+    display: inline-flex;
+    width: 2rem;
+    height: 2rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.625rem;
+    background: white;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.ds-agent-tile-name {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.1;
+    color: var(--ds-text-primary);
+    text-overflow: ellipsis;
+    text-transform: capitalize;
+    white-space: nowrap;
+}
+
+.ds-agent-tile-unavailable {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    height: 100%;
+    min-height: 5.25rem;
+    border: 1px dashed color-mix(in srgb, var(--ds-text-muted) 38%, transparent);
+    background: transparent;
+    color: var(--ds-text-secondary);
+    text-decoration: none;
+    transition:
+        border-color var(--ds-motion-fast) var(--ds-ease-standard),
+        background-color var(--ds-motion-fast) var(--ds-ease-standard);
+}
+
+.ds-agent-tile-unavailable:hover {
+    border-color: color-mix(in srgb, var(--ds-accent-gold) 60%, transparent);
+    background: color-mix(in srgb, var(--ds-accent-gold) 6%, transparent);
+}
+
+.ds-agent-tile-cta {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--ds-accent-gold) 16%, transparent);
+    color: var(--ds-accent-gold);
+    padding: 0.125rem 0.5rem;
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    line-height: 1.2;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.ds-agent-tile-status {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    line-height: 1.2;
+    color: var(--ds-text-muted);
+    text-transform: uppercase;
+}
+
+.ds-launch-fields-row {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    gap: 0.5rem;
+}
+
+.ds-new-session-choice-trigger {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.5rem;
+    min-height: 2.75rem;
+    padding: 0.5rem 0.875rem;
+    border-radius: var(--ds-radius-lg);
+    border: 1px solid var(--ds-border-default);
+    background: color-mix(in srgb, var(--ds-panel-strong) 96%, transparent);
+    box-shadow: var(--ds-shadow-soft);
+    text-align: left;
+    transition:
+        border-color var(--ds-motion-fast) var(--ds-ease-standard),
+        box-shadow var(--ds-motion-fast) var(--ds-ease-standard);
+}
+
+.ds-new-session-choice-trigger:hover:not(:disabled) {
+    border-color: var(--ds-border-strong);
+}
+
+.ds-new-session-choice-trigger:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.ds-new-session-choice-trigger > [data-button-content] {
+    width: 100%;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.ds-new-session-choice-trigger-content {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.5rem;
+}
+
+.ds-new-session-choice-trigger-icon {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+}
+
+.ds-new-session-choice-trigger-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: left;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--ds-text-primary);
+}
+
+.ds-new-session-choice-dialog {
+    width: min(calc(100vw - 1.5rem), 28rem);
+    max-height: min(80vh, 32rem);
+    display: flex;
+    flex-direction: column;
+    padding: 1rem;
+    gap: 0.75rem;
+}
+
+.ds-new-session-choice-dialog-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--ds-text-primary);
+}
+
+.ds-new-session-choice-dialog-title-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 0.5rem;
+    background: color-mix(in srgb, currentColor 14%, var(--ds-panel-strong));
+}
+
+.ds-field-control-elevated:focus,
+.ds-field-control-elevated:focus-visible {
+    outline: none;
+    border-color: color-mix(in srgb, var(--ds-brand) 60%, var(--ds-border-default));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ds-brand) 36%, transparent);
+}
+
+.ds-new-session-choice-options {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 0.125rem;
+    min-height: 0;
+}
+
+.ds-new-session-choice-option-meta {
+    flex-shrink: 0;
+    align-self: center;
+    border-radius: 999px;
+    border: 1px solid var(--ds-border-default);
+    background: var(--app-subtle-bg);
+    padding: 0.125rem 0.5rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--ds-text-secondary);
+    white-space: nowrap;
 }
 
 @media (min-width: 640px) {
     .session-chat-page {
         --ds-session-chat-header-clearance: calc(env(safe-area-inset-top) + 5.5rem);
-        --ds-session-chat-history-control-inset: 2.5rem;
         --chat-header-visual-clearance: 0.75rem;
-    }
-}
-
-@media (min-width: 768px) {
-    .ds-thread-history-control-wrapper {
-        left: var(--chat-desktop-stage-center-x);
-        right: auto;
-        top: var(--ds-session-chat-history-control-top-desktop);
-        transform: translateX(-50%);
-    }
-
-    .ds-thread-bottom-control-wrapper {
-        left: var(--chat-desktop-stage-center-x);
-        right: auto;
-        top: calc(
-            var(--chat-composer-stage-top) -
-            var(--chat-side-control-size) -
-            var(--chat-desktop-bottom-control-gap)
-        );
-        bottom: auto;
-        transform: translateX(-50%);
-    }
-
-    .ds-thread-history-control,
-    .ds-thread-bottom-control {
-        border-radius: 999px;
-        height: var(--chat-side-control-size);
-        width: var(--chat-side-control-size);
+        --chat-stage-side-width: 5.5rem;
     }
 }

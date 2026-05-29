@@ -1,5 +1,5 @@
-import type { ToolViewProps } from '@/components/ToolCard/views/_all'
 import { ChecklistList, extractTodoChecklist } from '@/components/ToolCard/checklist'
+import type { ToolViewProps } from '@/components/ToolCard/views/_all'
 
 export function TodoWriteView(props: ToolViewProps) {
     const todos = extractTodoChecklist(props.block.tool.input, props.block.tool.result)

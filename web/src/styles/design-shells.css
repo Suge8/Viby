@@ -7,14 +7,38 @@
     width: 100%;
 }
 
+.ds-sessions-list-scroller {
+    margin-bottom: var(--app-install-banner-clearance, 0px);
+    scroll-padding-bottom: 1rem;
+}
+
+.ds-sessions-create-fab-wrapper {
+    bottom: var(--app-install-banner-clearance, 0px);
+    padding-bottom: max(
+        var(--app-overlay-edge-offset),
+        calc(var(--app-safe-area-inset-bottom) + var(--app-overlay-edge-offset))
+    );
+    padding-right: max(
+        var(--app-overlay-edge-offset),
+        calc(var(--app-safe-area-inset-right) + var(--app-overlay-edge-offset))
+    );
+}
+
 @media (min-width: 1024px) {
     .ds-sessions-list-pane {
+        width: 26.25rem;
+    }
+    .ds-sessions-create-fab-wrapper {
+        right: auto;
         width: 26.25rem;
     }
 }
 
 @media (min-width: 1280px) {
     .ds-sessions-list-pane {
+        width: 30rem;
+    }
+    .ds-sessions-create-fab-wrapper {
         width: 30rem;
     }
 }
@@ -160,12 +184,6 @@
 
 .ds-cli-output-fallback-body {
     max-height: 40vh;
-}
-
-.ds-runtime-notice-icon-shell {
-    height: 2.25rem;
-    width: 2.25rem;
-    border-radius: 0.875rem;
 }
 
 .ds-login-hub-trigger,
@@ -319,14 +337,6 @@
     min-height: 3rem;
 }
 
-.ds-directory-picker-button {
-    min-width: 7.75rem;
-}
-
-.ds-session-type-worktree-label {
-    letter-spacing: 0.14em;
-}
-
 .ds-project-picker-x-strip {
     scrollbar-width: none;
     overscroll-behavior-x: contain;
@@ -336,16 +346,7 @@
     display: none;
 }
 
-.ds-session-type-worktree-card {
-    border-radius: 1.125rem;
-}
-
 .ds-recover-local-scroller {
     max-height: var(--app-recover-list-max-h);
-    overscroll-behavior: contain;
-}
-
-.ds-new-session-choice-options {
-    max-height: var(--app-choice-list-max-h);
     overscroll-behavior: contain;
 }

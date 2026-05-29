@@ -1,5 +1,5 @@
-import * as React from 'react'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
+import * as React from 'react'
 import { cn } from '@/lib/utils'
 
 export const Dialog = DialogPrimitive.Root
@@ -10,11 +10,11 @@ export const DialogContent = React.forwardRef<
     React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
 >(({ className, ...props }, ref) => (
     <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[var(--ds-overlay)] data-[state=closed]:animate-none data-[state=open]:animate-[banner-enter_var(--ds-motion-base)_var(--ds-ease-emphasized)]" />
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[var(--ds-overlay)] data-[state=open]:animate-[ds-dialog-overlay-in_var(--ds-motion-base)_var(--ds-ease-emphasized)] data-[state=closed]:animate-[ds-dialog-overlay-out_var(--ds-motion-fast)_var(--ds-ease-standard)]" />
         <DialogPrimitive.Content
             ref={ref}
             className={cn(
-                'ds-dialog-surface fixed left-1/2 top-1/2 z-50 w-[calc(100vw-24px)] max-w-lg -translate-x-1/2 -translate-y-1/2 p-5 data-[state=open]:animate-[route-enter_var(--ds-motion-base)_var(--ds-ease-emphasized)]',
+                'ds-dialog-surface fixed left-1/2 top-1/2 z-50 w-[calc(100vw-24px)] max-w-lg -translate-x-1/2 -translate-y-1/2 p-5 data-[state=open]:animate-[ds-dialog-content-in_var(--ds-motion-base)_var(--ds-ease-emphasized)] data-[state=closed]:animate-[ds-dialog-content-out_var(--ds-motion-fast)_var(--ds-ease-standard)]',
                 className
             )}
             {...props}
@@ -43,10 +43,6 @@ export const DialogDescription = React.forwardRef<
     HTMLParagraphElement,
     React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description>
 >(({ className, ...props }, ref) => (
-    <DialogPrimitive.Description
-        ref={ref}
-        className={cn('text-sm text-[var(--app-hint)]', className)}
-        {...props}
-    />
+    <DialogPrimitive.Description ref={ref} className={cn('text-sm text-[var(--app-hint)]', className)} {...props} />
 ))
 DialogDescription.displayName = 'DialogDescription'

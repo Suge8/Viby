@@ -22,4 +22,10 @@ describe('ConnectingProgressRail', () => {
         rail = screen.getByRole('progressbar')
         expect(rail).toHaveAttribute('aria-valuenow', '100')
     })
+
+    it('keeps the rail free of trailing sheen decoration', () => {
+        render(<ConnectingProgressRail progress={0.42} />)
+
+        expect(document.querySelector('.ds-connecting-rail-sheen')).toBeNull()
+    })
 })

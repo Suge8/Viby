@@ -1,6 +1,11 @@
 import type { ComponentPropsWithoutRef } from 'react'
 import ReactMarkdown, { defaultUrlTransform, type UrlTransform } from 'react-markdown'
-import { MARKDOWN_COMPONENTS, MARKDOWN_PLUGINS } from '@/components/markdown/markdownConfig'
+import type { CodeHighlightMode } from '@/components/code-block/CodeContent'
+import {
+    MARKDOWN_COMPONENTS,
+    MARKDOWN_PLUGINS,
+    MarkdownCodeHighlightProvider,
+} from '@/components/markdown/markdownConfig'
 import { joinClassNames } from '@/lib/joinClassNames'
 import { isMarkdownSessionFileHref } from './markdownFilePathLinks'
 
@@ -12,6 +17,7 @@ type MarkdownPrimitiveProps = Omit<
 > & {
     content: string
     className?: string
+    codeHighlight?: CodeHighlightMode
 }
 
 const transformMarkdownUrl: UrlTransform = (url) => {
@@ -19,18 +25,20 @@ const transformMarkdownUrl: UrlTransform = (url) => {
 }
 
 export function MarkdownPrimitive(props: MarkdownPrimitiveProps): React.JSX.Element {
-    const { className, content, ...restProps } = props
+    const { className, codeHighlight = 'auto', content, ...restProps } = props
 
     return (
-        <div className={joinClassNames(DEFAULT_MARKDOWN_CLASS_NAME, className)}>
-            <ReactMarkdown
-                {...restProps}
-                remarkPlugins={MARKDOWN_PLUGINS}
-                components={MARKDOWN_COMPONENTS}
-                urlTransform={transformMarkdownUrl}
-            >
-                {content}
-            </ReactMarkdown>
-        </div>
+        <MarkdownCodeHighlightProvider highlight={codeHighlight}>
+            <div className={joinClassNames(DEFAULT_MARKDOWN_CLASS_NAME, className)}>
+                <ReactMarkdown
+                    {...restProps}
+                    remarkPlugins={MARKDOWN_PLUGINS}
+                    components={MARKDOWN_COMPONENTS}
+                    urlTransform={transformMarkdownUrl}
+                >
+                    {content}
+                </ReactMarkdown>
+            </div>
+        </MarkdownCodeHighlightProvider>
     )
 }

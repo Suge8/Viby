@@ -28,7 +28,7 @@ describe('PlanProposalView', () => {
             />
         )
 
-        expect(container.textContent).toContain('## Summary')
+        expect(container.textContent).toContain('Summary')
         expect(container.textContent).toContain('Ship native render')
     })
 })

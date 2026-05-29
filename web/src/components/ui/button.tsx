@@ -43,6 +43,7 @@ const buttonVariants = cva(
                 iconXs: 'min-h-0 h-8 w-8 px-0',
                 iconSm: 'min-h-0 h-10 w-10 px-0',
                 iconLg: 'min-h-0 h-14 w-14 px-0',
+                none: 'min-h-0',
             },
         },
         defaultVariants: {

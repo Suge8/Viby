@@ -82,7 +82,7 @@ export function PlanExecutionPromptPanel(props: PlanExecutionPromptPanelProps): 
                     <Button type="button" variant="secondary" disabled={loading} onClick={props.onDismiss}>
                         {t('tool.planExecution.continue')}
                     </Button>
-                    <Button type="button" disabled={loading} onClick={() => handleExecute()}>
+                    <Button type="button" disabled={loading} pending={loading} onClick={() => handleExecute()}>
                         {loading ? t('misc.loading') : t('tool.planExecution.execute')}
                     </Button>
                 </div>

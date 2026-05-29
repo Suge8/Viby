@@ -1,19 +1,21 @@
 import type * as React from 'react'
 import { FeatureCheckIcon as CheckIcon } from '@/components/featureIcons'
 import { Button, type ButtonProps } from '@/components/ui/button'
-import { getInteractiveCardClassName } from '@/components/ui/interactiveCardStyles'
+import { getInteractiveCardClassName, type InteractiveCardStyleMode } from '@/components/ui/interactiveCardStyles'
 import { cn } from '@/lib/utils'
 
 type PressableSurfaceProps = Omit<ButtonProps, 'variant'> & {
     selected?: boolean
-    density?: 'default' | 'compact'
+    density?: 'default' | 'compact' | 'none'
+    cardMode?: InteractiveCardStyleMode
 }
 
-const PRESSABLE_SURFACE_BASE_CLASS_NAME = `ds-pressable-surface border text-[var(--ds-text-primary)] shadow-[var(--ds-shadow-soft)] ${getInteractiveCardClassName('full-card')}`
+const PRESSABLE_SURFACE_BASE_CLASS_NAME = `ds-pressable-surface border text-[var(--ds-text-primary)] shadow-[var(--ds-shadow-soft)]`
 
 const PRESSABLE_SURFACE_DENSITY_CLASS_NAME: Record<NonNullable<PressableSurfaceProps['density']>, string> = {
     default: 'px-3.5 py-3',
     compact: 'px-3 py-2.5',
+    none: '',
 }
 
 const PRESSABLE_SURFACE_SELECTED_CLASS_NAME =
@@ -23,7 +25,8 @@ const PRESSABLE_SURFACE_IDLE_CLASS_NAME =
     'border-[var(--ds-border-default)] bg-[color:color-mix(in_srgb,var(--ds-panel-strong)_96%,transparent)] hover:border-[var(--ds-border-strong)] hover:bg-[color:color-mix(in_srgb,var(--ds-panel-strong)_90%,var(--app-subtle-bg))]'
 
 export function PressableSurface(props: PressableSurfaceProps): React.JSX.Element {
-    const { className, density = 'default', selected = false, children, ...buttonProps } = props
+    const { className, density = 'default', selected = false, cardMode = 'full-card', children, ...buttonProps } = props
+    const cardClass = getInteractiveCardClassName(cardMode)
 
     return (
         <Button
@@ -31,6 +34,7 @@ export function PressableSurface(props: PressableSurfaceProps): React.JSX.Elemen
             pressStyle="card"
             className={cn(
                 PRESSABLE_SURFACE_BASE_CLASS_NAME,
+                cardClass,
                 PRESSABLE_SURFACE_DENSITY_CLASS_NAME[density],
                 selected ? PRESSABLE_SURFACE_SELECTED_CLASS_NAME : PRESSABLE_SURFACE_IDLE_CLASS_NAME,
                 className

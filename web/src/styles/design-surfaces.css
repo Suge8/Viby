@@ -192,6 +192,27 @@
     max-width: min(100%, 32rem);
 }
 
+.ds-transcript-status-line {
+    display: flex;
+    max-width: min(100%, 34rem);
+    margin-inline: auto;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 0.125rem 0.5rem;
+    color: var(--ds-text-muted);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    line-height: 1.45;
+}
+
+.ds-transcript-status-line[data-tone="danger"] {
+    color: color-mix(in srgb, var(--ds-danger) 78%, var(--ds-text-muted));
+}
+
+.ds-transcript-status-line pre {
+    color: var(--ds-text-muted);
+}
+
 .ds-transcript-role-chip {
     display: inline-flex;
     align-items: center;

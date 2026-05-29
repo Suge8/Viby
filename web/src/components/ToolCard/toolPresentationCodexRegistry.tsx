@@ -1,5 +1,14 @@
 import { isObject } from '@viby/protocol'
-import { BulbIcon, ClipboardIcon, EyeIcon, FileDiffIcon, QuestionIcon, TerminalIcon } from '@/components/ToolCard/icons'
+import {
+    ClipboardListIcon,
+    EyeIcon,
+    FileDiffIcon,
+    ListChecksIcon,
+    QuestionIcon,
+    ShieldAlertIcon,
+    SparklesIcon,
+    TerminalIcon,
+} from '@/components/ToolCard/icons'
 import {
     countLines,
     DEFAULT_ICON_CLASS,
@@ -58,7 +67,7 @@ export const codexToolPresentationRegistry: Record<string, ToolPresentationDefin
         minimal: true,
     },
     CodexPermission: {
-        icon: () => <QuestionIcon className={DEFAULT_ICON_CLASS} />,
+        icon: () => <ShieldAlertIcon className={DEFAULT_ICON_CLASS} />,
         title: (opts) => {
             const tool = getInputStringAny(opts.input, ['tool'])
             return tool ? `Permission: ${tool}` : 'Permission request'
@@ -67,7 +76,7 @@ export const codexToolPresentationRegistry: Record<string, ToolPresentationDefin
         minimal: true,
     },
     CodexReasoning: {
-        icon: () => <BulbIcon className={DEFAULT_ICON_CLASS} />,
+        icon: () => <SparklesIcon className={DEFAULT_ICON_CLASS} />,
         title: (opts) => getInputStringAny(opts.input, ['title']) ?? 'Reasoning',
         minimal: true,
     },
@@ -110,29 +119,29 @@ export const codexToolPresentationRegistry: Record<string, ToolPresentationDefin
         },
     },
     TodoWrite: {
-        icon: () => <BulbIcon className={DEFAULT_ICON_CLASS} />,
+        icon: () => <ListChecksIcon className={DEFAULT_ICON_CLASS} />,
         title: () => 'Todo list',
         subtitle: (opts) => formatChecklistCount(extractTodoChecklist(opts.input, opts.result), 'item'),
         minimal: (opts) => extractTodoChecklist(opts.input, opts.result).length === 0,
     },
     update_plan: {
-        icon: () => <ClipboardIcon className={DEFAULT_ICON_CLASS} />,
+        icon: () => <ListChecksIcon className={DEFAULT_ICON_CLASS} />,
         title: () => 'Plan',
         subtitle: (opts) => formatChecklistCount(extractUpdatePlanChecklist(opts.input, opts.result), 'step'),
         minimal: (opts) => extractUpdatePlanChecklist(opts.input, opts.result).length === 0,
     },
     ExitPlanMode: {
-        icon: () => <ClipboardIcon className={DEFAULT_ICON_CLASS} />,
+        icon: () => <ClipboardListIcon className={DEFAULT_ICON_CLASS} />,
         title: () => 'Plan proposal',
         minimal: false,
     },
     exit_plan_mode: {
-        icon: () => <ClipboardIcon className={DEFAULT_ICON_CLASS} />,
+        icon: () => <ClipboardListIcon className={DEFAULT_ICON_CLASS} />,
         title: () => 'Plan proposal',
         minimal: false,
     },
     proposed_plan: {
-        icon: () => <ClipboardIcon className={DEFAULT_ICON_CLASS} />,
+        icon: () => <ClipboardListIcon className={DEFAULT_ICON_CLASS} />,
         title: () => 'Proposed Plan',
         minimal: false,
     },

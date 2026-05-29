@@ -74,6 +74,7 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
                         variant={destructive ? 'destructive' : 'secondary'}
                         onClick={handleConfirm}
                         disabled={isPending}
+                        pending={isPending}
                     >
                         {isPending ? confirmingLabel : confirmLabel}
                     </Button>

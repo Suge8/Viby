@@ -1,19 +1,14 @@
-import type { ToolViewProps } from '@/components/ToolCard/views/_all'
 import { isObject } from '@viby/protocol'
 import { DiffView } from '@/components/DiffView'
+import type { ToolViewProps } from '@/components/ToolCard/views/_all'
 
 export function WriteView(props: ToolViewProps) {
     const input = props.block.tool.input
     if (!isObject(input)) return null
 
-    const content = typeof input.content === 'string' ? input.content : typeof input.text === 'string' ? input.text : null
+    const content =
+        typeof input.content === 'string' ? input.content : typeof input.text === 'string' ? input.text : null
     if (content === null) return null
 
-    return (
-        <DiffView
-            oldString=""
-            newString={content}
-            variant="inline"
-        />
-    )
+    return <DiffView oldString="" newString={content} variant="inline" />
 }

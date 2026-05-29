@@ -53,12 +53,6 @@
     backdrop-filter: blur(18px);
 }
 
-.session-list-item,
-.ds-session-list-new-button {
-    -webkit-backdrop-filter: blur(14px);
-    backdrop-filter: blur(14px);
-}
-
 .ds-message-surface-user {
     background:
         radial-gradient(circle at 80% 0%, color-mix(in srgb, var(--ds-accent-lime) 18%, transparent), transparent 38%),
@@ -116,6 +110,15 @@
 @media (max-width: 767px) {
     .app-shell[data-viby-route="session-chat"]::before {
         opacity: 0;
+    }
+
+    .sessions-mobile-list-pane[aria-hidden="true"] *,
+    .sessions-mobile-list-pane[aria-hidden="true"] *::before,
+    .sessions-mobile-list-pane[aria-hidden="true"] *::after,
+    .sessions-mobile-detail-pane[aria-hidden="true"] *,
+    .sessions-mobile-detail-pane[aria-hidden="true"] *::before,
+    .sessions-mobile-detail-pane[aria-hidden="true"] *::after {
+        animation-play-state: paused;
     }
 }
 

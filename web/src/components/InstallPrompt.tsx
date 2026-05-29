@@ -1,10 +1,12 @@
-import { type JSX, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type JSX, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { usePlatform } from '@/hooks/usePlatform'
 import { usePWAInstall } from '@/hooks/usePWAInstall'
 import { ensureAppOverlayRoot } from '@/lib/overlayRoot'
 import { useTranslation } from '@/lib/use-translation'
 import { createInstallPromptViewModel, InstallBanner, InstallGuideDialog } from './InstallPromptContent'
+
+const INSTALL_BANNER_CLEARANCE_PROPERTY = '--app-install-banner-clearance'
 
 type InstallPromptProps = {
     suppressed?: boolean
@@ -15,6 +17,7 @@ export function InstallPrompt({ suppressed = false }: InstallPromptProps): JSX.E
     const { installPlatform, promptInstall, dismissInstall, isStandalone } = usePWAInstall()
     const { haptic } = usePlatform()
     const [showGuide, setShowGuide] = useState(false)
+    const bannerFrameRef = useRef<HTMLDivElement | null>(null)
     const bannerPrimaryActionRef = useRef<HTMLButtonElement | null>(null)
     const shouldRestoreGuideFocusRef = useRef(false)
 
@@ -25,6 +28,7 @@ export function InstallPrompt({ suppressed = false }: InstallPromptProps): JSX.E
         [installPlatform, t]
     )
     const isHidden = suppressed || isStandalone || promptModel === null
+    useInstallBannerClearance(!isHidden && !showGuide, bannerFrameRef)
 
     useEffect(() => {
         if (isHidden) {
@@ -80,6 +84,7 @@ export function InstallPrompt({ suppressed = false }: InstallPromptProps): JSX.E
             ) : (
                 <InstallBanner
                     model={promptModel.banner}
+                    frameRef={bannerFrameRef}
                     primaryActionRef={bannerPrimaryActionRef}
                     onPrimaryAction={handlePrimaryAction}
                     onDismiss={handleDismiss}
@@ -88,4 +93,41 @@ export function InstallPrompt({ suppressed = false }: InstallPromptProps): JSX.E
         </>,
         overlayRoot
     )
+}
+
+function useInstallBannerClearance(isActive: boolean, bannerRef: RefObject<HTMLDivElement | null>): void {
+    useEffect(() => {
+        const root = document.documentElement
+        if (!isActive) {
+            root.style.removeProperty(INSTALL_BANNER_CLEARANCE_PROPERTY)
+            return
+        }
+
+        const bannerElement = bannerRef.current
+        if (!bannerElement) {
+            return
+        }
+
+        const updateClearance = (): void => {
+            const rect = bannerElement.getBoundingClientRect()
+            const bottomGap = Math.max(0, window.innerHeight - rect.bottom)
+            const clearance = rect.height + bottomGap
+            root.style.setProperty(INSTALL_BANNER_CLEARANCE_PROPERTY, `${Math.ceil(clearance)}px`)
+        }
+
+        updateClearance()
+        const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateClearance)
+        resizeObserver?.observe(bannerElement)
+        bannerElement.addEventListener('animationend', updateClearance)
+        window.addEventListener('resize', updateClearance)
+        window.visualViewport?.addEventListener('resize', updateClearance)
+
+        return () => {
+            resizeObserver?.disconnect()
+            bannerElement.removeEventListener('animationend', updateClearance)
+            window.removeEventListener('resize', updateClearance)
+            window.visualViewport?.removeEventListener('resize', updateClearance)
+            root.style.removeProperty(INSTALL_BANNER_CLEARANCE_PROPERTY)
+        }
+    }, [bannerRef, isActive])
 }

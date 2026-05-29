@@ -22,18 +22,19 @@ function CopyActionButtonComponent(props: CopyActionButtonProps): React.JSX.Elem
     const variant = props.variant ?? 'contextual'
     const placement = props.placement ?? 'inline'
     const title = copied ? (copiedLabel ?? label) : label
+    const buttonSize = placement === 'bubble-trailing' ? 'iconXs' : 'iconSm'
     const button = (
         <Button
             type="button"
             variant={variant === 'floating' ? 'outline' : 'plain'}
-            size="iconSm"
+            size={buttonSize}
             pointerEffect="none"
             className={cn(
                 variant === 'floating'
                     ? ICON_ONLY_BUTTON_FLOATING_CONTEXTUAL_CLASS_NAME
                     : ICON_ONLY_BUTTON_CONTEXTUAL_CLASS_NAME,
                 placement === 'bubble-trailing'
-                    ? 'pointer-events-auto opacity-72 hover:opacity-100 focus-visible:opacity-100'
+                    ? 'pointer-events-auto hover:opacity-100 focus-visible:opacity-100'
                     : 'shrink-0',
                 className
             )}

@@ -1,11 +1,14 @@
 import { isObject } from '@viby/protocol'
 import {
-    BulbIcon,
     EyeIcon,
     FileDiffIcon,
+    FilePlusIcon,
+    FilesIcon,
+    FolderOpenIcon,
     GlobeIcon,
     MessageSquareIcon,
     RocketIcon,
+    SearchCodeIcon,
     SearchIcon,
     TerminalIcon,
 } from '@/components/ToolCard/icons'
@@ -72,7 +75,7 @@ export const toolPresentationRegistry: Record<string, ToolPresentationDefinition
         minimal: true,
     },
     Grep: {
-        icon: () => <EyeIcon className={DEFAULT_ICON_CLASS} />,
+        icon: () => <SearchCodeIcon className={DEFAULT_ICON_CLASS} />,
         title: (opts) => {
             const pattern = getInputStringAny(opts.input, ['pattern'])
             return pattern ? `grep(pattern: ${pattern})` : 'Search content'
@@ -80,7 +83,7 @@ export const toolPresentationRegistry: Record<string, ToolPresentationDefinition
         minimal: true,
     },
     LS: {
-        icon: () => <SearchIcon className={DEFAULT_ICON_CLASS} />,
+        icon: () => <FolderOpenIcon className={DEFAULT_ICON_CLASS} />,
         title: (opts) => {
             const path = getInputStringAny(opts.input, ['path'])
             return path ? resolveDisplayPath(path, opts.metadata) : 'List files'
@@ -110,7 +113,7 @@ export const toolPresentationRegistry: Record<string, ToolPresentationDefinition
         minimal: true,
     },
     MultiEdit: {
-        icon: () => <FileDiffIcon className={DEFAULT_ICON_CLASS} />,
+        icon: () => <FilesIcon className={DEFAULT_ICON_CLASS} />,
         title: (opts) => {
             const file = getInputStringAny(opts.input, ['file_path', 'path'])
             if (!file) {
@@ -124,7 +127,7 @@ export const toolPresentationRegistry: Record<string, ToolPresentationDefinition
         minimal: true,
     },
     Write: {
-        icon: () => <FileDiffIcon className={DEFAULT_ICON_CLASS} />,
+        icon: () => <FilePlusIcon className={DEFAULT_ICON_CLASS} />,
         title: (opts) => {
             const file = getInputStringAny(opts.input, ['file_path', 'path'])
             return file ? resolveDisplayPath(file, opts.metadata) : 'Write file'
@@ -173,7 +176,7 @@ export const toolPresentationRegistry: Record<string, ToolPresentationDefinition
         minimal: true,
     },
     NotebookEdit: {
-        icon: () => <FileDiffIcon className={DEFAULT_ICON_CLASS} />,
+        icon: () => <FilesIcon className={DEFAULT_ICON_CLASS} />,
         title: (opts) => {
             const path = getInputStringAny(opts.input, ['notebook_path'])
             return path ? resolveDisplayPath(path, opts.metadata) : 'Edit notebook'

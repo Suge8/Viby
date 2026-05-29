@@ -3,11 +3,12 @@ import {
     unstable_memoizeMarkdownComponents as memoizeMarkdownComponents,
     useIsMarkdownCodeBlock,
 } from '@assistant-ui/react-markdown'
-import type { ComponentPropsWithoutRef } from 'react'
+import { type ComponentPropsWithoutRef, createContext, type ReactNode, useContext } from 'react'
 import remarkGfm from 'remark-gfm'
 import { useOptionalVibyChatContext } from '@/components/AssistantChat/context'
 import { SyntaxHighlighter } from '@/components/assistant-ui/shiki-highlighter'
 import { CopyActionButton } from '@/components/CopyActionButton'
+import type { CodeHighlightMode } from '@/components/code-block/CodeContent'
 import { useCopyAction } from '@/hooks/useCopyAction'
 import { joinClassNames } from '@/lib/joinClassNames'
 import { useTranslation } from '@/lib/use-translation'
@@ -22,6 +23,23 @@ export const MARKDOWN_PLUGINS = [
     remarkStripCjkAutolinkPunctuation,
     remarkLinkSessionFilePaths,
 ]
+
+const MarkdownCodeHighlightContext = createContext<CodeHighlightMode>('auto')
+
+export function MarkdownCodeHighlightProvider(props: {
+    children: ReactNode
+    highlight: CodeHighlightMode
+}): React.JSX.Element {
+    return (
+        <MarkdownCodeHighlightContext.Provider value={props.highlight}>
+            {props.children}
+        </MarkdownCodeHighlightContext.Provider>
+    )
+}
+
+function MarkdownSyntaxHighlighter(props: Parameters<typeof SyntaxHighlighter>[0]) {
+    return <SyntaxHighlighter {...props} highlight={useContext(MarkdownCodeHighlightContext)} />
+}
 
 function CodeHeader(props: CodeHeaderProps) {
     const { t } = useTranslation()
@@ -207,7 +225,7 @@ function Image(props: ComponentPropsWithoutRef<'img'>) {
 }
 
 export const MARKDOWN_COMPONENTS = memoizeMarkdownComponents({
-    SyntaxHighlighter,
+    SyntaxHighlighter: MarkdownSyntaxHighlighter,
     CodeHeader,
     pre: Pre,
     code: Code,

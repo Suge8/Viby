@@ -76,6 +76,42 @@
     }
 }
 
+@keyframes ds-dialog-overlay-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes ds-dialog-overlay-out {
+    from {
+        opacity: 1;
+    }
+    to {
+        opacity: 0;
+    }
+}
+
+@keyframes ds-dialog-content-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes ds-dialog-content-out {
+    from {
+        opacity: 1;
+    }
+    to {
+        opacity: 0;
+    }
+}
+
 @keyframes viby-replying-dot {
     0%,
     100% {
@@ -91,5 +127,63 @@
     60% {
         opacity: 0.34;
         transform: translate3d(0, 0.04rem, 0) scale(0.92);
+    }
+}
+
+/*
+ * Transcript row mount motion is owned by a single CSS keyframe. It only runs
+ * when `useSessionTranscriptModel.freshRowIds` marks a row as a true tail-
+ * append (new turn, new assistant block, stream→durable settle). Prepend,
+ * session entry, and full re-normalize never set `data-fresh`, so historical
+ * rows revealed by virtualization or upward scroll never restage an animation.
+ * Pure opacity → promoted to compositor, no layout/paint cost, no React work.
+ */
+.ds-transcript-row[data-fresh="true"] {
+    animation: viby-transcript-row-mount 260ms var(--ds-ease-decelerate) both;
+    will-change: opacity, transform;
+}
+
+@keyframes viby-transcript-row-mount {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ds-transcript-row[data-fresh="true"] {
+        animation: none;
+        will-change: auto;
+    }
+}
+
+/*
+ * Transcript viewport enters with a short opacity fade so the swap from the
+ * skeleton overlay to real virtualized rows reads as a single motion: skeleton
+ * fading out (220ms) while the viewport fades in (180ms) under it. No
+ * transform, no layout work — pure opacity on the compositor.
+ */
+.viby-thread-viewport {
+    animation: viby-thread-viewport-enter 180ms var(--ds-ease-decelerate) both;
+    will-change: opacity;
+}
+
+@keyframes viby-thread-viewport-enter {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .viby-thread-viewport {
+        animation: none;
+        will-change: auto;
     }
 }

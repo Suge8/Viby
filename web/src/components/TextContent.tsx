@@ -1,13 +1,8 @@
-import { lazy, memo, Suspense } from 'react'
+import { memo } from 'react'
 import type { PreferredTextRenderMode } from '@/chat/textRenderMode'
 import { resolveTextRenderMode } from '@/chat/textRenderMode'
-import { getLoadedMarkdownRendererModule } from '@/components/markdown/loadMarkdownRenderer'
+import { MarkdownRenderer } from '@/components/MarkdownRenderer'
 import { PlainTextContent } from '@/components/PlainTextContent'
-
-const LazyMarkdownRenderer = lazy(async () => {
-    const module = await import('@/components/MarkdownRenderer')
-    return { default: module.MarkdownRenderer }
-})
 
 type TextContentProps = {
     text: string
@@ -23,17 +18,7 @@ function TextContentComponent(props: TextContentProps): React.JSX.Element {
         return plainContent
     }
 
-    const loadedMarkdownRenderer = getLoadedMarkdownRendererModule()
-    if (loadedMarkdownRenderer) {
-        const { MarkdownRenderer } = loadedMarkdownRenderer
-        return <MarkdownRenderer content={props.text} />
-    }
-
-    return (
-        <Suspense fallback={plainContent}>
-            <LazyMarkdownRenderer content={props.text} />
-        </Suspense>
-    )
+    return <MarkdownRenderer content={props.text} />
 }
 
 export const TextContent = memo(TextContentComponent)

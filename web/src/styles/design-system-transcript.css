@@ -41,9 +41,9 @@
 }
 
 .ds-tool-card-surface {
-    border: 1px solid color-mix(in srgb, var(--ds-border-default) 72%, transparent);
-    border-color: color-mix(in srgb, var(--ds-border-default) 72%, transparent);
-    background: color-mix(in srgb, var(--ds-panel-strong) 96%, transparent);
+    border: 1px solid color-mix(in srgb, var(--ds-border-default) 36%, transparent);
+    border-radius: var(--ds-radius-lg);
+    background: color-mix(in srgb, var(--ds-panel) 50%, transparent);
     box-shadow: none;
 }
 
@@ -59,12 +59,6 @@
 
 .ds-message-surface {
     --ds-message-trailing-action-offset: 0.25rem;
-    --ds-message-trailing-action-size: var(--ds-touch-target-compact);
-    --ds-message-trailing-action-reserve: calc(
-        var(--ds-message-trailing-action-size) +
-        var(--ds-message-trailing-action-offset) +
-        0.25rem
-    );
     position: relative;
     isolation: isolate;
     width: 100%;
@@ -92,9 +86,14 @@
 }
 
 .ds-message-surface-assistant {
-    border-color: color-mix(in srgb, var(--ds-border-default) 68%, transparent);
-    background: color-mix(in srgb, var(--ds-panel-strong) 72%, transparent);
+    /* Paper-flow tier: drop every bubble geometry inherited from base */
+    /* (radius / overflow / border) so text is not clipped at the corners. */
+    border-color: transparent;
+    background: transparent;
     color: var(--app-fg);
+    padding: 0 0.5rem;
+    border-radius: 0;
+    overflow: visible;
 }
 
 .ds-message-surface-copyable {
@@ -111,13 +110,13 @@
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ds-success) 18%, transparent);
 }
 
-.ds-message-surface-copy-content[data-has-trailing-action="true"] {
-    padding-right: var(--ds-message-trailing-action-reserve);
+.ds-message-copy-button {
+    opacity: 0.4;
+    transition: opacity var(--ds-motion-fast) var(--ds-ease-standard);
 }
 
-.ds-message-surface[data-content-layout="media-only"]
-    .ds-message-surface-copy-content[data-has-trailing-action="true"] {
-    padding-right: 0;
+.ds-message-surface-copyable:is(:hover, :focus-within) .ds-message-copy-button {
+    opacity: 0.8;
 }
 
 .ds-message-surface[data-content-layout="media-only"] {
@@ -136,14 +135,9 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-    .ds-message-surface-copy-content[data-has-trailing-action="true"] {
-        padding-right: 0;
-    }
-
     .ds-message-copy-button {
         opacity: 0;
         pointer-events: none;
-        transition: opacity var(--ds-motion-fast) var(--ds-ease-standard);
     }
 
     .ds-message-surface-copyable:is(:hover, :focus-within) .ds-message-copy-button,
@@ -176,4 +170,16 @@
 
 .ds-message-surface .aui-md-li + .aui-md-li {
     margin-top: 0.125rem;
+}
+
+/* assistant runs as paper-flowing text without bubble padding, so restore */
+/* block-level breathing between markdown nodes. */
+.ds-message-surface-assistant .aui-md-p + .aui-md-p,
+.ds-message-surface-assistant .aui-md-p + .aui-md-ul,
+.ds-message-surface-assistant .aui-md-p + .aui-md-ol,
+.ds-message-surface-assistant .aui-md-ul + .aui-md-p,
+.ds-message-surface-assistant .aui-md-ol + .aui-md-p,
+.ds-message-surface-assistant .aui-md-p + .aui-md-pre-wrapper,
+.ds-message-surface-assistant .aui-md-pre-wrapper + .aui-md-p {
+    margin-top: 0.75rem;
 }

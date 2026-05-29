@@ -24,7 +24,6 @@ import {
     Plus,
     Settings,
     Square,
-    SquareArrowOutUpRight,
     Terminal,
     Users,
 } from 'lucide-react'
@@ -130,16 +129,6 @@ export function PuzzleIcon(props: AppIconProps) {
 export function ArchiveIcon(props: AppIconProps) {
     return (
         <Archive
-            {...props}
-            className={withDefaultClassName(props.className)}
-            strokeWidth={getDefaultStrokeWidth(props)}
-        />
-    )
-}
-
-export function OpenIcon(props: AppIconProps) {
-    return (
-        <SquareArrowOutUpRight
             {...props}
             className={withDefaultClassName(props.className)}
             strokeWidth={getDefaultStrokeWidth(props)}

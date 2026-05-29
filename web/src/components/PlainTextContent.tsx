@@ -7,11 +7,7 @@ type PlainTextContentProps = {
 }
 
 function PlainTextContentComponent(props: PlainTextContentProps): React.JSX.Element {
-    return (
-        <div className={cn('whitespace-pre-wrap break-words text-base', props.className)}>
-            {props.text}
-        </div>
-    )
+    return <div className={cn('whitespace-pre-wrap break-words text-base', props.className)}>{props.text}</div>
 }
 
 export const PlainTextContent = memo(PlainTextContentComponent)

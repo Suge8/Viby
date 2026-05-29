@@ -3,9 +3,12 @@ import {
     Bot,
     Check,
     Clipboard,
+    ClipboardList,
     Cpu,
     Eye,
     FileCode,
+    FilePlus2,
+    Files,
     FileText,
     Folder,
     GitBranch,
@@ -14,6 +17,8 @@ import {
     Keyboard,
     Languages,
     Lightbulb,
+    ListChecks,
+    type LucideIcon,
     Monitor,
     Package,
     Paperclip,
@@ -21,273 +26,160 @@ import {
     RefreshCw,
     Rocket,
     Search,
+    SearchCode,
     Share2,
     Shield,
+    ShieldAlert,
     SlidersHorizontal,
+    Sparkles,
     Trash2,
     Wrench,
     X,
 } from 'lucide-react'
 import { type AppIconProps, getDefaultStrokeWidth, withDefaultClassName } from '@/components/iconUtils'
 
+function renderFeatureIcon(Icon: LucideIcon, props: AppIconProps): React.JSX.Element {
+    return (
+        <Icon {...props} className={withDefaultClassName(props.className)} strokeWidth={getDefaultStrokeWidth(props)} />
+    )
+}
+
 export function FeatureCloseIcon(props: AppIconProps) {
-    return <X {...props} className={withDefaultClassName(props.className)} strokeWidth={getDefaultStrokeWidth(props)} />
+    return renderFeatureIcon(X, props)
 }
 
 export function FeatureShareIcon(props: AppIconProps) {
-    return (
-        <Share2
-            {...props}
-            className={withDefaultClassName(props.className)}
-            strokeWidth={getDefaultStrokeWidth(props)}
-        />
-    )
+    return renderFeatureIcon(Share2, props)
 }
 
 export function FeatureCopyIcon(props: AppIconProps) {
-    return (
-        <Clipboard
-            {...props}
-            className={withDefaultClassName(props.className)}
-            strokeWidth={getDefaultStrokeWidth(props)}
-        />
-    )
+    return renderFeatureIcon(Clipboard, props)
 }
 
 export function FeatureCheckIcon(props: AppIconProps) {
-    return (
-        <Check
-            {...props}
-            className={withDefaultClassName(props.className)}
-            strokeWidth={getDefaultStrokeWidth(props)}
-        />
-    )
+    return renderFeatureIcon(Check, props)
 }
 
 export function FeatureSearchIcon(props: AppIconProps) {
-    return (
-        <Search
-            {...props}
-            className={withDefaultClassName(props.className)}
-            strokeWidth={getDefaultStrokeWidth(props)}
-        />
-    )
+    return renderFeatureIcon(Search, props)
 }
 
 export function FeatureGlobeIcon(props: AppIconProps) {
-    return (
-        <Globe
-            {...props}
-            className={withDefaultClassName(props.className)}
-            strokeWidth={getDefaultStrokeWidth(props)}
-        />
-    )
+    return renderFeatureIcon(Globe, props)
 }
 
 export function FeatureFolderIcon(props: AppIconProps) {
-    return (
-        <Folder
-            {...props}
-            className={withDefaultClassName(props.className)}
-            strokeWidth={getDefaultStrokeWidth(props)}
-        />
-    )
+    return renderFeatureIcon(Folder, props)
 }
 
 export function FeatureGitBranchIcon(props: AppIconProps) {
-    return (
-        <GitBranch
-            {...props}
-            className={withDefaultClassName(props.className)}
-            strokeWidth={getDefaultStrokeWidth(props)}
-        />
-    )
+    return renderFeatureIcon(GitBranch, props)
 }
 
 export function FeatureTranslateIcon(props: AppIconProps) {
-    return (
-        <Languages
-            {...props}
-            className={withDefaultClassName(props.className)}
-            strokeWidth={getDefaultStrokeWidth(props)}
-        />
-    )
+    return renderFeatureIcon(Languages, props)
 }
 
 export function FeatureRocketIcon(props: AppIconProps) {
-    return (
-        <Rocket
-            {...props}
-            className={withDefaultClassName(props.className)}
-            strokeWidth={getDefaultStrokeWidth(props)}
-        />
-    )
+    return renderFeatureIcon(Rocket, props)
 }
 
 export function FeatureEyeIcon(props: AppIconProps) {
-    return (
-        <Eye {...props} className={withDefaultClassName(props.className)} strokeWidth={getDefaultStrokeWidth(props)} />
-    )
+    return renderFeatureIcon(Eye, props)
 }
 
 export function FeatureWrenchIcon(props: AppIconProps) {
-    return (
-        <Wrench
-            {...props}
-            className={withDefaultClassName(props.className)}
-            strokeWidth={getDefaultStrokeWidth(props)}
-        />
-    )
+    return renderFeatureIcon(Wrench, props)
 }
 
 export function FeatureFileDiffIcon(props: AppIconProps) {
-    return (
-        <GitCompare
-            {...props}
-            className={withDefaultClassName(props.className)}
-            strokeWidth={getDefaultStrokeWidth(props)}
-        />
-    )
+    return renderFeatureIcon(GitCompare, props)
 }
 
 export function FeatureFileCodeIcon(props: AppIconProps) {
-    return (
-        <FileCode
-            {...props}
-            className={withDefaultClassName(props.className)}
-            strokeWidth={getDefaultStrokeWidth(props)}
-        />
-    )
+    return renderFeatureIcon(FileCode, props)
 }
 
 export function FeatureFileTextIcon(props: AppIconProps) {
-    return (
-        <FileText
-            {...props}
-            className={withDefaultClassName(props.className)}
-            strokeWidth={getDefaultStrokeWidth(props)}
-        />
-    )
+    return renderFeatureIcon(FileText, props)
 }
 
 export function FeatureEditIcon(props: AppIconProps) {
-    return (
-        <Pencil
-            {...props}
-            className={withDefaultClassName(props.className)}
-            strokeWidth={getDefaultStrokeWidth(props)}
-        />
-    )
+    return renderFeatureIcon(Pencil, props)
 }
 
 export function FeatureTrashIcon(props: AppIconProps) {
-    return (
-        <Trash2
-            {...props}
-            className={withDefaultClassName(props.className)}
-            strokeWidth={getDefaultStrokeWidth(props)}
-        />
-    )
+    return renderFeatureIcon(Trash2, props)
 }
 
 export function FeatureRefreshIcon(props: AppIconProps) {
-    return (
-        <RefreshCw
-            {...props}
-            className={withDefaultClassName(props.className)}
-            strokeWidth={getDefaultStrokeWidth(props)}
-        />
-    )
+    return renderFeatureIcon(RefreshCw, props)
 }
 
 export function FeatureAgentIcon(props: AppIconProps) {
-    return (
-        <Bot {...props} className={withDefaultClassName(props.className)} strokeWidth={getDefaultStrokeWidth(props)} />
-    )
+    return renderFeatureIcon(Bot, props)
 }
 
 export function FeatureAttachmentIcon(props: AppIconProps) {
-    return (
-        <Paperclip
-            {...props}
-            className={withDefaultClassName(props.className)}
-            strokeWidth={getDefaultStrokeWidth(props)}
-        />
-    )
+    return renderFeatureIcon(Paperclip, props)
 }
 
 export function FeatureControlsIcon(props: AppIconProps) {
-    return (
-        <SlidersHorizontal
-            {...props}
-            className={withDefaultClassName(props.className)}
-            strokeWidth={getDefaultStrokeWidth(props)}
-        />
-    )
+    return renderFeatureIcon(SlidersHorizontal, props)
 }
 
 export function FeatureModelIcon(props: AppIconProps) {
-    return (
-        <Cpu {...props} className={withDefaultClassName(props.className)} strokeWidth={getDefaultStrokeWidth(props)} />
-    )
+    return renderFeatureIcon(Cpu, props)
 }
 
 export function FeatureProjectIcon(props: AppIconProps) {
-    return (
-        <Package
-            {...props}
-            className={withDefaultClassName(props.className)}
-            strokeWidth={getDefaultStrokeWidth(props)}
-        />
-    )
+    return renderFeatureIcon(Package, props)
 }
 
 export function FeatureMonitorIcon(props: AppIconProps) {
-    return (
-        <Monitor
-            {...props}
-            className={withDefaultClassName(props.className)}
-            strokeWidth={getDefaultStrokeWidth(props)}
-        />
-    )
+    return renderFeatureIcon(Monitor, props)
 }
 
 export function FeatureBulbIcon(props: AppIconProps) {
-    return (
-        <Lightbulb
-            {...props}
-            className={withDefaultClassName(props.className)}
-            strokeWidth={getDefaultStrokeWidth(props)}
-        />
-    )
+    return renderFeatureIcon(Lightbulb, props)
 }
 
 export function FeatureKeyboardIcon(props: AppIconProps) {
-    return (
-        <Keyboard
-            {...props}
-            className={withDefaultClassName(props.className)}
-            strokeWidth={getDefaultStrokeWidth(props)}
-        />
-    )
+    return renderFeatureIcon(Keyboard, props)
 }
 
 export function FeatureShieldIcon(props: AppIconProps) {
-    return (
-        <Shield
-            {...props}
-            className={withDefaultClassName(props.className)}
-            strokeWidth={getDefaultStrokeWidth(props)}
-        />
-    )
+    return renderFeatureIcon(Shield, props)
 }
 
 export function FeatureSwitchToRemoteIcon(props: AppIconProps) {
-    return (
-        <ArrowLeftRight
-            {...props}
-            className={withDefaultClassName(props.className)}
-            strokeWidth={getDefaultStrokeWidth(props)}
-        />
-    )
+    return renderFeatureIcon(ArrowLeftRight, props)
+}
+
+export function FeatureSparklesIcon(props: AppIconProps) {
+    return renderFeatureIcon(Sparkles, props)
+}
+
+export function FeatureListChecksIcon(props: AppIconProps) {
+    return renderFeatureIcon(ListChecks, props)
+}
+
+export function FeatureClipboardListIcon(props: AppIconProps) {
+    return renderFeatureIcon(ClipboardList, props)
+}
+
+export function FeatureSearchCodeIcon(props: AppIconProps) {
+    return renderFeatureIcon(SearchCode, props)
+}
+
+export function FeatureFilePlusIcon(props: AppIconProps) {
+    return renderFeatureIcon(FilePlus2, props)
+}
+
+export function FeatureFilesIcon(props: AppIconProps) {
+    return renderFeatureIcon(Files, props)
+}
+
+export function FeatureShieldAlertIcon(props: AppIconProps) {
+    return renderFeatureIcon(ShieldAlert, props)
 }

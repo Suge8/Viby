@@ -64,31 +64,27 @@ export function ToolCardHeader(props: {
     state: ToolCallBlock['tool']['state']
 }): ReactNode {
     return (
-        <div className="flex flex-col gap-1">
-            <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0 flex items-center gap-2">
-                    <div className="flex h-3.5 w-3.5 shrink-0 items-center justify-center leading-none text-[var(--app-hint)]">
-                        {props.icon}
-                    </div>
-                    <h3 className="min-w-0 text-sm font-medium leading-tight break-words">{props.toolTitle}</h3>
-                </div>
-
-                <div className="flex shrink-0 items-center gap-2">
-                    <ElapsedView from={props.runningFrom} active={props.state === 'running'} />
-                    <span className={statusColorClass(props.state)}>
-                        <StatusIcon state={props.state} />
-                    </span>
-                    <span className="text-[var(--app-hint)]">
-                        <ChevronIcon collapsed className="h-4 w-4" />
-                    </span>
-                </div>
+        <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-3.5 w-3.5 shrink-0 items-center justify-center leading-none text-[var(--app-hint)]">
+                {props.icon}
             </div>
-
-            {props.subtitle ? (
-                <p className="font-mono text-xs break-all text-[var(--app-hint)] opacity-80">
-                    {truncate(props.subtitle, TOOL_SUBTITLE_TRUNCATE_LENGTH)}
-                </p>
-            ) : null}
+            <h3 className="min-w-0 flex-1 truncate text-sm font-medium leading-tight">
+                <span>{props.toolTitle}</span>
+                {props.subtitle ? (
+                    <span className="ml-2 font-mono text-xs font-normal text-[var(--app-hint)] opacity-80">
+                        {truncate(props.subtitle, TOOL_SUBTITLE_TRUNCATE_LENGTH)}
+                    </span>
+                ) : null}
+            </h3>
+            <div className="flex shrink-0 items-center gap-2">
+                <ElapsedView from={props.runningFrom} active={props.state === 'running'} />
+                <span className={statusColorClass(props.state)}>
+                    <StatusIcon state={props.state} />
+                </span>
+                <span className="text-[var(--app-hint)]">
+                    <ChevronIcon collapsed className="h-4 w-4" />
+                </span>
+            </div>
         </div>
     )
 }

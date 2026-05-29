@@ -7,33 +7,23 @@
     overflow: hidden;
 }
 
-.session-chat-layout {
+/* Composer geometry tokens live on :root so portal-rendered overlays
+   (e.g. RemotePairingLinkBadge) can read the same composer rect that
+   the chat workspace measures. useSessionChatWorkspaceModel writes the
+   dynamic measurements onto document.documentElement and removes them
+   on unmount; the static defaults below keep non-chat routes safe. */
+:root {
     --chat-composer-offset-bottom: 0px;
     --chat-composer-reserved-space: 0px;
-    --chat-floating-control-offset-bottom: 0px;
     --chat-composer-stage-top: 100vh;
     --chat-desktop-stage-center-x: 50vw;
+    --chat-desktop-bottom-control-gap: 0.5rem;
+    --chat-side-control-size: 2.5rem;
+}
+
+.session-chat-layout {
     --chat-composer-visual-clearance: 0.375rem;
     --chat-composer-occupied-space: var(--chat-composer-visual-clearance);
-    --chat-bottom-control-min-offset: 1.5rem;
-    --chat-bottom-control-lift: 7.5rem;
-    --chat-desktop-bottom-control-gap: 0.5rem;
-    --chat-bottom-control-bottom-offset: calc(
-        var(--chat-composer-offset-bottom) +
-        max(
-            var(--chat-bottom-control-min-offset),
-            calc(var(--chat-composer-occupied-space) - var(--chat-bottom-control-lift))
-        )
-    );
-    --chat-side-control-right-offset: max(0.4rem, calc(env(safe-area-inset-right) + 0.4rem));
-    --chat-side-control-upper-top: 24%;
-    --chat-side-control-size: 2.5rem;
-    --chat-side-control-rest-bottom-offset: calc(env(safe-area-inset-bottom) + 6rem);
-    --chat-side-control-bottom-gap: 5.75rem;
-    --chat-side-control-bottom-offset: calc(
-        var(--chat-floating-control-offset-bottom) +
-        var(--chat-side-control-bottom-gap)
-    );
 }
 
 .ds-composer-shell {
@@ -78,31 +68,8 @@
     max-width: min(100%, 25rem);
 }
 
-.ds-replying-indicator-anchor {
-    pointer-events: none;
-    position: absolute;
-    right: 0;
-    bottom: calc(100% + 0.35rem);
-    left: 0;
-    z-index: 1;
-}
-
 .ds-stage-empty-icon {
     filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.18));
-}
-
-.ds-replying-indicator-shell {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-    transition:
-        opacity var(--ds-replying-indicator-exit-duration, 140ms) var(--ds-ease-emphasized),
-        transform var(--ds-replying-indicator-exit-duration, 140ms) var(--ds-ease-emphasized);
-    will-change: opacity, transform;
-}
-
-.ds-replying-indicator-shell[data-state="exiting"] {
-    opacity: 0;
-    transform: translate3d(0, 0.18rem, 0);
 }
 
 .ds-replying-indicator {
@@ -137,6 +104,26 @@
     .ds-composer-shell {
         padding-top: 0;
         padding-bottom: calc(env(safe-area-inset-bottom) + 0.75rem);
+    }
+
+    /* Desktop chat scope: mirror SessionHeader's three-column grid so the
+       composer surface (plus its local notice stack and queued-messages bar)
+       lines up with the header title card's column instead of spanning the
+       full stage. Shares `--chat-stage-side-width` + `--app-chat-stage-column-gap`
+       with SessionHeader so the two stages stay visually identical. */
+    .session-chat-composer-shell > .ds-stage-shell {
+        display: grid;
+        grid-template-columns:
+            var(--chat-stage-side-width)
+            minmax(0, 1fr)
+            var(--chat-stage-side-width);
+        column-gap: var(--app-chat-stage-column-gap);
+        align-items: stretch;
+    }
+
+    .session-chat-composer-shell > .ds-stage-shell > * {
+        grid-column: 2 / 3;
+        min-width: 0;
     }
 }
 
@@ -182,11 +169,6 @@
             var(--chat-composer-reserved-space) +
             var(--chat-composer-visual-clearance)
         );
-        --chat-bottom-control-min-offset: 7rem;
-        --chat-side-control-upper-top: 23%;
-        --chat-side-control-size: 2.5rem;
-        --chat-side-control-rest-bottom-offset: calc(env(safe-area-inset-bottom) + clamp(5.5rem, 18svh, 8.5rem));
-        --chat-side-control-bottom-gap: 5.15rem;
     }
 
     .app-shell[data-viby-route="session-chat"] .session-chat-thread-root {
@@ -212,12 +194,6 @@
         left: 0;
         z-index: 20;
         background: transparent;
-    }
-
-    .app-shell[data-viby-route="session-chat"]
-        .session-chat-layout[data-chat-keyboard-open="true"]
-        .session-chat-thread-bottom-control-anchor {
-        bottom: var(--chat-side-control-bottom-offset);
     }
 
     .app-shell[data-viby-route="session-chat"] .session-chat-composer-shell > .ds-stage-shell {

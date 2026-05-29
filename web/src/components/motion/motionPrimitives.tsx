@@ -1,6 +1,6 @@
 import { Outlet, useLocation } from '@tanstack/react-router'
-import { LazyMotion, MotionConfig, m, type Transition, type Variants } from 'motion/react'
-import { type CSSProperties, forwardRef, type ReactNode } from 'react'
+import { AnimatePresence, LazyMotion, MotionConfig, m, type Transition, type Variants } from 'motion/react'
+import { type CSSProperties, forwardRef, type ReactNode, type Ref } from 'react'
 import { isSessionsWorkspacePath, normalizeRoutePath } from '@/routes/sessions/sessionRoutePaths'
 
 export const MOTION_EASE_EMPHASIZED: [number, number, number, number] = [0.22, 1, 0.36, 1]
@@ -68,6 +68,7 @@ type MotionStaggerGroupProps = {
     children: ReactNode
     className?: string
     delay?: number
+    ref?: Ref<HTMLDivElement>
     stagger?: number
     style?: CSSProperties
     testId?: string
@@ -173,6 +174,7 @@ export const MotionReveal = forwardRef<HTMLDivElement, MotionRevealProps>(functi
 export function MotionStaggerGroup(props: MotionStaggerGroupProps): React.JSX.Element {
     return (
         <m.div
+            ref={props.ref}
             data-testid={props.testId}
             className={props.className}
             style={props.style}
@@ -190,6 +192,49 @@ export function MotionStaggerGroup(props: MotionStaggerGroupProps): React.JSX.El
         >
             {props.children}
         </m.div>
+    )
+}
+
+const SWAP_VARIANTS: Variants = {
+    initial: { opacity: 0, y: 10, scale: 0.985 },
+    animate: {
+        opacity: 1,
+        y: 0,
+        scale: 1,
+        transition: { duration: MOTION_DURATIONS.staggerItem, ease: MOTION_EASE_EMPHASIZED },
+    },
+    exit: {
+        opacity: 0,
+        y: -6,
+        scale: 0.99,
+        transition: { duration: MOTION_DURATIONS.staggerItem * 0.65, ease: MOTION_EASE_EMPHASIZED },
+    },
+}
+
+type MotionSwapProps = {
+    children: ReactNode
+    switchKey: string
+    className?: string
+}
+
+// Drop-in tab/view swap animation. Mirrors desktop's PresenceSwap so the same
+// AnimatePresence + exit-fade pattern is the single source of truth for
+// stateful-content transitions on both shells.
+export function MotionSwap(props: MotionSwapProps): React.JSX.Element {
+    return (
+        <AnimatePresence mode="wait" initial={false}>
+            <m.div
+                key={props.switchKey}
+                className={props.className}
+                variants={SWAP_VARIANTS}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                style={{ willChange: 'opacity, transform' }}
+            >
+                {props.children}
+            </m.div>
+        </AnimatePresence>
     )
 }
 

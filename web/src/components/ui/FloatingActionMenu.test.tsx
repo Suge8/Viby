@@ -11,9 +11,9 @@ function createMenuContent(onSelect: () => void): FloatingActionMenuContent {
                 id: 'rename',
                 label: 'Rename',
                 icon: <span aria-hidden="true">R</span>,
-                onSelect
-            }
-        ]
+                onSelect,
+            },
+        ],
     }
 }
 

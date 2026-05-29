@@ -24,9 +24,7 @@ export function ConnectingProgressRail(props: ConnectingProgressRailProps): Reac
             aria-valuenow={Math.round(progress * 100)}
             className={joinClassNames('ds-connecting-rail', props.className)}
         >
-            <div className="ds-connecting-rail-fill" style={filledStyle}>
-                <div className="ds-connecting-rail-sheen" aria-hidden="true" />
-            </div>
+            <div className="ds-connecting-rail-fill" style={filledStyle} />
         </div>
     )
 }

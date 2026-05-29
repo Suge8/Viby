@@ -76,7 +76,7 @@ describe('ToolCard', () => {
         expect(trigger.className).toContain('justify-start')
     })
 
-    it('uses the same transcript-family radius and non-floating surface contract as message bubbles', () => {
+    it('binds tool card chrome to the ds-tool-card-surface owner and forbids floating shadow chrome', () => {
         const { container } = render(
             <ToolCard
                 api={{} as never}
@@ -90,8 +90,9 @@ describe('ToolCard', () => {
 
         const card = container.firstElementChild as HTMLElement
         expect(card.className).toContain('ds-tool-card-surface')
-        expect(card.className).toContain('rounded-[var(--ds-radius-2xl)]')
         expect(card.className).toContain('shadow-none')
         expect(card.className).not.toContain('shadow-sm')
+        // Radius is now owned exclusively by .ds-tool-card-surface CSS, not tailwind class.
+        expect(card.className).not.toContain('rounded-[var(--ds-radius-2xl)]')
     })
 })

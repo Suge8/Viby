@@ -111,12 +111,13 @@ export function createInstallPromptViewModel(
 
 export function InstallBanner(props: {
     model: InstallBannerModel
+    frameRef?: Ref<HTMLDivElement>
     primaryActionRef?: Ref<HTMLButtonElement>
     onPrimaryAction: () => unknown
     onDismiss: () => void
 }): JSX.Element {
     return (
-        <div className="ds-install-banner-frame animate-slide-up">
+        <div ref={props.frameRef} className="ds-install-banner-frame animate-slide-up">
             <div className="ds-panel ds-install-banner-surface">
                 <div className="ds-install-banner-glow" aria-hidden="true" />
                 <div className="flex items-start gap-3">

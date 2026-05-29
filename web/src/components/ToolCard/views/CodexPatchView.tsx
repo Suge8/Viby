@@ -1,5 +1,5 @@
-import type { ToolViewProps } from '@/components/ToolCard/views/_all'
 import { isObject } from '@viby/protocol'
+import type { ToolViewProps } from '@/components/ToolCard/views/_all'
 import { basename, resolveDisplayPath } from '@/utils/path'
 
 export function CodexPatchView(props: ToolViewProps) {
