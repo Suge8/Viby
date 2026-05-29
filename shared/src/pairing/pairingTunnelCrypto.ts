@@ -110,6 +110,14 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
     return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
 }
 
+export function toPairingTunnelBase64Url(bytes: Uint8Array): string {
+    return toBase64Url(bytes)
+}
+
+export function fromPairingTunnelBase64Url(value: string): Uint8Array<ArrayBuffer> {
+    return fromBase64Url(value)
+}
+
 function toBase64Url(bytes: Uint8Array): string {
     let binary = ''
     for (let index = 0; index < bytes.length; index += 1) binary += String.fromCharCode(bytes[index] ?? 0)

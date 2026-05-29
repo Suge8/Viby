@@ -1,8 +1,8 @@
 import { z } from 'zod'
-import { PairingSignalV2Schema } from './pairingSignal'
+import { PairingRtcSignalSchema } from './pairingSignal'
 import { PairingTunnelRelayFrameSchema } from './pairingTunnelFrame'
 
-export const PairingBrokerSignalMessageSchema = PairingSignalV2Schema
+export const PairingBrokerSignalMessageSchema = PairingRtcSignalSchema
 export type PairingBrokerSignalMessage = z.infer<typeof PairingBrokerSignalMessageSchema>
 
 export const PairingBrokerTunnelMessageSchema = PairingTunnelRelayFrameSchema

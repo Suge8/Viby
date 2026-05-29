@@ -1,4 +1,4 @@
-import { type PairingByeReason, type PairingSignalV2, PairingSignalV2Schema } from './pairingSignal'
+import { type PairingByeReason, type PairingRtcSignal, PairingTransportSignalSchema } from './pairingSignal'
 import {
     computePairingReconnectDelay,
     PAIRING_ICE_DISCONNECTED_RESTART_DELAY_MS,
@@ -24,10 +24,16 @@ export type {
     RTCIceServer,
 } from './pairingTransportTypes'
 
-const SOCKET_OPEN = 1,
-    ICE_CANDIDATE_POOL_SIZE = 4
+const SOCKET_OPEN = 1
 const ICE_RESTART_STATES = new Set(['disconnected', 'failed'])
-type DefaultPeerConfig = { bundlePolicy: 'max-bundle'; iceCandidatePoolSize: number; iceServers: RTCIceServer[] }
+// `iceCandidatePoolSize > 0` predates the data channel and the m-line; the
+// pre-gathered STUN/TURN candidates ship with a placeholder ufrag and the
+// host candidates race the mDNS hostname resolver. WebKit (iOS/macOS) and
+// Chromium then mix mDNS and IP host candidates across components, so the
+// peer ICE check fails and the data channel never opens. The default of 0
+// gathers on `setLocalDescription`, when the data channel and ufrag are
+// bound to a real m-line; ICE then converges in the normal way.
+type DefaultPeerConfig = { bundlePolicy: 'max-bundle'; iceServers: RTCIceServer[] }
 
 export function createPairingTransport(options: PairingTransportOptions): PairingTransportHandle {
     const peer = (options.peerFactory ?? createDefaultPeer)(options.iceServers)
@@ -90,7 +96,7 @@ export function createPairingTransport(options: PairingTransportOptions): Pairin
         })
         return readyPromise
     }
-    function send(signal: PairingSignalV2) {
+    function send(signal: PairingRtcSignal) {
         const payload = JSON.stringify(signal)
         if (socket?.readyState === SOCKET_OPEN) {
             socket.send(payload)
@@ -130,8 +136,12 @@ export function createPairingTransport(options: PairingTransportOptions): Pairin
     async function receive(data: string) {
         const raw = JSON.parse(data) as unknown
         options.onSignalReceived?.(raw)
-        const signal = PairingSignalV2Schema.parse(raw)
+        const signal = PairingTransportSignalSchema.parse(raw)
         if (signal.type === 'bye') return close(signal.reason)
+        if (signal.type === 'peer-replaced') {
+            options.onPeerReplaced?.()
+            return
+        }
         await negotiation.onSignal(signal)
     }
     function requestIceRestart() {
@@ -180,6 +190,7 @@ export function createPairingTransport(options: PairingTransportOptions): Pairin
 
     function maybeRestartIce(): void {
         if (peer.connectionState === 'closed') return
+        if (!canInitiateOffer()) return
         const at = now()
         const elapsedMs = at - lastIceRestartAt
         if (elapsedMs < PAIRING_ICE_RESTART_MIN_INTERVAL_MS) {
@@ -205,6 +216,12 @@ export function createPairingTransport(options: PairingTransportOptions): Pairin
         clearTimeout(disconnectedRestartTimer)
         disconnectedRestartTimer = null
     }
+    function canInitiateOffer(): boolean {
+        // Passive peers have no m-line before the host offer arrives. Calling
+        // restartIce() there makes WebKit emit an empty SDP, which max-bundle
+        // rejects with “session description has no BUNDLE group”.
+        return options.createDataChannel || Boolean(peer.localDescription?.sdp || peer.remoteDescription?.sdp)
+    }
 }
 
 function sameState(left: PairingTransportState, right: PairingTransportState) {
@@ -220,7 +237,6 @@ function createDefaultPeer(iceServers: RTCIceServer[]) {
     }
     return new globalPeer.RTCPeerConnection({
         bundlePolicy: 'max-bundle',
-        iceCandidatePoolSize: ICE_CANDIDATE_POOL_SIZE,
         iceServers,
     })
 }

@@ -42,7 +42,7 @@ describe('buildPairingDeviceLinkStatus', () => {
         ).toEqual({ phase: 'direct', title: '点对点直连', tone: 'success', latencyMs: null })
     })
 
-    it('reports relay transport with latency when stats land on TURN', () => {
+    it('reports relay transport with latency when stats land on relay', () => {
         const sampledAt = Date.now()
         expect(
             buildPairingDeviceLinkStatus({

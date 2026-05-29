@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'bun:test'
-import { PairingByeReasonSchema, PairingSignalV2Schema } from './pairingSignal'
+import { PairingByeReasonSchema, PairingTransportSignalSchema } from './pairingSignal'
 
 function parseAfterJsonRoundTrip(value: unknown) {
-    return PairingSignalV2Schema.parse(JSON.parse(JSON.stringify(value)))
+    return PairingTransportSignalSchema.parse(JSON.parse(JSON.stringify(value)))
 }
 
-describe('pairingSignalV2', () => {
+describe('pairingTransportSignal', () => {
     it('round-trips description signals', () => {
         const signal = { type: 'description', description: { type: 'offer', sdp: 'v=0' } } as const
         expect(parseAfterJsonRoundTrip(signal)).toEqual(signal)
@@ -24,10 +24,15 @@ describe('pairingSignalV2', () => {
         expect(parseAfterJsonRoundTrip(signal)).toEqual(signal)
     })
 
+    it('round-trips peer replacement signals', () => {
+        const signal = { type: 'peer-replaced' } as const
+        expect(parseAfterJsonRoundTrip(signal)).toEqual(signal)
+    })
+
     it('accepts every native description type', () => {
         for (const descriptionType of ['offer', 'answer', 'pranswer', 'rollback'] as const) {
             expect(
-                PairingSignalV2Schema.parse({ type: 'description', description: { type: descriptionType } })
+                PairingTransportSignalSchema.parse({ type: 'description', description: { type: descriptionType } })
             ).toEqual({
                 type: 'description',
                 description: { type: descriptionType },

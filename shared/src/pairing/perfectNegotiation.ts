@@ -1,7 +1,7 @@
-import type { PairingSignalV2, PairingSignalV2Candidate, PairingSignalV2Description } from './pairingSignal'
+import type { PairingRtcCandidateSignal, PairingRtcDescriptionSignal, PairingRtcSignal } from './pairingSignal'
 
-type Description = PairingSignalV2Description['description']
-type Candidate = PairingSignalV2Candidate['candidate']
+type Description = PairingRtcDescriptionSignal['description']
+type Candidate = PairingRtcCandidateSignal['candidate']
 type Listener = () => Promise<void>
 
 export interface RTCPeerConnection {
@@ -18,10 +18,10 @@ export interface RTCPeerConnection {
 export interface PerfectNegotiationOptions {
     peer: RTCPeerConnection
     polite: boolean
-    send(signal: PairingSignalV2): void
+    send(signal: PairingRtcSignal): void
 }
 export interface PerfectNegotiationHandle {
-    onSignal(signal: PairingSignalV2): Promise<void>
+    onSignal(signal: PairingRtcSignal): Promise<void>
     dispose(): void
 }
 export function createPerfectNegotiation(options: PerfectNegotiationOptions): PerfectNegotiationHandle {
@@ -78,7 +78,7 @@ export function createPerfectNegotiation(options: PerfectNegotiationOptions): Pe
         await flushPendingCandidates()
         if (active && description.type === 'offer') await answerOffer()
     }
-    async function onSignal(signal: PairingSignalV2) {
+    async function onSignal(signal: PairingRtcSignal) {
         if (!active || signal.type === 'bye') return
         if (signal.type === 'description') return onDescription(signal.description)
         try {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test'
+import { PROTOCOL_VERSION } from '../version'
 import {
     buildPairingLinkPresentation,
     classifyPairingLinkQuality,
@@ -13,6 +14,7 @@ import {
     PairingPeerGitCommandResultSchema,
     PairingPeerListSessionsResultSchema,
     PairingPeerMessageSchema,
+    PairingPeerMessagesResultSchema,
     PairingPeerMethodSchema,
     PairingPeerOpenSessionResultSchema,
     PairingPeerPathsExistResultSchema,
@@ -38,6 +40,13 @@ describe('pairing peer rpc schema', () => {
         const requestMethods = PairingPeerRequestSchema.options.map((schema) => schema.shape.method.value)
         expect(PairingPeerMethodSchema.options).toEqual(requestMethods)
         expect(new Set(PairingPeerMethodSchema.options).size).toBe(PairingPeerMethodSchema.options.length)
+    })
+
+    it('carries peer protocol version on heartbeat frames', () => {
+        expect(PairingPeerMessageSchema.parse({ kind: 'heartbeat', protocolVersion: PROTOCOL_VERSION })).toEqual({
+            kind: 'heartbeat',
+            protocolVersion: PROTOCOL_VERSION,
+        })
     })
 
     it('accepts narrow remote session summaries for session lists', () => {
@@ -126,7 +135,21 @@ describe('pairing peer rpc schema', () => {
             },
         })
 
+        expect(
+            PairingPeerOpenSessionResultSchema.parse({
+                session: openResult.session,
+                stream: openResult.stream,
+                watermark: openResult.watermark,
+                interactivity: openResult.interactivity,
+            }).session.id
+        ).toBe('session-1')
         expect(openResult.session.id).toBe('session-1')
+        expect(
+            PairingPeerMessagesResultSchema.parse({
+                messages: [],
+                page: { limit: 50, beforeSeq: null, nextBeforeSeq: null, hasMore: false },
+            }).page.limit
+        ).toBe(50)
         expect(
             PairingPeerMessageSchema.parse({
                 kind: 'response',
@@ -273,7 +296,7 @@ describe('pairing peer rpc schema', () => {
             sample: {
                 source: 'desktop',
                 transport: 'relay',
-                transportMode: 'turn-webrtc',
+                transportMode: 'relay-wss',
                 localCandidateType: 'relay',
                 remoteCandidateType: 'srflx',
                 currentRoundTripTimeMs: 92,
@@ -320,7 +343,7 @@ describe('pairing peer rpc schema', () => {
         expect(formatPairingRoundTripTime(37.7)).toBe('38ms')
         expect(formatPairingRoundTripTime(-1)).toBe('0ms')
         expect(describePairingLinkTransport({ transport: 'relay' })).toBe('安全中转')
-        expect(describePairingDirectBlockedReason('turn-candidate')).toBe('网络只能选到 TURN 中转')
+        expect(describePairingDirectBlockedReason('turn-candidate')).toBe('网络只能选到中转候选')
         expect(resolvePairingLinkTransport({ localCandidateType: 'host', remoteCandidateType: 'srflx' })).toBe('direct')
         expect(resolvePairingLinkTransport({ localCandidateType: null, remoteCandidateType: 'srflx' })).toBe('unknown')
         expect(resolvePairingLinkTransport({ localCandidateType: null, remoteCandidateType: 'relay' })).toBe('relay')

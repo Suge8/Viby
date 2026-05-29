@@ -2,29 +2,33 @@ import { z } from 'zod'
 import { AgentAvailabilityResponseSchema, ListAgentAvailabilityRequestSchema } from '../agentAvailability'
 import {
     AgentConfigResponseSchema,
+    OpenAgentConfigRequestSchema,
+    OpenAgentConfigResponseSchema,
     RestoreAgentConfigRequestSchema,
     RestoreAgentConfigResponseSchema,
     SaveAgentConfigRequestSchema,
     SaveAgentConfigResponseSchema,
 } from '../agentConfig'
 import { ResolveAgentLaunchConfigRequestSchema, ResolveAgentLaunchConfigResponseSchema } from '../agentLaunchConfig'
+import { normalizeProtocolVersion } from '../buildCompatibility'
 import { MachineDirectoryResponseSchema } from '../machineDirectory'
 import { RuntimeCapabilityRequestSchema, RuntimeCapabilityResponseSchema } from '../runtimeCapability'
 import {
     CodexServiceTierSchema,
-    DecryptedMessageSchema,
     ModelReasoningEffortSchema,
     PermissionModeSchema,
     SessionDriverSchema,
     SessionSchema,
     SyncEventSchema,
 } from '../schemas'
-import { SessionViewSnapshotSchema } from '../sessionView'
 import {
     createOptionalPairingPeerRequestSchema,
     createPairingPeerRequestSchema,
     PairingPeerRequestIdSchema,
 } from './pairingPeerRequestSchemaBase'
+
+export * from './pairingPeerSessionRpcSchema'
+
 import {
     PairingPeerAbortSessionRequestSchema,
     PairingPeerApprovePermissionRequestSchema,
@@ -52,6 +56,13 @@ import {
     PairingPeerUnarchiveSessionRequestSchema,
 } from './pairingPeerRpcExtendedSchema'
 import {
+    PairingPeerListSessionsRequestSchema,
+    PairingPeerLoadAfterRequestSchema,
+    PairingPeerMessagesRequestSchema,
+    PairingPeerOpenSessionRequestSchema,
+    PairingPeerResumeSessionRequestSchema,
+} from './pairingPeerSessionRpcSchema'
+import {
     PairingPeerPushSubscribeRequestSchema,
     PairingPeerPushUnsubscribeRequestSchema,
     PairingPeerPushVapidRequestSchema,
@@ -66,39 +77,6 @@ import {
 } from './pairingPeerTerminalSchema'
 import { PairingErrorPayloadSchema } from './pairingSchemaBase'
 
-export const PairingRemoteSessionSummarySchema = z.object({
-    id: z.string().min(1),
-    active: z.boolean(),
-    thinking: z.boolean(),
-    updatedAt: z.number().int().nonnegative(),
-    latestActivityAt: z.number().int().nonnegative().nullable(),
-    lifecycleState: z.enum(['running', 'open', 'closed', 'archived']),
-    resumeAvailable: z.boolean(),
-    model: z.string().nullable(),
-    codexServiceTier: CodexServiceTierSchema.nullable(),
-    metadata: z
-        .object({
-            name: z.string().min(1).optional(),
-            path: z.string().min(1),
-            driver: SessionDriverSchema.nullish().optional(),
-            summary: z.object({ text: z.string().min(1), updatedAt: z.number().int().nonnegative() }).optional(),
-        })
-        .nullable(),
-})
-export type PairingRemoteSessionSummary = z.infer<typeof PairingRemoteSessionSummarySchema>
-
-export const PairingPeerListSessionsParamsSchema = z.object({})
-export type PairingPeerListSessionsParams = z.infer<typeof PairingPeerListSessionsParamsSchema>
-export const PairingPeerOpenSessionParamsSchema = z.object({ sessionId: z.string().min(1) })
-export type PairingPeerOpenSessionParams = z.infer<typeof PairingPeerOpenSessionParamsSchema>
-export const PairingPeerResumeSessionParamsSchema = z.object({ sessionId: z.string().min(1) })
-export type PairingPeerResumeSessionParams = z.infer<typeof PairingPeerResumeSessionParamsSchema>
-export const PairingPeerLoadAfterParamsSchema = z.object({
-    sessionId: z.string().min(1),
-    afterSeq: z.number().int().min(0),
-    limit: z.number().int().positive().max(200).optional(),
-})
-export type PairingPeerLoadAfterParams = z.infer<typeof PairingPeerLoadAfterParamsSchema>
 export const PairingPeerSendMessageParamsSchema = z.object({
     sessionId: z.string().min(1),
     text: z.string(),
@@ -127,21 +105,6 @@ export const PairingPeerSpawnSessionParamsSchema = z.object({
 })
 export type PairingPeerSpawnSessionParams = z.infer<typeof PairingPeerSpawnSessionParamsSchema>
 
-export const PairingPeerListSessionsResultSchema = z.object({ sessions: z.array(PairingRemoteSessionSummarySchema) })
-export type PairingPeerListSessionsResult = z.infer<typeof PairingPeerListSessionsResultSchema>
-
-export const PairingPeerOpenSessionResultSchema = SessionViewSnapshotSchema
-export type PairingPeerOpenSessionResult = z.infer<typeof PairingPeerOpenSessionResultSchema>
-
-export const PairingPeerResumeSessionResultSchema = SessionViewSnapshotSchema
-export type PairingPeerResumeSessionResult = z.infer<typeof PairingPeerResumeSessionResultSchema>
-
-export const PairingPeerLoadAfterResultSchema = z.object({
-    messages: z.array(DecryptedMessageSchema),
-    nextAfterSeq: z.number().int().min(0),
-})
-export type PairingPeerLoadAfterResult = z.infer<typeof PairingPeerLoadAfterResultSchema>
-
 export const PairingPeerSendMessageResultSchema = z.object({ session: SessionSchema })
 export type PairingPeerSendMessageResult = z.infer<typeof PairingPeerSendMessageResultSchema>
 
@@ -166,6 +129,9 @@ export type PairingPeerSaveAgentConfigResult = z.infer<typeof PairingPeerSaveAge
 export const PairingPeerRestoreAgentConfigResultSchema = RestoreAgentConfigResponseSchema
 export type PairingPeerRestoreAgentConfigResult = z.infer<typeof PairingPeerRestoreAgentConfigResultSchema>
 
+export const PairingPeerOpenAgentConfigResultSchema = OpenAgentConfigResponseSchema
+export type PairingPeerOpenAgentConfigResult = z.infer<typeof PairingPeerOpenAgentConfigResultSchema>
+
 export const PairingPeerAgentLaunchConfigResultSchema = ResolveAgentLaunchConfigResponseSchema
 export type PairingPeerAgentLaunchConfigResult = z.infer<typeof PairingPeerAgentLaunchConfigResultSchema>
 
@@ -177,22 +143,6 @@ export type PairingPeerSpawnSessionResult = z.infer<typeof PairingPeerSpawnSessi
 
 export { PairingPeerRequestIdSchema }
 
-export const PairingPeerListSessionsRequestSchema = createOptionalPairingPeerRequestSchema(
-    'sessions.list',
-    PairingPeerListSessionsParamsSchema
-)
-export const PairingPeerOpenSessionRequestSchema = createPairingPeerRequestSchema(
-    'session.open',
-    PairingPeerOpenSessionParamsSchema
-)
-export const PairingPeerResumeSessionRequestSchema = createPairingPeerRequestSchema(
-    'session.resume',
-    PairingPeerResumeSessionParamsSchema
-)
-export const PairingPeerLoadAfterRequestSchema = createPairingPeerRequestSchema(
-    'session.load-after',
-    PairingPeerLoadAfterParamsSchema
-)
 export const PairingPeerSendMessageRequestSchema = createPairingPeerRequestSchema(
     'session.send',
     PairingPeerSendMessageParamsSchema
@@ -217,6 +167,10 @@ export const PairingPeerRestoreAgentConfigRequestSchema = createPairingPeerReque
     'runtime.restore-agent-config',
     RestoreAgentConfigRequestSchema
 )
+export const PairingPeerOpenAgentConfigRequestSchema = createPairingPeerRequestSchema(
+    'runtime.open-agent-config',
+    OpenAgentConfigRequestSchema
+)
 export const PairingPeerPathsExistRequestSchema = createPairingPeerRequestSchema(
     'runtime.paths-exists',
     PairingPeerPathsExistParamsSchema
@@ -239,6 +193,7 @@ const PairingPeerRequestSchemas = [
     PairingPeerOpenSessionRequestSchema,
     PairingPeerResumeSessionRequestSchema,
     PairingPeerLoadAfterRequestSchema,
+    PairingPeerMessagesRequestSchema,
     PairingPeerSendMessageRequestSchema,
     PairingPeerAbortSessionRequestSchema,
     PairingPeerArchiveSessionRequestSchema,
@@ -260,6 +215,7 @@ const PairingPeerRequestSchemas = [
     PairingPeerAgentConfigRequestSchema,
     PairingPeerSaveAgentConfigRequestSchema,
     PairingPeerRestoreAgentConfigRequestSchema,
+    PairingPeerOpenAgentConfigRequestSchema,
     PairingPeerPathsExistRequestSchema,
     PairingPeerBrowseDirectoryRequestSchema,
     PairingPeerAgentLaunchConfigRequestSchema,
@@ -331,6 +287,10 @@ export const PairingPeerHeartbeatSchema = z.object({
     ack: z.boolean().optional(),
     id: z.string().min(1).optional(),
     sentAt: z.number().int().nonnegative().optional(),
+    protocolVersion: z.preprocess(
+        (value) => normalizeProtocolVersion(value) ?? undefined,
+        z.number().int().positive().optional()
+    ),
 })
 export type PairingPeerHeartbeat = z.infer<typeof PairingPeerHeartbeatSchema>
 

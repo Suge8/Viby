@@ -24,7 +24,7 @@ describe('pairingWorkspaceRoute', () => {
     })
 
     it('does not tag non-workspace links', () => {
-        expect(withPairingWorkspaceIntent('/p/pairing-1#ticket=ticket-1')).toBe('/p/pairing-1#ticket=ticket-1')
+        expect(withPairingWorkspaceIntent('/p/pairing-1#extra=value')).toBe('/p/pairing-1#extra=value')
     })
 
     it('keeps PWA handoff parameter names canonical', () => {

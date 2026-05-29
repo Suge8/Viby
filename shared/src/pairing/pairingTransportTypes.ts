@@ -1,4 +1,4 @@
-import type { PairingByeReason, PairingSignalV2 } from './pairingSignal'
+import type { PairingByeReason, PairingRtcCandidateSignal } from './pairingSignal'
 import type { RTCPeerConnection as NegotiationPeer } from './perfectNegotiation'
 
 export type PairingTransportState =
@@ -20,15 +20,10 @@ export interface PairingSocket {
 }
 
 export interface PairingPeer extends NegotiationPeer {
+    remoteDescription: NegotiationPeer['localDescription']
     iceConnectionState: string
     connectionState: string
-    onicecandidate:
-        | ((event: {
-              candidate: PairingSignalV2 extends { type: 'candidate'; candidate: infer Candidate }
-                  ? Candidate | null
-                  : never
-          }) => void)
-        | null
+    onicecandidate: ((event: { candidate: PairingRtcCandidateSignal['candidate'] | null }) => void) | null
     onconnectionstatechange: (() => void) | null
     oniceconnectionstatechange: (() => void) | null
     ondatachannel: ((event: { channel: RTCDataChannel }) => void) | null
@@ -44,6 +39,7 @@ export interface PairingTransportOptions {
     getWsUrl(): Promise<string>
     createDataChannel: boolean
     onChannel(channel: RTCDataChannel): void
+    onPeerReplaced?: () => void
     onSignalReceived?: (raw: unknown) => void
     socketFactory?: (url: string) => PairingSocket
     peerFactory?: (iceServers: RTCIceServer[]) => PairingPeer

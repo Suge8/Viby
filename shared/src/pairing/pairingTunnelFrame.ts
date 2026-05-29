@@ -3,7 +3,7 @@ import { z } from 'zod'
 export const PairingTunnelRouteSchema = z.enum(['relay', 'direct'])
 export type PairingTunnelRoute = z.infer<typeof PairingTunnelRouteSchema>
 
-export const PairingTunnelTransportSchema = z.enum(['relay-wss', 'direct-webrtc', 'turn-webrtc'])
+export const PairingTunnelTransportSchema = z.enum(['relay-wss', 'direct-webrtc'])
 export type PairingTunnelTransport = z.infer<typeof PairingTunnelTransportSchema>
 
 export const PairingTunnelCandidateTypeSchema = z.enum(['host', 'srflx', 'prflx', 'relay'])
@@ -15,6 +15,7 @@ export const PairingTunnelDirectBlockedReasonSchema = z.enum([
     'direct-slower-than-relay',
     'ice-failed',
     'heartbeat-missed',
+    'peer-replaced',
 ])
 export type PairingTunnelDirectBlockedReason = z.infer<typeof PairingTunnelDirectBlockedReasonSchema>
 

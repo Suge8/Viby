@@ -1,5 +1,6 @@
 import type {
     PairingTunnelCandidateType,
+    PairingTunnelDirectBlockedReason,
     PairingTunnelRoute,
     PairingTunnelTelemetry,
     PairingTunnelTransport,
@@ -67,7 +68,7 @@ export function reducePairingTunnelRoute(
                 ...state,
                 directProbe: 'failed',
                 directProbeFailures: state.directProbeFailures + 1,
-                directBlockedReason: 'ice-failed',
+                directBlockedReason: normalizeDirectFailureReason(event.reason),
             })
         case 'heartbeat-ack':
             return handleHeartbeatAck(state, event.route, normalizeRtt(event.roundTripTimeMs), event.sampledAt, options)
@@ -96,10 +97,17 @@ export function readPairingTunnelTelemetry(state: PairingTunnelRouteState): Pair
 }
 
 export function shouldReprobePairingDirect(state: PairingTunnelRouteState): boolean {
+    return state.activeTransport === 'relay-wss' && state.directProbe !== 'probing'
+}
+
+export function shouldRequestPairingDirectProbeAck(state: PairingTunnelRouteState): boolean {
     return (
-        (state.activeTransport === 'relay-wss' || state.activeTransport === 'turn-webrtc') &&
-        state.directProbe !== 'probing'
+        state.activeRoute !== 'direct' && state.directProbe === 'probing' && state.directBlockedReason === 'missing-ack'
     )
+}
+
+function normalizeDirectFailureReason(reason: string | undefined): PairingTunnelDirectBlockedReason {
+    return reason === 'peer-replaced' ? 'peer-replaced' : 'ice-failed'
 }
 
 function handleRelayReady(
@@ -161,7 +169,7 @@ function handleDirectCandidate(
                 : (sampledAt ?? state.directProbeSampledAt),
     }
     const probing = { ...withCandidate, directProbe: 'probing' as const }
-    return candidateType === 'relay' ? maybePromoteWebRtcRelay(probing, options) : maybePromoteDirect(probing, options)
+    return candidateType === 'relay' ? rejectRelayCandidate(probing) : maybePromoteDirect(probing, options)
 }
 
 function handleHeartbeatAck(
@@ -175,7 +183,18 @@ function handleHeartbeatAck(
         const relayRoundTripTimeMs = roundTripTimeMs ?? state.relayRoundTripTimeMs
         const relayRoundTripSampledAt =
             relayRoundTripTimeMs === null ? null : (sampledAt ?? state.relayRoundTripSampledAt)
-        if (state.activeRoute !== 'relay') return { ...state, relayRoundTripTimeMs, relayRoundTripSampledAt }
+        if (state.activeRoute === null) {
+            return promoteRoute(
+                { ...state, relayAvailable: true, relayRoundTripTimeMs, relayRoundTripSampledAt },
+                'relay',
+                'relay-wss',
+                relayRoundTripTimeMs,
+                relayRoundTripSampledAt
+            )
+        }
+        if (state.activeRoute !== 'relay') {
+            return { ...state, relayAvailable: true, relayRoundTripTimeMs, relayRoundTripSampledAt }
+        }
         return {
             ...state,
             missedAcks: 0,
@@ -191,12 +210,9 @@ function handleHeartbeatAck(
     const directProbeSampledAt = directProbeRoundTripTimeMs === null ? null : (sampledAt ?? state.directProbeSampledAt)
     const next = { ...state, directAckCount, directProbeRoundTripTimeMs, directProbeSampledAt, missedAcks: 0 }
     if (state.activeRoute === 'direct') {
-        if (state.activeTransport === 'turn-webrtc') return maybePromoteWebRtcRelay(next, options)
         return { ...next, roundTripTimeMs: directProbeRoundTripTimeMs, roundTripSampledAt: directProbeSampledAt }
     }
-    return state.directCandidateType === 'relay'
-        ? maybePromoteWebRtcRelay(next, options)
-        : maybePromoteDirect(next, options)
+    return state.directCandidateType === 'relay' ? rejectRelayCandidate(next) : maybePromoteDirect(next, options)
 }
 
 function handleHeartbeatMissed(
@@ -204,7 +220,19 @@ function handleHeartbeatMissed(
     route: PairingTunnelRoute,
     options: PairingTunnelRouteOptions
 ): PairingTunnelRouteState {
-    if (route !== state.activeRoute) return state
+    if (route !== state.activeRoute) {
+        return route === 'direct' && state.directProbe === 'probing'
+            ? {
+                  ...state,
+                  directProbe: 'failed',
+                  directProbeFailures: state.directProbeFailures + 1,
+                  directAckCount: 0,
+                  directProbeRoundTripTimeMs: null,
+                  directProbeSampledAt: null,
+                  directBlockedReason: 'heartbeat-missed',
+              }
+            : state
+    }
 
     const missedAcks = state.missedAcks + 1
     if (missedAcks < options.missedAckLimit) {
@@ -226,12 +254,9 @@ function maybePromoteDirect(
     state: PairingTunnelRouteState,
     options: PairingTunnelRouteOptions
 ): PairingTunnelRouteState {
-    if (!state.directCandidateType || state.directCandidateType === 'relay') return state
+    if (state.directCandidateType === 'relay') return state
     if (state.directAckCount < requiredDirectAckCount(state, options)) {
         return { ...state, directBlockedReason: 'missing-ack' }
-    }
-    if (!directHasUsefulRttBenefit(state, options)) {
-        return { ...state, directBlockedReason: 'direct-slower-than-relay' }
     }
     return promoteRoute(
         { ...state, directProbe: 'usable', directBlockedReason: null },
@@ -242,25 +267,10 @@ function maybePromoteDirect(
     )
 }
 
-function maybePromoteWebRtcRelay(
-    state: PairingTunnelRouteState,
-    options: PairingTunnelRouteOptions
-): PairingTunnelRouteState {
+function rejectRelayCandidate(state: PairingTunnelRouteState): PairingTunnelRouteState {
     if (state.directCandidateType !== 'relay') return state
-    if (state.directAckCount < requiredDirectAckCount(state, options)) {
-        return { ...state, directBlockedReason: 'missing-ack' }
-    }
-    if (!turnHasUsefulRtt(state, options)) {
-        const blocked = { ...state, directBlockedReason: 'direct-slower-than-relay' as const }
-        return state.activeTransport === 'relay-wss' ? blocked : demoteDirect(blocked)
-    }
-    return promoteRoute(
-        { ...state, directProbe: 'usable', directBlockedReason: 'turn-candidate' },
-        'direct',
-        'turn-webrtc',
-        state.directProbeRoundTripTimeMs,
-        state.directProbeSampledAt
-    )
+    const blocked = { ...state, directProbe: 'failed' as const, directBlockedReason: 'turn-candidate' as const }
+    return state.activeRoute === 'direct' ? demoteDirect(blocked) : blocked
 }
 
 function demoteDirect(state: PairingTunnelRouteState): PairingTunnelRouteState {
@@ -291,18 +301,6 @@ function demoteDirect(state: PairingTunnelRouteState): PairingTunnelRouteState {
 function requiredDirectAckCount(state: PairingTunnelRouteState, options: PairingTunnelRouteOptions): number {
     const failureAdjusted = options.minDirectAcks + state.directProbeFailures
     return Math.min(Math.max(options.minDirectAcks, failureAdjusted), options.maxDirectAcksAfterFailure)
-}
-
-function directHasUsefulRttBenefit(state: PairingTunnelRouteState, options: PairingTunnelRouteOptions): boolean {
-    if (state.activeRoute !== 'relay') return true
-    if (state.relayRoundTripTimeMs === null || state.directProbeRoundTripTimeMs === null) return true
-    return state.directProbeRoundTripTimeMs <= state.relayRoundTripTimeMs + options.maxDirectPenaltyMs
-}
-
-function turnHasUsefulRtt(state: PairingTunnelRouteState, options: PairingTunnelRouteOptions): boolean {
-    if (!state.relayAvailable) return true
-    if (state.relayRoundTripTimeMs === null || state.directProbeRoundTripTimeMs === null) return true
-    return state.directProbeRoundTripTimeMs <= state.relayRoundTripTimeMs + options.maxTurnPenaltyMs
 }
 
 function promoteRoute(

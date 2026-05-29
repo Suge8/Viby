@@ -35,6 +35,7 @@ class MockSocket implements PairingSocket {
 class MockPeer implements PairingPeer {
     signalingState: PairingPeer['signalingState'] = 'stable'
     localDescription: RtcSessionDescription | null = null
+    remoteDescription: RtcSessionDescription | null = null
     iceConnectionState = 'new'
     connectionState = 'new'
     onicecandidate: ((event: { candidate: RtcIceCandidate | null }) => void) | null = null
@@ -56,6 +57,7 @@ class MockPeer implements PairingPeer {
         this.signalingState = description.type === 'offer' ? 'have-local-offer' : 'stable'
     }
     async setRemoteDescription(description: RtcSessionDescription) {
+        this.remoteDescription = description
         this.signalingState = description.type === 'offer' ? 'have-remote-offer' : 'stable'
     }
     async addIceCandidate(_: RtcIceCandidate) {}
@@ -244,7 +246,7 @@ describe('pairingTransport', () => {
             polite: true,
             iceServers: [],
             getWsUrl: async () => 'u',
-            createDataChannel: false,
+            createDataChannel: true,
             onChannel: () => {},
             socketFactory: () => socket,
             peerFactory: () => peer,
@@ -266,7 +268,7 @@ describe('pairingTransport', () => {
             polite: true,
             iceServers: [],
             getWsUrl: async () => 'u',
-            createDataChannel: false,
+            createDataChannel: true,
             onChannel: () => {},
             socketFactory: () => socket,
             peerFactory: () => peer,
@@ -282,7 +284,7 @@ describe('pairingTransport', () => {
         transport.dispose()
     })
 
-    it('restarts ICE when disconnected persists', async () => {
+    it('does not let a passive peer create an offer before the first remote description', async () => {
         const socket = new MockSocket(),
             peer = new MockPeer()
         const transport = createPairingTransport({
@@ -291,6 +293,30 @@ describe('pairingTransport', () => {
             iceServers: [],
             getWsUrl: async () => 'u',
             createDataChannel: false,
+            onChannel: () => {},
+            socketFactory: () => socket,
+            peerFactory: () => peer,
+        })
+        await openWhenBound(socket)
+        peer.disconnectIce()
+        transport.notifyForeground()
+        expect(peer.restartCount).toBe(0)
+        expect(peer.localDescription).toBeNull()
+        peer.remoteDescription = { type: 'offer', sdp: 'offer' }
+        transport.requestIceRestart()
+        expect(peer.restartCount).toBe(1)
+        transport.dispose()
+    })
+
+    it('restarts ICE when disconnected persists', async () => {
+        const socket = new MockSocket(),
+            peer = new MockPeer()
+        const transport = createPairingTransport({
+            pairingId: 'p',
+            polite: true,
+            iceServers: [],
+            getWsUrl: async () => 'u',
+            createDataChannel: true,
             onChannel: () => {},
             socketFactory: () => socket,
             peerFactory: () => peer,
@@ -342,7 +368,7 @@ describe('pairingTransport', () => {
             polite: true,
             iceServers: [],
             getWsUrl: async () => `u${index}`,
-            createDataChannel: false,
+            createDataChannel: true,
             onChannel: () => {},
             socketFactory: () => sockets[index++],
             peerFactory: () => peer,

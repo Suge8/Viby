@@ -23,27 +23,38 @@ export const RtcIceCandidateSchema = z.object({
 })
 export type RtcIceCandidate = z.infer<typeof RtcIceCandidateSchema>
 
-export const PairingSignalV2DescriptionSchema = z.object({
+export const PairingRtcDescriptionSignalSchema = z.object({
     type: z.literal('description'),
     description: RtcSessionDescriptionSchema,
 })
-export type PairingSignalV2Description = z.infer<typeof PairingSignalV2DescriptionSchema>
+export type PairingRtcDescriptionSignal = z.infer<typeof PairingRtcDescriptionSignalSchema>
 
-export const PairingSignalV2CandidateSchema = z.object({
+export const PairingRtcCandidateSignalSchema = z.object({
     type: z.literal('candidate'),
     candidate: RtcIceCandidateSchema,
 })
-export type PairingSignalV2Candidate = z.infer<typeof PairingSignalV2CandidateSchema>
+export type PairingRtcCandidateSignal = z.infer<typeof PairingRtcCandidateSignalSchema>
 
-export const PairingSignalV2ByeSchema = z.object({
+export const PairingRtcByeSignalSchema = z.object({
     type: z.literal('bye'),
     reason: PairingByeReasonSchema,
 })
-export type PairingSignalV2Bye = z.infer<typeof PairingSignalV2ByeSchema>
+export type PairingRtcByeSignal = z.infer<typeof PairingRtcByeSignalSchema>
 
-export const PairingSignalV2Schema = z.discriminatedUnion('type', [
-    PairingSignalV2DescriptionSchema,
-    PairingSignalV2CandidateSchema,
-    PairingSignalV2ByeSchema,
+export const PairingRtcSignalSchema = z.discriminatedUnion('type', [
+    PairingRtcDescriptionSignalSchema,
+    PairingRtcCandidateSignalSchema,
+    PairingRtcByeSignalSchema,
 ])
-export type PairingSignalV2 = z.infer<typeof PairingSignalV2Schema>
+export type PairingRtcSignal = z.infer<typeof PairingRtcSignalSchema>
+
+export const PairingBrokerControlSignalSchema = z.object({ type: z.literal('peer-replaced') })
+export type PairingBrokerControlSignal = z.infer<typeof PairingBrokerControlSignalSchema>
+
+export const PairingTransportSignalSchema = z.discriminatedUnion('type', [
+    PairingRtcDescriptionSignalSchema,
+    PairingRtcCandidateSignalSchema,
+    PairingRtcByeSignalSchema,
+    PairingBrokerControlSignalSchema,
+])
+export type PairingTransportSignal = z.infer<typeof PairingTransportSignalSchema>

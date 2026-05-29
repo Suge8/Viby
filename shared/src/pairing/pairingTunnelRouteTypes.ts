@@ -55,16 +55,12 @@ export type PairingTunnelRouteEvent =
 export interface PairingTunnelRouteOptions {
     minDirectAcks: number
     maxDirectAcksAfterFailure: number
-    maxDirectPenaltyMs: number
-    maxTurnPenaltyMs: number
     missedAckLimit: number
 }
 
 export const DEFAULT_PAIRING_TUNNEL_ROUTE_OPTIONS: PairingTunnelRouteOptions = {
     minDirectAcks: 2,
     maxDirectAcksAfterFailure: 4,
-    maxDirectPenaltyMs: 30,
-    maxTurnPenaltyMs: 0,
     missedAckLimit: 2,
 }
 

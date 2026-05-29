@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'bun:test'
-import type { PairingSignalV2, PairingSignalV2Candidate, PairingSignalV2Description } from './pairingSignal'
+import type { PairingRtcCandidateSignal, PairingRtcDescriptionSignal, PairingRtcSignal } from './pairingSignal'
 import { createPerfectNegotiation, type RTCPeerConnection } from './perfectNegotiation'
 
-type Description = PairingSignalV2Description['description']
-type Candidate = PairingSignalV2Candidate['candidate']
+type Description = PairingRtcDescriptionSignal['description']
+type Candidate = PairingRtcCandidateSignal['candidate']
 type Listener = () => Promise<void>
 type SignalingState = 'stable' | 'have-local-offer' | 'have-remote-offer' | 'closed'
 
@@ -82,7 +82,7 @@ class MockPeer {
 
 function createHarness(polite: boolean) {
     const peer = new MockPeer()
-    const sent: PairingSignalV2[] = []
+    const sent: PairingRtcSignal[] = []
     const handle = createPerfectNegotiation({
         peer: peer as RTCPeerConnection,
         polite,

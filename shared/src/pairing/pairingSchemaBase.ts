@@ -7,7 +7,7 @@ export type PairingRole = z.infer<typeof PairingRoleSchema>
 export const PairingSessionStateSchema = z.enum(['active', 'waiting', 'deleted', 'expired'])
 export type PairingSessionState = z.infer<typeof PairingSessionStateSchema>
 
-export const PairingApprovalStatusSchema = z.enum(['pending', 'approved']).nullable()
+export const PairingApprovalStatusSchema = z.literal('approved').nullable()
 export type PairingApprovalStatus = z.infer<typeof PairingApprovalStatusSchema>
 
 export const PairingMetadataSchema = z.record(z.string(), z.unknown())
@@ -36,7 +36,6 @@ export const PairingSessionFieldsSchema = z.object({
     createdAt: z.number().int().nonnegative(),
     updatedAt: z.number().int().nonnegative(),
     expiresAt: z.number().int().positive(),
-    ticketExpiresAt: z.number().int().positive(),
     shortCode: z
         .string()
         .regex(/^\d{6}$/)
@@ -52,7 +51,6 @@ export const PairingSessionSnapshotSchema = PairingSessionFieldsSchema.extend({
 export type PairingSessionSnapshot = z.infer<typeof PairingSessionSnapshotSchema>
 
 export const PairingSessionRecordSchema = PairingSessionFieldsSchema.extend({
-    ticketHash: z.string().min(1),
     host: PairingParticipantRecordSchema,
     guest: PairingParticipantRecordSchema.nullable(),
 })
@@ -70,21 +68,20 @@ export const PairingCreateRequestSchema = z.object({
     label: z.string().min(1).max(120).optional(),
     metadata: PairingMetadataSchema.optional(),
     sessionTtlSeconds: z.number().int().positive().optional(),
-    ticketTtlSeconds: z.number().int().positive().optional(),
 })
 export type PairingCreateRequest = z.infer<typeof PairingCreateRequestSchema>
 
-export const PairingClaimRequestSchema = z.object({
-    ticket: z.string().min(1),
+/**
+ * Single-step pairing auth: a guest device submits the 6-digit code shown on
+ * the host's screen along with its own identity. The broker atomically
+ * verifies the code, registers the guest, marks the session approved, and
+ * returns the guest credentials needed to reach the relay/WebRTC plane.
+ */
+export const PairingVerifyCodeRequestSchema = z.object({
+    code: z.string().regex(/^\d{6}$/),
     label: z.string().min(1).max(120).optional(),
     publicKey: z.string().min(1).optional(),
     metadata: PairingMetadataSchema.optional(),
-})
-export type PairingClaimRequest = z.infer<typeof PairingClaimRequestSchema>
-
-export const PairingVerifyCodeRequestSchema = z.object({
-    token: z.string().min(1),
-    code: z.string().regex(/^\d{6}$/),
 })
 export type PairingVerifyCodeRequest = z.infer<typeof PairingVerifyCodeRequestSchema>
 
@@ -100,18 +97,47 @@ export const PairingCreateResponseSchema = z.object({
     pairingUrl: z.string().min(1),
     wsUrl: z.string().min(1),
     tunnelUrl: z.string().min(1),
+    eventsUrl: z.string().min(1),
     iceServers: z.array(PairingIceServerSchema),
 })
 export type PairingCreateResponse = z.infer<typeof PairingCreateResponseSchema>
 
-export const PairingClaimResponseSchema = z.object({
+/**
+ * Shared response shape for any path that promotes a device to "approved
+ * guest" status (initial verify-code, PWA handoff claim, reconnect). Carries
+ * the guest token plus all transport endpoints the device needs.
+ */
+export const PairingGuestAuthResponseSchema = z.object({
     pairing: PairingSessionSnapshotSchema,
     guestToken: z.string().min(1),
     wsUrl: z.string().min(1),
     tunnelUrl: z.string().min(1),
     iceServers: z.array(PairingIceServerSchema),
 })
-export type PairingClaimResponse = z.infer<typeof PairingClaimResponseSchema>
+export type PairingGuestAuthResponse = z.infer<typeof PairingGuestAuthResponseSchema>
+
+export const PairingVerifyCodeResponseSchema = PairingGuestAuthResponseSchema
+export type PairingVerifyCodeResponse = PairingGuestAuthResponse
+
+/**
+ * LAN pairing response shapes (hub-local). LAN devices connect directly to
+ * the hub after verify and therefore do not need the WebRTC transport URLs
+ * the broker returns; they receive a hub device token + reconnect secret.
+ */
+export const PairingLanCreateResponseSchema = z.object({
+    pairing: PairingSessionSnapshotSchema,
+    pairingUrl: z.string().min(1),
+    eventsUrl: z.string().min(1),
+})
+export type PairingLanCreateResponse = z.infer<typeof PairingLanCreateResponseSchema>
+
+export const PairingLanVerifyCodeResponseSchema = z.object({
+    pairing: PairingSessionSnapshotSchema,
+    deviceToken: z.string().min(1),
+    deviceId: z.string().min(1),
+    deviceSecret: z.string().min(1),
+})
+export type PairingLanVerifyCodeResponse = z.infer<typeof PairingLanVerifyCodeResponseSchema>
 
 export const PairingDeviceProofSchema = z.object({
     publicKey: z.string().min(1),
@@ -190,24 +216,25 @@ export const PairingDeleteResponseSchema = z.object({
 })
 export type PairingDeleteResponse = z.infer<typeof PairingDeleteResponseSchema>
 
-export const PairingApproveResponseSchema = z.object({
-    pairing: PairingSessionSnapshotSchema,
-})
-export type PairingApproveResponse = z.infer<typeof PairingApproveResponseSchema>
-
-export const PairingVerifyCodeResponseSchema = z.object({
-    pairing: PairingSessionSnapshotSchema,
-})
-export type PairingVerifyCodeResponse = z.infer<typeof PairingVerifyCodeResponseSchema>
-
 export const PairingStatusResponseSchema = z.object({
     pairing: PairingSessionSnapshotSchema,
 })
 export type PairingStatusResponse = z.infer<typeof PairingStatusResponseSchema>
 
+/**
+ * Host-side server-sent event payload. Hosts subscribe to
+ * `GET /pairings/:id/events` to receive snapshot updates the moment a guest
+ * verifies or the session is deleted, replacing client-side polling.
+ */
+export const PairingHostEventSchema = z.object({
+    type: z.literal('pairing.updated'),
+    pairing: PairingSessionSnapshotSchema,
+})
+export type PairingHostEvent = z.infer<typeof PairingHostEventSchema>
+
 export const PairingTelemetryTransportSchema = z.enum(['direct', 'relay', 'unknown'])
 export type PairingTelemetryTransport = z.infer<typeof PairingTelemetryTransportSchema>
-export const PairingTelemetryTransportModeSchema = z.enum(['direct-webrtc', 'turn-webrtc', 'relay-wss', 'unknown'])
+export const PairingTelemetryTransportModeSchema = z.enum(['direct-webrtc', 'relay-wss', 'unknown'])
 export type PairingTelemetryTransportMode = z.infer<typeof PairingTelemetryTransportModeSchema>
 
 export const PairingTelemetrySampleSchema = z.object({
@@ -241,7 +268,6 @@ export function toPairingSessionSnapshot(session: PairingSessionRecord): Pairing
         createdAt: session.createdAt,
         updatedAt: session.updatedAt,
         expiresAt: session.expiresAt,
-        ticketExpiresAt: session.ticketExpiresAt,
         shortCode: session.shortCode,
         approvalStatus: session.approvalStatus,
         metadata: session.metadata,

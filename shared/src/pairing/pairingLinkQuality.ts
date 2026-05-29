@@ -1,5 +1,4 @@
 import { PAIRING_LINK_SAMPLE_STALE_MS } from './pairingTiming'
-
 export type PairingLinkTransport = 'direct' | 'relay' | 'unknown'
 export type PairingLinkTone = 'success' | 'warning' | 'neutral'
 export type PairingDeviceLinkTone = PairingLinkTone | 'danger'
@@ -18,9 +17,8 @@ export type PairingDeviceLinkPhase =
     | 'public'
     | 'unknown'
 
-const FAST_RTT_MS = 80
-const STEADY_RTT_MS = 180
-
+const FAST_RTT_MS = 80,
+    STEADY_RTT_MS = 180
 export interface PairingLinkQualityInput {
     transport: PairingLinkTransport
     currentRoundTripTimeMs: number | null
@@ -39,30 +37,6 @@ export interface PairingLinkTransportInput {
 }
 
 export interface PairingLinkCandidateInput {
-    localCandidateType: string | null
-    remoteCandidateType: string | null
-}
-
-export interface PairingStatsReportLike {
-    get(id: string): PairingStatsLike | undefined
-    forEach(callback: (stat: PairingStatsLike) => void): void
-}
-
-export interface PairingStatsLike {
-    id?: string
-    type?: string
-    selected?: boolean
-    nominated?: boolean
-    state?: string
-    selectedCandidatePairId?: string
-    localCandidateId?: string
-    remoteCandidateId?: string
-    candidateType?: string
-    currentRoundTripTime?: number
-}
-
-export interface PairingSelectedCandidatePairStats {
-    pair: PairingStatsLike
     localCandidateType: string | null
     remoteCandidateType: string | null
 }
@@ -177,7 +151,7 @@ export function describePairingLinkTransport(input: PairingLinkTransportInput | 
 export function describePairingDirectBlockedReason(reason: string | null | undefined): string | null {
     switch (reason) {
         case 'turn-candidate':
-            return '网络只能选到 TURN 中转'
+            return '网络只能选到中转候选'
         case 'missing-ack':
             return '直连探测还在确认心跳'
         case 'direct-slower-than-relay':
@@ -186,6 +160,8 @@ export function describePairingDirectBlockedReason(reason: string | null | undef
             return '直连 ICE 失败'
         case 'heartbeat-missed':
             return '直连心跳丢失'
+        case 'peer-replaced':
+            return '设备窗口已切换，正在重建直连'
         default:
             return null
     }
@@ -201,52 +177,6 @@ export function resolvePairingLinkTransport(input: PairingLinkCandidateInput): P
     }
 
     return 'unknown'
-}
-
-function findSelectedCandidatePair(report: PairingStatsReportLike): PairingStatsLike | null {
-    let fallback: PairingStatsLike | null = null
-
-    for (const stat of readPairingStats(report)) {
-        if (stat.type === 'transport' && stat.selectedCandidatePairId) {
-            const selected = report.get(stat.selectedCandidatePairId)
-            if (selected) {
-                return selected
-            }
-        }
-
-        if (stat.type === 'candidate-pair' && stat.nominated && stat.state === 'succeeded') {
-            fallback = stat
-        }
-    }
-
-    return fallback
-}
-
-function readCandidateType(report: PairingStatsReportLike, candidateId: string | undefined): string | null {
-    const candidate = candidateId ? report.get(candidateId) : null
-    return candidate && typeof candidate.candidateType === 'string' ? candidate.candidateType : null
-}
-
-function readPairingStats(report: PairingStatsReportLike): PairingStatsLike[] {
-    const stats: PairingStatsLike[] = []
-    report.forEach((stat) => stats.push(stat))
-    return stats
-}
-
-export function resolvePairingSelectedCandidatePairStats(
-    report: PairingStatsReportLike
-): PairingSelectedCandidatePairStats | null {
-    const pair = findSelectedCandidatePair(report)
-
-    if (!pair) {
-        return null
-    }
-
-    return {
-        pair,
-        localCandidateType: readCandidateType(report, pair.localCandidateId),
-        remoteCandidateType: readCandidateType(report, pair.remoteCandidateId),
-    }
 }
 
 function buildReadyDeviceLinkStatus(stats: PairingLinkQualityInput | null): PairingDeviceLinkStatus {

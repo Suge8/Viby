@@ -11,6 +11,7 @@ const originalPeerConnection = browserGlobal.RTCPeerConnection
 class DefaultPeer implements PairingPeer {
     signalingState: PairingPeer['signalingState'] = 'stable'
     localDescription: RtcSessionDescription | null = null
+    remoteDescription: RtcSessionDescription | null = null
     iceConnectionState = 'new'
     connectionState = 'new'
     onicecandidate: ((event: { candidate: RtcIceCandidate | null }) => void) | null = null
@@ -56,7 +57,15 @@ describe('pairingTransport default peer', () => {
         else delete browserGlobal.RTCPeerConnection
     })
 
-    it('pre-gathers ICE candidates on the browser peer', () => {
+    it('builds the browser peer without pre-gathered ICE candidates', () => {
+        // `iceCandidatePoolSize: 0` (default) is intentional: WebKit and
+        // Chromium pre-gather with a placeholder ufrag before the data
+        // channel and m-line exist, and the resulting candidates collide
+        // with the mDNS-anonymized host candidates that the browser emits
+        // on `setLocalDescription`. ICE then fails to converge on iOS
+        // Safari and macOS WebView, so the relay tunnel is the only path
+        // that ever reaches `ready`. Leaving the pool empty lets gathering
+        // start after the data channel is attached.
         const configs: unknown[] = []
         browserGlobal.RTCPeerConnection = class MockPeer extends DefaultPeer {
             constructor(config: unknown) {
@@ -77,7 +86,6 @@ describe('pairingTransport default peer', () => {
         expect(configs).toEqual([
             {
                 bundlePolicy: 'max-bundle',
-                iceCandidatePoolSize: 4,
                 iceServers: [{ urls: 'stun:stun.example.test' }],
             },
         ])
