@@ -1,4 +1,5 @@
 use std::fs;
+use std::path::Path;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -25,6 +26,11 @@ struct SettingsFile {
     public_access_enabled: Option<bool>,
 }
 
+pub(crate) struct RuntimeStatusRead {
+    pub status: Option<HubRuntimeStatus>,
+    pub warning: Option<String>,
+}
+
 pub(crate) fn default_startup_config() -> HubStartupConfig {
     HubStartupConfig {
         listen_host: DEFAULT_VIBY_LISTEN_HOST.to_string(),
@@ -33,16 +39,56 @@ pub(crate) fn default_startup_config() -> HubStartupConfig {
     }
 }
 
-fn read_runtime_status() -> Result<Option<HubRuntimeStatus>, String> {
-    let status_path = runtime_status_file_path()?;
+fn clear_invalid_runtime_status(
+    path: &Path,
+    source: &str,
+    error: impl ToString,
+) -> RuntimeStatusRead {
+    let reason = error.to_string();
+    match fs::remove_file(path) {
+        Ok(()) => RuntimeStatusRead {
+            status: None,
+            warning: Some(format!("已清理无效中枢状态文件 {source}: {reason}")),
+        },
+        Err(remove_error) => RuntimeStatusRead {
+            status: None,
+            warning: Some(format!(
+                "忽略无效中枢状态文件 {source}: {reason}; 清理失败: {remove_error}"
+            )),
+        },
+    }
+}
+
+pub(crate) fn read_runtime_status_from_path(status_path: &Path) -> RuntimeStatusRead {
     if !status_path.exists() {
-        return Ok(None);
+        return RuntimeStatusRead {
+            status: None,
+            warning: None,
+        };
     }
 
-    let raw = fs::read_to_string(status_path).map_err(|error| error.to_string())?;
-    let parsed =
-        serde_json::from_str::<HubRuntimeStatus>(&raw).map_err(|error| error.to_string())?;
-    Ok(Some(parsed))
+    let source = status_path.display().to_string();
+    let raw = match fs::read_to_string(&status_path) {
+        Ok(value) => value,
+        Err(error) => {
+            return RuntimeStatusRead {
+                status: None,
+                warning: Some(format!("无法读取中枢状态文件 {source}: {error}")),
+            };
+        }
+    };
+    match serde_json::from_str::<HubRuntimeStatus>(&raw) {
+        Ok(status) => RuntimeStatusRead {
+            status: Some(status),
+            warning: None,
+        },
+        Err(error) => clear_invalid_runtime_status(status_path, &source, error),
+    }
+}
+
+fn read_runtime_status() -> Result<RuntimeStatusRead, String> {
+    let status_path = runtime_status_file_path()?;
+    Ok(read_runtime_status_from_path(&status_path))
 }
 
 fn read_startup_config() -> Result<HubStartupConfig, String> {
@@ -191,8 +237,9 @@ fn build_launching_status(
         preferred_browser_url: local_hub_url.clone(),
         public_url: local_hub_url,
         public_access_enabled: startup_config.public_access_enabled,
+        // Desktop only spawns the bundled (current) Hub, which always hot-reloads.
+        public_access_hot_reload: true,
         pairing_broker_url: None,
-        pairing_code: None,
         hub_owner_token: String::new(),
         settings_file: settings_file.display().to_string(),
         data_dir: data_dir.display().to_string(),
@@ -226,9 +273,10 @@ pub(crate) fn resolve_visible_status(
 
 pub fn build_snapshot(process: &mut ManagedHubState) -> Result<HubSnapshot, String> {
     let startup_config = read_startup_config()?;
+    let runtime_status = read_runtime_status()?;
     let visible_status = resolve_visible_status(
         process.managed_pid,
-        read_runtime_status()?.map(normalize_runtime_status),
+        runtime_status.status.map(normalize_runtime_status),
         &startup_config,
     )?;
     let log_path = desktop_log_file_path()?;
@@ -240,7 +288,7 @@ pub fn build_snapshot(process: &mut ManagedHubState) -> Result<HubSnapshot, Stri
     Ok(HubSnapshot {
         running,
         managed: process.managed_pid.is_some() || desktop_owned_running,
-        last_error: process.last_error.clone(),
+        last_error: process.last_error.clone().or(runtime_status.warning),
         log_path: log_path.display().to_string(),
         startup_config,
         status: visible_status,

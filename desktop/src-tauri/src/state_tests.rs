@@ -1,8 +1,11 @@
+use std::fs;
+use std::path::PathBuf;
 use std::process::{Child, Command};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::snapshot::{
-    default_startup_config, is_desktop_owned_running, is_pid_running, resolve_visible_status,
-    stop_managed_hub,
+    default_startup_config, is_desktop_owned_running, is_pid_running,
+    read_runtime_status_from_path, resolve_visible_status, stop_managed_hub,
 };
 use crate::state::{
     HubLaunchSource, HubRuntimePhase, HubRuntimeStatus, ManagedHubState, DEFAULT_VIBY_LISTEN_HOST,
@@ -51,6 +54,14 @@ fn spawn_waiting_process() -> Child {
     }
 }
 
+fn temp_status_path(name: &str) -> PathBuf {
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system time should be after unix epoch")
+        .as_nanos();
+    std::env::temp_dir().join(format!("viby-{name}-{}-{stamp}.json", std::process::id()))
+}
+
 fn kill_child_if_running(child: &mut Child) {
     if child.try_wait().ok().flatten().is_none() {
         let _ = child.kill();
@@ -72,8 +83,8 @@ fn make_status(pid: u32, launch_source: Option<&str>) -> HubRuntimeStatus {
         preferred_browser_url: "http://127.0.0.1:3006".to_string(),
         public_url: "http://127.0.0.1:3006".to_string(),
         public_access_enabled: true,
+        public_access_hot_reload: true,
         pairing_broker_url: Some("https://pair.example.com".to_string()),
-        pairing_code: Some("123456".to_string()),
         hub_owner_token: "token".to_string(),
         settings_file: "/tmp/settings.toml".to_string(),
         data_dir: "/tmp".to_string(),
@@ -137,6 +148,18 @@ fn desktop_owned_running_ignores_stopped_status() {
     status.phase = HubRuntimePhase::Stopped;
 
     assert!(!is_desktop_owned_running(&status));
+}
+
+#[test]
+fn invalid_runtime_status_file_is_removed() {
+    let path = temp_status_path("invalid-runtime-status");
+    fs::write(&path, r#"{"phase":"ready"}"#).expect("runtime status fixture should write");
+
+    let read = read_runtime_status_from_path(&path);
+
+    assert!(read.status.is_none());
+    assert!(read.warning.unwrap().contains("已清理无效中枢状态文件"));
+    assert!(!path.exists());
 }
 
 #[test]

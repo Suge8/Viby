@@ -12,7 +12,6 @@
         "allow-get-hub-snapshot",
         "allow-start-hub",
         "allow-stop-hub",
-        "allow-open-preferred-url",
         "allow-open-url",
         "allow-copy-text",
         "allow-set-public-access-enabled",
@@ -20,8 +19,12 @@
         "allow-clear-pairing-sessions",
         "allow-remove-pairing-session",
         "allow-create-pairing-session",
-        "allow-approve-pairing-session",
         "allow-refresh-pairing-session",
-        "allow-delete-pairing-session"
+        "allow-delete-pairing-session",
+        "allow-create-lan-pairing-session",
+        "allow-refresh-lan-pairing-session",
+        "allow-delete-lan-pairing-session",
+        "allow-subscribe-pairing-events",
+        "allow-unsubscribe-pairing-events"
     ]
 }

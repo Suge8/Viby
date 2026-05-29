@@ -24,10 +24,19 @@
 ## 开发命令
 
 ```bash
-bun run test
-bun run dev:desktop
-bun run build:desktop
+bun run dev             # 仓库默认开发入口，等同 dev:desktop
+bun run dev:desktop     # 桌面壳聚焦开发
+bun run build:desktop   # 生产打包：harness 全量门 + sidecar + tauri build
 ```
+
+`dev` / `dev:desktop` 是快路径：只编译 Rust、起前端 dev server，Hub/CLI 直接从源码运行并用 Bun watch 随源码变更重启。提交级 harness 质量门由 `build:desktop` / CI / 提交前承担，不进 dev 启动链。它要求 sidecar 文件 `src-tauri/binaries/viby-sidecar-<triple>` 已存在；首次或缺失时按报错提示 provision 一次：`bun run build:single-exe && (cd desktop && bun run prepare:sidecar)`。
+
+源码生效边界：
+
+- `desktop/src/**`：Vite HMR，保存后刷新 webview。
+- `hub/src/**`、`cli/src/**`、`shared/**`：dev Desktop 托管的 Hub 会随 Bun watch 重启；运行中的 agent 子进程不继承已加载代码，需要新会话/重启对应子进程。
+- `desktop/src-tauri/**`：Tauri dev 重新编译 Rust；壳层状态或托管 Hub 状态卡住时重开 `bun run dev`。
+- 已打包 `.app` / release：只读内置 sidecar，不读工作区源码。
 
 如需单独运行 Tauri：
 

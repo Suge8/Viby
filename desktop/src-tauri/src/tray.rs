@@ -6,13 +6,11 @@ use tauri::{AppHandle, Manager, WindowEvent};
 
 use crate::lifecycle::request_app_exit;
 use crate::state::{show_main_window, DesktopState};
-use crate::supervisor;
 
 pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     let show_item = MenuItem::with_id(app, "show", "显示窗口", true, None::<&str>)?;
-    let open_item = MenuItem::with_id(app, "open", "打开网页", true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show_item, &open_item, &quit_item])?;
+    let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
 
     let mut builder = TrayIconBuilder::with_id("main-tray")
         .icon({
@@ -32,9 +30,6 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             match event.id().as_ref() {
                 "show" => {
                     let _ = show_main_window(&app_handle);
-                }
-                "open" => {
-                    let _ = supervisor::open_preferred_url(&app_handle);
                 }
                 "quit" => {
                     let _ = request_app_exit(&app_handle);

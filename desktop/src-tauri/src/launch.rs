@@ -110,7 +110,7 @@ fn configure_spawn_command(command: &mut Command) -> Result<(), String> {
         .map_err(|error| error.to_string())?;
     let stderr_file = log_file.try_clone().map_err(|error| error.to_string())?;
 
-    command.stdin(Stdio::null());
+    command.stdin(Stdio::piped());
     command.stdout(Stdio::from(log_file));
     command.stderr(Stdio::from(stderr_file));
 
@@ -132,16 +132,13 @@ fn configure_shared_home_environment(command: &mut Command) -> Result<(), String
 
 fn configure_hub_runtime_environment(command: &mut Command, startup_config: &HubStartupConfig) {
     command.env("VIBY_LAUNCH_SOURCE", "desktop");
+    command.env("VIBY_DESKTOP_PARENT_PIPE", "1");
     command.env("VIBY_LISTEN_HOST", DEFAULT_VIBY_LISTEN_HOST);
     command.env("VIBY_LISTEN_PORT", startup_config.listen_port.to_string());
-    command.env(
-        "VIBY_PUBLIC_ACCESS_ENABLED",
-        if startup_config.public_access_enabled {
-            "true"
-        } else {
-            "false"
-        },
-    );
+    // public_access_enabled lives in settings.toml as the single source of truth so the
+    // running Hub can hot-reload it. Clear any inherited env so an outer shell cannot
+    // override the desktop switch.
+    command.env_remove("VIBY_PUBLIC_ACCESS_ENABLED");
 }
 
 fn append_hub_args(command: &mut Command) {
@@ -153,7 +150,7 @@ fn create_dev_cli_command() -> Result<Command, String> {
     let cli_dir = repo_root.join("cli");
     let mut command = Command::new(BUN_EXECUTABLE);
     command.current_dir(cli_dir);
-    command.arg("src/index.ts");
+    command.arg("--watch").arg("src/index.ts");
     configure_shared_home_environment(&mut command)?;
     Ok(command)
 }
@@ -181,7 +178,10 @@ fn spawn_packaged_hub(app: &AppHandle, startup_config: &HubStartupConfig) -> Res
     command.spawn().map_err(|error| error.to_string())
 }
 
-pub fn spawn_hub_process(app: &AppHandle, startup_config: &HubStartupConfig) -> Result<Child, String> {
+pub fn spawn_hub_process(
+    app: &AppHandle,
+    startup_config: &HubStartupConfig,
+) -> Result<Child, String> {
     if cfg!(debug_assertions) {
         return spawn_dev_hub(startup_config);
     }

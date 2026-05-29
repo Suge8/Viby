@@ -1,7 +1,9 @@
 mod commands;
+mod lan_pairing;
 mod launch;
 mod lifecycle;
 mod pairing;
+mod pairing_events;
 mod pairing_storage;
 mod settings;
 mod snapshot;
@@ -9,6 +11,7 @@ mod state;
 mod supervisor;
 mod tray;
 
+use pairing_events::PairingEventsState;
 use state::DesktopState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -19,6 +22,7 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(DesktopState::default())
+        .manage(PairingEventsState::default())
         .setup(|app| {
             tray::create_tray(app.handle())?;
             supervisor::start_snapshot_supervisor(app.handle().clone())
@@ -32,7 +36,6 @@ pub fn run() {
             commands::get_hub_snapshot,
             commands::start_hub,
             commands::stop_hub,
-            commands::open_preferred_url,
             commands::open_url,
             commands::copy_text,
             commands::set_public_access_enabled,
@@ -40,9 +43,13 @@ pub fn run() {
             commands::clear_pairing_sessions,
             commands::remove_pairing_session,
             commands::create_pairing_session,
-            commands::approve_pairing_session,
             commands::refresh_pairing_session,
-            commands::delete_pairing_session
+            commands::delete_pairing_session,
+            commands::create_lan_pairing_session,
+            commands::refresh_lan_pairing_session,
+            commands::delete_lan_pairing_session,
+            commands::subscribe_pairing_events,
+            commands::unsubscribe_pairing_events
         ])
         .build(tauri::generate_context!())
         .expect("error while building viby desktop");

@@ -4,7 +4,6 @@ fn main() {
             "get_hub_snapshot",
             "start_hub",
             "stop_hub",
-            "open_preferred_url",
             "open_url",
             "copy_text",
             "set_public_access_enabled",
@@ -12,9 +11,13 @@ fn main() {
             "clear_pairing_sessions",
             "remove_pairing_session",
             "create_pairing_session",
-            "approve_pairing_session",
             "refresh_pairing_session",
             "delete_pairing_session",
+            "create_lan_pairing_session",
+            "refresh_lan_pairing_session",
+            "delete_lan_pairing_session",
+            "subscribe_pairing_events",
+            "unsubscribe_pairing_events",
         ]),
     ))
     .expect("failed to build Viby desktop ACL manifest");

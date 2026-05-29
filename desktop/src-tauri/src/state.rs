@@ -50,10 +50,11 @@ pub struct HubRuntimeStatus {
     pub public_url: String,
     #[serde(default = "default_public_access_enabled")]
     pub public_access_enabled: bool,
+    // Older Hub builds omit this; absent means "no settings hot-reload".
+    #[serde(default)]
+    pub public_access_hot_reload: bool,
     #[serde(default)]
     pub pairing_broker_url: Option<String>,
-    #[serde(default)]
-    pub pairing_code: Option<String>,
     pub hub_owner_token: String,
     pub settings_file: String,
     pub data_dir: String,
@@ -82,7 +83,6 @@ pub struct PairingSessionSnapshot {
     pub created_at: u64,
     pub updated_at: u64,
     pub expires_at: u64,
-    pub ticket_expires_at: u64,
     pub short_code: Option<String>,
     pub approval_status: Option<String>,
     pub host: PairingParticipantSnapshot,
@@ -106,7 +106,21 @@ pub struct DesktopPairingSession {
     pub pairing_url: String,
     pub ws_url: String,
     pub tunnel_url: String,
+    #[serde(default)]
+    pub events_url: String,
     pub ice_servers: Vec<PairingIceServer>,
+}
+
+/// LAN pairing invite shape returned by the hub's `/api/lan-pairings/*`
+/// endpoints. It is a strict subset of `DesktopPairingSession`: phones reach
+/// the host through the hub directly so there is no WebRTC transport URL or
+/// guest token to advertise, only the invite link and the SSE events URL.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopLanPairingSession {
+    pub pairing: PairingSessionSnapshot,
+    pub pairing_url: String,
+    pub events_url: String,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq, Eq)]
