@@ -131,7 +131,6 @@ describe('useChatViewportLayout', () => {
             isStandalone: true,
             isKeyboardOpen: true,
             bottomInsetPx: 245,
-            floatingControlBottomInsetPx: 245,
             visibleViewportBottomPx: 385,
             stableViewportHeightPx: 664,
         })
@@ -150,7 +149,6 @@ describe('useChatViewportLayout', () => {
             isStandalone: true,
             isKeyboardOpen: false,
             bottomInsetPx: 0,
-            floatingControlBottomInsetPx: 0,
             visibleViewportBottomPx: 724,
             stableViewportHeightPx: 724,
         })
@@ -169,7 +167,6 @@ describe('useChatViewportLayout', () => {
             isStandalone: true,
             isKeyboardOpen: true,
             bottomInsetPx: 305,
-            floatingControlBottomInsetPx: 305,
             visibleViewportBottomPx: 385,
             stableViewportHeightPx: 724,
         })
@@ -199,7 +196,6 @@ describe('useChatViewportLayout', () => {
         expect(focusedState).toMatchObject({
             isKeyboardOpen: true,
             bottomInsetPx: 266,
-            floatingControlBottomInsetPx: 266,
             visibleViewportBottomPx: 544,
             stableViewportHeightPx: 844,
         })
@@ -228,11 +224,9 @@ describe('useChatViewportLayout', () => {
 
         expect(firstFocusState).toMatchObject({
             bottomInsetPx: 266,
-            floatingControlBottomInsetPx: 266,
         })
         expect(jitteredFocusState).toMatchObject({
             bottomInsetPx: 218,
-            floatingControlBottomInsetPx: 266,
         })
     })
 
@@ -255,7 +249,6 @@ describe('useChatViewportLayout', () => {
             isStandalone: true,
             isKeyboardOpen: false,
             bottomInsetPx: 0,
-            floatingControlBottomInsetPx: 0,
             visibleViewportBottomPx: 844,
         })
 
@@ -269,7 +262,6 @@ describe('useChatViewportLayout', () => {
             isStandalone: true,
             isKeyboardOpen: true,
             bottomInsetPx: 266,
-            floatingControlBottomInsetPx: 266,
             visibleViewportBottomPx: 544,
         })
 
@@ -283,7 +275,6 @@ describe('useChatViewportLayout', () => {
             isStandalone: true,
             isKeyboardOpen: false,
             bottomInsetPx: 0,
-            floatingControlBottomInsetPx: 0,
             visibleViewportBottomPx: 844,
         })
 
@@ -334,7 +325,6 @@ describe('useChatViewportLayout', () => {
             isStandalone: true,
             isKeyboardOpen: false,
             bottomInsetPx: 0,
-            floatingControlBottomInsetPx: 0,
             visibleViewportBottomPx: 844,
             stableViewportHeightPx: 844,
         })
@@ -366,7 +356,6 @@ describe('useChatViewportLayout', () => {
             isStandalone: true,
             isKeyboardOpen: false,
             bottomInsetPx: 0,
-            floatingControlBottomInsetPx: 0,
             visibleViewportBottomPx: 844,
         })
 

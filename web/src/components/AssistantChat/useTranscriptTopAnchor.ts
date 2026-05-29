@@ -4,8 +4,11 @@ import { readTranscriptTopAnchorSpacePx } from './transcriptAnchorGeometry'
 import { resolveTranscriptHistoryJumpTargetRowByConversationId } from './transcriptVisibleRows'
 
 const TOP_ANCHOR_TOLERANCE_PX = 2
-const TOP_ANCHOR_SETTLE_FRAME_LIMIT = 120
-const TOP_ANCHOR_STABLE_FRAME_LIMIT = 2
+const TOP_ANCHOR_MAX_CORRECTION_ATTEMPTS = 6
+
+type ScrollEndTarget = HTMLElement & {
+    onscrollend?: ((event: Event) => void) | null
+}
 
 export function useTranscriptTopAnchor(options: {
     rowStartIndexByConversationId: ReadonlyMap<string, number>
@@ -13,130 +16,87 @@ export function useTranscriptTopAnchor(options: {
     virtuosoRef: RefObject<VirtuosoHandle | null>
 }) {
     const { rowStartIndexByConversationId, viewportRef, virtuosoRef } = options
-    const topAnchorFrameRef = useRef<number | null>(null)
-    const topAnchorProgrammaticScrollGuardFrameRef = useRef<number | null>(null)
+    const scrollEndCleanupRef = useRef<(() => void) | null>(null)
+    const runTopAnchorSettleCorrectionRef = useRef<() => void>(() => {})
     const topAnchorProgrammaticScrollRef = useRef(false)
+    const topAnchorCorrectionAttemptRef = useRef(0)
     const pendingConversationIdRef = useRef<string | null>(null)
-    const settleFrameCountRef = useRef(0)
-    const stableFrameCountRef = useRef(0)
     const [topAnchorPending, setTopAnchorPending] = useState(false)
 
-    const clearTopAnchorFrame = useCallback(() => {
-        if (topAnchorFrameRef.current !== null) {
-            cancelAnimationFrame(topAnchorFrameRef.current)
-            topAnchorFrameRef.current = null
-        }
+    const clearTopAnchorScrollEndWait = useCallback(() => {
+        scrollEndCleanupRef.current?.()
+        scrollEndCleanupRef.current = null
     }, [])
 
     const clearTopAnchorProgrammaticScrollGuard = useCallback(() => {
-        if (topAnchorProgrammaticScrollGuardFrameRef.current !== null) {
-            cancelAnimationFrame(topAnchorProgrammaticScrollGuardFrameRef.current)
-            topAnchorProgrammaticScrollGuardFrameRef.current = null
-        }
         topAnchorProgrammaticScrollRef.current = false
     }, [])
 
     const resetTopAnchorState = useCallback(() => {
+        clearTopAnchorScrollEndWait()
+        clearTopAnchorProgrammaticScrollGuard()
+        topAnchorCorrectionAttemptRef.current = 0
         pendingConversationIdRef.current = null
-        settleFrameCountRef.current = 0
-        stableFrameCountRef.current = 0
         setTopAnchorPending(false)
-    }, [])
+    }, [clearTopAnchorProgrammaticScrollGuard, clearTopAnchorScrollEndWait])
 
     const cancelTopAnchorTransaction = useCallback(() => {
-        clearTopAnchorFrame()
-        clearTopAnchorProgrammaticScrollGuard()
         resetTopAnchorState()
-    }, [clearTopAnchorFrame, clearTopAnchorProgrammaticScrollGuard, resetTopAnchorState])
+    }, [resetTopAnchorState])
 
     const armTopAnchorProgrammaticScrollGuard = useCallback(() => {
-        clearTopAnchorProgrammaticScrollGuard()
         topAnchorProgrammaticScrollRef.current = true
-    }, [clearTopAnchorProgrammaticScrollGuard])
+    }, [])
 
-    const runTopAnchorTransaction = useCallback(() => {
-        if (pendingConversationIdRef.current === null || topAnchorFrameRef.current !== null) {
+    const armTopAnchorScrollEndWait = useCallback(() => {
+        clearTopAnchorScrollEndWait()
+        const viewport = viewportRef.current as ScrollEndTarget | null
+        if (!viewport || !('onscrollend' in viewport)) {
+            resetTopAnchorState()
+            return
+        }
+        const handleScrollEnd = () => runTopAnchorSettleCorrectionRef.current()
+        viewport.addEventListener('scrollend', handleScrollEnd, { once: true })
+        scrollEndCleanupRef.current = () => {
+            viewport.removeEventListener('scrollend', handleScrollEnd)
+        }
+    }, [clearTopAnchorScrollEndWait, resetTopAnchorState, viewportRef])
+
+    const runTopAnchorSettleCorrection = useCallback(() => {
+        clearTopAnchorScrollEndWait()
+        const conversationId = pendingConversationIdRef.current
+        const viewport = viewportRef.current
+        const handle = virtuosoRef.current
+        if (conversationId === null || !viewport || !handle?.scrollTo) {
+            resetTopAnchorState()
             return
         }
 
-        const tick = () => {
-            topAnchorFrameRef.current = null
-            const conversationId = pendingConversationIdRef.current
-            if (conversationId === null) {
-                return
-            }
-
-            const row = resolveTranscriptHistoryJumpTargetRowByConversationId({
-                conversationId,
-                viewport: viewportRef.current,
-            })
-            const viewport = viewportRef.current
-            const handle = virtuosoRef.current
-            if (row && viewport) {
-                const viewportTop = viewport.getBoundingClientRect().top
-                const targetTop = readTranscriptTopAnchorSpacePx(viewport)
-                const delta = Math.round(row.getBoundingClientRect().top - viewportTop - targetTop)
-
-                if (Math.abs(delta) <= TOP_ANCHOR_TOLERANCE_PX) {
-                    stableFrameCountRef.current += 1
-                    if (stableFrameCountRef.current >= TOP_ANCHOR_STABLE_FRAME_LIMIT) {
-                        resetTopAnchorState()
-                        return
-                    }
-
-                    settleFrameCountRef.current += 1
-                    if (settleFrameCountRef.current >= TOP_ANCHOR_SETTLE_FRAME_LIMIT) {
-                        resetTopAnchorState()
-                        return
-                    }
-
-                    topAnchorFrameRef.current = requestAnimationFrame(tick)
-                    return
-                }
-
-                stableFrameCountRef.current = 0
-                armTopAnchorProgrammaticScrollGuard()
-                if (handle?.scrollTo) {
-                    handle.scrollTo({
-                        top: Math.max(0, viewport.scrollTop + delta),
-                        behavior: 'auto',
-                    })
-                } else if (handle?.scrollBy) {
-                    handle.scrollBy({
-                        top: delta,
-                        behavior: 'auto',
-                    })
-                } else {
-                    viewport.scrollTop = Math.max(0, viewport.scrollTop + delta)
-                }
-                settleFrameCountRef.current += 1
-                if (settleFrameCountRef.current >= TOP_ANCHOR_SETTLE_FRAME_LIMIT) {
-                    resetTopAnchorState()
-                    return
-                }
-
-                topAnchorFrameRef.current = requestAnimationFrame(tick)
-                return
-            }
-
-            if (row) {
-                stableFrameCountRef.current = 0
-                resetTopAnchorState()
-                return
-            }
-
-            stableFrameCountRef.current = 0
-            settleFrameCountRef.current += 1
-            if (settleFrameCountRef.current >= TOP_ANCHOR_SETTLE_FRAME_LIMIT) {
-                resetTopAnchorState()
-                return
-            }
-
-            topAnchorFrameRef.current = requestAnimationFrame(tick)
+        const row = resolveTranscriptHistoryJumpTargetRowByConversationId({ conversationId, viewport })
+        if (!row) {
+            resetTopAnchorState()
+            return
         }
 
-        topAnchorFrameRef.current = requestAnimationFrame(tick)
-    }, [armTopAnchorProgrammaticScrollGuard, resetTopAnchorState, viewportRef])
+        const viewportTop = viewport.getBoundingClientRect().top
+        const targetTop = readTranscriptTopAnchorSpacePx(viewport)
+        const delta = Math.round(row.getBoundingClientRect().top - viewportTop - targetTop)
+        if (Math.abs(delta) <= TOP_ANCHOR_TOLERANCE_PX) {
+            resetTopAnchorState()
+            return
+        }
+
+        if (topAnchorCorrectionAttemptRef.current >= TOP_ANCHOR_MAX_CORRECTION_ATTEMPTS) {
+            resetTopAnchorState()
+            return
+        }
+
+        topAnchorCorrectionAttemptRef.current += 1
+        armTopAnchorProgrammaticScrollGuard()
+        handle.scrollTo({ top: Math.max(0, viewport.scrollTop + delta), behavior: 'auto' })
+        armTopAnchorScrollEndWait()
+    }, [armTopAnchorProgrammaticScrollGuard, armTopAnchorScrollEndWait, resetTopAnchorState, viewportRef, virtuosoRef])
+    runTopAnchorSettleCorrectionRef.current = runTopAnchorSettleCorrection
 
     const revealConversationAtTopAnchor = useCallback(
         (conversationId: string) => {
@@ -145,25 +105,26 @@ export function useTranscriptTopAnchor(options: {
                 return false
             }
 
+            const viewport = viewportRef.current
+            const anchorOffsetPx = viewport ? readTranscriptTopAnchorSpacePx(viewport) : 0
             pendingConversationIdRef.current = conversationId
-            settleFrameCountRef.current = 0
-            stableFrameCountRef.current = 0
+            topAnchorCorrectionAttemptRef.current = 0
             setTopAnchorPending(true)
-            clearTopAnchorFrame()
             armTopAnchorProgrammaticScrollGuard()
             virtuosoRef.current?.scrollToIndex({
                 index: targetIndex,
                 align: 'start',
-                behavior: 'auto',
+                behavior: 'smooth',
+                offset: anchorOffsetPx === 0 ? 0 : -anchorOffsetPx,
             })
-            runTopAnchorTransaction()
+            armTopAnchorScrollEndWait()
             return true
         },
         [
             armTopAnchorProgrammaticScrollGuard,
-            clearTopAnchorFrame,
+            armTopAnchorScrollEndWait,
             rowStartIndexByConversationId,
-            runTopAnchorTransaction,
+            viewportRef,
             virtuosoRef,
         ]
     )
@@ -182,10 +143,10 @@ export function useTranscriptTopAnchor(options: {
 
     return {
         cancelTopAnchorTransaction,
-        clearTopAnchorFrame,
+        clearTopAnchorScrollEndWait,
         handleViewportScrollCapture,
-        topAnchorPending,
         isTopAnchorTransactionPending,
         revealConversationAtTopAnchor,
+        topAnchorPending,
     }
 }

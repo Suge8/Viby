@@ -57,21 +57,17 @@ function createTranscriptOptions(overrides?: Partial<Parameters<typeof useTransc
     return {
         sessionId: 'session-1',
         rows,
-        conversationIds: ['conversation-user-1', 'conversation-assistant-2'],
         rowStartIndexByConversationId: new Map([
             ['conversation-user-1', 0],
             ['conversation-assistant-2', 1],
         ]),
-        historyJumpTargetConversationIds: ['conversation-user-1'],
-        hasMoreMessages: false,
-        isLoadingMessages: false,
-        isLoadingMoreMessages: false,
-        onLoadHistoryUntilPreviousUser: vi.fn(async () => ({ didLoadOlderMessages: true })),
         onAtBottomChange: vi.fn(),
         onFlushPending: vi.fn(),
         activeTurnLocalId: null,
         composerAnchorTop: 0,
+        onLoadOlderHistory: vi.fn(),
         ...overrides,
+        hasMoreHistory: overrides?.hasMoreHistory ?? false,
     }
 }
 
@@ -96,9 +92,7 @@ describe('useTranscriptVirtuoso active turn anchoring', () => {
                     initialProps: {
                         options: createTranscriptOptions({
                             rows: [],
-                            conversationIds: [],
                             rowStartIndexByConversationId: new Map(),
-                            historyJumpTargetConversationIds: [],
                             onAtBottomChange,
                         }),
                     },
@@ -130,9 +124,7 @@ describe('useTranscriptVirtuoso active turn anchoring', () => {
             rerender({
                 options: createTranscriptOptions({
                     rows: activeRows,
-                    conversationIds: ['conversation-user-local-1'],
                     rowStartIndexByConversationId: new Map([['conversation-user-local-1', 0]]),
-                    historyJumpTargetConversationIds: ['conversation-user-local-1'],
                     activeTurnLocalId: 'local-1',
                     onAtBottomChange,
                 }),
@@ -143,11 +135,7 @@ describe('useTranscriptVirtuoso active turn anchoring', () => {
             })
 
             expect(result.current.alignToBottom).toBe(false)
-            expect(scrollToIndex).toHaveBeenCalledWith({
-                index: 0,
-                align: 'start',
-                behavior: 'auto',
-            })
+            expect(scrollToIndex).toHaveBeenCalledWith({ index: 0, align: 'start', behavior: 'smooth', offset: 0 })
             expect(scrollTo).not.toHaveBeenCalled()
             expect(onAtBottomChange).not.toHaveBeenCalled()
         } finally {
@@ -155,7 +143,7 @@ describe('useTranscriptVirtuoso active turn anchoring', () => {
         }
     })
 
-    it('keeps the same active turn anchored while assistant output starts streaming', () => {
+    it('keeps the same active turn anchored while assistant output starts streaming, then releases it on completion', () => {
         const frameQueue = installQueuedAnimationFrameHarness()
 
         try {
@@ -186,10 +174,14 @@ describe('useTranscriptVirtuoso active turn anchoring', () => {
                     }) as DOMRect,
                 querySelectorAll: () => [],
             }
+            const scrollTo = vi.fn(({ top }: { top: number }) => {
+                viewport.scrollTop = top
+            })
             const scrollToIndex = vi.fn()
 
             act(() => {
                 result.current.virtuosoRef.current = {
+                    scrollTo,
                     scrollToIndex,
                     getState: vi.fn(),
                 } as never
@@ -199,9 +191,7 @@ describe('useTranscriptVirtuoso active turn anchoring', () => {
             rerender({
                 options: createTranscriptOptions({
                     rows: activeRows,
-                    conversationIds: ['conversation-user-local-1'],
                     rowStartIndexByConversationId: new Map([['conversation-user-local-1', 0]]),
-                    historyJumpTargetConversationIds: ['conversation-user-local-1'],
                     activeTurnLocalId: 'local-1',
                 }),
             })
@@ -213,12 +203,10 @@ describe('useTranscriptVirtuoso active turn anchoring', () => {
             rerender({
                 options: createTranscriptOptions({
                     rows: streamingRows,
-                    conversationIds: ['conversation-user-local-1', 'conversation-assistant-stream-1'],
                     rowStartIndexByConversationId: new Map([
                         ['conversation-user-local-1', 0],
                         ['conversation-assistant-stream-1', 1],
                     ]),
-                    historyJumpTargetConversationIds: ['conversation-user-local-1'],
                     activeTurnLocalId: 'local-1',
                 }),
             })
@@ -226,18 +214,20 @@ describe('useTranscriptVirtuoso active turn anchoring', () => {
             rerender({
                 options: createTranscriptOptions({
                     rows: streamingRows,
-                    conversationIds: ['conversation-user-local-1', 'conversation-assistant-stream-1'],
                     rowStartIndexByConversationId: new Map([
                         ['conversation-user-local-1', 0],
                         ['conversation-assistant-stream-1', 1],
                     ]),
-                    historyJumpTargetConversationIds: ['conversation-user-local-1'],
                     activeTurnLocalId: null,
                 }),
             })
+            act(() => {
+                frameQueue.flushAllFrames()
+            })
 
             expect(scrollToIndex).toHaveBeenCalledTimes(1)
-            expect(result.current.alignToBottom).toBe(false)
+            expect(result.current.alignToBottom).toBe(true)
+            expect(scrollTo).toHaveBeenCalled()
         } finally {
             frameQueue.restore()
         }
@@ -282,9 +272,7 @@ describe('useTranscriptVirtuoso active turn anchoring', () => {
             rerender({
                 options: createTranscriptOptions({
                     rows: activeRows,
-                    conversationIds: ['conversation-user-local-1'],
                     rowStartIndexByConversationId: new Map([['conversation-user-local-1', 0]]),
-                    historyJumpTargetConversationIds: ['conversation-user-local-1'],
                     activeTurnLocalId: 'local-1',
                 }),
             })
@@ -350,9 +338,7 @@ describe('useTranscriptVirtuoso active turn anchoring', () => {
             rerender({
                 options: createTranscriptOptions({
                     rows: firstTurnRows,
-                    conversationIds: ['conversation-user-local-1'],
                     rowStartIndexByConversationId: new Map([['conversation-user-local-1', 0]]),
-                    historyJumpTargetConversationIds: ['conversation-user-local-1'],
                     activeTurnLocalId: 'local-1',
                 }),
             })
@@ -367,34 +353,22 @@ describe('useTranscriptVirtuoso active turn anchoring', () => {
             rerender({
                 options: createTranscriptOptions({
                     rows: secondTurnRows,
-                    conversationIds: [
-                        'conversation-user-local-1',
-                        'conversation-assistant-2',
-                        'conversation-user-local-2',
-                    ],
                     rowStartIndexByConversationId: new Map([
                         ['conversation-user-local-1', 0],
                         ['conversation-assistant-2', 1],
                         ['conversation-user-local-2', 2],
                     ]),
-                    historyJumpTargetConversationIds: ['conversation-user-local-1', 'conversation-user-local-2'],
                     activeTurnLocalId: null,
                 }),
             })
             rerender({
                 options: createTranscriptOptions({
                     rows: secondTurnRows,
-                    conversationIds: [
-                        'conversation-user-local-1',
-                        'conversation-assistant-2',
-                        'conversation-user-local-2',
-                    ],
                     rowStartIndexByConversationId: new Map([
                         ['conversation-user-local-1', 0],
                         ['conversation-assistant-2', 1],
                         ['conversation-user-local-2', 2],
                     ]),
-                    historyJumpTargetConversationIds: ['conversation-user-local-1', 'conversation-user-local-2'],
                     activeTurnLocalId: 'local-2',
                 }),
             })
@@ -403,18 +377,14 @@ describe('useTranscriptVirtuoso active turn anchoring', () => {
             })
 
             expect(result.current.alignToBottom).toBe(false)
-            expect(scrollToIndex).toHaveBeenCalledWith({
-                index: 2,
-                align: 'start',
-                behavior: 'auto',
-            })
+            expect(scrollToIndex).toHaveBeenCalledWith({ index: 2, align: 'start', behavior: 'smooth', offset: 0 })
             expect(scrollTo).not.toHaveBeenCalled()
         } finally {
             frameQueue.restore()
         }
     })
 
-    it('clears a completed active turn anchor when the user explicitly returns to bottom', () => {
+    it('clears a completed active turn anchor when the reply completes', () => {
         const frameQueue = installQueuedAnimationFrameHarness()
 
         try {
@@ -454,12 +424,10 @@ describe('useTranscriptVirtuoso active turn anchoring', () => {
             rerender({
                 options: createTranscriptOptions({
                     rows: activeRows,
-                    conversationIds: ['conversation-user-local-1', 'conversation-assistant-2'],
                     rowStartIndexByConversationId: new Map([
                         ['conversation-user-local-1', 0],
                         ['conversation-assistant-2', 1],
                     ]),
-                    historyJumpTargetConversationIds: ['conversation-user-local-1'],
                     activeTurnLocalId: 'local-1',
                 }),
             })
@@ -470,22 +438,16 @@ describe('useTranscriptVirtuoso active turn anchoring', () => {
             rerender({
                 options: createTranscriptOptions({
                     rows: activeRows,
-                    conversationIds: ['conversation-user-local-1', 'conversation-assistant-2'],
                     rowStartIndexByConversationId: new Map([
                         ['conversation-user-local-1', 0],
                         ['conversation-assistant-2', 1],
                     ]),
-                    historyJumpTargetConversationIds: ['conversation-user-local-1'],
                     activeTurnLocalId: null,
                 }),
             })
-            expect(result.current.alignToBottom).toBe(false)
-
             act(() => {
-                result.current.scrollToBottom()
                 frameQueue.flushAllFrames()
             })
-
             expect(result.current.alignToBottom).toBe(true)
             expect(scrollTo).toHaveBeenCalled()
         } finally {

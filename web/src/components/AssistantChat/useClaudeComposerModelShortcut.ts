@@ -1,5 +1,5 @@
-import { useEffect } from 'react'
 import type { SessionDriver } from '@viby/protocol'
+import { useEffect } from 'react'
 import { getNextClaudeComposerModel } from '@/lib/sessionConfigOptions'
 
 type HapticFeedback = (type?: 'light' | 'success' | 'error') => void

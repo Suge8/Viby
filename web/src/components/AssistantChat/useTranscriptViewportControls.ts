@@ -136,15 +136,10 @@ export function useTranscriptViewportControls(options: {
                     return
                 }
 
-                if (virtuosoRef.current?.scrollTo) {
-                    virtuosoRef.current.scrollTo({
-                        top: restoreTop,
-                        behavior: 'auto',
-                    })
-                    return
-                }
-
-                viewportNode.scrollTop = restoreTop
+                virtuosoRef.current?.scrollTo?.({
+                    top: restoreTop,
+                    behavior: 'auto',
+                })
             })
             enterManualMode(true)
         }

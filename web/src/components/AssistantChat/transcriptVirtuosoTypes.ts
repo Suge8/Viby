@@ -1,23 +1,26 @@
 import type { RefObject } from 'react'
 import type { ListRange, VirtuosoHandle } from 'react-virtuoso'
 import type { TranscriptRenderRow } from '@/chat/transcriptTypes'
-import type { LoadMoreMessagesResult } from '@/lib/message-window-store'
 import { buildTranscriptFollowOutput } from './transcriptScrollPolicy'
 
 export type UseTranscriptVirtuosoOptions = {
     sessionId: string
     rows: readonly TranscriptRenderRow[]
-    conversationIds: readonly string[]
     rowStartIndexByConversationId: ReadonlyMap<string, number>
-    historyJumpTargetConversationIds: readonly string[]
-    hasMoreMessages: boolean
-    isLoadingMessages: boolean
-    isLoadingMoreMessages: boolean
-    onLoadHistoryUntilPreviousUser: () => Promise<LoadMoreMessagesResult>
     onAtBottomChange: (atBottom: boolean) => void
     onFlushPending: () => void
     activeTurnLocalId: string | null
     composerAnchorTop: number
+    /** Whether older history is still available beyond the current window. */
+    hasMoreHistory: boolean
+    /**
+     * Called when the viewport approaches the top of the loaded window. The
+     * transcript owner single-flights concurrent calls so the underlying loader
+     * only ever runs one batch at a time; this signature accepts any Promise
+     * shape so the caller can pass `loadHistoryUntilPreviousUser` directly
+     * without an extra wrapper.
+     */
+    onLoadOlderHistory: () => Promise<unknown> | void
 }
 
 export type UseTranscriptVirtuosoResult = {
@@ -31,12 +34,10 @@ export type UseTranscriptVirtuosoResult = {
     defaultItemHeight: number | undefined
     followOutput: ReturnType<typeof buildTranscriptFollowOutput>
     heightEstimates: number[]
-    isHistoryActionPending: boolean
-    isHistoryControlVisible: boolean
-    handleHistoryControlClick: () => Promise<void>
-    handleRangeChanged: (range: ListRange) => void
     handleAtBottomStateChange: (atBottom: boolean) => void
     handleTotalListHeightChanged: () => void
+    handleStartReached: () => void
+    handleRangeChanged: (range: ListRange) => void
     handleViewportScrollCapture: () => void
     handleViewportWheelCapture: (event: Pick<WheelEvent, 'deltaY'>) => void
     handleViewportTouchStartCapture: (event: Pick<TouchEvent, 'touches'>) => void

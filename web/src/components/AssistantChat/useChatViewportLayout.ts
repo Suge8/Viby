@@ -12,7 +12,6 @@ export type ChatViewportLayout = {
     isStandalone: boolean
     isKeyboardOpen: boolean
     bottomInsetPx: number
-    floatingControlBottomInsetPx: number
     visibleViewportBottomPx: number
 }
 
@@ -30,7 +29,6 @@ function areChatViewportStatesEqual(previousState: ChatViewportState | null, nex
         previousState.isStandalone === nextState.isStandalone &&
         previousState.isKeyboardOpen === nextState.isKeyboardOpen &&
         previousState.bottomInsetPx === nextState.bottomInsetPx &&
-        previousState.floatingControlBottomInsetPx === nextState.floatingControlBottomInsetPx &&
         previousState.visibleViewportBottomPx === nextState.visibleViewportBottomPx &&
         previousState.stableViewportHeightPx === nextState.stableViewportHeightPx &&
         previousState.orientationKey === nextState.orientationKey
@@ -139,19 +137,6 @@ function getStableViewportHeight(options: {
     return Math.max(previousState.stableViewportHeightPx, layoutViewportHeight)
 }
 
-function getStableFloatingControlBottomInset(options: {
-    bottomInsetPx: number
-    previousState: ChatViewportState | null
-    orientationKey: ViewportOrientationKey
-}): number {
-    const { bottomInsetPx, previousState, orientationKey } = options
-    if (previousState?.orientationKey !== orientationKey) {
-        return bottomInsetPx
-    }
-
-    return Math.max(bottomInsetPx, previousState?.floatingControlBottomInsetPx ?? 0)
-}
-
 function createIdleChatViewportState(options: {
     isStandalone: boolean
     stableViewportHeightPx: number
@@ -161,7 +146,6 @@ function createIdleChatViewportState(options: {
         isStandalone: options.isStandalone,
         isKeyboardOpen: false,
         bottomInsetPx: 0,
-        floatingControlBottomInsetPx: 0,
         visibleViewportBottomPx: options.stableViewportHeightPx,
         stableViewportHeightPx: options.stableViewportHeightPx,
         orientationKey: options.orientationKey,
@@ -205,11 +189,6 @@ export function getNextChatViewportState(options: {
     return {
         isStandalone,
         ...metrics,
-        floatingControlBottomInsetPx: getStableFloatingControlBottomInset({
-            bottomInsetPx: metrics.bottomInsetPx,
-            previousState,
-            orientationKey,
-        }),
         visibleViewportBottomPx: getVisibleViewportBottom(stableViewportHeightPx, visualViewport),
         stableViewportHeightPx,
         orientationKey,
@@ -288,7 +267,6 @@ export function useChatViewportLayout(): ChatViewportLayout {
         isStandalone: state.isStandalone,
         isKeyboardOpen: state.isKeyboardOpen,
         bottomInsetPx: state.bottomInsetPx,
-        floatingControlBottomInsetPx: state.floatingControlBottomInsetPx,
         visibleViewportBottomPx: state.visibleViewportBottomPx,
     }
 }

@@ -64,12 +64,7 @@ function MessageSurfaceComponent(props: MessageSurfaceProps): React.JSX.Element 
             data-copied={copied ? 'true' : undefined}
             data-content-layout={contentLayout}
         >
-            <div
-                className="ds-message-surface-copy-content z-10 min-w-0"
-                data-has-trailing-action={isCopyable ? 'true' : undefined}
-            >
-                {props.children}
-            </div>
+            <div className="ds-message-surface-copy-content z-10 min-w-0">{props.children}</div>
             {isCopyable ? (
                 <CopyActionButton
                     label={t('chat.messageCopyHint')}

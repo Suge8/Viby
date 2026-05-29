@@ -11,22 +11,25 @@ type ComposerPlatform = {
 
 export function useComposerPlatform(): ComposerPlatform {
     const { haptic: platformHaptic, isTouch } = usePlatform()
-    const haptic = useCallback<ComposerHaptic>((type = 'light') => {
-        if (type === 'light') {
-            platformHaptic.impact('light')
-            return
-        }
+    const haptic = useCallback<ComposerHaptic>(
+        (type = 'light') => {
+            if (type === 'light') {
+                platformHaptic.impact('light')
+                return
+            }
 
-        if (type === 'success') {
-            platformHaptic.notification('success')
-            return
-        }
+            if (type === 'success') {
+                platformHaptic.notification('success')
+                return
+            }
 
-        platformHaptic.notification('error')
-    }, [platformHaptic])
+            platformHaptic.notification('error')
+        },
+        [platformHaptic]
+    )
 
     return {
         haptic,
-        isTouch
+        isTouch,
     }
 }

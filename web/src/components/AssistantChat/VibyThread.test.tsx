@@ -1,13 +1,16 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createElement, Fragment, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { buildTranscriptRenderRows } from '@/chat/transcriptRenderRows'
+import { buildTranscriptRenderRows, injectThinkingRenderRow } from '@/chat/transcriptRenderRows'
 import type { TranscriptRow } from '@/chat/transcriptTypes'
 import { I18nProvider } from '@/lib/i18n-context'
 import { NoticeProvider } from '@/lib/notice-center'
 import {
     SESSION_CHAT_VIEWPORT_TEST_ID,
     THREAD_BOTTOM_CONTROL_TEST_ID,
+    THREAD_HISTORY_LOADING_TEST_ID,
+    THREAD_OUTLINE_POPOVER_TEST_ID,
+    THREAD_OUTLINE_TRIGGER_TEST_ID,
     TRANSCRIPT_ROW_TEST_ID,
 } from '@/lib/sessionUiContracts'
 import { VibyThread } from './VibyThread'
@@ -81,12 +84,15 @@ vi.mock('@/hooks/usePlatform', () => ({
     }),
 }))
 
-function renderThread(overrides?: {
+type RenderThreadOverrides = {
     session?: Partial<Parameters<typeof VibyThread>[0]['session']>
     messageState?: Partial<Parameters<typeof VibyThread>[0]['messageState']>
     handlers?: Partial<Parameters<typeof VibyThread>[0]['handlers']>
     composerAnchorTop?: number
-}): ReturnType<typeof render> {
+    replyingPhase?: Parameters<typeof VibyThread>[0]['replyingPhase']
+}
+
+function renderThread(overrides?: RenderThreadOverrides): ReturnType<typeof render> {
     return render(
         <NoticeProvider>
             <I18nProvider>
@@ -101,13 +107,14 @@ function renderThread(overrides?: {
                     }}
                     messageState={{
                         messages: [],
+                        hasLoadedLatest: true,
                         hasMore: false,
-                        isLoading: false,
                         isLoadingMore: false,
                         atBottom: true,
                         pendingCount: 0,
                         pendingReply: null,
                         messagesVersion: 1,
+                        restoredFromWarmSnapshot: false,
                         stream: null,
                         ...overrides?.messageState,
                     }}
@@ -120,6 +127,7 @@ function renderThread(overrides?: {
                         ...overrides?.handlers,
                     }}
                     composerAnchorTop={overrides?.composerAnchorTop ?? 0}
+                    replyingPhase={overrides?.replyingPhase ?? null}
                 />
             </I18nProvider>
         </NoticeProvider>
@@ -137,21 +145,44 @@ function createViewportMock(overrides?: Record<string, unknown>) {
         alignToBottom: true,
         followOutput: vi.fn(),
         heightEstimates: [120],
-        isHistoryActionPending: false,
-        isHistoryControlVisible: false,
-        handleHistoryControlClick: vi.fn(),
-        handleRangeChanged: vi.fn(),
+        defaultItemHeight: 120,
         handleAtBottomStateChange: vi.fn(),
         handleTotalListHeightChanged: vi.fn(),
+        handleStartReached: vi.fn(),
+        handleRangeChanged: vi.fn(),
         handleViewportScrollCapture: vi.fn(),
-        handleViewportPointerDownCapture: vi.fn(),
         handleViewportWheelCapture: vi.fn(),
         handleViewportTouchStartCapture: vi.fn(),
         handleViewportTouchMoveCapture: vi.fn(),
         scrollToBottom: vi.fn(),
+        scrollToConversation: vi.fn(() => true),
         ...overrides,
     }
 }
+
+function transcriptModelFromRows(rows: TranscriptRow[], options?: { outlineItems?: ConversationOutlineLite[] }) {
+    const renderRows = buildTranscriptRenderRows(rows)
+    return {
+        rows,
+        renderRows,
+        freshRowIds: new Set<string>(),
+        conversationIds: rows.map((row) => row.conversationId),
+        rowStartIndexByConversationId: new Map(rows.map((row, index) => [row.conversationId, index])),
+        rawMessagesCount: rows.length,
+        normalizedMessagesCount: rows.length,
+        outlineItems:
+            options?.outlineItems ??
+            rows
+                .filter((row) => row.type === 'user')
+                .map((row) => ({
+                    conversationId: row.conversationId,
+                    title: row.type === 'user' ? row.block.text : 'untitled',
+                    createdAt: 0,
+                })),
+    }
+}
+
+type ConversationOutlineLite = { conversationId: string; title: string; createdAt: number }
 
 describe('VibyThread layout', () => {
     afterEach(() => {
@@ -176,39 +207,37 @@ describe('VibyThread layout', () => {
                 },
             },
         ]
-        useSessionTranscriptModelMock.mockReturnValue({
-            rows: transcriptRows,
-            renderRows: buildTranscriptRenderRows(transcriptRows),
-            conversationIds: ['assistant:1'],
-            rowStartIndexByConversationId: new Map([['assistant:1', 0]]),
-            historyJumpTargetConversationIds: [],
-            rawMessagesCount: 1,
-            normalizedMessagesCount: 1,
-        })
+        useSessionTranscriptModelMock.mockReturnValue(transcriptModelFromRows(transcriptRows))
         useTranscriptVirtuosoMock.mockReturnValue(createViewportMock())
     })
 
     it('renders a centered full-width thread lane inside the stage shell', () => {
         const { container } = renderThread()
         const threadLane = container.querySelector('.ds-thread-lane') as HTMLElement | null
-        const topSpacer = container.querySelector('.ds-thread-top-anchor-spacer') as HTMLElement | null
 
         expect(container.querySelector('.session-chat-thread-root')).toHaveClass('w-full')
         expect(container.querySelector('.session-chat-thread-root')).toHaveClass('flex-1')
-        expect(container.querySelector('.session-chat-thread-root')).toHaveClass('min-w-0')
-        expect(container.querySelector('.session-chat-thread-viewport .ds-stage-shell')).not.toHaveClass(
-            'pt-[var(--ds-session-chat-history-control-inset)]'
-        )
         expect(threadLane).not.toBeNull()
-        expect(topSpacer).not.toBeNull()
-        expect(topSpacer?.style.height).toBe('var(--chat-header-anchor-space)')
-        const bottomSpacer = container.querySelector('.ds-thread-bottom-anchor-spacer') as HTMLElement | null
-        expect(bottomSpacer?.style.height).toBe('var(--chat-composer-occupied-space)')
-        expect(container.querySelector('.session-chat-thread-viewport')).not.toBeNull()
+        expect(container.querySelector('.ds-thread-top-anchor-spacer')).not.toBeNull()
+        expect(container.querySelector('.ds-thread-bottom-anchor-spacer')).not.toBeNull()
         expect(screen.getByTestId(SESSION_CHAT_VIEWPORT_TEST_ID)).toBeInTheDocument()
     })
 
-    it('keeps the transcript tail gap owned by the composer clearance instead of the last row spacing', () => {
+    it('holds the virtual transcript until the latest window is ready', () => {
+        const { container } = renderThread({ messageState: { hasLoadedLatest: false } })
+
+        expect(screen.queryByTestId(TRANSCRIPT_ROW_TEST_ID)).toBeNull()
+        expect(container.querySelector('.ds-loading-shimmer')).not.toBeNull()
+    })
+
+    it('does not mount stale warm-snapshot transcript rows before recovery finishes', () => {
+        const { container } = renderThread({ messageState: { restoredFromWarmSnapshot: true } })
+
+        expect(screen.queryByTestId(TRANSCRIPT_ROW_TEST_ID)).toBeNull()
+        expect(container.querySelector('.ds-loading-shimmer')).not.toBeNull()
+    })
+
+    it('marks the last visible row gap as none and tags user rows as history jump targets', () => {
         const transcriptRows: TranscriptRow[] = [
             {
                 id: 'user:1',
@@ -243,18 +272,7 @@ describe('VibyThread layout', () => {
             },
         ]
 
-        useSessionTranscriptModelMock.mockReturnValue({
-            rows: transcriptRows,
-            renderRows: buildTranscriptRenderRows(transcriptRows),
-            conversationIds: ['user:1', 'assistant:2'],
-            rowStartIndexByConversationId: new Map([
-                ['user:1', 0],
-                ['assistant:2', 1],
-            ]),
-            historyJumpTargetConversationIds: ['user:1'],
-            rawMessagesCount: 2,
-            normalizedMessagesCount: 2,
-        })
+        useSessionTranscriptModelMock.mockReturnValue(transcriptModelFromRows(transcriptRows))
 
         const { container } = renderThread()
         const rows = [...container.querySelectorAll<HTMLElement>('.ds-transcript-row')]
@@ -267,102 +285,297 @@ describe('VibyThread layout', () => {
         expect(rows[1]?.dataset.rowGap).toBe('none')
     })
 
-    it('only reserves top inset when the history control is visible', () => {
-        useTranscriptVirtuosoMock.mockReturnValue(createViewportMock({ isHistoryControlVisible: true }))
+    it('hides the outline trigger when no user turns are present and no more history can be loaded', () => {
+        // Outline navigates depth-0 user turns. With zero loaded turns AND no
+        // more history available, there is genuinely nothing to jump to and
+        // nothing to discover — the trigger stays hidden.
+        const transcriptRows: TranscriptRow[] = []
+        useSessionTranscriptModelMock.mockReturnValue(transcriptModelFromRows(transcriptRows))
 
-        const { container } = renderThread({
-            messageState: {
-                hasMore: true,
-            },
-        })
+        renderThread({ messageState: { hasMore: false } })
 
-        expect(container.querySelector('.session-chat-thread-viewport .ds-stage-shell')).toHaveClass(
-            'pt-[var(--ds-session-chat-history-control-inset)]'
-        )
+        expect(screen.queryByTestId(THREAD_OUTLINE_TRIGGER_TEST_ID)).toBeNull()
     })
 
-    it('renders the history control outside the scroll viewport when older messages are available', () => {
-        useTranscriptVirtuosoMock.mockReturnValue(createViewportMock({ isHistoryControlVisible: true }))
+    it('keeps the outline trigger mounted while latest history availability is still loading', () => {
+        const transcriptRows: TranscriptRow[] = []
+        useSessionTranscriptModelMock.mockReturnValue(transcriptModelFromRows(transcriptRows))
 
-        const { container } = renderThread({
-            messageState: {
-                hasMore: true,
-            },
-        })
+        renderThread({ messageState: { hasLoadedLatest: false, hasMore: false } })
 
-        const historyControl = screen.getByTestId('thread-history-control')
-        const historyAnchor = historyControl.parentElement
+        const trigger = screen.getByTestId(THREAD_OUTLINE_TRIGGER_TEST_ID)
+        expect(trigger).toBeInTheDocument()
+        expect(trigger).toBeDisabled()
+        expect(trigger).toHaveAttribute('aria-busy', 'true')
 
-        expect(historyControl).toBeInTheDocument()
-        expect(historyControl).toHaveAttribute('title', 'misc.previousUserMessage')
-        expect(historyAnchor).toHaveClass('ds-thread-history-control-wrapper')
-        expect(container.querySelector('.session-chat-thread-viewport')?.contains(historyControl)).toBe(false)
+        fireEvent.click(trigger)
+        expect(screen.queryByTestId(THREAD_OUTLINE_POPOVER_TEST_ID)).toBeNull()
     })
 
-    it('marks the history control pending while older messages load', async () => {
-        let resolveHistory!: () => void
-        const handleHistoryControlClick = vi.fn(() => new Promise<void>((resolve) => (resolveHistory = resolve)))
-        useTranscriptVirtuosoMock.mockReturnValue(
-            createViewportMock({
-                isHistoryControlVisible: true,
-                handleHistoryControlClick,
-            })
-        )
+    it('keeps the outline trigger mounted while a warm snapshot is being reconciled', () => {
+        const transcriptRows: TranscriptRow[] = []
+        useSessionTranscriptModelMock.mockReturnValue(transcriptModelFromRows(transcriptRows))
+
+        renderThread({ messageState: { hasMore: false, restoredFromWarmSnapshot: true } })
+
+        const trigger = screen.getByTestId(THREAD_OUTLINE_TRIGGER_TEST_ID)
+        expect(trigger).toBeInTheDocument()
+        expect(trigger).toBeDisabled()
+    })
+
+    it('keeps the outline trigger visible when no turns are loaded yet but older history is still available', () => {
+        // Cold entry into a reasoning-heavy session can land with zero user turns
+        // in the loaded 50-message window. Hiding the trigger then would silently
+        // strand the user; instead the trigger stays visible so opening it can
+        // pull older history via the shared single-flight loader.
+        const transcriptRows: TranscriptRow[] = []
+        useSessionTranscriptModelMock.mockReturnValue(transcriptModelFromRows(transcriptRows))
+
+        renderThread({ messageState: { hasMore: true } })
+
+        expect(screen.queryByTestId(THREAD_OUTLINE_TRIGGER_TEST_ID)).toBeInTheDocument()
+    })
+
+    it('renders the outline trigger floating above the composer when at least one user turn is available', () => {
+        const transcriptRows: TranscriptRow[] = [
+            {
+                id: 'user:1',
+                type: 'user',
+                conversationId: 'user:1',
+                depth: 0,
+                copyText: 'first prompt',
+                tone: 'user',
+                block: {
+                    kind: 'user-text',
+                    id: 'u1',
+                    localId: null,
+                    createdAt: 1,
+                    text: 'first prompt',
+                    renderMode: 'plain',
+                },
+            },
+        ]
+        useSessionTranscriptModelMock.mockReturnValue(transcriptModelFromRows(transcriptRows))
+
+        renderThread()
+
+        const trigger = screen.getByTestId(THREAD_OUTLINE_TRIGGER_TEST_ID)
+        expect(trigger).toBeInTheDocument()
+        expect(trigger.closest('.ds-thread-outline-trigger-wrapper')).not.toBeNull()
+    })
+
+    it('opens the outline popover without pulling earlier history', async () => {
+        const onLoad = vi.fn(async () => ({ didLoadOlderMessages: true }))
+        const transcriptRows: TranscriptRow[] = [
+            {
+                id: 'user:1',
+                type: 'user',
+                conversationId: 'user:1',
+                depth: 0,
+                copyText: 'first prompt',
+                tone: 'user',
+                block: {
+                    kind: 'user-text',
+                    id: 'u1',
+                    localId: null,
+                    createdAt: 1,
+                    text: 'first prompt',
+                    renderMode: 'plain',
+                },
+            },
+        ]
+        useSessionTranscriptModelMock.mockReturnValue(transcriptModelFromRows(transcriptRows))
 
         renderThread({
-            messageState: {
-                hasMore: true,
-            },
+            messageState: { hasMore: true, isLoadingMore: false },
+            handlers: { onLoadHistoryUntilPreviousUser: onLoad },
         })
 
-        const historyControl = screen.getByTestId('thread-history-control')
-        fireEvent.click(historyControl)
-        fireEvent.click(historyControl)
+        fireEvent.click(screen.getByTestId(THREAD_OUTLINE_TRIGGER_TEST_ID))
+        const popover = await screen.findByTestId(THREAD_OUTLINE_POPOVER_TEST_ID)
+        expect(popover).toBeInTheDocument()
+        expect(popover.textContent).toContain('first prompt')
+        expect(onLoad).not.toHaveBeenCalled()
+    })
 
-        expect(handleHistoryControlClick).toHaveBeenCalledTimes(1)
-        expect(historyControl).toBeDisabled()
-        expect(historyControl).toHaveAttribute('aria-busy', 'true')
+    it('reveals loaded outline rows 5 at a time before requesting older history', async () => {
+        const onLoad = vi.fn(async () => ({ didLoadOlderMessages: true }))
+        const transcriptRows = Array.from({ length: 12 }, (_, index): TranscriptRow => {
+            const ordinal = index + 1
+            return {
+                id: `user:${ordinal}`,
+                type: 'user',
+                conversationId: `user:${ordinal}`,
+                depth: 0,
+                copyText: `prompt ${ordinal}`,
+                tone: 'user',
+                block: {
+                    kind: 'user-text',
+                    id: `u${ordinal}`,
+                    localId: null,
+                    createdAt: ordinal,
+                    text: `prompt ${ordinal}`,
+                    renderMode: 'plain',
+                },
+            }
+        })
+        useSessionTranscriptModelMock.mockReturnValue(transcriptModelFromRows(transcriptRows))
 
-        resolveHistory()
-        await waitFor(() => expect(historyControl).not.toBeDisabled())
+        renderThread({
+            messageState: { hasMore: true, isLoadingMore: false },
+            handlers: { onLoadHistoryUntilPreviousUser: onLoad },
+        })
+
+        fireEvent.click(screen.getByTestId(THREAD_OUTLINE_TRIGGER_TEST_ID))
+        const popover = await screen.findByTestId(THREAD_OUTLINE_POPOVER_TEST_ID)
+
+        expect(popover.querySelectorAll('.ds-thread-outline-popover-item')).toHaveLength(5)
+        expect(popover.textContent).not.toContain('prompt 7')
+        expect(popover.textContent).toContain('prompt 8')
+        expect(onLoad).not.toHaveBeenCalled()
+
+        fireEvent.click(screen.getByRole('button', { name: /show earlier|显示更早/i }))
+        expect(popover.querySelectorAll('.ds-thread-outline-popover-item')).toHaveLength(10)
+        expect(popover.textContent).toContain('prompt 3')
+        expect(onLoad).not.toHaveBeenCalled()
+    })
+
+    it('requests older history only from the explicit outline command', async () => {
+        const onLoad = vi.fn(async () => ({ didLoadOlderMessages: true }))
+        const transcriptRows: TranscriptRow[] = [
+            {
+                id: 'user:1',
+                type: 'user',
+                conversationId: 'user:1',
+                depth: 0,
+                copyText: 'first prompt',
+                tone: 'user',
+                block: {
+                    kind: 'user-text',
+                    id: 'u1',
+                    localId: null,
+                    createdAt: 1,
+                    text: 'first prompt',
+                    renderMode: 'plain',
+                },
+            },
+        ]
+        useSessionTranscriptModelMock.mockReturnValue(transcriptModelFromRows(transcriptRows))
+
+        renderThread({
+            messageState: { hasMore: true, isLoadingMore: false },
+            handlers: { onLoadHistoryUntilPreviousUser: onLoad },
+        })
+
+        fireEvent.click(screen.getByTestId(THREAD_OUTLINE_TRIGGER_TEST_ID))
+        await screen.findByTestId(THREAD_OUTLINE_POPOVER_TEST_ID)
+        expect(onLoad).not.toHaveBeenCalled()
+
+        fireEvent.click(screen.getByRole('button', { name: /show earlier|显示更早/i }))
+        expect(onLoad).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not render an outline more button when no more history is available', async () => {
+        const onLoad = vi.fn(async () => ({ didLoadOlderMessages: false }))
+        const transcriptRows: TranscriptRow[] = [
+            {
+                id: 'user:1',
+                type: 'user',
+                conversationId: 'user:1',
+                depth: 0,
+                copyText: 'first prompt',
+                tone: 'user',
+                block: {
+                    kind: 'user-text',
+                    id: 'u1',
+                    localId: null,
+                    createdAt: 1,
+                    text: 'first prompt',
+                    renderMode: 'plain',
+                },
+            },
+        ]
+        useSessionTranscriptModelMock.mockReturnValue(transcriptModelFromRows(transcriptRows))
+
+        renderThread({
+            messageState: { hasMore: false, isLoadingMore: false },
+            handlers: { onLoadHistoryUntilPreviousUser: onLoad },
+        })
+
+        fireEvent.click(screen.getByTestId(THREAD_OUTLINE_TRIGGER_TEST_ID))
+        await screen.findByTestId(THREAD_OUTLINE_POPOVER_TEST_ID)
+        expect(screen.queryByRole('button', { name: /show earlier|显示更早/i })).toBeNull()
+        expect(onLoad).not.toHaveBeenCalled()
+    })
+
+    it('renders a thinking row at the tail when a replyingPhase is active', () => {
+        const transcriptRows: TranscriptRow[] = [
+            {
+                id: 'user:1',
+                type: 'user',
+                conversationId: 'user:1',
+                depth: 0,
+                copyText: 'hi',
+                tone: 'user',
+                block: {
+                    kind: 'user-text',
+                    id: 'u1',
+                    localId: null,
+                    createdAt: 1,
+                    text: 'hi',
+                    renderMode: 'plain',
+                },
+            },
+        ]
+        const baseRenderRows = buildTranscriptRenderRows(transcriptRows)
+        useSessionTranscriptModelMock.mockReturnValue({
+            rows: transcriptRows,
+            renderRows: injectThinkingRenderRow(baseRenderRows, 'preparing'),
+            freshRowIds: new Set<string>(),
+            conversationIds: ['user:1'],
+            rowStartIndexByConversationId: new Map([['user:1', 0]]),
+            rawMessagesCount: 1,
+            normalizedMessagesCount: 1,
+            outlineItems: [{ conversationId: 'user:1', title: 'hi', createdAt: 0 }],
+        })
+
+        renderThread({ replyingPhase: 'preparing' })
+
+        expect(screen.getByTestId('assistant-replying-indicator')).toBeInTheDocument()
     })
 
     it('keeps the transcript visible while loading the entry shell', () => {
         const { container } = renderThread({
-            messageState: {
-                isLoading: true,
-                pendingCount: 0,
-            },
+            messageState: { pendingCount: 0 },
         })
 
         expect(container.querySelector('.session-chat-thread-viewport')).not.toHaveStyle({ visibility: 'hidden' })
         expect(container.querySelector('.ds-thread-top-anchor-spacer')).not.toBeNull()
-        expect(screen.getByTestId('thread-history-control')).toHaveAttribute('aria-hidden', 'true')
-        expect(screen.getByTestId('thread-history-control')).toBeDisabled()
     })
 
-    it('marks wheel-driven leave-bottom intent immediately on the viewport owner', () => {
+    it('forwards viewport wheel + scroll + touch capture to the single transcript owner', () => {
         const handleViewportWheelCapture = vi.fn()
-        useTranscriptVirtuosoMock.mockReturnValue(createViewportMock({ handleViewportWheelCapture }))
-
-        const { container } = renderThread()
-        const viewport = container.querySelector('.session-chat-thread-viewport')
-
-        expect(viewport).not.toBeNull()
-        fireEvent.wheel(viewport as Element, { deltaY: -120 })
-        expect(handleViewportWheelCapture).toHaveBeenCalledTimes(1)
-    })
-
-    it('forwards viewport scroll capture to the single transcript owner', () => {
         const handleViewportScrollCapture = vi.fn()
-        useTranscriptVirtuosoMock.mockReturnValue(createViewportMock({ handleViewportScrollCapture }))
+        const handleViewportTouchStartCapture = vi.fn()
+        useTranscriptVirtuosoMock.mockReturnValue(
+            createViewportMock({
+                handleViewportWheelCapture,
+                handleViewportScrollCapture,
+                handleViewportTouchStartCapture,
+            })
+        )
 
         const { container } = renderThread()
-        const viewport = container.querySelector('.session-chat-thread-viewport')
+        const viewport = container.querySelector('.session-chat-thread-viewport') as Element
 
-        expect(viewport).not.toBeNull()
-        fireEvent.scroll(viewport as Element)
+        fireEvent.wheel(viewport, { deltaY: -120 })
+        expect(handleViewportWheelCapture).toHaveBeenCalledTimes(1)
+
+        fireEvent.scroll(viewport)
         expect(handleViewportScrollCapture).toHaveBeenCalledTimes(1)
+
+        fireEvent.touchStart(viewport, { touches: [{ clientY: 180 }] })
+        expect(handleViewportTouchStartCapture).toHaveBeenCalledTimes(1)
     })
 
     it('ignores descendant scroll events so nested scrollers cannot steal the viewport owner', () => {
@@ -375,18 +588,6 @@ describe('VibyThread layout', () => {
         expect(firstRow).not.toBeNull()
         fireEvent.scroll(firstRow as Element)
         expect(handleViewportScrollCapture).not.toHaveBeenCalled()
-    })
-
-    it('marks touch-start leave-bottom intent immediately on mobile viewport drags', () => {
-        const handleViewportTouchStartCapture = vi.fn()
-        useTranscriptVirtuosoMock.mockReturnValue(createViewportMock({ handleViewportTouchStartCapture }))
-
-        const { container } = renderThread()
-        const viewport = container.querySelector('.session-chat-thread-viewport')
-
-        expect(viewport).not.toBeNull()
-        fireEvent.touchStart(viewport as Element, { touches: [{ clientY: 180 }] })
-        expect(handleViewportTouchStartCapture).toHaveBeenCalledTimes(1)
     })
 
     it('does not detach and reattach the viewport ref on unrelated rerenders', () => {
@@ -409,13 +610,14 @@ describe('VibyThread layout', () => {
                         }}
                         messageState={{
                             messages: [],
+                            hasLoadedLatest: true,
                             hasMore: false,
-                            isLoading: false,
                             isLoadingMore: false,
                             atBottom: false,
                             pendingCount: 1,
                             pendingReply: null,
                             messagesVersion: 2,
+                            restoredFromWarmSnapshot: false,
                             stream: null,
                         }}
                         handlers={{
@@ -426,6 +628,7 @@ describe('VibyThread layout', () => {
                             onLoadHistoryUntilPreviousUser: vi.fn(async () => ({ didLoadOlderMessages: true })),
                         }}
                         composerAnchorTop={0}
+                        replyingPhase={null}
                     />
                 </I18nProvider>
             </NoticeProvider>
@@ -435,14 +638,8 @@ describe('VibyThread layout', () => {
         expect(viewport.setViewportRef).not.toHaveBeenCalledWith(null)
     })
 
-    it('renders a compact icon-only bottom CTA with an accessible label when the user is away from the bottom', () => {
-        useTranscriptVirtuosoMock.mockReturnValue(createViewportMock({ scrollToBottom: vi.fn() }))
-
-        renderThread({
-            messageState: {
-                atBottom: false,
-            },
-        })
+    it('renders a compact icon-only bottom CTA centered above the composer when the user is away from the bottom', () => {
+        renderThread({ messageState: { atBottom: false } })
 
         const button = screen.getByRole('button', { name: 'Back to bottom' })
         const buttonAnchor = button.parentElement
@@ -453,15 +650,64 @@ describe('VibyThread layout', () => {
         expect(buttonAnchor).toHaveClass('ds-thread-bottom-control-wrapper')
     })
 
-    it('uses the message-window atBottom owner for the bottom CTA', () => {
-        const { container } = renderThread({
-            messageState: {
-                atBottom: true,
-            },
+    it('reveals the history loading indicator only while older messages are being fetched', () => {
+        const view = renderThread({
+            messageState: { hasMore: true, isLoadingMore: false },
         })
 
+        const indicator = screen.getByTestId(THREAD_HISTORY_LOADING_TEST_ID)
+        expect(indicator).toHaveAttribute('data-visible', 'false')
+
+        view.rerender(
+            <NoticeProvider>
+                <I18nProvider>
+                    <VibyThread
+                        session={{
+                            api: null as never,
+                            sessionId: 'session-1',
+                            metadata: null,
+                            agentState: null,
+                            disabled: false,
+                        }}
+                        messageState={{
+                            messages: [],
+                            hasLoadedLatest: true,
+                            hasMore: true,
+                            isLoadingMore: true,
+                            atBottom: false,
+                            pendingCount: 0,
+                            pendingReply: null,
+                            messagesVersion: 1,
+                            restoredFromWarmSnapshot: false,
+                            stream: null,
+                        }}
+                        handlers={{
+                            onRefresh: vi.fn(),
+                            onRetryMessage: vi.fn(),
+                            onFlushPending: vi.fn(),
+                            onAtBottomChange: vi.fn(),
+                            onLoadHistoryUntilPreviousUser: vi.fn(async () => ({ didLoadOlderMessages: true })),
+                        }}
+                        composerAnchorTop={0}
+                        replyingPhase={null}
+                    />
+                </I18nProvider>
+            </NoticeProvider>
+        )
+
+        expect(screen.getByTestId(THREAD_HISTORY_LOADING_TEST_ID)).toHaveAttribute('data-visible', 'true')
+    })
+
+    it('keeps the history loading indicator hidden when there is no more history to load', () => {
+        renderThread({ messageState: { hasMore: false, isLoadingMore: true } })
+
+        expect(screen.getByTestId(THREAD_HISTORY_LOADING_TEST_ID)).toHaveAttribute('data-visible', 'false')
+    })
+
+    it('hides the bottom CTA when the message-window atBottom owner reports we are at bottom', () => {
+        renderThread({ messageState: { atBottom: true } })
+
         const button = screen.getByTestId(THREAD_BOTTOM_CONTROL_TEST_ID)
-        expect(button).not.toBeNull()
         expect(button).toHaveAttribute('aria-hidden', 'true')
         expect(button).toBeDisabled()
     })

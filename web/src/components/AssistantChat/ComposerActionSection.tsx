@@ -49,6 +49,7 @@ export function ComposerActionSection(props: ComposerActionSectionProps): ReactN
                             item.disabled ? 'cursor-not-allowed opacity-50' : ''
                         )}
                         aria-busy={item.pending === true}
+                        pendingIndicator="none"
                         onClick={item.onSelect}
                         onMouseDown={(event) => event.preventDefault()}
                     >

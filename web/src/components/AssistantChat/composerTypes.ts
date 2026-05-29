@@ -1,5 +1,4 @@
 import type { SameSessionSwitchTargetDriver, SessionDriver } from '@viby/protocol'
-import type { AssistantReplyingPhase } from '@/components/AssistantChat/assistantReplyingPhase'
 import type { ComposerEnterBehavior } from '@/components/AssistantChat/composerEnterBehavior'
 import type { Suggestion } from '@/hooks/useActiveSuggestions'
 import type {
@@ -47,7 +46,6 @@ export type VibyComposerModel = {
     sessionId: string
     disabled?: boolean
     sendPending?: boolean
-    replyingPhase?: AssistantReplyingPhase | null
     autocompleteLayout?: {
         visibleViewportBottomPx: number
     }

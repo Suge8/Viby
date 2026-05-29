@@ -166,11 +166,9 @@ afterEach(() => {
 
 export function createComposerModel(options?: {
     configOverrides?: Partial<ComponentProps<typeof VibyComposer>['model']['config']>
-    replyingPhase?: ComponentProps<typeof VibyComposer>['model']['replyingPhase']
 }): ComponentProps<typeof VibyComposer>['model'] {
     return {
         sessionId: 'session-1',
-        replyingPhase: options?.replyingPhase ?? null,
         config: {
             permissionMode: 'default',
             collaborationMode: 'default',
@@ -199,7 +197,6 @@ export function createComposerNode(model: ComponentProps<typeof VibyComposer>['m
 
 export function renderComposer(options?: {
     configOverrides?: Partial<ComponentProps<typeof VibyComposer>['model']['config']>
-    replyingPhase?: ComponentProps<typeof VibyComposer>['model']['replyingPhase']
 }): ReturnType<typeof render> {
     const renderResult = render(createComposerNode(createComposerModel(options)))
 

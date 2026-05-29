@@ -107,23 +107,11 @@ const ThreadList = forwardRef<HTMLDivElement, VirtuosoListProps & { context: Thr
 ThreadList.displayName = 'ThreadList'
 
 export function ThreadHeaderSpacer(): React.JSX.Element {
-    return (
-        <div
-            aria-hidden="true"
-            className="ds-thread-top-anchor-spacer"
-            style={{ height: 'var(--chat-header-anchor-space)' }}
-        />
-    )
+    return <div aria-hidden="true" className="ds-thread-top-anchor-spacer" />
 }
 
 export function ThreadFooterSpacer(): React.JSX.Element {
-    return (
-        <div
-            aria-hidden="true"
-            className="ds-thread-bottom-anchor-spacer"
-            style={{ height: 'var(--chat-composer-occupied-space)' }}
-        />
-    )
+    return <div aria-hidden="true" className="ds-thread-bottom-anchor-spacer" />
 }
 
 export const THREAD_VIRTUOSO_COMPONENTS = {
@@ -137,8 +125,17 @@ export function renderThreadTranscriptItem(options: {
     index: number
     item: TranscriptRenderRow
     lastRowId: string | null
+    freshRowIds: ReadonlySet<string>
 }): React.JSX.Element {
     const trailingGap = options.item.row.id === options.lastRowId ? 'none' : options.item.gap
+    // `data-fresh` is consumed by the single CSS keyframe owner in
+    // `design-system-motion.css`. We deliberately do not wrap the row in any
+    // motion-library component: per-row hooks would add commit/layout cost on
+    // every virtualized mount/unmount and the visible "flash" the user reports
+    // when scrolling up came from that overhead plus prepend rows incorrectly
+    // being marked fresh by the previous diff. CSS animation runs on the
+    // compositor, costs nothing on row reveal, and respects reduced motion.
+    const isFresh = options.freshRowIds.has(options.item.row.id)
 
     return (
         <div
@@ -147,6 +144,7 @@ export function renderThreadTranscriptItem(options: {
             data-conversation-id={options.item.row.conversationId}
             data-history-jump-target={options.item.row.type === 'user' ? 'true' : undefined}
             data-row-index={options.index}
+            data-fresh={isFresh ? 'true' : undefined}
             data-testid={TRANSCRIPT_ROW_TEST_ID}
         >
             <TranscriptRowView row={options.item.row} />

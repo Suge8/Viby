@@ -92,6 +92,7 @@ function PrimaryButton(props: ComposerPrimaryActionState): React.JSX.Element {
             disabled={props.disabled}
             aria-label={label}
             title={label}
+            pendingIndicator="none"
         >
             {icon}
         </Button>

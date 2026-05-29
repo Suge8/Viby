@@ -9,6 +9,13 @@ import {
 
 const EXPLICIT_BOTTOM_SETTLE_FRAME_LIMIT = 24
 const EXPLICIT_BOTTOM_STALL_FRAME_LIMIT = 120
+// Browser native smooth scroll typically runs ~250–500ms. While that animation
+// is in flight, re-issuing `scrollTo({ behavior: 'auto' })` cancels it and the
+// user sees an instant jump. Skip our auto-correct loop during this window so
+// the smooth animation completes; afterwards we fall back to per-frame auto
+// correction to close any residual delta from rows that measured larger than
+// estimate during the animation.
+const EXPLICIT_BOTTOM_SMOOTH_HOLD_MS = 520
 
 type ExplicitBottomBehavior = 'auto' | 'smooth'
 
@@ -43,6 +50,7 @@ export function useTranscriptExplicitBottom(options: {
     const explicitBottomStableFrameCountRef = useRef(0)
     const explicitBottomSnapshotRef = useRef<ViewportBottomSnapshot | null>(null)
     const explicitBottomBehaviorRef = useRef<ExplicitBottomBehavior>('auto')
+    const explicitBottomSmoothHoldUntilRef = useRef(0)
     const explicitBottomProgrammaticScrollRef = useRef(false)
     const reportAtBottomRef = useRef(reportAtBottom)
     const setFollowModeRef = useRef(setFollowMode)
@@ -151,8 +159,21 @@ export function useTranscriptExplicitBottom(options: {
                 return
             }
 
+            // If we are inside the smooth-scroll hold window the native
+            // animation virtuoso started is still in flight — don't issue
+            // another scrollTo, just keep observing the viewport, otherwise the
+            // smooth animation cancels and the user perceives an instant jump.
+            if (performance.now() < explicitBottomSmoothHoldUntilRef.current) {
+                explicitBottomFrameRef.current = requestAnimationFrame(tick)
+                return
+            }
+
             pendingAutoFollowRef.current = true
-            scrollToViewportEnd(explicitBottomBehaviorRef.current)
+            const currentBehavior = explicitBottomBehaviorRef.current
+            scrollToViewportEnd(currentBehavior)
+            if (currentBehavior === 'smooth') {
+                explicitBottomSmoothHoldUntilRef.current = performance.now() + EXPLICIT_BOTTOM_SMOOTH_HOLD_MS
+            }
             explicitBottomBehaviorRef.current = 'auto'
 
             const nextSnapshot = readViewportBottomSnapshot(viewport)
@@ -187,6 +208,7 @@ export function useTranscriptExplicitBottom(options: {
             explicitBottomBehaviorRef.current = behavior
             explicitBottomPendingRef.current = true
             pendingAutoFollowRef.current = true
+            explicitBottomSmoothHoldUntilRef.current = 0
             resetExplicitBottomState()
             explicitBottomSnapshotRef.current = readViewportBottomSnapshot(viewportRef.current)
             setFollowModeRef.current('following')

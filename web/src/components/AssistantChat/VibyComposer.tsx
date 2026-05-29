@@ -12,7 +12,6 @@ import {
     useRef,
     useState,
 } from 'react'
-import { AssistantReplyingIndicator } from '@/components/AssistantChat/AssistantReplyingIndicator'
 import { AttachmentItem } from '@/components/AssistantChat/AttachmentItem'
 import { ComposerButtons } from '@/components/AssistantChat/ComposerButtons'
 import { ComposerSuggestionsOverlay } from '@/components/AssistantChat/ComposerSuggestionsOverlay'
@@ -25,7 +24,6 @@ import {
 import { useComposerInputController } from '@/components/AssistantChat/useComposerInputController'
 import { useComposerPlatform } from '@/components/AssistantChat/useComposerPlatform'
 import { useComposerResumeHint } from '@/components/AssistantChat/useComposerResumeHint'
-import { useReplyingIndicatorPresence } from '@/components/AssistantChat/useReplyingIndicatorPresence'
 import {
     areAttachmentsReady,
     type ComposerAttachment,
@@ -49,7 +47,6 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
         disabled = false,
         sendPending = false,
         autocompletePrefixes = DEFAULT_AUTOCOMPLETE_PREFIXES,
-        replyingPhase = null,
     } = composerModel
     const {
         permissionMode: rawPermissionMode,
@@ -88,7 +85,6 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
     const [isAborting, setIsAborting] = useState(false)
     const controlsButtonAnchorRef = useRef<HTMLDivElement | null>(null)
     const suggestionsAnchorRef = useRef<HTMLDivElement | null>(null)
-    const replyingIndicatorPresence = useReplyingIndicatorPresence(replyingPhase)
     const { showResumePlaceholder, clearResumeHint } = useComposerResumeHint({
         active,
         allowSendWhenInactive,
@@ -237,14 +233,6 @@ function VibyComposerInner(props: VibyComposerProps): React.JSX.Element {
     return (
         <ComposerPrimitive.Root onSubmit={handleFormSubmit}>
             <div className="relative">
-                {replyingIndicatorPresence.visiblePhase ? (
-                    <div className="ds-replying-indicator-anchor">
-                        <AssistantReplyingIndicator
-                            phase={replyingIndicatorPresence.visiblePhase}
-                            state={replyingIndicatorPresence.state}
-                        />
-                    </div>
-                ) : null}
                 <ComposerSuggestionsOverlay
                     anchorRef={suggestionsAnchorRef}
                     hidden={openPanel !== null}

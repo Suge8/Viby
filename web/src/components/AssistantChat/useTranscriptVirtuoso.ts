@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ListRange, VirtuosoHandle } from 'react-virtuoso'
+import type { FollowOutput, ListRange, VirtuosoHandle } from 'react-virtuoso'
 import {
     buildTranscriptFollowOutput,
     buildTranscriptHeightEstimates,
-    detectPrependedTranscriptRows,
+    evictStaleTranscriptHeightEstimates,
     INITIAL_TRANSCRIPT_FIRST_ITEM_INDEX,
     resolveTranscriptDefaultItemHeight,
     resolveTranscriptLastItemIndex,
-    resolveTranscriptTopConversationId,
+    shouldPrefetchOlderTranscriptRows,
     type TranscriptFollowMode,
 } from './transcriptScrollPolicy'
 import {
@@ -15,12 +15,13 @@ import {
     useTranscriptVirtuosoForegroundSync,
 } from './transcriptVirtuosoEffects'
 import { type UseTranscriptVirtuosoOptions, type UseTranscriptVirtuosoResult } from './transcriptVirtuosoTypes'
-import { useTranscriptActiveTurnAnchor } from './useTranscriptActiveTurnAnchor'
+import { useTranscriptActiveTurnController } from './useTranscriptActiveTurnController'
 import { useTranscriptAtBottomOwner, useTranscriptAtBottomSignal } from './useTranscriptAtBottomOwner'
 import { useTranscriptBottomEffects } from './useTranscriptBottomEffects'
 import { useTranscriptExplicitBottom } from './useTranscriptExplicitBottom'
-import { useTranscriptHistoryNavigation } from './useTranscriptHistoryNavigation'
 import { useTranscriptLeaveBottomIntent } from './useTranscriptLeaveBottomIntent'
+import { useTranscriptPrependIndex } from './useTranscriptPrependIndex'
+import { useTranscriptStartReachedOwner } from './useTranscriptStartReachedOwner'
 import { useTranscriptTopAnchor } from './useTranscriptTopAnchor'
 import { useTranscriptViewportControls } from './useTranscriptViewportControls'
 
@@ -30,17 +31,41 @@ export function useTranscriptVirtuoso(options: UseTranscriptVirtuosoOptions): Us
     const previousRowsRef = useRef(options.rows)
     const previousRowCountRef = useRef(0)
     const autoScrollFrameRef = useRef<number | null>(null)
-    const [firstItemIndex, setFirstItemIndex] = useState(INITIAL_TRANSCRIPT_FIRST_ITEM_INDEX)
-    const [followMode, setFollowMode] = useState<TranscriptFollowMode>(options.rows.length > 0 ? 'following' : 'manual')
-    const followModeRef = useRef(followMode)
-    const [topConversationId, setTopConversationId] = useState<string | null>(
-        options.conversationIds[options.conversationIds.length - 1] ?? null
-    )
-    followModeRef.current = followMode
+    // `firstItemIndex` must change in the same render as prepended `data`.
+    const firstItemIndexRef = useRef(INITIAL_TRANSCRIPT_FIRST_ITEM_INDEX)
+    // True once virtuoso has reported `atBottom: true` at least once. Until
+    // then `initialTopMostItemIndex` owns the entry scroll; our follow-mode
+    // auto-scroll AND the reverse infinite-scroll prefetch must both stay
+    // silent so two scroll owners never fight over the initial mount position
+    // and so the prefetch loop cannot fire from an unsettled near-top range.
+    const hasSettledInitialBottomRef = useRef(false)
     const { measuredAtBottomRef, reportAtBottom } = useTranscriptAtBottomSignal({
         onAtBottomChange: options.onAtBottomChange,
         onFlushPending: options.onFlushPending,
     })
+    const handleStartReached = useTranscriptStartReachedOwner({
+        hasMoreHistory: options.hasMoreHistory,
+        hasSettledInitialBottomRef,
+        measuredAtBottomRef,
+        onLoadOlderHistory: options.onLoadOlderHistory,
+    })
+    const handleRangeChanged = useCallback(
+        (range: ListRange) => {
+            if (shouldPrefetchOlderTranscriptRows(range, firstItemIndexRef.current)) {
+                handleStartReached()
+            }
+        },
+        [handleStartReached]
+    )
+    const pendingPrependCleanupRef = useRef(false)
+    const heightEstimateCacheRef = useRef<Map<string, number>>(new Map())
+    const prependSettlingUntilRef = useRef(0)
+    const isPrependScrollSettling = useCallback(
+        () => prependSettlingUntilRef.current > 0 && performance.now() < prependSettlingUntilRef.current,
+        []
+    )
+    const [followMode, setFollowMode] = useState<TranscriptFollowMode>('following')
+    const followModeRef = useRef(followMode)
     const setFollowModeState = useCallback((nextMode: TranscriptFollowMode) => {
         followModeRef.current = nextMode
         setFollowMode((currentMode) => (currentMode === nextMode ? currentMode : nextMode))
@@ -131,22 +156,16 @@ export function useTranscriptVirtuoso(options: UseTranscriptVirtuosoOptions): Us
             revealConversationAtTopAnchor,
         ]
     )
-    const revealActiveTurnAtTopAnchor = useCallback(
-        (conversationId: string) => revealConversationAtManualTop(conversationId, false),
-        [revealConversationAtManualTop]
-    )
-    const activeTurnAnchor = useTranscriptActiveTurnAnchor({
+    const { activeTurnAnchor, scrollToConversation } = useTranscriptActiveTurnController({
         activeTurnLocalId: options.activeTurnLocalId,
+        cancelTopAnchorTransaction,
+        measuredAtBottomRef,
+        revealConversationAtManualTop,
         rows: options.rows,
-        revealConversationAtTopAnchor: revealActiveTurnAtTopAnchor,
+        setFollowMode: setFollowModeState,
+        startExplicitBottomTransaction,
+        viewportRef,
     })
-    const scrollToConversation = useCallback(
-        (conversationId: string) => {
-            activeTurnAnchor.clearActiveTurnAnchor()
-            return revealConversationAtManualTop(conversationId)
-        },
-        [activeTurnAnchor.clearActiveTurnAnchor, revealConversationAtManualTop]
-    )
 
     const {
         clearManualScrollRestoreFrame,
@@ -186,7 +205,9 @@ export function useTranscriptVirtuoso(options: UseTranscriptVirtuosoOptions): Us
     const { handleAtBottomStateChange, handleTotalListHeightChanged } = useTranscriptAtBottomOwner({
         explicitBottomPendingRef,
         followModeRef,
+        hasSettledInitialBottomRef,
         isTopAnchorTransactionPending,
+        isPrependScrollSettling,
         measuredAtBottomRef,
         pendingAutoFollowRef,
         reportAtBottom,
@@ -198,21 +219,31 @@ export function useTranscriptVirtuoso(options: UseTranscriptVirtuosoOptions): Us
         viewportRef,
     })
 
+    const firstItemIndex = useTranscriptPrependIndex({
+        firstItemIndexRef,
+        followModeRef,
+        pendingPrependCleanupRef,
+        prependSettlingUntilRef,
+        previousRowsRef,
+        rows: options.rows,
+    })
+
     useEffect(() => {
-        const prependedCount = detectPrependedTranscriptRows(previousRowsRef.current, options.rows)
-        previousRowsRef.current = options.rows
-        if (prependedCount === 0) {
+        if (!pendingPrependCleanupRef.current) {
             return
         }
-
-        setFirstItemIndex((currentIndex) => currentIndex - prependedCount)
-    }, [options.rows])
+        pendingPrependCleanupRef.current = false
+        cancelPendingAutoFollow()
+        cancelExplicitBottomTransaction()
+        setFollowModeState('manual')
+    }, [cancelExplicitBottomTransaction, cancelPendingAutoFollow, firstItemIndex, setFollowModeState])
 
     useTranscriptBottomEffects({
         alignToBottom: activeTurnAnchor.alignToBottom,
         composerAnchorTop: options.composerAnchorTop,
         explicitBottomPendingRef,
         followModeRef,
+        hasSettledInitialBottomRef,
         measuredAtBottomRef,
         previousRowCountRef,
         resetExplicitBottomState,
@@ -246,35 +277,21 @@ export function useTranscriptVirtuoso(options: UseTranscriptVirtuosoOptions): Us
         reportAtBottom,
         scheduleAutoScrollToBottom,
     })
-    const historyNavigation = useTranscriptHistoryNavigation({
-        conversationIds: options.conversationIds,
-        fallbackConversationId: topConversationId,
-        hasMoreMessages: options.hasMoreMessages,
-        historyJumpTargetConversationIds: options.historyJumpTargetConversationIds,
-        isScrollNavigationPending: topAnchorPending,
-        isScrollNavigationPendingRef: isTopAnchorTransactionPending,
-        isLoadingMessages: options.isLoadingMessages,
-        isLoadingMoreMessages: options.isLoadingMoreMessages,
-        onLoadHistoryUntilPreviousUser: options.onLoadHistoryUntilPreviousUser,
-        scrollToConversation,
-        viewportRef,
-    })
 
-    const handleRangeChanged = useCallback(
-        (range: ListRange) => {
-            setTopConversationId(
-                resolveTranscriptTopConversationId({
-                    rows: options.rows,
-                    firstItemIndex,
-                    range,
-                })
-            )
-        },
-        [firstItemIndex, options.rows]
-    )
-
-    const followOutput = useMemo(() => buildTranscriptFollowOutput(followMode), [followMode])
-    const heightEstimates = useMemo(() => buildTranscriptHeightEstimates(options.rows), [options.rows])
+    const followOutput: FollowOutput = useCallback((isAtBottom: boolean) => {
+        const resolveFollowOutput = buildTranscriptFollowOutput(followModeRef.current)
+        if (typeof resolveFollowOutput !== 'function') {
+            return resolveFollowOutput
+        }
+        return resolveFollowOutput(isAtBottom)
+    }, [])
+    void followMode
+    const heightEstimates = useMemo(() => {
+        const cache = heightEstimateCacheRef.current
+        const estimates = buildTranscriptHeightEstimates(options.rows, cache)
+        evictStaleTranscriptHeightEstimates(options.rows, cache)
+        return estimates
+    }, [options.rows])
     const defaultItemHeight = useMemo(() => resolveTranscriptDefaultItemHeight(heightEstimates), [heightEstimates])
     const lastItemIndex = resolveTranscriptLastItemIndex(options.rows.length)
     const initialTopMostItemIndex =
@@ -301,12 +318,10 @@ export function useTranscriptVirtuoso(options: UseTranscriptVirtuosoOptions): Us
         defaultItemHeight,
         followOutput,
         heightEstimates,
-        isHistoryActionPending: historyNavigation.isHistoryActionPending,
-        isHistoryControlVisible: historyNavigation.isHistoryControlVisible,
-        handleHistoryControlClick: historyNavigation.handleHistoryControlClick,
-        handleRangeChanged,
         handleAtBottomStateChange,
         handleTotalListHeightChanged,
+        handleStartReached,
+        handleRangeChanged,
         handleViewportWheelCapture,
         handleViewportScrollCapture,
         handleViewportTouchStartCapture,

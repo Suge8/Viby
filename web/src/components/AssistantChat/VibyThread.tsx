@@ -1,20 +1,22 @@
-import { memo, useMemo } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 import { Virtuoso } from 'react-virtuoso'
 import type { ApiClient } from '@/api/client'
+import type { AssistantReplyingPhase } from '@/components/AssistantChat/assistantReplyingPhase'
 import { ConversationOutline } from '@/components/AssistantChat/ConversationOutline'
 import { VibyChatProvider } from '@/components/AssistantChat/context'
 import {
-    getThreadStageClassName,
     MessageSkeleton,
+    THREAD_STAGE_CLASS_NAME,
     THREAD_VIEWPORT_CLASS_NAME,
     ThreadBottomControl,
-    ThreadHistoryControl,
+    ThreadHistoryLoadingIndicator,
     ThreadNotice,
 } from '@/components/AssistantChat/threadControls'
 import {
     TRANSCRIPT_AT_BOTTOM_THRESHOLD_PX,
     TRANSCRIPT_MIN_OVERSCAN_ITEM_COUNT,
     TRANSCRIPT_OVERSCAN_PX,
+    TRANSCRIPT_START_REACHED_THRESHOLD_PX,
 } from '@/components/AssistantChat/transcriptScrollPolicy'
 import {
     renderThreadTranscriptItem,
@@ -50,18 +52,26 @@ type VibyThreadProps = {
     messageState: Pick<
         SessionChatWorkspaceMessageState,
         | 'atBottom'
+        | 'hasLoadedLatest'
         | 'hasMore'
-        | 'isLoading'
         | 'isLoadingMore'
         | 'messages'
         | 'messagesVersion'
         | 'pendingCount'
         | 'pendingReply'
+        | 'restoredFromWarmSnapshot'
         | 'stream'
     >
     handlers: VibyThreadHandlers
     composerAnchorTop: number
+    replyingPhase: AssistantReplyingPhase | null
 }
+
+// Skeleton must crossfade with the real transcript rather than swap instantly.
+// Instant swap produces a one-frame blank gap on session entry; the crossfade
+// keeps the loading affordance visible while the rows fade in underneath, so
+// the user perceives a single, smooth entry transition.
+const SKELETON_FADE_OUT_MS = 220
 
 export const VibyThread = memo(function VibyThread(props: VibyThreadProps): React.JSX.Element {
     const threadModel = useVibyThreadModel(props)
@@ -72,10 +82,10 @@ export const VibyThread = memo(function VibyThread(props: VibyThreadProps): Reac
         rawMessagesCount,
         showSkeleton,
         showNormalizationWarning,
-        isHistoryControlDisabled,
-        threadStageClassName,
         lastRenderRowId,
+        freshRowIds,
     } = threadModel
+    const skeletonMounted = useSkeletonExitTransition(showSkeleton, SKELETON_FADE_OUT_MS)
     const chatProviderValue = useMemo(
         () => ({
             api: props.session.api,
@@ -102,10 +112,9 @@ export const VibyThread = memo(function VibyThread(props: VibyThreadProps): Reac
             handleViewportTouchStartCapture: viewport.handleViewportTouchStartCapture,
             handleViewportWheelCapture: viewport.handleViewportWheelCapture,
             setViewportRef: viewport.setViewportRef,
-            threadStageClassName,
+            threadStageClassName: THREAD_STAGE_CLASS_NAME,
         }),
         [
-            threadStageClassName,
             viewport.handleViewportScrollCapture,
             viewport.handleViewportTouchMoveCapture,
             viewport.handleViewportTouchStartCapture,
@@ -117,7 +126,6 @@ export const VibyThread = memo(function VibyThread(props: VibyThreadProps): Reac
     return (
         <VibyChatProvider value={chatProviderValue}>
             <div className="session-chat-thread-root relative flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-hidden">
-                <ConversationOutline items={outlineItems} onJump={viewport.scrollToConversation} />
                 {showNormalizationWarning ? (
                     <div className="px-3 pt-2">
                         <div className="mx-auto w-full ds-stage-shell">
@@ -129,23 +137,7 @@ export const VibyThread = memo(function VibyThread(props: VibyThreadProps): Reac
                     </div>
                 ) : null}
 
-                {!showSkeleton ? (
-                    <ThreadHistoryControl
-                        visible={viewport.isHistoryControlVisible}
-                        loading={viewport.isHistoryActionPending}
-                        disabled={isHistoryControlDisabled}
-                        onClick={viewport.handleHistoryControlClick}
-                    />
-                ) : null}
-
-                {showSkeleton ? (
-                    <div className={`${THREAD_VIEWPORT_CLASS_NAME} ${threadStageClassName}`}>
-                        <div className="ds-thread-lane">
-                            <ThreadHeaderSpacer />
-                            <MessageSkeleton />
-                        </div>
-                    </div>
-                ) : (
+                {showSkeleton ? null : (
                     <Virtuoso
                         ref={viewport.setVirtuosoRef}
                         data={renderRows}
@@ -158,8 +150,13 @@ export const VibyThread = memo(function VibyThread(props: VibyThreadProps): Reac
                         defaultItemHeight={viewport.defaultItemHeight}
                         atBottomThreshold={TRANSCRIPT_AT_BOTTOM_THRESHOLD_PX}
                         atBottomStateChange={viewport.handleAtBottomStateChange}
-                        rangeChanged={viewport.handleRangeChanged}
                         totalListHeightChanged={viewport.handleTotalListHeightChanged}
+                        startReached={viewport.handleStartReached}
+                        rangeChanged={viewport.handleRangeChanged}
+                        increaseViewportBy={{
+                            top: TRANSCRIPT_START_REACHED_THRESHOLD_PX,
+                            bottom: 0,
+                        }}
                         overscan={TRANSCRIPT_OVERSCAN_PX}
                         minOverscanItemCount={TRANSCRIPT_MIN_OVERSCAN_ITEM_COUNT}
                         heightEstimates={viewport.heightEstimates}
@@ -169,10 +166,45 @@ export const VibyThread = memo(function VibyThread(props: VibyThreadProps): Reac
                                 index: _index,
                                 item,
                                 lastRowId: lastRenderRowId,
+                                freshRowIds,
                             })
                         }
                     />
                 )}
+
+                {skeletonMounted ? (
+                    <div
+                        className={`${THREAD_VIEWPORT_CLASS_NAME} ${THREAD_STAGE_CLASS_NAME} ds-thread-skeleton-overlay`}
+                        data-fading={showSkeleton ? undefined : 'true'}
+                        aria-hidden={showSkeleton ? undefined : 'true'}
+                    >
+                        <div className="ds-thread-lane">
+                            <ThreadHeaderSpacer />
+                            <MessageSkeleton />
+                        </div>
+                    </div>
+                ) : null}
+
+                <ThreadHistoryLoadingIndicator
+                    visible={props.messageState.isLoadingMore && props.messageState.hasMore}
+                />
+
+                <ConversationOutline
+                    sessionId={props.session.sessionId}
+                    items={outlineItems}
+                    onJump={viewport.scrollToConversation}
+                    hasMoreHistory={props.messageState.hasMore}
+                    isLoadingHistory={props.messageState.isLoadingMore}
+                    isPreparingHistory={
+                        props.messageState.restoredFromWarmSnapshot || !props.messageState.hasLoadedLatest
+                    }
+                    onRequestMoreHistory={() => {
+                        // Fire-and-forget; the underlying loader is already
+                        // single-flighted by `useTranscriptStartReachedOwner`
+                        // and the message-window store.
+                        void props.handlers.onLoadHistoryUntilPreviousUser()
+                    }}
+                />
 
                 <ThreadBottomControl
                     count={props.messageState.pendingCount}
@@ -184,6 +216,27 @@ export const VibyThread = memo(function VibyThread(props: VibyThreadProps): Reac
     )
 })
 
+/**
+ * Keeps the loading skeleton mounted briefly after `showSkeleton` flips false
+ * so it can fade out while the real transcript fades in underneath. Re-entering
+ * the loading state mid-transition (rare, e.g. session switch) immediately
+ * remounts the skeleton with no fade.
+ */
+function useSkeletonExitTransition(showSkeleton: boolean, durationMs: number): boolean {
+    const [mounted, setMounted] = useState(showSkeleton)
+    useEffect(() => {
+        if (showSkeleton) {
+            setMounted(true)
+            return
+        }
+        const timer = window.setTimeout(() => setMounted(false), durationMs)
+        return () => {
+            window.clearTimeout(timer)
+        }
+    }, [showSkeleton, durationMs])
+    return mounted
+}
+
 function useVibyThreadModel(props: VibyThreadProps) {
     const visibleMessages = useMemo(
         () => props.messageState.messages.filter((message) => !isQueuedForInvocation(message)),
@@ -194,42 +247,32 @@ function useVibyThreadModel(props: VibyThreadProps) {
         messages: visibleMessages,
         agentState: props.session.agentState,
         stream: props.messageState.stream,
+        replyingPhase: props.replyingPhase,
     })
     const viewport = useTranscriptVirtuoso({
         sessionId: props.session.sessionId,
         rows: transcript.renderRows,
-        conversationIds: transcript.conversationIds,
         rowStartIndexByConversationId: transcript.rowStartIndexByConversationId,
-        historyJumpTargetConversationIds: transcript.historyJumpTargetConversationIds,
-        hasMoreMessages: props.messageState.hasMore,
-        isLoadingMessages: props.messageState.isLoading,
-        isLoadingMoreMessages: props.messageState.isLoadingMore,
-        onLoadHistoryUntilPreviousUser: props.handlers.onLoadHistoryUntilPreviousUser,
         onAtBottomChange: props.handlers.onAtBottomChange,
         onFlushPending: props.handlers.onFlushPending,
         activeTurnLocalId: props.messageState.pendingReply?.localId ?? null,
         composerAnchorTop: props.composerAnchorTop,
+        hasMoreHistory: props.messageState.hasMore,
+        onLoadOlderHistory: props.handlers.onLoadHistoryUntilPreviousUser,
     })
-    const showSkeleton =
-        props.messageState.isLoading && transcript.rawMessagesCount === 0 && props.messageState.pendingCount === 0
+    const showSkeleton = props.messageState.restoredFromWarmSnapshot || !props.messageState.hasLoadedLatest
     const showNormalizationWarning =
         import.meta.env.DEV && transcript.normalizedMessagesCount === 0 && transcript.rawMessagesCount > 0
-    const isHistoryControlDisabled =
-        props.messageState.isLoadingMore || viewport.isHistoryActionPending || props.messageState.isLoading
     const lastRenderRowId = transcript.renderRows.at(-1)?.row.id ?? null
-    const threadStageClassName = getThreadStageClassName({
-        reserveHistoryControlInset: viewport.isHistoryControlVisible,
-    })
 
     return {
         viewport,
         outlineItems: transcript.outlineItems ?? [],
         renderRows: transcript.renderRows,
+        freshRowIds: transcript.freshRowIds,
         rawMessagesCount: transcript.rawMessagesCount,
         showSkeleton,
         showNormalizationWarning,
-        isHistoryControlDisabled,
         lastRenderRowId,
-        threadStageClassName,
     }
 }
