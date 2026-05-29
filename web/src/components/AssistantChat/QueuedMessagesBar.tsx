@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import type { ApiClient } from '@/api/client'
-import { normalizeDecryptedMessage } from '@/chat/normalize'
+import { normalizeClientMessage } from '@/chat/normalize'
 import { FeatureCloseIcon } from '@/components/featureIcons'
 import { TextContent } from '@/components/TextContent'
 import { Button } from '@/components/ui/button'
@@ -8,15 +8,15 @@ import { removeQueuedMessages } from '@/lib/message-window-store'
 import { isQueuedForInvocation } from '@/lib/messages'
 import { useTranslation } from '@/lib/use-translation'
 import { cn } from '@/lib/utils'
-import type { DecryptedMessage } from '@/types/api'
+import type { ClientMessage } from '@/types/api'
 
 const QUEUED_PREVIEW_LIMIT = 3
 
 type QueuedMessagesBarProps = {
     api: ApiClient
     sessionId: string
-    messages: readonly DecryptedMessage[]
-    pending: readonly DecryptedMessage[]
+    messages: readonly ClientMessage[]
+    pending: readonly ClientMessage[]
     disabled?: boolean
 }
 
@@ -25,8 +25,8 @@ type QueuedMessageItem = {
     text: string
 }
 
-function getQueuedMessageText(message: DecryptedMessage): string {
-    const normalized = normalizeDecryptedMessage(message)
+function getQueuedMessageText(message: ClientMessage): string {
+    const normalized = normalizeClientMessage(message)
     if (!normalized || normalized.role !== 'user') {
         return ''
     }
@@ -41,12 +41,12 @@ function getQueuedMessageText(message: DecryptedMessage): string {
 }
 
 function collectQueuedMessages(
-    messages: readonly DecryptedMessage[],
-    pending: readonly DecryptedMessage[]
+    messages: readonly ClientMessage[],
+    pending: readonly ClientMessage[]
 ): QueuedMessageItem[] {
     const seenLocalIds = new Set<string>()
     const queued: QueuedMessageItem[] = []
-    const collect = (candidates: readonly DecryptedMessage[]) => {
+    const collect = (candidates: readonly ClientMessage[]) => {
         for (const message of candidates) {
             if (!message.localId || seenLocalIds.has(message.localId) || !isQueuedForInvocation(message)) {
                 continue
@@ -63,10 +63,7 @@ function collectQueuedMessages(
     return queued
 }
 
-function useQueuedMessages(
-    messages: readonly DecryptedMessage[],
-    pending: readonly DecryptedMessage[]
-): QueuedMessageItem[] {
+function useQueuedMessages(messages: readonly ClientMessage[], pending: readonly ClientMessage[]): QueuedMessageItem[] {
     return useMemo(() => collectQueuedMessages(messages, pending), [messages, pending])
 }
 

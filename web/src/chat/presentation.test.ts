@@ -110,6 +110,42 @@ describe('chat event presentation', () => {
         })
     })
 
+    it('renders turn terminal statuses with stable user-facing copy', () => {
+        expect(
+            getEventPresentation({
+                type: 'turn-terminal',
+                status: 'truncated',
+                provider: 'pi',
+                reason: 'length',
+            })
+        ).toEqual({
+            icon: '↪️',
+            text: 'Reply reached the model output limit.',
+            tone: 'warning',
+        })
+        expect(getEventPresentation({ type: 'turn-terminal', status: 'completed' })).toEqual({
+            icon: null,
+            text: 'Reply finished.',
+            tone: 'default',
+        })
+        expect(getEventPresentation({ type: 'turn-terminal', status: 'aborted' })).toEqual({
+            icon: '⏹️',
+            text: 'Reply stopped.',
+            tone: 'info',
+        })
+        expect(getEventPresentation({ type: 'turn-terminal', status: 'needs-input' })).toEqual({
+            icon: '💬',
+            text: 'Reply needs your input.',
+            tone: 'info',
+        })
+        expect(getEventPresentation({ type: 'turn-terminal', status: 'failed', reason: 'length' })).toEqual({
+            icon: '⚠️',
+            text: 'AI reply did not complete. Send again to retry.',
+            tone: 'danger',
+            detail: 'length',
+        })
+    })
+
     it('renders usage limit warning events', () => {
         expect(
             getEventPresentation({

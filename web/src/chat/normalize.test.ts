@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeDecryptedMessage } from './normalize'
+import { normalizeClientMessage } from './normalize'
 import { normalizeAgentRecord } from './normalizeAgent'
 
 describe('normalizeAgentRecord', () => {
@@ -21,7 +21,7 @@ describe('normalizeAgentRecord', () => {
     })
 
     it('drops bare provider envelopes instead of rendering raw JSON bubbles', () => {
-        const normalized = normalizeDecryptedMessage({
+        const normalized = normalizeClientMessage({
             id: 'bare-output-1',
             seq: 1,
             localId: null,
@@ -43,7 +43,7 @@ describe('normalizeAgentRecord', () => {
     })
 
     it('drops wrapped provider envelopes with no visible transcript projection', () => {
-        const normalized = normalizeDecryptedMessage({
+        const normalized = normalizeClientMessage({
             id: 'wrapped-output-1',
             seq: 1,
             localId: null,
@@ -68,7 +68,7 @@ describe('normalizeAgentRecord', () => {
     })
 
     it('normalizes provider error envelopes as transcript events', () => {
-        const normalized = normalizeDecryptedMessage({
+        const normalized = normalizeClientMessage({
             id: 'provider-error-1',
             seq: 1,
             localId: null,
@@ -294,7 +294,7 @@ describe('normalizeAgentRecord', () => {
     })
 
     it('keeps legacy Pi codex transcript visible through full message normalization', () => {
-        const normalized = normalizeDecryptedMessage({
+        const normalized = normalizeClientMessage({
             id: 'message-pi-legacy',
             seq: 1,
             localId: null,
@@ -328,7 +328,7 @@ describe('normalizeAgentRecord', () => {
     })
 
     it('drops durable data-url attachment previews from user messages', () => {
-        const normalized = normalizeDecryptedMessage({
+        const normalized = normalizeClientMessage({
             id: 'message-user-attachment',
             seq: 1,
             localId: null,
@@ -371,7 +371,7 @@ describe('normalizeAgentRecord', () => {
     })
 
     it('normalizes codex plan updates into completed update_plan tool blocks', () => {
-        const normalized = normalizeDecryptedMessage({
+        const normalized = normalizeClientMessage({
             id: 'message-plan',
             seq: 1,
             localId: null,
@@ -421,7 +421,7 @@ describe('normalizeAgentRecord', () => {
     })
 
     it('normalizes codex assistant messages with proposed_plan blocks into native proposed_plan tool cards', () => {
-        const normalized = normalizeDecryptedMessage({
+        const normalized = normalizeClientMessage({
             id: 'message-proposed-plan',
             seq: 1,
             localId: null,

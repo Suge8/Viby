@@ -10,10 +10,14 @@ const vibyThreadHarness = vi.hoisted(() => ({
 const composerDraftHarness = vi.hoisted(() => ({
     mountCount: 0,
 }))
+const assistantRuntimeHarness = vi.hoisted(() => ({
+    props: null as null | Parameters<typeof import('@/lib/assistant-runtime').useVibyRuntime>[0],
+}))
 
 beforeEach(() => {
     vibyThreadHarness.props = null
     composerDraftHarness.mountCount = 0
+    assistantRuntimeHarness.props = null
 })
 
 afterEach(() => {
@@ -25,7 +29,10 @@ vi.mock('@assistant-ui/react', () => ({
 }))
 
 vi.mock('@/lib/assistant-runtime', () => ({
-    useVibyRuntime: () => ({}),
+    useVibyRuntime: (props: Parameters<typeof import('@/lib/assistant-runtime').useVibyRuntime>[0]) => {
+        assistantRuntimeHarness.props = props
+        return {}
+    },
 }))
 
 vi.mock('@/lib/use-translation', () => ({
@@ -147,6 +154,30 @@ describe('SessionChatRuntimeSurface', () => {
 
         expect(screen.queryByTestId('runtime-motion-reveal')).not.toBeInTheDocument()
         expect(screen.getByTestId('runtime-thread')).toBeInTheDocument()
+    })
+
+    it('marks the composer runtime running while transient stream is active', () => {
+        render(
+            <SessionChatRuntimeSurface
+                {...createProps({
+                    model: {
+                        ...createProps().model,
+                        session: createSession({ thinking: false }),
+                        messageState: {
+                            ...createProps().model.messageState,
+                            stream: {
+                                assistantTurnId: 'turn-1',
+                                startedAt: 1,
+                                updatedAt: 2,
+                                text: 'streaming',
+                            },
+                        },
+                    },
+                })}
+            />
+        )
+
+        expect(assistantRuntimeHarness.props?.isRunning).toBe(true)
     })
 
     it('keeps resumable closed sessions interactive so the composer can trigger resume', () => {

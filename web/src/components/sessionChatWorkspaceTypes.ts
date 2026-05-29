@@ -4,11 +4,11 @@ import type { ApiClient } from '@/api/client'
 import type { Suggestion } from '@/hooks/useActiveSuggestions'
 import type { LoadMoreMessagesResult, PendingReplyState } from '@/lib/message-window-store'
 import type { MessageWindowWarningKey } from '@/lib/messageWindowWarnings'
-import type { AttachmentMetadata, DecryptedMessage, Session, SessionStreamState } from '@/types/api'
+import type { AttachmentMetadata, ClientMessage, Session, SessionStreamState } from '@/types/api'
 
 export type SessionChatWorkspaceMessageState = {
-    messages: DecryptedMessage[]
-    pending: DecryptedMessage[]
+    messages: ClientMessage[]
+    pending: ClientMessage[]
     warning: MessageWindowWarningKey | null
     hasLoadedLatest: boolean
     hasMore: boolean

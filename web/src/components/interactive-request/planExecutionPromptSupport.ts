@@ -1,6 +1,6 @@
 import { extractProposedPlanSegments } from '@viby/protocol'
-import { normalizeDecryptedMessage } from '@/chat/normalize'
-import type { DecryptedMessage, Session } from '@/types/api'
+import { normalizeClientMessage } from '@/chat/normalize'
+import type { ClientMessage, Session } from '@/types/api'
 
 export const IMPLEMENT_PLAN_MESSAGE = 'Implement the plan.'
 
@@ -12,7 +12,7 @@ export type PlanExecutionPrompt = {
 
 export function getActivePlanExecutionPrompt(args: {
     session: Session
-    messages: DecryptedMessage[]
+    messages: ClientMessage[]
     hasPendingInteractiveRequest: boolean
     isReplying: boolean
 }): PlanExecutionPrompt | null {
@@ -44,14 +44,14 @@ export function getActivePlanExecutionPrompt(args: {
     return null
 }
 
-function getLastUserCreatedAt(messages: DecryptedMessage[]): number {
+function getLastUserCreatedAt(messages: ClientMessage[]): number {
     for (let index = messages.length - 1; index >= 0; index -= 1) {
         const message = messages[index]
         if (!message) {
             continue
         }
 
-        const normalized = normalizeDecryptedMessage(message)
+        const normalized = normalizeClientMessage(message)
         if (normalized?.role === 'user') {
             return message.createdAt
         }
@@ -60,8 +60,8 @@ function getLastUserCreatedAt(messages: DecryptedMessage[]): number {
     return Number.NEGATIVE_INFINITY
 }
 
-function getPlanExecutionPromptFromMessage(message: DecryptedMessage): PlanExecutionPrompt | null {
-    const normalized = normalizeDecryptedMessage(message)
+function getPlanExecutionPromptFromMessage(message: ClientMessage): PlanExecutionPrompt | null {
+    const normalized = normalizeClientMessage(message)
     if (!normalized || normalized.role !== 'agent' || !Array.isArray(normalized.content)) {
         return null
     }

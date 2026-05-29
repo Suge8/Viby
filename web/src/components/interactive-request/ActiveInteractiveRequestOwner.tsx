@@ -14,13 +14,13 @@ import { useInteractiveSurfaceFrame } from '@/components/interactive-request/use
 import { useDesktopSessionsLayout } from '@/hooks/useDesktopSessionsLayout'
 import { usePlatform } from '@/hooks/usePlatform'
 import { useTranslation } from '@/lib/use-translation'
-import type { DecryptedMessage, Session } from '@/types/api'
+import type { ClientMessage, Session } from '@/types/api'
 
 type ActiveInteractiveRequestOwnerModel = {
     api: ApiClient
     composerHeight: number
     session: Session
-    messages: DecryptedMessage[]
+    messages: ClientMessage[]
     isReplying: boolean
     onSend: (text: string) => void
 }

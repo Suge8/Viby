@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react'
-import { normalizeDecryptedMessage } from '@/chat/normalize'
+import { normalizeClientMessage } from '@/chat/normalize'
 import { buildConversationOutline } from '@/chat/outline'
 import { reconcileChatBlocks } from '@/chat/reconcile'
 import { reduceChatBlocks } from '@/chat/reducer'
@@ -9,7 +9,7 @@ import { createTranscriptModel, stabilizeTranscriptRowIdentities } from '@/chat/
 import type { TranscriptRow } from '@/chat/transcriptTypes'
 import type { ChatBlock, NormalizedMessage } from '@/chat/types'
 import type { AssistantReplyingPhase } from '@/components/AssistantChat/assistantReplyingPhase'
-import type { DecryptedMessage, Session, SessionStreamState } from '@/types/api'
+import type { ClientMessage, Session, SessionStreamState } from '@/types/api'
 
 function buildSessionStreamBlock(stream: SessionStreamState): ChatBlock {
     return {
@@ -24,13 +24,13 @@ function buildSessionStreamBlock(stream: SessionStreamState): ChatBlock {
 
 export function useSessionTranscriptModel(options: {
     sessionId: string
-    messages: DecryptedMessage[]
+    messages: ClientMessage[]
     agentState: Session['agentState']
     stream: SessionStreamState | null
     replyingPhase: AssistantReplyingPhase | null
 }) {
     const { sessionId, messages, agentState, stream, replyingPhase } = options
-    const normalizedCacheRef = useRef<Map<string, { source: DecryptedMessage; normalized: NormalizedMessage | null }>>(
+    const normalizedCacheRef = useRef<Map<string, { source: ClientMessage; normalized: NormalizedMessage | null }>>(
         new Map()
     )
     const blocksByIdRef = useRef<Map<string, ChatBlock>>(new Map())
@@ -73,7 +73,7 @@ export function useSessionTranscriptModel(options: {
                 continue
             }
 
-            const next = normalizeDecryptedMessage(message)
+            const next = normalizeClientMessage(message)
             cache.set(message.id, { source: message, normalized: next })
             if (next) {
                 normalized.push(next)

@@ -66,9 +66,10 @@ function SessionChatRuntimeSurfaceInner(props: SessionChatRuntimeSurfaceProps): 
             leaveSurface()
         }
     }, [session.id])
+    const isReplying = session.thinking || messageState.pendingReply !== null || messageState.stream !== null
     const assistantRuntime = useVibyRuntime({
         session,
-        isSending: messageState.isSending,
+        isRunning: isReplying,
         onSendMessage: onSend,
         onAbort,
         attachmentAdapter,
@@ -95,11 +96,12 @@ function SessionChatRuntimeSurfaceInner(props: SessionChatRuntimeSurfaceProps): 
         () => ({
             onRefresh,
             onRetryMessage,
+            onSend,
             onFlushPending,
             onAtBottomChange,
             onLoadHistoryUntilPreviousUser,
         }),
-        [onAtBottomChange, onFlushPending, onLoadHistoryUntilPreviousUser, onRefresh, onRetryMessage]
+        [onAtBottomChange, onFlushPending, onLoadHistoryUntilPreviousUser, onRefresh, onRetryMessage, onSend]
     )
     const interactiveRequestModel = useMemo(
         () => ({
@@ -107,10 +109,10 @@ function SessionChatRuntimeSurfaceInner(props: SessionChatRuntimeSurfaceProps): 
             composerHeight,
             session,
             messages: messageState.messages,
-            isReplying: session.thinking || messageState.pendingReply !== null || messageState.stream !== null,
+            isReplying,
             onSend,
         }),
-        [api, composerHeight, messageState.messages, messageState.pendingReply, messageState.stream, onSend, session]
+        [api, composerHeight, isReplying, messageState.messages, onSend, session]
     )
 
     return (

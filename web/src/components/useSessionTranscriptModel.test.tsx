@@ -1,9 +1,9 @@
 import { renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { useSessionTranscriptModel } from '@/components/useSessionTranscriptModel'
-import type { DecryptedMessage } from '@/types/api'
+import type { ClientMessage } from '@/types/api'
 
-function createUserMessage(id: string, text: string, seq?: number): DecryptedMessage {
+function createUserMessage(id: string, text: string, seq?: number): ClientMessage {
     return {
         id,
         sessionId: 'session-1',
@@ -13,7 +13,7 @@ function createUserMessage(id: string, text: string, seq?: number): DecryptedMes
         createdAt: 1_000 + (seq ?? Number.parseInt(id.replace(/\D/g, ''), 10)),
         updatedAt: 1_000 + (seq ?? Number.parseInt(id.replace(/\D/g, ''), 10)),
         seq: seq ?? Number.parseInt(id.replace(/\D/g, ''), 10),
-    } as unknown as DecryptedMessage
+    } as unknown as ClientMessage
 }
 
 describe('useSessionTranscriptModel', () => {
@@ -58,7 +58,7 @@ describe('useSessionTranscriptModel', () => {
         const initialMessages = [createUserMessage('m1', 'first', 2)]
         const nextMessages = [createUserMessage('m1', 'first', 2), createUserMessage('m2', 'second', 3)]
         const { result, rerender } = renderHook(
-            ({ messages }: { messages: DecryptedMessage[] }) =>
+            ({ messages }: { messages: ClientMessage[] }) =>
                 useSessionTranscriptModel({
                     sessionId: 'session-1',
                     messages,
@@ -91,7 +91,7 @@ describe('useSessionTranscriptModel', () => {
         const initialMessages = [createUserMessage('m2', 'second', 2)]
         const prependedMessages = [createUserMessage('m1', 'older', 1), createUserMessage('m2', 'second', 2)]
         const { result, rerender } = renderHook(
-            ({ messages }: { messages: DecryptedMessage[] }) =>
+            ({ messages }: { messages: ClientMessage[] }) =>
                 useSessionTranscriptModel({
                     sessionId: 'session-1',
                     messages,

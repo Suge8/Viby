@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ApiClient } from '@/api/client'
 import { ActiveInteractiveRequestOwner } from '@/components/interactive-request/ActiveInteractiveRequestOwner'
 import { createTestSession } from '@/test/sessionFactories'
-import type { DecryptedMessage } from '@/types/api'
+import type { ClientMessage } from '@/types/api'
 
 const platformHarness = vi.hoisted(() => ({
     isTouch: false,
@@ -112,7 +112,7 @@ function createDeferred(): { promise: Promise<void>; resolve: () => void } {
 function createOwnerModel(options: {
     api: ApiClient
     session: ReturnType<typeof createTestSession>
-    messages?: DecryptedMessage[]
+    messages?: ClientMessage[]
     composerHeight?: number
     isReplying?: boolean
     onSend?: (text: string) => void
@@ -262,7 +262,7 @@ describe('ActiveInteractiveRequestOwner', () => {
                 completedRequests: {},
             },
         })
-        const messages: DecryptedMessage[] = [
+        const messages: ClientMessage[] = [
             {
                 id: 'user-1',
                 seq: 1,
@@ -326,7 +326,7 @@ describe('ActiveInteractiveRequestOwner', () => {
                 completedRequests: {},
             },
         })
-        const messages: DecryptedMessage[] = [
+        const messages: ClientMessage[] = [
             {
                 id: 'user-1',
                 seq: 1,
@@ -389,7 +389,7 @@ describe('ActiveInteractiveRequestOwner', () => {
                 completedRequests: {},
             },
         })
-        const messages: DecryptedMessage[] = [
+        const messages: ClientMessage[] = [
             {
                 id: 'user-1',
                 seq: 1,

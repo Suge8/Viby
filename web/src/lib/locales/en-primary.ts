@@ -142,6 +142,7 @@ export default {
     'chat.messageCopied.description': 'The message content is now in your clipboard.',
     'chat.messageCopied.badge': 'Copied',
     'chat.eventDetails': 'Details',
+    'chat.continueGeneration': 'Continue',
     'chat.messagesWarning.pendingOverflow': 'New replies arrived while you were away. Scroll to the bottom to refresh.',
     'chat.messagesWarning.loadFailed': 'Could not load the latest messages right now. Please try again.',
     'chat.messagesWarning.postSwitchSendFailed':

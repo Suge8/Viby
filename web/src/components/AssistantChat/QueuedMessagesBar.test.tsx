@@ -2,10 +2,10 @@ import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ApiClient } from '@/api/client'
 import { renderWithI18n } from '@/test/i18n'
-import type { DecryptedMessage } from '@/types/api'
+import type { ClientMessage } from '@/types/api'
 import { QueuedMessagesBar } from './QueuedMessagesBar'
 
-function createQueuedUserMessage(localId: string, text: string): DecryptedMessage {
+function createQueuedUserMessage(localId: string, text: string): ClientMessage {
     return {
         id: localId,
         seq: null,

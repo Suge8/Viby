@@ -3,13 +3,13 @@ import { safeStringify } from '@viby/protocol/utils'
 import { isRecognizedAgentContent, isSkippableAgentContent, normalizeAgentRecord } from '@/chat/normalizeAgent'
 import { normalizeUserRecord } from '@/chat/normalizeUser'
 import type { NormalizedMessage } from '@/chat/types'
-import type { DecryptedMessage } from '@/types/api'
+import type { ClientMessage } from '@/types/api'
 
-function withDurableMessageState(normalized: NormalizedMessage, message: DecryptedMessage): NormalizedMessage {
+function withDurableMessageState(normalized: NormalizedMessage, message: ClientMessage): NormalizedMessage {
     return { ...normalized, status: message.status, originalText: message.originalText }
 }
 
-function createAgentTextMessage(message: DecryptedMessage, content: unknown, meta?: unknown): NormalizedMessage {
+function createAgentTextMessage(message: ClientMessage, content: unknown, meta?: unknown): NormalizedMessage {
     return {
         id: message.id,
         localId: message.localId,
@@ -23,7 +23,7 @@ function createAgentTextMessage(message: DecryptedMessage, content: unknown, met
     }
 }
 
-function createUserTextMessage(message: DecryptedMessage, content: unknown, meta?: unknown): NormalizedMessage {
+function createUserTextMessage(message: ClientMessage, content: unknown, meta?: unknown): NormalizedMessage {
     return {
         id: message.id,
         localId: message.localId,
@@ -38,7 +38,7 @@ function createUserTextMessage(message: DecryptedMessage, content: unknown, meta
 }
 
 function normalizeRecognizedAgentMessage(
-    message: DecryptedMessage,
+    message: ClientMessage,
     content: unknown,
     meta?: unknown
 ): NormalizedMessage | null | undefined {
@@ -49,7 +49,7 @@ function normalizeRecognizedAgentMessage(
     return normalized ? withDurableMessageState(normalized, message) : null
 }
 
-function normalizeRoleWrappedMessage(message: DecryptedMessage, record: RoleWrappedRecord): NormalizedMessage | null {
+function normalizeRoleWrappedMessage(message: ClientMessage, record: RoleWrappedRecord): NormalizedMessage | null {
     if (record.role === 'user') {
         const normalized = normalizeUserRecord(
             message.id,
@@ -71,7 +71,7 @@ function normalizeRoleWrappedMessage(message: DecryptedMessage, record: RoleWrap
     return createAgentTextMessage(message, record.content, record.meta)
 }
 
-export function normalizeDecryptedMessage(message: DecryptedMessage): NormalizedMessage | null {
+export function normalizeClientMessage(message: ClientMessage): NormalizedMessage | null {
     const topLevelAgentMessage = normalizeRecognizedAgentMessage(message, message.content)
     if (topLevelAgentMessage !== undefined) {
         return topLevelAgentMessage

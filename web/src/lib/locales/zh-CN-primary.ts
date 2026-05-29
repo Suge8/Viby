@@ -156,6 +156,7 @@ export default {
     'chat.messageCopied.description': '这条消息内容已经进入剪贴板。',
     'chat.messageCopied.badge': '已复制',
     'chat.eventDetails': '详情',
+    'chat.continueGeneration': '继续生成',
     'chat.messagesWarning.pendingOverflow': '你离开期间有新回复到达。滚动到底部即可刷新。',
     'chat.messagesWarning.loadFailed': '当前暂时无法加载最新消息，请稍后再试。',
     'chat.messagesWarning.postSwitchSendFailed': '切换后的第一条消息在新代理回复前就失败了。请重新发送后继续。',

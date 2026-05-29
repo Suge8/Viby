@@ -10,6 +10,7 @@ export type VibyChatContextValue = {
     disabled: boolean
     onRefresh: () => void
     onRetryMessage?: (localId: string) => void
+    onSend?: (text: string) => void
 }
 
 const VibyChatContext = createContext<VibyChatContextValue | null>(null)

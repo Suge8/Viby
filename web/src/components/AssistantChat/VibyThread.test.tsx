@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createElement, Fragment, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { CONTINUE_GENERATION_PROMPT } from '@/chat/continueGeneration'
 import { buildTranscriptRenderRows, injectThinkingRenderRow } from '@/chat/transcriptRenderRows'
 import type { TranscriptRow } from '@/chat/transcriptTypes'
 import { I18nProvider } from '@/lib/i18n-context'
@@ -121,6 +122,7 @@ function renderThread(overrides?: RenderThreadOverrides): ReturnType<typeof rend
                     handlers={{
                         onRefresh: vi.fn(),
                         onRetryMessage: vi.fn(),
+                        onSend: vi.fn(),
                         onFlushPending: vi.fn(),
                         onAtBottomChange: vi.fn(),
                         onLoadHistoryUntilPreviousUser: vi.fn(async () => ({ didLoadOlderMessages: true })),
@@ -221,6 +223,32 @@ describe('VibyThread layout', () => {
         expect(container.querySelector('.ds-thread-top-anchor-spacer')).not.toBeNull()
         expect(container.querySelector('.ds-thread-bottom-anchor-spacer')).not.toBeNull()
         expect(screen.getByTestId(SESSION_CHAT_VIEWPORT_TEST_ID)).toBeInTheDocument()
+    })
+
+    it('sends the canonical continue prompt from truncated terminal notices', () => {
+        const onSend = vi.fn()
+        useSessionTranscriptModelMock.mockReturnValue(
+            transcriptModelFromRows([
+                {
+                    id: 'event:turn-terminal-1',
+                    type: 'event',
+                    conversationId: 'event:turn-terminal-1',
+                    depth: 0,
+                    copyText: null,
+                    block: {
+                        kind: 'agent-event',
+                        id: 'turn-terminal-1',
+                        createdAt: 1,
+                        event: { type: 'turn-terminal', status: 'truncated', provider: 'pi', reason: 'length' },
+                    },
+                },
+            ])
+        )
+
+        renderThread({ handlers: { onSend } })
+        fireEvent.click(screen.getByRole('button', { name: 'chat.continueGeneration' }))
+
+        expect(onSend).toHaveBeenCalledWith(CONTINUE_GENERATION_PROMPT)
     })
 
     it('holds the virtual transcript until the latest window is ready', () => {
@@ -623,6 +651,7 @@ describe('VibyThread layout', () => {
                         handlers={{
                             onRefresh: vi.fn(),
                             onRetryMessage: vi.fn(),
+                            onSend: vi.fn(),
                             onFlushPending: vi.fn(),
                             onAtBottomChange: vi.fn(),
                             onLoadHistoryUntilPreviousUser: vi.fn(async () => ({ didLoadOlderMessages: true })),
@@ -684,6 +713,7 @@ describe('VibyThread layout', () => {
                         handlers={{
                             onRefresh: vi.fn(),
                             onRetryMessage: vi.fn(),
+                            onSend: vi.fn(),
                             onFlushPending: vi.fn(),
                             onAtBottomChange: vi.fn(),
                             onLoadHistoryUntilPreviousUser: vi.fn(async () => ({ didLoadOlderMessages: true })),

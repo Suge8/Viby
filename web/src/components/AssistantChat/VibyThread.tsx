@@ -42,6 +42,7 @@ type VibyThreadSessionContext = {
 type VibyThreadHandlers = {
     onRefresh: () => void
     onRetryMessage?: (localId: string) => void
+    onSend: (text: string) => void
     onFlushPending: () => void
     onAtBottomChange: (atBottom: boolean) => void
     onLoadHistoryUntilPreviousUser: () => Promise<LoadMoreMessagesResult>
@@ -94,10 +95,12 @@ export const VibyThread = memo(function VibyThread(props: VibyThreadProps): Reac
             disabled: props.session.disabled,
             onRefresh: props.handlers.onRefresh,
             onRetryMessage: props.handlers.onRetryMessage,
+            onSend: props.handlers.onSend,
         }),
         [
             props.handlers.onRefresh,
             props.handlers.onRetryMessage,
+            props.handlers.onSend,
             props.session.api,
             props.session.disabled,
             props.session.metadata,

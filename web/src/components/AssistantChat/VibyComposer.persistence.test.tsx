@@ -63,7 +63,7 @@ function ComposerPersistenceRuntime(props: { sessionId: string }): React.JSX.Ele
             metadata: { driver: 'codex' },
             agentState: { controlledByUser: false },
         } as never,
-        isSending: false,
+        isRunning: false,
         onSendMessage: vi.fn(),
         onAbort: vi.fn(async () => undefined),
     })

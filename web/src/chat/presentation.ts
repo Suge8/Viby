@@ -9,6 +9,7 @@ const ASSISTANT_RETRY_TEXT = 'AI reply did not complete. Send again to retry.'
 type ApiErrorEvent = { type: 'api-error'; retryAttempt: number; maxRetries: number; error?: unknown }
 type DriverSwitchSendFailedEvent = Record<string, unknown> & { code?: unknown }
 type LimitEvent = { type: 'limit-reached' | 'limit-warning'; endsAt?: unknown; percent?: unknown }
+type TurnTerminalEvent = { type: 'turn-terminal'; status?: unknown; reason?: unknown }
 
 export function formatUnixTimestamp(value: number): string {
     const ms = value < 1_000_000_000_000 ? value * 1000 : value
@@ -95,6 +96,23 @@ function getDriverSwitchSendFailedPresentation(event: DriverSwitchSendFailedEven
     }
 }
 
+function getTurnTerminalPresentation(event: TurnTerminalEvent): EventPresentation {
+    switch (event.status) {
+        case 'completed':
+            return { icon: null, text: 'Reply finished.', tone: 'default' }
+        case 'truncated':
+            return { icon: '↪️', text: 'Reply reached the model output limit.', tone: 'warning' }
+        case 'aborted':
+            return { icon: '⏹️', text: 'Reply stopped.', tone: 'info' }
+        case 'failed':
+            return withDetail({ icon: '⚠️', text: ASSISTANT_RETRY_TEXT, tone: 'danger' }, event.reason)
+        case 'needs-input':
+            return { icon: '💬', text: 'Reply needs your input.', tone: 'info' }
+        default:
+            return { icon: null, text: 'Reply finished.', tone: 'default' }
+    }
+}
+
 function getLimitPresentation(event: LimitEvent): EventPresentation {
     const endsAt = typeof event.endsAt === 'number' ? event.endsAt : null
     if (event.type === 'limit-reached') {
@@ -127,6 +145,8 @@ export function getEventPresentation(event: AgentEvent): EventPresentation {
         }
         case 'driver-switch-send-failed':
             return getDriverSwitchSendFailedPresentation(event)
+        case 'turn-terminal':
+            return getTurnTerminalPresentation(event as TurnTerminalEvent)
         case 'permission-mode-changed': {
             const mode = typeof event.mode === 'string' ? event.mode : 'default'
             return { icon: '🔐', text: `Permission mode: ${mode}`, tone: 'info' }

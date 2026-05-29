@@ -1,7 +1,10 @@
-import { memo } from 'react'
+import { memo, useCallback } from 'react'
+import { CONTINUE_GENERATION_PROMPT } from '@/chat/continueGeneration'
 import { getEventPresentation } from '@/chat/presentation'
 import type { AgentEvent } from '@/chat/types'
 import { AppNotice } from '@/components/AppNotice'
+import { useOptionalVibyChatContext } from '@/components/AssistantChat/context'
+import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/lib/use-translation'
 
 type TranscriptEventNoticeProps = {
@@ -21,7 +24,15 @@ function EventDetail(props: { detail: string; label: string }): React.JSX.Elemen
 
 function TranscriptEventNoticeComponent(props: TranscriptEventNoticeProps): React.JSX.Element {
     const { t } = useTranslation()
+    const chat = useOptionalVibyChatContext()
     const presentation = getEventPresentation(props.event)
+    const handleContinue = useCallback(() => chat?.onSend?.(CONTINUE_GENERATION_PROMPT), [chat])
+    const continueAction =
+        props.event.type === 'turn-terminal' && props.event.status === 'truncated' && chat?.onSend ? (
+            <Button type="button" size="sm" variant="outline" disabled={chat.disabled} onClick={handleContinue}>
+                {t('chat.continueGeneration')}
+            </Button>
+        ) : null
     const detail = presentation.detail ? (
         <EventDetail detail={presentation.detail} label={t('chat.eventDetails')} />
     ) : null
@@ -46,6 +57,7 @@ function TranscriptEventNoticeComponent(props: TranscriptEventNoticeProps): Reac
             title={presentation.text}
             description={detail ?? undefined}
             className="ds-transcript-notice-shell"
+            action={continueAction}
         />
     )
 }
