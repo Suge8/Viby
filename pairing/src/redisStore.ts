@@ -102,28 +102,24 @@ export class RedisPairingStore implements PairingStore {
         return { session, role: index.role }
     }
 
-    async claimSession(
+    async claimAndApprove(
         pairingId: string,
+        providedCode: string,
         guest: PairingParticipantRecord,
-        shortCode: string
+        at: number
     ): Promise<PairingSessionRecord | null> {
         const session = await this.updateSession(pairingId, async (current) => {
-            if (!isActiveState(current.state) || current.guest) {
-                return null
-            }
-
+            if (!isActiveState(current.state) || current.guest) return null
+            if (current.shortCode === null || current.shortCode !== providedCode) return null
             return updateState({
                 ...current,
-                updatedAt: this.now(),
-                shortCode,
-                approvalStatus: 'pending',
+                updatedAt: at,
+                approvalStatus: 'approved',
                 guest: { ...guest },
             })
         })
 
-        if (!session) {
-            return null
-        }
+        if (!session) return null
 
         await setTokenIndex({
             adapter: this.adapter,
@@ -133,24 +129,6 @@ export class RedisPairingStore implements PairingStore {
             ttlSeconds: this.ttlSeconds(session.expiresAt),
         })
         return session
-    }
-
-    async approveSession(pairingId: string, at: number): Promise<PairingSessionRecord | null> {
-        return this.updateSession(pairingId, async (current) => {
-            if (!isActiveState(current.state) || !current.guest) {
-                return null
-            }
-
-            if (current.approvalStatus === 'approved') {
-                return current
-            }
-
-            return updateState({
-                ...current,
-                updatedAt: at,
-                approvalStatus: 'approved',
-            })
-        })
     }
 
     async renewSession(pairingId: string, expiresAt: number, at: number): Promise<PairingSessionRecord | null> {

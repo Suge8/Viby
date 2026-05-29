@@ -20,10 +20,8 @@ function createSessionRecord(now: number) {
             createdAt: now,
             updatedAt: now,
             expiresAt: now + 1_000,
-            ticketExpiresAt: now + 500,
-            shortCode: null,
+            shortCode: '123456',
             approvalStatus: null,
-            ticketHash: 'ticket-hash',
             host,
             guest: null,
         }),
@@ -140,7 +138,7 @@ describe('RedisPairingStore', () => {
         })
         adapter.values.set(sessionKey(session.id), raw)
 
-        const claimed = await store.claimSession(session.id, guest, '123456')
+        const claimed = await store.claimAndApprove(session.id, '123456', guest, now + 1)
 
         expect(claimed?.guest?.tokenHash).toBe(guest.tokenHash)
         expect(adapter.compareAndSetCalls.at(-1)?.expected).toBe(raw)
@@ -154,7 +152,7 @@ describe('RedisPairingStore', () => {
         const guest = createParticipantRecord({ token: 'guest-secret', label: 'Phone' })
 
         await store.createSession(session)
-        const claimed = await store.claimSession(session.id, guest, '123456')
+        const claimed = await store.claimAndApprove(session.id, '123456', guest, now + 1)
         expect(claimed?.guest?.tokenHash).toBe(guest.tokenHash)
         await store.issueReconnectChallenge(session.id, 'host', {
             nonce: 'host-expire',
@@ -191,7 +189,7 @@ describe('RedisPairingStore', () => {
         const guest = createParticipantRecord({ token: 'guest-secret', label: 'Phone' })
 
         await store.createSession(session)
-        await store.claimSession(session.id, guest, '123456')
+        await store.claimAndApprove(session.id, '123456', guest, now + 1)
 
         await expect(store.renewSession(session.id, now + 10_000, now + 5)).resolves.toMatchObject({
             expiresAt: now + 10_000,
@@ -210,7 +208,7 @@ describe('RedisPairingStore', () => {
         const guest = createParticipantRecord({ token: 'guest-secret', label: 'Phone' })
 
         await store.createSession(session)
-        await store.claimSession(session.id, guest, '123456')
+        await store.claimAndApprove(session.id, '123456', guest, now + 1)
         const bound = await store.bindGuestDeviceKey(session.id, 'public-key-1', now + 5)
         const rejected = await store.bindGuestDeviceKey(session.id, 'public-key-2', now + 6)
 
@@ -229,7 +227,7 @@ describe('RedisPairingStore', () => {
         const nextGuest = createParticipantRecord({ token: 'guest-new', label: 'Phone' })
 
         await store.createSession(session)
-        await store.claimSession(session.id, guest, '123456')
+        await store.claimAndApprove(session.id, '123456', guest, now + 1)
         const rotated = await store.rotateGuestToken(session.id, nextGuest, now + 5)
 
         expect(rotated?.guest?.tokenHash).toBe(nextGuest.tokenHash)
@@ -237,17 +235,20 @@ describe('RedisPairingStore', () => {
         expect(adapter.values.get(tokenIndexKey(nextGuest.tokenHash))).toBeTruthy()
     })
 
-    it('stores PWA handoff tickets in redis and consumes them once', async () => {
+    it('stores independent PWA handoff tickets in redis and consumes each once', async () => {
         const now = 1_000
         const adapter = new FakeRedisAdapter()
         const { session } = createSessionRecord(now)
         const store = new RedisPairingStore(adapter, () => now)
 
         await store.createSession(session)
-        await store.issueHandoffTicket(session.id, { tokenHash: 'handoff-hash', expiresAt: now + 600 })
+        await store.issueHandoffTicket(session.id, { tokenHash: 'handoff-a', expiresAt: now + 600 })
+        await store.issueHandoffTicket(session.id, { tokenHash: 'handoff-b', expiresAt: now + 600 })
 
-        await expect(store.consumeHandoffTicket(session.id, 'handoff-hash', now + 1)).resolves.toBe(true)
-        await expect(store.consumeHandoffTicket(session.id, 'handoff-hash', now + 1)).resolves.toBe(false)
+        await expect(store.consumeHandoffTicket(session.id, 'handoff-a', now + 1)).resolves.toBe(true)
+        await expect(store.consumeHandoffTicket(session.id, 'handoff-a', now + 1)).resolves.toBe(false)
+        await expect(store.consumeHandoffTicket(session.id, 'handoff-b', now + 1)).resolves.toBe(true)
+        await expect(store.consumeHandoffTicket(session.id, 'handoff-b', now + 1)).resolves.toBe(false)
     })
 
     it('stores reconnect challenges in redis and consumes them once', async () => {
@@ -289,6 +290,6 @@ describe('RedisPairingStore', () => {
         await expect(store.deleteSession(session.id, now + 1)).resolves.toMatchObject({ state: 'deleted' })
         expect(adapter.values.get(reconnectChallengeKey(session.id, 'host'))).toBeUndefined()
         expect(adapter.values.get(reconnectChallengeKey(session.id, 'guest'))).toBeUndefined()
-        expect(adapter.values.get(handoffTicketKey(session.id))).toBeUndefined()
+        expect(adapter.values.get(handoffTicketKey(session.id, 'handoff-hash'))).toBeUndefined()
     })
 })

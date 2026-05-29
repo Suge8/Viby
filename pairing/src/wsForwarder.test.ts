@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'bun:test'
 import {
     PairingBrokerTunnelMessageSchema,
+    type PairingRtcSignal,
     PairingSessionRecordSchema,
-    type PairingSignalV2,
     type PairingTunnelRelayFrame,
 } from '@viby/protocol/pairing'
 import { createParticipantRecord } from './httpSupport'
@@ -34,17 +34,14 @@ async function setup(now = 1_000) {
         createdAt: now,
         updatedAt: now,
         expiresAt: now + 10_000,
-        ticketExpiresAt: now + 5_000,
-        shortCode: null,
+        shortCode: '123456',
         approvalStatus: null,
-        ticketHash: 'ticket-hash',
         host,
         guest: null,
     })
     const store = new MemoryPairingStore(() => now)
     await store.createSession(session)
-    await store.claimSession(session.id, guest, '123456')
-    await store.approveSession(session.id, now)
+    await store.claimAndApprove(session.id, '123456', guest, now)
     return { store, session, guest }
 }
 
@@ -54,7 +51,7 @@ describe('PairingSocketHub forwarder', () => {
         const hub = new PairingSocketHub({ store })
         const hostSocket = socket(),
             guestSocket = socket()
-        const signal: PairingSignalV2 = { type: 'description', description: { type: 'offer', sdp: 'v=0' } }
+        const signal: PairingRtcSignal = { type: 'description', description: { type: 'offer', sdp: 'v=0' } }
         await hub.attach(session.id, session.host.tokenHash, hostSocket)
         await hub.attach(session.id, guest.tokenHash, guestSocket)
         await hub.handleMessage(hostSocket, JSON.stringify(signal))
@@ -138,7 +135,7 @@ describe('PairingSocketHub forwarder', () => {
         const hub = new PairingSocketHub({ store, bufferMessages: true })
         const hostSocket = socket(),
             guestSocket = socket()
-        const signal: PairingSignalV2 = { type: 'description', description: { type: 'offer', sdp: 'v=0' } }
+        const signal: PairingRtcSignal = { type: 'description', description: { type: 'offer', sdp: 'v=0' } }
         await hub.attach(session.id, session.host.tokenHash, hostSocket)
         await hub.handleMessage(hostSocket, JSON.stringify(signal))
         await hub.attach(session.id, guest.tokenHash, guestSocket)
@@ -202,10 +199,8 @@ describe('PairingSocketHub forwarder', () => {
             createdAt: now,
             updatedAt: now,
             expiresAt: now + 10_000,
-            ticketExpiresAt: now + 5_000,
-            shortCode: null,
+            shortCode: '123456',
             approvalStatus: null,
-            ticketHash: 'ticket-hash',
             host,
             guest: null,
         })

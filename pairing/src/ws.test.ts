@@ -1,5 +1,5 @@
 import { describe, expect, it, mock } from 'bun:test'
-import { PairingSessionRecordSchema, type PairingSignalV2 } from '@viby/protocol/pairing'
+import { type PairingRtcSignal, PairingSessionRecordSchema } from '@viby/protocol/pairing'
 import { createParticipantRecord } from './httpSupport'
 import { MemoryPairingStore } from './memoryStore'
 import { PairingSocketHub } from './ws'
@@ -13,10 +13,8 @@ function createSessionRecord(now: number) {
         createdAt: now,
         updatedAt: now,
         expiresAt: now + 10_000,
-        ticketExpiresAt: now + 5_000,
-        shortCode: null,
+        shortCode: '123456',
         approvalStatus: null,
-        ticketHash: 'ticket-hash',
         host,
         guest: null,
     })
@@ -46,8 +44,7 @@ async function createClaimedStore(now: number) {
     const session = createSessionRecord(now)
     const guest = createParticipantRecord({ token: 'guest-secret', label: 'Phone' })
     await store.createSession(session)
-    await store.claimSession(session.id, guest, '123456')
-    await store.approveSession(session.id, now)
+    await store.claimAndApprove(session.id, '123456', guest, now)
     return { store, session, guest }
 }
 
@@ -77,6 +74,46 @@ describe('PairingSocketHub', () => {
 
         expect(firstHostSocket.closeCalls).toContainEqual({ code: 1012, reason: 'replaced' })
         expect(secondHostSocket.closeCalls).toHaveLength(0)
+    })
+
+    it('tells the opposite role to rebuild WebRTC when a guest token is rotated', async () => {
+        const now = 1_000
+        const { store, session, guest } = await createClaimedStore(now)
+        const hub = new PairingSocketHub({ store, now: () => now })
+        const hostSocket = createSocket()
+        const guestSocket = createSocket()
+
+        await hub.attach(session.id, session.host.tokenHash, hostSocket)
+        await hub.attach(session.id, guest.tokenHash, guestSocket)
+        hub.notifyPeerReplaced(session.id, 'guest')
+
+        expect(hostSocket.sent).toContainEqual({ type: 'peer-replaced' })
+    })
+
+    it('does not rebuild WebRTC for a same-token signaling socket refresh', async () => {
+        const now = 1_000
+        const { store, session, guest } = await createClaimedStore(now)
+        const hub = new PairingSocketHub({ store, now: () => now })
+        const hostSocket = createSocket()
+        const firstGuestSocket = createSocket()
+        const secondGuestSocket = createSocket()
+
+        await hub.attach(session.id, session.host.tokenHash, hostSocket)
+        await hub.attach(session.id, guest.tokenHash, firstGuestSocket)
+        await hub.attach(session.id, guest.tokenHash, secondGuestSocket)
+
+        expect(hostSocket.sent).not.toContainEqual({ type: 'peer-replaced' })
+    })
+
+    it('rejects client-forged peer replacement control messages', async () => {
+        const { store, session } = await createClaimedStore(1_000)
+        const hub = new PairingSocketHub({ store })
+        const hostSocket = createSocket()
+
+        await hub.attach(session.id, session.host.tokenHash, hostSocket)
+        await hub.handleMessage(hostSocket, JSON.stringify({ type: 'peer-replaced' }))
+
+        expect(hostSocket.closeCalls).toContainEqual({ code: 1003, reason: 'invalid-message' })
     })
 
     it('ignores stale callbacks from sockets replaced by the same role', async () => {
@@ -152,7 +189,7 @@ describe('PairingSocketHub', () => {
         const hub = new PairingSocketHub({ store, now: () => now })
         const hostSocket = createSocket()
         const guestSocket = createSocket()
-        const signal: PairingSignalV2 = { type: 'description', description: { type: 'offer', sdp: 'v=0' } }
+        const signal: PairingRtcSignal = { type: 'description', description: { type: 'offer', sdp: 'v=0' } }
 
         await hub.attach(session.id, session.host.tokenHash, hostSocket)
         await hub.handleMessage(hostSocket, JSON.stringify(signal))

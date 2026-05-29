@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, normalize, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { WEB_BUILD_METADATA_FILE_NAME } from '@viby/protocol'
 
 type WebAppAssetOptions = {
     indexHtml?: string
@@ -39,6 +40,7 @@ const WEB_ROOT_ASSET_FILE_NAMES = new Set([
     'agent-pi.svg',
     'apple-touch-icon-180x180.png',
     'brand-logo-tight.png',
+    WEB_BUILD_METADATA_FILE_NAME,
     'favicon.ico',
     'icon.svg',
     WEB_MANIFEST_FILE_NAME,
@@ -91,6 +93,9 @@ function getContentType(path: string): string {
     if (path.endsWith('.ico')) {
         return 'image/x-icon'
     }
+    if (path.endsWith('.json')) {
+        return 'application/json; charset=utf-8'
+    }
     if (path.endsWith('.webmanifest')) {
         return 'application/manifest+json; charset=utf-8'
     }
@@ -115,7 +120,7 @@ function getAssetCacheControl(path: string, isHashedAsset: boolean): string {
     if (isHashedAsset) {
         return HASHED_ASSET_CACHE_CONTROL
     }
-    if (path === '/sw.js') {
+    if (path === '/sw.js' || path === `/${WEB_BUILD_METADATA_FILE_NAME}`) {
         return SERVICE_WORKER_CACHE_CONTROL
     }
     return ROOT_ASSET_CACHE_CONTROL

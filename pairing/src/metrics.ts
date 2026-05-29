@@ -7,14 +7,14 @@ import type {
 export type PairingMetricName =
     | 'create_requests'
     | 'create_rejected'
-    | 'claim_requests'
-    | 'claim_rejected'
+    | 'verify_requests'
+    | 'verify_rejected'
     | 'challenge_requests'
     | 'challenge_rejected'
     | 'reconnect_requests'
     | 'reconnect_rejected'
-    | 'approve_requests'
-    | 'approve_rejected'
+    | 'handoff_claim_requests'
+    | 'handoff_claim_rejected'
     | 'telemetry_reports'
     | 'telemetry_rejected'
     | 'delete_requests'
@@ -45,7 +45,6 @@ export class PairingMetrics {
         },
         transportModeCounts: {
             'direct-webrtc': 0,
-            'turn-webrtc': 0,
             'relay-wss': 0,
             unknown: 0,
         },

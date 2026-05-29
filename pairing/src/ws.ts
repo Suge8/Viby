@@ -18,6 +18,8 @@ import type {
 
 export type { PairingConnection, PairingSocketHubOptions, PairingSocketLike } from './wsTypes'
 
+const SOCKET_OPEN = 1
+
 export class PairingSocketHub {
     private readonly connections = new Map<string, ConnectionState>()
     private readonly connectionIndex = new PairingConnectionIndex()
@@ -108,6 +110,11 @@ export class PairingSocketHub {
         if (!state || state.sockets.get(connection.role) !== connection.socket) return
         state.sockets.delete(connection.role)
         this.disconnectGrace.schedule(state, connection)
+    }
+
+    notifyPeerReplaced(pairingId: string, replacedRole: 'host' | 'guest'): void {
+        const target = this.connections.get(pairingId)?.sockets.get(oppositeRole(replacedRole))
+        if (target?.readyState === SOCKET_OPEN) target.send(JSON.stringify({ type: 'peer-replaced' }))
     }
 
     async notifyBye(pairingId: string, reason: PairingByeReason): Promise<void> {

@@ -5,6 +5,7 @@ import { createPairingApp, type PairingHttpOptions } from './http'
 import { createPairingManifestCookieSigner } from './manifestCookie'
 import { PairingMetrics } from './metrics'
 import { PairingRateLimiter } from './rateLimit'
+import { PairingSessionEventBus } from './sessionEventBus'
 import { createConfiguredPairingStore, type PairingStore } from './store'
 import { PairingSocketHub } from './ws'
 import { shouldBufferPairingTunnelMessage } from './wsBufferPolicy'
@@ -58,6 +59,7 @@ export async function createPairingRuntime(options: CreatePairingRuntimeOptions)
     const { upgradeWebSocket, websocket } = createBunWebSocket()
     const rateLimiter = new PairingRateLimiter()
     const metrics = new PairingMetrics(options.now?.() ?? Date.now())
+    const eventBus = new PairingSessionEventBus()
     const manifestCookieSigner = createPairingManifestCookieSigner({
         secret: encodeManifestCookieSecret(options.manifestCookieSecret),
     })
@@ -66,23 +68,21 @@ export async function createPairingRuntime(options: CreatePairingRuntimeOptions)
         store: storeLease.store,
         socketHub,
         tunnelHub,
+        eventBus,
         publicUrl: options.publicUrl,
         sessionTtlSeconds: options.sessionTtlSeconds,
-        ticketTtlSeconds: options.ticketTtlSeconds,
+        handoffTicketTtlSeconds: options.handoffTicketTtlSeconds,
         reconnectChallengeTtlSeconds: options.reconnectChallengeTtlSeconds,
         stunUrls: options.stunUrls,
-        turnUrls: options.turnUrls,
-        turnStaticAuthSecret: options.turnStaticAuthSecret,
-        turnCredentialTtlSeconds: options.turnCredentialTtlSeconds,
         createToken: options.createToken,
         upgradeWebSocket,
         logger: options.logger ?? console,
         rateLimiter,
         rateLimitRules: {
             create: { bucket: 'create', limit: options.createLimitPerMinute, windowMs: 60_000 },
-            claim: { bucket: 'claim', limit: options.claimLimitPerMinute, windowMs: 60_000 },
+            verify: { bucket: 'verify', limit: options.verifyLimitPerMinute, windowMs: 60_000 },
             reconnect: { bucket: 'reconnect', limit: options.reconnectLimitPerMinute, windowMs: 60_000 },
-            approve: { bucket: 'approve', limit: options.approveLimitPerMinute, windowMs: 60_000 },
+            handoffClaim: { bucket: 'handoffClaim', limit: options.reconnectLimitPerMinute, windowMs: 60_000 },
         },
         metrics,
         now: options.now,

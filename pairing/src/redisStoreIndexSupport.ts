@@ -3,11 +3,14 @@ import {
     cloneHandoffTicket,
     cloneReconnectChallenge,
     decodeHandoffTicket,
+    decodeHandoffTicketIndex,
     decodeReconnectChallenge,
     decodeTokenIndex,
     encodeHandoffTicket,
+    encodeHandoffTicketIndex,
     encodeReconnectChallenge,
     encodeTokenIndex,
+    handoffTicketIndexKey,
     handoffTicketKey,
     type PairingTokenIndex,
     reconnectChallengeKey,
@@ -121,9 +124,12 @@ export async function storeHandoffTicket(options: {
     ticket: PairingHandoffTicketRecord
     ttlSeconds: number
 }): Promise<PairingHandoffTicketRecord> {
-    await options.adapter.set(handoffTicketKey(options.pairingId), encodeHandoffTicket(options.ticket), {
-        ttlSeconds: options.ttlSeconds,
-    })
+    await options.adapter.set(
+        handoffTicketKey(options.pairingId, options.ticket.tokenHash),
+        encodeHandoffTicket(options.ticket),
+        { ttlSeconds: options.ttlSeconds }
+    )
+    await appendHandoffTicketIndex(options)
     return cloneHandoffTicket(options.ticket)
 }
 
@@ -133,21 +139,49 @@ export async function consumeHandoffTicket(options: {
     tokenHash: string
     at: number
 }): Promise<boolean> {
-    const key = handoffTicketKey(options.pairingId)
+    const key = handoffTicketKey(options.pairingId, options.tokenHash)
     const raw = await options.adapter.get(key)
-    if (!raw) return false
+    if (raw) return await consumeStoredHandoffTicket(options, key, raw)
 
+    const legacyKey = handoffTicketKey(options.pairingId)
+    const legacyRaw = await options.adapter.get(legacyKey)
+    return legacyRaw ? await consumeStoredHandoffTicket(options, legacyKey, legacyRaw) : false
+}
+
+async function consumeStoredHandoffTicket(
+    options: { adapter: RedisPairingAdapter; at: number; tokenHash: string },
+    key: string,
+    raw: string
+): Promise<boolean> {
     const ticket = decodeHandoffTicket(raw)
     if (!ticket || ticket.tokenHash !== options.tokenHash || options.at > ticket.expiresAt) {
         await options.adapter.del(key)
         return false
     }
-
     return await options.adapter.compareAndSet(key, raw, null)
 }
 
+async function appendHandoffTicketIndex(options: {
+    adapter: RedisPairingAdapter
+    pairingId: string
+    ticket: PairingHandoffTicketRecord
+    ttlSeconds: number
+}): Promise<void> {
+    const key = handoffTicketIndexKey(options.pairingId)
+    const current = decodeHandoffTicketIndex((await options.adapter.get(key)) ?? '[]')
+    await options.adapter.set(key, encodeHandoffTicketIndex([...current, options.ticket.tokenHash]), {
+        ttlSeconds: options.ttlSeconds,
+    })
+}
+
 export async function clearHandoffTicket(adapter: RedisPairingAdapter, pairingId: string): Promise<void> {
-    await adapter.del(handoffTicketKey(pairingId))
+    const indexKey = handoffTicketIndexKey(pairingId)
+    const tokenHashes = decodeHandoffTicketIndex((await adapter.get(indexKey)) ?? '[]')
+    await Promise.all([
+        adapter.del(handoffTicketKey(pairingId)),
+        adapter.del(indexKey),
+        ...tokenHashes.map((tokenHash) => adapter.del(handoffTicketKey(pairingId, tokenHash))),
+    ])
 }
 
 export async function clearReconnectChallenges(adapter: RedisPairingAdapter, pairingId: string): Promise<void> {

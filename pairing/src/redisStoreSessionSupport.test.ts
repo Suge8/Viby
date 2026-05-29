@@ -43,10 +43,8 @@ function createSession(now: number) {
         createdAt: now,
         updatedAt: now,
         expiresAt: now + 1_000,
-        ticketExpiresAt: now + 500,
         shortCode: null,
         approvalStatus: null,
-        ticketHash: 'ticket-hash',
         host: createParticipantRecord({ token: 'host-token', label: 'Host' }),
         guest: null,
     })

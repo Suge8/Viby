@@ -13,7 +13,7 @@ import {
     storeHandoffTicket,
     storeReconnectChallenge,
 } from './redisStoreIndexSupport'
-import { handoffTicketKey, reconnectChallengeKey, tokenIndexKey } from './storeSupport'
+import { handoffTicketIndexKey, handoffTicketKey, reconnectChallengeKey, tokenIndexKey } from './storeSupport'
 import type { RedisPairingAdapter } from './storeTypes'
 
 class FakeRedisAdapter implements RedisPairingAdapter {
@@ -56,10 +56,8 @@ function createSession(now: number) {
         createdAt: now,
         updatedAt: now,
         expiresAt: now + 1_000,
-        ticketExpiresAt: now + 500,
         shortCode: '123456',
-        approvalStatus: 'pending',
-        ticketHash: 'ticket-hash',
+        approvalStatus: 'approved',
         host,
         guest,
     })
@@ -167,42 +165,44 @@ describe('redisStoreIndexSupport', () => {
         expect(adapter.values.get(reconnectChallengeKey('pairing-1', 'guest'))).toBeUndefined()
     })
 
-    it('stores, consumes, and clears PWA handoff tickets', async () => {
+    it('stores, consumes, and clears independent PWA handoff tickets', async () => {
         const adapter = new FakeRedisAdapter()
 
         await storeHandoffTicket({
             adapter,
             pairingId: 'pairing-1',
-            ticket: { tokenHash: 'handoff-hash', expiresAt: 2_000 },
+            ticket: { tokenHash: 'handoff-a', expiresAt: 2_000 },
+            ttlSeconds: 1,
+        })
+        await storeHandoffTicket({
+            adapter,
+            pairingId: 'pairing-1',
+            ticket: { tokenHash: 'handoff-b', expiresAt: 2_000 },
             ttlSeconds: 1,
         })
 
         await expect(
             consumeHandoffTicket({ adapter, pairingId: 'pairing-1', tokenHash: 'wrong-hash', at: 1_500 })
         ).resolves.toBe(false)
-        expect(adapter.values.get(handoffTicketKey('pairing-1'))).toBeUndefined()
-
-        await storeHandoffTicket({
-            adapter,
-            pairingId: 'pairing-1',
-            ticket: { tokenHash: 'handoff-hash', expiresAt: 2_000 },
-            ttlSeconds: 1,
-        })
         await expect(
-            consumeHandoffTicket({ adapter, pairingId: 'pairing-1', tokenHash: 'handoff-hash', at: 1_500 })
+            consumeHandoffTicket({ adapter, pairingId: 'pairing-1', tokenHash: 'handoff-a', at: 1_500 })
         ).resolves.toBe(true)
         await expect(
-            consumeHandoffTicket({ adapter, pairingId: 'pairing-1', tokenHash: 'handoff-hash', at: 1_500 })
+            consumeHandoffTicket({ adapter, pairingId: 'pairing-1', tokenHash: 'handoff-a', at: 1_500 })
         ).resolves.toBe(false)
+        await expect(
+            consumeHandoffTicket({ adapter, pairingId: 'pairing-1', tokenHash: 'handoff-b', at: 1_500 })
+        ).resolves.toBe(true)
 
         await storeHandoffTicket({
             adapter,
             pairingId: 'pairing-1',
-            ticket: { tokenHash: 'handoff-hash', expiresAt: 2_000 },
+            ticket: { tokenHash: 'handoff-c', expiresAt: 2_000 },
             ttlSeconds: 1,
         })
         await clearHandoffTicket(adapter, 'pairing-1')
-        expect(adapter.values.get(handoffTicketKey('pairing-1'))).toBeUndefined()
+        expect(adapter.values.get(handoffTicketKey('pairing-1', 'handoff-c'))).toBeUndefined()
+        expect(adapter.values.get(handoffTicketIndexKey('pairing-1'))).toBeUndefined()
     })
 
     it('clears both host and guest token indexes for a session', async () => {

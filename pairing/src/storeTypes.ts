@@ -29,12 +29,20 @@ export interface PairingStore {
     createSession(session: PairingSessionRecord): Promise<PairingSessionRecord>
     getSession(pairingId: string): Promise<PairingSessionRecord | null>
     getSessionByTokenHash(tokenHash: string): Promise<{ session: PairingSessionRecord; role: PairingRole } | null>
-    claimSession(
+    /**
+     * Atomic verify-code + claim + approve: the only path that promotes a
+     * guest to "approved". Returns the updated record on success; returns
+     * null when the session is missing, inactive, the provided code does not
+     * match the stored `shortCode`, or another guest already claimed the
+     * session in a race. The caller must rate-limit and pre-screen
+     * not-found / expired states to choose the correct user-facing error.
+     */
+    claimAndApprove(
         pairingId: string,
+        providedCode: string,
         guest: PairingParticipantRecord,
-        shortCode: string
+        at: number
     ): Promise<PairingSessionRecord | null>
-    approveSession(pairingId: string, at: number): Promise<PairingSessionRecord | null>
     renewSession(pairingId: string, expiresAt: number, at: number): Promise<PairingSessionRecord | null>
     bindGuestDeviceKey(pairingId: string, publicKey: string, at: number): Promise<PairingSessionRecord | null>
     rotateGuestToken(

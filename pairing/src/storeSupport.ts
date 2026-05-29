@@ -22,8 +22,13 @@ export function reconnectChallengeKey(pairingId: string, role: PairingRole): str
     return `pairing:challenge:${pairingId}:${role}`
 }
 
-export function handoffTicketKey(pairingId: string): string {
-    return `pairing:handoff:${pairingId}`
+export function handoffTicketKey(pairingId: string, tokenHash?: string): string {
+    const baseKey = `pairing:handoff:${pairingId}`
+    return tokenHash ? `${baseKey}:${tokenHash}` : baseKey
+}
+
+export function handoffTicketIndexKey(pairingId: string): string {
+    return `pairing:handoff-index:${pairingId}`
 }
 
 export function encodeTokenIndex(index: PairingTokenIndex): string {
@@ -88,6 +93,19 @@ export function cloneHandoffTicket(ticket: PairingHandoffTicketRecord): PairingH
 
 export function encodeHandoffTicket(ticket: PairingHandoffTicketRecord): string {
     return JSON.stringify(ticket)
+}
+
+export function encodeHandoffTicketIndex(tokenHashes: readonly string[]): string {
+    return JSON.stringify([...new Set(tokenHashes)])
+}
+
+export function decodeHandoffTicketIndex(raw: string): string[] {
+    try {
+        const parsed = JSON.parse(raw) as unknown
+        return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === 'string') : []
+    } catch {
+        return []
+    }
 }
 
 export function decodeHandoffTicket(raw: string): PairingHandoffTicketRecord | null {
