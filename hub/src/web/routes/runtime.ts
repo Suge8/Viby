@@ -3,6 +3,7 @@ import {
     ListAgentAvailabilityRequestSchema,
     LocalSessionCatalogRequestSchema,
     LocalSessionExportRequestSchema,
+    OpenAgentConfigRequestSchema,
     ResolveAgentLaunchConfigRequestSchema,
     RestoreAgentConfigRequestSchema,
     RuntimeCapabilityRequestSchema,
@@ -161,6 +162,25 @@ export function createRuntimeRoutes(getSyncEngine: () => SyncEngine | null): Hon
             return c.json({ agent: await engine.restoreAgentConfigFile(runtime.id, body) })
         }
     )
+
+    app.post('/runtime/agent-config/:driver/open', createJsonBodyValidator(OpenAgentConfigRequestSchema), async (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) {
+            return engine
+        }
+
+        const runtime = requireActiveLocalRuntime(c, engine)
+        if (runtime instanceof Response) {
+            return runtime
+        }
+
+        const body = c.req.valid('json')
+        if (body.driver !== c.req.param('driver')) {
+            return c.json({ error: 'Driver mismatch' }, 400)
+        }
+
+        return c.json(await engine.openAgentConfigFile(runtime.id, body))
+    })
 
     app.post('/runtime/spawn', createJsonBodyValidator(spawnBodySchema), async (c) => {
         const engine = requireSyncEngine(c, getSyncEngine)

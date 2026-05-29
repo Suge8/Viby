@@ -2,6 +2,7 @@ import {
     compareSessionSummaries,
     getSessionMessageActivityFromSession,
     presentSessionWithResumeAvailability,
+    projectSessionSummaryActiveStream,
     resolveSessionInteractivity,
     SESSION_TIMELINE_PAGE_SIZE,
     toSessionSummary,
@@ -55,7 +56,12 @@ export function createSessionsRoutes(
 
         const baseSessions = engine.getSessions()
         const sessions = baseSessions
-            .map((session) => toSessionSummary(session, getSessionMessageActivityFromSession(session)))
+            .map((session) =>
+                projectSessionSummaryActiveStream(
+                    toSessionSummary(session, getSessionMessageActivityFromSession(session)),
+                    getSessionStream?.(session.id) ?? null
+                )
+            )
             .sort(compareSessionSummaries)
 
         return c.json({ sessions })

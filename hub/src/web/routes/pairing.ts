@@ -11,7 +11,7 @@ const PAIRING_EVENT_HEARTBEAT_MS = 15_000
 export function createPairingRoutes(
     client: PairingBrokerClient = createPairingBrokerClient(),
     getSyncEngine: () => SyncEngine | null = () => null,
-    publicAccessEnabled = true
+    isPublicAccessEnabled: () => boolean = () => true
 ): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
@@ -87,7 +87,7 @@ export function createPairingRoutes(
         '/pairings',
         createJsonBodyValidator(PairingCreateRequestSchema, 'Invalid pairing create body'),
         async (c) => {
-            if (!publicAccessEnabled) {
+            if (!isPublicAccessEnabled()) {
                 return c.json({ error: 'Public access is disabled', code: 'public_access_disabled' }, 403)
             }
 

@@ -42,16 +42,14 @@ function isWeakToken(token: string): boolean {
     return weakPatterns.some((p) => p.test(token))
 }
 
-type HubOwnerTokenSource = 'env' | 'file'
-
-function normalizeHubOwnerToken(rawToken: string, source: HubOwnerTokenSource): { token: string; didStrip: boolean } {
+function normalizeHubOwnerToken(rawToken: string, source: 'env' | 'file'): string {
     const parsed = parseAccessToken(rawToken)
     if (!parsed) {
         throw new Error(
             `VIBY_HUB_OWNER_TOKEN from ${source} is invalid. Single-user mode no longer accepts namespace suffixes.`
         )
     }
-    return { token: parsed, didStrip: false }
+    return parsed
 }
 
 /**
@@ -68,19 +66,24 @@ export async function getOrCreateHubOwnerToken(dataDir: string): Promise<HubOwne
     // 1. Environment variable has highest priority for headless automation.
     const envToken = process.env.VIBY_HUB_OWNER_TOKEN
     if (envToken) {
-        const normalized = normalizeHubOwnerToken(envToken, 'env')
-        if (isWeakToken(normalized.token)) {
+        const normalizedToken = normalizeHubOwnerToken(envToken, 'env')
+        if (isWeakToken(normalizedToken)) {
             reportHubRuntimeWarning('VIBY_HUB_OWNER_TOKEN appears to be weak. Consider using a stronger secret.')
         }
 
         // Persist env token to file if not already saved (prevents token loss on env var issues)
         const settings = await readSettings(settingsFile)
         if (settings !== null && !settings.hubOwnerToken) {
-            settings.hubOwnerToken = normalized.token
+            settings.hubOwnerToken = normalizedToken
             await writeSettings(settingsFile, settings)
         }
 
-        return { token: normalized.token, source: 'env', isNew: false, filePath: settingsFile }
+        return {
+            token: normalizedToken,
+            source: 'env',
+            isNew: false,
+            filePath: settingsFile,
+        }
     }
 
     const result = await getOrCreateSettingsValue({
@@ -89,12 +92,7 @@ export async function getOrCreateHubOwnerToken(dataDir: string): Promise<HubOwne
             if (!settings.hubOwnerToken) {
                 return null
             }
-            const normalized = normalizeHubOwnerToken(settings.hubOwnerToken, 'file')
-            if (normalized.didStrip) {
-                settings.hubOwnerToken = normalized.token
-                return { value: normalized.token, writeBack: true }
-            }
-            return { value: normalized.token }
+            return { value: normalizeHubOwnerToken(settings.hubOwnerToken, 'file') }
         },
         writeValue: (settings, value) => {
             settings.hubOwnerToken = value

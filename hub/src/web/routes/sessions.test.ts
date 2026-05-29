@@ -894,11 +894,12 @@ describe('sessions routes', () => {
         })
         const app = createSessionsListApp({
             sessions: [olderStreamingSession, newerStableSession],
-            messageActivities: {
+            streams: {
                 'session-streaming': {
-                    latestActivityAt: 500,
-                    latestActivityKind: 'reply',
-                    latestCompletedReplyAt: null,
+                    assistantTurnId: 'turn-1',
+                    startedAt: 500,
+                    updatedAt: 550,
+                    text: 'working',
                 },
             },
         })
@@ -909,7 +910,7 @@ describe('sessions routes', () => {
         expect(await response.json()).toMatchObject({
             sessions: [
                 { id: 'session-stable', updatedAt: 200 },
-                { id: 'session-streaming', updatedAt: 100, latestActivityAt: 500, latestActivityKind: 'reply' },
+                { id: 'session-streaming', updatedAt: 100, latestActivityAt: 550, latestActivityKind: 'reply' },
             ],
         })
     })

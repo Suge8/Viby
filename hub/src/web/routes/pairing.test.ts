@@ -26,16 +26,16 @@ describe('pairing routes', () => {
                     createdAt: 1,
                     updatedAt: 1,
                     expiresAt: 2,
-                    ticketExpiresAt: 2,
-                    shortCode: null,
+                    shortCode: '123456',
                     approvalStatus: null,
                     host: {},
                     guest: null,
                 },
                 hostToken: 'host-token',
-                pairingUrl: 'https://pair.example.com/p/pairing-1#ticket=secret',
+                pairingUrl: 'https://pair.example.com/p/pairing-1',
                 wsUrl: 'wss://pair.example.com/pairings/pairing-1/ws?token=host-token',
                 tunnelUrl: 'wss://pair.example.com/pairings/pairing-1/tunnel?token=host-token',
+                eventsUrl: 'https://pair.example.com/pairings/pairing-1/events?token=host-token',
                 iceServers: [{ urls: 'stun:stun.example.com:3478' }],
             }),
         }
@@ -65,7 +65,7 @@ describe('pairing routes', () => {
                     },
                 },
                 () => null,
-                false
+                () => false
             )
         )
 

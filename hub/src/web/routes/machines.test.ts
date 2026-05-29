@@ -456,6 +456,33 @@ describe('runtime routes', () => {
         ])
     })
 
+    it('opens agent config files through the local runtime owner', async () => {
+        const calls: Array<Record<string, unknown>> = []
+        const engine = {
+            getMachines: () => localRuntime(),
+            openAgentConfigFile: async (machineId: string, request: Record<string, unknown>) => {
+                calls.push({ machineId, ...request })
+                return { ok: true, path: '/home/user/.codex/config.toml' }
+            },
+        } as unknown as Partial<SyncEngine>
+
+        const app = new Hono<WebAppEnv>()
+        app.route(
+            '/api',
+            createRuntimeRoutes(() => engine as SyncEngine)
+        )
+
+        const response = await app.request('/api/runtime/agent-config/codex/open', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ driver: 'codex' }),
+        })
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toEqual({ ok: true, path: '/home/user/.codex/config.toml' })
+        expect(calls).toEqual([{ machineId: 'machine-1', driver: 'codex' }])
+    })
+
     it('rejects mismatched agent config save drivers', async () => {
         const engine = {
             getMachines: () => localRuntime(),

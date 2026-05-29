@@ -1,14 +1,13 @@
-import { existsSync } from 'node:fs'
-import { join } from 'node:path'
 import type { Server as SocketEngine, WebSocketData } from '@socket.io/bun-engine'
-import { PROTOCOL_VERSION } from '@viby/protocol'
+import { PROTOCOL_VERSION, SESSION_ATTACHMENT_MAX_UPLOAD_BYTES } from '@viby/protocol'
 import type { SessionStreamState } from '@viby/protocol/types'
 import type { Server as BunServer } from 'bun'
-import { type Context, Hono, type Next } from 'hono'
-import { serveStatic } from 'hono/bun'
+import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
+import { getOrCreateOwnerId } from '../config/ownerId'
 import { createPairingBrokerClient } from '../pairing/client'
+import { LanPairingSessionStore } from '../pairing/lanSessionStore'
 import type { Store } from '../store'
 import type { SyncEngine } from '../sync/syncEngine'
 import { isBunCompiled } from '../utils/bunCompiled'
@@ -19,75 +18,17 @@ import { createAuthRoutes } from './routes/auth'
 import { createCliRoutes } from './routes/cli'
 import { createDeviceAuthRoutes } from './routes/deviceAuth'
 import { createGitRoutes } from './routes/git'
+import { createLanPairingHostRoutes, createLanPairingPublicRoutes } from './routes/lanPairing'
 import { createMessagesRoutes } from './routes/messages'
 import { createPairingRoutes } from './routes/pairing'
 import { createPermissionsRoutes } from './routes/permissions'
 import { createPushRoutes } from './routes/push'
 import { createRuntimeRoutes } from './routes/runtime'
 import { createSessionsRoutes } from './routes/sessions'
+import { registerWebAssetRoutes } from './staticWebAssets'
 
 export const API_CORS_ALLOW_METHODS = ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'] as const
 const API_CORS_ALLOW_HEADERS = ['authorization', 'content-type'] as const
-
-function findWebappDistDir(): { distDir: string; indexHtmlPath: string } {
-    const candidates = [
-        join(process.cwd(), '..', 'web', 'dist'),
-        join(import.meta.dir, '..', '..', '..', 'web', 'dist'),
-        join(process.cwd(), 'web', 'dist'),
-    ]
-
-    for (const distDir of candidates) {
-        const indexHtmlPath = join(distDir, 'index.html')
-        if (existsSync(indexHtmlPath)) {
-            return { distDir, indexHtmlPath }
-        }
-    }
-
-    const distDir = candidates[0]
-    return { distDir, indexHtmlPath: join(distDir, 'index.html') }
-}
-
-function serveEmbeddedAsset(asset: EmbeddedWebAsset): Response {
-    const cacheControl = getWebAssetCacheControl(asset.path)
-    return new Response(Bun.file(asset.sourcePath), {
-        headers: {
-            'Content-Type': asset.mimeType,
-            'Cache-Control': cacheControl,
-        },
-    })
-}
-
-function getWebAssetCacheControl(path: string): string {
-    const normalizedPath = path.startsWith('/') ? path : `/${path}`
-
-    if (
-        normalizedPath === '/' ||
-        normalizedPath === '/sw.js' ||
-        normalizedPath === '/manifest.webmanifest' ||
-        normalizedPath.endsWith('.html')
-    ) {
-        return 'no-cache, no-store, must-revalidate'
-    }
-
-    if (normalizedPath.startsWith('/assets/')) {
-        return 'public, max-age=31536000, immutable'
-    }
-
-    return 'public, max-age=3600'
-}
-
-async function serveStaticWithCacheControl(
-    c: Context<WebAppEnv>,
-    next: Next,
-    options: Parameters<typeof serveStatic<WebAppEnv>>[0],
-    cachePath: string
-): Promise<Response | void> {
-    const response = await serveStatic(options)(c, next)
-    if (response instanceof Response) {
-        response.headers.set('Cache-Control', getWebAssetCacheControl(cachePath))
-    }
-    return response
-}
 
 export function createApiCorsMiddleware(corsOrigins: readonly string[]): ReturnType<typeof cors> {
     const corsOriginOption = corsOrigins.includes('*') ? '*' : [...corsOrigins]
@@ -105,7 +46,7 @@ function createWebApp(options: {
     store: Store
     vapidPublicKey: string
     corsOrigins?: string[]
-    publicAccessEnabled: boolean
+    isPublicAccessEnabled: () => boolean
     embeddedAssetMap: Map<string, EmbeddedWebAsset> | null
     getActiveDeviceIds?: () => Set<string>
 }): Hono<WebAppEnv> {
@@ -113,24 +54,35 @@ function createWebApp(options: {
 
     app.use('*', logger())
 
+    const corsMiddleware = createApiCorsMiddleware(options.corsOrigins ?? [])
+    app.use('/health', corsMiddleware)
+
     // Health check endpoint (no auth required)
     app.get('/health', (c) => c.json({ status: 'ok', protocolVersion: PROTOCOL_VERSION }))
 
     app.use('*', async (c, next) => {
-        if (!isAllowedByPublicAccessPolicy(c.req.raw, options.publicAccessEnabled)) {
+        if (!isAllowedByPublicAccessPolicy(c.req.raw, options.isPublicAccessEnabled())) {
             return createPublicAccessDisabledResponse()
         }
         return await next()
     })
 
-    const corsMiddleware = createApiCorsMiddleware(options.corsOrigins ?? [])
     app.use('/api/*', corsMiddleware)
     app.use('/cli/*', corsMiddleware)
 
     app.route('/cli', createCliRoutes(options.getSyncEngine))
 
+    const lanPairingSessions = new LanPairingSessionStore()
+    const lanPairingOptions = {
+        sessions: lanPairingSessions,
+        devices: options.store.devices,
+        jwtSecret: options.jwtSecret,
+        getOwnerId: getOrCreateOwnerId,
+    }
+
     app.route('/api', createAuthRoutes(options.jwtSecret, options.store.devices))
     app.route('/api', createDeviceAuthRoutes(options.jwtSecret, options.store.devices))
+    app.route('/api', createLanPairingPublicRoutes(lanPairingOptions))
 
     app.use('/api/*', createAuthMiddleware(options.jwtSecret))
     app.route('/api', createSessionsRoutes(options.getSyncEngine, options.getSessionStream))
@@ -140,8 +92,9 @@ function createWebApp(options: {
     app.route('/api', createGitRoutes(options.getSyncEngine))
     app.route(
         '/api',
-        createPairingRoutes(createPairingBrokerClient(), options.getSyncEngine, options.publicAccessEnabled)
+        createPairingRoutes(createPairingBrokerClient(), options.getSyncEngine, options.isPublicAccessEnabled)
     )
+    app.route('/api', createLanPairingHostRoutes(lanPairingOptions))
     app.route(
         '/api',
         createDeviceAuthRoutes(options.jwtSecret, options.store.devices, {
@@ -151,80 +104,7 @@ function createWebApp(options: {
     )
     app.route('/api', createPushRoutes(options.store, options.vapidPublicKey))
 
-    if (options.embeddedAssetMap) {
-        const embeddedAssetMap = options.embeddedAssetMap
-        const indexHtmlAsset = embeddedAssetMap.get('/index.html')
-
-        if (!indexHtmlAsset) {
-            app.get('*', (c) => {
-                return c.text(
-                    'Embedded web app is missing index.html. Rebuild the executable after running bun run build:web.',
-                    503
-                )
-            })
-            return app
-        }
-
-        app.use('*', async (c, next) => {
-            if (c.req.path.startsWith('/api')) {
-                return await next()
-            }
-
-            if (c.req.method !== 'GET' && c.req.method !== 'HEAD') {
-                return await next()
-            }
-
-            const asset = embeddedAssetMap.get(c.req.path)
-            if (asset) {
-                return serveEmbeddedAsset(asset)
-            }
-
-            return await next()
-        })
-
-        app.get('*', async (c, next) => {
-            if (c.req.path.startsWith('/api')) {
-                await next()
-                return
-            }
-
-            return serveEmbeddedAsset(indexHtmlAsset)
-        })
-
-        return app
-    }
-
-    const { distDir, indexHtmlPath } = findWebappDistDir()
-
-    if (!existsSync(indexHtmlPath)) {
-        app.get('/', (c) => {
-            return c.text('Web app is not built.\n\nRun:\n  cd web\n  bun install\n  bun run build\n', 503)
-        })
-        return app
-    }
-
-    app.use('/assets/*', async (c, next) => {
-        return await serveStaticWithCacheControl(c, next, { root: distDir }, c.req.path)
-    })
-
-    app.use('*', async (c, next) => {
-        if (c.req.path.startsWith('/api')) {
-            await next()
-            return
-        }
-
-        return await serveStaticWithCacheControl(c, next, { root: distDir }, c.req.path)
-    })
-
-    app.get('*', async (c, next) => {
-        if (c.req.path.startsWith('/api')) {
-            await next()
-            return
-        }
-
-        return await serveStaticWithCacheControl(c, next, { root: distDir, path: 'index.html' }, '/index.html')
-    })
-
+    registerWebAssetRoutes(app, options.embeddedAssetMap)
     return app
 }
 
@@ -238,7 +118,7 @@ export type StartWebServerOptions = {
     listenHost: string
     listenPort: number
     publicUrl: string
-    publicAccessEnabled: boolean
+    isPublicAccessEnabled: () => boolean
     corsOrigins?: string[]
     getActiveDeviceIds?: () => Set<string>
 }
@@ -255,7 +135,7 @@ export async function createWebServerFetch(
         store: options.store,
         vapidPublicKey: options.vapidPublicKey,
         corsOrigins: options.corsOrigins,
-        publicAccessEnabled: options.publicAccessEnabled,
+        isPublicAccessEnabled: options.isPublicAccessEnabled,
         embeddedAssetMap,
         getActiveDeviceIds: options.getActiveDeviceIds,
     })
@@ -264,13 +144,34 @@ export async function createWebServerFetch(
     return (req, server) => {
         const url = new URL(req.url)
         if (url.pathname.startsWith('/socket.io/')) {
-            if (!isAllowedByPublicAccessPolicy(req, options.publicAccessEnabled)) {
+            if (!isAllowedByPublicAccessPolicy(req, options.isPublicAccessEnabled())) {
                 return createPublicAccessDisabledResponse()
             }
             return socketHandler.fetch(req, server)
         }
         return app.fetch(req)
     }
+}
+
+// Multipart upload needs headroom for form-field boundaries, file metadata,
+// and the `mimeType` field on top of the binary payload. 256 KiB is the
+// observed steady-state ceiling for `parseMultipartUploadBody` and matches
+// the value already approved by `hub/src/web/routes/sessionUploadRouteSupport.ts`.
+const HTTP_MULTIPART_OVERHEAD_BYTES = 256 * 1024
+
+/**
+ * Reconciles the socket.io `maxRequestBodySize` (which the engine ties to
+ * `maxHttpBufferSize`, defaulting to 1 MB to cap one WebSocket frame) with
+ * the hub's attachment upload ceiling. Adopting the socket.io value verbatim
+ * for the shared `Bun.serve` made every multipart upload over 1 MB respond
+ * with 413; composer paste and mobile screenshots are routinely 1–5 MB and
+ * the attachment surface advertises `SESSION_ATTACHMENT_MAX_UPLOAD_BYTES`
+ * as the real product limit. The HTTP body cap must always be at least the
+ * attachment ceiling plus multipart overhead while never shrinking below
+ * whatever the socket engine itself negotiated.
+ */
+export function resolveWebServerMaxRequestBodySize(socketMaxRequestBodySize: number): number {
+    return Math.max(socketMaxRequestBodySize, SESSION_ATTACHMENT_MAX_UPLOAD_BYTES + HTTP_MULTIPART_OVERHEAD_BYTES)
 }
 
 export async function startWebServer(options: StartWebServerOptions): Promise<BunServer<WebSocketData>> {
@@ -281,7 +182,7 @@ export async function startWebServer(options: StartWebServerOptions): Promise<Bu
         hostname: options.listenHost,
         port: options.listenPort,
         idleTimeout: Math.max(30, socketHandler.idleTimeout),
-        maxRequestBodySize: socketHandler.maxRequestBodySize,
+        maxRequestBodySize: resolveWebServerMaxRequestBodySize(socketHandler.maxRequestBodySize),
         websocket: socketHandler.websocket,
         fetch,
     })

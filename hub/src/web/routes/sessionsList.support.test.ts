@@ -1,4 +1,4 @@
-import type { SessionMessageActivity } from '@viby/protocol/types'
+import type { SessionMessageActivity, SessionStreamState } from '@viby/protocol/types'
 import { Hono } from 'hono'
 import type { Session, SyncEngine } from '../../sync/syncEngine'
 import type { WebAppEnv } from '../middleware/auth'
@@ -7,6 +7,7 @@ import { createSessionsRoutes } from './sessions'
 export function createSessionsListApp(options: {
     sessions: Session[]
     messageActivities?: Record<string, SessionMessageActivity>
+    streams?: Record<string, SessionStreamState>
 }) {
     const sessions = options.sessions.map((session) => {
         const activity = options.messageActivities?.[session.id]
@@ -30,7 +31,10 @@ export function createSessionsListApp(options: {
     const app = new Hono<WebAppEnv>()
     app.route(
         '/api',
-        createSessionsRoutes(() => engine as SyncEngine)
+        createSessionsRoutes(
+            () => engine as SyncEngine,
+            (sessionId) => options.streams?.[sessionId] ?? null
+        )
     )
     return app
 }

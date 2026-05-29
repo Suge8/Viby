@@ -7,7 +7,7 @@ import { getOrCreateHubOwnerToken } from './hubOwnerToken'
 
 const tempDirs: string[] = []
 const envSnapshot = new Map<string, string | undefined>()
-const TOKEN_ENV_KEYS = ['VIBY_HUB_OWNER_TOKEN', 'CLI_API_TOKEN'] as const
+const TOKEN_ENV_KEYS = ['VIBY_HUB_OWNER_TOKEN'] as const
 
 beforeEach(() => {
     for (const key of TOKEN_ENV_KEYS) {
@@ -47,17 +47,20 @@ describe('getOrCreateHubOwnerToken', () => {
         const result = await getOrCreateHubOwnerToken(dataDir)
         const settings = parseVibyLocalSettingsToml(await readFile(join(dataDir, 'settings.toml'), 'utf8'))
 
-        expect(result).toMatchObject({ token: 'owner-token-from-env', source: 'env', isNew: false })
+        expect(result).toMatchObject({
+            token: 'owner-token-from-env',
+            source: 'env',
+            isNew: false,
+        })
         expect(settings.hubOwnerToken).toBe('owner-token-from-env')
     })
 
-    it('ignores the removed CLI_API_TOKEN env name', async () => {
+    it('generates a token when no owner token exists', async () => {
         const dataDir = await createTempDataDir()
-        process.env.CLI_API_TOKEN = 'legacy-token'
 
         const result = await getOrCreateHubOwnerToken(dataDir)
 
-        expect(result.token).not.toBe('legacy-token')
+        expect(result.token).toHaveLength(43)
         expect(result.source).toBe('generated')
         expect(result.isNew).toBe(true)
     })

@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, extname, join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { WEB_BUILD_METADATA_FILE_NAME, WebBuildMetadataSchema } from '@viby/protocol'
 
 const MIME_TYPES: Record<string, string> = {
     '.css': 'text/css; charset=utf-8',
@@ -53,6 +54,13 @@ function resolveMimeType(filePath: string): string {
     return MIME_TYPES[ext] ?? 'application/octet-stream'
 }
 
+function assertWebBuildMetadata(path: string): void {
+    if (!existsSync(path)) {
+        throw new Error(`Missing web/dist/${WEB_BUILD_METADATA_FILE_NAME}. Run bun run build:web first.`)
+    }
+    WebBuildMetadataSchema.parse(JSON.parse(readFileSync(path, 'utf8')))
+}
+
 function main(): void {
     const scriptDir = dirname(fileURLToPath(import.meta.url))
     const workspaceRoot = join(scriptDir, '..', '..')
@@ -68,6 +76,7 @@ function main(): void {
     if (!existsSync(indexHtmlPath)) {
         throw new Error(`Missing web/dist/index.html. Run bun run build:web first.`)
     }
+    assertWebBuildMetadata(join(webDistDir, WEB_BUILD_METADATA_FILE_NAME))
 
     const files = listFiles(webDistDir).sort((a, b) => a.localeCompare(b))
     if (files.length === 0) {
@@ -84,8 +93,10 @@ function main(): void {
         const importName = `asset${index}`
         const mimeType = resolveMimeType(filePath)
 
-        imports.push(`import ${importName} from '${importPath}' assert { type: 'file' };`)
-        manifestLines.push(`    { path: '${requestPath}', sourcePath: ${importName}, mimeType: '${mimeType}' },`)
+        imports.push(`import ${importName} from '${importPath}' with { type: 'file' };`)
+        manifestLines.push(
+            `    { path: '${requestPath}', sourcePath: ${importName} as unknown as string, mimeType: '${mimeType}' },`
+        )
     })
 
     const output = [

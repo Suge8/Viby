@@ -1,22 +1,13 @@
 import { randomBytes } from 'node:crypto'
-import { DevicePlatformSchema } from '@viby/protocol/deviceAuth'
 import type { Hono } from 'hono'
 import { Hono as HonoApp } from 'hono'
 import { SignJWT } from 'jose'
 import { z } from 'zod'
 import { getOrCreateOwnerId } from '../../config/ownerId'
-import { configuration } from '../../configuration'
 import type { DeviceAuthStore } from '../../store/deviceAuthStore'
-import { constantTimeEquals } from '../../utils/crypto'
 import type { WebAppEnv } from '../middleware/auth'
 import { createDeviceAuthRateLimiter } from './deviceAuthRateLimit'
 import { createJsonBodyValidator } from './sessionRouteSupport'
-
-const verifyCodeSchema = z.object({
-    code: z.string().regex(/^\d{6}$/),
-    deviceName: z.string().trim().min(1).max(80).optional(),
-    platform: DevicePlatformSchema.optional(),
-})
 
 const reconnectSchema = z.object({
     deviceId: z.string().uuid(),
@@ -57,20 +48,6 @@ export function createDeviceAuthRoutes(
     const enforceRateLimit = createDeviceAuthRateLimiter()
 
     if (!options.protectedRoutes) {
-        app.post('/device-auth/code/verify', createJsonBodyValidator(verifyCodeSchema), async (c) => {
-            const rateLimitResponse = enforceRateLimit(c)
-            if (rateLimitResponse) return rateLimitResponse
-
-            const { code, deviceName, platform } = c.req.valid('json')
-            if (!constantTimeEquals(code, configuration.pairingCode)) {
-                return c.json({ error: 'Invalid pairing code', code: 'invalid_pairing_code' }, 401)
-            }
-
-            const secret = createSecret()
-            const device = devices.bindDevice({ secret, name: deviceName, platform, channel: 'link' })
-            return c.json({ ...(await signSession(jwtSecret, device.id)), device: { id: device.id, secret } })
-        })
-
         app.post('/device-auth/reconnect', createJsonBodyValidator(reconnectSchema), async (c) => {
             const rateLimitResponse = enforceRateLimit(c)
             if (rateLimitResponse) return rateLimitResponse
