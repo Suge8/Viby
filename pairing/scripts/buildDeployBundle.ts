@@ -13,6 +13,7 @@ import {
 } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { WEB_BUILD_METADATA_FILE_NAME, WebBuildMetadataSchema } from '@viby/protocol'
 import {
     buildDeployReadme,
     buildHealthCheckScript,
@@ -39,6 +40,11 @@ function ensureBundleDir(): void {
     mkdirSync(bundleDir, { recursive: true })
 }
 
+function assertWebBuildMetadata(path: string): void {
+    assertFileExists(path, 'Missing web/dist/build-meta.json. Run `bun run --cwd web build` first.')
+    WebBuildMetadataSchema.parse(JSON.parse(readFileSync(path, 'utf8')))
+}
+
 function copyBundleFile(fromPath: string, toName: string): void {
     copyFileSync(fromPath, join(bundleDir, toName))
 }
@@ -47,9 +53,11 @@ function copyWebAppDist(): void {
     const webDist = join(repoRoot, 'web', 'dist')
     const webIndex = join(webDist, 'index.html')
     const webAssets = join(webDist, 'assets')
+    const webBuildMetadata = join(webDist, WEB_BUILD_METADATA_FILE_NAME)
 
     assertFileExists(webIndex, 'Missing web/dist/index.html. Run `bun run --cwd web build` first.')
     assertFileExists(webAssets, 'Missing web/dist/assets. Run `bun run --cwd web build` first.')
+    assertWebBuildMetadata(webBuildMetadata)
 
     copyBundleFile(webIndex, 'web-index.html')
     cpSync(webAssets, join(bundleDir, 'assets'), { recursive: true })

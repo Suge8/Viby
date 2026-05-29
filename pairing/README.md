@@ -7,7 +7,7 @@
 - 生成扫码 URL
 - 交换 WebRTC signaling
 - 转发 `/tunnel` relay frame；设备先可用，再并发升级 direct
-- 下发 STUN + TURN ICE 配置；direct 只在非 TURN candidate 证明健康后成为 active route
+- 下发 STUN ICE 配置；direct 在 DataChannel heartbeat 健康且未选到 relay candidate 时成为 active route
 - 维护可重连的会话令牌
 - guest claim 后生成配对码；桌面显示，手机输入正确后自动批准
 - guest reconnect 默认要求同设备签名证明，不再只靠裸 token
@@ -24,7 +24,7 @@
 ## 运行
 
 ```bash
-bun run --cwd pairing dev
+bun run dev:pairing
 ```
 
 ## 打包部署
@@ -52,6 +52,7 @@ pairing/deploy-bundle.sha256
 
 - `pairing/deploy-bundle/index.js`
 - `pairing/deploy-bundle/web-index.html`
+- `pairing/deploy-bundle/build-meta.json`
 - `pairing/deploy-bundle/assets` 目录
 - `pairing/deploy-bundle/brand-logo-tight.png`
 - `pairing/deploy-bundle/pairing.env.example`
@@ -72,16 +73,13 @@ pairing/deploy-bundle.sha256
 - `PAIRING_SESSION_TTL_SECONDS`
 - `PAIRING_TICKET_TTL_SECONDS`
 - `PAIRING_STUN_URLS`
-- `PAIRING_TURN_URLS`
-- `PAIRING_TURN_STATIC_AUTH_SECRET`
-- `PAIRING_TURN_CREDENTIAL_TTL_SECONDS`
 - `PAIRING_RECONNECT_CHALLENGE_TTL_SECONDS`
 - `PAIRING_CREATE_LIMIT_PER_MINUTE`
 - `PAIRING_CLAIM_LIMIT_PER_MINUTE`
 - `PAIRING_RECONNECT_LIMIT_PER_MINUTE`
 - `PAIRING_APPROVE_LIMIT_PER_MINUTE`
 
-TURN 建议按 `UDP 3478 -> TCP 3478 -> TLS 5349` 排列；多地区就把最近 TURN 节点排在 `PAIRING_TURN_URLS` 最前。
+STUN 只用于 P2P 候选发现；生产至少配置 2 个不同网络入口。selected candidate 是 relay 时不会接管业务，继续使用 sealed WSS relay。
 
 建议生产环境至少配置：
 
@@ -89,8 +87,6 @@ TURN 建议按 `UDP 3478 -> TCP 3478 -> TLS 5349` 排列；多地区就把最近
 - `PAIRING_REDIS_URL`
 - `PAIRING_CREATE_TOKEN`
 - `PAIRING_STUN_URLS`
-- `PAIRING_TURN_URLS`
-- `PAIRING_TURN_STATIC_AUTH_SECRET`
 
 ## HTTP / WS
 

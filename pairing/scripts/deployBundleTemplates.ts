@@ -117,36 +117,6 @@ if [[ -n "\${PAIRING_CREATE_TOKEN:-}" ]]; then
   checks+=(metrics)
 fi
 
-run_turn_smoke() {
-  local url="$1"
-  local scheme="\${url%%:*}"
-  local hostport="\${url#*:}"
-  hostport="\${hostport%%\\?*}"
-  local host="\${hostport%:*}"
-  local port="\${hostport##*:}"
-  if [[ "$host" == "$hostport" ]]; then
-    port=$([[ "$scheme" == "turns" ]] && echo 5349 || echo 3478)
-  fi
-
-  local args=(-W "$PAIRING_TURN_STATIC_AUTH_SECRET" -y -c -n 1 -m 1 -p "$port")
-  if [[ "$scheme" == "turns" ]]; then
-    args=(-t -S "\${args[@]}")
-  elif [[ "$url" == *"transport=tcp"* ]]; then
-    args=(-t "\${args[@]}")
-  fi
-
-  timeout 20 turnutils_uclient "\${args[@]}" "$host" >/dev/null 2>&1 || fail "TURN smoke failed for $url"
-}
-
-if [[ -n "\${PAIRING_TURN_URLS:-}" && -n "\${PAIRING_TURN_STATIC_AUTH_SECRET:-}" ]]; then
-  command -v turnutils_uclient >/dev/null 2>&1 || fail "turnutils_uclient is required for TURN smoke"
-  IFS=',' read -ra turn_urls <<< "$PAIRING_TURN_URLS"
-  for turn_url in "\${turn_urls[@]}"; do
-    run_turn_smoke "\${turn_url//[[:space:]]/}"
-  done
-  checks+=(turn)
-fi
-
 printf '{"ok":true,"checks":"%s"}\\n' "\${checks[*]}"
 `
 }
@@ -159,12 +129,12 @@ export function buildDeployReadme(indexSizeBytes: number): string {
 ## 里面每个文件是什么
 
 - \`index.js\`：pairing broker 的打包运行产物
-- \`web-index.html\`、\`assets/\` 与根静态资源：手机端复用的正常 Viby Web
+- \`web-index.html\`、\`build-meta.json\`、\`assets/\` 与根静态资源：手机端复用的正常 Viby Web
 - \`pairing.env.example\`：环境变量模板，复制成 \`pairing.env\` 后填写真实值
 - \`run-pairing.sh\`：启动脚本，会自动读取同目录的 \`pairing.env\`
 - \`viby-pairing.service\`：systemd 模板，默认安装目录是 \`${defaultInstallDir}\`
 - \`viby-pairing.logrotate\`：日志轮转模板，适配 systemd append 日志
-- \`viby-pairing-health-check.sh\`：readiness、metrics 与 TURN smoke 检查
+- \`viby-pairing-health-check.sh\`：readiness 与 metrics 检查
 - \`Caddyfile.pairing\`：Caddy 反向代理示例
 
 bundle 目录生成后，旁边还会附带 \`../deploy-bundle.tar.gz\` 和 \`../deploy-bundle.sha256\`。
@@ -177,6 +147,7 @@ bundle 目录生成后，旁边还会附带 \`../deploy-bundle.tar.gz\` 和 \`..
 ${defaultInstallDir}/
   index.js
   web-index.html
+  build-meta.json
   assets/
   brand-logo-tight.png
   pairing.env
@@ -189,11 +160,26 @@ ${defaultInstallDir}/
   logs/
 \`\`\`
 
+## 更新已有服务器
+
+不要先清空线上目录。先把新 bundle 同步完整，再重启；健康检查通过后再删除不属于当前 bundle 的旧文件。这样不会暴露“新入口缺资源”或“旧入口主脚本消失”的半包状态。\`assets/\` 保留旧 hash 资源一段时间，已打开的旧 PWA 能继续拉到旧 chunk，同时新入口会读取最新 \`build-meta.json\`。
+
+\`\`\`bash
+tmp="$(mktemp -d)"
+tar -xzf deploy-bundle.tar.gz -C "$tmp"
+rsync -a "$tmp/deploy-bundle/" ${defaultInstallDir}/
+systemctl restart viby-pairing
+${defaultInstallDir}/viby-pairing-health-check.sh
+rsync -a --delete-after --exclude pairing.env --exclude logs --exclude assets "$tmp/deploy-bundle/" ${defaultInstallDir}/
+find ${defaultInstallDir}/assets -type f -mtime +30 -delete
+rm -rf "$tmp"
+\`\`\`
+
 ## 第 1 步：安装系统依赖
 
-服务器最少需要 Bun、Redis、Caddy 或 Nginx；TURN smoke 需要 coturn 的 \`turnutils_uclient\`。
+服务器最少需要 Bun、Redis、Caddy 或 Nginx。
 
-注意：broker 只是配对 / signaling 控制面，并托管手机端正常 Web 静态资源；Redis 存临时 pairing state；WebRTC ICE 默认直连优先，TURN 只做失败兜底。
+注意：broker 只是配对 / signaling 控制面，并托管手机端正常 Web 静态资源；Redis 存临时 pairing state；WebRTC ICE 只用 STUN 做 P2P 探测，失败继续走 sealed WSS relay。
 
 ## 第 2 步：编辑 pairing.env
 
@@ -208,10 +194,7 @@ PAIRING_PUBLIC_URL=https://pair.example.com
 PAIRING_REDIS_URL=redis://127.0.0.1:6379
 PAIRING_CREATE_TOKEN=replace-with-strong-secret
 PAIRING_MANIFEST_COOKIE_SECRET=replace-with-stable-random-secret
-PAIRING_STUN_URLS=stun:turn.example.com:3478
-PAIRING_TURN_URLS=turn:turn.example.com:3478?transport=udp,turn:turn.example.com:3478?transport=tcp,turns:turn.example.com:5349?transport=tcp
-PAIRING_TURN_STATIC_AUTH_SECRET=replace-with-coturn-static-auth-secret
-PAIRING_TURN_CREDENTIAL_TTL_SECONDS=600
+PAIRING_STUN_URLS=stun:stun.cloudflare.com:3478,stun:stun.miwifi.com:3478,stun:stun.nextcloud.com:443
 \`\`\`
 
 生产建议再加：
@@ -265,8 +248,7 @@ sudo logrotate -d /etc/logrotate.d/viby-pairing
 - systemd 服务默认启用最小沙箱：只允许写 \`logs/\`，其余安装目录只读
 - 日志轮转使用 \`copytruncate\`，避免重启 broker 才释放旧日志文件
 - 保持默认 ICE 策略；不要在客户端强制 relay
-- TURN 端口优先开 UDP 3478，再开 TCP 3478 和 TLS 5349 兜底
-- 多地区用户就部署多组 TURN，把近端节点排在 \`PAIRING_TURN_URLS\` 前面
+- STUN 只负责发现公网候选；selected candidate 是 relay 时继续用 WSS relay，不引入第二条中转主路径
 - Redis 建议走内网地址
 - 反代必须启用 HTTPS / WSS
 
