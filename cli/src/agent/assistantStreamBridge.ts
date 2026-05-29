@@ -9,6 +9,7 @@ export class AssistantStreamBridge {
     constructor(private readonly transport: AssistantStreamTransport) {}
 
     beginAssistantTurn(assistantTurnId: string): void {
+        this.clearMismatchedActiveTurn(assistantTurnId)
         this.activeAssistantTurnId = assistantTurnId
     }
 
@@ -18,6 +19,7 @@ export class AssistantStreamBridge {
             return
         }
 
+        this.clearMismatchedActiveTurn(resolvedAssistantTurnId)
         this.activeAssistantTurnId = resolvedAssistantTurnId
         this.transport.append({
             assistantTurnId: resolvedAssistantTurnId,
@@ -26,11 +28,14 @@ export class AssistantStreamBridge {
     }
 
     acknowledgeDurableTurn(assistantTurnId: string | null | undefined): void {
-        if (!assistantTurnId || assistantTurnId !== this.activeAssistantTurnId) {
+        if (!assistantTurnId || !this.activeAssistantTurnId) {
             return
         }
 
-        this.activeAssistantTurnId = null
+        this.clearMismatchedActiveTurn(assistantTurnId)
+        if (assistantTurnId === this.activeAssistantTurnId) {
+            this.activeAssistantTurnId = null
+        }
     }
 
     clearDanglingAssistantTurn(): void {
@@ -41,5 +46,13 @@ export class AssistantStreamBridge {
         const assistantTurnId = this.activeAssistantTurnId
         this.activeAssistantTurnId = null
         this.transport.clear({ assistantTurnId })
+    }
+
+    private clearMismatchedActiveTurn(nextAssistantTurnId: string): void {
+        if (!this.activeAssistantTurnId || this.activeAssistantTurnId === nextAssistantTurnId) {
+            return
+        }
+
+        this.clearDanglingAssistantTurn()
     }
 }

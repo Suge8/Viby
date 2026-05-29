@@ -1,6 +1,6 @@
-import { access } from 'node:fs/promises'
+import { access, mkdir, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import {
     AGENT_CONFIG_DRIVERS,
     type AgentConfigDriver,
@@ -8,6 +8,9 @@ import {
     type AgentConfigFileState,
     type AgentConfigResponse,
     getAgentConfigFields,
+    type OpenAgentConfigRequest,
+    OpenAgentConfigRequestSchema,
+    type OpenAgentConfigResponse,
     type RestoreAgentConfigRequest,
     RestoreAgentConfigRequestSchema,
     type SaveAgentConfigRequest,
@@ -22,10 +25,11 @@ import {
 } from './agentConfigFileMetadata'
 import { applyJsonConfigValues, readJsonConfigValues, readJsonSettings, writeJsonSettings } from './agentConfigJson'
 import { readTomlConfigValues, readTomlSettings, writeTomlSettings } from './agentConfigToml'
-import { assertAgentConfigVersionSupported, readAgentConfigVersion } from './agentConfigVersions'
+import { readAgentConfigVersion } from './agentConfigVersions'
 
 type AgentConfigFileOptions = {
     readVersion?: typeof readAgentConfigVersion
+    openPath?: (path: string) => Promise<void>
 }
 
 function normalizeConfigRoot(value: string | undefined, fallback: string): string {
@@ -57,6 +61,30 @@ async function pathExists(path: string): Promise<boolean> {
         return true
     } catch {
         return false
+    }
+}
+
+async function ensureConfigFile(driver: AgentConfigDriver, path: string): Promise<void> {
+    if (await pathExists(path)) return
+    await mkdir(dirname(path), { recursive: true })
+    const initialContent = driver === 'codex' ? '' : '{\n}\n'
+    await writeFile(path, initialContent, { flag: 'wx' }).catch((error: unknown) => {
+        if (error instanceof Error && 'code' in error && error.code === 'EEXIST') return
+        throw error
+    })
+}
+
+async function openPathWithSystem(path: string): Promise<void> {
+    const command =
+        process.platform === 'darwin'
+            ? ['open', path]
+            : process.platform === 'win32'
+              ? ['cmd', '/c', 'start', '', path]
+              : ['xdg-open', path]
+    const proc = Bun.spawn(command, { stdout: 'pipe', stderr: 'pipe' })
+    const [code, stderr] = await Promise.all([proc.exited, proc.stderr.text()])
+    if (code !== 0) {
+        throw new Error(stderr.trim() || `Failed to open ${path}`)
     }
 }
 
@@ -113,7 +141,6 @@ export async function saveAgentConfigFile(
     const parsed = SaveAgentConfigRequestSchema.parse(request)
     const path = agentConfigPath(parsed.driver)
     const fields = getAgentConfigFields(parsed.driver)
-    await assertAgentConfigVersionSupported(parsed.driver, options.readVersion)
     await assertAgentConfigUnchanged(path, parsed.expectedExists, parsed.expectedStamp)
     await createAgentConfigBackup(path)
     if (parsed.driver === 'codex') {
@@ -130,7 +157,17 @@ export async function restoreAgentConfigFile(
     options: AgentConfigFileOptions = {}
 ): Promise<AgentConfigFileState> {
     const parsed = RestoreAgentConfigRequestSchema.parse(request)
-    await assertAgentConfigVersionSupported(parsed.driver, options.readVersion)
     await restoreAgentConfigBackupFile(agentConfigPath(parsed.driver), parsed.backupPath)
     return await readConfigState(parsed.driver, options)
+}
+
+export async function openAgentConfigFile(
+    request: OpenAgentConfigRequest,
+    options: AgentConfigFileOptions = {}
+): Promise<OpenAgentConfigResponse> {
+    const parsed = OpenAgentConfigRequestSchema.parse(request)
+    const path = agentConfigPath(parsed.driver)
+    await ensureConfigFile(parsed.driver, path)
+    await (options.openPath ?? openPathWithSystem)(path)
+    return { ok: true, path }
 }

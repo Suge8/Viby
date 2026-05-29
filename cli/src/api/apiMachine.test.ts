@@ -164,6 +164,7 @@ describe('ApiMachineClient', () => {
             loadAgentConfigFiles: vi.fn(async () => ({ agents: [] })),
             saveAgentConfigFile: vi.fn(async () => agentConfigState()),
             restoreAgentConfigFile: vi.fn(async () => agentConfigState()),
+            openAgentConfigFile: vi.fn(async () => ({ ok: true as const, path: '/tmp/config.toml' })),
             stopSession: vi.fn(() => true),
             requestShutdown: vi.fn(),
         })
@@ -257,6 +258,7 @@ describe('ApiMachineClient', () => {
             loadAgentConfigFiles: vi.fn(async () => ({ agents: [] })),
             saveAgentConfigFile: vi.fn(async () => agentConfigState()),
             restoreAgentConfigFile: vi.fn(async () => agentConfigState()),
+            openAgentConfigFile: vi.fn(async () => ({ ok: true as const, path: '/tmp/config.toml' })),
             stopSession: vi.fn(() => false),
             requestShutdown,
         })
@@ -294,6 +296,7 @@ describe('ApiMachineClient', () => {
             loadAgentConfigFiles: vi.fn(async () => ({ agents: [] })),
             saveAgentConfigFile,
             restoreAgentConfigFile: vi.fn(async () => agentConfigState()),
+            openAgentConfigFile: vi.fn(async () => ({ ok: true as const, path: '/tmp/config.toml' })),
             stopSession: vi.fn(() => true),
             requestShutdown: vi.fn(),
         })

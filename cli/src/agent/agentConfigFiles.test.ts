@@ -3,7 +3,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { type AgentConfigDriver, type AgentConfigVersionState, getAgentConfigSupportedVersion } from '@viby/protocol'
 import { afterEach, describe, expect, it } from 'vitest'
-import { loadAgentConfigFiles, restoreAgentConfigFile, saveAgentConfigFile } from './agentConfigFiles'
+import {
+    loadAgentConfigFiles,
+    openAgentConfigFile,
+    restoreAgentConfigFile,
+    saveAgentConfigFile,
+} from './agentConfigFiles'
 
 const ORIGINAL_ENV = { ...process.env }
 const tempDirs: string[] = []
@@ -250,20 +255,40 @@ describe('agent config files', () => {
         ).rejects.toThrow('Config changed on disk')
     })
 
-    it('blocks writes when the installed agent version is not the supported latest version', async () => {
+    it('writes through outdated versions — version status is advisory only', async () => {
         const codexHome = makeTempDir()
         process.env.CODEX_HOME = codexHome
         mkdirSync(codexHome, { recursive: true })
         const configPath = join(codexHome, 'config.toml')
         writeFileSync(configPath, 'model = "before"\n')
 
-        await expect(
-            saveAgentConfigFile(
-                { driver: 'codex', values: { 'codex.model': 'after' } },
-                { readVersion: async (driver) => versionState(driver, 'unsupported') }
-            )
-        ).rejects.toThrow('Unsupported codex version')
+        const state = await saveAgentConfigFile(
+            { driver: 'codex', values: { 'codex.model': 'after' } },
+            { readVersion: async (driver) => versionState(driver, 'outdated') }
+        )
 
-        expect(readFileSync(configPath, 'utf-8')).toBe('model = "before"\n')
+        expect(state.values['codex.model']).toBe('after')
+        expect(state.version.status).toBe('outdated')
+        expect(readFileSync(configPath, 'utf-8')).toContain('model = "after"')
+    })
+
+    it('opens missing config files by creating the provider path without version gating', async () => {
+        const geminiRoot = makeTempDir()
+        process.env.GEMINI_CLI_HOME = geminiRoot
+
+        const opened: string[] = []
+        const state = await openAgentConfigFile(
+            { driver: 'gemini' },
+            {
+                openPath: async (path) => {
+                    opened.push(path)
+                },
+            }
+        )
+
+        expect(state.ok).toBe(true)
+        expect(state.path).toBe(join(geminiRoot, '.gemini', 'settings.json'))
+        expect(opened).toEqual([state.path])
+        expect(readJson(state.path)).toEqual({})
     })
 })

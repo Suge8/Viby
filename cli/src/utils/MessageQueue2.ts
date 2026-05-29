@@ -24,8 +24,9 @@ export class MessageQueue2<T> {
     private waiter: ((hasMessages: boolean) => void) | null = null
     private closed = false
     private onMessageHandler: ((message: string, mode: T) => void) | null = null
-    onBatchConsumed: ((localIds: string[]) => void) | null = null
-    onMessagesCanceled: ((localIds: string[]) => void) | null = null
+    private readonly enqueueListeners = new Set<() => void>()
+    private readonly consumedListeners = new Set<(localIds: string[]) => void>()
+    private readonly canceledListeners = new Set<(localIds: string[]) => void>()
 
     constructor(
         readonly modeHasher: (mode: T) => string,
@@ -37,6 +38,27 @@ export class MessageQueue2<T> {
 
     setOnMessage(handler: ((message: string, mode: T) => void) | null): void {
         this.onMessageHandler = handler
+    }
+
+    onEnqueued(listener: () => void): () => void {
+        this.enqueueListeners.add(listener)
+        return () => {
+            this.enqueueListeners.delete(listener)
+        }
+    }
+
+    onConsumed(listener: (localIds: string[]) => void): () => void {
+        this.consumedListeners.add(listener)
+        return () => {
+            this.consumedListeners.delete(listener)
+        }
+    }
+
+    onCanceled(listener: (localIds: string[]) => void): () => void {
+        this.canceledListeners.add(listener)
+        return () => {
+            this.canceledListeners.delete(listener)
+        }
     }
 
     push(message: string, mode: T, localId?: string): void {
@@ -158,6 +180,9 @@ export class MessageQueue2<T> {
 
     private emitMessage(message: string, mode: T): void {
         this.onMessageHandler?.(message, mode)
+        for (const listener of this.enqueueListeners) {
+            listener()
+        }
     }
 
     private resolveWaiter(hasMessages: boolean): void {
@@ -176,7 +201,9 @@ export class MessageQueue2<T> {
             .map((item) => item.localId)
             .filter((localId): localId is string => typeof localId === 'string' && localId.length > 0)
         if (localIds.length > 0) {
-            this.onMessagesCanceled?.(localIds)
+            for (const listener of this.canceledListeners) {
+                listener(localIds)
+            }
         }
     }
 
@@ -209,7 +236,9 @@ export class MessageQueue2<T> {
         }
 
         if (consumedLocalIds.length > 0) {
-            this.onBatchConsumed?.(consumedLocalIds)
+            for (const listener of this.consumedListeners) {
+                listener(consumedLocalIds)
+            }
         }
 
         return {

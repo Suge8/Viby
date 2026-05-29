@@ -4,7 +4,11 @@ import {
     getAgentConfigSupportedVersion,
     isAgentConfigVersionSupported,
     normalizeAgentConfigVersion,
+    parseAgentConfigVersionOutput,
 } from '@viby/protocol/agentConfig'
+
+// Version checks are advisory only. We never block writes — schemas are stable across recent
+// CLI patch versions, and forcing users to upgrade just to tweak a setting is hostile.
 
 type CommandResult = { code: number; output: string }
 type CommandRunner = (command: readonly string[]) => Promise<CommandResult>
@@ -22,10 +26,6 @@ const VERSION_COMMANDS: Record<AgentConfigDriver, readonly (readonly string[])[]
 
 function commandLabel(command: readonly string[]): string {
     return command.join(' ')
-}
-
-export function parseAgentConfigVersionOutput(output: string): string | undefined {
-    return output.match(/\bv?(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)\b/)?.[1]
 }
 
 function versionState(
@@ -71,7 +71,7 @@ export async function readAgentConfigVersion(
         if (!installedVersion) return versionState(driver, 'unknown', { command })
         return versionState(
             driver,
-            isAgentConfigVersionSupported(driver, installedVersion) ? 'supported' : 'unsupported',
+            isAgentConfigVersionSupported(driver, installedVersion) ? 'supported' : 'outdated',
             {
                 command,
                 installedVersion: normalizeAgentConfigVersion(installedVersion),
@@ -79,15 +79,4 @@ export async function readAgentConfigVersion(
         )
     }
     return versionState(driver, sawCommand ? 'unknown' : 'missing')
-}
-
-export async function assertAgentConfigVersionSupported(
-    driver: AgentConfigDriver,
-    reader: typeof readAgentConfigVersion = readAgentConfigVersion
-): Promise<AgentConfigVersionState> {
-    const version = await reader(driver)
-    if (version.status === 'supported') return version
-    throw new Error(
-        `Unsupported ${driver} version. Installed ${version.installedVersion ?? 'none'}, required ${version.supportedVersion}.`
-    )
 }

@@ -31,6 +31,7 @@ describe('AgentSessionBase', () => {
             api: {} as never,
             client: {
                 keepAlive,
+                sendSessionRuntimeState: vi.fn(),
                 on: vi.fn(),
                 updateMetadataAndWait,
                 getMetadataSnapshot: () => ({
@@ -90,6 +91,7 @@ describe('AgentSessionBase', () => {
             api: {} as never,
             client: {
                 keepAlive,
+                sendSessionRuntimeState: vi.fn(),
                 on: vi.fn(),
                 updateMetadataAndWait,
                 getMetadataSnapshot: () => metadata,
@@ -125,6 +127,7 @@ describe('AgentSessionBase', () => {
             api: {} as never,
             client: {
                 keepAlive,
+                sendSessionRuntimeState: vi.fn(),
                 on: vi.fn(),
                 updateMetadataAndWait,
                 getMetadataSnapshot: () => ({
@@ -170,6 +173,7 @@ describe('AgentSessionBase', () => {
             api: {} as never,
             client: {
                 keepAlive,
+                sendSessionRuntimeState: vi.fn(),
                 on: vi.fn(),
                 updateMetadataAndWait,
                 getMetadataSnapshot: () => null,
@@ -209,6 +213,7 @@ describe('AgentSessionBase', () => {
             api: {} as never,
             client: {
                 keepAlive,
+                sendSessionRuntimeState: vi.fn(),
                 on: vi.fn(),
                 updateMetadataAndWait: vi.fn(async () => undefined),
                 getMetadataSnapshot: () => null,
@@ -240,6 +245,143 @@ describe('AgentSessionBase', () => {
         session.stopKeepAlive()
     })
 
+    it('stops idle runner runtime after a completed turn and grace period', async () => {
+        const sendSessionRuntimeState = vi.fn()
+        const session = new AgentSessionBase<string>({
+            api: {} as never,
+            client: {
+                keepAlive: vi.fn(),
+                sendSessionRuntimeState,
+                on: vi.fn(),
+                updateMetadataAndWait: vi.fn(async () => undefined),
+                getMetadataSnapshot: () => null,
+            } as never,
+            path: '/tmp/project',
+            logPath: '/tmp/project/test.log',
+            sessionId: null,
+            messageQueue: new MessageQueue2<string>((value) => value),
+            sessionLabel: 'TestSession',
+            sessionIdLabel: 'Codex',
+            idleRuntimeStopMs: 5_000,
+            applySessionIdToMetadata: (metadata) => metadata,
+        })
+        const stopHandler = vi.fn(async () => undefined)
+
+        session.setRuntimeStopHandler(stopHandler)
+        await vi.advanceTimersByTimeAsync(5_000)
+        expect(stopHandler).not.toHaveBeenCalled()
+
+        session.onThinkingChange(true)
+        session.onThinkingChange(false)
+        await vi.advanceTimersByTimeAsync(4_999)
+        expect(stopHandler).not.toHaveBeenCalled()
+
+        await vi.advanceTimersByTimeAsync(1)
+        expect(sendSessionRuntimeState).toHaveBeenCalledWith({ state: 'stopping', reason: 'idle-timeout' })
+        expect(stopHandler).toHaveBeenCalledTimes(1)
+
+        session.stopKeepAlive()
+    })
+
+    it('uses runner startedBy as the default idle stop policy', async () => {
+        const session = new AgentSessionBase<string>({
+            api: {} as never,
+            client: {
+                keepAlive: vi.fn(),
+                sendSessionRuntimeState: vi.fn(),
+                on: vi.fn(),
+                updateMetadataAndWait: vi.fn(async () => undefined),
+                getMetadataSnapshot: () => null,
+            } as never,
+            path: '/tmp/project',
+            logPath: '/tmp/project/test.log',
+            sessionId: 'session-1',
+            messageQueue: new MessageQueue2<string>((value) => value),
+            sessionLabel: 'TestSession',
+            sessionIdLabel: 'Codex',
+            startedBy: 'runner',
+            applySessionIdToMetadata: (metadata) => metadata,
+        })
+        const stopHandler = vi.fn(async () => undefined)
+        session.setRuntimeStopHandler(stopHandler)
+
+        session.onThinkingChange(true)
+        session.onThinkingChange(false)
+        await vi.advanceTimersByTimeAsync(5 * 60 * 1_000)
+
+        expect(stopHandler).toHaveBeenCalledTimes(1)
+        session.stopKeepAlive()
+    })
+
+    it('does not enable idle stop for terminal sessions by default', async () => {
+        const session = new AgentSessionBase<string>({
+            api: {} as never,
+            client: {
+                keepAlive: vi.fn(),
+                sendSessionRuntimeState: vi.fn(),
+                on: vi.fn(),
+                updateMetadataAndWait: vi.fn(async () => undefined),
+                getMetadataSnapshot: () => null,
+            } as never,
+            path: '/tmp/project',
+            logPath: '/tmp/project/test.log',
+            sessionId: null,
+            messageQueue: new MessageQueue2<string>((value) => value),
+            sessionLabel: 'TestSession',
+            sessionIdLabel: 'Codex',
+            startedBy: 'terminal',
+            applySessionIdToMetadata: (metadata) => metadata,
+        })
+        const stopHandler = vi.fn(async () => undefined)
+        session.setRuntimeStopHandler(stopHandler)
+
+        session.onThinkingChange(true)
+        session.onThinkingChange(false)
+        await vi.advanceTimersByTimeAsync(5 * 60 * 1_000)
+
+        expect(stopHandler).not.toHaveBeenCalled()
+        session.stopKeepAlive()
+    })
+
+    it('does not stop runtime while a turn is processing or queued', async () => {
+        const queue = new MessageQueue2<string>((value) => value)
+        const session = new AgentSessionBase<string>({
+            api: {} as never,
+            client: {
+                keepAlive: vi.fn(),
+                sendSessionRuntimeState: vi.fn(),
+                on: vi.fn(),
+                updateMetadataAndWait: vi.fn(async () => undefined),
+                getMetadataSnapshot: () => null,
+            } as never,
+            path: '/tmp/project',
+            logPath: '/tmp/project/test.log',
+            sessionId: null,
+            messageQueue: queue,
+            sessionLabel: 'TestSession',
+            sessionIdLabel: 'Codex',
+            idleRuntimeStopMs: 5_000,
+            applySessionIdToMetadata: (metadata) => metadata,
+        })
+        const stopHandler = vi.fn(async () => undefined)
+        session.setRuntimeStopHandler(stopHandler)
+
+        queue.push('hello', 'mode')
+        await vi.advanceTimersByTimeAsync(5_000)
+        expect(stopHandler).not.toHaveBeenCalled()
+
+        queue.reset()
+        session.onThinkingChange(true)
+        await vi.advanceTimersByTimeAsync(5_000)
+        expect(stopHandler).not.toHaveBeenCalled()
+
+        session.onThinkingChange(false)
+        await vi.advanceTimersByTimeAsync(5_000)
+        expect(stopHandler).toHaveBeenCalledTimes(1)
+
+        session.stopKeepAlive()
+    })
+
     it('does not mutate unrelated driver handles when syncing the current driver session id', async () => {
         const keepAlive = vi.fn()
         const updateMetadataAndWait = vi.fn(
@@ -257,6 +399,7 @@ describe('AgentSessionBase', () => {
             api: {} as never,
             client: {
                 keepAlive,
+                sendSessionRuntimeState: vi.fn(),
                 on: vi.fn(),
                 updateMetadataAndWait,
                 getMetadataSnapshot: () => ({
@@ -322,6 +465,7 @@ describe('AgentSessionBase', () => {
             api: {} as never,
             client: {
                 keepAlive,
+                sendSessionRuntimeState: vi.fn(),
                 on: vi.fn(),
                 updateMetadataAndWait,
                 getMetadataSnapshot: () => ({
@@ -363,6 +507,7 @@ describe('AgentSessionBase', () => {
             api: {} as never,
             client: {
                 keepAlive,
+                sendSessionRuntimeState: vi.fn(),
                 on: vi.fn(),
                 updateMetadataAndWait,
                 getMetadataSnapshot: () => ({

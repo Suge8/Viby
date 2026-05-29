@@ -50,19 +50,19 @@ describe('agent config acceptance', () => {
         expect(rows.find((row) => row.driver === 'gemini')?.configPath).toContain('.gemini/settings.json')
     })
 
-    it('treats unsupported versions as a successful write block', async () => {
+    it('still writes when version is outdated — checks are advisory', async () => {
         const rows = await runAgentConfigAcceptance({
             root: makeTempDir(),
             commandExists: async () => true,
             runCommand: async (cmd) => ({ code: 0, output: `${cmd.join(' ')} ok` }),
-            readVersion: async (driver) => versionState(driver, driver === 'codex' ? 'unsupported' : 'supported'),
+            readVersion: async (driver) => versionState(driver, driver === 'codex' ? 'outdated' : 'supported'),
         })
 
         expect(rows.find((row) => row.driver === 'codex')).toMatchObject({
-            versionStatus: 'unsupported',
-            configWrite: 'blocked',
+            versionStatus: 'outdated',
+            configWrite: 'passed',
             commandStart: 'passed',
         })
-        expect(rows.filter((row) => row.configWrite === 'failed')).toHaveLength(0)
+        expect(rows.every((row) => row.configWrite === 'passed')).toBe(true)
     })
 })

@@ -1,10 +1,6 @@
-import { getAgentConfigSupportedVersion } from '@viby/protocol'
+import { getAgentConfigSupportedVersion, parseAgentConfigVersionOutput } from '@viby/protocol'
 import { describe, expect, it } from 'vitest'
-import {
-    assertAgentConfigVersionSupported,
-    parseAgentConfigVersionOutput,
-    readAgentConfigVersion,
-} from './agentConfigVersions'
+import { readAgentConfigVersion } from './agentConfigVersions'
 
 describe('agent config versions', () => {
     it('parses common agent version outputs', () => {
@@ -14,29 +10,32 @@ describe('agent config versions', () => {
         expect(parseAgentConfigVersionOutput('not installed')).toBeUndefined()
     })
 
-    it('marks exact latest versions supported and older versions unsupported', async () => {
-        const latest = getAgentConfigSupportedVersion('codex').version
+    it('marks verified versions supported and older versions outdated', async () => {
+        const minimum = getAgentConfigSupportedVersion('codex').version
         const supported = await readAgentConfigVersion('codex', async () => ({
             code: 0,
-            output: `codex-cli ${latest}`,
+            output: `codex-cli ${minimum}`,
         }))
-        const unsupported = await readAgentConfigVersion('codex', async () => ({ code: 0, output: 'codex-cli 0.1.0' }))
+        const newer = await readAgentConfigVersion('codex', async () => ({
+            code: 0,
+            output: 'codex-cli 0.131.0',
+        }))
+        const outdated = await readAgentConfigVersion('codex', async () => ({ code: 0, output: 'codex-cli 0.1.0' }))
 
         expect(supported.status).toBe('supported')
-        expect(supported.installedVersion).toBe(latest)
-        expect(unsupported.status).toBe('unsupported')
-        expect(unsupported.supportedVersion).toBe(latest)
+        expect(supported.installedVersion).toBe(minimum)
+        expect(newer.status).toBe('supported')
+        expect(newer.installedVersion).toBe('0.131.0')
+        expect(outdated.status).toBe('outdated')
+        expect(outdated.supportedVersion).toBe(minimum)
     })
 
-    it('requires the Copilot CLI command rather than only GitHub CLI being installed', async () => {
+    it('marks Copilot missing when neither copilot nor gh copilot is available', async () => {
         const state = await readAgentConfigVersion('copilot', async (command) => {
             if (command[0] === 'copilot') return { code: 127, output: 'command not found' }
             return { code: 1, output: '! Copilot CLI not installed' }
         })
 
         expect(state.status).toBe('missing')
-        await expect(assertAgentConfigVersionSupported('copilot', async () => state)).rejects.toThrow(
-            'Unsupported copilot version'
-        )
     })
 })

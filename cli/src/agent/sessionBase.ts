@@ -9,11 +9,16 @@ import type {
 import type { ApiClient, ApiSessionClient } from '@/lib'
 import { logger } from '@/ui/logger'
 import type { MessageQueue2 } from '@/utils/MessageQueue2'
+import { IdleRuntimeStopController } from './idleRuntimeStopController'
+import { KeepAliveController } from './keepAliveController'
 
-const KEEP_ALIVE_BUSY_INTERVAL_MS = 2_000
-const KEEP_ALIVE_IDLE_INTERVAL_MS = 10_000
+export const RUNNER_IDLE_RUNTIME_STOP_MS = 5 * 60 * 1_000
 const DURABLE_METADATA_SYNC_OPTIONS = { touchUpdatedAt: false } as const
 type RuntimeStopHandler = (() => Promise<void>) | null
+type KeepAliveRuntime = Pick<
+    AgentSessionBaseOptions<unknown>,
+    'permissionMode' | 'model' | 'modelReasoningEffort' | 'collaborationMode' | 'codexServiceTier'
+>
 
 export type AgentSessionBaseOptions<Mode> = {
     api: ApiClient
@@ -30,6 +35,8 @@ export type AgentSessionBaseOptions<Mode> = {
     modelReasoningEffort?: SessionModelReasoningEffort
     collaborationMode?: SessionCollaborationMode
     codexServiceTier?: CodexServiceTier | null
+    startedBy?: 'runner' | 'terminal'
+    idleRuntimeStopMs?: number
 }
 
 export class AgentSessionBase<Mode> {
@@ -50,7 +57,8 @@ export class AgentSessionBase<Mode> {
     ) => WritableSessionMetadata
     private readonly sessionLabel: string
     private readonly sessionIdLabel: string
-    private keepAliveTimer: NodeJS.Timeout | null = null
+    private readonly keepAlive: KeepAliveController
+    private readonly idleRuntimeStop: IdleRuntimeStopController
     private inFlightSessionIdMetadataSync: { sessionId: string; promise: Promise<void> } | null = null
     private sessionIdMetadataSyncQueue: Promise<void> = Promise.resolve()
     protected permissionMode?: SessionPermissionMode
@@ -76,18 +84,58 @@ export class AgentSessionBase<Mode> {
         this.modelReasoningEffort = opts.modelReasoningEffort
         this.collaborationMode = opts.collaborationMode
         this.codexServiceTier = opts.codexServiceTier
-        this.queue.onBatchConsumed = (localIds) => this.client.emitMessagesConsumed(localIds)
-        this.queue.onMessagesCanceled = (localIds) => this.client.emitMessagesCanceled(localIds)
+        this.keepAlive = new KeepAliveController({ emit: () => this.emitKeepAlive() })
+        this.idleRuntimeStop = new IdleRuntimeStopController({
+            delayMs: this.resolveIdleRuntimeStopMs(opts),
+            isThinking: () => this.thinking,
+            hasStopHandler: () => Boolean(this.runtimeStopHandler),
+            hasStopInFlight: () => Boolean(this.runtimeStopInFlight),
+            queueSize: () => this.queue.size(),
+            requestStop: () => this.requestRuntimeStop(),
+            onStopRequest: () => this.logIdleRuntimeStopRequest(),
+            onStopError: (error) => this.logIdleRuntimeStopError(error),
+        })
+        this.queue.onConsumed((localIds) => this.client.emitMessagesConsumed(localIds))
+        this.queue.onCanceled((localIds) => this.client.emitMessagesCanceled(localIds))
         this.client.on('cancel-messages', (localIds: string[]) => {
             this.queue.removeByLocalIds(localIds)
+            this.idleRuntimeStop.schedule()
         })
+        this.queue.onEnqueued(() => this.idleRuntimeStop.cancel())
 
         this.flushKeepAlive()
     }
 
     onThinkingChange = (thinking: boolean) => {
+        if (thinking) {
+            this.idleRuntimeStop.markTurnActive()
+        }
         this.thinking = thinking
         this.flushKeepAlive()
+        this.idleRuntimeStop.schedule()
+    }
+
+    private resolveIdleRuntimeStopMs(opts: AgentSessionBaseOptions<Mode>): number | undefined {
+        if (opts.idleRuntimeStopMs !== undefined) {
+            return opts.idleRuntimeStopMs
+        }
+        return opts.startedBy === 'runner' ? RUNNER_IDLE_RUNTIME_STOP_MS : undefined
+    }
+
+    private logIdleRuntimeStopRequest(): void {
+        this.client.sendSessionRuntimeState({ state: 'stopping', reason: 'idle-timeout' })
+        logger.debug(`[${this.sessionLabel}] Idle runtime stop requested`, {
+            reason: 'idle-timeout',
+            sessionId: this.sessionId,
+        })
+    }
+
+    private logIdleRuntimeStopError(error: unknown): void {
+        logger.debug(`[${this.sessionLabel}] Idle runtime stop failed`, {
+            reason: 'idle-timeout',
+            sessionId: this.sessionId,
+            error,
+        })
     }
 
     private shouldSyncSessionIdMetadata(sessionId: string): boolean {
@@ -209,9 +257,11 @@ export class AgentSessionBase<Mode> {
         if (!handler) {
             this.runtimeStopInFlight = null
         }
+        this.idleRuntimeStop.schedule()
     }
 
     async requestRuntimeStop(): Promise<boolean> {
+        this.idleRuntimeStop.cancel()
         if (this.runtimeStopInFlight) {
             await this.runtimeStopInFlight
             return true
@@ -233,10 +283,8 @@ export class AgentSessionBase<Mode> {
     }
 
     stopKeepAlive = (): void => {
-        if (this.keepAliveTimer) {
-            clearTimeout(this.keepAliveTimer)
-            this.keepAliveTimer = null
-        }
+        this.keepAlive.stop()
+        this.idleRuntimeStop.cancel()
     }
 
     protected notifyKeepAliveRuntimeChanged(): void {
@@ -248,29 +296,10 @@ export class AgentSessionBase<Mode> {
     }
 
     private flushKeepAlive(): void {
-        this.emitKeepAlive()
-        this.scheduleNextKeepAlive()
+        this.keepAlive.flush(this.thinking)
     }
 
-    private scheduleNextKeepAlive(): void {
-        this.stopKeepAlive()
-        const intervalMs = this.thinking ? KEEP_ALIVE_BUSY_INTERVAL_MS : KEEP_ALIVE_IDLE_INTERVAL_MS
-        this.keepAliveTimer = setTimeout(() => {
-            this.emitKeepAlive()
-            this.scheduleNextKeepAlive()
-        }, intervalMs)
-        this.keepAliveTimer.unref?.()
-    }
-
-    protected getKeepAliveRuntime():
-        | {
-              permissionMode?: SessionPermissionMode
-              model?: SessionModel
-              modelReasoningEffort?: SessionModelReasoningEffort
-              collaborationMode?: SessionCollaborationMode
-              codexServiceTier?: CodexServiceTier | null
-          }
-        | undefined {
+    protected getKeepAliveRuntime(): KeepAliveRuntime | undefined {
         if (
             this.permissionMode === undefined &&
             this.model === undefined &&

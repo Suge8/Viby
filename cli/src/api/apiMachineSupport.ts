@@ -7,6 +7,9 @@ import {
     ListAgentAvailabilityRequestSchema,
     LocalSessionCatalogRequestSchema,
     LocalSessionExportRequestSchema,
+    type OpenAgentConfigRequest,
+    OpenAgentConfigRequestSchema,
+    type OpenAgentConfigResponse,
     ResolveAgentLaunchConfigRequestSchema,
     type ResolveAgentLaunchConfigResponse,
     type RestoreAgentConfigRequest,
@@ -63,6 +66,7 @@ export type MachineRpcHandlers = {
     loadAgentConfigFiles: () => Promise<AgentConfigResponse>
     saveAgentConfigFile: (request: SaveAgentConfigRequest) => Promise<AgentConfigFileState>
     restoreAgentConfigFile: (request: RestoreAgentConfigRequest) => Promise<AgentConfigFileState>
+    openAgentConfigFile: (request: OpenAgentConfigRequest) => Promise<OpenAgentConfigResponse>
     stopSession: (sessionId: string) => boolean
     requestShutdown: () => void
 }
@@ -251,6 +255,17 @@ export function registerMachineRpcHandlers(rpcHandlerManager: RpcHandlerManager,
                 throw new Error('Invalid agent config restore request')
             }
             return await handlers.restoreAgentConfigFile(parsed.data)
+        }
+    )
+
+    rpcHandlerManager.registerHandler(
+        'open-agent-config-file',
+        async (params: unknown): Promise<OpenAgentConfigResponse> => {
+            const parsed = OpenAgentConfigRequestSchema.safeParse(params)
+            if (!parsed.success) {
+                throw new Error('Invalid agent config open request')
+            }
+            return await handlers.openAgentConfigFile(parsed.data)
         }
     )
 }

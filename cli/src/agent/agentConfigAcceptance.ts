@@ -16,7 +16,7 @@ export type AgentConfigAcceptanceRow = {
     supportedVersion: string
     installedVersion?: string
     versionStatus: string
-    configWrite: 'passed' | 'blocked' | 'failed'
+    configWrite: 'passed' | 'failed'
     commandStart: 'passed' | 'skipped' | 'failed'
     command?: string
     message?: string
@@ -97,43 +97,7 @@ async function runSpec(
 ): Promise<AgentConfigAcceptanceRow> {
     return await withEnv(spec.env(root), async () => {
         const version = await readVersion(spec.driver)
-        const commandStart = version.status === 'supported' || version.status === 'unsupported' ? 'passed' : 'skipped'
-        const command = version.command
         try {
-            if (version.status !== 'supported') {
-                try {
-                    await saveAgentConfigFile(
-                        { driver: spec.driver, values: spec.values, expectedExists: false },
-                        { readVersion }
-                    )
-                    return {
-                        driver: spec.driver,
-                        configPath: '',
-                        supportedVersion: version.supportedVersion,
-                        installedVersion: version.installedVersion,
-                        versionStatus: version.status,
-                        configWrite: 'failed',
-                        commandStart,
-                        command,
-                        message: 'unsupported version was allowed to write',
-                    }
-                } catch {
-                    return {
-                        driver: spec.driver,
-                        configPath: '',
-                        supportedVersion: version.supportedVersion,
-                        installedVersion: version.installedVersion,
-                        versionStatus: version.status,
-                        configWrite: 'blocked',
-                        commandStart,
-                        command,
-                        message: version.installedVersion
-                            ? `requires ${version.supportedVersion}`
-                            : `missing ${spec.commands.map(commandLabel).join(' or ')}`,
-                    }
-                }
-            }
-
             const state = await saveAgentConfigFile(
                 { driver: spec.driver, values: spec.values, expectedExists: false },
                 { readVersion }
@@ -201,10 +165,6 @@ async function commandExists(command: string): Promise<boolean> {
     if (!command) return false
     const proc = Bun.spawn(['sh', '-lc', `command -v ${command}`], { stdout: 'ignore', stderr: 'ignore' })
     return (await proc.exited) === 0
-}
-
-function commandLabel(command: readonly string[]): string {
-    return command.join(' ')
 }
 
 async function runCommand(cmd: readonly string[], env: NodeJS.ProcessEnv): Promise<CommandResult> {

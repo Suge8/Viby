@@ -453,12 +453,27 @@ describe('MessageQueue2', () => {
         expect(batch3?.mode.type).toBe('B')
     })
 
+    it('should emit enqueue events after queueing messages', () => {
+        const queue = new MessageQueue2<{ type: string }>((mode) => mode.type)
+        let enqueued = 0
+        queue.onEnqueued(() => {
+            enqueued += 1
+        })
+
+        queue.push('first', { type: 'A' })
+        queue.unshift('second', { type: 'A' })
+        queue.pushIsolateAndClear('third', { type: 'A' })
+
+        expect(enqueued).toBe(3)
+        expect(queue.size()).toBe(1)
+    })
+
     it('should emit consumed local IDs when a batch is dequeued', async () => {
         const queue = new MessageQueue2<{ type: string }>((mode) => mode.type)
         const consumed: string[][] = []
-        queue.onBatchConsumed = (localIds) => {
+        queue.onConsumed((localIds) => {
             consumed.push(localIds)
-        }
+        })
 
         queue.push('first', { type: 'A' }, 'local-1')
         queue.push('second', { type: 'A' }, 'local-2')
@@ -473,9 +488,9 @@ describe('MessageQueue2', () => {
     it('should emit canceled local IDs when clearing queued messages', () => {
         const queue = new MessageQueue2<{ type: string }>((mode) => mode.type)
         const canceled: string[][] = []
-        queue.onMessagesCanceled = (localIds) => {
+        queue.onCanceled((localIds) => {
             canceled.push(localIds)
-        }
+        })
 
         queue.push('first', { type: 'A' }, 'local-1')
         queue.push('second', { type: 'A' }, 'local-2')
@@ -488,9 +503,9 @@ describe('MessageQueue2', () => {
     it('should remove queued messages by local ID without emitting a cancellation loopback', async () => {
         const queue = new MessageQueue2<{ type: string }>((mode) => mode.type)
         const canceled: string[][] = []
-        queue.onMessagesCanceled = (localIds) => {
+        queue.onCanceled((localIds) => {
             canceled.push(localIds)
-        }
+        })
 
         queue.push('first', { type: 'A' }, 'local-1')
         queue.push('second', { type: 'A' }, 'local-2')

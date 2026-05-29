@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto'
+import type { CliSessionEventPayload } from '@viby/protocol'
 import type { RawJSONLines } from '@/claude/types'
 import { logger } from '@/ui/logger'
 import { runDetachedTask } from '@/utils/runDetachedTask'
 import { cleanupUploadDir } from '../modules/common/handlers/uploads'
-import type { DriverSwitchSendFailureCode, SessionKeepAliveRuntime, SessionKeepAliveSnapshot } from './apiSessionState'
+import type { SessionKeepAliveRuntime, SessionKeepAliveSnapshot } from './apiSessionState'
 import { isExternalUserMessage, toSessionAlivePayload } from './apiSessionState'
-import type { MessageContent, MessageMeta, SessionPermissionMode, WritableSessionMetadata } from './types'
+import type { MessageContent, MessageMeta, WritableSessionMetadata } from './types'
 
 export interface SessionSocketLike {
     connected: boolean
@@ -23,15 +24,7 @@ export interface SessionSocketLike {
     }
 }
 
-type EventPayload =
-    | { type: 'message'; message: string }
-    | { type: 'permission-mode-changed'; mode: SessionPermissionMode }
-    | {
-          type: 'driver-switch-send-failed'
-          stage: 'socket_update' | 'callback_flush'
-          code: DriverSwitchSendFailureCode
-      }
-    | { type: 'ready' }
+type EventPayload = CliSessionEventPayload
 
 export type TransportContext = {
     sessionId: string
@@ -50,6 +43,11 @@ export type TransportContext = {
 export type SessionStreamClientUpdate =
     | { kind: 'append'; assistantTurnId: string; delta: string }
     | { kind: 'clear'; assistantTurnId?: string }
+
+export type SessionRuntimeStateUpdate = {
+    state: 'stopping'
+    reason?: 'idle-timeout' | 'user-request' | 'shutdown'
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -190,6 +188,14 @@ export function emitMessagesCanceled(context: TransportContext, localIds: string
 export function sendStreamUpdate(context: TransportContext, update: SessionStreamClientUpdate): void {
     context.socket.emit('stream-update', {
         sid: context.sessionId,
+        ...update,
+    })
+}
+
+export function sendSessionRuntimeState(context: TransportContext, update: SessionRuntimeStateUpdate): void {
+    context.socket.emit('session-runtime-state', {
+        sid: context.sessionId,
+        time: Date.now(),
         ...update,
     })
 }

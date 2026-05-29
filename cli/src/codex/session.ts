@@ -41,6 +41,7 @@ export class CodexSession extends AgentSessionBase<EnhancedMode> {
             messageQueue: opts.messageQueue,
             sessionLabel: 'CodexSession',
             sessionIdLabel: 'Codex',
+            startedBy: opts.startedBy,
             applySessionIdToMetadata: (metadata, sessionId) => ({
                 ...metadata,
                 ...setSessionDriverRuntimeHandle(metadata, 'codex', { sessionId }),

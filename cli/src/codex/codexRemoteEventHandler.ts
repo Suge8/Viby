@@ -60,6 +60,9 @@ export function createCodexEventHandler(options: {
         if (shouldIgnoreTurnContentEvent(state, msgType, eventTurnId)) {
             return
         }
+        if (TURN_CONTENT_EVENT_TYPES.has(msgType) && !eventTurnId && !state.currentTurnId) {
+            state.allowAnonymousTerminalEvent = true
+        }
 
         if (msgType === 'thread_started') {
             const threadId = asString(msg.thread_id ?? msg.threadId)

@@ -1,3 +1,4 @@
+import type { CliSessionEventPayload } from '@viby/protocol'
 import type { RawJSONLines } from '@/claude/types'
 import type { TerminalManager } from '@/terminal/TerminalManager'
 import type { AsyncLock } from '@/utils/lock'
@@ -6,13 +7,13 @@ import {
     updateMetadata as applyMetadataUpdate,
     updateMetadataAndWait as applyMetadataUpdateAndWait,
 } from './apiSessionMutations'
+import type { MetadataUpdateOptions, SessionKeepAliveRuntime, SessionKeepAliveSnapshot } from './apiSessionState'
 import type {
-    DriverSwitchSendFailureCode,
-    MetadataUpdateOptions,
-    SessionKeepAliveRuntime,
-    SessionKeepAliveSnapshot,
-} from './apiSessionState'
-import type { SessionSocketLike, SessionStreamClientUpdate, TransportContext } from './apiSessionTransport'
+    SessionRuntimeStateUpdate,
+    SessionSocketLike,
+    SessionStreamClientUpdate,
+    TransportContext,
+} from './apiSessionTransport'
 import {
     emitMessagesCanceled,
     emitMessagesConsumed,
@@ -24,29 +25,15 @@ import {
     sendOutputMessage,
     sendSessionDeath,
     sendSessionEvent,
+    sendSessionRuntimeState,
     sendStreamUpdate,
     sendUserMessage,
     waitForConnected,
 } from './apiSessionTransport'
 import type { RpcHandlerManager } from './rpc/RpcHandlerManager'
-import type {
-    AgentState,
-    MessageMeta,
-    Metadata,
-    SessionPermissionMode,
-    UserMessage,
-    WritableSessionMetadata,
-} from './types'
+import type { AgentState, MessageMeta, Metadata, UserMessage, WritableSessionMetadata } from './types'
 
-type SessionEventPayload =
-    | { type: 'message'; message: string }
-    | { type: 'permission-mode-changed'; mode: SessionPermissionMode }
-    | {
-          type: 'driver-switch-send-failed'
-          stage: 'socket_update' | 'callback_flush'
-          code: DriverSwitchSendFailureCode
-      }
-    | { type: 'ready' }
+type SessionEventPayload = CliSessionEventPayload
 
 type RecoveryStateLike = {
     metadata: Metadata | null
@@ -65,6 +52,7 @@ export type ApiSessionPublicApi = {
     emitMessagesConsumed(localIds: string[]): void
     emitMessagesCanceled(localIds: string[]): void
     sendStreamUpdate(update: SessionStreamClientUpdate): void
+    sendSessionRuntimeState(update: SessionRuntimeStateUpdate): void
     sendSessionEvent(event: SessionEventPayload, id?: string): void
     keepAlive(thinking: boolean, mode: 'remote', runtime?: SessionKeepAliveRuntime): void
     sendSessionDeath(): void
@@ -105,6 +93,7 @@ export function createApiSessionPublicApi(options: {
         emitMessagesConsumed: (localIds) => emitMessagesConsumed(options.getTransportContext(), localIds),
         emitMessagesCanceled: (localIds) => emitMessagesCanceled(options.getTransportContext(), localIds),
         sendStreamUpdate: (update) => sendStreamUpdate(options.getTransportContext(), update),
+        sendSessionRuntimeState: (update) => sendSessionRuntimeState(options.getTransportContext(), update),
         sendSessionEvent: (event, id) => sendSessionEvent(options.getTransportContext(), event, id),
         keepAlive: (thinking, mode, runtime) => keepAlive(options.getTransportContext(), thinking, mode, runtime),
         sendSessionDeath: () => sendSessionDeath(options.getTransportContext()),

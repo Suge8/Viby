@@ -40,6 +40,7 @@ export class Session extends AgentSessionBase<EnhancedMode> {
             messageQueue: opts.messageQueue,
             sessionLabel: 'Session',
             sessionIdLabel: 'Claude Code',
+            startedBy: opts.startedBy,
             applySessionIdToMetadata: (metadata, sessionId) => ({
                 ...metadata,
                 ...setSessionDriverRuntimeHandle(metadata, 'claude', { sessionId }),
