@@ -50,6 +50,7 @@ export class SessionCache {
             (sessionId) => this.sessions.get(sessionId) ?? this.refreshSession(sessionId),
             (sessionId) => this.refreshSession(sessionId)
         )
+        this.repairActiveHistoryLifecycleDrift()
         this.repairInactiveRunningLifecycleDrift()
     }
 
@@ -108,6 +109,12 @@ export class SessionCache {
     private repairInactiveRunningLifecycleDrift(): void {
         for (const sessionId of this.store.sessions.getInactiveRunningSessionIds()) {
             this.metadataMutationService.normalizeInactiveStoredLifecycle(sessionId)
+        }
+    }
+
+    private repairActiveHistoryLifecycleDrift(): void {
+        for (const sessionId of this.store.sessions.getActiveHistorySessionIds()) {
+            this.store.sessions.setSessionInactive(sessionId)
         }
     }
 
@@ -224,6 +231,22 @@ export class SessionCache {
         )
     }
 
+    commitSessionLifecycleState(
+        sessionId: string,
+        lifecycleState: SessionLifecycleState,
+        options?: {
+            archivedBy?: string
+            archiveReason?: string
+            touchUpdatedAt?: boolean
+        }
+    ): void {
+        this.metadataMutationService.commitMetadataMutation(
+            sessionId,
+            (currentMetadata) => buildLifecycleMetadata(currentMetadata, lifecycleState, options),
+            { touchUpdatedAt: options?.touchUpdatedAt }
+        )
+    }
+
     async setSessionLifecycleState(
         sessionId: string,
         lifecycleState: SessionLifecycleState,
@@ -233,13 +256,7 @@ export class SessionCache {
             touchUpdatedAt?: boolean
         }
     ): Promise<void> {
-        await this.mutateSessionMetadata(
-            sessionId,
-            (currentMetadata) => {
-                return buildLifecycleMetadata(currentMetadata, lifecycleState, options)
-            },
-            { touchUpdatedAt: options?.touchUpdatedAt }
-        )
+        this.commitSessionLifecycleState(sessionId, lifecycleState, options)
     }
 
     async transitionSessionLifecycle(

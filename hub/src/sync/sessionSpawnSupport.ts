@@ -1,5 +1,5 @@
 import { getSessionLifecycleState, type SessionDriver, type SessionHandoffSnapshot } from '@viby/protocol'
-import type { Session } from '@viby/protocol/types'
+import type { Session, SessionLifecycleState } from '@viby/protocol/types'
 import { MachineCache } from './machineCache'
 import { RpcGateway } from './rpcGateway'
 import { SessionCache } from './sessionCache'
@@ -81,8 +81,10 @@ export class SessionSpawnSupport {
     }
 
     async spawnInactiveSession(spawnOptions: SessionSpawnOptions): Promise<SpawnInactiveSessionResult> {
+        const previousLifecycleState = await this.markSpawnStarting(spawnOptions.sessionId)
         const spawnResult = await this.rpcGateway.spawnSession(spawnOptions)
         if (spawnResult.type !== 'success') {
+            await this.restoreSpawnLifecycle(spawnOptions.sessionId, previousLifecycleState)
             return { type: 'error', message: spawnResult.message }
         }
 
@@ -92,6 +94,7 @@ export class SessionSpawnSupport {
             onTimeout: () => false,
         })
         if (!becameActive) {
+            await this.restoreSpawnLifecycle(spawnResult.sessionId, previousLifecycleState)
             return {
                 type: 'error',
                 message: 'Session remained inactive after start',
@@ -209,6 +212,32 @@ export class SessionSpawnSupport {
 
     private getSession(sessionId: string): Session | undefined {
         return getSpawnSupportSession(this.sessionCache, sessionId)
+    }
+
+    async markSpawnStarting(sessionId: string | undefined): Promise<SessionLifecycleState | null> {
+        if (!sessionId) {
+            return null
+        }
+
+        const session = this.getSession(sessionId)
+        const previousLifecycleState = session ? getSessionLifecycleState(session) : null
+        await this.sessionCache.setSessionLifecycleState(sessionId, 'running', {
+            touchUpdatedAt: false,
+        })
+        return previousLifecycleState
+    }
+
+    async restoreSpawnLifecycle(
+        sessionId: string | undefined,
+        previousLifecycleState: SessionLifecycleState | null
+    ): Promise<void> {
+        if (!sessionId) {
+            return
+        }
+
+        await this.sessionCache.setSessionLifecycleState(sessionId, previousLifecycleState ?? 'closed', {
+            touchUpdatedAt: false,
+        })
     }
 
     private async waitForSessionState<T>(

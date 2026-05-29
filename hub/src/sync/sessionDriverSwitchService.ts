@@ -4,7 +4,7 @@ import {
     type SessionDriver,
     type SessionHandoffSnapshot,
 } from '@viby/protocol'
-import type { Session } from '@viby/protocol/types'
+import type { Session, SessionLifecycleState } from '@viby/protocol/types'
 import { RpcGateway } from './rpcGateway'
 import { SessionCache } from './sessionCache'
 import {
@@ -37,6 +37,7 @@ type DriverSwitchValidation = {
 type DriverSwitchSpawnContext = DriverSwitchValidation & {
     handoffSnapshot: SessionHandoffSnapshot
     normalizedSwitchConfig: NormalizedDriverSwitchConfig
+    previousLifecycleState: SessionLifecycleState | null
 }
 
 const SUPPORTED_DRIVER_SWITCH_TARGETS = new Set<SessionDriver>(SAME_SESSION_SWITCH_TARGET_DRIVERS)
@@ -78,6 +79,7 @@ export class SessionDriverSwitchService {
             ...validation,
             handoffSnapshot: handoffResult,
             normalizedSwitchConfig: normalizeDriverSwitchConfig(validation.session, targetDriver),
+            previousLifecycleState: await this.sessionSpawnSupport.markSpawnStarting(validation.session.id),
         }
 
         const spawnError = await this.spawnDriverSwitchTargetSession(spawnContext, targetDriver)
@@ -239,6 +241,7 @@ export class SessionDriverSwitchService {
         })
 
         if (spawnResult.type !== 'success') {
+            await this.sessionSpawnSupport.restoreSpawnLifecycle(context.session.id, context.previousLifecycleState)
             const rollback = await this.sessionSpawnSupport.rollbackDriverSwitchMetadata(
                 context.session.id,
                 context.previousDriver
@@ -256,6 +259,7 @@ export class SessionDriverSwitchService {
         }
 
         await this.sessionSpawnSupport.cleanupUnexpectedSwitchSpawn(context.session.id, spawnResult.sessionId)
+        await this.sessionSpawnSupport.restoreSpawnLifecycle(context.session.id, context.previousLifecycleState)
         const rollback = await this.sessionSpawnSupport.rollbackDriverSwitchMetadata(
             context.session.id,
             context.previousDriver
@@ -275,6 +279,7 @@ export class SessionDriverSwitchService {
     ): Promise<DriverSwitchResult> {
         const attachState = await this.sessionSpawnSupport.waitForDriverSwitchAttach(context.session.id)
         if (attachState !== 'attached') {
+            await this.sessionSpawnSupport.restoreSpawnLifecycle(context.session.id, context.previousLifecycleState)
             const rollback = await this.sessionSpawnSupport.rollbackDriverSwitchMetadata(
                 context.session.id,
                 context.previousDriver

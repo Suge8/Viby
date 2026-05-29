@@ -12,6 +12,8 @@ import type {
     LocalSessionExportSnapshot,
     MachineDirectoryResponse,
     ModelReasoningEffort,
+    OpenAgentConfigRequest,
+    OpenAgentConfigResponse,
     PermissionMode,
     ResolveAgentLaunchConfigRequest,
     ResolveAgentLaunchConfigResponse,
@@ -29,6 +31,7 @@ import {
     parseAgentConfigFileState,
     parseAgentConfigResponse,
     parseMachineDirectoryResponse,
+    parseOpenAgentConfigResponse,
     parsePathExistsResponse,
     parseResolveAgentLaunchConfigResponse,
     parseRestoreAgentConfigResponse,
@@ -220,6 +223,13 @@ export class RpcGateway {
             | AgentConfigFileState
             | unknown
         return parseRestoreAgentConfigResponse(result)
+    }
+
+    async openAgentConfigFile(machineId: string, request: OpenAgentConfigRequest): Promise<OpenAgentConfigResponse> {
+        const result = (await this.machineRpc(machineId, 'open-agent-config-file', request)) as
+            | OpenAgentConfigResponse
+            | unknown
+        return parseOpenAgentConfigResponse(result)
     }
 
     async listLocalSessions(machineId: string, request: LocalSessionCatalogRequest): Promise<LocalSessionCatalog> {

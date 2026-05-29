@@ -4,6 +4,7 @@ import type {
     ListAgentAvailabilityRequest,
     LocalSessionCatalogRequest,
     LocalSessionExportRequest,
+    OpenAgentConfigRequest,
     PermissionMode,
     ResolveAgentLaunchConfigRequest,
     RestoreAgentConfigRequest,
@@ -188,6 +189,10 @@ export abstract class SyncEngineSessionApi extends SyncEngineReadApi {
 
     async restoreAgentConfigFile(machineId: string, request: RestoreAgentConfigRequest) {
         return await this.syncServices.sessionRpcFacade.restoreAgentConfigFile(machineId, request)
+    }
+
+    async openAgentConfigFile(machineId: string, request: OpenAgentConfigRequest) {
+        return await this.syncServices.sessionRpcFacade.openAgentConfigFile(machineId, request)
     }
 
     async validateRuntimeSpawnCapability(machineId: string, options: RuntimeSpawnValidationOptions) {

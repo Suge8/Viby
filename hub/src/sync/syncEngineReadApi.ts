@@ -101,7 +101,15 @@ export abstract class SyncEngineReadApi {
     }
 
     handleSessionEnd(payload: { sid: string; time: number }): void {
+        const stopReason = this.syncServices.sessionRuntimeStateService.getStoppingReason(payload.sid)
+        if (stopReason === 'idle-timeout' || stopReason === 'shutdown') {
+            this.syncServices.sessionCache.commitSessionLifecycleState(payload.sid, 'open', { touchUpdatedAt: false })
+        }
         this.syncServices.stateFacade.handleSessionEnd(payload)
+    }
+
+    handleSessionRuntimeStopping(sessionId: string, reason?: 'idle-timeout' | 'user-request' | 'shutdown'): void {
+        this.syncServices.sessionRuntimeStateService.markStopping(sessionId, reason)
     }
 
     handleMachineAlive(payload: { machineId: string; time: number }): void {

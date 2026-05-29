@@ -50,6 +50,15 @@ export class SyncEngine extends SyncEngineSessionApi {
         this.rpcGateway = services.rpcGateway
         this.messageService = services.messageService
         this.sessionLifecycleService = services.sessionLifecycleService
+        this.sessionCache.subscribe((event) => {
+            if (event.type !== 'session-updated') {
+                return
+            }
+            const patch = event.data as { active?: boolean }
+            if (patch.active === true || patch.active === false) {
+                services.sessionRuntimeStateService.clear(event.sessionId)
+            }
+        })
         this.reloadAll()
         this.inactivityTimer = setInterval(() => this.expireInactive(), INACTIVITY_SWEEP_INTERVAL_MS)
     }

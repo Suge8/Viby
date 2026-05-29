@@ -14,6 +14,7 @@ import { SessionHandoffService } from './sessionHandoffService'
 import { SessionInteractionService, type SessionSendMessageErrorCode } from './sessionInteractionService'
 import { SessionLifecycleService } from './sessionLifecycleService'
 import { SessionRpcFacade } from './sessionRpcFacade'
+import { SessionRuntimeStateService } from './sessionRuntimeStateService'
 import { SyncEngineStateFacade } from './syncEngineStateFacade'
 
 type SyncEngineResumeResult = Awaited<ReturnType<SessionLifecycleService['resumeSession']>>
@@ -69,12 +70,16 @@ export function createSyncEngineServices(options: SyncEngineServiceFactoryOption
         (sessionId, config) => sessionCache.applySessionConfig(sessionId, config)
     )
     const localSessionRecoveryService = new LocalSessionRecoveryService(options.store, sessionCache, sessionRpcFacade)
+    const sessionRuntimeStateService = new SessionRuntimeStateService()
     const sessionInteractionService = new SessionInteractionService({
         getSession: options.getSession,
         hasMessages: (sessionId) => messageService.hasMessages(sessionId),
         startSession: (sessionId) => sessionLifecycleService.startSession(sessionId),
         resumeSession: async (sessionId) => await options.resumeSession(sessionId),
         unarchiveSession: async (sessionId) => await options.unarchiveSession(sessionId),
+        isRuntimeStopping: (sessionId) => sessionRuntimeStateService.isStopping(sessionId),
+        waitUntilRuntimeNotStopping: async (sessionId) =>
+            await sessionRuntimeStateService.waitUntilNotStopping(sessionId),
         appendUserMessage: async (sessionId, payload) => {
             await messageService.appendUserMessage(sessionId, payload)
         },
@@ -112,6 +117,7 @@ export function createSyncEngineServices(options: SyncEngineServiceFactoryOption
         sessionInteractionService,
         sessionLifecycleService,
         sessionRpcFacade,
+        sessionRuntimeStateService,
         stateFacade,
     }
 }

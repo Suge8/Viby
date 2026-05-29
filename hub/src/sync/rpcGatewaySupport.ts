@@ -2,6 +2,7 @@ import {
     AgentAvailabilityResponseSchema,
     AgentConfigFileStateSchema,
     AgentConfigResponseSchema,
+    OpenAgentConfigResponseSchema,
     ResolveAgentLaunchConfigResponseSchema,
     RestoreAgentConfigResponseSchema,
 } from '@viby/protocol'
@@ -10,6 +11,7 @@ import type {
     AgentConfigFileState,
     AgentConfigResponse,
     MachineDirectoryResponse,
+    OpenAgentConfigResponse,
     ResolveAgentLaunchConfigResponse,
     RestoreAgentConfigResponse,
 } from '@viby/protocol/types'
@@ -128,4 +130,13 @@ export function parseRestoreAgentConfigResponse(result: RestoreAgentConfigRespon
     }
 
     return parseAgentConfigFileState(result)
+}
+
+export function parseOpenAgentConfigResponse(result: OpenAgentConfigResponse | unknown): OpenAgentConfigResponse {
+    const parsed = OpenAgentConfigResponseSchema.safeParse(result)
+    if (parsed.success) {
+        return parsed.data
+    }
+
+    throw new Error('Unexpected open-agent-config-file result')
 }
