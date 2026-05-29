@@ -1,5 +1,10 @@
 import type { CliSocketWithData } from '../../socketTypes'
-import { type SessionAlivePayload, type SessionEndPayload, type SessionHandlersDeps } from './sessionHandlerSupport'
+import {
+    type SessionAlivePayload,
+    type SessionEndPayload,
+    type SessionHandlersDeps,
+    sessionRuntimeStateSchema,
+} from './sessionHandlerSupport'
 import { registerSessionMessageHandlers } from './sessionMessageHandlers'
 import { registerSessionMutationHandlers } from './sessionMutationHandlers'
 
@@ -13,6 +18,7 @@ export function registerSessionHandlers(socket: CliSocketWithData, deps: Session
         sessionStreamManager,
         onSessionAlive,
         onSessionEnd,
+        onSessionRuntimeState,
         onWebappEvent,
     } = deps
 
@@ -29,6 +35,19 @@ export function registerSessionHandlers(socket: CliSocketWithData, deps: Session
             return
         }
         onSessionAlive?.(data)
+    })
+
+    socket.on('session-runtime-state', (data) => {
+        const parsed = sessionRuntimeStateSchema.safeParse(data)
+        if (!parsed.success) {
+            return
+        }
+        const sessionAccess = resolveSessionAccess(parsed.data.sid)
+        if (!sessionAccess.ok) {
+            emitAccessError('session', parsed.data.sid, sessionAccess.reason)
+            return
+        }
+        onSessionRuntimeState?.(parsed.data)
     })
 
     socket.on('session-end', (data: SessionEndPayload) => {

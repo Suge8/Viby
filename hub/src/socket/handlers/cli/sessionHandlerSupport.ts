@@ -1,4 +1,5 @@
-import type { ClientToServerEvents } from '@viby/protocol'
+import { type ClientToServerEvents, SessionRuntimeStatePayloadSchema } from '@viby/protocol'
+import { AgentStateSchema } from '@viby/protocol/schemas'
 import type { CodexCollaborationMode, PermissionMode, Session } from '@viby/protocol/types'
 import { z } from 'zod'
 import type { Store, StoredSession } from '../../../store'
@@ -22,6 +23,12 @@ export type SessionEndPayload = {
     time: number
 }
 
+export type SessionRuntimeStatePayload = ClientToServerEvents extends {
+    'session-runtime-state': (payload: infer TPayload) => void
+}
+    ? TPayload
+    : never
+
 export type ResolveSessionAccess = (sessionId: string) => AccessResult<StoredSession>
 
 export type EmitAccessError = (scope: 'session' | 'machine', id: string, reason: AccessErrorReason) => void
@@ -31,6 +38,7 @@ export type UpdateStateHandler = ClientToServerEvents['update-state']
 export type CommandCapabilitiesInvalidatedHandler = ClientToServerEvents['command-capabilities-invalidated']
 export type MessagesConsumedHandler = ClientToServerEvents['messages-consumed']
 export type MessagesCanceledHandler = ClientToServerEvents['messages-canceled']
+export type SessionRuntimeStateHandler = ClientToServerEvents['session-runtime-state']
 
 export const messageSchema = z.object({
     sid: z.string(),
@@ -48,7 +56,7 @@ export const updateMetadataSchema = z.object({
 export const updateStateSchema = z.object({
     sid: z.string(),
     expectedVersion: z.number().int(),
-    agentState: z.unknown().nullable(),
+    agentState: AgentStateSchema.nullable(),
 })
 
 export const commandCapabilitiesInvalidatedSchema = z.object({
@@ -59,6 +67,8 @@ export const queuedMessageLocalIdsSchema = z.object({
     sid: z.string(),
     localIds: z.array(z.string()),
 })
+
+export const sessionRuntimeStateSchema = SessionRuntimeStatePayloadSchema
 
 type SessionLifecycleMetadataField = 'lifecycleState' | 'lifecycleStateSince' | 'archivedBy' | 'archiveReason'
 
@@ -111,5 +121,6 @@ export type SessionHandlersDeps = {
     emitAccessError: EmitAccessError
     onSessionAlive?: (payload: SessionAlivePayload) => void
     onSessionEnd?: (payload: SessionEndPayload) => void
+    onSessionRuntimeState?: (payload: SessionRuntimeStatePayload) => void
     onWebappEvent?: (event: SyncEvent) => void
 }

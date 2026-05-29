@@ -1,4 +1,5 @@
 import { Server as Engine } from '@socket.io/bun-engine'
+import type { SessionRuntimeStatePayload } from '@viby/protocol'
 import { jwtVerify } from 'jose'
 import { type DefaultEventsMap, Server } from 'socket.io'
 import { z } from 'zod'
@@ -49,6 +50,7 @@ export type SocketServerDeps = {
     onWebappEvent?: (event: SyncEvent) => void
     onSessionAlive?: (payload: { sid: string; time: number; thinking?: boolean; mode?: 'local' | 'remote' }) => void
     onSessionEnd?: (payload: { sid: string; time: number }) => void
+    onSessionRuntimeState?: (payload: SessionRuntimeStatePayload) => void
     onMachineAlive?: (payload: { machineId: string; time: number }) => void
 }
 
@@ -196,6 +198,7 @@ export function createSocketServer(deps: SocketServerDeps): {
             sessionStreamManager,
             onSessionAlive: deps.onSessionAlive,
             onSessionEnd: deps.onSessionEnd,
+            onSessionRuntimeState: deps.onSessionRuntimeState,
             onMachineAlive: deps.onMachineAlive,
             onWebappEvent: deps.onWebappEvent,
         })

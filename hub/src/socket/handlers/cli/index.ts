@@ -1,15 +1,16 @@
+import type { SessionRuntimeStatePayload } from '@viby/protocol'
 import type { CodexCollaborationMode, PermissionMode } from '@viby/protocol/types'
 import type { Store, StoredMachine, StoredSession } from '../../../store'
-import type { RpcRegistry } from '../../rpcRegistry'
+import type { SessionStreamManager } from '../../../sync/sessionStreamManager'
 import type { SyncEvent } from '../../../sync/syncEngine'
-import type { TerminalRegistry } from '../../terminalRegistry'
+import type { RpcRegistry } from '../../rpcRegistry'
 import type { CliSocketWithData, SocketServer } from '../../socketTypes'
-import type { AccessErrorReason, AccessResult } from './types'
+import type { TerminalRegistry } from '../../terminalRegistry'
 import { registerMachineHandlers } from './machineHandlers'
 import { registerRpcHandlers } from './rpcHandlers'
 import { registerSessionHandlers } from './sessionHandlers'
 import { cleanupTerminalHandlers, registerTerminalHandlers } from './terminalHandlers'
-import type { SessionStreamManager } from '../../../sync/sessionStreamManager'
+import type { AccessErrorReason, AccessResult } from './types'
 
 type SessionAlivePayload = {
     sid: string
@@ -39,12 +40,24 @@ export type CliHandlersDeps = {
     sessionStreamManager: SessionStreamManager
     onSessionAlive?: (payload: SessionAlivePayload) => void
     onSessionEnd?: (payload: SessionEndPayload) => void
+    onSessionRuntimeState?: (payload: SessionRuntimeStatePayload) => void
     onMachineAlive?: (payload: MachineAlivePayload) => void
     onWebappEvent?: (event: SyncEvent) => void
 }
 
 export function registerCliHandlers(socket: CliSocketWithData, deps: CliHandlersDeps): void {
-    const { io, store, rpcRegistry, terminalRegistry, sessionStreamManager, onSessionAlive, onSessionEnd, onMachineAlive, onWebappEvent } = deps
+    const {
+        io,
+        store,
+        rpcRegistry,
+        terminalRegistry,
+        sessionStreamManager,
+        onSessionAlive,
+        onSessionEnd,
+        onSessionRuntimeState,
+        onMachineAlive,
+        onWebappEvent,
+    } = deps
     const terminalNamespace = io.of('/terminal')
 
     const resolveSessionAccess = (sessionId: string): AccessResult<StoredSession> => {
@@ -87,20 +100,21 @@ export function registerCliHandlers(socket: CliSocketWithData, deps: CliHandlers
         emitAccessError,
         onSessionAlive,
         onSessionEnd,
-        onWebappEvent
+        onSessionRuntimeState,
+        onWebappEvent,
     })
     registerMachineHandlers(socket, {
         store,
         resolveMachineAccess,
         emitAccessError,
         onMachineAlive,
-        onWebappEvent
+        onWebappEvent,
     })
     registerTerminalHandlers(socket, {
         terminalRegistry,
         terminalNamespace,
         resolveSessionAccess,
-        emitAccessError
+        emitAccessError,
     })
 
     socket.on('ping', (callback: () => void) => {

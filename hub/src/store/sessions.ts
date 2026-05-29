@@ -6,6 +6,7 @@ export {
 export type { CreateStoredSessionInput } from './sessionRecordStore'
 export {
     deleteSession,
+    getActiveHistorySessionIds,
     getInactiveRunningSessionIds,
     getOrCreateSession,
     getSession,

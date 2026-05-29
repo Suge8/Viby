@@ -179,6 +179,19 @@ export function getInactiveRunningSessionIds(db: Database): string[] {
     return rows.map((row) => row.id)
 }
 
+export function getActiveHistorySessionIds(db: Database): string[] {
+    const rows = db
+        .query(`
+        SELECT id
+        FROM sessions
+        WHERE active = 1
+          AND json_extract(metadata, '$.lifecycleState') IN ('closed', 'archived')
+    `)
+        .all() as Array<{ id: string }>
+
+    return rows.map((row) => row.id)
+}
+
 export function deleteSession(db: Database, id: string): boolean {
     const result = db.query('DELETE FROM sessions WHERE id = ?').run(id)
     return result.changes > 0

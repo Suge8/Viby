@@ -11,6 +11,7 @@ import { getSession } from './sessionRecordFieldStore'
 
 export {
     deleteSession,
+    getActiveHistorySessionIds,
     getInactiveRunningSessionIds,
     getSession,
     getSessions,

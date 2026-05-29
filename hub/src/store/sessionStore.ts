@@ -9,6 +9,7 @@ import type {
 import {
     type CreateStoredSessionInput,
     deleteSession,
+    getActiveHistorySessionIds,
     getInactiveRunningSessionIds,
     getOrCreateSession,
     getSession,
@@ -110,6 +111,10 @@ export class SessionStore {
 
     getInactiveRunningSessionIds(): string[] {
         return getInactiveRunningSessionIds(this.db)
+    }
+
+    getActiveHistorySessionIds(): string[] {
+        return getActiveHistorySessionIds(this.db)
     }
 
     getSessionMessageActivities(sessionIds: string[]): Record<string, SessionMessageActivity> {

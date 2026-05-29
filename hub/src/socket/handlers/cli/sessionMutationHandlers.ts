@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { buildSessionAttentionPatch } from '@viby/protocol'
 import type { CliSocketWithData } from '../../socketTypes'
 import type { SessionHandlersDeps, UpdateMetadataHandler, UpdateStateHandler } from './sessionHandlerSupport'
 import {
@@ -90,7 +91,11 @@ export function registerSessionMutationHandlers(socket: CliSocketWithData, deps:
                 agentState: { version: result.version, value: agentState },
             },
         })
-        onWebappEvent?.({ type: 'session-updated', sessionId: sid, data: { sid } })
+        onWebappEvent?.({
+            type: 'session-updated',
+            sessionId: sid,
+            data: { sid, ...buildSessionAttentionPatch(agentState) },
+        })
     }
 
     socket.on('update-metadata', handleUpdateMetadata)

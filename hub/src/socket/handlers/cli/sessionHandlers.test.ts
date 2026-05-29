@@ -7,7 +7,10 @@ import type { CliSocketWithData } from '../../socketTypes'
 import { mergeSessionMetadataPreservingLifecycle, registerSessionHandlers } from './sessionHandlers'
 
 type RegisteredSessionHandlers = Partial<
-    Pick<ClientToServerEvents, 'message' | 'update-metadata' | 'command-capabilities-invalidated'>
+    Pick<
+        ClientToServerEvents,
+        'message' | 'update-metadata' | 'update-state' | 'command-capabilities-invalidated' | 'session-runtime-state'
+    >
 >
 
 type MockSocket = {
@@ -22,12 +25,17 @@ type SessionHandlersHarness = {
     handlers: RegisteredSessionHandlers
     emittedUpdates: MockSocket['emittedUpdates']
     onWebappEvents: SyncEvent[]
+    runtimeStateEvents: Array<{ sid: string; state: 'stopping'; reason?: string }>
     sessionStreamManager: SessionStreamManager
 }
 
 type UpdateMetadataResponse = Parameters<ClientToServerEvents['update-metadata']>[1] extends (
     answer: infer TAnswer
 ) => void
+    ? TAnswer
+    : never
+
+type UpdateStateResponse = Parameters<ClientToServerEvents['update-state']>[1] extends (answer: infer TAnswer) => void
     ? TAnswer
     : never
 
@@ -71,6 +79,7 @@ function createSessionHandlersHarness(): SessionHandlersHarness {
         agentState: null,
     })
     const onWebappEvents: SyncEvent[] = []
+    const runtimeStateEvents: Array<{ sid: string; state: 'stopping'; reason?: string }> = []
     const { socket, handlers, emittedUpdates } = createMockSocket()
 
     const sessionStreamManager = new SessionStreamManager()
@@ -90,6 +99,9 @@ function createSessionHandlersHarness(): SessionHandlersHarness {
         onWebappEvent(event) {
             onWebappEvents.push(event)
         },
+        onSessionRuntimeState(payload) {
+            runtimeStateEvents.push(payload)
+        },
     })
 
     return {
@@ -98,6 +110,7 @@ function createSessionHandlersHarness(): SessionHandlersHarness {
         handlers,
         emittedUpdates,
         onWebappEvents,
+        runtimeStateEvents,
         sessionStreamManager,
     }
 }
@@ -110,12 +123,28 @@ function assertUpdateMetadataHandler(
     return handler as NonNullable<RegisteredSessionHandlers['update-metadata']>
 }
 
+function assertUpdateStateHandler(
+    handlers: RegisteredSessionHandlers
+): NonNullable<RegisteredSessionHandlers['update-state']> {
+    const handler = handlers['update-state']
+    expect(handler).toBeDefined()
+    return handler as NonNullable<RegisteredSessionHandlers['update-state']>
+}
+
 function assertSuccessfulMetadataResponse(
     response: UpdateMetadataResponse | null
 ): Extract<UpdateMetadataResponse, { result: 'success' }> {
     expect(response).not.toBeNull()
     expect(response?.result).toBe('success')
     return response as Extract<UpdateMetadataResponse, { result: 'success' }>
+}
+
+function assertSuccessfulStateResponse(
+    response: UpdateStateResponse | null
+): Extract<UpdateStateResponse, { result: 'success' }> {
+    expect(response).not.toBeNull()
+    expect(response?.result).toBe('success')
+    return response as Extract<UpdateStateResponse, { result: 'success' }>
 }
 
 describe('mergeSessionMetadataPreservingLifecycle', () => {
@@ -457,6 +486,67 @@ describe('registerSessionHandlers message', () => {
                         role: 'agent',
                     }),
                 }),
+            },
+        ])
+    })
+})
+
+it('forwards session runtime stopping state after access validation', () => {
+    const harness = createSessionHandlersHarness()
+    const handler = harness.handlers['session-runtime-state']
+    expect(handler).toBeDefined()
+
+    handler?.({
+        sid: harness.session.id,
+        time: Date.now(),
+        state: 'stopping',
+        reason: 'idle-timeout',
+    })
+
+    expect(harness.runtimeStateEvents).toEqual([
+        expect.objectContaining({
+            sid: harness.session.id,
+            state: 'stopping',
+            reason: 'idle-timeout',
+        }),
+    ])
+})
+
+describe('registerSessionHandlers update-state', () => {
+    it('emits pending request ids for web attention toast derivation', () => {
+        const harness = createSessionHandlersHarness()
+        const handler = assertUpdateStateHandler(harness.handlers)
+        let response: UpdateStateResponse | null = null
+
+        handler(
+            {
+                sid: harness.session.id,
+                expectedVersion: harness.session.agentStateVersion,
+                agentState: {
+                    controlledByUser: false,
+                    requests: {
+                        'request-2': { tool: 'Bash', arguments: {}, createdAt: 2_000 },
+                        'request-1': { tool: 'Read', arguments: {}, createdAt: 1_000 },
+                    },
+                    completedRequests: {},
+                },
+            },
+            (answer) => {
+                response = answer
+            }
+        )
+
+        const successResponse = assertSuccessfulStateResponse(response)
+        expect(successResponse.result).toBe('success')
+        expect(harness.onWebappEvents).toEqual([
+            {
+                type: 'session-updated',
+                sessionId: harness.session.id,
+                data: {
+                    sid: harness.session.id,
+                    pendingRequestsCount: 2,
+                    pendingRequestIds: ['request-1', 'request-2'],
+                },
             },
         ])
     })
