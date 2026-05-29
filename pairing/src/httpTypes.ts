@@ -4,6 +4,7 @@ import type { createBunWebSocket } from 'hono/bun'
 import type { PairingManifestCookieSigner } from './manifestCookie'
 import type { PairingMetrics } from './metrics'
 import type { PairingRateLimiter, PairingRateLimitRule } from './rateLimit'
+import type { PairingSessionEventBus } from './sessionEventBus'
 import type { PairingStore } from './store'
 import type { PairingSocketHub } from './ws'
 
@@ -13,23 +14,21 @@ export interface PairingHttpOptions {
     store: PairingStore
     socketHub: PairingSocketHub
     tunnelHub: PairingSocketHub
+    eventBus: PairingSessionEventBus
     publicUrl: string
     sessionTtlSeconds: number
-    ticketTtlSeconds: number
+    handoffTicketTtlSeconds: number
     reconnectChallengeTtlSeconds: number
     stunUrls: readonly string[]
-    turnUrls: readonly string[]
-    turnStaticAuthSecret: string | null
-    turnCredentialTtlSeconds: number
     createToken: string | null
     upgradeWebSocket: UpgradeWebSocket
     logger?: Pick<Console, 'error' | 'info' | 'warn'>
     rateLimiter?: PairingRateLimiter
     rateLimitRules?: {
         create: PairingRateLimitRule
-        claim: PairingRateLimitRule
+        verify: PairingRateLimitRule
         reconnect: PairingRateLimitRule
-        approve: PairingRateLimitRule
+        handoffClaim: PairingRateLimitRule
     }
     metrics?: PairingMetrics
     now?: () => number

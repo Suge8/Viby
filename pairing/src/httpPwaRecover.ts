@@ -62,7 +62,7 @@ export function createPairingCookieRecoverHandler(options: PairingHttpOptions): 
         if (unusable) return respondFailure(c, 'pairing_unavailable', { clearCookie: true })
 
         const handoffTicket = generatePairingSecret()
-        const expiresAt = now + options.ticketTtlSeconds * 1000
+        const expiresAt = now + options.handoffTicketTtlSeconds * 1000
         await options.store.issueHandoffTicket(pairingId, {
             tokenHash: hashPairingSecret(handoffTicket),
             expiresAt,

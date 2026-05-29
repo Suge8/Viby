@@ -1,9 +1,9 @@
+import { PROTOCOL_VERSION } from '@viby/protocol'
 import {
     hasPairingWorkspaceIntent,
     PAIRING_NAKED_WORKSPACE_REDIRECT_URL,
     PAIRING_PWA_HANDOFF_PARAM,
     PAIRING_PWA_MANIFEST_PAIRING_PARAM,
-    PairingClaimRequestSchema,
     PairingCreateRequestSchema,
     PairingPwaHandoffClaimRequestSchema,
     PairingPwaHandoffTicketRequestSchema,
@@ -25,7 +25,7 @@ import { readWebAppAsset, readWebAppIndexHtml } from './webAppAssets'
 export type { PairingHttpOptions } from './httpTypes'
 
 const WEB_APP_HTML_CACHE_CONTROL = 'no-store'
-const SENSITIVE_LOG_SEARCH_PARAMS = new Set(['handoff', 'ticket', 'token'])
+const SENSITIVE_LOG_SEARCH_PARAMS = new Set(['handoff', 'token'])
 
 function getRequestSearch(url: string): string {
     return new URL(url, 'https://pairing.local').search
@@ -122,7 +122,7 @@ export function createPairingApp(options: PairingHttpOptions): Hono {
         )
     })
 
-    app.get('/health', (c) => c.json({ ok: true, service: 'pairing' }))
+    app.get('/health', (c) => c.json({ ok: true, service: 'pairing', protocolVersion: PROTOCOL_VERSION }))
     app.get('/ready', async (c) => {
         try {
             await options.store.healthCheck()
@@ -178,7 +178,6 @@ export function createPairingApp(options: PairingHttpOptions): Hono {
 
     registerPairingSessionRoutes(app, options, {
         createPairingBodyValidator: createJsonBodyValidator(PairingCreateRequestSchema, 'Invalid pairing create body'),
-        claimPairingBodyValidator: createJsonBodyValidator(PairingClaimRequestSchema, 'Invalid pairing claim body'),
         verifyCodeBodyValidator: createJsonBodyValidator(
             PairingVerifyCodeRequestSchema,
             'Invalid pairing verification body'

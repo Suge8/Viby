@@ -1,5 +1,5 @@
 import {
-    PairingClaimResponseSchema,
+    PairingGuestAuthResponseSchema,
     type PairingPwaHandoffClaimRequest,
     type PairingPwaHandoffTicketRequest,
     PairingPwaHandoffTicketResponseSchema,
@@ -68,7 +68,7 @@ export function registerPairingPwaHandoffRoutes(
         }
 
         const handoffTicket = generatePairingSecret()
-        const expiresAt = now + options.ticketTtlSeconds * 1000
+        const expiresAt = now + options.handoffTicketTtlSeconds * 1000
         await options.store.issueHandoffTicket(pairingId, {
             tokenHash: hashPairingSecret(handoffTicket),
             expiresAt,
@@ -89,32 +89,32 @@ export function registerPairingPwaHandoffRoutes(
     })
 
     app.post('/pairings/:id/pwa-handoff-claim', validators.handoffClaimBodyValidator, async (c) => {
-        const rateLimitResponse = enforcePairingRateLimit(c, options, 'claim')
+        const rateLimitResponse = enforcePairingRateLimit(c, options, 'handoffClaim')
         if (rateLimitResponse) return rateLimitResponse
 
         const pairingId = c.req.param('id')
         const body = c.req.valid('json')
         const now = getNow(options.now)
-        options.metrics?.increment('claim_requests')
+        options.metrics?.increment('handoff_claim_requests')
 
         const session = await options.store.getSession(pairingId)
         if (!session || session.state === 'deleted' || session.state === 'expired') {
-            return rejectPairingCode(c, options, 'claim_rejected', 410, 'pairing_unavailable')
+            return rejectPairingCode(c, options, 'handoff_claim_rejected', 410, 'pairing_unavailable')
         }
         if (session.approvalStatus !== 'approved' || !session.guest) {
-            return rejectPairingCode(c, options, 'claim_rejected', 403, 'pairing_invalid_handoff_ticket')
+            return rejectPairingCode(c, options, 'handoff_claim_rejected', 403, 'pairing_invalid_handoff_ticket')
         }
 
         const accepted = await options.store.consumeHandoffTicket(pairingId, hashPairingSecret(body.handoffTicket), now)
         if (!accepted) {
-            return rejectPairingCode(c, options, 'claim_rejected', 403, 'pairing_invalid_handoff_ticket')
+            return rejectPairingCode(c, options, 'handoff_claim_rejected', 403, 'pairing_invalid_handoff_ticket')
         }
 
         const guestToken = generatePairingSecret()
         const renewed = await options.store.renewSession(pairingId, now + options.sessionTtlSeconds * 1000, now)
         const guest = renewed?.guest
         if (!guest) {
-            return rejectPairingCode(c, options, 'claim_rejected', 410, 'pairing_unavailable')
+            return rejectPairingCode(c, options, 'handoff_claim_rejected', 410, 'pairing_unavailable')
         }
 
         const recovered = await options.store.rotateGuestToken(
@@ -128,18 +128,19 @@ export function registerPairingPwaHandoffRoutes(
             now
         )
         if (!recovered) {
-            return rejectPairingCode(c, options, 'claim_rejected', 410, 'pairing_unavailable')
+            return rejectPairingCode(c, options, 'handoff_claim_rejected', 410, 'pairing_unavailable')
         }
+        options.socketHub.notifyPeerReplaced(pairingId, 'guest')
 
         logPairingAudit(options, 'pwa_handoff_claim', { ip: getClientAddress(c), pairingId })
-        const urls = buildPairingUrls(options.publicUrl, pairingId, '', guestToken)
+        const urls = buildPairingUrls(options.publicUrl, pairingId, guestToken)
         return c.json(
-            PairingClaimResponseSchema.parse({
+            PairingGuestAuthResponseSchema.parse({
                 pairing: toPairingSessionSnapshotForRole(recovered, 'guest'),
                 guestToken,
                 wsUrl: urls.wsUrl,
                 tunnelUrl: urls.tunnelUrl,
-                iceServers: createIceServers(options, pairingId, now),
+                iceServers: createIceServers(options),
             })
         )
     })

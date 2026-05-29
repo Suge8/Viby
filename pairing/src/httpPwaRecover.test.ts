@@ -7,6 +7,7 @@ import { createBunWebSocket } from 'hono/bun'
 import { createPairingApp } from './http'
 import { createPairingManifestCookieSigner } from './manifestCookie'
 import { MemoryPairingStore } from './memoryStore'
+import { PairingSessionEventBus } from './sessionEventBus'
 import { PairingSocketHub } from './ws'
 
 const FIXED_NOW = 1_700_000_000_000
@@ -26,6 +27,7 @@ function buildTestApp() {
     const store = new MemoryPairingStore(now)
     const socketHub = new PairingSocketHub({ store, now })
     const tunnelHub = new PairingSocketHub({ store, now, messageSchema: PairingBrokerTunnelMessageSchema })
+    const eventBus = new PairingSessionEventBus()
     const { upgradeWebSocket } = createBunWebSocket()
     const manifestCookieSigner = createPairingManifestCookieSigner({ secret: COOKIE_SECRET })
     const assetsRoot = createWebRoot()
@@ -33,14 +35,12 @@ function buildTestApp() {
         store,
         socketHub,
         tunnelHub,
+        eventBus,
         publicUrl: 'https://pair.example.com',
         sessionTtlSeconds: 3600,
-        ticketTtlSeconds: 600,
+        handoffTicketTtlSeconds: 600,
         reconnectChallengeTtlSeconds: 60,
         stunUrls: [],
-        turnUrls: [],
-        turnStaticAuthSecret: null,
-        turnCredentialTtlSeconds: 600,
         createToken: null,
         upgradeWebSocket,
         now,
@@ -55,18 +55,17 @@ async function seedApprovedPairing(store: MemoryPairingStore, pairingId: string)
     await store.createSession({
         id: pairingId,
         state: 'waiting',
-        approvalStatus: 'pending',
-        shortCode: null,
+        approvalStatus: null,
+        shortCode: '123456',
         host: { tokenHash: 'host-hash', label: 'host', metadata: { source: 'desktop' } },
         guest: null,
         createdAt: FIXED_NOW,
         updatedAt: FIXED_NOW,
         expiresAt: FIXED_NOW + 3600 * 1000,
-        ticketExpiresAt: FIXED_NOW + 600 * 1000,
-        ticketHash: 'ticket-hash',
     })
-    await store.claimSession(
+    await store.claimAndApprove(
         pairingId,
+        '123456',
         {
             tokenHash: 'guest-hash',
             label: 'guest',
@@ -75,9 +74,8 @@ async function seedApprovedPairing(store: MemoryPairingStore, pairingId: string)
             connectedAt: FIXED_NOW,
             lastSeenAt: FIXED_NOW,
         },
-        '123456'
+        FIXED_NOW
     )
-    await store.approveSession(pairingId, FIXED_NOW)
 }
 
 afterEach(() => {

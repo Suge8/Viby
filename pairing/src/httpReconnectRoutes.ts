@@ -1,7 +1,7 @@
 import {
-    PairingClaimResponseSchema,
     PairingDeviceReconnectChallengeRequestSchema,
     PairingDeviceReconnectRequestSchema,
+    PairingGuestAuthResponseSchema,
     PairingReconnectChallengeRequestSchema,
     PairingReconnectChallengeResponseSchema,
     PairingReconnectRequestSchema,
@@ -23,6 +23,13 @@ import {
 import { buildPairingUrls, createIceServers, createParticipantRecord, getNow } from './httpSupport'
 import type { PairingHttpOptions } from './httpTypes'
 import { createJsonBodyValidator } from './httpValidation'
+
+const TELEMETRY_CORS_HEADERS = {
+    'access-control-allow-headers': 'authorization, content-type',
+    'access-control-allow-methods': 'POST, OPTIONS',
+    'access-control-allow-origin': '*',
+    'access-control-max-age': '600',
+}
 
 export function registerPairingReconnectRoutes(app: Hono, options: PairingHttpOptions): void {
     app.post(
@@ -147,16 +154,17 @@ export function registerPairingReconnectRoutes(app: Hono, options: PairingHttpOp
             if (!recovered) {
                 return rejectPairingCode(c, options, 'reconnect_rejected', 410, 'pairing_unavailable')
             }
+            options.socketHub.notifyPeerReplaced(pairingId, 'guest')
 
             logPairingAudit(options, 'device_reconnect', { ip: getClientAddress(c), pairingId })
-            const urls = buildPairingUrls(options.publicUrl, pairingId, '', guestToken)
+            const urls = buildPairingUrls(options.publicUrl, pairingId, guestToken)
             return c.json(
-                PairingClaimResponseSchema.parse({
+                PairingGuestAuthResponseSchema.parse({
                     pairing: toPairingSessionSnapshotForRole(recovered, 'guest'),
                     guestToken,
                     wsUrl: urls.wsUrl,
                     tunnelUrl: urls.tunnelUrl,
-                    iceServers: createIceServers(options, pairingId, now),
+                    iceServers: createIceServers(options),
                 })
             )
         }
@@ -232,18 +240,20 @@ export function registerPairingReconnectRoutes(app: Hono, options: PairingHttpOp
             }
 
             logPairingAudit(options, 'reconnect', { ip: getClientAddress(c), pairingId, role: identity.role })
-            const urls = buildPairingUrls(options.publicUrl, pairingId, '', body.token)
+            const urls = buildPairingUrls(options.publicUrl, pairingId, body.token)
             return c.json(
                 PairingReconnectResponseSchema.parse({
                     pairing: toPairingSessionSnapshotForRole(renewedSession, identity.role),
                     role: identity.role,
                     wsUrl: urls.wsUrl,
                     tunnelUrl: urls.tunnelUrl,
-                    iceServers: createIceServers(options, pairingId, now),
+                    iceServers: createIceServers(options),
                 })
             )
         }
     )
+
+    app.options('/pairings/:id/telemetry', (c) => c.body(null, 204, TELEMETRY_CORS_HEADERS))
 
     app.post(
         '/pairings/:id/telemetry',
@@ -264,6 +274,7 @@ export function registerPairingReconnectRoutes(app: Hono, options: PairingHttpOp
             const body = c.req.valid('json')
             options.metrics?.increment('telemetry_reports')
             options.metrics?.recordTelemetry(body.sample)
+            for (const [key, value] of Object.entries(TELEMETRY_CORS_HEADERS)) c.header(key, value)
             return c.json(PairingTelemetryResponseSchema.parse({ accepted: true }))
         }
     )

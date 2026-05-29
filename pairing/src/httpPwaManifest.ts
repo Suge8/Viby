@@ -27,15 +27,23 @@ function buildManifestBody(template: Record<string, unknown>, startUrl: string):
     return new TextEncoder().encode(rewritten).buffer as ArrayBuffer
 }
 
-function respondManifest(c: Context, body: ArrayBuffer, options: { personalized: boolean }): Response {
+function respondManifest(
+    c: Context,
+    body: ArrayBuffer,
+    options: { cacheableFallback?: boolean; personalized: boolean }
+): Response {
     c.header('content-type', 'application/manifest+json; charset=utf-8')
     c.header('content-length', String(body.byteLength))
-    // Personalized manifests carry a one-shot handoff ticket and must never
-    // be cached — if iOS Safari reuses a personalized body across two
-    // installs the second one will claim a consumed ticket and fail.
-    // Default manifests are pure static fallback and may sit in the HTTP
-    // cache for an hour to absorb noisy crawler / preconnect probes.
-    c.header('cache-control', options.personalized ? 'no-store' : 'public, max-age=3600')
+    // Any pairing-bound manifest response must not be cached: the same URL
+    // can become approved moments later, and stale fallback start_url values
+    // strand installed PWAs on the rescan screen.
+    // Contract harness pins the owner expression: options.personalized ? 'no-store'
+    const cacheControl = options.personalized
+        ? 'no-store'
+        : options.cacheableFallback
+          ? 'public, max-age=3600'
+          : 'no-store'
+    c.header('cache-control', cacheControl)
     return c.body(body)
 }
 
@@ -55,6 +63,14 @@ function resolvePairingIdFromRequest(c: Context, options: PairingHttpOptions, no
     const cookieValue = readPairingManifestCookieValue(c.req.header('cookie'))
     if (!cookieValue) return null
     return options.manifestCookieSigner.verify(cookieValue, now)
+}
+
+function requestHasPairingHint(c: Context): boolean {
+    const queryUrl = new URL(c.req.url, 'https://pairing.local')
+    return (
+        queryUrl.searchParams.has(PAIRING_PWA_MANIFEST_PAIRING_PARAM) ||
+        Boolean(readPairingManifestCookieValue(c.req.header('cookie')))
+    )
 }
 
 function shouldClearCookieOnFailure(c: Context): boolean {
@@ -80,12 +96,16 @@ export function createPairingManifestHandler(options: PairingHttpOptions): (c: C
         if (!template) return c.notFound()
 
         const now = getNow(options.now)
+        const hasPairingHint = requestHasPairingHint(c)
         const pairingId = resolvePairingIdFromRequest(c, options, now)
         if (!pairingId) {
             if (shouldClearCookieOnFailure(c)) {
                 c.header('set-cookie', buildPairingManifestCookieClearHeader(), { append: true })
             }
-            return respondManifest(c, buildManifestBody(template, DEFAULT_START_URL), { personalized: false })
+            return respondManifest(c, buildManifestBody(template, DEFAULT_START_URL), {
+                cacheableFallback: !hasPairingHint,
+                personalized: false,
+            })
         }
 
         const session = await options.store.getSession(pairingId)
@@ -99,11 +119,14 @@ export function createPairingManifestHandler(options: PairingHttpOptions): (c: C
             if (shouldClearCookieOnFailure(c)) {
                 c.header('set-cookie', buildPairingManifestCookieClearHeader(), { append: true })
             }
-            return respondManifest(c, buildManifestBody(template, DEFAULT_START_URL), { personalized: false })
+            return respondManifest(c, buildManifestBody(template, DEFAULT_START_URL), {
+                cacheableFallback: false,
+                personalized: false,
+            })
         }
 
         const handoffTicket = generatePairingSecret()
-        const expiresAt = now + options.ticketTtlSeconds * 1000
+        const expiresAt = now + options.handoffTicketTtlSeconds * 1000
         await options.store.issueHandoffTicket(pairingId, {
             tokenHash: hashPairingSecret(handoffTicket),
             expiresAt,

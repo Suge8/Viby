@@ -3,13 +3,15 @@ import { webcrypto } from 'node:crypto'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { PairingBrokerTunnelMessageSchema, readPairingTicketFromUrl } from '@viby/protocol/pairing'
+import { PROTOCOL_VERSION, WEB_BUILD_METADATA_FILE_NAME } from '@viby/protocol'
+import { PairingBrokerTunnelMessageSchema } from '@viby/protocol/pairing'
 import { createBunWebSocket } from 'hono/bun'
 import { buildPairingDeviceProofPayload } from './crypto'
 import { createPairingApp } from './http'
 import { createPairingManifestCookieSigner } from './manifestCookie'
 import { PairingMetrics } from './metrics'
 import { PairingRateLimiter } from './rateLimit'
+import { PairingSessionEventBus } from './sessionEventBus'
 import { MemoryPairingStore } from './store'
 import { PairingSocketHub } from './ws'
 
@@ -20,20 +22,17 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
     return new Uint8Array(bytes).buffer
 }
 
+type RateLimitRuleConfig = { bucket: string; limit: number; windowMs: number }
+
 function createTestApp(overrides?: {
     now?: () => number
     metrics?: PairingMetrics
-    turn?: {
-        urls: string[]
-        staticAuthSecret: string
-        credentialTtlSeconds: number
-    }
     rateLimiter?: PairingRateLimiter
     rateLimitRules?: {
-        create: { bucket: string; limit: number; windowMs: number }
-        claim: { bucket: string; limit: number; windowMs: number }
-        reconnect: { bucket: string; limit: number; windowMs: number }
-        approve: { bucket: string; limit: number; windowMs: number }
+        create: RateLimitRuleConfig
+        verify: RateLimitRuleConfig
+        reconnect: RateLimitRuleConfig
+        handoffClaim: RateLimitRuleConfig
     }
     webApp?: { indexHtml?: string; assetsRoot?: string }
     manifestCookieSigner?: ReturnType<typeof createPairingManifestCookieSigner>
@@ -44,20 +43,19 @@ function createTestApp(overrides?: {
     const store = new MemoryPairingStore(now)
     const socketHub = new PairingSocketHub({ store, now })
     const tunnelHub = new PairingSocketHub({ store, now, messageSchema: PairingBrokerTunnelMessageSchema })
+    const eventBus = new PairingSessionEventBus()
     const { upgradeWebSocket } = createBunWebSocket()
 
     return createPairingApp({
         store,
         socketHub,
         tunnelHub,
+        eventBus,
         publicUrl: 'https://pair.example.com',
         sessionTtlSeconds: 3600,
-        ticketTtlSeconds: 600,
+        handoffTicketTtlSeconds: 600,
         reconnectChallengeTtlSeconds: 60,
         stunUrls: ['stun:stun.example.com:3478'],
-        turnUrls: overrides?.turn?.urls ?? [],
-        turnStaticAuthSecret: overrides?.turn?.staticAuthSecret ?? null,
-        turnCredentialTtlSeconds: overrides?.turn?.credentialTtlSeconds ?? 600,
         createToken: 'create-secret',
         upgradeWebSocket,
         logger: overrides?.logger,
@@ -179,6 +177,20 @@ describe('pairing http routes', () => {
         expect(response.headers.get('content-length')).toBe(String(Buffer.byteLength('console.log("ok")')))
     })
 
+    it('serves Web build metadata as an unversioned asset that must revalidate', async () => {
+        const assetsRoot = mkdtempSync(join(tmpdir(), 'viby-pairing-http-build-meta-'))
+        tempRoots.push(assetsRoot)
+        writeFileSync(join(assetsRoot, 'web-index.html'), '<!doctype html>')
+        writeFileSync(join(assetsRoot, WEB_BUILD_METADATA_FILE_NAME), '{"buildId":"test"}')
+        const app = createTestApp({ webApp: { assetsRoot } })
+
+        const response = await app.request(`/${WEB_BUILD_METADATA_FILE_NAME}`)
+
+        expect(response.status).toBe(200)
+        expect(response.headers.get('cache-control')).toBe('no-cache')
+        expect(response.headers.get('content-type')).toBe('application/json; charset=utf-8')
+    })
+
     it('serves the service worker as an unversioned asset that must revalidate', async () => {
         const assetsRoot = mkdtempSync(join(tmpdir(), 'viby-pairing-http-sw-'))
         tempRoots.push(assetsRoot)
@@ -222,7 +234,7 @@ describe('pairing http routes', () => {
         }
     })
 
-    it('creates, claims, reconnects, renews, and deletes a pairing session', async () => {
+    it('creates, verifies, reconnects, renews, and deletes a pairing session', async () => {
         let now = 1_700_000_000_000
         const app = createTestApp({ now: () => now })
 
@@ -236,62 +248,55 @@ describe('pairing http routes', () => {
         })
         expect(createResponse.status).toBe(200)
         const created = await createResponse.json()
-        expect(created.pairingUrl).toBe(
-            'https://pair.example.com/p/' +
-                created.pairing.id +
-                '#ticket=' +
-                encodeURIComponent(readPairingTicketFromUrl(created.pairingUrl)!)
-        )
+        expect(created.pairingUrl).toBe(`https://pair.example.com/p/${created.pairing.id}`)
         expect(created.wsUrl).toBe(
             `wss://pair.example.com/pairings/${created.pairing.id}/ws?token=${created.hostToken}`
         )
         expect(created.tunnelUrl).toBe(
             `wss://pair.example.com/pairings/${created.pairing.id}/tunnel?token=${created.hostToken}`
         )
+        expect(created.eventsUrl).toBe(
+            `https://pair.example.com/pairings/${created.pairing.id}/events?token=${created.hostToken}`
+        )
+        expect(created.pairing.shortCode).toMatch(/^\d{6}$/)
+        expect(created.pairing.approvalStatus).toBeNull()
 
-        const ticket = readPairingTicketFromUrl(created.pairingUrl)
-        expect(ticket).toBeTruthy()
         const guestIdentity = await createReconnectDeviceIdentity()
 
-        const claimResponse = await app.request(`/pairings/${created.pairing.id}/claim`, {
+        const wrongCodeResponse = await app.request(`/pairings/${created.pairing.id}/verify-code`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ code: '000000', label: 'Phone Guest', publicKey: guestIdentity.publicKey }),
+        })
+        expect(wrongCodeResponse.status).toBe(403)
+
+        const verifyResponse = await app.request(`/pairings/${created.pairing.id}/verify-code`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({
-                ticket,
+                code: created.pairing.shortCode,
                 label: 'Phone Guest',
                 publicKey: guestIdentity.publicKey,
             }),
         })
-        expect(claimResponse.status).toBe(200)
-        const claimed = await claimResponse.json()
+        expect(verifyResponse.status).toBe(200)
+        const claimed = await verifyResponse.json()
         expect(claimed.guestToken).toBeTruthy()
         expect(claimed.wsUrl).toContain(`/pairings/${created.pairing.id}/ws?token=`)
         expect(claimed.tunnelUrl).toContain(`/pairings/${created.pairing.id}/tunnel?token=`)
-        expect(claimed.pairing.approvalStatus).toBe('pending')
-        expect(claimed.pairing.shortCode).toBeNull()
+        expect(claimed.pairing.approvalStatus).toBe('approved')
+        expect(claimed.pairing.shortCode).toBe(created.pairing.shortCode)
 
-        const hostStatusResponse = await app.request(`/pairings/${created.pairing.id}`, {
-            headers: { authorization: `Bearer ${created.hostToken}` },
-        })
-        expect(hostStatusResponse.status).toBe(200)
-        const hostStatus = await hostStatusResponse.json()
-        expect(hostStatus.pairing.shortCode).toMatch(/^\d{6}$/)
-
-        const rejectedVerifyResponse = await app.request(`/pairings/${created.pairing.id}/verify-code`, {
+        const replayResponse = await app.request(`/pairings/${created.pairing.id}/verify-code`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ token: claimed.guestToken, code: '000000' }),
+            body: JSON.stringify({
+                code: created.pairing.shortCode,
+                label: 'Other Phone',
+                publicKey: guestIdentity.publicKey,
+            }),
         })
-        expect(rejectedVerifyResponse.status).toBe(403)
-
-        const approveResponse = await app.request(`/pairings/${created.pairing.id}/verify-code`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ token: claimed.guestToken, code: hostStatus.pairing.shortCode }),
-        })
-        expect(approveResponse.status).toBe(200)
-        const approved = await approveResponse.json()
-        expect(approved.pairing.approvalStatus).toBe('approved')
+        expect(replayResponse.status).toBe(409)
 
         const challengeResponse = await app.request(`/pairings/${created.pairing.id}/reconnect-challenge`, {
             method: 'POST',
@@ -386,17 +391,16 @@ describe('pairing http routes', () => {
         })
         const created = await createResponse.json()
         const browserIdentity = await createReconnectDeviceIdentity()
-        const ticket = readPairingTicketFromUrl(created.pairingUrl)
-        const claimResponse = await app.request(`/pairings/${created.pairing.id}/claim`, {
+        const verifyResponse = await app.request(`/pairings/${created.pairing.id}/verify-code`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ ticket, label: 'Phone Browser', publicKey: browserIdentity.publicKey }),
+            body: JSON.stringify({
+                code: created.pairing.shortCode,
+                label: 'Phone Browser',
+                publicKey: browserIdentity.publicKey,
+            }),
         })
-        const claimed = await claimResponse.json()
-        await app.request(`/pairings/${created.pairing.id}/approve`, {
-            method: 'POST',
-            headers: { authorization: `Bearer ${created.hostToken}` },
-        })
+        const claimed = await verifyResponse.json()
 
         const challengeResponse = await app.request(`/pairings/${created.pairing.id}/reconnect-challenge`, {
             method: 'POST',
@@ -417,6 +421,24 @@ describe('pairing http routes', () => {
         expect(handoffTicketResponse.status).toBe(200)
         const handoff = await handoffTicketResponse.json()
         expect(handoff.handoffTicket).toBeTruthy()
+
+        const secondChallengeResponse = await app.request(`/pairings/${created.pairing.id}/reconnect-challenge`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ token: claimed.guestToken }),
+        })
+        const secondChallenge = await secondChallengeResponse.json()
+        const secondProof = await createReconnectDeviceProof(
+            created.pairing.id,
+            browserIdentity,
+            secondChallenge.challenge.nonce
+        )
+        const newerHandoffResponse = await app.request(`/pairings/${created.pairing.id}/pwa-handoff-ticket`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ token: claimed.guestToken, deviceProof: secondProof }),
+        })
+        expect(newerHandoffResponse.status).toBe(200)
 
         const pwaIdentity = await createReconnectDeviceIdentity()
         const handoffClaimResponse = await app.request(`/pairings/${created.pairing.id}/pwa-handoff-claim`, {
@@ -464,18 +486,12 @@ describe('pairing http routes', () => {
         })
         const created = await createResponse.json()
         const browserIdentity = await createReconnectDeviceIdentity()
-        const ticket = readPairingTicketFromUrl(created.pairingUrl)
-        const claimResponse = await app.request(`/pairings/${created.pairing.id}/claim`, {
+        const verifyResponse = await app.request(`/pairings/${created.pairing.id}/verify-code`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ ticket, label: 'Phone Browser' }),
+            body: JSON.stringify({ code: created.pairing.shortCode, label: 'Phone Browser' }),
         })
-        const claimed = await claimResponse.json()
-        await app.request(`/pairings/${created.pairing.id}/approve`, {
-            method: 'POST',
-            headers: { authorization: `Bearer ${created.hostToken}` },
-        })
-
+        const claimed = await verifyResponse.json()
         const challengeResponse = await app.request(`/pairings/${created.pairing.id}/reconnect-challenge`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
@@ -510,14 +526,8 @@ describe('pairing http routes', () => {
         expect(handoffClaimResponse.status).toBe(200)
     })
 
-    it('returns temporary TURN credentials with every broker-issued ICE response', async () => {
-        const app = createTestApp({
-            turn: {
-                urls: ['turn:turn.example.com:3478?transport=udp', 'turn:turn.example.com:3478?transport=tcp'],
-                staticAuthSecret: 'turn-secret',
-                credentialTtlSeconds: 600,
-            },
-        })
+    it('returns only STUN ICE servers with every broker-issued ICE response', async () => {
+        const app = createTestApp()
 
         const createResponse = await app.request('/pairings', {
             method: 'POST',
@@ -529,28 +539,15 @@ describe('pairing http routes', () => {
         })
         expect(createResponse.status).toBe(200)
         const created = await createResponse.json()
-        const turnIceServer = created.iceServers.find((server: { urls: string | string[] }) =>
-            Array.isArray(server.urls)
-                ? server.urls.some((url) => url.startsWith('turn:'))
-                : server.urls.startsWith('turn:')
-        )
+        expect(created.iceServers).toEqual([{ urls: 'stun:stun.example.com:3478' }])
 
-        expect(turnIceServer).toMatchObject({
-            urls: ['turn:turn.example.com:3478?transport=udp', 'turn:turn.example.com:3478?transport=tcp'],
-            username: `1700000600:${created.pairing.id}`,
-            credentialType: 'password',
-        })
-        expect(turnIceServer.credential).toBeTruthy()
-        expect(turnIceServer.credential).not.toBe('turn-secret')
-
-        const ticket = readPairingTicketFromUrl(created.pairingUrl)
-        const claimResponse = await app.request(`/pairings/${created.pairing.id}/claim`, {
+        const verifyResponse = await app.request(`/pairings/${created.pairing.id}/verify-code`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ ticket, label: 'Phone Guest' }),
+            body: JSON.stringify({ code: created.pairing.shortCode, label: 'Phone Guest' }),
         })
-        expect(claimResponse.status).toBe(200)
-        const claimed = await claimResponse.json()
+        expect(verifyResponse.status).toBe(200)
+        const claimed = await verifyResponse.json()
         expect(claimed.iceServers).toEqual(created.iceServers)
 
         const reconnectResponse = await app.request(`/pairings/${created.pairing.id}/reconnect`, {
@@ -576,21 +573,16 @@ describe('pairing http routes', () => {
             body: JSON.stringify({ label: 'Desk Host' }),
         })
         const created = await createResponse.json()
-        const ticket = readPairingTicketFromUrl(created.pairingUrl)
-
-        const claimResponse = await app.request(`/pairings/${created.pairing.id}/claim`, {
+        const verifyResponse = await app.request(`/pairings/${created.pairing.id}/verify-code`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ ticket, label: 'Phone Guest', publicKey: deviceIdentity.publicKey }),
+            body: JSON.stringify({
+                code: created.pairing.shortCode,
+                label: 'Phone Guest',
+                publicKey: deviceIdentity.publicKey,
+            }),
         })
-        const claimed = await claimResponse.json()
-
-        const approveResponse = await app.request(`/pairings/${created.pairing.id}/approve`, {
-            method: 'POST',
-            headers: { authorization: `Bearer ${created.hostToken}` },
-        })
-        expect(approveResponse.status).toBe(200)
-
+        const claimed = await verifyResponse.json()
         const reconnectResponse = await app.request(`/pairings/${created.pairing.id}/reconnect`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
@@ -615,22 +607,19 @@ describe('pairing http routes', () => {
             body: JSON.stringify({ label: 'Desk Host' }),
         })
         const created = await createResponse.json()
-        const ticket = readPairingTicketFromUrl(created.pairingUrl)
         const deviceIdentity = await createReconnectDeviceIdentity()
         const deviceProof = await createReconnectDeviceProof(created.pairing.id, deviceIdentity, 'missing-challenge')
 
-        const claimResponse = await app.request(`/pairings/${created.pairing.id}/claim`, {
+        const verifyResponse = await app.request(`/pairings/${created.pairing.id}/verify-code`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ ticket, label: 'Phone Guest', publicKey: deviceIdentity.publicKey }),
+            body: JSON.stringify({
+                code: created.pairing.shortCode,
+                label: 'Phone Guest',
+                publicKey: deviceIdentity.publicKey,
+            }),
         })
-        const claimed = await claimResponse.json()
-
-        await app.request(`/pairings/${created.pairing.id}/approve`, {
-            method: 'POST',
-            headers: { authorization: `Bearer ${created.hostToken}` },
-        })
-
+        const claimed = await verifyResponse.json()
         const reconnectResponse = await app.request(`/pairings/${created.pairing.id}/reconnect`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
@@ -657,6 +646,13 @@ describe('pairing http routes', () => {
         })
 
         expect(response.status).toBe(401)
+    })
+
+    it('exposes protocol compatibility on health checks', async () => {
+        const app = createTestApp()
+        const response = await app.request('/health')
+
+        expect(await response.json()).toMatchObject({ ok: true, service: 'pairing', protocolVersion: PROTOCOL_VERSION })
     })
 
     it('emits a structured request log line for non-health requests so production journals show each PWA install fetch in sequence', async () => {
@@ -729,9 +725,9 @@ describe('pairing http routes', () => {
             rateLimiter: new PairingRateLimiter(),
             rateLimitRules: {
                 create: { bucket: 'create', limit: 30, windowMs: 60_000 },
-                claim: { bucket: 'claim', limit: 1, windowMs: 60_000 },
+                verify: { bucket: 'verify', limit: 1, windowMs: 60_000 },
                 reconnect: { bucket: 'reconnect', limit: 60, windowMs: 60_000 },
-                approve: { bucket: 'approve', limit: 30, windowMs: 60_000 },
+                handoffClaim: { bucket: 'handoffClaim', limit: 30, windowMs: 60_000 },
             },
         })
 
@@ -744,29 +740,28 @@ describe('pairing http routes', () => {
             body: JSON.stringify({ label: 'Desk Host' }),
         })
         const created = await createResponse.json()
-        const ticket = readPairingTicketFromUrl(created.pairingUrl)
 
-        const firstClaim = await app.request(`/pairings/${created.pairing.id}/claim`, {
+        const firstVerify = await app.request(`/pairings/${created.pairing.id}/verify-code`, {
             method: 'POST',
             headers: {
                 'content-type': 'application/json',
                 'x-forwarded-for': '203.0.113.10',
             },
-            body: JSON.stringify({ ticket, label: 'Phone Guest' }),
+            body: JSON.stringify({ code: created.pairing.shortCode, label: 'Phone Guest' }),
         })
-        expect(firstClaim.status).toBe(200)
+        expect(firstVerify.status).toBe(200)
 
-        const secondClaim = await app.request(`/pairings/${created.pairing.id}/claim`, {
+        const secondVerify = await app.request(`/pairings/${created.pairing.id}/verify-code`, {
             method: 'POST',
             headers: {
                 'content-type': 'application/json',
                 'x-forwarded-for': '203.0.113.10',
             },
-            body: JSON.stringify({ ticket: 'another-ticket', label: 'Retry Guest' }),
+            body: JSON.stringify({ code: '000000', label: 'Retry Guest' }),
         })
-        expect(secondClaim.status).toBe(429)
-        expect(secondClaim.headers.get('retry-after')).toBeTruthy()
-        expect(await secondClaim.json()).toMatchObject({
+        expect(secondVerify.status).toBe(429)
+        expect(secondVerify.headers.get('retry-after')).toBeTruthy()
+        expect(await secondVerify.json()).toMatchObject({
             code: 'pairing_rate_limited',
         })
     })
@@ -801,6 +796,24 @@ describe('pairing http routes', () => {
                 pairedSessions: 0,
             },
         })
+    })
+
+    it('answers telemetry CORS preflight for desktop WebViews', async () => {
+        const app = createTestApp()
+
+        const response = await app.request('/pairings/pairing-1/telemetry', {
+            method: 'OPTIONS',
+            headers: {
+                origin: 'tauri://localhost',
+                'access-control-request-headers': 'authorization, content-type',
+                'access-control-request-method': 'POST',
+            },
+        })
+
+        expect(response.status).toBe(204)
+        expect(response.headers.get('access-control-allow-origin')).toBe('*')
+        expect(response.headers.get('access-control-allow-methods')).toContain('POST')
+        expect(response.headers.get('access-control-allow-headers')).toContain('authorization')
     })
 
     it('records host telemetry samples in the broker metrics snapshot', async () => {
@@ -840,6 +853,7 @@ describe('pairing http routes', () => {
         })
 
         expect(telemetryResponse.status).toBe(200)
+        expect(telemetryResponse.headers.get('access-control-allow-origin')).toBe('*')
 
         const metricsResponse = await app.request('/metrics', {
             headers: {
@@ -882,14 +896,12 @@ describe('pairing http routes', () => {
             body: JSON.stringify({ label: 'Desk Host' }),
         })
         const created = await createResponse.json()
-        const ticket = readPairingTicketFromUrl(created.pairingUrl)
-
-        const claimResponse = await app.request(`/pairings/${created.pairing.id}/claim`, {
+        const verifyResponse = await app.request(`/pairings/${created.pairing.id}/verify-code`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ ticket, label: 'Phone Guest' }),
+            body: JSON.stringify({ code: created.pairing.shortCode, label: 'Phone Guest' }),
         })
-        const claimed = await claimResponse.json()
+        const claimed = await verifyResponse.json()
 
         const telemetryResponse = await app.request(`/pairings/${created.pairing.id}/telemetry`, {
             method: 'POST',
@@ -924,12 +936,106 @@ describe('pairing http routes', () => {
         expect(await metricsResponse.json()).toMatchObject({
             counters: {
                 create_requests: 1,
-                claim_requests: 1,
+                verify_requests: 1,
                 telemetry_rejected: 1,
             },
             telemetry: {
                 totalReports: 0,
             },
         })
+    })
+
+    it('rejects DELETE /pairings/:id when the caller is a guest, not the host', async () => {
+        const app = createTestApp()
+        const createResponse = await app.request('/pairings', {
+            method: 'POST',
+            headers: { authorization: 'Bearer create-secret', 'content-type': 'application/json' },
+            body: JSON.stringify({ label: 'Desk Host' }),
+        })
+        const created = await createResponse.json()
+        const verifyResponse = await app.request(`/pairings/${created.pairing.id}/verify-code`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ code: created.pairing.shortCode, label: 'Phone' }),
+        })
+        const claimed = await verifyResponse.json()
+
+        const guestDelete = await app.request(`/pairings/${created.pairing.id}`, {
+            method: 'DELETE',
+            headers: { authorization: `Bearer ${claimed.guestToken}` },
+        })
+        expect(guestDelete.status).toBe(403)
+
+        const hostDelete = await app.request(`/pairings/${created.pairing.id}`, {
+            method: 'DELETE',
+            headers: { authorization: `Bearer ${created.hostToken}` },
+        })
+        expect(hostDelete.status).toBe(200)
+    })
+
+    it('pushes pairing.updated to host SSE subscribers when verify-code approves the session', async () => {
+        const app = createTestApp()
+        const createResponse = await app.request('/pairings', {
+            method: 'POST',
+            headers: { authorization: 'Bearer create-secret', 'content-type': 'application/json' },
+            body: JSON.stringify({ label: 'Desk Host' }),
+        })
+        const created = await createResponse.json()
+
+        const eventsResponse = await app.request(`/pairings/${created.pairing.id}/events`, {
+            headers: { authorization: `Bearer ${created.hostToken}` },
+        })
+        expect(eventsResponse.status).toBe(200)
+        expect(eventsResponse.headers.get('content-type')).toContain('text/event-stream')
+
+        const reader = eventsResponse.body!.getReader()
+        const decoder = new TextDecoder()
+        async function readUntil(predicate: (chunk: string) => boolean, budgetMs = 1_000): Promise<string> {
+            const startedAt = Date.now()
+            let buffer = ''
+            while (!predicate(buffer)) {
+                if (Date.now() - startedAt > budgetMs) throw new Error(`SSE budget exceeded: ${buffer}`)
+                const { value, done } = await reader.read()
+                if (done) break
+                buffer += decoder.decode(value, { stream: true })
+            }
+            return buffer
+        }
+
+        // Initial snapshot: state pre-verify.
+        const initial = await readUntil((chunk) => chunk.includes('event: pairing.updated'))
+        expect(initial).toContain('"approvalStatus":null')
+
+        // Trigger verify-code, then expect the SSE stream to emit the approved snapshot.
+        await app.request(`/pairings/${created.pairing.id}/verify-code`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ code: created.pairing.shortCode, label: 'Phone' }),
+        })
+        const afterVerify = await readUntil((chunk) => chunk.includes('"approvalStatus":"approved"'))
+        expect(afterVerify).toContain('"approvalStatus":"approved"')
+
+        await reader.cancel()
+    })
+
+    it('refuses the SSE events stream to guest tokens', async () => {
+        const app = createTestApp()
+        const createResponse = await app.request('/pairings', {
+            method: 'POST',
+            headers: { authorization: 'Bearer create-secret', 'content-type': 'application/json' },
+            body: JSON.stringify({ label: 'Desk Host' }),
+        })
+        const created = await createResponse.json()
+        const verifyResponse = await app.request(`/pairings/${created.pairing.id}/verify-code`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ code: created.pairing.shortCode, label: 'Phone' }),
+        })
+        const claimed = await verifyResponse.json()
+
+        const guestEvents = await app.request(`/pairings/${created.pairing.id}/events`, {
+            headers: { authorization: `Bearer ${claimed.guestToken}` },
+        })
+        expect(guestEvents.status).toBe(403)
     })
 })

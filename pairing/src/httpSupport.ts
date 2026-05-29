@@ -1,5 +1,16 @@
-import { buildPairingClaimUrl, buildPairingTunnelUrl, buildPairingWsUrl } from '@viby/protocol/pairing'
-import { generatePairingId, generatePairingSecret, hashPairingSecret, tokenHint } from './crypto'
+import {
+    buildPairingEventsUrl,
+    buildPairingInviteUrl,
+    buildPairingTunnelUrl,
+    buildPairingWsUrl,
+} from '@viby/protocol/pairing'
+import {
+    generatePairingId,
+    generatePairingSecret,
+    generatePairingShortCode,
+    hashPairingSecret,
+    tokenHint,
+} from './crypto'
 import {
     type PairingCreateRequest,
     type PairingHttpOptions,
@@ -37,23 +48,8 @@ export function createParticipantRecord(input: {
     }
 }
 
-export function createIceServers(
-    options: Pick<PairingHttpOptions, 'stunUrls' | 'turnUrls' | 'turnStaticAuthSecret' | 'turnCredentialTtlSeconds'>,
-    pairingId: string,
-    now: number
-) {
-    return buildIceServers(
-        {
-            stunUrls: options.stunUrls,
-            turn: {
-                urls: options.turnUrls,
-                staticAuthSecret: options.turnStaticAuthSecret,
-                credentialTtlSeconds: options.turnCredentialTtlSeconds,
-            },
-        },
-        pairingId,
-        now
-    )
+export function createIceServers(options: Pick<PairingHttpOptions, 'stunUrls'>) {
+    return buildIceServers({ stunUrls: options.stunUrls })
 }
 
 export function authorizeCreateRequest(
@@ -72,19 +68,23 @@ export function authorizeCreateRequest(
     return null
 }
 
+/**
+ * Generate a fresh pairing session record. The 6-digit `shortCode` is the
+ * sole auth credential the host displays; it is created up-front so the host
+ * can render it immediately on the create response without polling. There is
+ * no separate claim ticket. Devices that open the invite URL and submit
+ * the matching code becomes the approved guest in a single atomic step.
+ */
 export function createPairingSessionRecord(
     input: PairingCreateRequest,
-    options: Pick<PairingHttpOptions, 'sessionTtlSeconds' | 'ticketTtlSeconds'> & { now: number }
+    options: Pick<PairingHttpOptions, 'sessionTtlSeconds'> & { now: number }
 ): {
     session: PairingSessionRecord
     hostToken: string
-    ticket: string
 } {
     const hostToken = generatePairingSecret()
-    const ticket = generatePairingSecret()
     const pairingId = generatePairingId()
     const sessionTtlSeconds = input.sessionTtlSeconds ?? options.sessionTtlSeconds
-    const ticketTtlSeconds = input.ticketTtlSeconds ?? options.ticketTtlSeconds
 
     const session = PairingSessionRecordSchema.parse({
         id: pairingId,
@@ -92,10 +92,8 @@ export function createPairingSessionRecord(
         createdAt: options.now,
         updatedAt: options.now,
         expiresAt: options.now + sessionTtlSeconds * 1000,
-        ticketExpiresAt: options.now + ticketTtlSeconds * 1000,
-        shortCode: null,
+        shortCode: generatePairingShortCode(),
         approvalStatus: null,
-        ticketHash: hashPairingSecret(ticket),
         metadata: input.metadata,
         host: createParticipantRecord({
             token: hostToken,
@@ -105,22 +103,23 @@ export function createPairingSessionRecord(
         guest: null,
     })
 
-    return { session, hostToken, ticket }
+    return { session, hostToken }
 }
 
 export function buildPairingUrls(
     baseUrl: string,
     pairingId: string,
-    ticket: string,
     token: string
 ): {
     pairingUrl: string
     tunnelUrl: string
     wsUrl: string
+    eventsUrl: string
 } {
     return {
-        pairingUrl: buildPairingClaimUrl(baseUrl, pairingId, ticket),
+        pairingUrl: buildPairingInviteUrl(baseUrl, pairingId),
         tunnelUrl: buildPairingTunnelUrl(baseUrl, pairingId, token),
         wsUrl: buildPairingWsUrl(baseUrl, pairingId, token),
+        eventsUrl: buildPairingEventsUrl(baseUrl, pairingId, token),
     }
 }
