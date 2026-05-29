@@ -35,6 +35,31 @@ describe('sessionListUtils', () => {
         expect(sessionMatchesListQuery(session, 'missing')).toBe(false)
     })
 
+    it('orders history rows by completed reply time instead of noisy updatedAt', () => {
+        const olderCompletedSession = createTestSessionListSummary({
+            id: 'older-completed',
+            lifecycleState: 'closed',
+            lifecycleStateSince: 1_100,
+            updatedAt: 10_000,
+            latestCompletedReplyAt: 1_000,
+            metadata: { path: '/workspace/older', driver: 'codex' },
+        })
+        const newerCompletedSession = createTestSessionListSummary({
+            id: 'newer-completed',
+            lifecycleState: 'closed',
+            lifecycleStateSince: 4_100,
+            updatedAt: 5_000,
+            latestCompletedReplyAt: 4_000,
+            metadata: { path: '/workspace/newer', driver: 'codex' },
+        })
+
+        const history = buildSessionSections([olderCompletedSession, newerCompletedSession]).find(
+            (section) => section.id === 'history'
+        )
+
+        expect(history?.rows.map((row) => row.id)).toEqual(['newer-completed', 'older-completed'])
+    })
+
     it('limits history preview while preserving the selected row outside the preview window', () => {
         const sessions = Array.from({ length: SESSION_LIST_HISTORY_PREVIEW_LIMIT + 2 }, (_value, index) =>
             createHistorySession(index)

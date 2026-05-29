@@ -9,10 +9,12 @@ import { cn } from '@/lib/utils'
 type SurfaceRouteHeaderProps = {
     title: string
     onBack: () => void
-    eyebrow?: string
     titleIcon?: ReactNode
     className?: string
 }
+
+const TITLE_ICON_FRAME_CLASS_NAME =
+    'flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--ds-radius-md)] bg-[color:color-mix(in_srgb,var(--ds-brand)_12%,var(--ds-panel)_88%)] text-[var(--ds-brand)] ring-1 ring-[color:color-mix(in_srgb,var(--ds-brand)_24%,var(--ds-border-default))]'
 
 export function SurfaceRouteHeader(props: SurfaceRouteHeaderProps): React.JSX.Element {
     const { t } = useTranslation()
@@ -24,7 +26,11 @@ export function SurfaceRouteHeader(props: SurfaceRouteHeaderProps): React.JSX.El
                 props.className
             )}
         >
-            <MotionStaggerGroup className="ds-stage-shell flex items-center gap-4 px-3" delay={0.02} stagger={0.08}>
+            <MotionStaggerGroup
+                className="ds-stage-shell grid grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-2 px-3"
+                delay={0.02}
+                stagger={0.08}
+            >
                 <MotionStaggerItem x={-18} y={0}>
                     <Button
                         type="button"
@@ -38,22 +44,18 @@ export function SurfaceRouteHeader(props: SurfaceRouteHeaderProps): React.JSX.El
                     </Button>
                 </MotionStaggerItem>
 
-                <MotionStaggerItem className="min-w-0 flex-1" y={18}>
-                    <div className="min-w-0">
-                        {props.eyebrow ? (
-                            <p className="ds-surface-route-header-eyebrow font-semibold uppercase text-[var(--ds-text-muted)]">
-                                {props.eyebrow}
-                            </p>
+                <MotionStaggerItem className="min-w-0 justify-self-center" y={12}>
+                    <div className="flex min-w-0 items-center justify-center gap-3">
+                        {props.titleIcon ? (
+                            <span className={TITLE_ICON_FRAME_CLASS_NAME}>{props.titleIcon}</span>
                         ) : null}
-
-                        <div className="mt-1 flex items-center gap-2">
-                            {props.titleIcon ? props.titleIcon : null}
-                            <h1 className="ds-surface-route-header-title font-semibold text-[var(--ds-text-primary)]">
-                                {props.title}
-                            </h1>
-                        </div>
+                        <h1 className="ds-surface-route-header-title truncate font-semibold text-[var(--ds-text-primary)]">
+                            {props.title}
+                        </h1>
                     </div>
                 </MotionStaggerItem>
+
+                <span aria-hidden="true" />
             </MotionStaggerGroup>
         </header>
     )

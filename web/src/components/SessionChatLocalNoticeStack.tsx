@@ -57,7 +57,7 @@ export const SessionChatLocalNoticeStack = memo(function SessionChatLocalNoticeS
                                 size="sm"
                                 className="mt-1 shrink-0"
                                 disabled={notice.action.pending}
-                                aria-busy={notice.action.pending}
+                                pending={notice.action.pending === true}
                                 onClick={notice.action.onPress}
                             >
                                 {notice.action.pending ? notice.action.pendingLabel : notice.action.label}

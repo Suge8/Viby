@@ -107,6 +107,7 @@ function createProps(
                 messages: [],
                 pending: [],
                 warning: null,
+                hasLoadedLatest: true,
                 hasMore: false,
                 isLoading: false,
                 isLoadingMore: false,
@@ -115,6 +116,7 @@ function createProps(
                 pendingCount: 0,
                 messagesVersion: 0,
                 pendingReply: null,
+                restoredFromWarmSnapshot: false,
                 stream: null,
                 streamVersion: 0,
             },
@@ -158,6 +160,7 @@ describe('SessionChatRuntimeSurface', () => {
                             messages: [],
                             pending: [],
                             warning: null,
+                            hasLoadedLatest: true,
                             hasMore: false,
                             isLoading: false,
                             isLoadingMore: false,
@@ -166,6 +169,7 @@ describe('SessionChatRuntimeSurface', () => {
                             pendingCount: 0,
                             messagesVersion: 1,
                             pendingReply: null,
+                            restoredFromWarmSnapshot: false,
                             stream: null,
                             streamVersion: 0,
                         },
@@ -177,7 +181,7 @@ describe('SessionChatRuntimeSurface', () => {
 
         expect(screen.getByTestId('runtime-thread')).toBeInTheDocument()
         expect(vibyThreadHarness.props?.session.disabled).toBe(false)
-        expect(vibyThreadHarness.props?.messageState.isLoading).toBe(false)
+        expect(vibyThreadHarness.props?.messageState.hasLoadedLatest).toBe(true)
     })
 
     it('keeps non-resumable inactive sessions read-only', () => {
@@ -191,6 +195,7 @@ describe('SessionChatRuntimeSurface', () => {
                             messages: [],
                             pending: [],
                             warning: null,
+                            hasLoadedLatest: true,
                             hasMore: false,
                             isLoading: false,
                             isLoadingMore: false,
@@ -199,6 +204,7 @@ describe('SessionChatRuntimeSurface', () => {
                             pendingCount: 0,
                             messagesVersion: 1,
                             pendingReply: null,
+                            restoredFromWarmSnapshot: false,
                             stream: null,
                             streamVersion: 0,
                         },

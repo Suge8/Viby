@@ -214,7 +214,7 @@ export function RecoverLocalPanel(props: RecoverLocalPanelProps) {
         <NewSessionSectionCard
             title={t('newSession.recover.title')}
             description={t('newSession.recover.description')}
-            icon={<HistoryIcon className="h-5 w-5" />}
+            icon={<HistoryIcon className="h-3.5 w-3.5" />}
             accent="violet"
         >
             <div className="space-y-3">

@@ -1,5 +1,6 @@
 import { PROTOCOL_VERSION } from '@viby/protocol'
 import { useCallback, useMemo, useState } from 'react'
+import { SettingsIcon } from '@/components/icons'
 import { MotionStaggerGroup, MotionStaggerItem } from '@/components/motion/motionPrimitives'
 import { RouteScrollArea } from '@/components/RouteScrollArea'
 import { SurfaceGroupCard } from '@/components/SurfaceGroupCard'
@@ -14,7 +15,6 @@ import { type AppearancePreference, getAppearanceOptions, useAppearance } from '
 import { useAppContext } from '@/lib/app-context'
 import { type LocalePreference, useTranslation } from '@/lib/use-translation'
 import { SessionRoutePageSurface } from '@/routes/sessions/components/SessionRoutePageSurface'
-import { SettingsActionCard, type SettingsActionCardAction } from './components/SettingsActionCard'
 import {
     AppearanceSettingsIcon,
     AppVersionSettingsIcon,
@@ -22,18 +22,18 @@ import {
     NotificationSettingsIcon,
 } from './components/SettingsIcons'
 import { SettingsInfoRow } from './components/SettingsInfoRow'
+import { SettingsNotificationCard } from './components/SettingsNotificationCard'
 import { SettingsSelectCard, type SettingsSelectOption } from './components/SettingsSelectCard'
 import { localeOptions, type SettingsPanelId } from './settingsData'
 import {
-    buildNotificationSummaryModel,
-    NOTIFICATION_STATUS_LABEL_KEYS,
+    getNotificationDescriptionKey,
+    isNotificationToggleDisabled,
     resolveNotificationSummary,
 } from './settingsNotificationSupport'
 import {
     buildAppearanceItems,
     buildFontScaleItems,
     buildLanguageItems,
-    buildNotificationActions,
     getLocaleOptionLabel,
 } from './settingsPageSupport'
 
@@ -78,9 +78,17 @@ export default function SettingsPage(): React.JSX.Element {
             }),
         [isPushSupported, isIOS, isStandalone, isSubscribed, permission]
     )
-    const notificationSummary = useMemo(
-        () => buildNotificationSummaryModel(notificationAvailability),
-        [notificationAvailability]
+    const notificationDescription = t(getNotificationDescriptionKey(notificationAvailability))
+    const isNotificationDisabled = isNotificationToggleDisabled(notificationAvailability)
+    const handleNotificationToggle = useCallback(
+        (nextEnabled: boolean) => {
+            if (nextEnabled) {
+                enableNotifications()
+            } else {
+                disableNotifications()
+            }
+        },
+        [enableNotifications, disableNotifications]
     )
 
     const togglePanel = useCallback(
@@ -111,8 +119,6 @@ export default function SettingsPage(): React.JSX.Element {
         },
         [setFontScale]
     )
-    const handleEnableNotifications = useCallback(() => enableNotifications(), [enableNotifications])
-    const handleDisableNotifications = useCallback(() => disableNotifications(), [disableNotifications])
     const handleRefreshNotifications = useCallback(() => refreshSubscription(), [refreshSubscription])
 
     const languageItems = useMemo<ReadonlyArray<SettingsSelectOption<LocalePreference>>>(
@@ -129,27 +135,13 @@ export default function SettingsPage(): React.JSX.Element {
         () => buildFontScaleItems(fontScaleOptions),
         [fontScaleOptions]
     )
-    const notificationActions = useMemo<ReadonlyArray<SettingsActionCardAction>>(() => {
-        return buildNotificationActions({
-            notificationAvailability,
-            t,
-            isPushPending,
-            onEnable: handleEnableNotifications,
-            onDisable: handleDisableNotifications,
-            onRefresh: handleRefreshNotifications,
-        })
-    }, [
-        handleDisableNotifications,
-        handleEnableNotifications,
-        handleRefreshNotifications,
-        isPushPending,
-        notificationAvailability,
-        t,
-    ])
-
     return (
         <SessionRoutePageSurface>
-            <SurfaceRouteHeader title={t('settings.title')} onBack={goBack} />
+            <SurfaceRouteHeader
+                title={t('settings.title')}
+                titleIcon={<SettingsIcon className="h-5 w-5" />}
+                onBack={goBack}
+            />
             <RouteScrollArea>
                 <MotionStaggerGroup className="flex flex-col gap-3" delay={0.03} stagger={0.07}>
                     <MotionStaggerItem y={14}>
@@ -212,16 +204,21 @@ export default function SettingsPage(): React.JSX.Element {
 
                     <MotionStaggerItem y={14}>
                         <SurfaceGroupCard title={t('settings.notifications.title')} icon={<NotificationSettingsIcon />}>
-                            <SettingsActionCard
-                                summary={{
-                                    title: t('settings.notifications.label'),
-                                    description: t(notificationSummary.descriptionKey),
-                                    detail: notificationSummary.detailKey
-                                        ? t(notificationSummary.detailKey)
-                                        : undefined,
-                                    valueLabel: t(NOTIFICATION_STATUS_LABEL_KEYS[notificationSummary.statusLabelKey]),
-                                }}
-                                actions={notificationActions}
+                            <SettingsNotificationCard
+                                title={t('settings.notifications.label')}
+                                description={notificationDescription}
+                                isChecked={isSubscribed}
+                                isDisabled={isNotificationDisabled}
+                                isPending={isPushPending}
+                                onToggle={handleNotificationToggle}
+                                refresh={
+                                    notificationAvailability === 'blocked'
+                                        ? {
+                                              label: t('settings.notifications.actions.refresh'),
+                                              onClick: handleRefreshNotifications,
+                                          }
+                                        : undefined
+                                }
                             />
                         </SurfaceGroupCard>
                     </MotionStaggerItem>

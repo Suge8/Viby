@@ -1,41 +1,41 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ApiClient } from '@/api/client'
-import { InlineNotice } from '@/components/InlineNotice'
 import { MotionStaggerGroup, MotionStaggerItem } from '@/components/motion/motionPrimitives'
 import { useSpawnSession } from '@/hooks/mutations/useSpawnSession'
 import { useRuntimeAgentLaunchConfig } from '@/hooks/queries/useRuntimeAgentLaunchConfig'
 import { useSessions } from '@/hooks/queries/useSessions'
 import { usePlatform } from '@/hooks/usePlatform'
 import { useRecentPaths } from '@/hooks/useRecentPaths'
+import { useNoticeCenter } from '@/lib/notice-center'
 import { getNoticePreset } from '@/lib/noticePresets'
 import { useTranslation } from '@/lib/use-translation'
 import { formatUserFacingErrorMessage } from '@/lib/userFacingError'
 import type { LocalRuntime } from '@/types/api'
 import { ActionButtons } from './ActionButtons'
-import { DirectorySection } from './DirectorySection'
 import { NewSessionLaunchPanel } from './NewSessionLaunchPanel'
 import { NewSessionModeSegmented } from './NewSessionModeSegmented'
 import { isEffectiveAgentReady } from './newSessionAvailability'
 import { type NewSessionMode } from './newSessionModes'
+import { getNewSessionStartBlockReason, NEW_SESSION_START_BLOCK_REASON_KEY } from './newSessionStartReadiness'
 import { RecoverLocalPanel } from './RecoverLocalPanel'
-import { SessionTypeSelector } from './SessionTypeSelector'
 import { useAgentLaunchOptions } from './useAgentLaunchOptions'
 import { useEffectiveNewSessionLaunchState } from './useEffectiveNewSessionLaunchState'
 import { useNewSessionCreateAction } from './useNewSessionCreateAction'
 import { useNewSessionDirectoryState } from './useNewSessionDirectoryState'
 import { useNewSessionLaunchForm } from './useNewSessionLaunchForm'
 import { useRecoverLocalState } from './useRecoverLocalState'
+import { WorkspaceSection } from './WorkspaceSection'
 
 export function NewSession(props: {
     api: ApiClient
     runtime: LocalRuntime
     initialMode?: NewSessionMode
-    initialDirectory?: string
     onSuccess: (sessionId: string) => Promise<void> | void
     onCancel: () => void
 }): React.JSX.Element {
     const { haptic } = usePlatform()
     const { t } = useTranslation()
+    const { addToast } = useNoticeCenter()
     const createErrorPreset = getNoticePreset('newSessionCreateError', t)
     const { spawnSession, isPending, error: spawnError } = useSpawnSession(props.api)
     const { sessions } = useSessions(props.api)
@@ -83,14 +83,12 @@ export function NewSession(props: {
         sessionType,
         t,
         getRecentPaths,
-        initialDirectory: props.initialDirectory,
     })
 
     const {
         agentAvailability,
         isAgentAvailabilityLoading,
         isAgentAvailabilityRefreshing,
-        agentAvailabilityError,
         refetchAgentAvailability,
         effectiveAgentSelection,
         effectiveModel,
@@ -115,6 +113,8 @@ export function NewSession(props: {
     const {
         config: agentLaunchConfig,
         error: agentLaunchConfigError,
+        isLoading: isAgentLaunchConfigLoading,
+        isFetching: isAgentLaunchConfigFetching,
         refetch: refetchAgentLaunchConfig,
     } = useRuntimeAgentLaunchConfig({
         api: props.api,
@@ -133,6 +133,18 @@ export function NewSession(props: {
         setModel,
         setModelReasoningEffort,
     })
+
+    const lastToastedErrorRef = useRef<string | null>(null)
+    useEffect(() => {
+        const combined = error ?? spawnError
+        if (!combined) {
+            lastToastedErrorRef.current = null
+            return
+        }
+        if (lastToastedErrorRef.current === combined) return
+        lastToastedErrorRef.current = combined
+        addToast({ tone: createErrorPreset.tone, title: createErrorPreset.title, description: combined })
+    }, [addToast, createErrorPreset.title, createErrorPreset.tone, error, spawnError])
 
     const formatRecoverError = useCallback(
         (nextError: unknown) =>
@@ -161,11 +173,31 @@ export function NewSession(props: {
             formatUserFacingErrorMessage(nextError, {
                 t,
                 fallbackKey: 'error.session.create',
+                codeMap: {
+                    agent_unavailable: 'newSession.error.agentUnavailable',
+                    agent_config_unavailable: 'newSession.error.agentConfigUnavailable',
+                    model_unavailable: 'runtimeCapability.error.model_unavailable',
+                    reasoning_unsupported: 'runtimeCapability.error.reasoning_unsupported',
+                },
             }),
         [t]
     )
+    const isEffectiveReady = isEffectiveAgentReady(effectiveAgentSelection.effectiveAgentAvailability)
+    const isLaunchConfigBusy = isAgentLaunchConfigLoading || isAgentLaunchConfigFetching
+    const startBlockReason = getNewSessionStartBlockReason({
+        agent: effectiveAgentSelection.effectiveAgent,
+        model: effectiveModel,
+        modelReasoningEffort: effectiveReasoningEffort,
+        hasDirectory: Boolean(trimmedDirectory),
+        missingWorktreeDirectory,
+        agentAvailabilityLoading: isAgentAvailabilityLoading,
+        launchConfigBusy: isLaunchConfigBusy,
+        launchConfigUnavailable: Boolean(agentLaunchConfigError),
+        agentReady: isEffectiveReady,
+    })
+    const startDisabledMessage = startBlockReason ? t(NEW_SESSION_START_BLOCK_REASON_KEY[startBlockReason]) : undefined
     const {
-        canCreate: hasCreateDirectory,
+        canCreate: startActionReady,
         createPhase,
         handleCreate,
     } = useNewSessionCreateAction({
@@ -178,6 +210,8 @@ export function NewSession(props: {
         effectiveModel,
         effectiveReasoningEffort,
         effectiveCodexServiceTier,
+        canStart: !startBlockReason,
+        blockedMessage: startDisabledMessage,
         checkPathsExists,
         confirmDirectoryCreation,
         spawnSession,
@@ -191,13 +225,9 @@ export function NewSession(props: {
         formatError: formatCreateError,
     })
     const isCreateOpening = createPhase === 'opening'
-    const canCreate =
-        hasCreateDirectory &&
-        !isFormDisabled &&
-        createPhase === 'idle' &&
-        !missingWorktreeDirectory &&
-        !isAgentAvailabilityLoading &&
-        isEffectiveAgentReady(effectiveAgentSelection.effectiveAgentAvailability)
+    const canCreate = startActionReady && !isFormDisabled && createPhase === 'idle'
+    const startDisabledHint =
+        recoverLocal.mode === 'start' && !canCreate && createPhase === 'idle' ? startDisabledMessage : undefined
     const submitLabel = recoverLocal.mode === 'recover-local' ? recoverLocal.recoverActionLabel : createLabel
     const pendingLabel = recoverLocal.isRecovering
         ? t('newSession.recover.opening')
@@ -209,7 +239,7 @@ export function NewSession(props: {
     }, [refetchAgentAvailability, refetchAgentLaunchConfig])
 
     return (
-        <MotionStaggerGroup className="flex flex-col gap-3" delay={0.03} stagger={0.07}>
+        <MotionStaggerGroup className="flex flex-col gap-2.5" delay={0.03} stagger={0.06}>
             <MotionStaggerItem y={14}>
                 <NewSessionModeSegmented
                     mode={recoverLocal.mode}
@@ -218,18 +248,16 @@ export function NewSession(props: {
                 />
             </MotionStaggerItem>
 
-            <MotionStaggerItem y={14}>
-                <DirectorySection {...directorySectionProps} />
-            </MotionStaggerItem>
-
             {recoverLocal.mode === 'start' ? (
                 <>
                     <MotionStaggerItem y={14}>
-                        <SessionTypeSelector
+                        <WorkspaceSection
+                            directory={directorySectionProps}
                             sessionType={sessionType}
                             worktreeName={worktreeName}
                             worktreeInputRef={worktreeInputRef}
                             isDisabled={isFormDisabled}
+                            showSessionType
                             onSessionTypeChange={setSessionType}
                             onWorktreeNameChange={setWorktreeName}
                         />
@@ -250,11 +278,10 @@ export function NewSession(props: {
                                 agentAvailability,
                                 agentAvailabilityLoading: isAgentAvailabilityLoading,
                                 agentAvailabilityRefreshing: isAgentAvailabilityRefreshing,
-                                agentAvailabilityError,
                                 savedAgent: agent,
                                 savedAgentAvailability: effectiveAgentSelection.rawAgentAvailability,
                                 hasAgentFallback: effectiveAgentSelection.hasFallback,
-                                agentLaunchConfigError,
+                                agentLaunchConfigLoading: isLaunchConfigBusy,
                             }}
                             handlers={{
                                 onAgentChange: handleAgentChange,
@@ -268,20 +295,24 @@ export function NewSession(props: {
                     </MotionStaggerItem>
                 </>
             ) : (
-                <MotionStaggerItem y={14}>
-                    <RecoverLocalPanel {...recoverLocal.panelProps} />
-                </MotionStaggerItem>
+                <>
+                    <MotionStaggerItem y={14}>
+                        <WorkspaceSection
+                            directory={directorySectionProps}
+                            sessionType={sessionType}
+                            worktreeName={worktreeName}
+                            worktreeInputRef={worktreeInputRef}
+                            isDisabled={isFormDisabled}
+                            showSessionType={false}
+                            onSessionTypeChange={setSessionType}
+                            onWorktreeNameChange={setWorktreeName}
+                        />
+                    </MotionStaggerItem>
+                    <MotionStaggerItem y={14}>
+                        <RecoverLocalPanel {...recoverLocal.panelProps} />
+                    </MotionStaggerItem>
+                </>
             )}
-
-            {(error ?? spawnError) ? (
-                <MotionStaggerItem y={12}>
-                    <InlineNotice
-                        tone={createErrorPreset.tone}
-                        title={createErrorPreset.title}
-                        description={error ?? spawnError ?? null}
-                    />
-                </MotionStaggerItem>
-            ) : null}
 
             <MotionStaggerItem y={12}>
                 <ActionButtons
@@ -290,6 +321,7 @@ export function NewSession(props: {
                     isPending={isPending || createPhase !== 'idle' || recoverLocal.isRecovering}
                     pendingLabel={pendingLabel}
                     createLabel={submitLabel}
+                    disabledHint={startDisabledHint}
                     onCreate={recoverLocal.mode === 'recover-local' ? recoverLocal.handleRecover : handleCreate}
                     onCancel={props.onCancel}
                 />

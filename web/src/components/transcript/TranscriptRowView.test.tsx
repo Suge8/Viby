@@ -5,6 +5,7 @@ import { VibyChatProvider } from '@/components/AssistantChat/context'
 import { preloadMarkdownRenderer } from '@/components/markdown/loadMarkdownRenderer'
 import { TranscriptRowView } from '@/components/transcript/TranscriptRowView'
 import { I18nProvider } from '@/lib/i18n-context'
+import { preloadTranslations } from '@/lib/i18nCatalog'
 import { NoticeProvider } from '@/lib/notice-center'
 
 vi.mock('@/hooks/usePlatform', () => ({
@@ -82,6 +83,47 @@ describe('TranscriptRowView', () => {
         })
 
         expect(container.querySelector('.ds-message-surface')).toHaveAttribute('data-content-layout', 'media-only')
+    })
+
+    it('renders event notices with collapsed diagnostic details', async () => {
+        await preloadTranslations('en')
+
+        renderRow({
+            id: 'event:assistant-error',
+            type: 'event',
+            conversationId: 'event:assistant-error',
+            depth: 0,
+            copyText: null,
+            block: {
+                kind: 'agent-event',
+                id: 'assistant-error',
+                createdAt: 1,
+                event: { type: 'assistant-error', detail: 'WebSocket closed with code 1006' },
+            },
+        })
+
+        expect(screen.getByText('AI reply did not complete. Send again to retry.')).toBeInTheDocument()
+        expect(screen.getByText('Details')).toBeInTheDocument()
+        expect(screen.getByText('WebSocket closed with code 1006')).toBeInTheDocument()
+    })
+
+    it('renders reasoning chip centered with translated label', async () => {
+        await preloadTranslations('en')
+
+        const { container } = renderRow({
+            id: 'reasoning:1',
+            type: 'assistant-reasoning',
+            conversationId: 'reasoning:1',
+            depth: 0,
+            copyText: null,
+            blocks: [],
+            text: 'thinking through the problem',
+            renderMode: 'plain',
+        } as TranscriptRow)
+
+        const button = await screen.findByRole('button', { name: 'Reasoning' })
+        expect(button).toBeInTheDocument()
+        expect(button.parentElement?.className).toContain('justify-center')
     })
 
     it('marks attachment-only user rows with images as media-only surfaces', () => {

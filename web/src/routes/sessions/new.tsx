@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useCallback, useEffect, useRef } from 'react'
+import { PlusCircleIcon } from '@/components/icons'
 import { LoadingState } from '@/components/LoadingState'
 import { NewSession } from '@/components/NewSession'
 import { RouteScrollArea } from '@/components/RouteScrollArea'
@@ -54,7 +55,6 @@ type NewSessionRouteContentProps = {
     runtime: LocalRuntime | null
     runtimeAvailability: RuntimeAvailabilityPresentation
     runtimeAvailabilityCopy: RuntimeAvailabilityCopy | null
-    initialDirectory?: string
     searchMode: string | undefined
     t: ReturnType<typeof useTranslation>['t']
 }
@@ -123,7 +123,6 @@ function renderNewSessionRouteContent(props: NewSessionRouteContentProps): React
             api={props.api}
             runtime={props.runtime}
             initialMode={props.searchMode === 'recover-local' ? 'recover-local' : 'start'}
-            initialDirectory={props.initialDirectory}
             onCancel={props.handleCancel}
             onSuccess={props.handleSuccess}
         />
@@ -196,7 +195,11 @@ export default function NewSessionRoute(): React.JSX.Element {
 
     return (
         <SessionRoutePageSurface>
-            <SurfaceRouteHeader title={t('newSession.title')} onBack={goBack} />
+            <SurfaceRouteHeader
+                title={t('newSession.title')}
+                titleIcon={<PlusCircleIcon className="h-5 w-5" />}
+                onBack={goBack}
+            />
             <RouteScrollArea>
                 {renderNewSessionRouteContent({
                     api,
@@ -205,7 +208,6 @@ export default function NewSessionRoute(): React.JSX.Element {
                     runtime,
                     runtimeAvailability,
                     runtimeAvailabilityCopy,
-                    initialDirectory: search.directory,
                     searchMode: search.mode,
                     t,
                 })}

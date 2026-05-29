@@ -10,15 +10,6 @@ describe('sessionActionAvailability', () => {
         ).toEqual(['stop', 'rename'])
     })
 
-    it('adds a new-session action when the session has a project directory', () => {
-        expect(
-            getAvailableSessionActionIds({
-                lifecycleState: 'closed',
-                hasDirectory: true,
-            })
-        ).toEqual(['new-session', 'rename', 'delete'])
-    })
-
     it('keeps resumable history sessions on rename and delete only', () => {
         expect(
             getAvailableSessionActionIds({
@@ -39,6 +30,5 @@ describe('sessionActionAvailability', () => {
         expect(isConfirmableSessionActionId('stop')).toBe(true)
         expect(isConfirmableSessionActionId('delete')).toBe(true)
         expect(isConfirmableSessionActionId('rename')).toBe(false)
-        expect(isConfirmableSessionActionId('new-session')).toBe(false)
     })
 })

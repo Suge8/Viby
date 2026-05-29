@@ -6,7 +6,6 @@ import { SessionStateBadge } from '@/components/session-list/SessionStateBadge'
 import { SessionAgentBrandIcon } from '@/components/session-list/sessionAgentPresentation'
 import type { SessionListSelection } from '@/components/session-list/sessionListContracts'
 import { Button } from '@/components/ui/button'
-import { usePendingAction } from '@/components/ui/buttonPending'
 import type { FloatingActionMenuAnchorPoint } from '@/components/ui/FloatingActionMenu.contract'
 import { getInteractiveCardClassName } from '@/components/ui/interactiveCardStyles'
 import { useLongPress } from '@/hooks/useLongPress'
@@ -43,9 +42,7 @@ export const SessionListItem = memo(function SessionListItem(props: SessionListI
     const lifecycleState = session.lifecycleState
     const sessionDriver = resolveSessionDriver(session.metadata)
     const selected = selection.selectedSessionId === session.id
-    const routeOpening = selection.openingSessionId === session.id
-    const [openPending, openSession] = usePendingAction(() => selection.onSelect(session.id), routeOpening)
-    const opening = !selected && openPending
+    const opening = !selected && selection.openingSessionId === session.id
 
     const longPressHandlers = useLongPress({
         onLongPress: (point) => {
@@ -53,7 +50,7 @@ export const SessionListItem = memo(function SessionListItem(props: SessionListI
             onOpenActionMenu?.(session.id, point)
         },
         onClick: () => {
-            return openSession()
+            selection.onSelect(session.id)
         },
         threshold: SESSION_ACTION_LONG_PRESS_MS,
         enableContextMenu: true,
@@ -64,17 +61,23 @@ export const SessionListItem = memo(function SessionListItem(props: SessionListI
     const relativeTime = formatRelativeTime(session.updatedAt, t)
     const presentation = useMemo(() => {
         return getSessionStatePresentation({
+            active: session.active,
             lifecycleState,
             thinking: session.thinking,
+            activeAt: session.activeAt,
+            latestActivityAt: session.latestActivityAt,
             latestActivityKind: session.latestActivityKind,
+            latestCompletedReplyAt: session.latestCompletedReplyAt,
             pendingRequestsCount: session.pendingRequestsCount,
-            hasUnseenReply,
             resumeAvailable: session.resumeAvailable,
         })
     }, [
-        hasUnseenReply,
         lifecycleState,
+        session.active,
+        session.activeAt,
+        session.latestActivityAt,
         session.latestActivityKind,
+        session.latestCompletedReplyAt,
         session.pendingRequestsCount,
         session.resumeAvailable,
         session.thinking,
@@ -115,8 +118,6 @@ export const SessionListItem = memo(function SessionListItem(props: SessionListI
             variant="plain"
             size="sm"
             pressStyle="card"
-            pending={opening}
-            pendingIndicator="none"
             {...longPressHandlers}
             onFocus={() => emitIntent('focus')}
             onPointerEnter={handlePointerEnter}
@@ -126,6 +127,7 @@ export const SessionListItem = memo(function SessionListItem(props: SessionListI
                 WebkitTouchCallout: 'none',
                 touchAction: 'manipulation',
             }}
+            aria-busy={opening || undefined}
             aria-current={selected ? 'page' : undefined}
         >
             <div className="flex items-center justify-between gap-3">

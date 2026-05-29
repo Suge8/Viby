@@ -1,5 +1,5 @@
 import { type CSSProperties, type ReactNode } from 'react'
-import { SkeletonRows, type SkeletonRow } from '@/components/loading/LoadingSkeleton'
+import { type SkeletonRow, SkeletonRows } from '@/components/loading/LoadingSkeleton'
 
 const FILE_CONTENT_SKELETON_ROWS: ReadonlyArray<SkeletonRow> = [
     { widthClassName: 'w-full', heightClassName: 'h-3' },
@@ -32,7 +32,9 @@ function getDiffLinePresentation(line: string): { className: string; style?: CSS
         isRemove ? 'bg-[var(--app-diff-removed-bg)] text-[var(--app-diff-removed-text)]' : '',
         isHunk ? 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] font-semibold' : '',
         isHeader ? 'text-[var(--app-hint)] font-semibold' : '',
-    ].filter(Boolean).join(' ')
+    ]
+        .filter(Boolean)
+        .join(' ')
 
     if (isAdd) {
         return {
@@ -57,11 +59,7 @@ export function DiffDisplay(props: DiffDisplayProps): ReactNode {
             {props.diffContent.split('\n').map((line, index) => {
                 const presentation = getDiffLinePresentation(line)
                 return (
-                    <div
-                        key={`${index}-${line}`}
-                        className={presentation.className}
-                        style={presentation.style}
-                    >
+                    <div key={`${index}-${line}`} className={presentation.className} style={presentation.style}>
                         {line || ' '}
                     </div>
                 )
@@ -77,11 +75,7 @@ type FileContentSkeletonProps = {
 export function FileContentSkeleton(props: FileContentSkeletonProps): ReactNode {
     return (
         <div className="rounded-md border border-[var(--app-border)] bg-[var(--app-code-bg)] p-3">
-            <SkeletonRows
-                label={props.label}
-                rows={FILE_CONTENT_SKELETON_ROWS}
-                className="space-y-2"
-            />
+            <SkeletonRows label={props.label} rows={FILE_CONTENT_SKELETON_ROWS} className="space-y-2" />
         </div>
     )
 }

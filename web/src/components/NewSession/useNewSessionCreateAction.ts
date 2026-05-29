@@ -14,6 +14,8 @@ type UseNewSessionCreateActionOptions = {
     effectiveModel: string
     effectiveReasoningEffort: ModelReasoningEffortSelection
     effectiveCodexServiceTier: CodexServiceTierSelection
+    canStart: boolean
+    blockedMessage?: string
     checkPathsExists: (paths: string[]) => Promise<Record<string, boolean>>
     confirmDirectoryCreation: () => void
     spawnSession: Parameters<typeof submitNewSessionCreation>[0]['spawnSession']
@@ -51,6 +53,8 @@ export function useNewSessionCreateAction(options: UseNewSessionCreateActionOpti
         effectiveModel,
         effectiveReasoningEffort,
         effectiveCodexServiceTier,
+        canStart,
+        blockedMessage,
         checkPathsExists,
         confirmDirectoryCreation,
         spawnSession,
@@ -65,10 +69,12 @@ export function useNewSessionCreateAction(options: UseNewSessionCreateActionOpti
     } = options
     const createInFlightRef = useRef(false)
     const [createPhase, setCreatePhase] = useState<NewSessionCreatePhase>('idle')
-    const canCreate = Boolean(trimmedDirectory)
+    const canCreate = Boolean(trimmedDirectory) && canStart
 
     const handleCreate = useCallback(async (): Promise<void> => {
-        if (!trimmedDirectory || createInFlightRef.current || createPhase !== 'idle') {
+        if (createInFlightRef.current || createPhase !== 'idle') return
+        if (!trimmedDirectory || !canStart) {
+            if (blockedMessage) setError(blockedMessage)
             return
         }
 
@@ -130,6 +136,8 @@ export function useNewSessionCreateAction(options: UseNewSessionCreateActionOpti
     }, [
         addRecentPath,
         buildPreferenceSnapshotFor,
+        blockedMessage,
+        canStart,
         checkPathsExists,
         confirmDirectoryCreation,
         createPhase,

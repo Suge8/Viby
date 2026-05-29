@@ -1,7 +1,38 @@
 import { describe, expect, it } from 'vitest'
-import { shouldDispatchSessionIntent } from './sessionsShellSupport'
+import {
+    getSessionsPaneMotionState,
+    isSessionsBackNavigationAction,
+    shouldDispatchSessionIntent,
+} from './sessionsShellSupport'
 
 describe('sessionsShellSupport', () => {
+    it('keeps the covered mobile list pane compositor-stable behind detail routes', () => {
+        const state = getSessionsPaneMotionState({
+            isDesktopLayout: false,
+            isSessionsIndex: false,
+        })
+
+        expect(state.listPaneAnimate).toEqual({ opacity: 1, scale: 1, x: '0%' })
+        expect(state.listPanePointerEvents).toBe('none')
+    })
+
+    it('skips app pane motion for mobile browser-back returns to the list', () => {
+        const state = getSessionsPaneMotionState({
+            isDesktopLayout: false,
+            isSessionsIndex: true,
+            skipPaneTransition: true,
+        })
+
+        expect(state.paneTransition).toEqual({ duration: 0 })
+    })
+
+    it('classifies backward history actions without user-agent branches', () => {
+        expect(isSessionsBackNavigationAction({ type: 'BACK' })).toBe(true)
+        expect(isSessionsBackNavigationAction({ type: 'GO', index: -1 })).toBe(true)
+        expect(isSessionsBackNavigationAction({ type: 'FORWARD' })).toBe(false)
+        expect(isSessionsBackNavigationAction({ type: 'GO', index: 1 })).toBe(false)
+    })
+
     it('drops intent for the currently selected session', () => {
         expect(
             shouldDispatchSessionIntent({

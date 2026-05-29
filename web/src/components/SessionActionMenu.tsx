@@ -1,5 +1,5 @@
 import { FeatureEditIcon as EditIcon, FeatureTrashIcon as TrashIcon } from '@/components/featureIcons'
-import { PlusIcon, StopIcon } from '@/components/icons'
+import { StopIcon } from '@/components/icons'
 import {
     getAvailableSessionActionIds,
     type SessionActionAvailabilityState,
@@ -25,65 +25,41 @@ type SessionActionMenuProps = {
 const DEFAULT_MENU_ICON_CLASS_NAME = 'text-[var(--app-hint)]'
 const DANGER_MENU_ICON_CLASS_NAME = 'text-[var(--ds-danger)]'
 
-type SessionActionMenuItemConfig = {
-    id: string
-    label: string
-    icon: React.JSX.Element
-    onSelect: () => void
-    tone?: FloatingActionMenuItem['tone']
-}
-
-function createSessionActionMenuItem(config: SessionActionMenuItemConfig): FloatingActionMenuItem {
-    return config
-}
-
 function createRenameMenuItem(
     t: (key: string, params?: Record<string, string | number>) => string,
     onSelect: (actionId: SessionActionId) => void
 ): FloatingActionMenuItem {
-    return createSessionActionMenuItem({
+    return {
         id: 'rename',
         label: t('session.action.rename'),
         icon: <EditIcon className={DEFAULT_MENU_ICON_CLASS_NAME} />,
         onSelect: () => onSelect('rename'),
-    })
-}
-
-function createNewSessionMenuItem(
-    t: (key: string, params?: Record<string, string | number>) => string,
-    onSelect: (actionId: SessionActionId) => void
-): FloatingActionMenuItem {
-    return createSessionActionMenuItem({
-        id: 'new-session',
-        label: t('session.action.newHere'),
-        icon: <PlusIcon className={DEFAULT_MENU_ICON_CLASS_NAME} />,
-        onSelect: () => onSelect('new-session'),
-    })
+    }
 }
 
 function createStopMenuItem(
     t: (key: string, params?: Record<string, string | number>) => string,
     onSelect: (actionId: SessionActionId) => void
 ): FloatingActionMenuItem {
-    return createSessionActionMenuItem({
+    return {
         id: 'stop',
         label: t('session.action.stop'),
         icon: <StopIcon className={DEFAULT_MENU_ICON_CLASS_NAME} />,
         onSelect: () => onSelect('stop'),
-    })
+    }
 }
 
 function createDeleteMenuItem(
     t: (key: string, params?: Record<string, string | number>) => string,
     onSelect: (actionId: SessionActionId) => void
 ): FloatingActionMenuItem {
-    return createSessionActionMenuItem({
+    return {
         id: 'delete',
         label: t('session.action.delete'),
         icon: <TrashIcon className={DANGER_MENU_ICON_CLASS_NAME} />,
         onSelect: () => onSelect('delete'),
         tone: 'danger',
-    })
+    }
 }
 
 export function SessionActionMenu(props: SessionActionMenuProps): React.JSX.Element {
@@ -112,8 +88,6 @@ function getSessionActionMenuItems(
 ): FloatingActionMenuItem[] {
     return getAvailableSessionActionIds(session).map((actionId) => {
         switch (actionId) {
-            case 'new-session':
-                return createNewSessionMenuItem(t, onActionSelect)
             case 'stop':
                 return createStopMenuItem(t, onActionSelect)
             case 'rename':

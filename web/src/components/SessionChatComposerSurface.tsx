@@ -1,5 +1,4 @@
 import { memo, useMemo } from 'react'
-import { resolveAssistantReplyingPhase } from '@/components/AssistantChat/assistantReplyingPhase'
 import type { VibyComposerModel } from '@/components/AssistantChat/composerTypes'
 import { VibyComposer } from '@/components/AssistantChat/VibyComposer'
 import type { SessionChatComposerSurfaceProps } from '@/components/sessionChatWorkspaceTypes'
@@ -14,7 +13,6 @@ function SessionChatComposerSurfaceInner(props: SessionChatComposerSurfaceProps)
             runtimeOptions,
             isSending,
             sendPending,
-            pendingReply,
             onSwitchSessionDriver,
             isSwitchingSessionDriver,
             allowSendWhenInactive,
@@ -22,10 +20,6 @@ function SessionChatComposerSurfaceInner(props: SessionChatComposerSurfaceProps)
             disabled,
         },
     } = props
-    const replyingPhase = resolveAssistantReplyingPhase({
-        thinking: session.thinking,
-        pendingReply,
-    })
     const { agents: agentAvailability } = useRuntimeAgentAvailability(api, session.metadata?.path ?? null)
 
     const { composerConfig, composerHandlers } = useSessionLiveConfigControls({
@@ -47,20 +41,11 @@ function SessionChatComposerSurfaceInner(props: SessionChatComposerSurfaceProps)
             sessionId: session.id,
             disabled,
             sendPending,
-            replyingPhase,
             autocompleteLayout: runtimeOptions.autocompleteLayout,
             config: composerConfig,
             handlers: composerHandlers,
         }),
-        [
-            composerConfig,
-            composerHandlers,
-            disabled,
-            replyingPhase,
-            runtimeOptions.autocompleteLayout,
-            sendPending,
-            session.id,
-        ]
+        [composerConfig, composerHandlers, disabled, runtimeOptions.autocompleteLayout, sendPending, session.id]
     )
 
     return <VibyComposer model={composerModel} key={`composer:${session.id}`} />

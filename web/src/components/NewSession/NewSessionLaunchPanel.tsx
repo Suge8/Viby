@@ -3,10 +3,12 @@ import { memo } from 'react'
 import {
     FeatureBulbIcon as BulbIcon,
     FeatureControlsIcon as ControlsIcon,
+    FeatureRefreshIcon as RefreshIcon,
     FeatureRocketIcon as RocketIcon,
 } from '@/components/featureIcons'
-import { InlineNotice } from '@/components/InlineNotice'
 import { AlertIcon } from '@/components/icons'
+import { Button } from '@/components/ui/button'
+import { CollapsiblePanel } from '@/components/ui/CollapsiblePanel'
 import { Switch } from '@/components/ui/switch'
 import { getLocalizedCodexServiceTierOptions } from '@/lib/sessionConfigPresentation'
 import { useTranslation } from '@/lib/use-translation'
@@ -38,11 +40,10 @@ type LaunchPanelProps = {
         agentAvailability: readonly AgentAvailability[]
         agentAvailabilityLoading: boolean
         agentAvailabilityRefreshing: boolean
-        agentAvailabilityError?: string | null
         savedAgent: AgentType
         savedAgentAvailability?: AgentAvailability | null
         hasAgentFallback: boolean
-        agentLaunchConfigError?: string | null
+        agentLaunchConfigLoading?: boolean
     }
     handlers: {
         onAgentChange: (agent: AgentType) => void
@@ -62,7 +63,7 @@ type LaunchSectionHeadingProps = {
 function LaunchSectionHeading(props: LaunchSectionHeadingProps): React.JSX.Element {
     return (
         <div className="ds-launch-section-heading">
-            <span className="flex h-5 w-5 items-center justify-center">{props.icon}</span>
+            <span className="flex h-4 w-4 items-center justify-center">{props.icon}</span>
             <span>{props.title}</span>
         </div>
     )
@@ -70,9 +71,10 @@ function LaunchSectionHeading(props: LaunchSectionHeadingProps): React.JSX.Eleme
 
 function LaunchSelectField<T extends string>(props: {
     ariaLabel: string
-    heading: React.JSX.Element
+    icon: React.JSX.Element
     value: T
     isDisabled: boolean
+    isLoading?: boolean
     options: Array<LaunchOption<T>>
     onChange: (value: T) => void
 }): React.JSX.Element | null {
@@ -89,17 +91,65 @@ function LaunchSelectField<T extends string>(props: {
     }))
 
     return (
-        <div>
-            <div className="mb-2">{props.heading}</div>
-            <NewSessionChoiceField
-                ariaLabel={props.ariaLabel}
-                value={props.value}
+        <NewSessionChoiceField
+            ariaLabel={props.ariaLabel}
+            value={props.value}
+            disabled={props.isDisabled}
+            isLoading={props.isLoading}
+            triggerClassName="ds-launch-select-control disabled:opacity-50"
+            triggerIcon={props.icon}
+            options={localizedOptions}
+            onChange={props.onChange}
+        />
+    )
+}
+
+function AgentRefreshButton(props: {
+    isDisabled: boolean
+    isLoading: boolean
+    isRefreshing: boolean
+    onRefresh: () => unknown
+}): React.JSX.Element {
+    const { t } = useTranslation()
+    const busy = props.isLoading || props.isRefreshing
+    const label = busy ? t('newSession.agentAvailability.refreshing') : t('newSession.agentAvailability.refresh')
+    return (
+        <Button
+            type="button"
+            variant="ghost"
+            size="iconXs"
+            onClick={props.onRefresh}
+            disabled={props.isDisabled || busy}
+            aria-label={label}
+            title={label}
+        >
+            <RefreshIcon className={busy ? 'h-3.5 w-3.5 animate-spin' : 'h-3.5 w-3.5'} />
+        </Button>
+    )
+}
+
+function YoloRow(props: {
+    yoloMode: boolean
+    isDisabled: boolean
+    onChange: (checked: boolean) => void
+}): React.JSX.Element {
+    const { t } = useTranslation()
+    return (
+        <label className="ds-launch-yolo-surface flex cursor-pointer items-center justify-between gap-3">
+            <span className="flex min-w-0 items-center gap-2">
+                <LaunchSectionHeading
+                    icon={<AlertIcon className="h-3.5 w-3.5 text-[var(--ds-danger)]" />}
+                    title={t('newSession.yolo')}
+                />
+                <span className="ds-launch-yolo-helper">{t('newSession.yolo.helper')}</span>
+            </span>
+            <Switch
+                checked={props.yoloMode}
+                onChange={(event) => props.onChange(event.target.checked)}
                 disabled={props.isDisabled}
-                triggerClassName="ds-field-control-elevated ds-launch-select-control disabled:opacity-50"
-                options={localizedOptions}
-                onChange={props.onChange}
+                trackClassName="peer-checked:bg-[var(--ds-danger)]"
             />
-        </div>
+        </label>
     )
 }
 
@@ -107,12 +157,20 @@ function NewSessionLaunchPanelComponent(props: LaunchPanelProps): React.JSX.Elem
     const { t } = useTranslation()
 
     return (
-        <NewSessionSectionCard
-            title={t('newSession.launchSettings')}
-            icon={<ControlsIcon className="h-5 w-5" />}
-            accent="lime"
-        >
-            <div className="space-y-4">
+        <div className="flex flex-col gap-2.5">
+            <NewSessionSectionCard
+                title={t('newSession.agent')}
+                icon={<RocketIcon className="h-3.5 w-3.5" />}
+                accent="lime"
+                headerAction={
+                    <AgentRefreshButton
+                        isDisabled={props.options.isDisabled}
+                        isLoading={props.options.agentAvailabilityLoading}
+                        isRefreshing={props.options.agentAvailabilityRefreshing}
+                        onRefresh={props.handlers.onRefreshAgentAvailability}
+                    />
+                }
+            >
                 <NewSessionAgentPicker
                     agent={props.form.agent}
                     savedAgent={props.options.savedAgent}
@@ -122,84 +180,57 @@ function NewSessionLaunchPanelComponent(props: LaunchPanelProps): React.JSX.Elem
                     availability={props.options.agentAvailability}
                     availabilityLoading={props.options.agentAvailabilityLoading}
                     availabilityRefreshing={props.options.agentAvailabilityRefreshing}
-                    availabilityError={props.options.agentAvailabilityError}
                     onAgentChange={props.handlers.onAgentChange}
-                    onRefresh={props.handlers.onRefreshAgentAvailability}
                 />
+            </NewSessionSectionCard>
 
-                <LaunchSelectField
-                    ariaLabel={t('newSession.model')}
-                    heading={
-                        <LaunchSectionHeading
+            <NewSessionSectionCard
+                title={t('newSession.launchSettings')}
+                icon={<ControlsIcon className="h-3.5 w-3.5" />}
+                accent="violet"
+            >
+                <div className="space-y-3">
+                    <div className="ds-launch-fields-row">
+                        <LaunchSelectField
+                            ariaLabel={t('newSession.model')}
                             icon={<BulbIcon className="h-3.5 w-3.5 text-[var(--ds-accent-gold)]" />}
-                            title={t('newSession.model')}
+                            value={props.form.model}
+                            isDisabled={props.options.isDisabled}
+                            isLoading={props.options.agentLaunchConfigLoading}
+                            options={props.options.modelOptions}
+                            onChange={props.handlers.onModelChange}
                         />
-                    }
-                    value={props.form.model}
-                    isDisabled={props.options.isDisabled}
-                    options={props.options.modelOptions}
-                    onChange={props.handlers.onModelChange}
-                />
 
-                <LaunchSelectField<ModelReasoningEffortSelection>
-                    ariaLabel={t('newSession.reasoningEffort')}
-                    heading={
-                        <LaunchSectionHeading
+                        <LaunchSelectField<ModelReasoningEffortSelection>
+                            ariaLabel={t('newSession.reasoningEffort')}
                             icon={<RocketIcon className="h-3.5 w-3.5 text-[var(--ds-accent-violet)]" />}
-                            title={t('newSession.reasoningEffort')}
+                            value={props.form.modelReasoningEffort}
+                            isDisabled={props.options.isDisabled}
+                            isLoading={props.options.agentLaunchConfigLoading}
+                            options={props.options.reasoningOptions}
+                            onChange={props.handlers.onReasoningEffortChange}
                         />
-                    }
-                    value={props.form.modelReasoningEffort}
-                    isDisabled={props.options.isDisabled}
-                    options={props.options.reasoningOptions}
-                    onChange={props.handlers.onReasoningEffortChange}
-                />
-
-                {props.form.agent === 'codex' ? (
-                    <LaunchSelectField<CodexServiceTierSelection>
-                        ariaLabel={t('newSession.codexFastMode')}
-                        heading={
-                            <LaunchSectionHeading
-                                icon={<RocketIcon className="h-3.5 w-3.5 text-[var(--ds-accent-lime)]" />}
-                                title={t('newSession.codexFastMode')}
-                            />
-                        }
-                        value={props.form.codexServiceTier}
-                        isDisabled={props.options.isDisabled}
-                        options={getLocalizedCodexServiceTierOptions(t)}
-                        onChange={props.handlers.onCodexServiceTierChange}
-                    />
-                ) : null}
-
-                {props.options.agentLaunchConfigError ? (
-                    <InlineNotice
-                        tone="warning"
-                        title={t('newSession.agentLaunchConfig.errorTitle')}
-                        description={props.options.agentLaunchConfigError}
-                        className="shadow-none"
-                    />
-                ) : null}
-
-                <label className="ds-launch-yolo-surface flex cursor-pointer items-start justify-between gap-4 rounded-3xl border border-[var(--ds-border-default)] bg-[color:color-mix(in_srgb,var(--ds-panel-strong)_94%,transparent)] p-4">
-                    <div className="min-w-0">
-                        <LaunchSectionHeading
-                            icon={<AlertIcon className="h-3.5 w-3.5 text-[var(--ds-danger)]" />}
-                            title={t('newSession.yolo')}
-                        />
-                        <p className="mt-1.5 text-xs leading-5 text-[var(--ds-text-secondary)]">
-                            {t('newSession.yolo.helper')}
-                        </p>
                     </div>
-                    <Switch
-                        checked={props.form.yoloMode}
-                        onChange={(event) => props.handlers.onYoloModeChange(event.target.checked)}
-                        disabled={props.options.isDisabled}
-                        className="mt-0.5"
-                        trackClassName="peer-checked:bg-[var(--ds-danger)]"
+
+                    <CollapsiblePanel open={props.form.agent === 'codex'}>
+                        <LaunchSelectField<CodexServiceTierSelection>
+                            ariaLabel={t('newSession.codexFastMode')}
+                            icon={<RocketIcon className="h-3.5 w-3.5 text-[var(--ds-accent-lime)]" />}
+                            value={props.form.codexServiceTier}
+                            isDisabled={props.options.isDisabled}
+                            options={getLocalizedCodexServiceTierOptions(t)}
+                            onChange={props.handlers.onCodexServiceTierChange}
+                        />
+                    </CollapsiblePanel>
+
+                    <YoloRow
+                        yoloMode={props.form.yoloMode}
+                        isDisabled={props.options.isDisabled}
+                        onChange={props.handlers.onYoloModeChange}
                     />
-                </label>
-            </div>
-        </NewSessionSectionCard>
+                </div>
+            </NewSessionSectionCard>
+        </div>
     )
 }
 

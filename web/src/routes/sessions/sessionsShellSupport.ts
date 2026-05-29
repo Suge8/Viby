@@ -23,11 +23,17 @@ type PaneMotion = {
     x: string
 }
 
-type SessionsPaneMotionState = {
+type SessionsPaneTransition = {
+    duration: number
+    ease?: readonly [number, number, number, number]
+}
+
+export type SessionsPaneMotionState = {
     listPaneAnimate: PaneMotion
     detailPaneAnimate: PaneMotion
     listPanePointerEvents: 'auto' | 'none'
     detailPanePointerEvents: 'auto' | 'none'
+    paneTransition: SessionsPaneTransition
 }
 
 type StaticSessionsRoute = typeof NEW_SESSION_ROUTE | typeof SETTINGS_ROUTE | typeof AGENTS_ROUTE
@@ -39,8 +45,12 @@ export type SessionIntentRecord = {
 }
 
 const ACTIVE_PANE_MOTION: PaneMotion = { opacity: 1, scale: 1, x: '0%' }
-const HIDDEN_LIST_PANE_MOTION: PaneMotion = { opacity: 0.88, scale: 0.984, x: '-9%' }
 const HIDDEN_DETAIL_PANE_MOTION: PaneMotion = { opacity: 0, scale: 0.986, x: '12%' }
+const SESSIONS_PANE_TRANSITION: SessionsPaneTransition = {
+    duration: 0.42,
+    ease: [0.22, 1, 0.36, 1],
+}
+const INSTANT_PANE_TRANSITION: SessionsPaneTransition = { duration: 0 }
 const SESSION_INTENT_DEDUPE_WINDOW_MS = 220
 const SESSION_INTENT_PRIORITY: Record<SessionIntentSource, number> = {
     hover: 1,
@@ -56,12 +66,24 @@ type SessionsIndexNavigation = {
     }
 }
 
+type SessionsHistoryAction = Readonly<
+    | { type: 'PUSH' | 'REPLACE' | 'FORWARD' | 'BACK' }
+    | {
+          type: 'GO'
+          index: number
+      }
+>
+
 export function isSelectedSession(selectedSessionId: string | null, sessionId: string): boolean {
     return selectedSessionId === sessionId
 }
 
 export function shouldRunIdleSessionPreload(): boolean {
     return shouldPreloadIdleSessionRoutes(getNetworkInformation())
+}
+
+export function isSessionsBackNavigationAction(action: SessionsHistoryAction): boolean {
+    return action.type === 'BACK' || (action.type === 'GO' && action.index < 0)
 }
 
 export function shouldDispatchSessionIntent(options: {
@@ -144,13 +166,16 @@ export function runStaticRouteNavigation(
 export function getSessionsPaneMotionState(options: {
     isDesktopLayout: boolean
     isSessionsIndex: boolean
+    skipPaneTransition?: boolean
 }): SessionsPaneMotionState {
+    const paneTransition = options.skipPaneTransition ? INSTANT_PANE_TRANSITION : SESSIONS_PANE_TRANSITION
     if (options.isDesktopLayout) {
         return {
             listPaneAnimate: ACTIVE_PANE_MOTION,
             detailPaneAnimate: ACTIVE_PANE_MOTION,
             listPanePointerEvents: 'auto',
             detailPanePointerEvents: 'auto',
+            paneTransition,
         }
     }
 
@@ -160,14 +185,16 @@ export function getSessionsPaneMotionState(options: {
             detailPaneAnimate: HIDDEN_DETAIL_PANE_MOTION,
             listPanePointerEvents: 'auto',
             detailPanePointerEvents: 'none',
+            paneTransition,
         }
     }
 
     return {
-        listPaneAnimate: HIDDEN_LIST_PANE_MOTION,
+        listPaneAnimate: ACTIVE_PANE_MOTION,
         detailPaneAnimate: ACTIVE_PANE_MOTION,
         listPanePointerEvents: 'none',
         detailPanePointerEvents: 'auto',
+        paneTransition,
     }
 }
 

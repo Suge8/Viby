@@ -61,9 +61,11 @@ type MessagesState = {
     hasMore: boolean
     loadHistoryUntilPreviousUser: () => Promise<LoadMoreResult>
     pendingCount: number
+    atBottom: boolean
     hasLoadedLatest: boolean
     messagesVersion: number
     pendingReply: PendingReplyState | null
+    restoredFromWarmSnapshot: boolean
     stream: SessionStreamState | null
     streamVersion: number
     flushPending: () => Promise<void>
@@ -79,9 +81,11 @@ const messagesState: MessagesState = {
     hasMore: false,
     loadHistoryUntilPreviousUser: vi.fn(async () => ({ didLoadOlderMessages: false })),
     pendingCount: 0,
+    atBottom: true,
     hasLoadedLatest: true,
     messagesVersion: 0,
     pendingReply: null,
+    restoredFromWarmSnapshot: false,
     stream: null,
     streamVersion: 0,
     flushPending: vi.fn(async () => undefined),
@@ -246,6 +250,7 @@ describe('useSessionChatRouteModel', () => {
         messagesState.messages = []
         messagesState.warning = null
         messagesState.hasLoadedLatest = true
+        messagesState.restoredFromWarmSnapshot = false
         messagesState.pendingReply = null
         messagesState.stream = null
         messagesState.messagesVersion = 0
@@ -255,6 +260,25 @@ describe('useSessionChatRouteModel', () => {
     it('keeps the chat route pending until the message-window owner confirms latest messages are hydrated', () => {
         const queryClient = createQueryClient()
         messagesState.hasLoadedLatest = false
+
+        const { result } = renderHook(
+            () =>
+                useSessionChatRouteModel({
+                    api: {} as ApiClient,
+                    session: createSession(),
+                    sessionId: 'session-1',
+                }),
+            {
+                wrapper: createWrapper(queryClient),
+            }
+        )
+
+        expect(result.current.isSessionDetailReady).toBe(false)
+    })
+
+    it('keeps the chat route pending while a warm snapshot is being refreshed to latest', () => {
+        const queryClient = createQueryClient()
+        messagesState.restoredFromWarmSnapshot = true
 
         const { result } = renderHook(
             () =>
@@ -607,6 +631,42 @@ describe('useSessionChatRouteModel', () => {
         )
 
         expect(result.current.sessionChatProps.actions.onRetryMessage).toBe(harness.retryMessage)
+    })
+
+    it('does not queue history-session sends from stale inactive thinking state', async () => {
+        const queryClient = createQueryClient()
+
+        renderHook(
+            () =>
+                useSessionChatRouteModel({
+                    api: {} as ApiClient,
+                    session: {
+                        ...createSession(),
+                        active: false,
+                        thinking: true,
+                        metadata: {
+                            path: '/repo',
+                            host: 'demo.local',
+                            driver: 'codex',
+                            lifecycleState: 'closed',
+                            lifecycleStateSince: 120,
+                            runtimeHandles: {
+                                codex: {
+                                    sessionId: 'thread-1',
+                                },
+                            },
+                        },
+                    },
+                    sessionId: 'session-1',
+                }),
+            {
+                wrapper: createWrapper(queryClient),
+            }
+        )
+
+        const isSessionThinking = harness.sendMessageOptions?.isSessionThinking as () => boolean
+
+        expect(isSessionThinking()).toBe(false)
     })
 
     it('shows the mapped recovery toast when the Hub-owned send chain rejects during recovery', async () => {

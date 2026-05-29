@@ -1,8 +1,8 @@
 import { isSessionHistoryLifecycleState, resolveSessionInteractivity } from '@viby/protocol'
-import { useCallback, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useChatViewportLayout } from '@/components/AssistantChat/useChatViewportLayout'
 import type { SessionChatLocalNotice } from '@/components/SessionChatLocalNoticeStack'
-import { buildSessionChatLayoutStyle, type SessionChatLayoutStyle } from '@/components/sessionChatLayoutStyle'
+import { buildSessionChatLayoutCssVars } from '@/components/sessionChatLayoutStyle'
 import type {
     SessionChatComposerSurfaceModel,
     SessionChatRuntimeSurfaceModel,
@@ -11,15 +11,6 @@ import type {
 import { useElementFrame } from '@/hooks/useElementFrame'
 import { useTranslation } from '@/lib/use-translation'
 import type { AttachmentMetadata } from '@/types/api'
-
-function buildHistoryNotice(options: { noticeIdPrefix: string; t: (key: string) => string }): SessionChatLocalNotice {
-    const { noticeIdPrefix, t } = options
-    return {
-        id: `${noticeIdPrefix}:history`,
-        tone: 'warning',
-        title: t('chat.history.banner'),
-    }
-}
 
 function buildInactiveLegacyNotice(noticeIdPrefix: string, title: string): SessionChatLocalNotice {
     return {
@@ -38,7 +29,6 @@ function buildMessageWarningNotice(noticeIdPrefix: string, title: string): Sessi
 }
 
 export function useSessionChatWorkspaceModel(props: SessionChatWorkspaceProps): {
-    chatLayoutStyle: SessionChatLayoutStyle
     composerRef: React.RefObject<HTMLDivElement | null>
     composerSurfaceModel: SessionChatComposerSurfaceModel
     isKeyboardOpen: boolean
@@ -50,8 +40,7 @@ export function useSessionChatWorkspaceModel(props: SessionChatWorkspaceProps): 
     const { t } = useTranslation()
     const { session, actions, messageState, runtimeOptions, persistComposerDraft = true } = props
     const { lifecycleState, resumeAvailable, allowSendWhenInactive } = resolveSessionInteractivity(session)
-    const { isStandalone, isKeyboardOpen, bottomInsetPx, floatingControlBottomInsetPx, visibleViewportBottomPx } =
-        useChatViewportLayout()
+    const { isStandalone, isKeyboardOpen, bottomInsetPx, visibleViewportBottomPx } = useChatViewportLayout()
     const composerRef = useRef<HTMLDivElement | null>(null)
     const composerFrame = useElementFrame(composerRef)
     const composerAnchorTop = Math.round(composerFrame?.top ?? 0)
@@ -70,14 +59,7 @@ export function useSessionChatWorkspaceModel(props: SessionChatWorkspaceProps): 
 
     const localNotices = useMemo<readonly SessionChatLocalNotice[]>(() => {
         const notices: SessionChatLocalNotice[] = []
-        if (isSessionHistoryLifecycleState(lifecycleState) && resumeAvailable) {
-            notices.push(
-                buildHistoryNotice({
-                    noticeIdPrefix,
-                    t,
-                })
-            )
-        } else if (isSessionHistoryLifecycleState(lifecycleState)) {
+        if (isSessionHistoryLifecycleState(lifecycleState) && !resumeAvailable) {
             notices.push(buildInactiveLegacyNotice(noticeIdPrefix, t('chat.inactive.readonlyLegacy')))
         }
 
@@ -88,14 +70,23 @@ export function useSessionChatWorkspaceModel(props: SessionChatWorkspaceProps): 
         return notices
     }, [lifecycleState, messageWarningTitle, noticeIdPrefix, resumeAvailable, t])
 
-    const chatLayoutStyle = useMemo<SessionChatLayoutStyle>(() => {
-        return buildSessionChatLayoutStyle({
-            composerFrame,
-            composerHeight,
-            bottomInsetPx,
-            floatingControlBottomInsetPx,
-        })
-    }, [bottomInsetPx, composerFrame, composerHeight, floatingControlBottomInsetPx])
+    /* Publish composer geometry on document.documentElement so portal
+       overlays (RemotePairingLinkBadge) and in-tree controls share one
+       source of truth. `buildSessionChatLayoutCssVars` always returns
+       the full schema, so the same `vars` object drives both write and
+       cleanup — unmount releases every key back to the :root defaults. */
+    useEffect(() => {
+        const root = document.documentElement
+        const vars = buildSessionChatLayoutCssVars({ composerFrame, composerHeight, bottomInsetPx })
+        for (const [name, value] of Object.entries(vars)) {
+            root.style.setProperty(name, value)
+        }
+        return () => {
+            for (const name of Object.keys(vars)) {
+                root.style.removeProperty(name)
+            }
+        }
+    }, [bottomInsetPx, composerFrame, composerHeight])
 
     const runtimeSurfaceModel = useMemo<SessionChatRuntimeSurfaceModel>(
         () => ({
@@ -142,7 +133,6 @@ export function useSessionChatWorkspaceModel(props: SessionChatWorkspaceProps): 
             },
             isSending: messageState.isSending,
             sendPending: messageState.isSending,
-            pendingReply: messageState.pendingReply,
             onSwitchSessionDriver: actions.onSwitchSessionDriver,
             isSwitchingSessionDriver: actions.isSwitchingSessionDriver,
             allowSendWhenInactive,
@@ -154,7 +144,6 @@ export function useSessionChatWorkspaceModel(props: SessionChatWorkspaceProps): 
             actions.onSwitchSessionDriver,
             allowSendWhenInactive,
             messageState.isSending,
-            messageState.pendingReply,
             props.api,
             runtimeOptions,
             session,
@@ -163,7 +152,6 @@ export function useSessionChatWorkspaceModel(props: SessionChatWorkspaceProps): 
     )
 
     return {
-        chatLayoutStyle,
         composerRef,
         composerSurfaceModel,
         isKeyboardOpen,

@@ -1,8 +1,7 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SessionList } from '@/components/SessionList'
 import { I18nProvider } from '@/lib/i18n-context'
-import { TEST_PROJECT_PATH } from '@/test/sessionFactories'
 import type { SessionSummary } from '@/types/api'
 
 if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
@@ -65,7 +64,7 @@ vi.mock('@/components/SessionActionMenu', () => ({
         onActionSelect,
     }: {
         overlay: { isOpen: boolean }
-        onActionSelect: (actionId: 'new-session' | 'rename' | 'stop' | 'delete') => void
+        onActionSelect: (actionId: 'rename' | 'stop' | 'delete') => void
     }) => {
         if (!overlay.isOpen) {
             return null
@@ -73,9 +72,6 @@ vi.mock('@/components/SessionActionMenu', () => ({
 
         return (
             <>
-                <button type="button" onClick={() => onActionSelect('new-session')}>
-                    new-session-action
-                </button>
                 <button type="button" onClick={() => onActionSelect('rename')}>
                     rename-action
                 </button>
@@ -110,11 +106,11 @@ vi.mock('@/components/ui/ConfirmDialog', () => ({
     },
 }))
 
-function createSessionSummary(): SessionSummary {
+function createSessionSummary(id = 'session-closed', title = 'Needs review'): SessionSummary {
     const now = Date.now()
 
     return {
-        id: 'session-closed',
+        id,
         active: false,
         thinking: false,
         activeAt: now,
@@ -125,9 +121,9 @@ function createSessionSummary(): SessionSummary {
         lifecycleState: 'closed',
         lifecycleStateSince: now,
         metadata: {
-            path: TEST_PROJECT_PATH,
+            path: '/project',
             driver: 'codex',
-            summary: { text: 'Needs review', updatedAt: now },
+            summary: { text: title, updatedAt: now },
         },
         todoProgress: null,
         pendingRequestsCount: 0,
@@ -139,21 +135,24 @@ function createSessionSummary(): SessionSummary {
     }
 }
 
-function renderSessionList(
-    onSelect: (sessionId: string) => unknown = vi.fn(),
-    onNewSessionInDirectory: (directory: string) => unknown = vi.fn()
-): void {
+type RenderSessionListOptions = {
+    onSelect?: (sessionId: string) => void
+    openingSessionId?: string | null
+    sessions?: readonly SessionSummary[]
+}
+
+function renderSessionList(options: RenderSessionListOptions = {}): void {
+    const { onSelect = vi.fn(), openingSessionId = null, sessions = [createSessionSummary()] } = options
     render(
         <I18nProvider>
             <SessionList
-                sessions={[createSessionSummary()]}
+                sessions={sessions}
                 api={null}
+                openingSessionId={openingSessionId}
                 selectedSessionId={null}
                 preferredSectionId="history"
                 actions={{
                     onSelect,
-                    onNewSession: vi.fn(),
-                    onNewSessionInDirectory,
                 }}
             />
         </I18nProvider>
@@ -181,22 +180,33 @@ describe('SessionList action flow', () => {
         expect(stopSessionMock).not.toHaveBeenCalled()
     })
 
-    it('marks the session card pending while async selection preloads the route', async () => {
-        let resolveSelect!: () => void
-        const onSelect = vi.fn(() => new Promise<void>((resolve) => (resolveSelect = resolve)))
-        renderSessionList(onSelect)
+    it('lets the route opening owner mark a session card pending', () => {
+        const onSelect = vi.fn()
+        renderSessionList({ onSelect, openingSessionId: 'session-closed' })
 
         const card = screen.getByRole('button', { name: /needs review/i })
-        fireEvent.click(card)
-        fireEvent.click(card)
 
-        expect(onSelect).toHaveBeenCalledTimes(1)
-        expect(card).toBeDisabled()
+        expect(card).not.toBeDisabled()
         expect(card).toHaveAttribute('aria-busy', 'true')
         expect(card.textContent).toMatch(/Opening|session\.opening/)
+    })
 
-        resolveSelect()
-        await waitFor(() => expect(card).not.toBeDisabled())
+    it('keeps other cards selectable while one card is opening', () => {
+        const onSelect = vi.fn()
+        renderSessionList({
+            onSelect,
+            openingSessionId: 'session-a',
+            sessions: [
+                createSessionSummary('session-a', 'Opening card'),
+                createSessionSummary('session-b', 'Next card'),
+            ],
+        })
+
+        const nextCard = screen.getByRole('button', { name: /next card/i })
+
+        expect(nextCard).not.toBeDisabled()
+        fireEvent.click(nextCard)
+        expect(onSelect).toHaveBeenCalledWith('session-b')
     })
 
     it('keeps the action controller mounted long enough to open the rename dialog on the first click', async () => {
@@ -211,20 +221,6 @@ describe('SessionList action flow', () => {
 
         expect(screen.getByText('rename-dialog-open')).toBeInTheDocument()
         expect(stopSessionMock).not.toHaveBeenCalled()
-    })
-
-    it('opens a new-session route from the selected session directory', async () => {
-        const onNewSessionInDirectory = vi.fn()
-        renderSessionList(vi.fn(), onNewSessionInDirectory)
-
-        fireEvent.contextMenu(screen.getByRole('button', { name: /needs review/i }), {
-            clientX: 24,
-            clientY: 36,
-        })
-
-        fireEvent.click(await screen.findByRole('button', { name: 'new-session-action' }))
-
-        expect(onNewSessionInDirectory).toHaveBeenCalledWith(TEST_PROJECT_PATH)
     })
 
     it('keeps the action controller mounted long enough to open the delete confirm dialog', async () => {

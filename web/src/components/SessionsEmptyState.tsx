@@ -5,9 +5,11 @@ import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/lib/use-translation'
 
 type SessionsEmptyStateProps = {
+    createPending?: boolean
     hasSessions: boolean
     onCreate: () => unknown
     onOpenSettings: () => unknown
+    settingsPending?: boolean
 }
 
 const SESSIONS_EMPTY_STATE_BRAND_MARK_CLASS_NAME = `ds-stage-empty-icon h-24 w-24 ${STAGE_BRAND_MARK_NEUTRAL_TONE_CLASS_NAME} sm:h-28 sm:w-28`
@@ -57,13 +59,19 @@ export function SessionsEmptyState(props: SessionsEmptyStateProps) {
                 <MotionStaggerItem y={12}>
                     <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
                         <MotionStaggerItem x={-12} y={0} scaleFrom={0.94}>
-                            <Button size="lg" onClick={props.onCreate} className="gap-2">
+                            <Button size="lg" onClick={props.onCreate} pending={props.createPending} className="gap-2">
                                 <PlusIcon className="h-5 w-5" />
                                 {t('sessions.new')}
                             </Button>
                         </MotionStaggerItem>
                         <MotionStaggerItem x={12} y={0} scaleFrom={0.94}>
-                            <Button size="lg" variant="secondary" onClick={props.onOpenSettings} className="gap-2">
+                            <Button
+                                size="lg"
+                                variant="secondary"
+                                onClick={props.onOpenSettings}
+                                pending={props.settingsPending}
+                                className="gap-2"
+                            >
                                 <SettingsIcon className="h-5 w-5 text-[var(--ds-accent-coral)]" />
                                 {t('settings.title')}
                             </Button>

@@ -27,7 +27,6 @@ type UseEffectiveNewSessionLaunchStateResult = {
     agentAvailability: ReturnType<typeof useRuntimeAgentAvailability>['agents']
     isAgentAvailabilityLoading: boolean
     isAgentAvailabilityRefreshing: boolean
-    agentAvailabilityError: string | null
     refetchAgentAvailability: () => Promise<unknown>
     effectiveAgentSelection: ReturnType<typeof resolveEffectiveAgentSelection>
     effectiveModel: string
@@ -57,7 +56,6 @@ export function useEffectiveNewSessionLaunchState(
         agents: agentAvailability,
         isLoading: isAgentAvailabilityLoading,
         isRefreshing: isAgentAvailabilityRefreshing,
-        error: agentAvailabilityError,
         refetch: refetchAgentAvailability,
     } = useRuntimeAgentAvailability(api, directory)
 
@@ -115,7 +113,6 @@ export function useEffectiveNewSessionLaunchState(
         agentAvailability,
         isAgentAvailabilityLoading,
         isAgentAvailabilityRefreshing,
-        agentAvailabilityError,
         refetchAgentAvailability,
         effectiveAgentSelection,
         effectiveModel: effectiveAgentPreferences.model,

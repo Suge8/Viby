@@ -3,6 +3,7 @@ import { AssistantRuntimeProvider } from '@assistant-ui/react'
 import { isSessionInteractionDisabled } from '@viby/protocol'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import type { ApiClient } from '@/api/client'
+import { resolveAssistantReplyingPhase } from '@/components/AssistantChat/assistantReplyingPhase'
 import { ComposerDraftController } from '@/components/AssistantChat/ComposerDraftController'
 import { VibyThread } from '@/components/AssistantChat/VibyThread'
 import { ActiveInteractiveRequestOwner } from '@/components/interactive-request/ActiveInteractiveRequestOwner'
@@ -74,6 +75,11 @@ function SessionChatRuntimeSurfaceInner(props: SessionChatRuntimeSurfaceProps): 
         allowSendWhenInactive,
     })
 
+    const replyingPhase = useMemo(
+        () => resolveAssistantReplyingPhase({ thinking: session.thinking, pendingReply: messageState.pendingReply }),
+        [messageState.pendingReply, session.thinking]
+    )
+
     const threadSession = useMemo(
         () => ({
             api,
@@ -119,6 +125,7 @@ function SessionChatRuntimeSurfaceInner(props: SessionChatRuntimeSurfaceProps): 
                         messageState={messageState}
                         handlers={threadHandlers}
                         composerAnchorTop={composerAnchorTop}
+                        replyingPhase={replyingPhase}
                     />
                 </div>
                 {children}

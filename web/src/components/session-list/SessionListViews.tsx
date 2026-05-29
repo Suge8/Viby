@@ -12,6 +12,7 @@ type SessionListViewProps = {
     activeSection: SessionListSection | null
     renderContext: SessionListRenderContext
     emptyLabel: string
+    isLoading?: boolean
     onShowAll: () => void
     showAllLabel: string
     t: (key: string, params?: Record<string, string | number>) => string
@@ -35,7 +36,7 @@ export function SessionListView(props: SessionListViewProps): React.JSX.Element 
             <MotionStaggerGroup className="flex flex-col gap-2" delay={0.01} stagger={0.055}>
                 <MotionStaggerItem y={12}>
                     <SessionListSectionHeader
-                        count={props.activeSection.count}
+                        count={props.isLoading ? null : props.activeSection.count}
                         label={props.t(props.activeSection.titleKey)}
                     />
                 </MotionStaggerItem>

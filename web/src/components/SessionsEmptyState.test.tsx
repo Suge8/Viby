@@ -9,11 +9,7 @@ describe('SessionsEmptyState', () => {
         const onOpenSettings = vi.fn()
 
         await renderWithI18n(
-            <SessionsEmptyState
-                hasSessions={false}
-                onCreate={onCreate}
-                onOpenSettings={onOpenSettings}
-            />
+            <SessionsEmptyState hasSessions={false} onCreate={onCreate} onOpenSettings={onOpenSettings} />
         )
 
         expect(screen.getByText('Start your first Viby session')).toBeInTheDocument()
@@ -25,16 +21,29 @@ describe('SessionsEmptyState', () => {
         expect(onOpenSettings).toHaveBeenCalledTimes(1)
     })
 
-    it('renders the selection empty state copy when sessions already exist', async () => {
+    it('marks central navigation actions pending from the shell owner', async () => {
         await renderWithI18n(
             <SessionsEmptyState
-                hasSessions
+                createPending
+                settingsPending
+                hasSessions={false}
                 onCreate={vi.fn()}
                 onOpenSettings={vi.fn()}
             />
         )
 
+        expect(screen.getByRole('button', { name: 'New Session' })).toHaveAttribute('aria-busy', 'true')
+        expect(screen.getByRole('button', { name: 'Settings' })).toHaveAttribute('aria-busy', 'true')
+    })
+
+    it('renders the selection empty state copy when sessions already exist', async () => {
+        await renderWithI18n(<SessionsEmptyState hasSessions onCreate={vi.fn()} onOpenSettings={vi.fn()} />)
+
         expect(screen.getByText('Pick a session to keep going')).toBeInTheDocument()
-        expect(screen.getByText('Choose any session from the left to reopen the conversation, inspect files, or jump back into the terminal.')).toBeInTheDocument()
+        expect(
+            screen.getByText(
+                'Choose any session from the left to reopen the conversation, inspect files, or jump back into the terminal.'
+            )
+        ).toBeInTheDocument()
     })
 })

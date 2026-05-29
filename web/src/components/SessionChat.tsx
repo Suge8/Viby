@@ -7,6 +7,7 @@ import { buildSessionChatPageStyle } from '@/components/sessionChatLayoutStyle'
 import type { SessionChatWorkspaceProps } from '@/components/sessionChatWorkspaceTypes'
 import { useSessionActions } from '@/hooks/mutations/useSessionActions'
 import type { Suggestion } from '@/hooks/useActiveSuggestions'
+import { useElementFrame } from '@/hooks/useElementFrame'
 import { useElementHeight } from '@/hooks/useElementHeight'
 import { SESSION_CHAT_PAGE_TEST_ID } from '@/lib/sessionUiContracts'
 
@@ -33,7 +34,9 @@ export function SessionChat(props: SessionChatProps): React.JSX.Element {
     const { actions, onBack, onSuggestionAction, onViewFiles, onViewTerminal, workspace } = props
     const { api, messageState, runtimeOptions, session } = workspace
     const headerStageRef = useRef<HTMLDivElement | null>(null)
+    const headerStageContentRef = useRef<HTMLDivElement | null>(null)
     const headerHeight = useElementHeight(headerStageRef)
+    const headerStageContentFrame = useElementFrame(headerStageContentRef)
     const { abortSession, switchSessionDriver, isSwitchingSessionDriver } = useSessionActions(api, session, {
         liveConfigSupport: runtimeOptions.liveConfigSupport,
     })
@@ -75,7 +78,10 @@ export function SessionChat(props: SessionChatProps): React.JSX.Element {
         }),
         [onSuggestionAction, runtimeOptions]
     )
-    const pageStyle = useMemo(() => buildSessionChatPageStyle({ headerHeight }), [headerHeight])
+    const pageStyle = useMemo(
+        () => buildSessionChatPageStyle({ headerHeight, headerStageContentFrame }),
+        [headerHeight, headerStageContentFrame]
+    )
 
     return (
         <MotionStaggerGroup
@@ -90,7 +96,12 @@ export function SessionChat(props: SessionChatProps): React.JSX.Element {
                 className="pointer-events-none absolute inset-x-0 top-0 z-[var(--ds-session-chat-header-layer)]"
                 y={-18}
             >
-                <SessionHeader session={session} navigation={headerNavigation} stageRef={headerStageRef} />
+                <SessionHeader
+                    session={session}
+                    navigation={headerNavigation}
+                    stageRef={headerStageRef}
+                    stageContentRef={headerStageContentRef}
+                />
             </MotionStaggerItem>
 
             <div className="session-chat-page-body min-h-0 flex-1 overflow-hidden">

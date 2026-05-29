@@ -1,12 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import { buildNotificationSummaryModel, resolveNotificationSummary } from './settingsNotificationSupport'
+import {
+    getNotificationDescriptionKey,
+    isNotificationToggleDisabled,
+    resolveNotificationSummary,
+} from './settingsNotificationSupport'
 
 describe('settings notification summary', () => {
-    it('keeps unsupported entries concise and product-facing', () => {
-        expect(buildNotificationSummaryModel('unavailable')).toEqual({
-            descriptionKey: 'settings.notifications.description.unavailable',
-            statusLabelKey: 'unavailable',
-        })
+    it('maps unsupported entries to a concise description and disables the toggle', () => {
+        expect(getNotificationDescriptionKey('unavailable')).toBe('settings.notifications.description.unavailable')
+        expect(isNotificationToggleDisabled('unavailable')).toBe(true)
+    })
+
+    it('shares the same default description for enabled and disabled states', () => {
+        expect(getNotificationDescriptionKey('enabled')).toBe('settings.notifications.description.default')
+        expect(getNotificationDescriptionKey('disabled')).toBe('settings.notifications.description.default')
+        expect(isNotificationToggleDisabled('disabled')).toBe(false)
     })
 
     it('asks iOS Safari browser users to install before checking push support', () => {

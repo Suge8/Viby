@@ -4,12 +4,10 @@ import { Autocomplete } from '@/components/ChatInput/Autocomplete'
 import { FloatingOverlay } from '@/components/ChatInput/FloatingOverlay'
 import { FeatureProjectIcon as ProjectIcon } from '@/components/featureIcons'
 import { InlineNotice } from '@/components/InlineNotice'
-import { FolderOpenIcon } from '@/components/icons'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { Suggestion } from '@/hooks/useActiveSuggestions'
 import { useTranslation } from '@/lib/use-translation'
-import { NewSessionSectionCard } from './NewSessionSectionCard'
 import { ProjectPickerDialog } from './ProjectPickerDialog'
 
 type DirectoryInputProps = {
@@ -40,22 +38,18 @@ type DirectoryStatusProps = {
     statusTone?: 'warning' | 'error' | null
 }
 
-type DirectorySectionProps = {
+export type DirectorySectionProps = {
     input: DirectoryInputProps
     picker: DirectoryPickerProps
     status: DirectoryStatusProps
 }
 
-export function DirectorySection(props: DirectorySectionProps) {
+export function DirectorySection(props: DirectorySectionProps): React.JSX.Element {
     const { t } = useTranslation()
     const [isPickerOpen, setIsPickerOpen] = useState(false)
     return (
-        <NewSessionSectionCard
-            title={t('newSession.directory')}
-            icon={<FolderOpenIcon className="h-5 w-5" />}
-            accent="gold"
-        >
-            <div className="flex flex-col gap-2.5 sm:flex-row">
+        <div className="space-y-2">
+            <div className="flex gap-2">
                 <div className="relative min-w-0 flex-1">
                     <Input
                         type="text"
@@ -83,7 +77,7 @@ export function DirectorySection(props: DirectorySectionProps) {
 
                 <Button
                     type="button"
-                    size="sm"
+                    size="iconSm"
                     variant="secondary"
                     pressStyle="button"
                     disabled={props.picker.isDisabled}
@@ -91,21 +85,20 @@ export function DirectorySection(props: DirectorySectionProps) {
                         props.picker.onOpen()
                         setIsPickerOpen(true)
                     }}
-                    className="ds-directory-picker-button"
+                    className="ds-directory-picker-icon-button"
+                    aria-label={t('newSession.projectPicker.open')}
+                    title={t('newSession.projectPicker.open')}
                 >
-                    <ProjectIcon className="mr-2 h-4 w-4" />
-                    {t('newSession.projectPicker.open')}
+                    <ProjectIcon className="h-4.5 w-4.5" />
                 </Button>
             </div>
 
             {props.status.statusMessage ? (
-                <div className="mt-0.5">
-                    <InlineNotice
-                        tone={props.status.statusTone === 'error' ? 'danger' : 'warning'}
-                        title={props.status.statusMessage}
-                        className="px-2.5 py-2 shadow-none"
-                    />
-                </div>
+                <InlineNotice
+                    tone={props.status.statusTone === 'error' ? 'danger' : 'warning'}
+                    title={props.status.statusMessage}
+                    className="px-2.5 py-2 shadow-none"
+                />
             ) : null}
 
             <ProjectPickerDialog
@@ -119,6 +112,6 @@ export function DirectorySection(props: DirectorySectionProps) {
                 onOpenChange={setIsPickerOpen}
                 onSelectPath={props.picker.onPathSelect}
             />
-        </NewSessionSectionCard>
+        </div>
     )
 }

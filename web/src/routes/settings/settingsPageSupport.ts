@@ -1,7 +1,6 @@
 import type { FontScale } from '@/hooks/useFontScale'
 import type { AppearancePreference } from '@/hooks/useTheme'
 import type { LocalePreference } from '@/lib/use-translation'
-import type { SettingsActionCardAction } from './components/SettingsActionCard'
 import type { SettingsSelectOption } from './components/SettingsSelectCard'
 import { localeOptions } from './settingsData'
 
@@ -39,51 +38,4 @@ export function buildFontScaleItems(
         value: option.value,
         label: option.label,
     }))
-}
-
-export function buildNotificationActions(input: {
-    notificationAvailability: 'enabled' | 'blocked' | 'disabled' | 'install-required' | 'unavailable'
-    t: (key: string) => string
-    isPushPending: boolean
-    onEnable: () => unknown
-    onDisable: () => unknown
-    onRefresh: () => unknown
-}): ReadonlyArray<SettingsActionCardAction> {
-    switch (input.notificationAvailability) {
-        case 'enabled':
-            return [
-                {
-                    label: input.t('settings.notifications.actions.turnOff'),
-                    onClick: input.onDisable,
-                    disabled: input.isPushPending,
-                    variant: 'secondary',
-                },
-                {
-                    label: input.t('settings.notifications.actions.refresh'),
-                    onClick: input.onRefresh,
-                    disabled: input.isPushPending,
-                    variant: 'ghost',
-                },
-            ]
-        case 'blocked':
-            return [
-                {
-                    label: input.t('settings.notifications.actions.refresh'),
-                    onClick: input.onRefresh,
-                    disabled: input.isPushPending,
-                    variant: 'secondary',
-                },
-            ]
-        case 'disabled':
-            return [
-                {
-                    label: input.t('settings.notifications.actions.turnOn'),
-                    onClick: input.onEnable,
-                    disabled: input.isPushPending,
-                    variant: 'default',
-                },
-            ]
-        default:
-            return []
-    }
 }

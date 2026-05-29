@@ -81,7 +81,6 @@ describe('SessionChatComposerSurface', () => {
             },
             isSending: false,
             sendPending: false,
-            pendingReply: null,
             onSwitchSessionDriver: vi.fn(async () => undefined),
             isSwitchingSessionDriver: false,
             allowSendWhenInactive: false,

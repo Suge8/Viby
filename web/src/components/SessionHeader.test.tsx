@@ -133,6 +133,38 @@ describe('SessionHeader', () => {
         expect(screen.getByText('Pi')).toBeInTheDocument()
     })
 
+    it('renders the reasoning effort label when present on the session', async () => {
+        await renderWithI18n(
+            <SessionHeader
+                session={
+                    {
+                        id: 'session-reasoning',
+                        active: true,
+                        thinking: false,
+                        permissionMode: 'default',
+                        collaborationMode: 'default',
+                        model: 'gpt-5-codex',
+                        modelReasoningEffort: 'high',
+                        metadata: {
+                            driver: 'codex',
+                        },
+                    } as never
+                }
+                navigation={{
+                    onBack: vi.fn(),
+                }}
+            />
+        )
+
+        expect(screen.getByText('High')).toBeInTheDocument()
+    })
+
+    it('drops the redundant Model label prefix from the metadata row', async () => {
+        await renderHeader()
+
+        expect(screen.queryByText(/^Model:/)).not.toBeInTheDocument()
+    })
+
     it('renders unknown agent gracefully', async () => {
         await renderWithI18n(
             <SessionHeader

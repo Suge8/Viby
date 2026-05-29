@@ -8,8 +8,10 @@ const useLocationMock = vi.fn()
 const useMatchRouteMock = vi.fn()
 const useSearchMock = vi.fn()
 const useSessionsMock = vi.fn()
+const loadAgentConfigRouteModuleMock = vi.fn(async () => undefined)
 const loadNewSessionRouteModuleMock = vi.fn(async () => undefined)
 const loadSettingsRouteModuleMock = vi.fn(async () => undefined)
+const routerHistoryUnsubscribeMock = vi.fn()
 
 vi.mock('@tanstack/react-router', () => ({
     Outlet: () => <div data-testid="outlet" />,
@@ -19,6 +21,7 @@ vi.mock('@tanstack/react-router', () => ({
     },
     useMatchRoute: () => useMatchRouteMock,
     useNavigate: () => navigateMock,
+    useRouter: () => ({ history: { subscribe: () => routerHistoryUnsubscribeMock } }),
     useSearch: () => useSearchMock(),
 }))
 
@@ -102,29 +105,33 @@ vi.mock('@/routes/sessions/sessionDetailRoutePreload', () => ({
 
 vi.mock('@/routes/sessions/sessionRoutePreload', () => ({
     SESSIONS_IDLE_PRELOADERS: [],
+    loadAgentConfigRouteModule: () => loadAgentConfigRouteModuleMock(),
     loadNewSessionRouteModule: () => loadNewSessionRouteModuleMock(),
     loadSettingsRouteModule: () => loadSettingsRouteModuleMock(),
 }))
 
-describe('SessionsShell mobile create FAB', () => {
+function mockMatchMedia(desktop: boolean): void {
+    Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        value: vi.fn().mockImplementation(() => ({
+            matches: desktop,
+            media: '(min-width: 1024px)',
+            onchange: null,
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+            addListener: vi.fn(),
+            removeListener: vi.fn(),
+            dispatchEvent: vi.fn(),
+        })),
+    })
+}
+
+describe('SessionsShell create FAB', () => {
     afterEach(() => {
         cleanup()
     })
 
     beforeEach(() => {
-        Object.defineProperty(window, 'matchMedia', {
-            configurable: true,
-            value: vi.fn().mockImplementation(() => ({
-                matches: false,
-                media: '(min-width: 1024px)',
-                onchange: null,
-                addEventListener: vi.fn(),
-                removeEventListener: vi.fn(),
-                addListener: vi.fn(),
-                removeListener: vi.fn(),
-                dispatchEvent: vi.fn(),
-            })),
-        })
         navigateMock.mockReset()
         useLocationMock.mockReturnValue('/sessions')
         useMatchRouteMock.mockReturnValue(false)
@@ -135,7 +142,8 @@ describe('SessionsShell mobile create FAB', () => {
         })
     })
 
-    it('renders the mobile create button inside the single overlay root', () => {
+    it('mounts the mobile create button inside the single overlay root', () => {
+        mockMatchMedia(false)
         render(<SessionsShell />)
 
         const overlayRoot = document.getElementById(APP_OVERLAY_ROOT_ELEMENT_ID)
@@ -143,6 +151,17 @@ describe('SessionsShell mobile create FAB', () => {
         expect(overlayRoot).not.toBeNull()
         expect(overlayRoot?.contains(createButton)).toBe(true)
         expect(createButton.parentElement?.className).toContain('justify-end')
+        expect(createButton.parentElement?.className).toContain('ds-sessions-create-fab-wrapper')
         expect(createButton.className).toContain('pointer-events-auto')
+    })
+
+    it('mounts the desktop create button inside the same overlay root', () => {
+        mockMatchMedia(true)
+        render(<SessionsShell />)
+
+        const overlayRoot = document.getElementById(APP_OVERLAY_ROOT_ELEMENT_ID)
+        const createButton = screen.getByRole('button', { name: 'sessions.new' })
+        expect(overlayRoot?.contains(createButton)).toBe(true)
+        expect(createButton.parentElement?.className).toContain('ds-sessions-create-fab-wrapper')
     })
 })

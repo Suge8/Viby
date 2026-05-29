@@ -17,8 +17,10 @@ export interface DirectoryState {
 
 export function deriveDirectoryState(options: DirectoryStateOptions): DirectoryState {
     const { currentDirectoryExists, directoryCreationConfirmed, sessionType, trimmedDirectory, t } = options
-    const missingWorktreeDirectory = sessionType === 'worktree' && trimmedDirectory !== '' && currentDirectoryExists === false
-    const needsDirectoryCreationWarning = sessionType === 'simple' && trimmedDirectory !== '' && currentDirectoryExists === false
+    const missingWorktreeDirectory =
+        sessionType === 'worktree' && trimmedDirectory !== '' && currentDirectoryExists === false
+    const needsDirectoryCreationWarning =
+        sessionType === 'simple' && trimmedDirectory !== '' && currentDirectoryExists === false
     let createLabel: string | undefined
     let statusMessage: string | null = null
     let statusTone: 'error' | 'warning' | null = null
@@ -41,6 +43,6 @@ export function deriveDirectoryState(options: DirectoryStateOptions): DirectoryS
         createLabel,
         missingWorktreeDirectory,
         statusMessage,
-        statusTone
+        statusTone,
     }
 }

@@ -32,26 +32,6 @@ vi.mock('./useDirectorySuggestionsInput', () => ({
 }))
 
 describe('useNewSessionDirectoryState', () => {
-    it('uses the route-provided directory before recent paths', async () => {
-        const { result } = renderHook(() =>
-            useNewSessionDirectoryState({
-                api: {} as never,
-                runtime: { id: 'runtime-1', active: true, metadata: null },
-                sessions: [],
-                isDisabled: false,
-                sessionType: 'simple',
-                t: (key) => key,
-                getRecentPaths: () => ['/recent'],
-                initialDirectory: '/from-route',
-            })
-        )
-
-        await waitFor(() => {
-            expect(result.current.trimmedDirectory).toBe('/from-route')
-            expect(runtimePathsExistsHarness.lastPaths).toEqual(['/from-route'])
-        })
-    })
-
     it('keeps known-path existence checks interaction-driven', async () => {
         const sessions = [
             {

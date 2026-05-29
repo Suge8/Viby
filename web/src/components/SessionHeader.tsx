@@ -1,5 +1,6 @@
 import { resolveSessionDriver } from '@viby/protocol'
 import { lazy, type Ref, Suspense, useId, useRef, useState } from 'react'
+import { FeatureModelIcon, FeatureSparklesIcon } from '@/components/featureIcons'
 import { BackIcon, MoreIcon } from '@/components/icons'
 import { MotionStaggerGroup, MotionStaggerItem } from '@/components/motion/motionPrimitives'
 import { SessionAgentBrandIcon } from '@/components/session-list/sessionAgentPresentation'
@@ -26,6 +27,7 @@ type SessionHeaderProps = {
     session: Session
     navigation: SessionHeaderNavigation
     stageRef?: Ref<HTMLDivElement>
+    stageContentRef?: Ref<HTMLDivElement>
 }
 
 async function loadSessionHeaderActionMenuModule() {
@@ -34,25 +36,28 @@ async function loadSessionHeaderActionMenuModule() {
 
 const LazySessionHeaderActionMenu = lazy(loadSessionHeaderActionMenuModule)
 
-const HEADER_SHELL_CLASS_NAME =
-    '[--chat-header-side-width:5rem] sm:[--chat-header-side-width:5.5rem] mx-auto w-full ds-stage-shell px-3'
+const HEADER_SHELL_CLASS_NAME = 'mx-auto w-full ds-stage-shell px-3'
 const HEADER_GRID_CLASS_NAME =
-    'grid grid-cols-[var(--chat-header-side-width)_minmax(0,1fr)_var(--chat-header-side-width)] items-center gap-2'
+    'grid grid-cols-[var(--chat-stage-side-width)_minmax(0,1fr)_var(--chat-stage-side-width)] items-center gap-[var(--app-chat-stage-column-gap)]'
 const HEADER_ROOT_CLASS_NAME = `${HEADER_SHELL_CLASS_NAME} ${HEADER_GRID_CLASS_NAME} pb-1.5 pt-[var(--ds-session-chat-header-controls-top-gap)] sm:pb-2 sm:pt-[var(--ds-session-chat-header-controls-top-gap-desktop)]`
 const HEADER_ACTION_BUTTON_CLASS_NAME = `h-9 w-9 shrink-0 sm:h-10 sm:w-10 ${ICON_ONLY_BUTTON_FLOATING_SURFACE_CLASS_NAME}`
 const HEADER_PANEL_CLASS_NAME =
     'min-w-0 rounded-[var(--ds-radius-lg)] border border-[var(--ds-border-default)] bg-[color:color-mix(in_srgb,var(--ds-panel-strong)_94%,transparent)] px-3 py-2 shadow-[var(--ds-shadow-soft)] backdrop-blur-sm sm:px-4 sm:py-2.5'
 const HEADER_METADATA_ROW_CLASS_NAME =
-    'ds-session-header-meta mt-1 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 leading-relaxed text-[var(--app-hint)] sm:mt-1.5 sm:gap-2 sm:text-xs'
+    'ds-session-header-meta mt-1 flex min-w-0 items-center justify-center gap-1.5 leading-none text-[var(--app-hint)] sm:mt-1.5 sm:gap-2 sm:text-xs'
+const HEADER_METADATA_SEPARATOR_CLASS_NAME = 'shrink-0 opacity-50'
+const HEADER_METADATA_SEGMENT_CLASS_NAME = 'inline-flex shrink-0 items-center gap-1'
+const HEADER_METADATA_MODEL_SEGMENT_CLASS_NAME = 'inline-flex min-w-0 max-w-40 shrink items-center gap-1 sm:max-w-64'
 
 export function SessionHeader(props: SessionHeaderProps): React.JSX.Element {
     const { t } = useTranslation()
     const { navigation, session, stageRef } = props
     const title = getSessionTitle(session)
-    const worktreeBranch = session.metadata?.worktree?.branch
     const sessionDriver = resolveSessionDriver(session.metadata)
     const modelLabel = getSessionModelLabel(session)
     const agentLabel = getSessionAgentLabel(sessionDriver)
+    const reasoningEffort = session.modelReasoningEffort
+    const reasoningLabel = reasoningEffort ? t(`reasoningEffort.${reasoningEffort}`) : null
     const hasMenuActions = Boolean(navigation.onViewFiles || navigation.onViewTerminal)
     const [menuOpen, setMenuOpen] = useState(false)
     const [menuAnchorPoint, setMenuAnchorPoint] = useState<FloatingActionMenuAnchorPoint>(
@@ -85,7 +90,12 @@ export function SessionHeader(props: SessionHeaderProps): React.JSX.Element {
                 data-testid={SESSION_CHAT_HEADER_STAGE_TEST_ID}
                 className="session-chat-header-shell shrink-0 pt-[env(safe-area-inset-top)]"
             >
-                <MotionStaggerGroup className={HEADER_ROOT_CLASS_NAME} delay={0.02} stagger={0.07}>
+                <MotionStaggerGroup
+                    ref={props.stageContentRef}
+                    className={HEADER_ROOT_CLASS_NAME}
+                    delay={0.02}
+                    stagger={0.07}
+                >
                     <MotionStaggerItem className="pointer-events-auto flex min-w-0 justify-start" x={-18} y={0}>
                         <Button
                             type="button"
@@ -108,19 +118,31 @@ export function SessionHeader(props: SessionHeaderProps): React.JSX.Element {
                             {title}
                         </div>
                         <div className={HEADER_METADATA_ROW_CLASS_NAME}>
-                            <span className="inline-flex items-center gap-1">
+                            <span className={HEADER_METADATA_SEGMENT_CLASS_NAME}>
                                 <SessionAgentBrandIcon driver={sessionDriver} className="h-3.5 w-3.5" />
-                                {agentLabel}
+                                <span>{agentLabel}</span>
                             </span>
                             {modelLabel ? (
-                                <span>
-                                    {t(modelLabel.key)}: {modelLabel.value}
-                                </span>
+                                <>
+                                    <span className={HEADER_METADATA_SEPARATOR_CLASS_NAME} aria-hidden="true">
+                                        ·
+                                    </span>
+                                    <span className={HEADER_METADATA_MODEL_SEGMENT_CLASS_NAME}>
+                                        <FeatureModelIcon className="h-3.5 w-3.5 shrink-0" />
+                                        <span className="min-w-0 truncate">{modelLabel.value}</span>
+                                    </span>
+                                </>
                             ) : null}
-                            {worktreeBranch ? (
-                                <span>
-                                    {t('session.item.worktree')}: {worktreeBranch}
-                                </span>
+                            {reasoningLabel ? (
+                                <>
+                                    <span className={HEADER_METADATA_SEPARATOR_CLASS_NAME} aria-hidden="true">
+                                        ·
+                                    </span>
+                                    <span className={HEADER_METADATA_SEGMENT_CLASS_NAME}>
+                                        <FeatureSparklesIcon className="h-3.5 w-3.5" />
+                                        <span>{reasoningLabel}</span>
+                                    </span>
+                                </>
                             ) : null}
                         </div>
                     </MotionStaggerItem>

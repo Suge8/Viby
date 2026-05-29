@@ -213,7 +213,7 @@ describe('NewSessionLaunchPanel', () => {
         expect(onAgentChange).not.toHaveBeenCalled()
     })
 
-    it('shows resolved terminal defaults in launch selectors', () => {
+    it('shows the resolved model name on the select trigger', () => {
         renderPanel({
             options: {
                 modelOptions: [
@@ -235,20 +235,7 @@ describe('NewSessionLaunchPanel', () => {
             },
         })
 
-        expect(screen.getAllByText('Terminal default model')).toHaveLength(2)
-        expect(screen.getAllByText('GPT-5.4')).toHaveLength(2)
-        expect(screen.getAllByText('Terminal default reasoning effort')).toHaveLength(2)
-        expect(screen.getAllByText('High')).toHaveLength(2)
-    })
-
-    it('shows an agent launch config warning when config loading fails', () => {
-        renderPanel({
-            options: {
-                agentLaunchConfigError: 'Local config missing',
-            },
-        })
-
-        expect(screen.getByText('Agent config unavailable')).toBeInTheDocument()
-        expect(screen.getByText('Local config missing')).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Model' })).toHaveTextContent('GPT-5.4')
+        expect(screen.getByRole('button', { name: 'Reasoning effort' })).toHaveTextContent('High')
     })
 })

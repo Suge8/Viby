@@ -1,64 +1,42 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { Outlet, useLocation, useMatchRoute, useNavigate, useSearch } from '@tanstack/react-router'
-import { m } from 'motion/react'
-import { type JSX, useCallback, useEffect, useRef } from 'react'
-import { SessionList } from '@/components/SessionList'
+import { useLocation, useMatchRoute, useNavigate, useRouter, useSearch } from '@tanstack/react-router'
+import { type JSX, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { SessionsEmptyState } from '@/components/SessionsEmptyState'
 import { disposeSessionViewRuntime } from '@/hooks/queries/sessionViewRuntime'
 import { useSessions } from '@/hooks/queries/useSessions'
 import { useDesktopSessionsLayout } from '@/hooks/useDesktopSessionsLayout'
 import { useFinalizeBootShell } from '@/hooks/useFinalizeBootShell'
 import { useAppContext } from '@/lib/app-context'
-import { runPreloadedNavigation } from '@/lib/navigationTransition'
 import { useNoticeCenter } from '@/lib/notice-center'
 import { getNoticePreset } from '@/lib/noticePresets'
 import { writeLastOpenedSessionId } from '@/lib/sessionEntryPreference'
-import {
-    SESSION_LIST_CREATE_BUTTON_TEST_ID,
-    SESSIONS_LIST_PANE_TEST_ID,
-    SESSIONS_LIST_SCROLLER_TEST_ID,
-} from '@/lib/sessionUiContracts'
+import { SESSION_LIST_CREATE_BUTTON_TEST_ID } from '@/lib/sessionUiContracts'
 import { useTranslation } from '@/lib/use-translation'
 import { useRemotePairingInteractionBlocked } from '@/remote/remotePairingInteractionState'
-import { SessionsMobileCreateButton } from '@/routes/sessions/components/SessionsMobileCreateButton'
-import { SessionsShellHeader } from '@/routes/sessions/components/SessionsShellHeader'
+import { SessionsCreateButton } from '@/routes/sessions/components/SessionsCreateButton'
+import { SessionsShellDetailPane, SessionsShellListPane } from '@/routes/sessions/components/SessionsShellPanes'
+import { isSessionsIndexPath, resolveSessionRouteParam } from '@/routes/sessions/sessionRoutePaths'
 import {
-    AGENTS_ROUTE,
-    buildNewSessionDirectoryHref,
-    isSessionsIndexPath,
-    NEW_SESSION_ROUTE,
-    resolveSessionRouteParam,
-    SETTINGS_ROUTE,
-} from '@/routes/sessions/sessionRoutePaths'
-import {
-    loadAgentConfigRouteModule,
-    loadNewSessionRouteModule,
-    loadSettingsRouteModule,
-} from '@/routes/sessions/sessionRoutePreload'
+    SessionsShellNavigationProvider,
+    useSessionsShellNavigation,
+} from '@/routes/sessions/sessionsShellNavigationContext'
 import { shouldClearSelectedSessionDetail } from '@/routes/sessions/sessionsShellSelectionSupport'
 import {
     buildSessionsIndexNavigation,
     getSessionsPaneMotionState,
-    runStaticRouteNavigation,
+    isSessionsBackNavigationAction,
 } from '@/routes/sessions/sessionsShellSupport'
 import { useSessionsShellActiveSection } from '@/routes/sessions/useSessionsShellActiveSection'
 import { useSessionsShellPreloadOwner } from '@/routes/sessions/useSessionsShellPreloadOwner'
 
-const SESSIONS_DETAIL_VIEWPORT_CLASS_NAME = 'sessions-detail-route-transition'
-const SESSIONS_LIST_PANE_CLASS_NAME = 'sessions-mobile-list-pane'
-const SESSIONS_DETAIL_PANE_CLASS_NAME = 'sessions-mobile-detail-pane'
-const SESSIONS_LIST_SCROLLER_CLASS_NAME = 'desktop-scrollbar-stable flex-1 min-h-0 overflow-x-hidden overflow-y-auto'
-const SESSIONS_PANE_TRANSITION = {
-    duration: 0.42,
-    ease: [0.22, 1, 0.36, 1],
-} as const
-
 export function SessionsShell(): JSX.Element {
     const { api } = useAppContext()
     const navigate = useNavigate()
+    const router = useRouter()
     const search = useSearch({ from: '/sessions' })
     const queryClient = useQueryClient()
     const pathname = useLocation({ select: (location) => location.pathname })
+    const routeVisitHref = useLocation({ select: (location) => location.href })
     const matchRoute = useMatchRoute()
     const { t } = useTranslation()
     const errorPreset = getNoticePreset('genericError', t)
@@ -72,6 +50,9 @@ export function SessionsShell(): JSX.Element {
     const isDesktopLayout = useDesktopSessionsLayout()
     const previousRuntimeSessionIdRef = useRef<string | null>(selectedSessionId)
     const lastErrorToastRef = useRef<string | null>(null)
+    const [isBackNavigation, setIsBackNavigation] = useState(false)
+    const [routeVisitRevision, setRouteVisitRevision] = useState(0)
+    const lastRouteVisitHrefRef = useRef(routeVisitHref)
     const {
         activeSectionId,
         handleActiveSectionChange,
@@ -86,39 +67,28 @@ export function SessionsShell(): JSX.Element {
     })
 
     useFinalizeBootShell(isSessionsIndex)
-    const { handleSelectSession, handleSessionIntent, openingSessionId } = useSessionsShellPreloadOwner({
+    const {
+        handleSelectSession,
+        handleSessionIntent,
+        handleStaticRouteNavigation,
+        openingSessionId,
+        pendingStaticRouteId,
+    } = useSessionsShellPreloadOwner({
         api,
         navigate,
+        pathname,
         queryClient,
+        routeVisitRevision,
         selectedSessionId,
     })
 
-    const handleNewSession = useCallback(() => {
-        return runStaticRouteNavigation(navigate, NEW_SESSION_ROUTE, loadNewSessionRouteModule())
-    }, [navigate])
-    const handleNewSessionInDirectory = useCallback(
-        (directory: string) => {
-            const recoveryHref = buildNewSessionDirectoryHref(directory)
-            return runPreloadedNavigation(
-                loadNewSessionRouteModule(),
-                () => {
-                    void navigate({
-                        to: NEW_SESSION_ROUTE,
-                        search: { directory },
-                    })
-                },
-                recoveryHref
-            )
-        },
-        [navigate]
+    const navigationContext = useMemo(
+        () => ({
+            onOpenStaticRoute: handleStaticRouteNavigation,
+            pendingStaticRouteId,
+        }),
+        [handleStaticRouteNavigation, pendingStaticRouteId]
     )
-
-    const handleOpenSettings = useCallback(() => {
-        return runStaticRouteNavigation(navigate, SETTINGS_ROUTE, loadSettingsRouteModule())
-    }, [navigate])
-    const handleOpenAgents = useCallback(() => {
-        return runStaticRouteNavigation(navigate, AGENTS_ROUTE, loadAgentConfigRouteModule())
-    }, [navigate])
 
     const handleSessionListActiveSectionChange = useCallback(
         (sectionId: 'running' | 'history') => {
@@ -126,6 +96,22 @@ export function SessionsShell(): JSX.Element {
         },
         [handleActiveSectionChange]
     )
+
+    useEffect(() => {
+        lastRouteVisitHrefRef.current = routeVisitHref
+    }, [routeVisitHref])
+
+    useEffect(() => {
+        return router.history.subscribe(({ action, location }) => {
+            setIsBackNavigation(isSessionsBackNavigationAction(action))
+            if (lastRouteVisitHrefRef.current === location.href) {
+                return
+            }
+
+            lastRouteVisitHrefRef.current = location.href
+            setRouteVisitRevision((revision) => revision + 1)
+        })
+    }, [router])
 
     useEffect(() => {
         const previousSessionId = previousRuntimeSessionIdRef.current
@@ -191,86 +177,62 @@ export function SessionsShell(): JSX.Element {
     const paneMotionState = getSessionsPaneMotionState({
         isDesktopLayout,
         isSessionsIndex,
+        skipPaneTransition: !isDesktopLayout && isSessionsIndex && isBackNavigation,
     })
 
     return (
-        <div className="ds-native-sessions-shell relative flex h-full min-h-0 min-w-0 w-full flex-1 overflow-hidden lg:overflow-visible">
-            <m.div
-                data-testid={SESSIONS_LIST_PANE_TEST_ID}
-                data-sessions-pane="list"
-                aria-hidden={!isDesktopLayout && !isSessionsIndex ? 'true' : undefined}
-                className={`${SESSIONS_LIST_PANE_CLASS_NAME} ds-sessions-list-pane absolute inset-0 z-10 flex w-full shrink-0 flex-col bg-[var(--app-bg)] lg:relative lg:inset-auto lg:z-auto`}
-                animate={paneMotionState.listPaneAnimate}
-                transition={SESSIONS_PANE_TRANSITION}
-                style={{ pointerEvents: paneMotionState.listPanePointerEvents }}
-            >
-                <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-px bg-[var(--app-divider)] lg:block" />
-                <SessionsShellHeader
+        <SessionsShellNavigationProvider value={navigationContext}>
+            <div className="ds-native-sessions-shell relative flex h-full min-h-0 min-w-0 w-full flex-1 overflow-hidden lg:overflow-visible">
+                <SessionsShellListPane
+                    activeSectionId={activeSectionId}
+                    agentsPending={pendingStaticRouteId === 'agents'}
                     agentsTitle={t('agents.config.title')}
+                    api={api}
+                    isDesktopLayout={isDesktopLayout}
+                    isSessionsIndex={isSessionsIndex}
+                    isSessionsLoading={areSessionsLoading}
+                    onActiveSectionChange={handleSessionListActiveSectionChange}
+                    onOpenStaticRoute={handleStaticRouteNavigation}
+                    onSelectSession={handleSelectSession}
+                    onSessionIntent={handleSessionIntent}
+                    openingSessionId={openingSessionId}
+                    paneMotionState={paneMotionState}
+                    preferredSectionId={search.section}
+                    selectedSessionId={selectedSessionId}
+                    sessions={sessions}
+                    settingsPending={pendingStaticRouteId === 'settings'}
                     settingsTitle={t('settings.title')}
-                    onOpenAgents={handleOpenAgents}
-                    onOpenSettings={handleOpenSettings}
                 />
 
-                <div data-testid={SESSIONS_LIST_SCROLLER_TEST_ID} className={SESSIONS_LIST_SCROLLER_CLASS_NAME}>
-                    <SessionList
-                        activeSectionId={activeSectionId}
-                        onActiveSectionChange={handleSessionListActiveSectionChange}
-                        sessions={sessions}
-                        openingSessionId={openingSessionId}
-                        selectedSessionId={selectedSessionId}
-                        preferredSectionId={search.section}
-                        api={api}
-                        actions={{
-                            onSelect: handleSelectSession,
-                            onSessionIntent: handleSessionIntent,
-                            onNewSession: handleNewSession,
-                            onNewSessionInDirectory: handleNewSessionInDirectory,
-                        }}
-                    />
-                </div>
-            </m.div>
+                <SessionsShellDetailPane
+                    isDesktopLayout={isDesktopLayout}
+                    isSessionsIndex={isSessionsIndex}
+                    paneMotionState={paneMotionState}
+                />
 
-            <m.div
-                data-testid="sessions-detail-pane"
-                data-sessions-pane="detail"
-                aria-hidden={!isDesktopLayout && isSessionsIndex ? 'true' : undefined}
-                className={`${SESSIONS_DETAIL_PANE_CLASS_NAME} ds-sessions-detail-pane absolute inset-0 z-20 flex min-w-0 w-full flex-1 flex-col bg-transparent lg:relative lg:inset-auto lg:z-auto lg:bg-[var(--app-bg)]`}
-                animate={paneMotionState.detailPaneAnimate}
-                transition={SESSIONS_PANE_TRANSITION}
-                style={{ pointerEvents: paneMotionState.detailPanePointerEvents }}
-            >
-                <div
-                    data-testid="sessions-detail-viewport"
-                    className={`${SESSIONS_DETAIL_VIEWPORT_CLASS_NAME} min-h-0 min-w-0 w-full flex-1 overflow-hidden`}
-                >
-                    <div className="h-full min-h-0 w-full">
-                        <Outlet />
-                    </div>
-                </div>
-            </m.div>
-
-            <SessionsMobileCreateButton
-                visible={!isDesktopLayout && isSessionsIndex}
-                testId={SESSION_LIST_CREATE_BUTTON_TEST_ID}
-                title={t('sessions.new')}
-                onClick={handleNewSession}
-            />
-        </div>
+                <SessionsCreateButton
+                    visible={isDesktopLayout || isSessionsIndex}
+                    testId={SESSION_LIST_CREATE_BUTTON_TEST_ID}
+                    pending={pendingStaticRouteId === 'new'}
+                    title={t('sessions.new')}
+                    onClick={() => handleStaticRouteNavigation('new')}
+                />
+            </div>
+        </SessionsShellNavigationProvider>
     )
 }
 
 export function SessionsIndexPage(): JSX.Element {
-    const navigate = useNavigate()
     const { api } = useAppContext()
     const { sessions } = useSessions(api)
     const isDesktopLayout = useDesktopSessionsLayout()
+    const { onOpenStaticRoute, pendingStaticRouteId } = useSessionsShellNavigation()
     const handleCreate = useCallback(() => {
-        return runStaticRouteNavigation(navigate, NEW_SESSION_ROUTE, loadNewSessionRouteModule())
-    }, [navigate])
+        onOpenStaticRoute('new')
+    }, [onOpenStaticRoute])
     const handleOpenSettings = useCallback(() => {
-        return runStaticRouteNavigation(navigate, SETTINGS_ROUTE, loadSettingsRouteModule())
-    }, [navigate])
+        onOpenStaticRoute('settings')
+    }, [onOpenStaticRoute])
 
     if (!isDesktopLayout && sessions.length > 0) {
         return <div className="h-full w-full" aria-hidden="true" />
@@ -279,9 +241,11 @@ export function SessionsIndexPage(): JSX.Element {
     return (
         <div className="flex h-full min-h-0 min-w-0 w-full flex-1">
             <SessionsEmptyState
+                createPending={pendingStaticRouteId === 'new'}
                 hasSessions={sessions.length > 0}
                 onCreate={handleCreate}
                 onOpenSettings={handleOpenSettings}
+                settingsPending={pendingStaticRouteId === 'settings'}
             />
         </div>
     )

@@ -7,6 +7,7 @@ import { SESSIONS_SHELL_AGENTS_BUTTON_TEST_ID, SESSIONS_SHELL_SETTINGS_BUTTON_TE
 import { cn } from '@/lib/utils'
 
 const HEADER_ACTION_BUTTON_CLASS_NAME = `ds-sessions-shell-action-button ${ICON_ONLY_BUTTON_NEUTRAL_SURFACE_CLASS_NAME} backdrop-blur-xl`
+const AGENTS_BUTTON_EXTRA_CLASS_NAME = 'ds-sessions-shell-agents-button'
 const BRAND_TITLE_FRAME_CLASS_NAME = 'ds-sessions-shell-header-frame'
 const BRAND_TITLE_CLASS_NAME = 'ds-sessions-shell-header-title'
 
@@ -14,6 +15,7 @@ type SessionsHeaderActionButtonProps = {
     title: string
     onClick: () => unknown
     className?: string
+    pending?: boolean
     testId?: string
     children: JSX.Element
 }
@@ -21,8 +23,10 @@ type SessionsHeaderActionButtonProps = {
 type SessionsShellHeaderProps = {
     agentsTitle: string
     settingsTitle: string
+    agentsPending?: boolean
     onOpenAgents: () => unknown
     onOpenSettings: () => unknown
+    settingsPending?: boolean
 }
 
 function SessionsHeaderActionButton(props: SessionsHeaderActionButtonProps): JSX.Element {
@@ -32,6 +36,7 @@ function SessionsHeaderActionButton(props: SessionsHeaderActionButtonProps): JSX
             size="iconXs"
             variant="secondary"
             onClick={props.onClick}
+            pending={props.pending}
             className={cn(HEADER_ACTION_BUTTON_CLASS_NAME, props.className)}
             data-testid={props.testId}
             title={props.title}
@@ -56,16 +61,22 @@ export function SessionsShellHeader(props: SessionsShellHeaderProps): JSX.Elemen
                             <SessionsHeaderActionButton
                                 title={props.agentsTitle}
                                 onClick={props.onOpenAgents}
+                                pending={props.agentsPending}
                                 testId={SESSIONS_SHELL_AGENTS_BUTTON_TEST_ID}
+                                className={AGENTS_BUTTON_EXTRA_CLASS_NAME}
                             >
-                                <AgentConfigIcon className="ds-sessions-shell-action-icon h-4.5 w-4.5" />
+                                <AgentConfigIcon
+                                    className="ds-sessions-shell-action-icon ds-sessions-shell-action-icon--agents h-5 w-5"
+                                    strokeWidth={2}
+                                />
                             </SessionsHeaderActionButton>
                             <SessionsHeaderActionButton
                                 title={props.settingsTitle}
                                 onClick={props.onOpenSettings}
+                                pending={props.settingsPending}
                                 testId={SESSIONS_SHELL_SETTINGS_BUTTON_TEST_ID}
                             >
-                                <SettingsIcon className="ds-sessions-shell-action-icon h-4.5 w-4.5" />
+                                <SettingsIcon className="ds-sessions-shell-action-icon h-5 w-5" strokeWidth={2} />
                             </SessionsHeaderActionButton>
                         </div>
                     </div>

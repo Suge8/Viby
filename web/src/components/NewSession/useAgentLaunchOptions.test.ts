@@ -32,6 +32,30 @@ describe('useAgentLaunchOptions', () => {
         })
     })
 
+    it('leaves the default option unannotated while the launch config is still loading', () => {
+        const { result } = renderHook(() =>
+            useAgentLaunchOptions({
+                agent: 'pi',
+                model: 'auto',
+                modelReasoningEffort: 'default',
+                directory: '/repo',
+                launchConfig: null,
+                updateAgentSetting: vi.fn(),
+                setModel: vi.fn(),
+                setModelReasoningEffort: vi.fn(),
+            })
+        )
+
+        const modelDefault = result.current.modelOptions[0]
+        const reasoningDefault = result.current.reasoningOptions[0]
+        expect(modelDefault?.value).toBe('auto')
+        expect(modelDefault?.resolvedLabel).toBeUndefined()
+        expect(modelDefault?.resolvedLabelKey).toBeUndefined()
+        expect(reasoningDefault?.value).toBe('default')
+        expect(reasoningDefault?.resolvedLabel).toBeUndefined()
+        expect(reasoningDefault?.resolvedLabelKey).toBeUndefined()
+    })
+
     it('annotates non-Pi terminal defaults from the same launch config owner', () => {
         const { result } = renderHook(() =>
             useAgentLaunchOptions({

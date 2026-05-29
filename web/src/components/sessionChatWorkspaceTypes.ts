@@ -10,6 +10,7 @@ export type SessionChatWorkspaceMessageState = {
     messages: DecryptedMessage[]
     pending: DecryptedMessage[]
     warning: MessageWindowWarningKey | null
+    hasLoadedLatest: boolean
     hasMore: boolean
     isLoading: boolean
     isLoadingMore: boolean
@@ -18,6 +19,7 @@ export type SessionChatWorkspaceMessageState = {
     atBottom: boolean
     messagesVersion: number
     pendingReply: PendingReplyState | null
+    restoredFromWarmSnapshot: boolean
     stream: SessionStreamState | null
     streamVersion: number
 }
@@ -59,7 +61,6 @@ export type SessionChatComposerSurfaceModel = {
     runtimeOptions: SessionChatWorkspaceRuntimeOptions
     isSending: boolean
     sendPending: boolean
-    pendingReply: PendingReplyState | null
     onSwitchSessionDriver: (targetDriver: SameSessionSwitchTargetDriver) => Promise<void>
     isSwitchingSessionDriver: boolean
     allowSendWhenInactive: boolean

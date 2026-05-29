@@ -1,10 +1,8 @@
 import { AGENT_FLAVORS, type AgentAvailability, getAgentSupportLink } from '@viby/protocol'
 import { memo, useMemo } from 'react'
-import { FeatureRocketIcon as RocketIcon } from '@/components/featureIcons'
 import { InlineNotice } from '@/components/InlineNotice'
 import { SessionAgentBrandIcon } from '@/components/session-list/sessionAgentPresentation'
-import { Button } from '@/components/ui/button'
-import { PressableSurface, PressableSurfaceSelectionIndicator } from '@/components/ui/pressable-surface'
+import { PressableSurface } from '@/components/ui/pressable-surface'
 import { getSessionAgentLabel } from '@/lib/sessionAgentLabel'
 import { useTranslation } from '@/lib/use-translation'
 import { cn } from '@/lib/utils'
@@ -19,9 +17,7 @@ type AgentPickerProps = {
     availability: readonly AgentAvailability[]
     availabilityLoading: boolean
     availabilityRefreshing: boolean
-    availabilityError?: string | null
     onAgentChange: (agent: AgentType) => void
-    onRefresh: () => unknown
 }
 
 const AGENT_ACCENT_CLASS_NAME: Record<AgentType, string> = {
@@ -39,10 +35,10 @@ const AGENT_OPTIONS = AGENT_FLAVORS.map((value) => ({
     accentClassName: AGENT_ACCENT_CLASS_NAME[value],
 }))
 
-function getAvailabilityLabel(
-    availability: AgentAvailability | null | undefined,
-    t: (key: string, params?: Record<string, string | number>) => string
-): string {
+type AgentOption = (typeof AGENT_OPTIONS)[number]
+type TranslateFn = (key: string, params?: Record<string, string | number>) => string
+
+function getAvailabilityLabel(availability: AgentAvailability | null | undefined, t: TranslateFn): string {
     if (!availability) {
         return t('newSession.agentAvailability.status.unknown')
     }
@@ -110,90 +106,86 @@ function AgentPickerNotice(
     )
 }
 
-function renderAgentCard(
-    option: (typeof AGENT_OPTIONS)[number],
-    checked: boolean,
-    availability: AgentAvailability | undefined,
-    isDisabled: boolean,
-    onAgentChange: (agent: AgentType) => void,
-    t: (key: string, params?: Record<string, string | number>) => string
-): React.JSX.Element {
-    const isAvailable = availability?.status === 'ready'
-    const ctaHref = availability ? getAgentSupportLink(option.value, availability.resolution) : null
-    const agentLabel = getSessionAgentLabel(option.value)
-    const statusLabel = getAvailabilityLabel(availability, t)
-    const actionLabel = t(`newSession.agentAvailability.action.${availability?.resolution ?? 'learn_more'}`)
-    const shouldShowStatus = isAvailable || !ctaHref || availability?.resolution === 'learn_more'
+type AgentTileBodyProps = {
+    option: AgentOption
+    isAvailable: boolean
+    agentLabel: string
+}
 
-    const content = (
+function AgentTileBody(props: AgentTileBodyProps): React.JSX.Element {
+    return (
         <>
             <span
                 className={cn(
-                    'flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-[var(--ds-border-default)] bg-[var(--app-subtle-bg)]',
-                    option.accentClassName,
-                    !isAvailable ? 'opacity-60 saturate-0' : ''
+                    'ds-agent-tile-icon',
+                    props.option.accentClassName,
+                    !props.isAvailable ? 'opacity-60 saturate-0' : ''
                 )}
             >
-                <SessionAgentBrandIcon driver={option.value} className="h-5.5 w-5.5" />
+                <SessionAgentBrandIcon driver={props.option.value} className="h-5 w-5" />
             </span>
-            <span className="flex min-w-0 flex-1 flex-col items-start gap-1">
-                <span
-                    className={cn(
-                        'max-w-full truncate text-sm font-semibold capitalize text-[var(--ds-text-primary)]',
-                        !isAvailable ? 'text-[var(--ds-text-secondary)]' : ''
-                    )}
-                >
-                    {agentLabel}
-                </span>
-                {shouldShowStatus ? (
-                    <span
-                        className={
-                            isAvailable ? 'ds-agent-status-pill' : 'text-xs leading-5 text-[var(--ds-text-secondary)]'
-                        }
-                    >
-                        {statusLabel}
-                    </span>
-                ) : null}
+            <span className={cn('ds-agent-tile-name', !props.isAvailable ? 'text-[var(--ds-text-secondary)]' : '')}>
+                {props.agentLabel}
             </span>
-            {isAvailable ? (
-                <PressableSurfaceSelectionIndicator selected={checked} className="ds-agent-card-control" />
-            ) : ctaHref ? (
-                <Button asChild variant="ghost" size="sm" className="ds-agent-card-action">
-                    <a href={ctaHref} target="_blank" rel="noreferrer" aria-label={`${actionLabel} ${agentLabel}`}>
-                        {actionLabel}
-                    </a>
-                </Button>
-            ) : null}
         </>
     )
+}
+
+type AgentTileProps = {
+    option: AgentOption
+    checked: boolean
+    availability: AgentAvailability | undefined
+    isDisabled: boolean
+    onAgentChange: (agent: AgentType) => void
+    t: TranslateFn
+}
+
+function AgentTile(props: AgentTileProps): React.JSX.Element {
+    const isAvailable = props.availability?.status === 'ready'
+    const ctaHref = props.availability ? getAgentSupportLink(props.option.value, props.availability.resolution) : null
+    const agentLabel = getSessionAgentLabel(props.option.value)
+    const statusLabel = getAvailabilityLabel(props.availability, props.t)
+    const actionLabel = props.t(`newSession.agentAvailability.action.${props.availability?.resolution ?? 'learn_more'}`)
+    const body = <AgentTileBody option={props.option} isAvailable={isAvailable} agentLabel={agentLabel} />
 
     if (isAvailable) {
         return (
             <PressableSurface
-                key={option.value}
                 type="button"
                 role="radio"
-                aria-checked={checked}
-                selected={checked}
-                density="compact"
-                disabled={isDisabled}
-                className={cn(
-                    'ds-agent-picker-card gap-3 text-left',
-                    checked ? 'ring-1 ring-[color:color-mix(in_srgb,var(--ds-brand)_10%,transparent)]' : ''
-                )}
-                onClick={() => onAgentChange(option.value)}
+                aria-checked={props.checked}
+                selected={props.checked}
+                density="none"
+                size="none"
+                cardMode="centered-tile"
+                disabled={props.isDisabled}
+                className="ds-agent-tile"
+                onClick={() => props.onAgentChange(props.option.value)}
             >
-                {content}
+                {body}
             </PressableSurface>
         )
     }
 
+    if (ctaHref) {
+        return (
+            <a
+                href={ctaHref}
+                target="_blank"
+                rel="noreferrer"
+                className="ds-agent-tile ds-agent-tile-unavailable"
+                aria-label={`${actionLabel} ${agentLabel}`}
+            >
+                {body}
+                <span className="ds-agent-tile-cta">{actionLabel}</span>
+            </a>
+        )
+    }
+
     return (
-        <div
-            key={option.value}
-            className="ds-pressable-surface ds-agent-picker-card flex items-center gap-3 rounded-[calc(var(--ds-radius-card)-2px)] border border-[var(--ds-border-default)] bg-[color:color-mix(in_srgb,var(--ds-panel-strong)_94%,transparent)] px-3 py-2.5 text-[var(--ds-text-primary)] shadow-[var(--ds-shadow-soft)]"
-        >
-            {content}
+        <div className="ds-agent-tile ds-agent-tile-unavailable">
+            {body}
+            <span className="ds-agent-tile-status">{statusLabel}</span>
         </div>
     )
 }
@@ -204,38 +196,10 @@ function NewSessionAgentPickerComponent(props: AgentPickerProps): React.JSX.Elem
         () => new Map(props.availability.map((entry) => [entry.driver, entry])),
         [props.availability]
     )
-    const availabilityBusy = props.availabilityLoading || props.availabilityRefreshing
     const hasAvailableAgent = AGENT_OPTIONS.some((option) => availabilityByDriver.get(option.value)?.status === 'ready')
 
     return (
         <div>
-            <div className="mb-2 flex items-center justify-between gap-3">
-                <div className="ds-launch-section-heading">
-                    <span className="flex h-5 w-5 items-center justify-center">
-                        <RocketIcon className="h-3.5 w-3.5 text-[var(--ds-accent-lime)]" />
-                    </span>
-                    <span>{t('newSession.agent')}</span>
-                </div>
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={props.onRefresh}
-                    disabled={props.isDisabled || availabilityBusy}
-                >
-                    {availabilityBusy
-                        ? t('newSession.agentAvailability.refreshing')
-                        : t('newSession.agentAvailability.refresh')}
-                </Button>
-            </div>
-            {props.availabilityError ? (
-                <InlineNotice
-                    tone="warning"
-                    title={t('newSession.agentAvailability.errorTitle')}
-                    description={props.availabilityError}
-                    className="mb-3 shadow-none"
-                />
-            ) : null}
             <AgentPickerNotice
                 savedAgent={props.savedAgent}
                 savedAgentAvailability={props.savedAgentAvailability}
@@ -244,19 +208,20 @@ function NewSessionAgentPickerComponent(props: AgentPickerProps): React.JSX.Elem
             <div
                 role={hasAvailableAgent ? 'radiogroup' : 'group'}
                 aria-label={t('newSession.agent')}
-                className="ds-agent-picker-grid"
+                className="ds-agent-tile-grid"
                 onKeyDown={handleAgentPickerKeyDown}
             >
-                {AGENT_OPTIONS.map((option) =>
-                    renderAgentCard(
-                        option,
-                        props.agent === option.value,
-                        availabilityByDriver.get(option.value),
-                        props.isDisabled,
-                        props.onAgentChange,
-                        t
-                    )
-                )}
+                {AGENT_OPTIONS.map((option) => (
+                    <AgentTile
+                        key={option.value}
+                        option={option}
+                        checked={props.agent === option.value}
+                        availability={availabilityByDriver.get(option.value)}
+                        isDisabled={props.isDisabled}
+                        onAgentChange={props.onAgentChange}
+                        t={t}
+                    />
+                ))}
             </div>
         </div>
     )

@@ -3,7 +3,7 @@ import type { SessionSummary } from '@/types/api'
 
 export type SessionListSelection = {
     onIntent?: (sessionId: string, source: 'focus' | 'hover' | 'press') => void
-    onSelect: (sessionId: string) => unknown
+    onSelect: (sessionId: string) => void
     openingSessionId?: string | null
     selectedSessionId: string | null
 }

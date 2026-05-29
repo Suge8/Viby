@@ -156,12 +156,15 @@ describe('SettingsPage', () => {
         ).not.toBeInTheDocument()
     })
 
-    it('renders the notifications section with an explicit enable action', async () => {
+    it('renders the notifications section as a single toggle row', async () => {
         renderWithProviders(<SettingsPage />)
 
         expect((await screen.findAllByText('Notifications')).length).toBeGreaterThanOrEqual(1)
-        expect((await screen.findAllByText('Push Notifications')).length).toBeGreaterThanOrEqual(1)
-        expect((await screen.findAllByRole('button', { name: 'Turn On' })).length).toBeGreaterThanOrEqual(1)
+        const toggle = await screen.findByRole('switch', { name: 'Approval & Reply Alerts' })
+        expect(toggle).not.toBeChecked()
+        expect(toggle).not.toBeDisabled()
+        expect(screen.getByText('Get a heads-up for approvals and replies')).toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Refresh' })).not.toBeInTheDocument()
     })
 
     it('asks iOS browser users to install before showing unsupported push status', async () => {
@@ -179,8 +182,9 @@ describe('SettingsPage', () => {
 
         renderWithProviders(<SettingsPage />)
 
-        expect(await screen.findByText('Install first')).toBeInTheDocument()
-        expect(screen.getByText('On iPhone and iPad, add Viby to your Home Screen first.')).toBeInTheDocument()
+        const toggle = await screen.findByRole('switch', { name: 'Approval & Reply Alerts' })
+        expect(toggle).toBeDisabled()
+        expect(screen.getByText('Add Viby to the Home Screen first')).toBeInTheDocument()
     })
 
     it('uses concise product copy when notifications are not supported on this entry', async () => {
@@ -196,11 +200,29 @@ describe('SettingsPage', () => {
 
         renderWithProviders(<SettingsPage />)
 
-        expect(await screen.findByText('Not supported here')).toBeInTheDocument()
-        expect(
-            screen.getByText('This entry does not support system notifications. Chat still works normally.')
-        ).toBeInTheDocument()
+        const toggle = await screen.findByRole('switch', { name: 'Approval & Reply Alerts' })
+        expect(toggle).toBeDisabled()
+        expect(screen.getByText('Not available on this entry')).toBeInTheDocument()
         expect(screen.queryByText(/service workers?/i)).not.toBeInTheDocument()
         expect(screen.queryByText(/secure production app/i)).not.toBeInTheDocument()
+    })
+
+    it('shows the refresh action only when notifications are blocked', async () => {
+        usePushNotificationsMock.mockReturnValue({
+            isSupported: true,
+            isSubscribed: false,
+            permission: 'denied',
+            isPending: false,
+            enableNotifications: vi.fn(),
+            disableNotifications: vi.fn(),
+            refreshSubscription: vi.fn(),
+        })
+
+        renderWithProviders(<SettingsPage />)
+
+        const toggle = await screen.findByRole('switch', { name: 'Approval & Reply Alerts' })
+        expect(toggle).toBeDisabled()
+        expect(screen.getByText('Blocked by your browser. Allow Viby, then refresh.')).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Refresh' })).toBeInTheDocument()
     })
 })

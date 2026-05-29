@@ -23,6 +23,14 @@ describe('SessionList history tabs', () => {
         document.body.innerHTML = ''
     })
 
+    it('shows syncing state instead of fake zero counts during first load', () => {
+        renderSessionList({ isLoading: true, sessions: [] })
+
+        expect(screen.getByText('Syncing sessions')).toBeInTheDocument()
+        expect(screen.getAllByText('…').length).toBeGreaterThanOrEqual(2)
+        expect(screen.queryByText('0')).not.toBeInTheDocument()
+    })
+
     it('uses the top tabs as the only running/history filter owner', () => {
         renderSessionList()
         expect(screen.getAllByText('Active').length).toBeGreaterThan(0)
@@ -197,7 +205,6 @@ describe('SessionList history tabs', () => {
                     selectedSessionId="session-2"
                     actions={{
                         onSelect: vi.fn(),
-                        onNewSession: vi.fn(),
                     }}
                 />
             </I18nProvider>

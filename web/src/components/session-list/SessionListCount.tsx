@@ -2,11 +2,12 @@ const SESSION_COUNT_MAX = 99
 const SESSION_COUNT_OVERFLOW_LABEL = '99+'
 
 type SessionListCountProps = {
-    count: number
+    count: number | null
     className: string
 }
 
-function formatSessionCount(count: number): string {
+function formatSessionCount(count: number | null): string {
+    if (count === null) return '…'
     return count > SESSION_COUNT_MAX ? SESSION_COUNT_OVERFLOW_LABEL : String(count)
 }
 

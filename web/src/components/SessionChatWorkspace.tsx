@@ -8,7 +8,6 @@ import { useSessionChatWorkspaceModel } from '@/components/useSessionChatWorkspa
 
 export default function SessionChatWorkspace(props: SessionChatWorkspaceProps): React.JSX.Element {
     const {
-        chatLayoutStyle,
         composerRef,
         composerSurfaceModel,
         isStandalone,
@@ -23,7 +22,6 @@ export default function SessionChatWorkspace(props: SessionChatWorkspaceProps): 
             className="session-chat-layout ds-chat-shell flex-1 min-h-0"
             data-chat-keyboard-open={isKeyboardOpen ? 'true' : 'false'}
             data-chat-standalone={isStandalone ? 'true' : 'false'}
-            style={chatLayoutStyle}
         >
             <SessionChatRuntimeSurface
                 key={props.session.id}

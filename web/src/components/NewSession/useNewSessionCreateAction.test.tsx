@@ -13,6 +13,7 @@ function createOptions(overrides: Partial<Parameters<typeof useNewSessionCreateA
         effectiveModel: 'auto',
         effectiveReasoningEffort: 'default' as const,
         effectiveCodexServiceTier: 'standard' as const,
+        canStart: true,
         checkPathsExists: vi.fn(async () => ({ '/repo': true })),
         confirmDirectoryCreation: vi.fn(),
         spawnSession: vi.fn(async () => ({ type: 'success' as const, session: { id: 'session-1' } })),
@@ -57,6 +58,18 @@ describe('useNewSessionCreateAction', () => {
 
         expect(options.onSuccess).toHaveBeenCalledTimes(1)
         expect(options.onSuccess).toHaveBeenCalledWith('session-1')
+    })
+
+    it('does not spawn when launch readiness is blocked', async () => {
+        const options = createOptions({ canStart: false, blockedMessage: 'Blocked' })
+        const { result } = renderHook(() => useNewSessionCreateAction(options))
+
+        await act(async () => {
+            await result.current.handleCreate()
+        })
+
+        expect(options.spawnSession).not.toHaveBeenCalled()
+        expect(options.setError).toHaveBeenCalledWith('Blocked')
     })
 
     it('keeps the action pending while the created session is opening', async () => {

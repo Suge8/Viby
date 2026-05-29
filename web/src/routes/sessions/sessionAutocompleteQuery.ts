@@ -34,13 +34,15 @@ export function getOrPrefetchSessionAutocompleteData<TData>(
         return undefined
     }
 
-    void queryClient.prefetchQuery({
-        queryKey,
-        queryFn,
-        ...SESSION_AUTOCOMPLETE_QUERY_OPTIONS,
-    }).catch(() => {
-        // Autocomplete is enhancement-only and should never block the composer.
-    })
+    void queryClient
+        .prefetchQuery({
+            queryKey,
+            queryFn,
+            ...SESSION_AUTOCOMPLETE_QUERY_OPTIONS,
+        })
+        .catch(() => {
+            // Autocomplete is enhancement-only and should never block the composer.
+        })
 
     return undefined
 }

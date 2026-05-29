@@ -1,14 +1,14 @@
 import { type CSSProperties, memo } from 'react'
-import { getEventPresentation } from '@/chat/presentation'
 import type { TranscriptRow } from '@/chat/transcriptTypes'
-import { AppNotice } from '@/components/AppNotice'
-import { useVibyChatContext } from '@/components/AssistantChat/context'
+import { AssistantReplyingIndicator } from '@/components/AssistantChat/AssistantReplyingIndicator'
+import { useVibyChatContext, type VibyChatContextValue } from '@/components/AssistantChat/context'
 import { CliOutputMessageContent } from '@/components/AssistantChat/messages/CliOutputMessageContent'
 import { MessageAttachments } from '@/components/AssistantChat/messages/MessageAttachments'
 import { MessageStatusIndicator } from '@/components/AssistantChat/messages/MessageStatusIndicator'
 import { MessageSurface } from '@/components/AssistantChat/messages/MessageSurface'
 import { TextContent } from '@/components/TextContent'
 import { ToolCard } from '@/components/ToolCard/ToolCard'
+import { TranscriptEventNotice } from '@/components/transcript/TranscriptEventNotice'
 import { TranscriptReasoningGroup } from '@/components/transcript/TranscriptReasoningGroup'
 import { isImageMimeType } from '@/lib/fileAttachments'
 
@@ -64,22 +64,12 @@ function resolveMessageSurfaceContentLayout(options: {
     return DEFAULT_MESSAGE_SURFACE_CONTENT_LAYOUT
 }
 
-function TranscriptRowViewComponent(props: { row: TranscriptRow }): React.JSX.Element | null {
-    const ctx = useVibyChatContext()
-    const { row } = props
-
+function renderRowContent(row: TranscriptRow, ctx: VibyChatContextValue): React.JSX.Element | null {
     if (row.type === 'event') {
-        const presentation = getEventPresentation(row.block.event)
         return (
             <DepthInset depth={row.depth}>
                 <div>
-                    <AppNotice
-                        layout="inline"
-                        tone={presentation.tone}
-                        icon={presentation.icon ? <span aria-hidden="true">{presentation.icon}</span> : undefined}
-                        title={presentation.text}
-                        className="ds-transcript-notice-shell"
-                    />
+                    <TranscriptEventNotice event={row.block.event} />
                 </div>
             </DepthInset>
         )
@@ -120,6 +110,16 @@ function TranscriptRowViewComponent(props: { row: TranscriptRow }): React.JSX.El
                         onDone={ctx.onRefresh}
                         block={row.block}
                     />
+                </div>
+            </DepthInset>
+        )
+    }
+
+    if (row.type === 'assistant-thinking') {
+        return (
+            <DepthInset depth={row.depth}>
+                <div className="flex min-w-0 max-w-full justify-start px-1">
+                    <AssistantReplyingIndicator phase={row.phase} />
                 </div>
             </DepthInset>
         )
@@ -170,6 +170,19 @@ function TranscriptRowViewComponent(props: { row: TranscriptRow }): React.JSX.El
             </div>
         </DepthInset>
     )
+}
+
+// Row mount motion is owned by a single CSS keyframe driven by the
+// `data-fresh` attribute on the outer row container (see
+// `design-system-motion.css`). The row view itself stays as a pure renderer
+// with no motion-library wrappers so virtualized mount/unmount stays cheap.
+function TranscriptRowViewComponent(props: { row: TranscriptRow }): React.JSX.Element | null {
+    const ctx = useVibyChatContext()
+    const content = renderRowContent(props.row, ctx)
+    if (!content) {
+        return null
+    }
+    return content
 }
 
 export const TranscriptRowView = memo(TranscriptRowViewComponent, (prev, next) => prev.row === next.row)

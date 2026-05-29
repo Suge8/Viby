@@ -1,10 +1,17 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SESSION_LIST_CREATE_BUTTON_TEST_ID } from '@/lib/sessionUiContracts'
+import { createTestSessionListSummary } from '@/test/sessionFactories'
 import { SessionsShell } from './SessionsShell'
 
+type TestHistoryAction = { type: 'PUSH' | 'REPLACE' | 'FORWARD' | 'BACK' } | { type: 'GO'; index: number }
+type TestHistoryEvent = { action: TestHistoryAction; location: { href: string; pathname: string } }
+
 const navigateMock = vi.fn()
+const routerHistorySubscribeMock = vi.fn<(callback: (event: TestHistoryEvent) => void) => () => void>(
+    () => () => undefined
+)
 const useLocationMock = vi.fn()
 const useMatchRouteMock = vi.fn()
 const useSearchMock = vi.fn()
@@ -15,6 +22,7 @@ const preloadSessionDetailRouteMock = vi.fn()
 const preloadSessionDetailIntentMock = vi.fn()
 const warmSessionDetailAncillaryRouteDataMock = vi.fn()
 const disposeSessionViewRuntimeMock = vi.fn()
+const loadAgentConfigRouteModuleMock = vi.fn(async () => undefined)
 const loadNewSessionRouteModuleMock = vi.fn(async () => undefined)
 const loadSettingsRouteModuleMock = vi.fn(async () => undefined)
 const getNetworkInformationMock = vi.fn(() => null)
@@ -41,12 +49,18 @@ function createDeferred(): {
 
 vi.mock('@tanstack/react-router', () => ({
     Outlet: () => <div data-testid="outlet" />,
-    useLocation: (options?: { select?: (location: { pathname: string }) => string }) => {
-        const location = { pathname: useLocationMock() }
+    useLocation: (options?: { select?: (location: { href: string; pathname: string }) => string }) => {
+        const pathname = useLocationMock()
+        const location = { href: pathname, pathname }
         return options?.select ? options.select(location) : location
     },
     useMatchRoute: () => useMatchRouteMock,
     useNavigate: () => navigateMock,
+    useRouter: () => ({
+        history: {
+            subscribe: routerHistorySubscribeMock,
+        },
+    }),
     useSearch: () => useSearchMock(),
 }))
 
@@ -56,15 +70,19 @@ vi.mock('@tanstack/react-query', () => ({
 
 vi.mock('@/components/SessionList', () => ({
     SessionList: (props: {
+        activeSectionId?: 'running' | 'history' | null
         openingSessionId?: string | null
         actions: {
             onSelect: (sessionId: string) => void
             onSessionIntent?: (sessionId: string, source: 'focus' | 'hover' | 'press') => void
-            onNewSession: () => void
         }
         onActiveSectionChange?: (sectionId: 'running' | 'history') => void
     }) => (
-        <div data-testid="session-list" data-opening-session-id={props.openingSessionId ?? ''}>
+        <div
+            data-testid="session-list"
+            data-active-section-id={props.activeSectionId ?? ''}
+            data-opening-session-id={props.openingSessionId ?? ''}
+        >
             <button type="button" onClick={() => props.actions.onSessionIntent?.('session-1', 'hover')}>
                 preload-session
             </button>
@@ -77,9 +95,6 @@ vi.mock('@/components/SessionList', () => ({
             <button type="button" onClick={() => props.onActiveSectionChange?.('running')}>
                 show-running
             </button>
-            <button type="button" title="sessions.new" onClick={() => props.actions.onNewSession()}>
-                new-session
-            </button>
         </div>
     ),
 }))
@@ -90,6 +105,7 @@ vi.mock('@/components/SessionsEmptyState', () => ({
 
 vi.mock('@/routes/sessions/sessionRoutePreload', () => ({
     SESSIONS_IDLE_PRELOADERS: [() => loadNewSessionRouteModuleMock(), () => loadSettingsRouteModuleMock()],
+    loadAgentConfigRouteModule: () => loadAgentConfigRouteModuleMock(),
     loadNewSessionRouteModule: () => loadNewSessionRouteModuleMock(),
     loadSettingsRouteModule: () => loadSettingsRouteModuleMock(),
 }))
@@ -190,11 +206,13 @@ describe('SessionsShell', () => {
         })
         window.localStorage.clear()
         navigateMock.mockReset()
+        routerHistorySubscribeMock.mockClear()
         preloadSessionDetailCriticalRouteMock.mockReset()
         preloadSessionDetailRouteMock.mockReset()
         preloadSessionDetailIntentMock.mockReset()
         warmSessionDetailAncillaryRouteDataMock.mockReset()
         disposeSessionViewRuntimeMock.mockReset()
+        loadAgentConfigRouteModuleMock.mockClear()
         loadNewSessionRouteModuleMock.mockClear()
         loadSettingsRouteModuleMock.mockClear()
         getNetworkInformationMock.mockReset()
@@ -306,11 +324,12 @@ describe('SessionsShell', () => {
             expect(navigateMock).toHaveBeenCalledWith({
                 to: '/sessions/$sessionId',
                 params: { sessionId: 'session-1' },
+                search: {},
             })
         })
     })
 
-    it('keeps the selected card opening until the route selection catches up', async () => {
+    it('keeps the selected card pending until the route selection catches up', async () => {
         const deferred = createDeferred()
         useLocationMock.mockReturnValue('/sessions')
         useMatchRouteMock.mockReturnValue(false)
@@ -333,6 +352,50 @@ describe('SessionsShell', () => {
         await waitFor(() => {
             expect(screen.getByTestId('session-list')).toHaveAttribute('data-opening-session-id', '')
         })
+    })
+
+    it('releases pending navigation when route path changes before selection catch-up', async () => {
+        const deferred = createDeferred()
+        let historySubscriber: ((event: TestHistoryEvent) => void) | null = null
+        routerHistorySubscribeMock.mockImplementation((callback) => {
+            historySubscriber = callback
+            return () => undefined
+        })
+        useLocationMock.mockReturnValue('/sessions')
+        useMatchRouteMock.mockReturnValue(false)
+        useSearchMock.mockReturnValue({ section: undefined })
+        preloadSessionDetailCriticalRouteMock.mockReturnValueOnce(deferred.promise)
+
+        render(<SessionsShell />)
+
+        fireEvent.click(screen.getByText('open-session'))
+        expect(screen.getByTestId('session-list')).toHaveAttribute('data-opening-session-id', 'session-1')
+
+        await act(async () => {
+            historySubscriber?.({
+                action: { type: 'PUSH' },
+                location: { href: '/sessions/session-1', pathname: '/sessions/session-1' },
+            })
+        })
+
+        await waitFor(() => {
+            expect(screen.getByTestId('session-list')).toHaveAttribute('data-opening-session-id', '')
+        })
+    })
+
+    it('dedupes repeated opens through the pending navigation owner', () => {
+        const deferred = createDeferred()
+        useLocationMock.mockReturnValue('/sessions')
+        useMatchRouteMock.mockReturnValue(false)
+        useSearchMock.mockReturnValue({ section: undefined })
+        preloadSessionDetailCriticalRouteMock.mockReturnValue(deferred.promise)
+
+        render(<SessionsShell />)
+
+        fireEvent.click(screen.getByText('open-session'))
+        fireEvent.click(screen.getByText('open-session'))
+
+        expect(runPreloadedNavigationMock).toHaveBeenCalledTimes(1)
     })
 
     it('does not re-preload the currently selected session on list intent', () => {
@@ -439,6 +502,7 @@ describe('SessionsShell', () => {
             expect(navigateMock).toHaveBeenCalledWith({
                 to: '/sessions/$sessionId',
                 params: { sessionId: 'session-1' },
+                search: {},
             })
         })
     })
@@ -475,6 +539,22 @@ describe('SessionsShell', () => {
         )
 
         expect(disposeSessionViewRuntimeMock).not.toHaveBeenCalled()
+    })
+
+    it('syncs an initial history route before clearing the selected detail', async () => {
+        useLocationMock.mockReturnValue('/sessions/session-2')
+        useMatchRouteMock.mockReturnValue({ sessionId: 'session-2' })
+        useSessionsMock.mockReturnValue({
+            sessions: [createTestSessionListSummary({ id: 'session-2' })],
+            error: null,
+        })
+
+        render(<SessionsShell />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId('session-list')).toHaveAttribute('data-active-section-id', 'history')
+        })
+        expect(navigateMock).not.toHaveBeenCalled()
     })
 
     it('clears the selected detail when the current running session moves into history', async () => {
@@ -661,6 +741,7 @@ describe('SessionsShell', () => {
             expect(navigateMock).toHaveBeenCalledWith({
                 to: '/sessions/$sessionId',
                 params: { sessionId: 'session-1' },
+                search: {},
             })
         })
     })
@@ -671,8 +752,10 @@ describe('SessionsShell', () => {
 
         render(<SessionsShell />)
 
-        fireEvent.click(screen.getByTitle('settings.title'))
+        const settingsButton = screen.getByTitle('settings.title')
+        fireEvent.click(settingsButton)
 
+        expect(settingsButton).toHaveAttribute('aria-busy', 'true')
         expect(loadSettingsRouteModuleMock).toHaveBeenCalledTimes(1)
         expect(navigateMock).not.toHaveBeenCalled()
 
@@ -688,14 +771,43 @@ describe('SessionsShell', () => {
         )
     })
 
-    it('waits for the new-session route preload before navigating there', async () => {
+    it('waits for the agents route preload before navigating there', async () => {
         const deferred = createDeferred()
-        loadNewSessionRouteModuleMock.mockReturnValueOnce(deferred.promise)
+        loadAgentConfigRouteModuleMock.mockReturnValueOnce(deferred.promise)
 
         render(<SessionsShell />)
 
-        fireEvent.click(screen.getByTitle('sessions.new'))
+        const agentsButton = screen.getByTitle('agents.config.title')
+        fireEvent.click(agentsButton)
 
+        expect(agentsButton).toHaveAttribute('aria-busy', 'true')
+        expect(loadAgentConfigRouteModuleMock).toHaveBeenCalledTimes(1)
+        expect(navigateMock).not.toHaveBeenCalled()
+
+        deferred.resolve()
+
+        await waitFor(() => {
+            expect(navigateMock).toHaveBeenCalledWith({ to: '/sessions/agents' })
+        })
+        expect(runPreloadedNavigationMock).toHaveBeenLastCalledWith(
+            expect.any(Promise),
+            expect.any(Function),
+            '/sessions/agents'
+        )
+    })
+
+    it('waits for the new-session route preload before navigating there', async () => {
+        const deferred = createDeferred()
+        loadNewSessionRouteModuleMock.mockReturnValueOnce(deferred.promise)
+        useLocationMock.mockReturnValue('/sessions')
+        useMatchRouteMock.mockReturnValue(false)
+
+        render(<SessionsShell />)
+
+        const createButton = screen.getByTitle('sessions.new')
+        fireEvent.click(createButton)
+
+        expect(createButton).toHaveAttribute('aria-busy', 'true')
         expect(loadNewSessionRouteModuleMock).toHaveBeenCalledTimes(1)
         expect(navigateMock).not.toHaveBeenCalled()
 
@@ -725,6 +837,7 @@ describe('SessionsShell', () => {
             expect(navigateMock).toHaveBeenCalledWith({
                 to: '/sessions/$sessionId',
                 params: { sessionId: 'session-1' },
+                search: {},
             })
         })
 
@@ -750,6 +863,8 @@ describe('SessionsShell', () => {
 
     it('still navigates when new-session preload fails', async () => {
         loadNewSessionRouteModuleMock.mockRejectedValueOnce(new Error('new preload failed'))
+        useLocationMock.mockReturnValue('/sessions')
+        useMatchRouteMock.mockReturnValue(false)
 
         render(<SessionsShell />)
 
@@ -772,6 +887,9 @@ describe('SessionsShell', () => {
     })
 
     it('preloads the new-session route module before navigating there', async () => {
+        useLocationMock.mockReturnValue('/sessions')
+        useMatchRouteMock.mockReturnValue(false)
+
         render(<SessionsShell />)
 
         fireEvent.click(screen.getByTitle('sessions.new'))

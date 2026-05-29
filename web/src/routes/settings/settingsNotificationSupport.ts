@@ -1,18 +1,10 @@
-export const NOTIFICATION_STATUS_LABEL_KEYS = {
-    enabled: 'settings.notifications.status.enabled',
-    disabled: 'settings.notifications.status.disabled',
-    blocked: 'settings.notifications.status.blocked',
-    installRequired: 'settings.notifications.status.installRequired',
-    unavailable: 'settings.notifications.status.unavailable',
-} as const
-
 export type NotificationAvailability = 'enabled' | 'disabled' | 'blocked' | 'install-required' | 'unavailable'
 
-export type NotificationSummaryModel = {
-    descriptionKey: string
-    detailKey?: string
-    statusLabelKey: keyof typeof NOTIFICATION_STATUS_LABEL_KEYS
-}
+export type NotificationDescriptionKey =
+    | 'settings.notifications.description.default'
+    | 'settings.notifications.description.blocked'
+    | 'settings.notifications.description.installRequired'
+    | 'settings.notifications.description.unavailable'
 
 export function resolveNotificationSummary(options: {
     hasPushSupport: boolean
@@ -37,37 +29,19 @@ export function resolveNotificationSummary(options: {
     return 'disabled'
 }
 
-export function buildNotificationSummaryModel(availability: NotificationAvailability): NotificationSummaryModel {
+export function getNotificationDescriptionKey(availability: NotificationAvailability): NotificationDescriptionKey {
     switch (availability) {
-        case 'enabled':
-            return {
-                descriptionKey: 'settings.notifications.description.enabled',
-                detailKey: 'settings.notifications.detail.events',
-                statusLabelKey: 'enabled',
-            }
         case 'blocked':
-            return {
-                descriptionKey: 'settings.notifications.description.blocked',
-                detailKey: 'settings.notifications.detail.blocked',
-                statusLabelKey: 'blocked',
-            }
+            return 'settings.notifications.description.blocked'
         case 'install-required':
-            return {
-                descriptionKey: 'settings.notifications.description.installRequired',
-                detailKey: 'settings.notifications.detail.installRequired',
-                statusLabelKey: 'installRequired',
-            }
+            return 'settings.notifications.description.installRequired'
         case 'unavailable':
-            return {
-                descriptionKey: 'settings.notifications.description.unavailable',
-                statusLabelKey: 'unavailable',
-            }
-        case 'disabled':
+            return 'settings.notifications.description.unavailable'
         default:
-            return {
-                descriptionKey: 'settings.notifications.description.disabled',
-                detailKey: 'settings.notifications.detail.events',
-                statusLabelKey: 'disabled',
-            }
+            return 'settings.notifications.description.default'
     }
+}
+
+export function isNotificationToggleDisabled(availability: NotificationAvailability): boolean {
+    return availability === 'blocked' || availability === 'install-required' || availability === 'unavailable'
 }

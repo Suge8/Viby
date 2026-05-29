@@ -27,21 +27,21 @@ const SESSION_LIST_STICKY_CONTROLS_CLASS_NAME = '-mt-2 sticky top-0 z-10 px-3 pb
 
 type SessionListEmptyLabelOptions = {
     activeSectionId: SessionListSectionId
+    isLoading: boolean
     searchQuery: string
     t: (key: string) => string
 }
 
 type SessionListActions = {
     onSessionIntent?: (sessionId: string, source: 'focus' | 'hover' | 'press') => void
-    onSelect: (sessionId: string) => unknown
-    onNewSession: () => unknown
-    onNewSessionInDirectory?: (directory: string) => unknown
+    onSelect: (sessionId: string) => void
 }
 
 type SessionListProps = {
     sessions: readonly SessionSummary[]
     api: ApiClient | null
     actions: SessionListActions
+    isLoading?: boolean
     openingSessionId?: string | null
     selectedSessionId?: string | null
     preferredSectionId?: SessionListSectionId | null
@@ -56,6 +56,7 @@ function SessionListComponent(props: SessionListProps): React.JSX.Element {
         api,
         actions,
         onActiveSectionChange,
+        isLoading = false,
         openingSessionId = null,
         preferredSectionId = null,
         selectedSessionId = null,
@@ -91,25 +92,23 @@ function SessionListComponent(props: SessionListProps): React.JSX.Element {
         () => ({
             activeTab: activeSectionId,
             ariaLabel: `${t('sessions.section.running')} / ${t('sessions.section.history')}`,
-            createLabel: t('sessions.new'),
             searchLabel: t('sessions.search.label'),
             searchPlaceholder: t('sessions.search.placeholder'),
             searchValue: searchQuery,
             tabs: controlTabs.map((section) => ({
                 id: section.id,
                 label: t(section.titleKey),
-                count: section.count,
+                count: isLoading ? null : section.count,
             })),
         }),
-        [activeSectionId, controlTabs, searchQuery, t]
+        [activeSectionId, controlTabs, isLoading, searchQuery, t]
     )
     const controlsActions = useMemo(
         () => ({
             onChange: setActiveSectionId,
-            onCreate: actions.onNewSession,
             onSearchChange: setSearchQuery,
         }),
-        [actions.onNewSession, setActiveSectionId]
+        [setActiveSectionId]
     )
     const activeSection = useMemo(
         () => sections.find((section) => section.id === activeSectionId) ?? null,
@@ -117,6 +116,7 @@ function SessionListComponent(props: SessionListProps): React.JSX.Element {
     )
     const emptyLabel = getSessionListEmptyLabel({
         activeSectionId,
+        isLoading,
         searchQuery: deferredSearchQuery,
         t,
     })
@@ -180,6 +180,7 @@ function SessionListComponent(props: SessionListProps): React.JSX.Element {
                         activeSection={activeSection}
                         renderContext={renderContext}
                         emptyLabel={emptyLabel}
+                        isLoading={isLoading}
                         onShowAll={handleShowAllActiveSection}
                         showAllLabel={
                             activeSection?.hiddenCount
@@ -196,10 +197,7 @@ function SessionListComponent(props: SessionListProps): React.JSX.Element {
                     api={api}
                     session={actionSession}
                     anchorPoint={actionTarget.anchorPoint}
-                    callbacks={{
-                        onDismiss: handleDismissActionController,
-                        onNewSessionInDirectory: actions.onNewSessionInDirectory,
-                    }}
+                    onDismiss={handleDismissActionController}
                 />
             ) : null}
         </div>
@@ -207,6 +205,10 @@ function SessionListComponent(props: SessionListProps): React.JSX.Element {
 }
 
 function getSessionListEmptyLabel(options: SessionListEmptyLabelOptions): string {
+    if (options.isLoading) {
+        return options.t('sessions.loading.syncing')
+    }
+
     if (options.searchQuery.trim()) {
         return options.t('sessions.empty.search')
     }

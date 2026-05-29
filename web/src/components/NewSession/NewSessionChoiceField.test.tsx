@@ -1,29 +1,49 @@
-import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { I18nProvider } from '@/lib/i18n-context'
 import { NewSessionChoiceField } from './NewSessionChoiceField'
 
-function dispatchPointer(target: Element, type: string, init: Record<string, number>): void {
-    const event = new Event(type, { bubbles: true })
-    for (const [key, value] of Object.entries(init)) {
-        Object.defineProperty(event, key, { value })
-    }
-    target.dispatchEvent(event)
+afterEach(() => {
+    cleanup()
+})
+
+function renderField(props: Parameters<typeof NewSessionChoiceField>[0]) {
+    return render(
+        <I18nProvider>
+            <NewSessionChoiceField {...props} />
+        </I18nProvider>
+    )
 }
 
 describe('NewSessionChoiceField', () => {
-    it('supports arrow-key navigation inside options', () => {
-        render(
-            <NewSessionChoiceField
-                ariaLabel="Agent"
-                value={null}
-                placeholder="Choose agent"
-                options={[
-                    { value: 'codex', label: 'Codex' },
-                    { value: 'claude', label: 'Claude' },
-                ]}
-                onChange={() => undefined}
-            />
-        )
+    it('opens a modal dialog when the trigger is clicked', () => {
+        renderField({
+            ariaLabel: 'Agent',
+            value: null,
+            placeholder: 'Choose agent',
+            options: [
+                { value: 'codex', label: 'Codex' },
+                { value: 'claude', label: 'Claude' },
+            ],
+            onChange: () => undefined,
+        })
+
+        expect(screen.queryByRole('group', { name: 'Agent' })).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Agent' }))
+        expect(screen.getByRole('group', { name: 'Agent' })).toHaveClass('ds-new-session-choice-options')
+    })
+
+    it('supports arrow-key navigation inside the option list', () => {
+        renderField({
+            ariaLabel: 'Agent',
+            value: null,
+            placeholder: 'Choose agent',
+            options: [
+                { value: 'codex', label: 'Codex' },
+                { value: 'claude', label: 'Claude' },
+            ],
+            onChange: () => undefined,
+        })
 
         fireEvent.click(screen.getByRole('button', { name: 'Agent' }))
         const codex = screen.getByRole('button', { name: /Codex/ })
@@ -35,30 +55,51 @@ describe('NewSessionChoiceField', () => {
         expect(claude).toHaveFocus()
     })
 
-    it('keeps option list open during outside scroll drag and closes on outside tap', () => {
+    it('shows a spinner on the trigger while loading', () => {
+        renderField({
+            ariaLabel: 'Model',
+            value: 'auto',
+            options: [{ value: 'auto', label: 'Terminal default model' }],
+            isLoading: true,
+            onChange: () => undefined,
+        })
+
+        const trigger = screen.getByRole('button', { name: 'Model' })
+        expect(trigger).toHaveAttribute('aria-busy', 'true')
+        expect(trigger).not.toHaveTextContent('Terminal default model')
+    })
+
+    it('hides the spinner once loading completes', () => {
+        renderField({
+            ariaLabel: 'Model',
+            value: 'auto',
+            options: [{ value: 'auto', label: 'Terminal default model' }],
+            isLoading: false,
+            onChange: () => undefined,
+        })
+
+        const trigger = screen.getByRole('button', { name: 'Model' })
+        expect(trigger).not.toHaveAttribute('aria-busy', 'true')
+        expect(trigger).toHaveTextContent('Terminal default model')
+    })
+
+    it('fires onChange and closes the dialog when an option is selected', () => {
         const onChange = vi.fn()
-        render(
-            <NewSessionChoiceField
-                ariaLabel="Agent"
-                value={null}
-                placeholder="Choose agent"
-                options={[
-                    { value: 'codex', label: 'Codex' },
-                    { value: 'claude', label: 'Claude' },
-                ]}
-                onChange={onChange}
-            />
-        )
+        renderField({
+            ariaLabel: 'Agent',
+            value: null,
+            placeholder: 'Choose agent',
+            options: [
+                { value: 'codex', label: 'Codex' },
+                { value: 'claude', label: 'Claude' },
+            ],
+            onChange,
+        })
 
         fireEvent.click(screen.getByRole('button', { name: 'Agent' }))
-        expect(screen.getByRole('group', { name: 'Agent' })).toHaveClass('ds-new-session-choice-options')
+        fireEvent.click(screen.getByRole('button', { name: /Codex/ }))
 
-        dispatchPointer(document.body, 'pointerdown', { pointerId: 1, clientX: 8, clientY: 8 })
-        dispatchPointer(document.body, 'pointerup', { pointerId: 1, clientX: 8, clientY: 40 })
-        expect(screen.getByRole('group', { name: 'Agent' })).toBeInTheDocument()
-
-        fireEvent.pointerDown(document.body)
-        fireEvent.pointerUp(document.body)
+        expect(onChange).toHaveBeenCalledWith('codex')
         expect(screen.queryByRole('group', { name: 'Agent' })).not.toBeInTheDocument()
     })
 })

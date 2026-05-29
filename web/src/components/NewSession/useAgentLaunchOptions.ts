@@ -66,9 +66,12 @@ function withResolvedTerminalDefault<T extends string>(
     defaultValue: T,
     resolved?: Pick<LaunchOption<T>, 'label' | 'labelKey'>
 ): Array<LaunchOption<T>> {
+    if (!resolved?.label && !resolved?.labelKey) {
+        return [...options]
+    }
     return options.map((option) =>
         option.value === defaultValue
-            ? { ...option, resolvedLabel: resolved?.label, resolvedLabelKey: resolved?.labelKey }
+            ? { ...option, resolvedLabel: resolved.label, resolvedLabelKey: resolved.labelKey }
             : option
     )
 }
@@ -132,19 +135,21 @@ export function useAgentLaunchOptions(options: UseAgentLaunchOptionsOptions): {
     }, [model, launchConfig])
 
     const modelOptions = useMemo(() => {
-        const nextOptions = withResolvedTerminalDefault(getConfiguredModelOptions(agent, launchConfig), 'auto', {
-            label: getDefaultModelLabel(launchConfig) ?? '',
-        })
+        const baseOptions = getConfiguredModelOptions(agent, launchConfig)
+        const resolvedDefaultLabel = getDefaultModelLabel(launchConfig)
+        const nextOptions = resolvedDefaultLabel
+            ? withResolvedTerminalDefault(baseOptions, 'auto', { label: resolvedDefaultLabel })
+            : baseOptions
         return withCurrentLaunchOption(nextOptions, model, 'auto')
     }, [agent, model, launchConfig])
 
     const reasoningOptions = useMemo(() => {
-        const nextOptions = getConfiguredReasoningOptions({ agent, capability: activeCapability })
-        return withCurrentLaunchOption(
-            withResolvedTerminalDefault(nextOptions, 'default', getDefaultReasoningOption(nextOptions, launchConfig)),
-            modelReasoningEffort,
-            'default'
-        )
+        const baseOptions = getConfiguredReasoningOptions({ agent, capability: activeCapability })
+        const resolvedDefaultReasoning = getDefaultReasoningOption(baseOptions, launchConfig)
+        const nextOptions = resolvedDefaultReasoning
+            ? withResolvedTerminalDefault(baseOptions, 'default', resolvedDefaultReasoning)
+            : baseOptions
+        return withCurrentLaunchOption(nextOptions, modelReasoningEffort, 'default')
     }, [activeCapability, agent, modelReasoningEffort, launchConfig])
 
     useEffect(() => {

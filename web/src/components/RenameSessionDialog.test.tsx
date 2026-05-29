@@ -1,7 +1,7 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { I18nProvider } from '@/lib/i18n-context'
 import { RenameSessionDialog } from '@/components/RenameSessionDialog'
+import { I18nProvider } from '@/lib/i18n-context'
 
 describe('RenameSessionDialog', () => {
     afterEach(() => {

@@ -88,7 +88,7 @@ export function RenameSessionDialog(props: RenameSessionDialogProps) {
                         <Button type="button" variant="secondary" onClick={onClose} disabled={isPending}>
                             {t('button.cancel')}
                         </Button>
-                        <Button type="submit" disabled={isPending || !name.trim()}>
+                        <Button type="submit" disabled={isPending || !name.trim()} pending={isPending}>
                             {isPending ? t('dialog.rename.saving') : t('button.save')}
                         </Button>
                     </div>

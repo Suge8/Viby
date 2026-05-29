@@ -64,12 +64,13 @@ export function SessionAgentBrandIcon(
                 <BrandMaskIcon
                     {...restProps}
                     className={resolvedClassName}
+                    color="#111111"
                     style={resolvedStyle}
                     src={OFFICIAL_AGENT_ASSETS.copilot}
                 />
             )
         case 'cursor':
-            return <CursorMarkIcon {...restProps} className={resolvedClassName} style={resolvedStyle} />
+            return <CursorMarkIcon {...restProps} className={resolvedClassName} color="#111111" style={resolvedStyle} />
         case 'gemini':
             return (
                 <BrandImageIcon
@@ -145,12 +146,14 @@ function BrandMaskIcon(
 ): React.JSX.Element {
     const { src, className, color, style } = props
 
+    // Brand mask icons render on white frames — lock the fill to near-black so the
+    // identity stays legible in every theme without depending on currentColor.
     return (
         <span
             aria-hidden="true"
             className={`${className} inline-block shrink-0`}
             style={{
-                backgroundColor: color ?? 'currentColor',
+                backgroundColor: color ?? '#111111',
                 WebkitMaskImage: `url(${src})`,
                 maskImage: `url(${src})`,
                 ...MASK_ICON_STYLE,
@@ -161,8 +164,9 @@ function BrandMaskIcon(
 }
 
 function CursorMarkIcon(props: SessionAgentIconProps): React.JSX.Element {
+    const { color, style, ...rest } = props
     return (
-        <svg {...props} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <svg {...rest} viewBox="0 0 24 24" fill={color ?? '#111111'} style={style} aria-hidden="true">
             <path d="M11.503.131 1.891 5.678a.84.84 0 0 0-.42.726v11.188c0 .3.162.575.42.724l9.609 5.55a1 1 0 0 0 .998 0l9.61-5.55a.84.84 0 0 0 .42-.724V6.404a.84.84 0 0 0-.42-.726L12.497.131a1.01 1.01 0 0 0-.996 0M2.657 6.338h18.55c.263 0 .43.287.297.515L12.23 22.918c-.062.107-.229.064-.229-.06V12.335a.59.59 0 0 0-.295-.51l-9.11-5.257c-.109-.063-.064-.23.061-.23" />
         </svg>
     )

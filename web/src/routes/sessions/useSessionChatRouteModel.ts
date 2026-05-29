@@ -81,6 +81,7 @@ export function useSessionChatRouteModel(options: SessionChatRouteModelOptions):
         hasLoadedLatest,
         messagesVersion,
         pendingReply,
+        restoredFromWarmSnapshot,
         stream,
         streamVersion,
         flushPending,
@@ -104,7 +105,7 @@ export function useSessionChatRouteModel(options: SessionChatRouteModelOptions):
         api,
         queryClient,
         sessionId,
-        isSessionThinking: () => session.thinking,
+        isSessionThinking: () => session.active && session.thinking,
     })
     const { autocompleteRefreshKey, getSuggestions: autocompleteSuggestions } = useSessionAutocompleteSuggestions({
         api,
@@ -122,6 +123,7 @@ export function useSessionChatRouteModel(options: SessionChatRouteModelOptions):
             messages,
             pending,
             warning: messagesWarning,
+            hasLoadedLatest,
             hasMore: messagesHasMore,
             isLoading: messagesLoading,
             isLoadingMore: messagesLoadingMore,
@@ -130,11 +132,13 @@ export function useSessionChatRouteModel(options: SessionChatRouteModelOptions):
             atBottom,
             messagesVersion,
             pendingReply,
+            restoredFromWarmSnapshot,
             stream,
             streamVersion,
         }),
         [
             atBottom,
+            hasLoadedLatest,
             isSending,
             messages,
             pending,
@@ -145,6 +149,7 @@ export function useSessionChatRouteModel(options: SessionChatRouteModelOptions):
             messagesWarning,
             pendingCount,
             pendingReply,
+            restoredFromWarmSnapshot,
             stream,
             streamVersion,
         ]
@@ -231,7 +236,7 @@ export function useSessionChatRouteModel(options: SessionChatRouteModelOptions):
     )
 
     return {
-        isSessionDetailReady: hasLoadedLatest,
+        isSessionDetailReady: hasLoadedLatest && !restoredFromWarmSnapshot,
         sessionChatProps: {
             workspace,
             actions,

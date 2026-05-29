@@ -42,9 +42,12 @@ export function useSessionsShellActiveSection(
         })
     }, [selectedSessionId, sessions])
     const selectedSectionId = getSessionListSectionId(selectedSession)
+    const selectedSessionSeen = selectedSessionSeenInListRef.current === selectedSessionId
     const routeSelectionNeedsSectionSync =
-        selectedSessionId !== previousSelectionSessionIdRef.current && selectedSectionId !== null
-    const wasSelectedSessionSeen = selectedSessionSeenInListRef.current === selectedSessionId
+        selectedSectionId !== null &&
+        (selectedSessionId !== previousSelectionSessionIdRef.current ||
+            (selectedSessionId !== null && !selectedSessionSeen && selectedSectionId !== activeSectionId))
+    const wasSelectedSessionSeen = selectedSessionSeen
 
     const handleActiveSectionChange = useCallback((sectionId: SessionListSectionId) => {
         setActiveSectionId(sectionId)
@@ -60,13 +63,17 @@ export function useSessionsShellActiveSection(
 
     useEffect(() => {
         const previousSessionId = previousSelectionSessionIdRef.current
-        if (selectedSessionId === previousSessionId) {
+        const selectionChanged = selectedSessionId !== previousSessionId
+        if (selectionChanged) {
+            previousSelectionSessionIdRef.current = selectedSessionId
+            selectedSessionSeenInListRef.current = null
+        }
+
+        if (!selectedSessionId || !selectedSectionId) {
             return
         }
 
-        previousSelectionSessionIdRef.current = selectedSessionId
-        selectedSessionSeenInListRef.current = null
-        if (selectedSectionId) {
+        if (selectionChanged || selectedSessionSeenInListRef.current !== selectedSessionId) {
             setActiveSectionId(selectedSectionId)
         }
     }, [selectedSectionId, selectedSessionId])

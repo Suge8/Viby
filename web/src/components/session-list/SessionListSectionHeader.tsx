@@ -8,7 +8,7 @@ const SESSION_LIST_SECTION_COUNT_CLASS_NAME =
     'ds-session-list-section-count inline-flex items-center justify-center rounded-full px-1.5 py-0.5 font-semibold tabular-nums text-[color:color-mix(in_srgb,var(--app-hint)_82%,var(--ds-text-primary)_18%)]'
 
 type SessionListSectionHeaderProps = {
-    count: number
+    count: number | null
     label: string
 }
 

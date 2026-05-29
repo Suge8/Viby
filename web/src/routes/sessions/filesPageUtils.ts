@@ -26,5 +26,5 @@ export function createFileRouteSearch(path: string, activeTab: FilesTab, staged?
 
 export function getRootLabel(basePath: string): string {
     const parts = basePath.split(/[/\\]/).filter(Boolean)
-    return parts.length > 0 ? parts[parts.length - 1] ?? basePath : basePath
+    return parts.length > 0 ? (parts[parts.length - 1] ?? basePath) : basePath
 }

@@ -20,16 +20,12 @@ type SessionListActionControllerProps = {
     api: ApiClient | null
     session: SessionSummary
     anchorPoint: FloatingActionMenuAnchorPoint
-    callbacks: {
-        onDismiss: () => void
-        onNewSessionInDirectory?: (directory: string) => unknown
-    }
+    onDismiss: () => void
 }
 
 export function SessionListActionController(props: SessionListActionControllerProps): React.JSX.Element {
     const { t } = useTranslation()
-    const { api, session, anchorPoint, callbacks } = props
-    const { onDismiss, onNewSessionInDirectory } = callbacks
+    const { api, session, anchorPoint, onDismiss } = props
     const [surface, setSurface] = useState<SessionActionSurface>({ kind: 'menu' })
     const sessionId = session.id
     const title = getSessionTitle(session)
@@ -42,28 +38,16 @@ export function SessionListActionController(props: SessionListActionControllerPr
         setSurface({ kind: 'menu' })
     }, [sessionId])
 
-    const handleMenuActionSelect = useCallback(
-        (actionId: SessionActionId) => {
-            if (actionId === 'new-session') {
-                const directory = session.metadata?.path?.trim()
-                if (directory) {
-                    onNewSessionInDirectory?.(directory)
-                }
-                onDismiss()
-                return
-            }
+    const handleMenuActionSelect = useCallback((actionId: SessionActionId) => {
+        if (actionId === 'rename') {
+            setSurface({ kind: 'rename' })
+            return
+        }
 
-            if (actionId === 'rename') {
-                setSurface({ kind: 'rename' })
-                return
-            }
-
-            if (isConfirmableSessionActionId(actionId)) {
-                setSurface({ kind: 'confirm', dialogKind: actionId })
-            }
-        },
-        [onDismiss, onNewSessionInDirectory, session.metadata?.path]
-    )
+        if (isConfirmableSessionActionId(actionId)) {
+            setSurface({ kind: 'confirm', dialogKind: actionId })
+        }
+    }, [])
 
     const handleConfirm = useCallback(async () => {
         switch (dialogKind) {
@@ -88,7 +72,6 @@ export function SessionListActionController(props: SessionListActionControllerPr
                 }}
                 session={{
                     lifecycleState: session.lifecycleState,
-                    hasDirectory: Boolean(session.metadata?.path?.trim()),
                 }}
                 onActionSelect={handleMenuActionSelect}
             />

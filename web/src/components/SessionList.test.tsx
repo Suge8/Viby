@@ -1,5 +1,5 @@
-import { cleanup, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { cleanup, fireEvent, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createSessionSummary, renderSessionList } from './SessionList.support'
 
 describe('SessionList', () => {
@@ -66,5 +66,17 @@ describe('SessionList', () => {
         })
 
         expect(screen.getByTestId('session-list-item')).toBeInTheDocument()
+    })
+
+    it('does not let row-local promise pending own session opening state', () => {
+        const never = new Promise<never>(() => {})
+        const onSelect = vi.fn(() => never) as unknown as (sessionId: string) => void
+        renderSessionList({ onSelect })
+
+        const card = screen.getByTestId('session-list-item')
+        fireEvent.click(card)
+
+        expect(onSelect).toHaveBeenCalledWith('session-1')
+        expect(card).not.toBeDisabled()
     })
 })

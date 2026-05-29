@@ -105,6 +105,8 @@ vi.mock('@/lib/use-translation', () => ({
                     return 'No history sessions'
                 case 'sessions.empty.search':
                     return 'No matching sessions'
+                case 'sessions.loading.syncing':
+                    return 'Syncing sessions'
                 case 'sessions.new':
                     return 'New Session'
                 case 'session.attention.newReply':
@@ -140,9 +142,15 @@ export function createSessionSummary(overrides: Partial<SessionSummary> & Pick<S
 }
 
 export function renderSessionList({
+    onSelect,
+    isLoading = false,
+    openingSessionId = null,
     selectedSessionId = null,
     sessions,
 }: {
+    onSelect?: (sessionId: string) => void
+    isLoading?: boolean
+    openingSessionId?: string | null
     selectedSessionId?: string | null
     sessions?: SessionSummary[]
 } = {}): RenderResult {
@@ -199,6 +207,9 @@ export function renderSessionList({
 
     return render(
         createSessionListElement({
+            onSelect,
+            isLoading,
+            openingSessionId,
             selectedSessionId,
             sessions: renderedSessions,
         })
@@ -206,9 +217,15 @@ export function renderSessionList({
 }
 
 export function createSessionListElement({
+    onSelect = vi.fn(),
+    isLoading = false,
+    openingSessionId = null,
     selectedSessionId = null,
     sessions,
 }: {
+    onSelect?: (sessionId: string) => void
+    isLoading?: boolean
+    openingSessionId?: string | null
     selectedSessionId?: string | null
     sessions: readonly SessionSummary[]
 }): ReactElement {
@@ -217,10 +234,11 @@ export function createSessionListElement({
             <SessionList
                 sessions={sessions}
                 api={null}
+                isLoading={isLoading}
+                openingSessionId={openingSessionId}
                 selectedSessionId={selectedSessionId}
                 actions={{
-                    onSelect: vi.fn(),
-                    onNewSession: vi.fn(),
+                    onSelect,
                 }}
             />
         </I18nProvider>

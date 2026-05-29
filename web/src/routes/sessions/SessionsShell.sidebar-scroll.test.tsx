@@ -13,6 +13,7 @@ vi.mock('@tanstack/react-router', () => ({
     },
     useMatchRoute: () => () => false,
     useNavigate: () => navigateMock,
+    useRouter: () => ({ history: { subscribe: () => () => undefined } }),
     useSearch: () => ({ section: undefined }),
 }))
 
