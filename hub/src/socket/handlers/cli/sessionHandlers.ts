@@ -8,7 +8,7 @@ import {
 import { registerSessionMessageHandlers } from './sessionMessageHandlers'
 import { registerSessionMutationHandlers } from './sessionMutationHandlers'
 
-export { mergeSessionMetadataPreservingLifecycle } from './sessionHandlerSupport'
+export { mergeCliMetadataWithSessionOwnedFields } from './sessionHandlerSupport'
 
 export function registerSessionHandlers(socket: CliSocketWithData, deps: SessionHandlersDeps): void {
     const {

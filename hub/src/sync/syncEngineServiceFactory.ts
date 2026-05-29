@@ -80,9 +80,7 @@ export function createSyncEngineServices(options: SyncEngineServiceFactoryOption
         isRuntimeStopping: (sessionId) => sessionRuntimeStateService.isStopping(sessionId),
         waitUntilRuntimeNotStopping: async (sessionId) =>
             await sessionRuntimeStateService.waitUntilNotStopping(sessionId),
-        appendUserMessage: async (sessionId, payload) => {
-            await messageService.appendUserMessage(sessionId, payload)
-        },
+        appendUserMessage: async (sessionId, payload) => await messageService.appendUserMessage(sessionId, payload),
         refreshSession: (sessionId) => sessionCache.refreshSession(sessionId),
         uploadFile: async (machineId, sessionId, filename, content, mimeType) =>
             await sessionRpcFacade.uploadFile(machineId, sessionId, filename, content, mimeType),

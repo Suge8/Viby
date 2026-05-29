@@ -106,7 +106,7 @@ export class MessageService {
             meta?: MessageMeta
             queuedForInvocation?: boolean
         }
-    ): Promise<void> {
+    ): Promise<DecryptedMessage> {
         const attachments = sanitizeDurableAttachmentMetadataList(payload.attachments)
         const content = {
             role: 'user',
@@ -117,7 +117,7 @@ export class MessageService {
             },
             ...(payload.meta ? { meta: payload.meta } : {}),
         }
-        await this.appendMessage(sessionId, content, payload.localId ?? undefined, {
+        return await this.appendMessage(sessionId, content, payload.localId ?? undefined, {
             invokedAt: payload.queuedForInvocation ? null : undefined,
         })
     }
@@ -130,8 +130,8 @@ export class MessageService {
             attachments?: AttachmentMetadata[]
             sentFrom?: 'webapp'
         }
-    ): Promise<void> {
-        await this.appendUserMessage(sessionId, {
+    ): Promise<DecryptedMessage> {
+        return await this.appendUserMessage(sessionId, {
             text: payload.text,
             localId: payload.localId,
             attachments: payload.attachments,
@@ -192,7 +192,7 @@ export class MessageService {
         content: unknown,
         localId?: string,
         options: { invokedAt?: number | null } = {}
-    ): Promise<void> {
+    ): Promise<DecryptedMessage> {
         const msg = this.store.messages.addMessage(sessionId, content, localId, undefined, options.invokedAt)
 
         const update = {
@@ -214,18 +214,20 @@ export class MessageService {
         }
         this.io.of('/cli').to(`session:${sessionId}`).emit('update', update)
 
+        const message = {
+            id: msg.id,
+            seq: msg.seq,
+            localId: msg.localId,
+            content: msg.content,
+            createdAt: msg.createdAt,
+            invokedAt: msg.invokedAt,
+        }
         this.publisher.emit({
             type: 'message-received',
             sessionId,
-            message: {
-                id: msg.id,
-                seq: msg.seq,
-                localId: msg.localId,
-                content: msg.content,
-                createdAt: msg.createdAt,
-                invokedAt: msg.invokedAt,
-            },
+            message,
         })
+        return message
     }
 }
 

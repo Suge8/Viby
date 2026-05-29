@@ -2,6 +2,17 @@ import { describe, expect, it, vi } from 'bun:test'
 import type { Session } from '@viby/protocol/types'
 import { SessionInteractionService } from './sessionInteractionService'
 
+function createAcceptedMessage() {
+    return {
+        id: 'message-1',
+        seq: 1,
+        localId: 'local-1',
+        content: { role: 'user', content: { type: 'text', text: 'ok' } },
+        createdAt: 1,
+        invokedAt: 1,
+    }
+}
+
 function createSession(driver: 'gemini' | 'codex'): Session {
     return {
         id: 'session-1',
@@ -31,7 +42,7 @@ describe('SessionInteractionService', () => {
     it('emits command capability invalidation after provider reload commands succeed', async () => {
         const session = createSession('gemini')
         const onCommandCapabilitiesInvalidated = vi.fn()
-        const appendUserMessage = vi.fn(async () => undefined)
+        const appendUserMessage = vi.fn(async () => createAcceptedMessage())
         const service = new SessionInteractionService({
             getSession: () => session,
             hasMessages: () => true,
@@ -66,7 +77,7 @@ describe('SessionInteractionService', () => {
             startSession: async () => ({ type: 'success', sessionId: session.id }),
             resumeSession: async () => ({ type: 'success', sessionId: session.id }),
             unarchiveSession: async () => session,
-            appendUserMessage: async () => undefined,
+            appendUserMessage: async () => createAcceptedMessage(),
             refreshSession: () => session,
             uploadFile: async () => ({ success: true }),
             deleteUploadFile: async () => ({ success: true }),
@@ -92,7 +103,7 @@ describe('SessionInteractionService', () => {
             startSession: async () => ({ type: 'success', sessionId: session.id }),
             resumeSession: async () => ({ type: 'success', sessionId: session.id }),
             unarchiveSession: async () => session,
-            appendUserMessage: async () => undefined,
+            appendUserMessage: async () => createAcceptedMessage(),
             refreshSession: () => session,
             uploadFile: async () => ({ success: true }),
             deleteUploadFile: async () => ({ success: true }),
@@ -126,7 +137,7 @@ describe('SessionInteractionService', () => {
             startSession,
             resumeSession,
             unarchiveSession: async () => session,
-            appendUserMessage: async () => undefined,
+            appendUserMessage: async () => createAcceptedMessage(),
             refreshSession: () => session,
             uploadFile,
             deleteUploadFile: async () => ({ success: true }),
@@ -157,7 +168,7 @@ describe('SessionInteractionService', () => {
             thinking: false,
         }
         let currentSession = inactiveSession
-        const appendUserMessage = vi.fn(async () => undefined)
+        const appendUserMessage = vi.fn(async () => createAcceptedMessage())
         const service = new SessionInteractionService({
             getSession: () => currentSession,
             hasMessages: () => true,

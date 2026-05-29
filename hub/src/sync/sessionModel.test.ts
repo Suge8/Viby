@@ -385,8 +385,8 @@ describe('session model', () => {
                 localId: 'local-1',
             })
 
-            expect(result.active).toBe(true)
-            expect(getSessionLifecycleState(result)).toBe('running')
+            expect(result.session.active).toBe(true)
+            expect(getSessionLifecycleState(result.session)).toBe('running')
             expect(store.messages.getMessages(session.id, 10)).toContainEqual(
                 expect.objectContaining({
                     localId: 'local-1',
@@ -453,8 +453,8 @@ describe('session model', () => {
             })
 
             expect(steps).toEqual(['unarchive', 'resume'])
-            expect(result.active).toBe(true)
-            expect(getSessionLifecycleState(result)).toBe('running')
+            expect(result.session.active).toBe(true)
+            expect(getSessionLifecycleState(result.session)).toBe('running')
             expect(store.messages.getMessages(session.id, 10)).toContainEqual(
                 expect.objectContaining({
                     content: expect.objectContaining({
@@ -530,8 +530,8 @@ describe('session model', () => {
                     collaborationMode: undefined,
                 },
             ])
-            expect(result.active).toBe(true)
-            expect(getSessionLifecycleState(result)).toBe('running')
+            expect(result.session.active).toBe(true)
+            expect(getSessionLifecycleState(result.session)).toBe('running')
             expect(store.messages.getMessages(session.id, 10)).toMatchObject([
                 {
                     content: {

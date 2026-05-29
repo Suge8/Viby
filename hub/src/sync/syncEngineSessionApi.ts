@@ -12,6 +12,7 @@ import type {
     RuntimeCapabilitySnapshot,
     SaveAgentConfigRequest,
     Session,
+    SessionSendMessageResult,
 } from '@viby/protocol/types'
 import type { RuntimeSpawnValidationOptions } from '../runtime/runtimeCapabilityValidation'
 import type { DriverSwitchResult, ResumeContractState, ResumeSessionResult } from './sessionLifecycleService'
@@ -28,7 +29,7 @@ export type SyncEngineSpawnSessionOptions = Parameters<SyncEngineServices['sessi
 export abstract class SyncEngineSessionApi extends SyncEngineReadApi {
     protected abstract get syncServices(): SyncEngineServices
 
-    async sendMessage(sessionId: string, payload: SessionSendMessagePayload): Promise<Session> {
+    async sendMessage(sessionId: string, payload: SessionSendMessagePayload): Promise<SessionSendMessageResult> {
         return await this.syncServices.sessionInteractionService.sendMessage(sessionId, payload)
     }
 
@@ -42,7 +43,7 @@ export abstract class SyncEngineSessionApi extends SyncEngineReadApi {
     }
 
     async appendInternalUserMessage(sessionId: string, payload: InternalSessionMessagePayload): Promise<Session> {
-        return await this.syncServices.sessionInteractionService.appendInternalUserMessage(sessionId, payload)
+        return (await this.syncServices.sessionInteractionService.appendInternalUserMessage(sessionId, payload)).session
     }
 
     async approvePermission(

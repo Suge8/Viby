@@ -71,6 +71,7 @@ export const queuedMessageLocalIdsSchema = z.object({
 export const sessionRuntimeStateSchema = SessionRuntimeStatePayloadSchema
 
 type SessionLifecycleMetadataField = 'lifecycleState' | 'lifecycleStateSince' | 'archivedBy' | 'archiveReason'
+type UserOwnedSessionMetadataField = 'name'
 
 const PROTECTED_SESSION_LIFECYCLE_METADATA_FIELDS: readonly SessionLifecycleMetadataField[] = [
     'lifecycleState',
@@ -78,6 +79,7 @@ const PROTECTED_SESSION_LIFECYCLE_METADATA_FIELDS: readonly SessionLifecycleMeta
     'archivedBy',
     'archiveReason',
 ]
+const USER_OWNED_SESSION_METADATA_FIELDS: readonly UserOwnedSessionMetadataField[] = ['name']
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null
@@ -95,12 +97,18 @@ export function parseMessageContent(raw: unknown): unknown {
     }
 }
 
-export function mergeSessionMetadataPreservingLifecycle(currentMetadata: unknown, nextMetadata: unknown): unknown {
+export function mergeCliMetadataWithSessionOwnedFields(currentMetadata: unknown, nextMetadata: unknown): unknown {
     if (!isRecord(currentMetadata) || !isRecord(nextMetadata)) {
         return nextMetadata
     }
 
     const mergedMetadata: Record<string, unknown> = { ...nextMetadata }
+
+    for (const field of USER_OWNED_SESSION_METADATA_FIELDS) {
+        if (Object.prototype.hasOwnProperty.call(currentMetadata, field)) {
+            mergedMetadata[field] = currentMetadata[field]
+        }
+    }
 
     for (const field of PROTECTED_SESSION_LIFECYCLE_METADATA_FIELDS) {
         if (!Object.prototype.hasOwnProperty.call(currentMetadata, field)) {

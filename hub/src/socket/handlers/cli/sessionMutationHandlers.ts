@@ -3,7 +3,7 @@ import { buildSessionAttentionPatch } from '@viby/protocol'
 import type { CliSocketWithData } from '../../socketTypes'
 import type { SessionHandlersDeps, UpdateMetadataHandler, UpdateStateHandler } from './sessionHandlerSupport'
 import {
-    mergeSessionMetadataPreservingLifecycle,
+    mergeCliMetadataWithSessionOwnedFields,
     updateMetadataSchema,
     updateStateSchema,
 } from './sessionHandlerSupport'
@@ -25,7 +25,7 @@ export function registerSessionMutationHandlers(socket: CliSocketWithData, deps:
             return
         }
 
-        const protectedMetadata = mergeSessionMetadataPreservingLifecycle(sessionAccess.value.metadata, metadata)
+        const protectedMetadata = mergeCliMetadataWithSessionOwnedFields(sessionAccess.value.metadata, metadata)
         const result = store.sessions.updateSessionMetadata(sid, protectedMetadata, expectedVersion, { touchUpdatedAt })
         if (result.result === 'success') {
             cb({ result: 'success', version: result.version, metadata: result.value })

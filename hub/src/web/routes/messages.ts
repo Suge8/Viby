@@ -134,13 +134,17 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null): Ho
         }
 
         try {
-            const session = await engine.sendMessage(sessionId, {
+            const result = await engine.sendMessage(sessionId, {
                 text: trimmedText,
                 localId: body.localId,
                 attachments: body.attachments,
                 sentFrom: 'webapp',
             })
-            return c.json({ ok: true, session: presentSessionSnapshot(session) })
+            return c.json({
+                ok: true,
+                session: presentSessionSnapshot(result.session),
+                message: result.message,
+            })
         } catch (error) {
             if (error instanceof SessionSendMessageError) {
                 return c.json(

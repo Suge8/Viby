@@ -75,12 +75,21 @@ function createApp(engineOverrides?: Partial<SyncEngine>) {
         ) => {
             sendMessageCalls.push({ sessionId, payload })
             return {
-                id: sessionId,
-                active: true,
-                metadata: {
-                    flavor: 'codex',
-                    codexSessionId: 'thread-1',
-                    lifecycleState: 'running',
+                session: {
+                    id: sessionId,
+                    active: true,
+                    metadata: {
+                        flavor: 'codex',
+                        codexSessionId: 'thread-1',
+                        lifecycleState: 'running',
+                    },
+                },
+                message: {
+                    id: 'message-accepted',
+                    seq: 1,
+                    localId: payload.localId ?? null,
+                    createdAt: 1_000,
+                    content: { role: 'user', content: { type: 'text', text: payload.text } },
                 },
             } as never
         },
@@ -189,6 +198,45 @@ describe('messages routes', () => {
                 },
             },
         ])
+    })
+
+    it('returns the accepted authoritative message from the send owner', async () => {
+        const acceptedMessage = {
+            id: 'message-queued',
+            seq: 4,
+            localId: 'local-queued',
+            createdAt: 2_000,
+            invokedAt: null,
+            content: {
+                role: 'user',
+                content: { type: 'text', text: 'queue me' },
+            },
+        }
+        const acceptedPayloads: Array<{ localId?: string | null; text?: string }> = []
+        const { app, getMessagesPageCalls } = createApp({
+            sendMessage: async (_sessionId: string, payload: { localId?: string | null; text?: string }) => {
+                acceptedPayloads.push(payload)
+                return {
+                    session: {
+                        id: 'session-1',
+                        active: true,
+                        metadata: { lifecycleState: 'running' },
+                    },
+                    message: { ...acceptedMessage, localId: payload.localId ?? null },
+                }
+            },
+        } as never)
+
+        const response = await app.request('/api/sessions/session-1/messages', {
+            method: 'POST',
+            body: JSON.stringify({ text: 'queue me', localId: 'local-queued' }),
+        })
+
+        expect(response.status).toBe(200)
+        const body = (await response.json()) as { message: unknown }
+        expect(body.message).toEqual(acceptedMessage)
+        expect(acceptedPayloads).toEqual([expect.objectContaining({ text: 'queue me', localId: 'local-queued' })])
+        expect(getMessagesPageCalls).toEqual([])
     })
 
     it('rejects whitespace-only text when no attachments are present', async () => {

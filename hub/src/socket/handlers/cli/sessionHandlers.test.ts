@@ -4,7 +4,7 @@ import type { SyncEvent } from '@viby/protocol/types'
 import { Store } from '../../../store'
 import { SessionStreamManager } from '../../../sync/sessionStreamManager'
 import type { CliSocketWithData } from '../../socketTypes'
-import { mergeSessionMetadataPreservingLifecycle, registerSessionHandlers } from './sessionHandlers'
+import { mergeCliMetadataWithSessionOwnedFields, registerSessionHandlers } from './sessionHandlers'
 
 type RegisteredSessionHandlers = Partial<
     Pick<
@@ -147,9 +147,9 @@ function assertSuccessfulStateResponse(
     return response as Extract<UpdateStateResponse, { result: 'success' }>
 }
 
-describe('mergeSessionMetadataPreservingLifecycle', () => {
+describe('mergeCliMetadataWithSessionOwnedFields', () => {
     it('preserves archived lifecycle metadata across unrelated CLI metadata updates', () => {
-        const merged = mergeSessionMetadataPreservingLifecycle(
+        const merged = mergeCliMetadataWithSessionOwnedFields(
             {
                 path: '/tmp/project',
                 host: 'localhost',
@@ -183,7 +183,7 @@ describe('mergeSessionMetadataPreservingLifecycle', () => {
     })
 
     it('ignores explicit lifecycle fields from CLI metadata updates', () => {
-        const merged = mergeSessionMetadataPreservingLifecycle(
+        const merged = mergeCliMetadataWithSessionOwnedFields(
             {
                 path: '/tmp/project',
                 host: 'localhost',
@@ -211,7 +211,7 @@ describe('mergeSessionMetadataPreservingLifecycle', () => {
     })
 
     it('does not let CLI metadata create lifecycle fields when none exist yet', () => {
-        const merged = mergeSessionMetadataPreservingLifecycle(
+        const merged = mergeCliMetadataWithSessionOwnedFields(
             {
                 path: '/tmp/project',
                 host: 'localhost',
@@ -227,6 +227,35 @@ describe('mergeSessionMetadataPreservingLifecycle', () => {
         expect(merged).toEqual({
             path: '/tmp/project',
             host: 'localhost',
+        })
+    })
+
+    it('preserves Web-owned name across CLI metadata updates', () => {
+        const merged = mergeCliMetadataWithSessionOwnedFields(
+            {
+                path: '/tmp/project',
+                host: 'localhost',
+                name: '会话状态稳定性',
+            },
+            {
+                path: '/tmp/project',
+                host: 'localhost',
+                name: 'Viby',
+                summary: {
+                    text: 'Viby',
+                    updatedAt: 2_000,
+                },
+            }
+        )
+
+        expect(merged).toEqual({
+            path: '/tmp/project',
+            host: 'localhost',
+            name: '会话状态稳定性',
+            summary: {
+                text: 'Viby',
+                updatedAt: 2_000,
+            },
         })
     })
 })
@@ -451,6 +480,56 @@ describe('registerSessionHandlers update-metadata', () => {
                 value: expectedMetadata,
             },
         })
+    })
+
+    it('preserves the Web-owned explicit session name when CLI writes auto summary metadata', () => {
+        const harness = createSessionHandlersHarness()
+        const handler = assertUpdateMetadataHandler(harness.handlers)
+        let response: UpdateMetadataResponse | null = null
+        const renamedMetadata = {
+            ...(harness.session.metadata as Record<string, unknown>),
+            name: '会话状态稳定性',
+        }
+        harness.store.sessions.updateSessionMetadata(
+            harness.session.id,
+            renamedMetadata,
+            harness.session.metadataVersion
+        )
+        const renamedSession = harness.store.sessions.getSession(harness.session.id)
+        const expectedMetadata = {
+            ...renamedMetadata,
+            summary: {
+                text: 'Viby',
+                updatedAt: 2_000,
+            },
+        }
+
+        handler(
+            {
+                sid: harness.session.id,
+                expectedVersion: renamedSession?.metadataVersion ?? 0,
+                metadata: {
+                    path: '/tmp/project',
+                    host: 'localhost',
+                    summary: {
+                        text: 'Viby',
+                        updatedAt: 2_000,
+                    },
+                },
+            },
+            (answer) => {
+                response = answer
+            }
+        )
+
+        const successResponse = assertSuccessfulMetadataResponse(response)
+
+        expect(successResponse).toEqual({
+            result: 'success',
+            version: 3,
+            metadata: expectedMetadata,
+        })
+        expect(harness.store.sessions.getSession(harness.session.id)?.metadata).toEqual(expectedMetadata)
     })
 })
 

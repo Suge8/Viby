@@ -81,8 +81,8 @@ describe('session model lifecycle repair', () => {
 
             const result = await engine.sendMessage(session.id, { text: 'wake up' })
 
-            expect(result.active).toBe(true)
-            expect(getSessionLifecycleState(result)).toBe('running')
+            expect(result.session.active).toBe(true)
+            expect(getSessionLifecycleState(result.session)).toBe('running')
             expect(store.messages.getMessages(session.id, 10)).toContainEqual(
                 expect.objectContaining({
                     content: expect.objectContaining({

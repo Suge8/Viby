@@ -6,7 +6,7 @@ import {
     resolveSessionDriver,
     shouldInvalidateCommandCapabilitiesOnTrigger,
 } from '@viby/protocol'
-import type { Session } from '@viby/protocol/types'
+import type { DecryptedMessage, Session, SessionSendMessageResult } from '@viby/protocol/types'
 import type { RpcDeleteUploadResponse, RpcUploadFileResponse } from './rpcGateway'
 import type { ResumeSessionResult } from './sessionLifecycleService'
 import type {
@@ -36,7 +36,7 @@ type SessionInteractionServiceOptions = {
     unarchiveSession: (sessionId: string) => Promise<Session>
     isRuntimeStopping: (sessionId: string) => boolean
     waitUntilRuntimeNotStopping: (sessionId: string) => Promise<boolean>
-    appendUserMessage: (sessionId: string, payload: InternalSessionMessagePayload) => Promise<void>
+    appendUserMessage: (sessionId: string, payload: InternalSessionMessagePayload) => Promise<DecryptedMessage>
     refreshSession: (sessionId: string) => Session | null
     uploadFile: (
         machineId: string,
@@ -53,10 +53,10 @@ type SessionInteractionServiceOptions = {
 export class SessionInteractionService {
     constructor(private readonly options: SessionInteractionServiceOptions) {}
 
-    async sendMessage(sessionId: string, payload: SessionSendMessagePayload): Promise<Session> {
+    async sendMessage(sessionId: string, payload: SessionSendMessagePayload): Promise<SessionSendMessageResult> {
         const readySession = this.options.getSession(sessionId)
         this.throwIfLifecycleOwnedCommand(sessionId, payload.text)
-        const nextSession = await this.appendInternalUserMessage(sessionId, {
+        const result = await this.appendInternalUserMessage(sessionId, {
             text: payload.text,
             localId: payload.localId,
             attachments: payload.attachments,
@@ -66,14 +66,17 @@ export class SessionInteractionService {
             },
         })
         this.emitCommandCapabilityInvalidationForTrigger(readySession, payload.text, sessionId)
-        return nextSession
+        return result
     }
 
-    async appendInternalUserMessage(sessionId: string, payload: InternalSessionMessagePayload): Promise<Session> {
+    async appendInternalUserMessage(
+        sessionId: string,
+        payload: InternalSessionMessagePayload
+    ): Promise<SessionSendMessageResult> {
         const readySession = await this.ensureSessionReadyForSend(sessionId)
-        await this.options.appendUserMessage(sessionId, payload)
+        const message = await this.options.appendUserMessage(sessionId, payload)
         this.options.refreshSession(sessionId)
-        return this.options.getSession(sessionId) ?? readySession
+        return { session: this.options.getSession(sessionId) ?? readySession, message }
     }
 
     async appendPassiveInternalUserMessage(
