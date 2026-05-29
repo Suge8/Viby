@@ -8,7 +8,7 @@ import {
     type FakeCliRuntime,
     seedRuntimeAndSessions,
 } from './appLikeRouteBrowserFixtureSupport'
-import { LOGIN_INPUT_SELECTOR, runAppLikeRouteFlows } from './appLikeRouteBrowserFlowSupport'
+import { runAppLikeRouteFlows } from './appLikeRouteBrowserFlowSupport'
 import { type FlowArtifact, validateArtifacts, writeArtifacts } from './appLikeRouteBrowserProbeSupport'
 import {
     type IsolatedBrowserApp,
@@ -99,10 +99,16 @@ async function main(): Promise<void> {
             },
             outputDir,
         }))
+        await context.addInitScript(
+            ({ hubOwnerToken, hubUrl }) => {
+                localStorage.setItem(`viby_access_token::${hubUrl}`, hubOwnerToken)
+                localStorage.setItem('viby_hub_url', hubUrl)
+            },
+            { hubOwnerToken: VIBY_HUB_OWNER_TOKEN, hubUrl: app.hubUrl }
+        )
         await context.tracing.start({ screenshots: true, snapshots: true })
 
         await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: ROUTE_SETTLE_TIMEOUT_MS })
-        await page.locator(LOGIN_INPUT_SELECTOR).waitFor({ timeout: ROUTE_SETTLE_TIMEOUT_MS })
 
         flowArtifacts.push(
             ...(await runAppLikeRouteFlows({

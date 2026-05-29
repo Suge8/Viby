@@ -9,9 +9,7 @@ describe('secretsGate', () => {
     it('allows committed examples and placeholder values', () => {
         const content = source([
             'PAIRING_CREATE_' + 'TOKEN=replace-with-strong-secret',
-            'PAIRING_TURN_STATIC_AUTH_' + 'SECRET=your-turn-secret',
             'PAIRING_REDIS_' + 'URL=redis://127.0.0.1:6379',
-            'static-auth-' + 'secret=replace-with-turn-secret',
         ])
 
         expect(scanSecretContent('pairing/.env.example', content)).toEqual([])

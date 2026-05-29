@@ -118,10 +118,12 @@ function dockerRunArgs(
     brokerUrl: string,
     createToken: string
 ) {
+    const netemDisabled = process.env.VIBY_PAIRING_NETEM_PROFILE === 'none'
     const netem =
         role === 'host'
             ? 'tc qdisc add dev eth0 root netem delay 25ms 5ms loss 0.2%'
             : 'tc qdisc add dev eth0 root netem delay 90ms 30ms loss 1%'
+    const setup = netemDisabled ? 'true' : `apk add --no-cache iproute2 >/dev/null && ${netem}`
     return [
         'run',
         '--rm',
@@ -145,10 +147,16 @@ function dockerRunArgs(
         `PING_COUNT=${process.env.PING_COUNT || '24'}`,
         '-e',
         `PING_TIMEOUT_MS=${process.env.PING_TIMEOUT_MS || '5000'}`,
+        '-e',
+        `NETEM_HANDOVER=${process.env.NETEM_HANDOVER || '1'}`,
+        '-e',
+        `NETEM_BLACKHOLE_MS=${process.env.NETEM_BLACKHOLE_MS || '1500'}`,
+        '-e',
+        `REOPEN_GUEST_TUNNEL=${process.env.REOPEN_GUEST_TUNNEL || '1'}`,
         defaultImage,
         'sh',
         '-lc',
-        `apk add --no-cache iproute2 >/dev/null && ${netem} && bun /smoke/client.mjs ${role}`,
+        `${setup} && bun /smoke/client.mjs ${role}`,
     ]
 }
 

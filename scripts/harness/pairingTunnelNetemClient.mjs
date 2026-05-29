@@ -10,6 +10,7 @@ const pingCount = Number.parseInt(process.env.PING_COUNT || '24', 10)
 const timeoutMs = Number.parseInt(process.env.PING_TIMEOUT_MS || '5000', 10)
 const handoverBlackholeMs = Number.parseInt(process.env.NETEM_BLACKHOLE_MS || '1500', 10)
 const reopenGuestTunnel = process.env.REOPEN_GUEST_TUNNEL !== '0'
+const runNetemHandover = process.env.NETEM_HANDOVER !== '0'
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 const keyInfo = encoder.encode('viby-pairing-tunnel-v1')
@@ -18,6 +19,7 @@ if (role !== 'host' && role !== 'guest') throw new Error('role must be host or g
 if (!brokerUrl) throw new Error('BROKER_URL is required')
 
 const sessionPath = `${sharedDir}/session.json`
+const hostReadyPath = `${sharedDir}/host-ready`
 const resultPath = `${sharedDir}/result.json`
 const donePath = `${sharedDir}/done`
 
@@ -266,6 +268,7 @@ async function runHost() {
     })
 
     const tunnel = await openSecureTunnel(created.tunnelUrl)
+    writeJson(hostReadyPath, { ready: true })
     tunnel.onFrame((frame) => {
         if (frame.kind !== 'message' || frame.payload?.kind !== 'netem-ping') return
         void tunnel.sendFrame({
@@ -292,8 +295,8 @@ async function runGuest() {
         body: JSON.stringify({ ticket: session.ticket, label: 'Docker Netem Guest' }),
     })
     if (!claimed.tunnelUrl) throw new Error('claim response missing tunnelUrl')
-
     let tunnel = await openSecureTunnel(claimed.tunnelUrl)
+    await waitForFile(hostReadyPath, 'host ready')
     const samples = []
     const timeline = []
     const startedAt = Date.now()
@@ -304,7 +307,7 @@ async function runGuest() {
             tunnel = await openSecureTunnel(claimed.tunnelUrl)
             timeline.push({ atMs: Date.now(), label: 'guest-tunnel-replaced' })
         }
-        if (seq === Math.floor(pingCount / 2)) await runHandoverProfile(timeline)
+        if (runNetemHandover && seq === Math.floor(pingCount / 2)) await runHandoverProfile(timeline)
         const sentAt = Date.now()
         await tunnel.sendFrame({
             kind: 'message',

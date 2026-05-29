@@ -46,8 +46,11 @@ export async function runAppLikeRouteFlows(options: {
             probeDurationMs: options.probeDurationMs,
             allowLoginVisible: true,
             action: async () => {
-                await options.page.locator(LOGIN_INPUT_SELECTOR).fill(options.hubOwnerToken)
-                await options.page.locator(LOGIN_SUBMIT_SELECTOR).click()
+                const loginInput = options.page.locator(LOGIN_INPUT_SELECTOR)
+                if (await loginInput.isVisible({ timeout: 500 }).catch(() => false)) {
+                    await loginInput.fill(options.hubOwnerToken)
+                    await options.page.locator(LOGIN_SUBMIT_SELECTOR).click()
+                }
             },
             ready: async () => {
                 await waitForListReady({

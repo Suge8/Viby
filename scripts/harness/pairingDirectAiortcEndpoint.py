@@ -51,6 +51,15 @@ def encode_candidate(candidate):
     }
 
 
+def candidate_type(raw):
+    parts = raw.split()
+    return parts[parts.index("typ") + 1] if "typ" in parts else "unknown"
+
+
+def sdp_candidate_types(sdp):
+    return sorted({candidate_type(line) for line in sdp.splitlines() if line.startswith("a=candidate:")})
+
+
 async def selected_candidate(pc):
     stats = await pc.getStats()
     selected = None
@@ -103,7 +112,9 @@ async def main():
         async def on_icecandidate(candidate):
             if candidate is None:
                 return
-            await send_signal({"type": "candidate", "candidate": encode_candidate(candidate)})
+            encoded = encode_candidate(candidate)
+            record(f"candidate {candidate_type(encoded['candidate'])}")
+            await send_signal({"type": "candidate", "candidate": encoded})
 
         @pc.on("datachannel")
         def on_datachannel(channel):
@@ -139,6 +150,7 @@ async def main():
                         await pc.setLocalDescription(await pc.createAnswer())
                         while pc.iceGatheringState != "complete":
                             await asyncio.sleep(0.05)
+                        record(f"local-sdp-candidates {','.join(sdp_candidate_types(pc.localDescription.sdp))}")
                         await send_signal(
                             {
                                 "type": "description",
@@ -149,6 +161,7 @@ async def main():
                             }
                         )
                 if signal.get("type") == "candidate":
+                    record(f"receive-candidate {candidate_type(signal['candidate']['candidate'])}")
                     await pc.addIceCandidate(parse_candidate(signal["candidate"]))
 
         signaling_task = asyncio.create_task(receive_signaling())

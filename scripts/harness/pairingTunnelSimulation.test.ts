@@ -10,7 +10,7 @@ function replay(events: PairingTunnelRouteEvent[]) {
 }
 
 describe('pairing tunnel network simulation', () => {
-    it('uses TURN WebRTC when cellular NAT only produces fast relay candidates', () => {
+    it('keeps WSS relay when cellular NAT only produces relay candidates', () => {
         const state = replay([
             { type: 'relay-ready', transport: 'relay-wss', roundTripTimeMs: 120 },
             { type: 'direct-probe-started' },
@@ -21,14 +21,15 @@ describe('pairing tunnel network simulation', () => {
 
         expect(state).toMatchObject({
             phase: 'ready',
-            activeRoute: 'direct',
-            activeTransport: 'turn-webrtc',
+            activeRoute: 'relay',
+            activeTransport: 'relay-wss',
+            directProbe: 'failed',
             directBlockedReason: 'turn-candidate',
-            routeSwitches: 1,
+            routeSwitches: 0,
         })
     })
 
-    it('keeps WSS relay when TURN WebRTC is slower', () => {
+    it('keeps WSS relay when direct probe lands on relay candidate', () => {
         const state = replay([
             { type: 'relay-ready', transport: 'relay-wss', roundTripTimeMs: 80 },
             { type: 'direct-probe-started' },
@@ -41,7 +42,8 @@ describe('pairing tunnel network simulation', () => {
             phase: 'ready',
             activeRoute: 'relay',
             activeTransport: 'relay-wss',
-            directBlockedReason: 'direct-slower-than-relay',
+            directProbe: 'failed',
+            directBlockedReason: 'turn-candidate',
             routeSwitches: 0,
         })
     })
@@ -61,6 +63,42 @@ describe('pairing tunnel network simulation', () => {
             activeTransport: 'direct-webrtc',
             relayAvailable: true,
             routeSwitches: 1,
+        })
+    })
+
+    it('upgrades from relay when same-LAN direct heartbeats work but browser stats hide candidates', () => {
+        const state = replay([
+            { type: 'relay-ready', transport: 'relay-wss', roundTripTimeMs: 95 },
+            { type: 'direct-probe-started' },
+            { type: 'heartbeat-ack', route: 'direct', roundTripTimeMs: 22 },
+            { type: 'heartbeat-ack', route: 'direct', roundTripTimeMs: 19 },
+        ])
+
+        expect(state).toMatchObject({
+            phase: 'ready',
+            activeRoute: 'direct',
+            activeTransport: 'direct-webrtc',
+            directCandidateType: null,
+            directBlockedReason: null,
+            routeSwitches: 1,
+        })
+    })
+
+    it('does not leave a failed relay-side direct probe stuck in probing', () => {
+        const state = replay([
+            { type: 'relay-ready', transport: 'relay-wss', roundTripTimeMs: 95 },
+            { type: 'direct-probe-started' },
+            { type: 'heartbeat-ack', route: 'direct', roundTripTimeMs: 22 },
+            { type: 'heartbeat-missed', route: 'direct' },
+        ])
+
+        expect(state).toMatchObject({
+            phase: 'ready',
+            activeRoute: 'relay',
+            activeTransport: 'relay-wss',
+            directProbe: 'failed',
+            directBlockedReason: 'heartbeat-missed',
+            directProbeFailures: 1,
         })
     })
 

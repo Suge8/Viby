@@ -50,11 +50,7 @@ function ensureBundle(): void {
 function createEvidenceDir(): string {
     const artifactRoot = join(repoRoot, '.artifacts', 'harness')
     const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-    const prefix = process.argv.includes('--turn')
-        ? 'pairing-public-turn-webrtc'
-        : process.argv.includes('--public')
-          ? 'pairing-public-direct-webrtc'
-          : 'pairing-direct-webrtc'
+    const prefix = process.argv.includes('--public') ? 'pairing-prod-local-direct-webrtc' : 'pairing-direct-webrtc'
     const workDir = join(artifactRoot, `${prefix}-${stamp}`)
     mkdirSync(workDir, { recursive: true })
     return workDir
@@ -120,30 +116,15 @@ async function requestJson<T>(baseUrl: string, path: string, options: RequestIni
 
 function assertDirect(result: DirectSmokeResult): void {
     if (result.localCandidateType === 'relay' || result.remoteCandidateType === 'relay') {
-        throw new Error(`${result.role} selected TURN relay instead of direct: ${JSON.stringify(result)}`)
+        throw new Error(`${result.role} selected relay candidate instead of direct: ${JSON.stringify(result)}`)
     }
     if (!result.localCandidateType || !result.remoteCandidateType) {
         throw new Error(`${result.role} selected candidate was not observable: ${JSON.stringify(result)}`)
     }
 }
 
-function assertTurnRelay(result: DirectSmokeResult): void {
-    if (result.localCandidateType !== 'relay' || result.remoteCandidateType !== 'relay') {
-        throw new Error(`${result.role} selected non-TURN route: ${JSON.stringify(result)}`)
-    }
-}
-
-function assertTurnLatency(result: DirectSmokeResult): void {
-    const maxP95 = Number.parseInt(process.env.MAX_TURN_P95_RTT_MS || '1000', 10)
-    if (typeof result.p95RttMs === 'number' && result.p95RttMs > maxP95) {
-        throw new Error(`TURN WebRTC p95 ${result.p95RttMs}ms exceeded ${maxP95}ms`)
-    }
-}
-
 async function main(): Promise<void> {
     const publicMode = process.argv.includes('--public')
-    const turnMode = process.argv.includes('--turn')
-    if (turnMode && !publicMode) throw new Error('TURN WebRTC smoke requires --public broker with TURN configured')
     if (!publicMode) ensureBundle()
     const port = publicMode ? 0 : await pickPort()
     const createToken = publicMode ? (process.env.PAIRING_CREATE_TOKEN ?? '') : `direct-${Date.now()}`
@@ -157,7 +138,7 @@ async function main(): Promise<void> {
         const created = await requestJson<{
             hostToken: string
             iceServers: RTCIceServer[]
-            pairing: { id: string }
+            pairing: { id: string; shortCode: string | null }
             pairingUrl: string
             wsUrl: string
         }>(brokerUrl, '/pairings', {
@@ -165,21 +146,16 @@ async function main(): Promise<void> {
             headers: { authorization: `Bearer ${createToken}`, 'content-type': 'application/json' },
             body: JSON.stringify({ label: 'Direct WebRTC Host' }),
         })
-        const ticket = new URL(created.pairingUrl).hash.slice(1).split('ticket=')[1]
-        if (!ticket) throw new Error('create response missing ticket')
+        if (!created.pairing.shortCode) throw new Error('create response missing shortCode')
         const claimed = await requestJson<{ guestToken: string; wsUrl: string }>(
             brokerUrl,
-            `/pairings/${created.pairing.id}/claim`,
+            `/pairings/${created.pairing.id}/verify-code`,
             {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({ ticket, label: 'Direct WebRTC Guest' }),
+                body: JSON.stringify({ code: created.pairing.shortCode, label: 'Direct WebRTC Guest' }),
             }
         )
-        await requestJson(brokerUrl, `/pairings/${created.pairing.id}/approve`, {
-            method: 'POST',
-            headers: { authorization: `Bearer ${created.hostToken}` },
-        })
         const pingCount = 12
         const [host, guest] = await runBrowserPair({
             brokerUrl,
@@ -187,21 +163,14 @@ async function main(): Promise<void> {
             hostWsUrl: created.wsUrl,
             guestWsUrl: claimed.wsUrl,
             iceServers: created.iceServers,
-            iceTransportPolicy: turnMode ? 'relay' : undefined,
             pingCount,
         })
-        if (turnMode) {
-            assertTurnRelay(host)
-            assertTurnRelay(guest)
-            assertTurnLatency(guest)
-        } else {
-            assertDirect(host)
-            assertDirect(guest)
-        }
+        assertDirect(host)
+        assertDirect(guest)
         const summary = {
             ok: true,
-            transportMode: turnMode ? 'turn-webrtc' : 'direct-webrtc',
-            iceTransportPolicy: turnMode ? 'relay' : 'all',
+            transportMode: 'direct-webrtc',
+            iceTransportPolicy: 'all',
             pingCount,
             ackCount: guest.ackCount,
             p50RttMs: guest.p50RttMs,

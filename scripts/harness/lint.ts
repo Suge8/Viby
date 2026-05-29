@@ -147,6 +147,10 @@ const tanstackQueryHookAllowPrefixes = ['web/src/hooks/queries/']
 const tanstackQueryHookAllowFiles = new Set(['web/src/routes/sessions/file.tsx'])
 const tanstackMutationHookAllowPrefixes = ['web/src/hooks/mutations/']
 const queryClientOwnerFiles = new Set(['web/src/lib/query-client.ts'])
+const sessionsQueryWriteOwnerFiles = new Set([
+    'web/src/lib/sessionQueryCache.ts',
+    'web/src/lib/realtimeEventController.ts',
+])
 const routerOwnerFiles = new Set(['web/src/router.tsx'])
 const hookMemoObjectWrapperRoots = ['web/src/hooks/', 'desktop/src/hooks/']
 const hookMemoObjectWrapperAllowlist = new Set<string>()
@@ -504,6 +508,18 @@ function checkWebStackOwners(violations: Violation[]): void {
                 'query-client-owner',
                 repoPath,
                 'new QueryClient must stay inside the single query client owner file'
+            )
+        }
+
+        if (
+            /setQueryData(?:<[^>]+>)?\s*\(\s*queryKeys\.sessions/u.test(content) &&
+            !sessionsQueryWriteOwnerFiles.has(repoPath)
+        ) {
+            addViolation(
+                violations,
+                'sessions-query-write-owner',
+                repoPath,
+                'queryKeys.sessions writes must go through the session query cache or realtime event owner'
             )
         }
 

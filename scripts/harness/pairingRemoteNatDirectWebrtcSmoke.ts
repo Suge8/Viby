@@ -41,7 +41,7 @@ function quote(value: string): string {
 function createEvidenceDir(): string {
     const artifactRoot = join(repoRoot, '.artifacts', 'harness')
     const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-    const workDir = join(artifactRoot, `pairing-remote-direct-webrtc-${stamp}`)
+    const workDir = join(artifactRoot, `pairing-remote-nat-direct-webrtc-${stamp}`)
     mkdirSync(workDir, { recursive: true })
     return workDir
 }
@@ -108,12 +108,12 @@ function assertDirect(result: EndpointResult, requireCandidate = true): void {
 function assertDirectLatency(result: EndpointResult): void {
     const maxP95 = Number.parseInt(process.env.MAX_DIRECT_P95_RTT_MS || '750', 10)
     if (typeof result.p95RttMs === 'number' && result.p95RttMs > maxP95) {
-        throw new Error(`remote direct p95 ${result.p95RttMs}ms exceeded ${maxP95}ms`)
+        throw new Error(`remote NAT direct p95 ${result.p95RttMs}ms exceeded ${maxP95}ms`)
     }
 }
 
 async function main(): Promise<void> {
-    if (!createToken) throw new Error('PAIRING_CREATE_TOKEN is required for remote direct smoke')
+    if (!createToken) throw new Error('PAIRING_CREATE_TOKEN is required for remote NAT direct smoke')
     const workDir = createEvidenceDir()
     const remoteDir = runChecked('ssh', [remoteAlias, 'mktemp -d /tmp/viby-pairing-direct.XXXXXX'])
     try {
@@ -136,7 +136,7 @@ async function main(): Promise<void> {
         const created = await requestJson<{
             hostToken: string
             iceServers: RTCIceServer[]
-            pairing: { id: string }
+            pairing: { id: string; shortCode: string | null }
             pairingUrl: string
             wsUrl: string
         }>('/pairings', {
@@ -144,16 +144,11 @@ async function main(): Promise<void> {
             headers: { authorization: `Bearer ${createToken}`, 'content-type': 'application/json' },
             body: JSON.stringify({ label: 'Remote Direct Host' }),
         })
-        const ticket = new URL(created.pairingUrl).hash.slice(1).split('ticket=')[1]
-        if (!ticket) throw new Error('create response missing ticket')
-        const claimed = await requestJson<{ wsUrl: string }>(`/pairings/${created.pairing.id}/claim`, {
+        if (!created.pairing.shortCode) throw new Error('create response missing shortCode')
+        const claimed = await requestJson<{ wsUrl: string }>(`/pairings/${created.pairing.id}/verify-code`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ ticket, label: 'Remote Direct Guest' }),
-        })
-        await requestJson(`/pairings/${created.pairing.id}/approve`, {
-            method: 'POST',
-            headers: { authorization: `Bearer ${created.hostToken}` },
+            body: JSON.stringify({ code: created.pairing.shortCode, label: 'Remote Direct Guest' }),
         })
 
         const commonEnv = {
@@ -185,7 +180,7 @@ async function main(): Promise<void> {
         const outcomes = await Promise.allSettled([localRun, remoteRun])
         if (outcomes.some((outcome) => outcome.status === 'rejected')) {
             const reasons = outcomes.map((outcome) => (outcome.status === 'rejected' ? String(outcome.reason) : 'ok'))
-            throw new Error(`remote direct endpoints failed: ${reasons.join(' | ')}`)
+            throw new Error(`remote NAT direct endpoints failed: ${reasons.join(' | ')}`)
         }
         const outputs = outcomes.map((outcome) => {
             if (outcome.status === 'rejected') throw outcome.reason
@@ -212,7 +207,7 @@ async function main(): Promise<void> {
         run('ssh', [remoteAlias, `rm -rf ${quote(remoteDir)}`])
         if (process.env.VIBY_PAIRING_REMOTE_DIRECT_CLEAN_ARTIFACTS === '1')
             rmSync(workDir, { recursive: true, force: true })
-        else console.log(`[harness] pairing remote direct artifacts kept at ${workDir}`)
+        else console.log(`[harness] pairing remote NAT direct artifacts kept at ${workDir}`)
     }
 }
 

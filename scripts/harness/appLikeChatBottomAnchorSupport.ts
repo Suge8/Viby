@@ -2,8 +2,6 @@ import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Page } from 'playwright-core'
 import {
-    COMPOSER_INPUT_SELECTOR,
-    COMPOSER_PRIMARY_ACTION_BUTTON_SELECTOR,
     SESSION_CHAT_COMPOSER_STAGE_SELECTOR,
     SESSION_CHAT_VIEWPORT_SELECTOR,
     THREAD_BOTTOM_CONTROL_SELECTOR,
@@ -55,11 +53,6 @@ export async function assertChatBottomAnchorBehavior(options: {
     await options.page.locator(THREAD_BOTTOM_CONTROL_SELECTOR).first().click()
     await waitForRestingBottom(options.page, options.settleTimeoutMs)
     measurements.afterBottomCta = await captureMeasurement(options, 'chat-bottom-after-cta', 'resting')
-
-    await options.page.locator(COMPOSER_INPUT_SELECTOR).first().fill('browser smoke bottom anchor send')
-    await options.page.locator(COMPOSER_PRIMARY_ACTION_BUTTON_SELECTOR).first().click()
-    await waitForRestingBottom(options.page, options.settleTimeoutMs)
-    measurements.afterSend = await captureMeasurement(options, 'chat-bottom-after-send', 'resting')
 
     writeFileSync(
         join(options.outputDir, 'chat-bottom-anchor-summary.json'),

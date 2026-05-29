@@ -7,10 +7,9 @@ import {
     SESSION_CHAT_VIEWPORT_SELECTOR,
     SESSION_LIST_ITEM_SELECTOR,
     THREAD_BOTTOM_CONTROL_SELECTOR,
-    THREAD_HISTORY_CONTROL_SELECTOR,
+    THREAD_OUTLINE_TRIGGER_SELECTOR,
 } from '../../web/src/lib/sessionUiContracts'
 import { createFakeCliRuntime, type FakeCliRuntime, seedRuntimeAndSessions } from './appLikeRouteBrowserFixtureSupport'
-import { LOGIN_INPUT_SELECTOR } from './appLikeRouteBrowserFlowSupport'
 import {
     type BrowserObservabilityBuckets,
     type IsolatedBrowserApp,
@@ -27,8 +26,9 @@ type DesktopChatGeometry = {
     bottomButtonVisible: boolean
     composerTop: number
     desktopGap: number
-    historyButtonCenterX: number
+    headerContentRight: number
     lastRowBottom: number
+    outlineButtonRight: number
     restingGap: number
     stageCenterX: number
 }
@@ -97,12 +97,17 @@ async function main(): Promise<void> {
             buckets,
             outputDir,
         })
+        await context.addInitScript(
+            ({ hubOwnerToken, hubUrl }) => {
+                localStorage.setItem(`viby_access_token::${hubUrl}`, hubOwnerToken)
+                localStorage.setItem('viby_hub_url', hubUrl)
+            },
+            { hubOwnerToken: VIBY_HUB_OWNER_TOKEN, hubUrl: app.hubUrl }
+        )
 
         try {
             const targetUrl = `${app.webUrl}/sessions?hub=${encodeURIComponent(app.hubUrl)}`
             await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: ROUTE_SETTLE_TIMEOUT_MS })
-            await page.locator(LOGIN_INPUT_SELECTOR).fill(VIBY_HUB_OWNER_TOKEN)
-            await page.locator('button[type="submit"]').click()
             await page.locator(SESSION_LIST_ITEM_SELECTOR).filter({ hasText: SESSION_NAME }).first().click()
             await page.locator(SESSION_CHAT_PAGE_SELECTOR).first().waitFor({ timeout: ROUTE_SETTLE_TIMEOUT_MS })
             await page.waitForTimeout(800)
@@ -150,9 +155,12 @@ async function main(): Promise<void> {
                     `Desktop resting gap drifted away from ${DESKTOP_RESTING_GAP_PX}px (gap=${restingGeometry.restingGap})`
                 )
             }
-            if (Math.abs(controlsGeometry.historyButtonCenterX - controlsGeometry.stageCenterX) > CENTER_TOLERANCE_PX) {
+            if (
+                Math.abs(controlsGeometry.outlineButtonRight - controlsGeometry.headerContentRight) >
+                CENTER_TOLERANCE_PX
+            ) {
                 throw new Error(
-                    `Desktop history control drifted off stage center (history=${controlsGeometry.historyButtonCenterX}, stage=${controlsGeometry.stageCenterX})`
+                    `Desktop outline control drifted off header right rail (outline=${controlsGeometry.outlineButtonRight}, rail=${controlsGeometry.headerContentRight})`
                 )
             }
             if (
@@ -189,7 +197,7 @@ async function main(): Promise<void> {
 
 async function captureDesktopChatGeometry(page: import('playwright-core').Page): Promise<DesktopChatGeometry> {
     return await page.evaluate(
-        ({ bottomSelector, composerSelector, historySelector, viewportSelector }) => {
+        ({ bottomSelector, composerSelector, outlineSelector, viewportSelector }) => {
             function readLengthPx(scope: HTMLElement, rawValue: string): number {
                 const value = rawValue.trim()
                 if (value.length === 0) {
@@ -220,22 +228,27 @@ async function captureDesktopChatGeometry(page: import('playwright-core').Page):
             }
 
             const composerStage = document.querySelector(composerSelector)
-            const historyButton = document.querySelector(historySelector)
+            const outlineButton = document.querySelector(outlineSelector)
             const bottomButton = document.querySelector(bottomSelector)
             const viewport = document.querySelector(viewportSelector)
             const layout = composerStage?.closest('.session-chat-layout')
             if (
                 !(composerStage instanceof HTMLElement) ||
-                !(historyButton instanceof HTMLButtonElement) ||
+                !(outlineButton instanceof HTMLButtonElement) ||
                 !(viewport instanceof HTMLDivElement)
             ) {
                 throw new Error('Desktop chat geometry surface missing')
             }
 
             const stageRect = composerStage.getBoundingClientRect()
-            const historyRect = historyButton.getBoundingClientRect()
+            const outlineRect = outlineButton.getBoundingClientRect()
             const bottomRect = bottomButton instanceof HTMLButtonElement ? bottomButton.getBoundingClientRect() : null
             const lastVisibleRow = getLastVisibleRow(viewport)
+            const layoutStyle = getComputedStyle(layout ?? document.documentElement)
+            const headerContentRight =
+                Math.round(
+                    Number.parseFloat(layoutStyle.getPropertyValue('--chat-desktop-header-stage-content-right-x'))
+                ) || Math.round(stageRect.right)
 
             return {
                 bottomButtonCenterX: bottomRect ? Math.round(bottomRect.left + bottomRect.width / 2) : null,
@@ -251,8 +264,9 @@ async function captureDesktopChatGeometry(page: import('playwright-core').Page):
                         '--chat-desktop-bottom-control-gap'
                     )
                 ),
-                historyButtonCenterX: Math.round(historyRect.left + historyRect.width / 2),
+                headerContentRight,
                 lastRowBottom: lastVisibleRow ? Math.round(lastVisibleRow.getBoundingClientRect().bottom) : 0,
+                outlineButtonRight: Math.round(outlineRect.right),
                 restingGap: Math.round(
                     stageRect.top - (lastVisibleRow?.getBoundingClientRect().bottom ?? stageRect.top)
                 ),
@@ -262,7 +276,7 @@ async function captureDesktopChatGeometry(page: import('playwright-core').Page):
         {
             bottomSelector: THREAD_BOTTOM_CONTROL_SELECTOR,
             composerSelector: SESSION_CHAT_COMPOSER_STAGE_SELECTOR,
-            historySelector: THREAD_HISTORY_CONTROL_SELECTOR,
+            outlineSelector: THREAD_OUTLINE_TRIGGER_SELECTOR,
             viewportSelector: SESSION_CHAT_VIEWPORT_SELECTOR,
         }
     )

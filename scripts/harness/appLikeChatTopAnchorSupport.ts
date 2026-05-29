@@ -5,7 +5,9 @@ import {
     SESSION_CHAT_HEADER_STAGE_SELECTOR,
     SESSION_CHAT_VIEWPORT_SELECTOR,
     THREAD_BOTTOM_CONTROL_SELECTOR,
-    THREAD_HISTORY_CONTROL_SELECTOR,
+    THREAD_OUTLINE_ITEM_SELECTOR,
+    THREAD_OUTLINE_POPOVER_SELECTOR,
+    THREAD_OUTLINE_TRIGGER_SELECTOR,
     TRANSCRIPT_JUMP_TARGET_ROW_SELECTOR,
     TRANSCRIPT_ROW_SELECTOR,
 } from '../../web/src/lib/sessionUiContracts'
@@ -31,8 +33,8 @@ export async function assertChatTopAnchorBehavior(options: {
 }): Promise<void> {
     await options.page.waitForTimeout(1_000)
     await waitForRestingBottom(options.page, options.settleTimeoutMs * TOP_ANCHOR_PRECONDITION_TIMEOUT_MULTIPLIER)
-    await options.page.locator(THREAD_HISTORY_CONTROL_SELECTOR).first().click()
-    await waitForTopAnchor(options.page, options.settleTimeoutMs)
+    const jumpedConversationId = await jumpFromOutline(options.page, options.settleTimeoutMs)
+    await waitForTopAnchor(options.page, options.settleTimeoutMs, jumpedConversationId)
     await waitForTopAnchorIdle(options.page, options.settleTimeoutMs)
     const anchored = await captureMeasurement(options, 'chat-top-after-history-jump', 'anchored')
 
@@ -67,6 +69,18 @@ export async function assertChatTopAnchorBehavior(options: {
         join(options.outputDir, 'chat-top-anchor-summary.json'),
         `${JSON.stringify({ anchored, resting, overlayed }, null, 2)}\n`
     )
+}
+
+async function jumpFromOutline(page: Page, timeoutMs: number): Promise<string> {
+    await page.locator(THREAD_OUTLINE_TRIGGER_SELECTOR).first().click()
+    await page.locator(THREAD_OUTLINE_POPOVER_SELECTOR).first().waitFor({ timeout: timeoutMs })
+    const item = page.locator(THREAD_OUTLINE_ITEM_SELECTOR).first()
+    const conversationId = await item.getAttribute('data-conversation-id')
+    if (!conversationId) {
+        throw new Error('Outline item missing data-conversation-id')
+    }
+    await item.click()
+    return conversationId
 }
 
 async function captureMeasurement(
@@ -163,67 +177,100 @@ async function waitForTopRestingCeiling(page: Page, timeoutMs: number): Promise<
     throw new Error('Timed out waiting for the manual top resting ceiling to settle')
 }
 
-async function waitForTopAnchor(page: Page, timeoutMs: number): Promise<void> {
-    await page.waitForFunction(
-        ({ headerSelector, jumpTargetRowSelector, tolerancePx, viewportSelector }) => {
-            function readLengthPx(scope: HTMLElement, rawValue: string): number {
-                const value = rawValue.trim()
-                if (value.length === 0) {
-                    return 0
+async function waitForTopAnchor(page: Page, timeoutMs: number, conversationId: string): Promise<void> {
+    const startedAt = Date.now()
+    let lastMeasurement: unknown = null
+    while (Date.now() - startedAt < timeoutMs) {
+        const measurement = await page.evaluate(
+            ({ conversationId, headerSelector, jumpTargetRowSelector, viewportSelector }) => {
+                function readLengthPx(scope: HTMLElement, rawValue: string): number {
+                    const value = rawValue.trim()
+                    if (value.length === 0) {
+                        return 0
+                    }
+
+                    const probe = document.createElement('div')
+                    probe.style.position = 'absolute'
+                    probe.style.visibility = 'hidden'
+                    probe.style.pointerEvents = 'none'
+                    probe.style.marginTop = value
+                    scope.appendChild(probe)
+                    const px = Math.round(Number.parseFloat(getComputedStyle(probe).marginTop) || 0)
+                    probe.remove()
+                    return px
                 }
 
-                const probe = document.createElement('div')
-                probe.style.position = 'absolute'
-                probe.style.visibility = 'hidden'
-                probe.style.pointerEvents = 'none'
-                probe.style.marginTop = value
-                scope.appendChild(probe)
-                const px = Math.round(Number.parseFloat(getComputedStyle(probe).marginTop) || 0)
-                probe.remove()
-                return px
-            }
+                function getJumpTargetRow(viewport: HTMLDivElement): HTMLElement | null {
+                    const rows = [...viewport.querySelectorAll<HTMLElement>(jumpTargetRowSelector)]
+                    const viewportRect = viewport.getBoundingClientRect()
+                    const viewportTop = viewportRect.top + 1
+                    const viewportBottom = viewportRect.bottom
+                    return (
+                        rows.find((row) => {
+                            const rect = row.getBoundingClientRect()
+                            return (
+                                row.dataset.conversationId === conversationId &&
+                                rect.bottom > viewportTop &&
+                                rect.top < viewportBottom
+                            )
+                        }) ?? null
+                    )
+                }
 
-            function getFirstVisibleJumpTargetRow(viewport: HTMLDivElement): HTMLElement | null {
-                const rows = [...viewport.querySelectorAll<HTMLElement>(jumpTargetRowSelector)]
-                const viewportRect = viewport.getBoundingClientRect()
-                const viewportTop = viewportRect.top + 1
-                const viewportBottom = viewportRect.bottom
-                return (
-                    rows.find((row) => {
-                        const rect = row.getBoundingClientRect()
-                        return rect.bottom > viewportTop && rect.top < viewportBottom
-                    }) ?? null
+                const viewport = document.querySelector(viewportSelector)
+                const headerStage = document.querySelector(headerSelector)
+                const layout = viewport?.closest('.session-chat-page')
+                if (!(viewport instanceof HTMLDivElement) || !(headerStage instanceof HTMLElement)) {
+                    return { ready: false, reason: 'missing-surface' }
+                }
+
+                const topJumpTargetRow = getJumpTargetRow(viewport)
+                if (!(topJumpTargetRow instanceof HTMLElement)) {
+                    return {
+                        ready: false,
+                        reason: 'target-not-visible',
+                        scrollTop: viewport.scrollTop,
+                        renderedTargets: [...viewport.querySelectorAll<HTMLElement>(jumpTargetRowSelector)].map(
+                            (row) => row.dataset.conversationId
+                        ),
+                    }
+                }
+
+                const topDelta =
+                    topJumpTargetRow.getBoundingClientRect().top - headerStage.getBoundingClientRect().bottom
+                const topAnchorGap = readLengthPx(
+                    layout instanceof HTMLElement ? layout : document.body,
+                    getComputedStyle(layout ?? document.documentElement).getPropertyValue(
+                        '--chat-header-visual-clearance'
+                    )
                 )
+
+                return {
+                    ready: false,
+                    reason: 'target-drift',
+                    scrollTop: viewport.scrollTop,
+                    topAnchorGap,
+                    topDelta,
+                }
+            },
+            {
+                conversationId,
+                headerSelector: SESSION_CHAT_HEADER_STAGE_SELECTOR,
+                jumpTargetRowSelector: TRANSCRIPT_JUMP_TARGET_ROW_SELECTOR,
+                viewportSelector: SESSION_CHAT_VIEWPORT_SELECTOR,
             }
+        )
+        lastMeasurement = measurement
+        if (
+            measurement.reason === 'target-drift' &&
+            Math.abs(measurement.topDelta - measurement.topAnchorGap) <= TOP_ANCHOR_TOLERANCE_PX
+        ) {
+            return
+        }
+        await page.waitForTimeout(100)
+    }
 
-            const viewport = document.querySelector(viewportSelector)
-            const headerStage = document.querySelector(headerSelector)
-            const layout = viewport?.closest('.session-chat-page')
-            if (!(viewport instanceof HTMLDivElement) || !(headerStage instanceof HTMLElement)) {
-                return false
-            }
-
-            const topJumpTargetRow = getFirstVisibleJumpTargetRow(viewport)
-            if (!(topJumpTargetRow instanceof HTMLElement)) {
-                return false
-            }
-
-            const topDelta = topJumpTargetRow.getBoundingClientRect().top - headerStage.getBoundingClientRect().bottom
-            const topAnchorGap = readLengthPx(
-                layout instanceof HTMLElement ? layout : document.body,
-                getComputedStyle(layout ?? document.documentElement).getPropertyValue('--chat-header-visual-clearance')
-            )
-
-            return Math.abs(topDelta - topAnchorGap) <= tolerancePx
-        },
-        {
-            headerSelector: SESSION_CHAT_HEADER_STAGE_SELECTOR,
-            jumpTargetRowSelector: TRANSCRIPT_JUMP_TARGET_ROW_SELECTOR,
-            tolerancePx: TOP_ANCHOR_TOLERANCE_PX,
-            viewportSelector: SESSION_CHAT_VIEWPORT_SELECTOR,
-        },
-        { timeout: timeoutMs }
-    )
+    throw new Error(`Timed out waiting for outline top anchor: ${JSON.stringify(lastMeasurement)}`)
 }
 
 async function waitForTopAnchorIdle(page: Page, timeoutMs: number): Promise<void> {
