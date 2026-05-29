@@ -38,15 +38,36 @@
         position: relative;
         display: grid;
         min-width: 0;
-        min-height: clamp(300px, 42vh, 360px);
-        align-content: center;
-        gap: clamp(18px, 3vh, 28px);
+        grid-template-rows: var(--desktop-card-heading-row) auto;
+        justify-items: center;
+        gap: clamp(14px, 2.4vh, 22px);
         padding: clamp(18px, 2.5vw, 28px);
-        transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
     }
 
-    .desktop-access-card {
-        border-left: 1px dashed color-mix(in srgb, var(--desktop-border-strong) 78%, transparent);
+    .desktop-feature-card > .desktop-card-heading,
+    .desktop-feature-card > .desktop-card-heading-bar {
+        align-self: end;
+    }
+
+    .desktop-card-heading-bar {
+        position: relative;
+        display: flex;
+        width: 100%;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .desktop-card-heading-bar > .desktop-access-help {
+        position: absolute;
+        right: 0;
+    }
+
+    .desktop-feature-card > .desktop-card-body {
+        display: grid;
+        width: 100%;
+        min-width: 0;
+        justify-items: center;
+        gap: clamp(14px, 2.4vh, 22px);
     }
 
     .desktop-card-heading {
@@ -90,50 +111,44 @@
 
     .desktop-help-button {
         display: grid;
-        width: 30px;
-        height: 30px;
+        width: 26px;
+        height: 26px;
+        flex: 0 0 auto;
         place-items: center;
         border: 1px solid var(--desktop-border);
-        border-radius: 999px;
+        border-radius: var(--desktop-radius-full);
         background: var(--desktop-surface);
-        color: var(--desktop-muted);
+        color: var(--desktop-faint);
         cursor: pointer;
         transition:
-            transform 160ms ease,
-            border-color 160ms ease,
-            color 160ms ease;
+            border-color var(--desktop-motion-fast) ease,
+            color var(--desktop-motion-fast) ease,
+            background-color var(--desktop-motion-fast) ease;
     }
 
-    .desktop-help-button:hover {
+    .desktop-access-help:hover .desktop-help-button,
+    .desktop-access-help:focus-within .desktop-help-button {
         border-color: var(--desktop-border-strong);
+        background: var(--desktop-surface-soft);
         color: var(--desktop-text);
-        transform: translateY(-1px);
-    }
-
-    .desktop-help-button:active {
-        transform: scale(0.96);
     }
 
     .desktop-help-button > span {
-        font-size: 17px;
-        font-weight: 850;
+        font-size: 14px;
+        font-weight: 800;
         line-height: 1;
     }
 
-    .desktop-access-card {
-        position: relative;
-    }
-
     .desktop-access-help {
-        position: absolute;
-        top: -30px;
-        right: 22px;
+        position: relative;
         z-index: 3;
+        display: inline-flex;
+        flex: 0 0 auto;
     }
 
     .desktop-access-help-popover {
         position: absolute;
-        top: 38px;
+        top: calc(100% + 10px);
         right: 0;
         z-index: 4;
         display: grid;
@@ -141,9 +156,9 @@
         gap: 12px;
         padding: 14px;
         border: 1px solid var(--desktop-border);
-        border-radius: 16px;
+        border-radius: var(--desktop-radius);
         background: var(--desktop-surface);
-        box-shadow: var(--desktop-shadow-soft);
+        box-shadow: var(--desktop-shadow);
         color: var(--desktop-muted);
         font-size: 13px;
         line-height: 1.45;
@@ -151,8 +166,8 @@
         pointer-events: none;
         transform: translateY(-4px);
         transition:
-            opacity 160ms ease,
-            transform 160ms ease;
+            opacity var(--desktop-motion-fast) ease,
+            transform var(--desktop-motion-fast) var(--desktop-ease-emphasized);
     }
 
     .desktop-access-help:hover .desktop-access-help-popover,
@@ -175,18 +190,6 @@
         font-size: 17px;
     }
 
-    .desktop-mobile-card {
-        justify-items: stretch;
-    }
-
-    .desktop-mobile-card > .desktop-card-heading,
-    .desktop-mobile-card > .desktop-mobile-action,
-    .desktop-mobile-card > .desktop-device-count,
-    .desktop-mobile-card > .desktop-device-summary,
-    .desktop-mobile-card > .desktop-device-hint {
-        justify-self: center;
-    }
-
     .desktop-device-hint {
         margin: 0;
         padding: 12px 18px;
@@ -197,13 +200,6 @@
         color: var(--desktop-text-muted, rgba(255, 255, 255, 0.72));
         border-radius: 12px;
         background: var(--desktop-surface-soft, rgba(255, 255, 255, 0.04));
-    }
-
-    .desktop-access-card > .desktop-card-heading,
-    .desktop-access-card > .desktop-public-access-control,
-    .desktop-access-card > .desktop-entry-row,
-    .desktop-access-card > .desktop-control-pill {
-        justify-self: center;
     }
 
     .desktop-mobile-action {
@@ -289,44 +285,55 @@
         box-shadow: none;
     }
 
+    .desktop-public-access-row {
+        display: grid;
+        justify-items: center;
+    }
+
     .desktop-public-access-control {
         position: relative;
         z-index: 1;
         display: grid;
-        width: min(100%, 360px);
+        width: auto;
         min-width: 0;
-        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-columns: auto minmax(0, 1fr) auto;
         align-items: center;
-        gap: 14px;
-        padding: 13px 16px;
-        border: 1px solid var(--desktop-border);
-        border-radius: 18px;
-        background:
-            linear-gradient(180deg, color-mix(in srgb, var(--desktop-surface) 86%, transparent), transparent),
-            var(--desktop-surface-soft);
-        box-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 46%, transparent);
-        transition:
-            border-color var(--desktop-motion-base) ease,
-            box-shadow var(--desktop-motion-base) ease,
-            background-color var(--desktop-motion-base) ease;
+        gap: 12px;
+        padding: 10px 12px 10px 16px;
+        border-radius: var(--desktop-radius-full);
+        background: var(--desktop-surface-soft);
+        transition: background-color var(--desktop-motion-base) ease;
     }
 
     .desktop-public-access-control.is-on {
-        border-color: color-mix(in srgb, var(--desktop-success) 34%, var(--desktop-border));
-        box-shadow:
-            0 14px 36px color-mix(in srgb, var(--desktop-success) 14%, transparent),
-            inset 0 1px 0 color-mix(in srgb, #ffffff 50%, transparent);
+        background: color-mix(in srgb, var(--desktop-success) 14%, var(--desktop-surface-soft));
+    }
+
+    .desktop-public-access-control.is-busy {
+        background: color-mix(in srgb, var(--desktop-warning) 14%, var(--desktop-surface-soft));
+    }
+
+    .desktop-public-access-icon {
+        display: grid;
+        place-items: center;
+        color: var(--desktop-muted);
+        transition: color var(--desktop-motion-base) ease;
+    }
+
+    .desktop-public-access-control.is-on .desktop-public-access-icon {
+        color: var(--desktop-success);
+    }
+
+    .desktop-public-access-control.is-busy .desktop-public-access-icon {
+        color: var(--desktop-warning);
+    }
+
+    .desktop-public-access-icon .desktop-icon {
+        font-size: 20px;
+        stroke-width: 2.2;
     }
 
     .desktop-public-access-copy {
-        display: grid;
-        min-width: 0;
-        grid-template-columns: 38px minmax(0, 1fr);
-        align-items: center;
-        gap: 12px;
-    }
-
-    .desktop-public-access-copy > div {
         display: grid;
         min-width: 0;
         gap: 3px;
@@ -334,65 +341,51 @@
 
     .desktop-public-access-copy strong {
         color: var(--desktop-text);
-        font-size: 14px;
-        font-weight: 820;
-        letter-spacing: -0.015em;
+        font-size: 13px;
+        font-weight: 800;
+        line-height: 1.2;
+        letter-spacing: -0.01em;
+        white-space: nowrap;
     }
 
-    .desktop-public-access-copy span:not(.desktop-public-access-icon) {
-        color: var(--desktop-muted);
-        font-size: 12px;
-        font-weight: 680;
-        line-height: 1.35;
+    .desktop-public-access-state {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--desktop-faint);
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 1.2;
+        white-space: nowrap;
     }
 
-    .desktop-public-access-icon {
-        display: grid;
-        width: 38px;
-        height: 38px;
-        place-items: center;
-        border-radius: 14px;
-        background: color-mix(in srgb, var(--desktop-success) 10%, var(--desktop-surface));
+    .desktop-public-access-state::before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        border-radius: var(--desktop-radius-full);
+        background: currentColor;
+    }
+
+    .desktop-public-access-control.is-on .desktop-public-access-state {
         color: var(--desktop-success);
-        transition:
-            background-color var(--desktop-motion-base) ease,
-            color var(--desktop-motion-base) ease,
-            transform var(--desktop-motion-base) var(--desktop-ease-emphasized);
     }
 
-    .desktop-public-access-control.is-off .desktop-public-access-icon {
-        background: color-mix(in srgb, var(--desktop-border) 60%, var(--desktop-surface));
-        color: var(--desktop-muted);
-    }
-
-    .desktop-public-access-control.is-on .desktop-public-access-icon {
-        transform: rotate(-3deg);
-    }
-
-    .desktop-public-access-icon .desktop-icon {
-        font-size: 19px;
-        stroke-width: 2.2;
+    .desktop-public-access-control.is-busy .desktop-public-access-state {
+        color: var(--desktop-warning);
     }
 
     .desktop-entry-row {
         position: relative;
         z-index: 1;
-        display: flex;
+        display: grid;
         width: min(100%, 360px);
         min-width: 0;
-        align-items: center;
-        gap: 14px;
+        gap: 10px;
         padding: 16px 18px;
         border: 1px solid var(--desktop-border);
-        border-radius: 18px;
+        border-radius: var(--desktop-radius);
         background: var(--desktop-surface-soft);
-    }
-
-    .desktop-entry-copy {
-        display: grid;
-        flex: 1 1 auto;
-        min-width: 0;
-        gap: 10px;
     }
 
     .desktop-entry-address {
@@ -409,12 +402,43 @@
         min-width: 0;
     }
 
-    .desktop-entry-address > .desktop-entry-actions {
-        display: inline-flex;
-        gap: 8px;
+    .desktop-entry-button {
+        display: grid;
+        place-items: center;
+        width: 42px;
+        height: 42px;
+        flex: 0 0 auto;
+        border: 1px solid var(--desktop-border);
+        border-radius: 12px;
+        background: var(--desktop-surface);
+        color: var(--desktop-muted);
+        cursor: pointer;
+        transition:
+            border-color 160ms var(--desktop-ease-emphasized),
+            color 160ms var(--desktop-ease-emphasized),
+            background-color 160ms var(--desktop-ease-emphasized),
+            transform 160ms var(--desktop-ease-emphasized);
     }
 
-    .desktop-entry-copy strong {
+    .desktop-entry-button:hover {
+        border-color: var(--desktop-border-strong);
+        color: var(--desktop-text);
+    }
+
+    .desktop-entry-button:active {
+        transform: scale(0.94);
+    }
+
+    .desktop-entry-button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+    }
+
+    .desktop-entry-button .desktop-icon {
+        font-size: 17px;
+    }
+
+    .desktop-entry-address strong {
         color: var(--desktop-text);
         font-size: clamp(0.96rem, 1.7vw, 1.3rem);
         font-weight: 800;

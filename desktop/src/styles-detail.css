@@ -24,6 +24,12 @@
             inset 0 1px 0 rgba(255, 255, 255, 0.72);
     }
 
+    .desktop-pairing-card.is-compact {
+        width: min(100%, 380px);
+        padding: clamp(22px, 3.5vw, 30px);
+        border-radius: 24px;
+    }
+
     .desktop-shell[data-theme="dark"] .desktop-pairing-card {
         background: rgba(36, 38, 31, 0.98);
         box-shadow:
@@ -35,6 +41,7 @@
         position: absolute;
         top: 18px;
         right: 18px;
+        z-index: 2;
         display: grid;
         width: 42px;
         height: 42px;
@@ -137,28 +144,20 @@
         gap: 14px;
     }
 
-    .desktop-pairing-side-top {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 24px;
-    }
-
-    .desktop-pairing-side-top > span {
+    .desktop-pairing-hint {
         color: var(--desktop-muted);
         font-size: 0.95rem;
-        font-weight: 780;
+        font-weight: 700;
         letter-spacing: 0;
     }
 
     .desktop-pairing-code {
-        display: flex;
+        position: relative;
+        display: grid;
+        place-items: center;
         width: min(100%, 300px);
         min-width: 0;
         min-height: 106px;
-        align-items: center;
-        justify-content: center;
-        gap: 10px;
         padding: 12px 14px;
         overflow: hidden;
         border: 1px solid color-mix(in srgb, var(--desktop-border-strong) 72%, transparent);
@@ -171,6 +170,14 @@
             0 14px 34px color-mix(in srgb, var(--desktop-text) 9%, transparent);
     }
 
+    .desktop-pairing-code-text {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        min-width: 0;
+    }
+
     .desktop-pairing-code .desktop-icon {
         flex: 0 0 auto;
         color: var(--desktop-success);
@@ -179,17 +186,20 @@
     }
 
     .desktop-pairing-code-copy {
+        position: absolute;
+        top: 50%;
+        right: 10px;
+        transform: translateY(-50%);
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 36px;
-        height: 36px;
-        flex: 0 0 36px;
+        width: 32px;
+        height: 32px;
         padding: 0;
         border: 1px solid transparent;
-        border-radius: 12px;
+        border-radius: 10px;
         background: color-mix(in srgb, var(--desktop-surface) 78%, transparent);
-        color: var(--desktop-text-muted);
+        color: var(--desktop-muted);
         cursor: pointer;
         transition:
             transform 120ms ease,
@@ -202,16 +212,16 @@
         border-color: var(--desktop-border);
         background: var(--desktop-surface);
         color: var(--desktop-text);
-        transform: translateY(-1px);
+        transform: translateY(calc(-50% - 1px));
     }
 
     .desktop-pairing-code-copy:active {
         background: var(--desktop-border);
-        transform: scale(0.96);
+        transform: translateY(-50%) scale(0.94);
     }
 
     .desktop-pairing-code-copy .desktop-icon {
-        font-size: 18px;
+        font-size: 16px;
         color: inherit;
     }
 
@@ -245,13 +255,59 @@
         font-weight: 760;
     }
 
-    .desktop-pairing-guidance {
-        max-width: 22rem;
-        margin: -4px 0 0;
-        color: var(--desktop-muted);
+    .desktop-pairing-link-copy {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: 44px;
+        padding: 10px 18px;
+        border: 1px solid var(--desktop-border);
+        border-radius: 999px;
+        background: var(--desktop-surface);
+        color: var(--desktop-text);
         font-size: 14px;
-        font-weight: 650;
-        line-height: 1.55;
+        font-weight: 760;
+        letter-spacing: -0.01em;
+        cursor: pointer;
+        transition:
+            border-color 160ms var(--desktop-ease-emphasized),
+            background-color 160ms var(--desktop-ease-emphasized),
+            transform 160ms var(--desktop-ease-emphasized),
+            box-shadow 160ms var(--desktop-ease-emphasized);
+    }
+
+    .desktop-pairing-link-copy:hover {
+        border-color: var(--desktop-border-strong);
+        box-shadow: var(--desktop-shadow-sm);
+        transform: translateY(-1px);
+    }
+
+    .desktop-pairing-link-copy:active {
+        transform: scale(0.98);
+    }
+
+    .desktop-pairing-link-copy .desktop-icon {
+        font-size: 16px;
+        color: var(--desktop-muted);
+    }
+
+    .desktop-pairing-grid.is-no-qr {
+        grid-template-columns: 1fr;
+        gap: 0;
+    }
+
+    .desktop-pairing-grid.is-no-qr .desktop-pairing-stage {
+        gap: 16px;
+    }
+
+    .desktop-pairing-grid.is-no-qr .desktop-pairing-code {
+        width: 100%;
+        min-height: 96px;
+    }
+
+    .desktop-pairing-grid.is-no-qr .desktop-pairing-side strong {
+        font-size: clamp(2.4rem, 7vw, 3rem);
     }
 
     .desktop-pairing-grid.is-connected .desktop-pairing-side strong {

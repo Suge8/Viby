@@ -97,7 +97,7 @@
     .desktop-segmented-control {
         display: inline-flex;
         flex: 0 0 auto;
-        align-items: center;
+        align-items: stretch;
         gap: 3px;
         padding: 3px;
         border: 1px solid var(--desktop-border);
@@ -106,27 +106,76 @@
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
     }
 
-    .desktop-segmented-control button {
-        min-width: 64px;
-        min-height: 36px;
-        padding: 8px 13px;
-        border-radius: 13px;
-        color: var(--desktop-muted);
-        font-size: 13px;
-        font-weight: 760;
+    .desktop-segmented-control.is-fill {
+        display: grid;
+        width: 100%;
     }
 
-    .desktop-segmented-control button:hover {
+    .desktop-segmented-control button {
+        position: relative;
+        display: inline-flex;
+        min-width: 64px;
+        min-height: 36px;
+        align-items: center;
+        justify-content: center;
+        padding: 8px 13px;
+        border: 0;
+        border-radius: 13px;
+        background: transparent;
+        color: var(--desktop-muted);
+        font: inherit;
+        font-size: 13px;
+        font-weight: 760;
+        cursor: pointer;
+        transition: color 220ms ease;
+    }
+
+    .desktop-segmented-control.is-fill button {
+        min-width: 0;
+    }
+
+    .desktop-segmented-control button:hover:not(.is-selected) {
         color: var(--desktop-text);
-        transform: translateY(var(--desktop-hover-lift));
     }
 
     .desktop-segmented-control button.is-selected {
-        background: var(--desktop-surface);
         color: var(--desktop-text);
+    }
+
+    .desktop-segmented-pill {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        border-radius: inherit;
+        background: var(--desktop-surface);
         box-shadow:
             0 6px 16px rgba(31, 27, 20, 0.08),
             inset 0 1px 0 rgba(255, 255, 255, 0.72);
+    }
+
+    .desktop-segmented-content {
+        position: relative;
+        z-index: 1;
+        display: inline-flex;
+        min-width: 0;
+        align-items: center;
+        gap: 6px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .desktop-segmented-badge {
+        position: absolute;
+        top: 4px;
+        right: 6px;
+        z-index: 2;
+        display: inline-flex;
+        width: 6px;
+        height: 6px;
+        border-radius: 999px;
+        background: var(--desktop-warning);
+        box-shadow: 0 0 0 2px var(--desktop-surface);
     }
 
     .desktop-toggle {
