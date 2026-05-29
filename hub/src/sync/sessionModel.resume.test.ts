@@ -339,6 +339,62 @@ describe('session model resume contracts', () => {
         }
     })
 
+    it('keeps stale inactive running metadata in the open section after a failed provider-handle send resume', async () => {
+        const store = new Store(':memory:')
+        const engine = new SyncEngine(store, {} as never, new RpcRegistry(), { broadcast() {} } as never)
+
+        try {
+            const session = createEngineSession(engine, {
+                tag: 'session-stale-running-provider-send-failure',
+                metadata: {
+                    path: '/tmp/project',
+                    host: 'localhost',
+                    machineId: 'machine-1',
+                    driver: 'pi',
+                    runtimeHandles: {
+                        pi: { sessionId: 'pi-provider-session' },
+                    },
+                    lifecycleState: 'running',
+                    lifecycleStateSince: Date.now(),
+                },
+                model: 'openai/gpt-5.4-mini',
+            })
+            store.messages.addMessage(session.id, {
+                role: 'user',
+                content: {
+                    type: 'text',
+                    text: 'Existing history makes send use resume.',
+                },
+            })
+            engine.getOrCreateMachine(
+                'machine-1',
+                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+                null
+            )
+            engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
+
+            ;(engine as any).rpcGateway.spawnSession = async () => ({
+                type: 'error',
+                message: 'Provider resume failed',
+            })
+
+            await expect(
+                engine.sendMessage(session.id, {
+                    text: 'This should not append until resume succeeds.',
+                    localId: 'local-stale-running-send',
+                })
+            ).rejects.toMatchObject({
+                code: 'resume_failed',
+            })
+
+            const stored = store.sessions.getSession(session.id)
+            expect((stored?.metadata as { lifecycleState?: string } | null)?.lifecycleState).toBe('open')
+            expect(store.messages.getMessages(session.id, 10)).toHaveLength(1)
+        } finally {
+            engine.stop()
+        }
+    })
+
     it('passes the stored model when respawning a resumed session', async () => {
         const store = new Store(':memory:')
         const engine = new SyncEngine(store, {} as never, new RpcRegistry(), { broadcast() {} } as never)

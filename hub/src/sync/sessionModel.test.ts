@@ -438,6 +438,9 @@ describe('session model', () => {
             }
             ;(engine as any).resumeSession = async (sessionId: string) => {
                 steps.push('resume')
+                await (engine as any).sessionCache.setSessionLifecycleState(sessionId, 'running', {
+                    touchUpdatedAt: false,
+                })
                 engine.handleSessionAlive({
                     sid: sessionId,
                     time: Date.now(),
@@ -1407,31 +1410,6 @@ describe('session model', () => {
         } finally {
             engine.stop()
         }
-    })
-
-    it('repairs historical inactive running durable lifecycle when the cache boots', () => {
-        const store = new Store(':memory:')
-        const stored = store.sessions.getOrCreateSession({
-            tag: 'session-startup-lifecycle-repair',
-            metadata: {
-                path: '/tmp/project',
-                host: 'localhost',
-                driver: 'codex',
-                lifecycleState: 'running',
-                lifecycleStateSince: Date.now(),
-            },
-            model: 'gpt-5.4',
-        })
-
-        store.sessions.setSessionInactive(stored.id)
-
-        const events: SyncEvent[] = []
-        const cache = new SessionCache(store, createPublisher(events))
-        const repaired = store.sessions.getSession(stored.id)
-
-        expect(repaired?.active).toBe(false)
-        expect((repaired?.metadata as { lifecycleState?: string } | null)?.lifecycleState).toBe('closed')
-        expect(cache.refreshSession(stored.id)?.metadata?.lifecycleState).toBe('closed')
     })
 
     it('refreshes cached sessions from durable inactive state instead of preserving stale active memory', () => {

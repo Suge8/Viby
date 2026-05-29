@@ -215,4 +215,60 @@ describe('LocalSessionRecoveryService', () => {
         await expect(secondImport).resolves.toMatchObject({ session: recoveredSession, imported: true })
         expect(store.messages.addMessages).toHaveBeenCalledTimes(1)
     })
+
+    it('imports recovered assistant text as canonical output content', async () => {
+        const addedMessages: unknown[] = []
+        const recoveredSession = { id: 'session-recovered' } as Session
+        const store = {
+            sessions: {
+                getSessions: () => [],
+                getOrCreateSession: mock(() => createStoredSession({ id: 'stored-session' })),
+                touchSessionUpdatedAt: mock(() => true),
+                deleteSession: mock(() => true),
+            },
+            messages: {
+                addMessages: mock((_sessionId: string, messages: unknown[]) => {
+                    addedMessages.push(...messages)
+                    return []
+                }),
+            },
+        } as unknown as Store
+        const service = new LocalSessionRecoveryService(
+            store,
+            { refreshSession: mock(() => recoveredSession) } as unknown as SessionCache,
+            {
+                exportLocalSession: mock(async () => ({
+                    path: '/repo',
+                    driver: 'codex',
+                    providerSessionId: 'codex-session-1',
+                    title: 'Recovered Codex Session',
+                    startedAt: 10,
+                    updatedAt: 20,
+                    messages: [{ role: 'agent', text: 'render me', createdAt: 11 }],
+                })),
+            } as unknown as SessionRpcFacade
+        )
+
+        await service.importLocalSession({ id: 'machine-1', metadata: {} } as Machine, {
+            path: '/repo',
+            driver: 'codex',
+            providerSessionId: 'codex-session-1',
+        })
+
+        expect(addedMessages).toEqual([
+            {
+                content: {
+                    role: 'agent',
+                    content: {
+                        type: 'output',
+                        data: {
+                            type: 'assistant',
+                            message: { content: [{ type: 'text', text: 'render me' }] },
+                        },
+                    },
+                },
+                createdAt: 11,
+            },
+        ])
+    })
 })

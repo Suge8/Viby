@@ -175,11 +175,13 @@ export class SessionLifecycleService {
             return createResumeError(message, 'resume_failed')
         }
 
+        const previousLifecycleState = await this.sessionSpawnSupport.markSpawnStarting(sessionId)
         const spawnResult = await this.rpcGateway.spawnSession(effectiveSpawnOptions)
 
         if (spawnResult.type !== 'success') {
             const restoreError = await resolvedHooks
                 .writeSessionResumeToken(sessionId, resumeToken)
+                .then(() => this.sessionSpawnSupport.restoreSpawnLifecycle(sessionId, previousLifecycleState))
                 .then(() => null)
                 .catch((error) => {
                     return error instanceof Error ? error.message : 'Failed to restore resume token after spawn failure'
@@ -199,6 +201,7 @@ export class SessionLifecycleService {
                 spawnResult.sessionId,
                 resumeToken
             )
+            await this.sessionSpawnSupport.restoreSpawnLifecycle(sessionId, previousLifecycleState)
             const baseMessage = 'Session failed to resume into the original hub session'
             const message = cleanupError ? `${baseMessage}. Cleanup also failed: ${cleanupError}` : baseMessage
             return { type: 'error', message, code: 'resume_failed' }
@@ -211,6 +214,7 @@ export class SessionLifecycleService {
                 spawnResult.sessionId,
                 resumeToken
             )
+            await this.sessionSpawnSupport.restoreSpawnLifecycle(sessionId, previousLifecycleState)
             const baseMessage = getResumeContractFailureMessage(contractState)
             const message = cleanupError ? `${baseMessage}. Cleanup also failed: ${cleanupError}` : baseMessage
             return { type: 'error', message, code: 'resume_failed' }

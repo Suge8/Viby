@@ -7,7 +7,7 @@ import {
     buildInactivePresencePatch,
     capturePresenceConfig,
     type InactiveLifecyclePatch,
-    isPresenceBlockedByArchivedLifecycle,
+    isPresenceBlockedByHistoryLifecycle,
     type SessionPresencePatch,
     shouldBroadcastAlivePresence,
 } from './sessionPresenceSupport'
@@ -48,7 +48,7 @@ export class SessionPresenceService {
         }
 
         const session = this.getSession(payload.sid)
-        if (!session || isPresenceBlockedByArchivedLifecycle(session)) {
+        if (!session || isPresenceBlockedByHistoryLifecycle(session)) {
             return
         }
 

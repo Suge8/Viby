@@ -42,6 +42,8 @@ describe('SessionInteractionService', () => {
             refreshSession: () => session,
             uploadFile: async () => ({ success: true }),
             deleteUploadFile: async () => ({ success: true }),
+            isRuntimeStopping: () => false,
+            waitUntilRuntimeNotStopping: async () => true,
             onCommandCapabilitiesInvalidated,
             createSendError: (message) => new Error(message),
         })
@@ -68,6 +70,8 @@ describe('SessionInteractionService', () => {
             refreshSession: () => session,
             uploadFile: async () => ({ success: true }),
             deleteUploadFile: async () => ({ success: true }),
+            isRuntimeStopping: () => false,
+            waitUntilRuntimeNotStopping: async () => true,
             onCommandCapabilitiesInvalidated,
             createSendError: (message) => new Error(message),
         })
@@ -92,6 +96,8 @@ describe('SessionInteractionService', () => {
             refreshSession: () => session,
             uploadFile: async () => ({ success: true }),
             deleteUploadFile: async () => ({ success: true }),
+            isRuntimeStopping: () => false,
+            waitUntilRuntimeNotStopping: async () => true,
             onCommandCapabilitiesInvalidated: () => {},
             createSendError: (message) => new Error(message),
         })
@@ -124,6 +130,8 @@ describe('SessionInteractionService', () => {
             refreshSession: () => session,
             uploadFile,
             deleteUploadFile: async () => ({ success: true }),
+            isRuntimeStopping: () => false,
+            waitUntilRuntimeNotStopping: async () => true,
             onCommandCapabilitiesInvalidated: () => {},
             createSendError: (message) => new Error(message),
         })
@@ -135,5 +143,50 @@ describe('SessionInteractionService', () => {
         expect(startSession).not.toHaveBeenCalled()
         expect(resumeSession).not.toHaveBeenCalled()
         expect(session.active).toBe(false)
+    })
+
+    it('does not queue the first resume send because of stale inactive thinking', async () => {
+        const inactiveSession = {
+            ...createSession('codex'),
+            active: false,
+            thinking: true,
+        }
+        const resumedSession = {
+            ...inactiveSession,
+            active: true,
+            thinking: false,
+        }
+        let currentSession = inactiveSession
+        const appendUserMessage = vi.fn(async () => undefined)
+        const service = new SessionInteractionService({
+            getSession: () => currentSession,
+            hasMessages: () => true,
+            startSession: async () => ({ type: 'success', sessionId: currentSession.id }),
+            resumeSession: async () => {
+                currentSession = resumedSession
+                return { type: 'success', sessionId: currentSession.id }
+            },
+            unarchiveSession: async () => currentSession,
+            appendUserMessage,
+            refreshSession: () => currentSession,
+            uploadFile: async () => ({ success: true }),
+            deleteUploadFile: async () => ({ success: true }),
+            isRuntimeStopping: () => false,
+            waitUntilRuntimeNotStopping: async () => true,
+            onCommandCapabilitiesInvalidated: () => {},
+            createSendError: (message) => new Error(message),
+        })
+
+        await service.sendMessage(currentSession.id, {
+            text: 'resume me',
+            sentFrom: 'webapp',
+        })
+
+        expect(appendUserMessage).toHaveBeenCalledWith(
+            inactiveSession.id,
+            expect.objectContaining({
+                queuedForInvocation: false,
+            })
+        )
     })
 })

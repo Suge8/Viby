@@ -42,24 +42,29 @@ function matchesHubKnownLocalSession(
     return getSessionDriverRuntimeHandle(metadata, localSession.driver)?.sessionId === localSession.providerSessionId
 }
 
-function buildImportedMessageContent(message: LocalSessionTranscriptMessage): unknown {
-    if (message.role === 'user') {
-        return {
-            role: 'user',
-            content: {
-                type: 'text',
-                text: message.text,
-                attachments: [],
-            },
-        }
-    }
-
+function buildImportedAgentContent(text: string): unknown {
     return {
-        role: 'agent',
-        content: {
-            type: 'text',
-            text: message.text,
+        type: 'output',
+        data: {
+            type: 'assistant',
+            message: {
+                content: [{ type: 'text', text }],
+            },
         },
+    }
+}
+
+function buildImportedMessageContent(message: LocalSessionTranscriptMessage): unknown {
+    return {
+        role: message.role,
+        content:
+            message.role === 'user'
+                ? {
+                      type: 'text',
+                      text: message.text,
+                      attachments: [],
+                  }
+                : buildImportedAgentContent(message.text),
     }
 }
 

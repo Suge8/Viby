@@ -1,4 +1,4 @@
-import { isSessionArchivedLifecycleState } from '@viby/protocol'
+import { isSessionHistoryLifecycleState } from '@viby/protocol'
 import type { Session } from '@viby/protocol/types'
 import type { Store } from '../store'
 
@@ -23,10 +23,9 @@ export type AlivePresencePayload = {
     collaborationMode?: Session['collaborationMode']
 }
 
-export function isPresenceBlockedByArchivedLifecycle(session: Session | null | undefined): boolean {
-    return Boolean(
-        session?.metadata?.lifecycleState && isSessionArchivedLifecycleState(session.metadata.lifecycleState)
-    )
+export function isPresenceBlockedByHistoryLifecycle(session: Session | null | undefined): boolean {
+    const lifecycleState = session?.metadata?.lifecycleState
+    return Boolean(lifecycleState && isSessionHistoryLifecycleState(lifecycleState))
 }
 
 export function capturePresenceConfig(

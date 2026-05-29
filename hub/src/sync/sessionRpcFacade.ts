@@ -10,6 +10,8 @@ import type {
     LocalSessionCatalogRequest,
     LocalSessionExportRequest,
     LocalSessionExportSnapshot,
+    OpenAgentConfigRequest,
+    OpenAgentConfigResponse,
     PermissionMode,
     ResolveAgentLaunchConfigRequest,
     ResolveAgentLaunchConfigResponse,
@@ -132,6 +134,10 @@ export class SessionRpcFacade {
 
     async restoreAgentConfigFile(machineId: string, request: RestoreAgentConfigRequest): Promise<AgentConfigFileState> {
         return await this.rpcGateway.restoreAgentConfigFile(machineId, request)
+    }
+
+    async openAgentConfigFile(machineId: string, request: OpenAgentConfigRequest): Promise<OpenAgentConfigResponse> {
+        return await this.rpcGateway.openAgentConfigFile(machineId, request)
     }
 
     async listLocalSessions(machineId: string, request: LocalSessionCatalogRequest): Promise<LocalSessionCatalog> {

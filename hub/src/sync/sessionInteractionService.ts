@@ -34,6 +34,8 @@ type SessionInteractionServiceOptions = {
     startSession: (sessionId: string) => Promise<ResumeSessionResult>
     resumeSession: (sessionId: string) => Promise<ResumeSessionResult>
     unarchiveSession: (sessionId: string) => Promise<Session>
+    isRuntimeStopping: (sessionId: string) => boolean
+    waitUntilRuntimeNotStopping: (sessionId: string) => Promise<boolean>
     appendUserMessage: (sessionId: string, payload: InternalSessionMessagePayload) => Promise<void>
     refreshSession: (sessionId: string) => Session | null
     uploadFile: (
@@ -58,7 +60,7 @@ export class SessionInteractionService {
             text: payload.text,
             localId: payload.localId,
             attachments: payload.attachments,
-            queuedForInvocation: readySession?.thinking === true,
+            queuedForInvocation: readySession?.active === true && readySession.thinking,
             meta: {
                 sentFrom: payload.sentFrom ?? 'webapp',
             },
@@ -116,8 +118,9 @@ export class SessionInteractionService {
         if (!session) {
             throw this.options.createSendError('Session not found', 'session_not_found', 404)
         }
-        if (session.active) {
-            return session
+        const sendableSession = await this.waitForSendableRuntime(sessionId, session)
+        if (sendableSession.active) {
+            return sendableSession
         }
 
         const shouldFreshStart = !this.options.hasMessages(sessionId)
@@ -145,6 +148,19 @@ export class SessionInteractionService {
         }
 
         return resumedSession
+    }
+
+    private async waitForSendableRuntime(sessionId: string, session: Session): Promise<Session> {
+        if (!session.active || !this.options.isRuntimeStopping(sessionId)) {
+            return session
+        }
+
+        const ready = await this.options.waitUntilRuntimeNotStopping(sessionId)
+        if (!ready) {
+            throw this.options.createSendError('Session runtime is still stopping', 'resume_failed', 409)
+        }
+
+        return this.options.getSession(sessionId) ?? session
     }
 
     private resolveAttachmentMutationTarget(sessionId: string): { machineId: string } {
