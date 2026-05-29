@@ -1,0 +1,2659 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Viby · 你的 AI 住在你的电脑里</title>
+<meta name="description" content="AI 跑在你自己的电脑上。出门,你用手机接力。Claude Code、Codex、Pi 都可以。" />
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#F4EFE6" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0F1012" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" type="image/svg+xml" href="/assets/logo.svg" />
+<link rel="icon" href="/assets/favicon.ico" sizes="any" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="Viby · 你的 AI 住在你的电脑里" />
+<meta property="og:description" content="AI 在你自己的电脑上跑。出门,它继续干活。打开手机就能盯着进度。" />
+<meta property="og:image" content="https://viby.run/assets/og-image.png" />
+<meta property="og:url" content="https://viby.run" />
+<meta name="twitter:card" content="summary_large_image" />
+<link rel="canonical" href="https://viby.run" />
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Viby",
+  "description": "本地优先的 AI 远程控制。AI 跑在你自己的设备上,你用手机接力。",
+  "url": "https://viby.run",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "macOS, Windows, Linux, iOS, Android",
+  "softwareVersion": "alpha",
+  "license": "https://www.gnu.org/licenses/agpl-3.0.html",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "CNY" },
+  "author": { "@type": "Organization", "name": "Viby", "url": "https://github.com/Suge8/Viby" }
+}
+</script>
+<script>
+  // theme bootstrap (runs before render to avoid flash)
+  (function(){
+    try {
+      var saved = localStorage.getItem("viby-theme");
+      var fromQuery = location.search.match(/[?&]theme=(dark|light)/);
+      var pick = (fromQuery && fromQuery[1]) || saved;
+      if (pick === "dark" || pick === "light") {
+        document.documentElement.dataset.theme = pick;
+      }
+    } catch (e) {}
+  })();
+</script>
+<link rel="preconnect" href="https://api.fontshare.com" crossorigin />
+<link rel="preconnect" href="https://cdn.fontshare.com" crossorigin />
+<link rel="preconnect" href="https://fonts.googleapis.com" crossorigin />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" />
+<style>
+  :root {
+    /* light defaults */
+    --cream: oklch(96.5% 0.015 80);
+    --cream-deep: oklch(93% 0.025 78);
+    --cream-glow: oklch(89% 0.035 76);
+    --ink: oklch(17% 0.012 75);
+    --ink-soft: oklch(42% 0.012 75);
+    --ink-faint: oklch(64% 0.010 75);
+    --ink-line: oklch(82% 0.014 75);
+    --ink-hair: oklch(88% 0.012 75);
+    --paper: oklch(99% 0.006 80);
+    --coral: oklch(67% 0.185 33);
+    --coral-deep: oklch(56% 0.175 32);
+    --coral-soft: oklch(92% 0.045 35);
+    --lime: oklch(72% 0.155 148);
+    --lime-soft: oklch(92% 0.05 145);
+    --graphite: oklch(15% 0.008 75);
+    --graphite-2: oklch(20% 0.01 75);
+    --graphite-line: oklch(28% 0.01 75);
+    --titanium-1: oklch(78% 0.008 75);
+    --titanium-2: oklch(58% 0.006 75);
+    --grain-opacity: 0.5;
+    --shadow-card: 0 1px 2px oklch(15% 0.01 75 / 0.04), 0 14px 40px oklch(15% 0.01 75 / 0.06);
+    --shadow-float: 0 1px 2px oklch(15% 0.01 75 / 0.06), 0 36px 80px oklch(15% 0.01 75 / 0.14);
+    --shadow-dramatic: 0 2px 4px oklch(15% 0.01 75 / 0.08), 0 60px 120px oklch(15% 0.01 75 / 0.22);
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  :root[data-theme="dark"] {
+    --cream: oklch(14% 0.008 75);
+    --cream-deep: oklch(18% 0.012 75);
+    --cream-glow: oklch(24% 0.02 35);
+    --ink: oklch(96% 0.008 75);
+    --ink-soft: oklch(72% 0.008 75);
+    --ink-faint: oklch(54% 0.008 75);
+    --ink-line: oklch(30% 0.008 75);
+    --ink-hair: oklch(24% 0.008 75);
+    --paper: oklch(19% 0.008 75);
+    --coral: oklch(75% 0.175 33);
+    --coral-deep: oklch(82% 0.16 33);
+    --coral-soft: oklch(32% 0.09 35);
+    --lime: oklch(78% 0.155 148);
+    --lime-soft: oklch(28% 0.08 145);
+    --graphite: oklch(10% 0.006 75);
+    --graphite-2: oklch(14% 0.006 75);
+    --graphite-line: oklch(26% 0.008 75);
+    --titanium-1: oklch(60% 0.008 75);
+    --titanium-2: oklch(40% 0.006 75);
+    --grain-opacity: 0.25;
+    --shadow-card: 0 1px 2px oklch(0% 0 0 / 0.4), 0 14px 40px oklch(0% 0 0 / 0.3);
+    --shadow-float: 0 1px 2px oklch(0% 0 0 / 0.5), 0 36px 80px oklch(0% 0 0 / 0.5);
+    --shadow-dramatic: 0 2px 4px oklch(0% 0 0 / 0.6), 0 60px 120px oklch(0% 0 0 / 0.6);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --cream: oklch(14% 0.008 75);
+      --cream-deep: oklch(18% 0.012 75);
+      --cream-glow: oklch(24% 0.02 35);
+      --ink: oklch(96% 0.008 75);
+      --ink-soft: oklch(72% 0.008 75);
+      --ink-faint: oklch(54% 0.008 75);
+      --ink-line: oklch(30% 0.008 75);
+      --ink-hair: oklch(24% 0.008 75);
+      --paper: oklch(19% 0.008 75);
+      --coral: oklch(75% 0.175 33);
+      --coral-deep: oklch(82% 0.16 33);
+      --coral-soft: oklch(32% 0.09 35);
+      --lime: oklch(78% 0.155 148);
+      --lime-soft: oklch(28% 0.08 145);
+      --graphite: oklch(10% 0.006 75);
+      --graphite-2: oklch(14% 0.006 75);
+      --graphite-line: oklch(26% 0.008 75);
+      --titanium-1: oklch(60% 0.008 75);
+      --titanium-2: oklch(40% 0.006 75);
+      --grain-opacity: 0.25;
+      --shadow-card: 0 1px 2px oklch(0% 0 0 / 0.4), 0 14px 40px oklch(0% 0 0 / 0.3);
+      --shadow-float: 0 1px 2px oklch(0% 0 0 / 0.5), 0 36px 80px oklch(0% 0 0 / 0.5);
+      --shadow-dramatic: 0 2px 4px oklch(0% 0 0 / 0.6), 0 60px 120px oklch(0% 0 0 / 0.6);
+    }
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  @media (prefers-reduced-motion: no-preference) {
+    html { scroll-behavior: smooth; }
+  }
+  body {
+    margin: 0;
+    font-family: "General Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--cream);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+  }
+  a { color: inherit; text-decoration: none; }
+  button { font: inherit; cursor: pointer; border: 0; background: none; color: inherit; padding: 0; }
+  img, svg { display: block; max-width: 100%; }
+  ::selection { background: var(--ink); color: var(--cream); }
+
+  /* warm radial ambient glow */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: -20vh -10vw auto -10vw;
+    height: 120vh;
+    background:
+      radial-gradient(ellipse 70% 55% at 78% 15%, var(--coral-soft) 0%, transparent 55%),
+      radial-gradient(ellipse 50% 40% at 12% 8%, var(--cream-glow) 0%, transparent 65%);
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.85;
+  }
+  /* paper grain */
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.1 0 0 0 0 0.08 0 0 0 0 0.05 0 0 0 0.04 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    mix-blend-mode: multiply;
+    opacity: var(--grain-opacity);
+  }
+  :root[data-theme="dark"] body::after { mix-blend-mode: screen; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) body::after { mix-blend-mode: screen; }
+  }
+  main, nav, footer { position: relative; z-index: 2; }
+
+  /* ---------- shell ---------- */
+  .shell {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 0 clamp(20px, 4vw, 56px);
+  }
+  .shell-wide {
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 0 clamp(16px, 3vw, 40px);
+  }
+
+  /* ---------- nav ---------- */
+  nav.top {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    background: color-mix(in oklch, var(--cream) 72%, transparent);
+    border-bottom: 1px solid transparent;
+    transition: border-color 240ms var(--ease), background 240ms var(--ease);
+  }
+  nav.top.is-scrolled { border-bottom-color: var(--ink-hair); }
+  nav.top .row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 64px;
+  }
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    letter-spacing: -0.02em;
+    font-weight: 600;
+    font-size: 17px;
+  }
+  .brand-mark {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: var(--ink);
+    color: var(--cream);
+    display: grid;
+    place-items: center;
+  }
+  .brand-mark svg { width: 14px; height: 14px; }
+  :root[data-theme="dark"] .phone-stage::before,
+  :root[data-theme="dark"] .closing::before {
+    background: radial-gradient(ellipse at center, color-mix(in oklch, var(--coral) 22%, transparent) 0%, transparent 70%);
+    opacity: 0.7;
+  }
+  :root[data-theme="dark"] .iphone {
+    box-shadow:
+      0 0 0 1px oklch(28% 0.008 75 / 0.8),
+      inset 0 0 0 1px oklch(100% 0 0 / 0.06),
+      0 2px 4px oklch(0% 0 0 / 0.4),
+      0 60px 120px oklch(0% 0 0 / 0.55),
+      0 24px 50px oklch(0% 0 0 / 0.3);
+  }
+  .nav-links { display: flex; gap: 4px; align-items: center; }
+  .nav-links a {
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ink-soft);
+    transition: color 160ms var(--ease), background 160ms var(--ease);
+  }
+  .nav-links a:hover { color: var(--ink); background: color-mix(in oklch, var(--ink) 4%, transparent); }
+  .nav-cta { background: var(--ink); color: var(--cream) !important; }
+  .nav-cta:hover { background: color-mix(in oklch, var(--ink) 88%, var(--cream)); color: var(--cream) !important; }
+  .theme-toggle {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    border: 1px solid var(--ink-hair);
+    background: color-mix(in oklch, var(--paper) 70%, transparent);
+    color: var(--ink-soft);
+    display: grid; place-items: center;
+    transition: color 160ms var(--ease), background 160ms var(--ease), border-color 160ms var(--ease);
+  }
+  .theme-toggle:hover { color: var(--ink); border-color: var(--ink-line); }
+  .theme-toggle svg { width: 16px; height: 16px; transition: transform 280ms var(--ease); }
+  .theme-toggle .sun { display: block; }
+  .theme-toggle .moon { display: none; }
+  :root[data-theme="dark"] .theme-toggle .sun { display: none; }
+  :root[data-theme="dark"] .theme-toggle .moon { display: block; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .theme-toggle .sun { display: none; }
+    :root:not([data-theme="light"]) .theme-toggle .moon { display: block; }
+  }
+  @media (max-width: 720px) {
+    .nav-links a:not(.nav-cta) { display: none; }
+  }
+
+  /* ---------- hero ---------- */
+  .hero {
+    padding: clamp(56px, 11vh, 120px) 0 clamp(64px, 10vh, 96px);
+    position: relative;
+  }
+  .hero-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    gap: clamp(24px, 4vw, 56px);
+    align-items: center;
+  }
+  @media (max-width: 980px) {
+    .hero-grid { grid-template-columns: 1fr; gap: 56px; }
+  }
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    padding: 7px 14px 7px 12px;
+    border: 1px solid var(--ink-hair);
+    border-radius: 999px;
+    background: color-mix(in oklch, var(--paper) 80%, transparent);
+  }
+  .live-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--lime);
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--lime) 60%, transparent);
+    animation: pulse 2.4s var(--ease) infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--lime) 60%, transparent); }
+    50%      { box-shadow: 0 0 0 8px color-mix(in oklch, var(--lime) 0%, transparent); }
+  }
+  .hero h1 {
+    font-size: clamp(30px, 4.6vw, 64px);
+    line-height: 1.08;
+    letter-spacing: -0.04em;
+    font-weight: 600;
+    margin: 28px 0 0;
+  }
+  /* P3.2 hero h1 clip-path line reveal */
+  .hero h1 .line {
+    display: block;
+    white-space: nowrap;
+    clip-path: inset(0 0 100% 0);
+    opacity: 0;
+    animation: line-reveal 900ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  .hero h1 .line:nth-child(1) { animation-delay: 180ms; }
+  .hero h1 .line:nth-child(2) { animation-delay: 360ms; }
+  @keyframes line-reveal {
+    to { clip-path: inset(0 0 0 0); opacity: 1; }
+  }
+  @media (max-width: 720px) {
+    .hero h1 .line { white-space: normal; }
+  }
+  .hero h1 .accent {
+    color: var(--coral);
+    position: relative;
+    white-space: nowrap;
+  }
+  .hero h1 .accent::after {
+    content: "";
+    position: absolute;
+    left: 4%;
+    right: 4%;
+    bottom: -0.04em;
+    height: 0.06em;
+    background: var(--coral);
+    opacity: 0.32;
+    border-radius: 999px;
+  }
+  .hero .lede {
+    margin: 28px 0 0;
+    max-width: 52ch;
+    font-size: clamp(16px, 1.4vw, 19px);
+    line-height: 1.55;
+    color: var(--ink-soft);
+  }
+  .hero-actions {
+    margin-top: 36px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 22px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    transition: transform 180ms var(--ease), background 180ms var(--ease), color 180ms var(--ease), border-color 180ms var(--ease), box-shadow 180ms var(--ease);
+  }
+  .btn-primary { background: var(--ink); color: var(--cream); }
+  .btn-primary:hover { background: var(--graphite-2); transform: translateY(-1px); box-shadow: 0 12px 28px oklch(15% 0.01 75 / 0.18); }
+  .btn-ghost { background: transparent; color: var(--ink); border-color: var(--ink-line); }
+  .btn-ghost:hover { background: color-mix(in oklch, var(--ink) 5%, transparent); border-color: var(--ink); }
+  .btn .arrow { transition: transform 220ms var(--ease); }
+  .btn:hover .arrow { transform: translateX(3px); }
+  .hero-trust {
+    margin-top: 28px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    color: var(--ink-faint);
+  }
+  .hero-trust .sep { width: 3px; height: 3px; border-radius: 50%; background: var(--ink-line); }
+
+  /* ---------- iPhone frame ---------- */
+  .phone-stage {
+    position: relative;
+    width: 100%;
+    display: grid;
+    place-items: center;
+    perspective: 1800px;
+    isolation: isolate;
+  }
+  .phone-stage::before {
+    /* warm glow puck behind device */
+    content: "";
+    position: absolute;
+    inset: 8% 10%;
+    background: radial-gradient(ellipse at center, var(--coral-soft) 0%, transparent 68%);
+    filter: blur(40px);
+    z-index: -1;
+    opacity: 0.85;
+  }
+  .iphone {
+    width: min(320px, 78%);
+    aspect-ratio: 9 / 19.5;
+    border-radius: 52px;
+    padding: 4px;
+    background:
+      linear-gradient(140deg, var(--titanium-1) 0%, var(--titanium-2) 40%, var(--graphite) 60%, var(--titanium-2) 80%, var(--titanium-1) 100%);
+    box-shadow:
+      0 0 0 1px oklch(20% 0.008 75 / 0.6),
+      inset 0 0 0 1px oklch(100% 0 0 / 0.18),
+      0 2px 4px oklch(15% 0.01 75 / 0.1),
+      0 60px 120px oklch(15% 0.01 75 / 0.22),
+      0 24px 50px oklch(15% 0.01 75 / 0.12);
+    transform: rotate(-1.5deg);
+    transform-style: preserve-3d;
+  }
+  /* P3.2 hero iPhone scale-in (only on hero) */
+  .hero .iphone {
+    opacity: 0;
+    transform: scale(0.94) rotate(-1.5deg);
+    animation: iphone-in 1100ms cubic-bezier(0.16, 1, 0.3, 1) 380ms forwards;
+  }
+  @keyframes iphone-in {
+    to { opacity: 1; transform: scale(1) rotate(-1.5deg); }
+  }
+  .iphone-screen {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    border-radius: 48px;
+    background: var(--paper);
+    overflow: hidden;
+    isolation: isolate;
+  }
+  .iphone-dynamic-island {
+    position: absolute;
+    top: 11px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 110px;
+    height: 33px;
+    border-radius: 999px;
+    background: #0a0a0a;
+    z-index: 5;
+  }
+  .iphone-statusbar {
+    position: relative;
+    z-index: 4;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 32px 0;
+    font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink);
+    font-feature-settings: "tnum";
+  }
+  .iphone-statusbar .icons { display: flex; gap: 5px; align-items: center; color: var(--ink); }
+  .iphone-statusbar .icons svg { width: 17px; height: 11px; }
+
+  .phone-app {
+    padding: 38px 16px 14px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background:
+      radial-gradient(ellipse 80% 40% at 50% 0%, var(--cream-glow) 0%, transparent 60%),
+      var(--paper);
+  }
+  .phone-app-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 6px 12px;
+    border-bottom: 1px solid var(--ink-hair);
+  }
+  .phone-app-header .avatar {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, oklch(75% 0.15 35), oklch(60% 0.18 30));
+    display: grid; place-items: center;
+    color: white;
+    font-weight: 700;
+    font-size: 12px;
+  }
+  .phone-app-header .session {
+    display: flex; flex-direction: column; line-height: 1.2;
+    flex: 1; min-width: 0;
+  }
+  .phone-app-header .session .name {
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: -0.01em;
+  }
+  .phone-app-header .session .meta {
+    font-size: 10px;
+    color: var(--ink-faint);
+    display: flex; align-items: center; gap: 5px;
+  }
+  .phone-app-header .session .meta .live-dot { width: 5px; height: 5px; animation: pulse 2.4s var(--ease) infinite; }
+
+  .phone-chat {
+    flex: 1;
+    padding: 12px 4px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow: hidden;
+  }
+  .msg {
+    max-width: 84%;
+    padding: 8px 12px;
+    border-radius: 16px;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .msg.user {
+    background: var(--ink);
+    color: var(--cream);
+    align-self: flex-end;
+    border-bottom-right-radius: 5px;
+  }
+  .msg.ai {
+    background: color-mix(in oklch, var(--ink) 4%, var(--paper));
+    color: var(--ink);
+    align-self: flex-start;
+    border-bottom-left-radius: 5px;
+  }
+  .msg.tool {
+    align-self: flex-start;
+    max-width: 92%;
+    padding: 0;
+    background: transparent;
+    border-radius: 0;
+  }
+  .tool-card {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 10px;
+    border: 1px solid var(--ink-hair);
+    background: var(--paper);
+    border-radius: 10px;
+    font-size: 11px;
+    color: var(--ink-soft);
+  }
+  .tool-card .ico {
+    width: 16px; height: 16px;
+    border-radius: 4px;
+    background: var(--lime-soft);
+    color: oklch(35% 0.13 145);
+    display: grid; place-items: center;
+  }
+  .tool-card .ico svg { width: 10px; height: 10px; }
+  .tool-card .label { flex: 1; font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 10px; }
+  .tool-card .stat { font-size: 10px; color: var(--lime); font-weight: 600; }
+
+  .approval {
+    background: var(--paper);
+    border: 1px solid var(--ink-hair);
+    border-radius: 14px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 2px 0;
+  }
+  .approval .head {
+    display: flex; gap: 8px; align-items: center;
+    font-size: 11px; font-weight: 600;
+    color: var(--ink);
+  }
+  .approval .head .badge {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 9px;
+    letter-spacing: 0.06em;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: color-mix(in oklch, var(--coral) 14%, var(--paper));
+    color: var(--coral-deep);
+    text-transform: uppercase;
+  }
+  .approval .what {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 10px;
+    color: var(--ink-soft);
+    word-break: break-all;
+    line-height: 1.4;
+  }
+  .approval .actions { display: flex; gap: 6px; }
+  .approval .actions .a {
+    flex: 1;
+    height: 28px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    display: grid; place-items: center;
+  }
+  .approval .actions .a.allow { background: var(--ink); color: var(--cream); }
+  .approval .actions .a.deny { background: transparent; color: var(--ink); border: 1px solid var(--ink-line); }
+
+  .phone-composer {
+    margin-top: 8px;
+    padding: 8px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--ink-hair);
+    background: var(--paper);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--ink-faint);
+  }
+  .phone-composer .plus {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: color-mix(in oklch, var(--ink) 5%, var(--paper));
+    display: grid; place-items: center;
+    color: var(--ink-soft);
+  }
+  .phone-composer .plus svg { width: 12px; height: 12px; }
+  .phone-composer .send {
+    margin-left: auto;
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: var(--ink);
+    color: var(--cream);
+    display: grid; place-items: center;
+  }
+  .phone-composer .send svg { width: 11px; height: 11px; }
+
+  /* ---------- Mac window frame ---------- */
+  .mac {
+    border-radius: 14px;
+    overflow: hidden;
+    background: var(--graphite);
+    border: 1px solid oklch(40% 0.01 75 / 0.6);
+    box-shadow:
+      0 1px 2px oklch(15% 0.01 75 / 0.08),
+      0 60px 120px oklch(15% 0.01 75 / 0.22),
+      0 24px 50px oklch(15% 0.01 75 / 0.10);
+    display: flex;
+    flex-direction: column;
+  }
+  .mac-chrome {
+    height: 32px;
+    background: var(--graphite-2);
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    gap: 8px;
+    border-bottom: 1px solid var(--graphite-line);
+    flex-shrink: 0;
+  }
+  .mac-chrome .dot {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+  }
+  .mac-chrome .dot.r { background: #ff5f57; }
+  .mac-chrome .dot.y { background: #febc2e; }
+  .mac-chrome .dot.g { background: #28c840; }
+  .mac-chrome .title {
+    margin: 0 auto;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    color: oklch(70% 0.005 75);
+    padding-right: 56px;
+  }
+  .mac-body {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    min-height: 280px;
+    color: oklch(85% 0.008 75);
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+  }
+  @media (max-width: 720px) {
+    .mac-body { grid-template-columns: 1fr; }
+    .mac-tree { display: none; }
+  }
+  .mac-tree {
+    padding: 16px 14px;
+    border-right: 1px solid var(--graphite-line);
+    font-size: 12px;
+    line-height: 1.85;
+    color: oklch(70% 0.008 75);
+    background: oklch(13% 0.008 75);
+  }
+  .mac-tree .group { color: oklch(60% 0.006 75); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 6px; }
+  .mac-tree .ent { display: flex; align-items: center; gap: 6px; padding: 1px 4px; border-radius: 4px; }
+  .mac-tree .ent .car { width: 8px; color: oklch(50% 0.006 75); }
+  .mac-tree .ent.active { background: oklch(28% 0.013 35 / 0.5); color: oklch(95% 0.008 75); }
+  .mac-tree .ent.dirty::after {
+    content: "";
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--coral); margin-left: auto;
+  }
+  .mac-tree .ent .ico { width: 12px; height: 12px; color: oklch(60% 0.006 75); }
+  .mac-tree .level-1 { padding-left: 12px; }
+  .mac-tree .level-2 { padding-left: 22px; }
+
+  .mac-term {
+    padding: 14px 18px;
+    font-size: 12.5px;
+    line-height: 1.7;
+    background: var(--graphite);
+    overflow: hidden;
+  }
+  /* P3.4 real typewriter terminal */
+  .mac-term .ln {
+    display: flex; align-items: center; gap: 6px; min-height: 21px;
+    opacity: 0;
+    clip-path: inset(0 100% 0 0);
+    will-change: clip-path, opacity;
+  }
+  .mac-term.go .ln {
+    animation:
+      term-fade 1ms calc(var(--i, 0) * 320ms) forwards,
+      term-type calc(var(--chars, 12) * 30ms) steps(24, end) calc(var(--i, 0) * 320ms) forwards;
+  }
+  @keyframes term-fade { to { opacity: 1; } }
+  @keyframes term-type { to { clip-path: inset(0 0 0 0); } }
+  /* cursor on currently-typing line */
+  .mac-term.go .ln.active::after {
+    content: "▉";
+    color: var(--lime);
+    margin-left: 4px;
+    animation: blink 1s steps(2) infinite;
+  }
+  .mac-term .you { color: var(--lime); font-weight: 600; }
+  .mac-term .ai { color: oklch(80% 0.13 35); font-weight: 600; }
+  .mac-term .hint { color: oklch(55% 0.006 75); }
+  .mac-term .ok { color: var(--lime); }
+  .mac-term .err { color: oklch(70% 0.18 28); }
+  .mac-term .num { color: oklch(80% 0.1 200); }
+  .mac-term .str { color: oklch(80% 0.13 90); }
+  .mac-term .cur::after {
+    content: "▍";
+    color: var(--lime);
+    animation: blink 1.2s steps(2) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ---------- phone gallery ---------- */
+  .gallery {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: clamp(20px, 3vw, 36px);
+    align-items: end;
+    justify-items: center;
+  }
+  @media (max-width: 880px) {
+    .gallery { grid-template-columns: 1fr; gap: 36px; }
+  }
+  .gallery-card { display: flex; flex-direction: column; align-items: center; gap: 18px; max-width: 320px; }
+  .gallery-card .label {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .gallery-card .cap {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    text-align: center;
+    max-width: 22ch;
+  }
+  .iphone--mini { width: 100%; max-width: 240px; border-radius: 40px; padding: 3px; transform: rotate(-1.5deg); }
+  .iphone--mini .iphone-screen { border-radius: 37px; }
+  .iphone--mini .iphone-dynamic-island { width: 86px; height: 25px; top: 8px; }
+  .iphone--mini .iphone-statusbar { font-size: 11px; padding: 12px 22px 0; }
+  .iphone--mini .iphone-statusbar .icons svg { width: 14px; height: 9px; }
+  .iphone--mini .iphone-statusbar .icons svg:last-child { width: 20px; height: 10px; }
+  .iphone--mini .phone-app { padding: 30px 12px 10px; }
+  .gallery-card:nth-child(1) .iphone--mini { transform: rotate(-2.4deg); }
+  .gallery-card:nth-child(2) .iphone--mini { transform: rotate(0.6deg) translateY(-12px); }
+  .gallery-card:nth-child(3) .iphone--mini { transform: rotate(2deg); }
+
+  /* phone -- session list */
+  .panel-list { padding: 4px; display: flex; flex-direction: column; gap: 6px; }
+  .panel-title { display: flex; align-items: center; justify-content: space-between; padding: 4px 6px 8px; }
+  .panel-title .t { font-weight: 700; font-size: 17px; letter-spacing: -0.02em; }
+  .panel-title .ic { color: var(--ink-faint); }
+  .panel-tabs { display: flex; gap: 6px; padding: 4px 6px; }
+  .panel-tabs .tab {
+    flex: 1;
+    padding: 7px 0;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 10px;
+    color: var(--ink-soft);
+    background: color-mix(in oklch, var(--ink) 3%, transparent);
+  }
+  .panel-tabs .tab.active { background: var(--ink); color: var(--cream); }
+  .panel-tabs .tab .badge {
+    display: inline-block;
+    margin-left: 4px;
+    font-size: 9px;
+    padding: 1px 5px;
+    border-radius: 999px;
+    background: color-mix(in oklch, currentColor 12%, transparent);
+  }
+  .panel-item {
+    padding: 10px 12px;
+    border: 1px solid var(--ink-hair);
+    border-radius: 14px;
+    background: var(--paper);
+    display: flex; gap: 10px; align-items: center;
+  }
+  .panel-item .av {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, oklch(75% 0.15 35), oklch(60% 0.18 30));
+    display: grid; place-items: center;
+    color: white; font-size: 9px;
+  }
+  .panel-item .av svg { width: 11px; height: 11px; }
+  .panel-item .meta { flex: 1; min-width: 0; }
+  .panel-item .meta .nm { font-size: 12px; font-weight: 600; letter-spacing: -0.01em; }
+  .panel-item .meta .mt { font-size: 10px; color: var(--ink-faint); margin-top: 2px; }
+  .panel-item .chip {
+    font-size: 9px;
+    font-weight: 600;
+    padding: 3px 7px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .panel-item .chip.pending { background: color-mix(in oklch, var(--coral) 14%, var(--paper)); color: var(--coral-deep); }
+  .panel-item .chip.live { background: var(--lime-soft); color: oklch(35% 0.13 145); display: inline-flex; align-items: center; gap: 4px; }
+  .panel-item .chip.live::before { content:""; width:5px; height:5px; border-radius:50%; background: var(--lime); animation: pulse 2.4s var(--ease) infinite; }
+
+  /* phone -- file diff */
+  .panel-file { padding: 4px; display: flex; flex-direction: column; gap: 8px; font-size: 11px; }
+  .panel-file .bc { color: var(--ink-faint); font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 10px; padding: 0 6px; }
+  .panel-file .tree { padding: 8px 10px; border: 1px solid var(--ink-hair); border-radius: 12px; background: var(--paper); display: flex; flex-direction: column; gap: 3px; }
+  .panel-file .tree .e { display: flex; align-items: center; gap: 6px; font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 10.5px; color: var(--ink-soft); }
+  .panel-file .tree .e.dirty { color: var(--ink); font-weight: 500; }
+  .panel-file .tree .e .ic { width: 10px; color: var(--ink-faint); }
+  .panel-file .tree .e.dirty::after { content:""; width: 5px; height: 5px; border-radius: 50%; background: var(--coral); margin-left: auto; }
+  .panel-file .diff { padding: 8px 10px; border: 1px solid var(--ink-hair); border-radius: 12px; background: var(--paper); font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 10px; line-height: 1.6; }
+  .panel-file .diff .add { color: oklch(45% 0.13 145); background: color-mix(in oklch, var(--lime) 10%, transparent); padding: 0 4px; border-radius: 3px; }
+  .panel-file .diff .del { color: oklch(50% 0.16 28); background: color-mix(in oklch, var(--coral) 10%, transparent); padding: 0 4px; border-radius: 3px; text-decoration: line-through; text-decoration-color: oklch(50% 0.16 28 / 0.4); }
+  .panel-file .diff .ln { display: flex; gap: 4px; align-items: baseline; }
+  .panel-file .diff .n { color: var(--ink-faint); font-size: 9px; min-width: 12px; text-align: right; }
+
+  /* phone -- terminal */
+  .panel-term { padding: 4px; display: flex; flex-direction: column; gap: 6px; }
+  .panel-term .hd { display: flex; align-items: center; justify-content: space-between; padding: 0 6px 4px; }
+  .panel-term .hd .t { font-weight: 700; font-size: 15px; letter-spacing: -0.02em; }
+  .panel-term .hd .live-dot { width: 6px; height: 6px; }
+  .panel-term .term {
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: var(--graphite);
+    color: oklch(85% 0.008 75);
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 10px;
+    line-height: 1.7;
+    min-height: 200px;
+  }
+  .panel-term .term .l { display: flex; gap: 4px; }
+  .panel-term .term .ok { color: var(--lime); }
+  .panel-term .term .ai { color: oklch(80% 0.13 35); font-weight: 600; }
+  .panel-term .term .num { color: oklch(80% 0.1 200); }
+  .panel-term .term .hint { color: oklch(55% 0.006 75); }
+  .panel-term .term .cur::after { content: "▉"; color: var(--lime); animation: blink 1.2s steps(2) infinite; }
+
+  /* ---------- big mac fold (drenched ink) ---------- */
+  .machine {
+    padding: clamp(72px, 12vh, 128px) 0 clamp(72px, 12vh, 128px);
+    position: relative;
+    background: var(--graphite);
+    color: oklch(96% 0.008 75);
+    margin: 0;
+    overflow: hidden;
+    isolation: isolate;
+  }
+  .machine::before {
+    content: "";
+    position: absolute;
+    inset: -10% -10% auto -10%;
+    height: 80%;
+    background:
+      radial-gradient(ellipse 60% 50% at 80% 30%, color-mix(in oklch, var(--coral) 28%, transparent) 0%, transparent 60%),
+      radial-gradient(ellipse 50% 40% at 10% 80%, color-mix(in oklch, var(--lime) 18%, transparent) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: -1;
+    opacity: 0.5;
+  }
+  /* P3.1 inverted asymmetry: mac on left, breaking out of shell */
+  .machine-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+    gap: clamp(40px, 6vw, 80px);
+    align-items: center;
+  }
+  .machine-mac-wrap { order: 1; margin-left: clamp(-100px, -6vw, -32px); }
+  .machine-copy { order: 2; }
+  @media (max-width: 980px) {
+    .machine-grid { grid-template-columns: 1fr; }
+    .machine-mac-wrap, .machine-copy { order: initial; margin-left: 0; }
+  }
+  .machine .kicker { color: oklch(82% 0.13 33); }
+  .machine-copy h2 {
+    font-size: clamp(36px, 5.4vw, 76px);
+    line-height: 1.0;
+    letter-spacing: -0.045em;
+    font-weight: 600;
+    margin: 18px 0 0;
+    text-wrap: balance;
+    color: oklch(98% 0.008 75);
+  }
+  .machine-copy .lede {
+    margin: 22px 0 0;
+    color: oklch(72% 0.008 75);
+    font-size: clamp(16px, 1.4vw, 19px);
+    line-height: 1.6;
+    max-width: 46ch;
+  }
+  .machine-tally {
+    margin-top: 44px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    padding: 28px 0 0;
+    border-top: 1px solid oklch(30% 0.008 75);
+  }
+  .machine-tally .n {
+    font-size: clamp(56px, 8vw, 120px);
+    font-weight: 600;
+    letter-spacing: -0.06em;
+    color: oklch(98% 0.008 75);
+    line-height: 0.92;
+    font-feature-settings: "tnum";
+  }
+  .machine-tally .l {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: oklch(60% 0.008 75);
+    margin-top: 14px;
+  }
+  .machine-mac-wrap { transform: rotate(0.6deg); }
+  .machine .mac {
+    border-color: oklch(32% 0.01 75);
+    box-shadow:
+      0 1px 2px oklch(0% 0 0 / 0.4),
+      0 50px 100px oklch(0% 0 0 / 0.4),
+      0 24px 50px oklch(0% 0 0 / 0.25);
+  }
+
+  /* ---------- section primitives ---------- */
+  section { padding: clamp(72px, 13vh, 144px) 0; position: relative; }
+  .kicker {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 12px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--coral-deep);
+    font-weight: 500;
+  }
+  .section-head {
+    display: grid;
+    grid-template-columns: minmax(160px, 200px) 1fr;
+    gap: clamp(20px, 5vw, 60px);
+    align-items: baseline;
+    margin-bottom: clamp(40px, 6.5vh, 64px);
+  }
+  @media (max-width: 720px) {
+    .section-head { grid-template-columns: 1fr; gap: 16px; }
+  }
+  .section-head h2 {
+    font-size: clamp(34px, 5vw, 60px);
+    line-height: 1.03;
+    letter-spacing: -0.04em;
+    font-weight: 600;
+    margin: 0;
+    max-width: 22ch;
+    text-wrap: balance;
+  }
+  .section-head .lede {
+    color: var(--ink-soft);
+    font-size: clamp(15px, 1.4vw, 17px);
+    line-height: 1.55;
+    margin: 14px 0 0;
+    max-width: 52ch;
+  }
+
+  /* ---------- principles (why) ---------- */
+  .principles {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--ink-hair);
+    border: 1px solid var(--ink-hair);
+    border-radius: 28px;
+    overflow: hidden;
+  }
+  @media (max-width: 880px) { .principles { grid-template-columns: 1fr; } }
+  .principle {
+    background: var(--paper);
+    padding: clamp(28px, 4vw, 44px);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-height: 260px;
+    transition: background 260ms var(--ease);
+  }
+  .principle:hover { background: color-mix(in oklch, var(--paper) 92%, var(--cream-glow)); }
+  .principle .n {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    color: var(--ink-faint);
+    letter-spacing: 0.08em;
+  }
+  .principle h3 {
+    font-size: clamp(20px, 1.8vw, 24px);
+    line-height: 1.2;
+    letter-spacing: -0.025em;
+    font-weight: 600;
+    margin: 6px 0 0;
+    text-wrap: balance;
+  }
+  .principle p {
+    color: var(--ink-soft);
+    line-height: 1.6;
+    font-size: 14.5px;
+    margin: 0;
+  }
+  .principle .sigil {
+    margin-top: auto;
+    color: var(--ink-line);
+    transition: color 260ms var(--ease);
+  }
+  .principle:hover .sigil { color: var(--coral); }
+
+  /* ---------- flow ---------- */
+  .flow-section { background: linear-gradient(180deg, transparent, color-mix(in oklch, var(--cream-deep) 30%, transparent) 60%, transparent); }
+  .flow {
+    border-top: 1px solid var(--ink-hair);
+    border-bottom: 1px solid var(--ink-hair);
+  }
+  .flow .row {
+    background: transparent;
+    transition: background 260ms var(--ease);
+    border-bottom: 1px solid var(--ink-hair);
+  }
+  .flow .row:last-child { border-bottom: none; }
+  .flow .row:hover { background: color-mix(in oklch, var(--paper) 70%, transparent); }
+  .step {
+    display: grid;
+    grid-template-columns: 80px minmax(0, 1fr) minmax(220px, 32%);
+    gap: clamp(20px, 4vw, 56px);
+    align-items: center;
+    padding: clamp(28px, 4.5vw, 48px) 0;
+  }
+  @media (max-width: 880px) {
+    .step { grid-template-columns: 1fr; gap: 16px; padding: 28px 0; }
+  }
+  .step .index {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 13px;
+    letter-spacing: 0.1em;
+    color: var(--ink-faint);
+    font-weight: 500;
+  }
+  .step h3 {
+    font-size: clamp(22px, 2.2vw, 28px);
+    line-height: 1.2;
+    letter-spacing: -0.03em;
+    font-weight: 600;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .step .detail {
+    color: var(--ink-soft);
+    font-size: 14.5px;
+    line-height: 1.6;
+    margin: 8px 0 0;
+    max-width: 50ch;
+  }
+  .step .visual {
+    color: var(--ink-faint);
+  }
+  /* small QR mock */
+  .qr-mock {
+    width: 100%; max-width: 140px;
+    aspect-ratio: 1;
+    border-radius: 16px;
+    border: 1px solid var(--ink-hair);
+    background: var(--paper);
+    padding: 12px;
+    position: relative;
+    margin-left: auto;
+  }
+  .qr-mock svg { width: 100%; height: 100%; }
+  /* P3.3 handshake visual (two devices connected) */
+  .handshake {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    max-width: 260px;
+    margin-left: auto;
+    padding: 16px 18px;
+    background: var(--paper);
+    border: 1px solid var(--ink-hair);
+    border-radius: 16px;
+  }
+  .handshake .dev {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    color: var(--ink);
+  }
+  .handshake .dev svg { width: 30px; height: 30px; }
+  .handshake .dev .label {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 9.5px;
+    letter-spacing: 0.08em;
+    color: var(--ink-faint);
+    text-transform: uppercase;
+  }
+  .handshake .bridge {
+    flex: 1;
+    height: 30px;
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+  .handshake .bridge::before,
+  .handshake .bridge::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0;
+    top: 50%;
+    height: 1px;
+    transform: translateY(-50%);
+  }
+  .handshake .bridge::before { background: var(--ink-hair); }
+  .handshake .bridge::after {
+    background: var(--coral);
+    stroke-dasharray: 4 6;
+    background: linear-gradient(90deg, var(--coral) 50%, transparent 0);
+    background-size: 10px 1px;
+    background-repeat: repeat-x;
+    animation: dashflow 1.6s linear infinite;
+  }
+  @keyframes dashflow { to { background-position-x: -20px; } }
+  .handshake .lock {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--coral);
+    color: white;
+    display: grid; place-items: center;
+    position: relative;
+    z-index: 1;
+    box-shadow: 0 0 0 4px var(--paper);
+  }
+  .handshake .lock svg { width: 12px; height: 12px; }
+
+  /* P3.3 ai-running visual (live tool calls) */
+  .ai-running {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-width: 260px;
+    margin-left: auto;
+    padding: 14px 14px;
+    background: var(--paper);
+    border: 1px solid var(--ink-hair);
+    border-radius: 14px;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+  }
+  .ai-running .ln {
+    display: flex; align-items: center; gap: 8px;
+    color: var(--ink-soft);
+  }
+  .ai-running .ln .t {
+    color: var(--ink-faint);
+    font-size: 10px;
+    min-width: 36px;
+  }
+  .ai-running .ln .what { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ai-running .ln .ok { color: oklch(50% 0.13 145); font-size: 12px; }
+  .ai-running .ln.live { color: var(--ink); }
+  .ai-running .ln.live .what::after {
+    content: "";
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--lime);
+    margin-left: 6px;
+    animation: pulse 2.4s var(--ease) infinite;
+    vertical-align: middle;
+  }
+  /* return scene */
+  .return-card {
+    padding: 14px 16px;
+    border-radius: 14px;
+    background: var(--paper);
+    border: 1px solid var(--ink-hair);
+    max-width: 240px;
+    margin-left: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .return-card .head { font-size: 12px; color: var(--ink-faint); font-family: "JetBrains Mono", ui-monospace, monospace; letter-spacing: 0.08em; text-transform: uppercase; }
+  .return-card .what { font-size: 14px; font-weight: 600; color: var(--ink); line-height: 1.35; }
+  .return-card .stat { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--lime); }
+  .return-card .stat .live-dot { width: 6px; height: 6px; }
+
+  /* ---------- hero chat reveal ---------- */
+  .phone-stage.go .phone-chat > * {
+    animation: bubbleIn 520ms var(--ease-out) both;
+  }
+  .phone-stage.go .phone-chat > *:nth-child(1) { animation-delay: 200ms; }
+  .phone-stage.go .phone-chat > *:nth-child(2) { animation-delay: 520ms; }
+  .phone-stage.go .phone-chat > *:nth-child(3) { animation-delay: 880ms; }
+  .phone-stage.go .phone-chat > *:nth-child(4) { animation-delay: 1280ms; }
+  .phone-stage.go .phone-chat > *:nth-child(5) { animation-delay: 1620ms; }
+  .phone-chat > * { opacity: 0; transform: translateY(6px); }
+  @keyframes bubbleIn { to { opacity: 1; transform: none; } }
+
+  /* ---------- agents ---------- */
+  .agents-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--ink-hair);
+    border: 1px solid var(--ink-hair);
+    border-radius: 28px;
+    overflow: hidden;
+  }
+  @media (max-width: 980px) { .agents-grid { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 680px) { .agents-grid { grid-template-columns: repeat(2, 1fr); } }
+  .agent {
+    background: var(--paper);
+    padding: 24px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    transition: background 240ms var(--ease);
+    position: relative;
+  }
+  .agent:hover { background: color-mix(in oklch, var(--paper) 88%, var(--cream-glow)); }
+  .agent .quote-wrap {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 320ms var(--ease);
+    margin-top: -6px;
+  }
+  .agent:hover .quote-wrap { grid-template-rows: 1fr; }
+  .agent .quote {
+    overflow: hidden;
+    opacity: 0;
+    transition: opacity 220ms var(--ease) 80ms;
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: var(--ink-soft);
+  }
+  .agent:hover .quote { opacity: 1; }
+  .agent .icon {
+    width: 38px; height: 38px;
+    border-radius: 11px;
+    background: color-mix(in oklch, var(--ink) 4%, var(--paper));
+    display: grid; place-items: center;
+    overflow: hidden;
+  }
+  .agent .icon img { width: 26px; height: 26px; object-fit: contain; }
+  .agent .icon svg { width: 22px; height: 22px; }
+  .agent .name { font-weight: 600; font-size: 15px; letter-spacing: -0.015em; }
+  .agent .tag {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    color: var(--ink-faint);
+    text-transform: uppercase;
+    margin-top: auto;
+  }
+  .agent.experimental .tag { color: var(--coral-deep); }
+  .agent-more { background: color-mix(in oklch, var(--cream-glow) 50%, var(--paper)); }
+  .agent-more:hover { background: color-mix(in oklch, var(--coral-soft) 50%, var(--paper)); }
+  .agent-more .icon-ghost { background: transparent; border: 1px dashed var(--ink-line); color: var(--ink-soft); }
+  .agent-more:hover .icon-ghost { color: var(--coral-deep); border-color: var(--coral); }
+
+  /* ---------- surfaces ---------- */
+  .surfaces {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+  }
+  @media (max-width: 980px) { .surfaces { grid-template-columns: 1fr; } }
+  .surface {
+    border: 1px solid var(--ink-hair);
+    border-radius: 28px;
+    padding: 28px;
+    background: var(--paper);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-height: 340px;
+    transition: transform 260ms var(--ease), box-shadow 260ms var(--ease), border-color 260ms var(--ease);
+    overflow: hidden;
+    position: relative;
+  }
+  .surface:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-card);
+    border-color: var(--ink-line);
+  }
+  .surface .label {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .surface h3 {
+    font-size: 22px;
+    line-height: 1.2;
+    letter-spacing: -0.025em;
+    margin: 0;
+    font-weight: 600;
+  }
+  .surface p {
+    color: var(--ink-soft);
+    font-size: 14.5px;
+    line-height: 1.55;
+    margin: 0;
+  }
+  .surface .surface-vis {
+    margin-top: auto;
+    height: 120px;
+    border-radius: 14px;
+    background: color-mix(in oklch, var(--cream-deep) 40%, var(--paper));
+    border: 1px solid var(--ink-hair);
+    overflow: hidden;
+    display: grid;
+    place-items: center;
+    color: var(--ink-soft);
+    position: relative;
+  }
+  .surface-vis .browser-bar {
+    position: absolute; top: 0; left: 0; right: 0;
+    height: 22px;
+    background: oklch(95% 0.008 75);
+    border-bottom: 1px solid var(--ink-hair);
+    display: flex; align-items: center; padding: 0 8px; gap: 4px;
+  }
+  .surface-vis .browser-bar .d { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-line); }
+  .surface-vis .browser-bar .url {
+    margin-left: 8px;
+    height: 14px; flex: 1;
+    border-radius: 999px;
+    background: var(--paper);
+    border: 1px solid var(--ink-hair);
+    display: flex; align-items: center;
+    padding: 0 8px;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 9px;
+    color: var(--ink-soft);
+  }
+  .surface-vis .browser-content {
+    margin-top: 22px;
+    padding: 12px;
+    display: flex; gap: 8px;
+    align-items: flex-end;
+    height: calc(100% - 22px);
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .surface-vis .b-bar {
+    background: var(--ink-line);
+    border-radius: 3px;
+    flex: 1;
+  }
+  .surface-vis .pwa-tile {
+    width: 84px;
+    border-radius: 14px;
+    background: var(--ink);
+    aspect-ratio: 1;
+    box-shadow: 0 10px 30px oklch(15% 0.01 75 / 0.16);
+    display: grid; place-items: center;
+    color: var(--cream);
+  }
+  .surface-vis .pwa-tile svg { width: 28px; height: 28px; }
+  .surface-vis .pwa-label {
+    position: absolute;
+    bottom: 14px;
+    color: var(--ink);
+    font-size: 10px;
+    font-weight: 500;
+  }
+  .surface-vis .desktop-mini {
+    width: 90%; height: 88%;
+    border-radius: 8px;
+    background: var(--graphite);
+    border: 1px solid var(--graphite-line);
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .surface-vis .desktop-mini .ch { height: 14px; background: var(--graphite-2); display: flex; gap: 3px; align-items: center; padding: 0 5px; }
+  .surface-vis .desktop-mini .ch .d { width: 5px; height: 5px; border-radius: 50%; }
+  .surface-vis .desktop-mini .ch .d.r { background: #ff5f57; }
+  .surface-vis .desktop-mini .ch .d.y { background: #febc2e; }
+  .surface-vis .desktop-mini .ch .d.g { background: #28c840; }
+  .surface-vis .desktop-mini .bd {
+    flex: 1; padding: 8px;
+    display: flex; gap: 6px;
+  }
+  .surface-vis .desktop-mini .side {
+    width: 24px;
+    background: oklch(13% 0.008 75);
+    border-radius: 4px;
+  }
+  .surface-vis .desktop-mini .main {
+    flex: 1;
+    background: oklch(13% 0.008 75);
+    border-radius: 4px;
+  }
+
+  /* ---------- comparison ---------- */
+  .compare-grid {
+    display: grid;
+    grid-template-columns: 220px repeat(3, minmax(0, 1fr));
+    border: 1px solid var(--ink-hair);
+    border-radius: 24px;
+    overflow: hidden;
+    background: var(--paper);
+  }
+  @media (max-width: 880px) {
+    .compare-grid { grid-template-columns: 130px repeat(3, minmax(0, 1fr)); }
+    .compare-grid .row { font-size: 12px; }
+  }
+  .compare-grid .h {
+    padding: 22px 18px 14px;
+    border-bottom: 1px solid var(--ink-hair);
+    font-weight: 600;
+    font-size: 14px;
+    letter-spacing: -0.01em;
+  }
+  .compare-grid .h.viby {
+    color: var(--ink);
+    background: color-mix(in oklch, var(--coral-soft) 50%, var(--paper));
+    position: relative;
+  }
+  .compare-grid .h.other { color: var(--ink-soft); }
+  .compare-grid .h .price {
+    display: block;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    color: var(--ink-faint);
+    margin-top: 4px;
+  }
+  .compare-grid .h.viby .price { color: var(--coral-deep); }
+  .compare-grid .row {
+    padding: 14px 18px;
+    border-top: 1px solid var(--ink-hair);
+    font-size: 13.5px;
+    color: var(--ink-soft);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .compare-grid .row.label {
+    color: var(--ink);
+    font-weight: 500;
+    background: color-mix(in oklch, var(--cream-deep) 30%, var(--paper));
+  }
+  .compare-grid .row.viby { background: color-mix(in oklch, var(--coral-soft) 28%, var(--paper)); color: var(--ink); font-weight: 500; }
+  .compare-grid .row .y { color: var(--lime); }
+  .compare-grid .row .n { color: oklch(55% 0.16 28); }
+  .compare-foot {
+    margin-top: 18px;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    color: var(--ink-faint);
+    text-align: center;
+  }
+
+  /* ---------- FAQ ---------- */
+  .faq {
+    display: grid;
+    gap: 1px;
+    background: var(--ink-hair);
+    border: 1px solid var(--ink-hair);
+    border-radius: 24px;
+    overflow: hidden;
+  }
+  .faq details {
+    background: var(--paper);
+    transition: background 220ms var(--ease);
+  }
+  .faq details[open] { background: color-mix(in oklch, var(--cream-glow) 30%, var(--paper)); }
+  .faq summary {
+    list-style: none;
+    padding: 22px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: clamp(15px, 1.4vw, 18px);
+    letter-spacing: -0.015em;
+    color: var(--ink);
+  }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary .toggle {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: color-mix(in oklch, var(--ink) 5%, transparent);
+    display: grid; place-items: center;
+    flex-shrink: 0;
+    transition: transform 280ms var(--ease), background 220ms var(--ease);
+  }
+  .faq details[open] summary .toggle { transform: rotate(45deg); background: var(--coral); color: var(--cream); }
+  .faq summary .toggle svg { width: 12px; height: 12px; }
+  .faq .answer {
+    padding: 0 28px 22px;
+    color: var(--ink-soft);
+    font-size: 14.5px;
+    line-height: 1.65;
+    max-width: 70ch;
+  }
+  .faq .answer code {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 12.5px;
+    padding: 1px 6px;
+    background: color-mix(in oklch, var(--ink) 6%, transparent);
+    border-radius: 4px;
+  }
+
+  /* ---------- closing CTA (oversize single-word hero) ---------- */
+  .closing {
+    text-align: center;
+    padding: clamp(96px, 16vh, 200px) 0 clamp(72px, 12vh, 128px);
+    position: relative;
+    overflow: hidden;
+  }
+  .closing::before {
+    content: "";
+    position: absolute;
+    inset: 10% 5% auto 5%;
+    height: 80%;
+    background: radial-gradient(ellipse at center, var(--coral-soft) 0%, transparent 65%);
+    filter: blur(80px);
+    pointer-events: none;
+    z-index: -1;
+    opacity: 0.9;
+  }
+  .closing .mega {
+    font-size: clamp(140px, 28vw, 360px);
+    line-height: 0.82;
+    letter-spacing: -0.08em;
+    font-weight: 700;
+    margin: 0;
+    color: var(--ink);
+    position: relative;
+    display: inline-block;
+  }
+  .closing .mega .accent {
+    color: var(--coral);
+    position: relative;
+  }
+  .closing .mega .accent::after {
+    content: "";
+    position: absolute;
+    left: 6%; right: 6%;
+    bottom: 0.04em;
+    height: 0.04em;
+    background: var(--coral);
+    opacity: 0.32;
+    border-radius: 999px;
+  }
+  .closing .tagline {
+    margin: 32px auto 0;
+    max-width: 32ch;
+    color: var(--ink-soft);
+    font-size: clamp(18px, 1.8vw, 24px);
+    line-height: 1.4;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+  }
+  .closing .micro {
+    margin: 14px auto 0;
+    max-width: 40ch;
+    color: var(--ink-faint);
+    font-size: clamp(13px, 1vw, 14px);
+    line-height: 1.5;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    letter-spacing: 0.04em;
+  }
+  .closing .hero-actions { justify-content: center; margin-top: 40px; }
+
+  /* ---------- hero chat typing indicator ---------- */
+  .typing-dots { display: inline-flex; gap: 4px; align-items: center; padding: 4px 2px; }
+  .typing-dots span {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--ink-soft);
+    animation: dotpulse 1.4s var(--ease) infinite;
+  }
+  .typing-dots span:nth-child(2) { animation-delay: 0.16s; }
+  .typing-dots span:nth-child(3) { animation-delay: 0.32s; }
+  @keyframes dotpulse {
+    0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+    30% { opacity: 1; transform: translateY(-2px); }
+  }
+
+  /* ---------- agents (hierarchy: core hero row + experimental strip) ---------- */
+  .agents-core {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  @media (max-width: 880px) { .agents-core { grid-template-columns: 1fr; } }
+  .agent-core {
+    background: var(--paper);
+    border: 1px solid var(--ink-hair);
+    border-radius: 24px;
+    padding: 32px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    min-height: 220px;
+    transition: transform 280ms var(--ease), box-shadow 280ms var(--ease), border-color 280ms var(--ease);
+  }
+  .agent-core:hover {
+    transform: translateY(-3px);
+    border-color: var(--ink-line);
+    box-shadow: var(--shadow-card);
+  }
+  .agent-core .top { display: flex; align-items: center; gap: 16px; }
+  .agent-core .icon {
+    width: 56px; height: 56px;
+    border-radius: 16px;
+    background: color-mix(in oklch, var(--ink) 4%, var(--paper));
+    display: grid; place-items: center;
+    overflow: hidden;
+  }
+  .agent-core .icon img { width: 38px; height: 38px; object-fit: contain; }
+  .agent-core .icon svg { width: 30px; height: 30px; }
+  .agent-core .name { font-size: 22px; font-weight: 600; letter-spacing: -0.025em; }
+  .agent-core .desc { color: var(--ink-soft); font-size: 14.5px; line-height: 1.55; margin: 0; }
+  .agent-core .tag {
+    margin-top: auto;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    color: var(--lime);
+    text-transform: uppercase;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .agent-core .tag::before {
+    content: "";
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--lime);
+  }
+  .agents-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .agent-mini {
+    flex: 1 1 calc(20% - 12px);
+    min-width: 150px;
+    background: var(--paper);
+    border: 1px solid var(--ink-hair);
+    border-radius: 14px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: background 220ms var(--ease), border-color 220ms var(--ease);
+  }
+  .agent-mini:hover { background: color-mix(in oklch, var(--paper) 92%, var(--cream-glow)); border-color: var(--ink-line); }
+  .agent-mini .icon {
+    width: 28px; height: 28px; flex-shrink: 0;
+    border-radius: 8px;
+    background: color-mix(in oklch, var(--ink) 4%, var(--paper));
+    display: grid; place-items: center;
+    overflow: hidden;
+  }
+  .agent-mini .icon img { width: 18px; height: 18px; object-fit: contain; }
+  .agent-mini .icon svg { width: 14px; height: 14px; }
+  .agent-mini .nm { font-size: 13px; font-weight: 500; letter-spacing: -0.015em; }
+  .agent-mini .tg {
+    margin-left: auto;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    color: var(--ink-faint);
+    text-transform: uppercase;
+  }
+  .agent-mini.more { background: color-mix(in oklch, var(--cream-glow) 30%, var(--paper)); }
+  .agent-mini.more:hover { background: color-mix(in oklch, var(--coral-soft) 30%, var(--paper)); }
+  .agent-mini.more .icon { background: transparent; border: 1px dashed var(--ink-line); color: var(--ink-soft); }
+  .agent-mini.more:hover .icon { border-color: var(--coral); color: var(--coral-deep); }
+
+  /* ---------- comparison (declaration form) ---------- */
+  .claims {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1px;
+    background: var(--ink-hair);
+    border-top: 1px solid var(--ink-hair);
+    border-bottom: 1px solid var(--ink-hair);
+  }
+  .claim {
+    background: var(--cream);
+    padding: clamp(28px, 4.5vw, 56px) clamp(20px, 3vw, 40px);
+    display: grid;
+    grid-template-columns: 60px minmax(0, 1.4fr) minmax(0, 1fr);
+    align-items: baseline;
+    gap: clamp(20px, 4vw, 56px);
+    transition: background 260ms var(--ease);
+  }
+  .claim:hover { background: var(--paper); }
+  @media (max-width: 880px) {
+    .claim { grid-template-columns: 1fr; gap: 8px; padding: 24px 20px; }
+  }
+  .claim .idx {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    color: var(--ink-faint);
+    align-self: start;
+    margin-top: 8px;
+  }
+  .claim .v {
+    font-size: clamp(22px, 2.4vw, 32px);
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    line-height: 1.2;
+    color: var(--ink);
+    text-wrap: balance;
+  }
+  .claim .v em {
+    font-style: normal;
+    color: var(--coral);
+    position: relative;
+  }
+  .claim .v em::after {
+    content: "";
+    position: absolute;
+    left: 4%; right: 4%; bottom: -0.04em;
+    height: 0.06em;
+    background: var(--coral);
+    opacity: 0.32;
+    border-radius: 999px;
+  }
+  .claim .alt {
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .claim .alt .other {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    color: var(--ink-faint);
+    text-transform: uppercase;
+  }
+
+  /* ---------- footer ---------- */
+  footer {
+    border-top: 1px solid var(--ink-hair);
+    padding: 40px 0 56px;
+    margin-top: 40px;
+    color: var(--ink-soft);
+  }
+  footer .row {
+    display: flex; justify-content: space-between;
+    align-items: center; flex-wrap: wrap; gap: 16px;
+  }
+  footer .meta {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px; letter-spacing: 0.1em;
+    color: var(--ink-faint);
+  }
+  footer a:hover { color: var(--ink); }
+  .foot-links { display: flex; gap: 22px; font-size: 14px; }
+
+  /* ---------- enter motion ---------- */
+  .rise {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 760ms var(--ease-out), transform 760ms var(--ease-out);
+  }
+  .rise.show { opacity: 1; transform: none; }
+  .rise:nth-child(1) { transition-delay: 0ms; }
+  .rise:nth-child(2) { transition-delay: 60ms; }
+  .rise:nth-child(3) { transition-delay: 120ms; }
+  .rise:nth-child(4) { transition-delay: 180ms; }
+  .rise:nth-child(5) { transition-delay: 240ms; }
+  .rise:nth-child(6) { transition-delay: 300ms; }
+  .rise:nth-child(7) { transition-delay: 360ms; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+    .rise { opacity: 1; transform: none; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="top" id="nav">
+  <div class="shell row">
+    <a href="/" class="brand" aria-label="Viby">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 2 6 10l4.5-8"/></svg>
+      </span>
+      <span>Viby</span>
+    </a>
+    <div class="nav-links">
+      <a href="#why">为什么</a>
+      <a href="#how">怎么用</a>
+      <a href="#compare">对比</a>
+      <a href="https://github.com/Suge8/Viby" rel="noopener noreferrer">GitHub</a>
+      <button type="button" class="theme-toggle" id="theme-toggle" aria-label="切换亮色 / 暗色">
+        <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+        <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/></svg>
+      </button>
+      <a href="https://github.com/Suge8/Viby#快速开始" class="nav-cta" rel="noopener noreferrer">立即开始</a>
+    </div>
+  </div>
+</nav>
+
+<main>
+
+<section class="hero">
+  <div class="shell">
+    <div class="hero-grid">
+      <div>
+        <span class="eyebrow rise"><span class="live-dot"></span>本地 AI · 远程操控</span>
+        <h1 class="rise"><span class="line">你的 AI 住在你的<span class="accent">电脑</span>里。</span><span class="line">出门,它继续干活。</span></h1>
+        <p class="lede rise">他在你 Mac 上写代码。你在公交上看进度、改要求、按放行。Claude Code、Codex、Pi 都可以。</p>
+        <div class="hero-actions rise">
+          <a href="https://github.com/Suge8/Viby#快速开始" class="btn btn-primary" rel="noopener noreferrer">
+            立即开始
+            <svg class="arrow" width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </a>
+          <a href="https://github.com/Suge8/Viby" class="btn btn-ghost" rel="noopener noreferrer">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38v-1.34c-2.22.48-2.69-1.07-2.69-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.23 1.88.88 2.34.67.07-.52.28-.88.51-1.08-1.77-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.83-2.15-.08-.2-.36-1.02.08-2.13 0 0 .67-.21 2.2.82a7.65 7.65 0 0 1 4 0c1.53-1.03 2.2-.82 2.2-.82.44 1.11.16 1.93.08 2.13.52.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.74.54 1.5v2.22c0 .21.15.46.55.38A8 8 0 0 0 8 0Z"/></svg>
+            阅读源码
+          </a>
+        </div>
+        <div class="hero-trust rise">
+          <span>免费</span><span class="sep"></span>
+          <span>开源</span><span class="sep"></span>
+          <span>数据不离开你的设备</span>
+        </div>
+      </div>
+
+      <div class="phone-stage rise" aria-hidden="true">
+        <div class="iphone">
+          <div class="iphone-screen">
+            <div class="iphone-dynamic-island"></div>
+            <div class="iphone-statusbar">
+              <span>22:14</span>
+              <span class="icons">
+                <svg viewBox="0 0 17 11" fill="currentColor" aria-hidden="true"><rect x="0" y="7" width="3" height="4" rx="0.5"/><rect x="4" y="5" width="3" height="6" rx="0.5"/><rect x="8" y="3" width="3" height="8" rx="0.5"/><rect x="12" y="1" width="3" height="10" rx="0.5"/></svg>
+                <svg viewBox="0 0 14 11" fill="currentColor" aria-hidden="true"><path d="M7 2.5c1.9 0 3.6.7 4.9 1.9l1.4-1.5C11.7 1.4 9.5.5 7 .5S2.3 1.4.7 2.9l1.4 1.5C3.4 3.2 5.1 2.5 7 2.5Zm0 3c1.1 0 2.1.4 2.9 1.1l1.4-1.5C10.2 4 8.7 3.5 7 3.5s-3.2.5-4.3 1.6l1.4 1.5C4.9 5.9 5.9 5.5 7 5.5ZM7 9.5l2.3-2.3C8.6 6.7 7.8 6.5 7 6.5s-1.6.2-2.3.7L7 9.5Z"/></svg>
+                <svg viewBox="0 0 26 12" fill="none" aria-hidden="true">
+                  <rect x="0.5" y="0.5" width="22" height="11" rx="2.5" stroke="currentColor" opacity="0.5"/>
+                  <rect x="2" y="2" width="17" height="8" rx="1.2" fill="currentColor"/>
+                  <rect x="23.5" y="3.5" width="2" height="5" rx="0.8" fill="currentColor" opacity="0.5"/>
+                </svg>
+              </span>
+            </div>
+
+            <div class="phone-app">
+              <div class="phone-app-header">
+                <div class="avatar">
+                  <svg width="14" height="14" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 2 6 10l4.5-8"/></svg>
+                </div>
+                <div class="session">
+                  <span class="name">写一个登录页</span>
+                  <span class="meta"><span class="live-dot"></span>你的 Mac · 进行中</span>
+                </div>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ink-faint)"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+              </div>
+
+              <div class="phone-chat">
+                <div class="msg user">密码框加个显示/隐藏切换</div>
+                <div class="msg ai">看一下 LoginForm 现状。</div>
+                <div class="msg tool">
+                  <div class="tool-card">
+                    <span class="ico">
+                      <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 3h8v6H2z"/><path d="M2 5h8"/></svg>
+                    </span>
+                    <span class="label">读取 src/auth/LoginForm.tsx</span>
+                    <span class="stat">✓ 完成</span>
+                  </div>
+                </div>
+                <div class="msg ai">加好了，eye 图标切换。要跑测试吗？</div>
+                <div class="msg ai typing-bubble">
+                  <span class="typing-dots"><span></span><span></span><span></span></span>
+                </div>
+                <div class="approval">
+                  <div class="head">
+                    <span class="badge">待审批</span>
+                    <span>运行命令</span>
+                  </div>
+                  <div class="what">bun&nbsp;test&nbsp;LoginForm.test.tsx</div>
+                  <div class="actions">
+                    <span class="a allow">放行</span>
+                    <span class="a deny">拦下</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="phone-composer">
+                <span class="plus">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                </span>
+                <span>输入消息</span>
+                <span class="send">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19V5M5 12l7-7 7 7"/></svg>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="machine">
+  <div class="shell">
+    <div class="machine-grid">
+      <div class="machine-copy">
+        <span class="kicker rise">同一时刻</span>
+        <h2 class="rise">你看手机,<br/>电脑没闲着。</h2>
+        <p class="lede rise">用你的 CPU、你的磁盘、你的网络。不排队、不计 token。</p>
+        <div class="machine-tally rise">
+          <div>
+            <div class="n">0</div>
+            <div class="l">数据上云</div>
+          </div>
+          <div>
+            <div class="n">∞</div>
+            <div class="l">不限 token</div>
+          </div>
+          <div>
+            <div class="n">100%</div>
+            <div class="l">在你控制下</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="machine-mac-wrap rise" aria-hidden="true">
+        <div class="mac">
+          <div class="mac-chrome">
+            <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+            <span class="title">~/projects/storefront · 你的 Mac</span>
+          </div>
+          <div class="mac-body">
+            <div class="mac-tree">
+              <div class="group">storefront</div>
+              <div class="ent"><span class="car">▾</span>src/</div>
+              <div class="ent level-1"><span class="car">▾</span>auth/</div>
+              <div class="ent level-2 active dirty">LoginForm.tsx</div>
+              <div class="ent level-2">LoginForm.test.tsx</div>
+              <div class="ent level-2">useAuth.ts</div>
+              <div class="ent level-1"><span class="car">▸</span>api/</div>
+              <div class="ent level-1"><span class="car">▸</span>ui/</div>
+              <div class="ent">package.json</div>
+              <div class="ent">README.md</div>
+            </div>
+            <div class="mac-term">
+              <div class="ln"><span class="ai">claude</span><span class="hint">~/projects/storefront</span></div>
+              <div class="ln"><span class="you">$</span> <span>tsc --watch &amp; bun test</span></div>
+              <div class="ln"><span class="hint">↳ 监听类型变化中</span></div>
+              <div class="ln"><span class="you">●</span> 编辑 <span class="str">src/auth/LoginForm.tsx</span></div>
+              <div class="ln"><span class="hint">+ 12 lines / - 3 lines</span></div>
+              <div class="ln"><span class="you">●</span> 运行 <span class="str">bun test LoginForm.test.tsx</span></div>
+              <div class="ln"><span class="ok">✓</span> renders form</div>
+              <div class="ln"><span class="ok">✓</span> submits credentials</div>
+              <div class="ln"><span class="ok">✓</span> toggles password visibility</div>
+              <div class="ln"><span class="ok">✓</span> validates email</div>
+              <div class="ln"><span class="num">4 passed</span><span class="hint"> · 0 failed · 218ms</span></div>
+              <div class="ln"><span class="you">$</span> <span class="cur"></span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="why">
+  <div class="shell">
+    <div class="section-head">
+      <span class="kicker rise">为什么</span>
+      <div>
+        <h2 class="rise">你的东西,<br/>在你手里。</h2>
+        <p class="lede rise">不上传、不代理、不留备份。你出门,它也没出门。</p>
+      </div>
+    </div>
+    <div class="principles">
+      <article class="principle rise">
+        <span class="n">01</span>
+        <h3>代码不出门</h3>
+        <p>读文件、改文件、跑命令,都在你机器上。Viby 只建加密链路,不存内容、不做代理。</p>
+        <svg class="sigil" width="36" height="36" viewBox="0 0 36 36" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="6" y="13" width="24" height="17" rx="3"/><path d="M11 13V9a7 7 0 0 1 14 0v4"/><circle cx="18" cy="22" r="2.2"/></svg>
+      </article>
+      <article class="principle rise">
+        <span class="n">02</span>
+        <h3>不计 token,不排队</h3>
+        <p>用你电脑的 CPU、GPU、网络。AI 想跑多久跑多久,多大模型随你选。</p>
+        <svg class="sigil" width="36" height="36" viewBox="0 0 36 36" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M18 4 8 18h8l-2 14L26 18h-8l2-14Z"/></svg>
+      </article>
+      <article class="principle rise">
+        <span class="n">03</span>
+        <h3>每一步都问你</h3>
+        <p>改文件、跑命令、调工具--手机弹一下,你点放行或拦下。</p>
+        <svg class="sigil" width="36" height="36" viewBox="0 0 36 36" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="m9 18 6 6 12-14"/></svg>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section id="how" class="flow-section">
+  <div class="shell">
+    <div class="section-head">
+      <span class="kicker rise">怎么用</span>
+      <div>
+        <h2 class="rise">30 秒,<br/>AI 进口袋。</h2>
+        <p class="lede rise">三件事就绪。</p>
+      </div>
+    </div>
+  </div>
+  <div class="flow">
+    <div class="row rise">
+      <div class="shell">
+        <div class="step">
+          <span class="index">01</span>
+          <div>
+            <h3>电脑上打开 Viby</h3>
+            <p class="detail">常驻菜单栏。屏幕出一个二维码、一组 6 位短码。</p>
+          </div>
+          <div class="visual">
+            <div class="qr-mock" aria-hidden="true">
+              <svg viewBox="0 0 21 21" shape-rendering="crispEdges">
+                <rect width="21" height="21" fill="none"/>
+                <g fill="currentColor">
+                  <rect x="0" y="0" width="7" height="7"/><rect x="1" y="1" width="5" height="5" fill="var(--paper)"/><rect x="2" y="2" width="3" height="3"/>
+                  <rect x="14" y="0" width="7" height="7"/><rect x="15" y="1" width="5" height="5" fill="var(--paper)"/><rect x="16" y="2" width="3" height="3"/>
+                  <rect x="0" y="14" width="7" height="7"/><rect x="1" y="15" width="5" height="5" fill="var(--paper)"/><rect x="2" y="16" width="3" height="3"/>
+                  <rect x="8" y="0" width="1" height="1"/><rect x="10" y="0" width="1" height="2"/><rect x="12" y="1" width="1" height="1"/>
+                  <rect x="9" y="2" width="2" height="1"/><rect x="12" y="3" width="2" height="1"/>
+                  <rect x="8" y="4" width="1" height="2"/><rect x="11" y="4" width="1" height="1"/><rect x="13" y="5" width="1" height="1"/>
+                  <rect x="9" y="6" width="2" height="1"/><rect x="12" y="6" width="2" height="1"/>
+                  <rect x="0" y="8" width="1" height="2"/><rect x="2" y="8" width="3" height="1"/><rect x="6" y="8" width="1" height="1"/>
+                  <rect x="8" y="8" width="2" height="2"/><rect x="11" y="8" width="1" height="1"/><rect x="13" y="8" width="2" height="1"/>
+                  <rect x="16" y="9" width="1" height="2"/><rect x="18" y="8" width="2" height="1"/><rect x="20" y="9" width="1" height="2"/>
+                  <rect x="1" y="10" width="1" height="1"/><rect x="3" y="11" width="2" height="1"/><rect x="6" y="10" width="1" height="2"/>
+                  <rect x="9" y="10" width="1" height="2"/><rect x="11" y="11" width="2" height="1"/><rect x="14" y="10" width="1" height="2"/>
+                  <rect x="17" y="12" width="2" height="1"/><rect x="20" y="11" width="1" height="2"/>
+                  <rect x="8" y="14" width="2" height="1"/><rect x="11" y="13" width="1" height="2"/><rect x="13" y="14" width="2" height="1"/>
+                  <rect x="16" y="14" width="1" height="2"/><rect x="18" y="13" width="2" height="2"/>
+                  <rect x="8" y="16" width="1" height="2"/><rect x="10" y="17" width="2" height="1"/><rect x="13" y="16" width="1" height="2"/>
+                  <rect x="15" y="17" width="2" height="1"/><rect x="18" y="16" width="1" height="2"/><rect x="20" y="17" width="1" height="1"/>
+                  <rect x="9" y="19" width="2" height="1"/><rect x="12" y="19" width="1" height="2"/><rect x="14" y="19" width="2" height="1"/>
+                  <rect x="17" y="19" width="2" height="1"/>
+                </g>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="row rise">
+      <div class="shell">
+        <div class="step">
+          <span class="index">02</span>
+          <div>
+            <h3>手机扫一下</h3>
+            <p class="detail">1 秒握手。不经服务器,不要账号。直连优先,复杂网络也能穿透。</p>
+          </div>
+          <div class="visual handshake" aria-hidden="true">
+            <div class="dev">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M2 20h20M9 16v4M15 16v4"/></svg>
+              <span class="label">Mac</span>
+            </div>
+            <div class="bridge">
+              <div class="lock">
+                <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="7" height="5" rx="1"/><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5"/></svg>
+              </div>
+            </div>
+            <div class="dev">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><circle cx="12" cy="18.5" r="0.8"/></svg>
+              <span class="label">Phone</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="row rise">
+      <div class="shell">
+        <div class="step">
+          <span class="index">03</span>
+          <div>
+            <h3>出门。</h3>
+            <p class="detail">手机操控,电脑执行。在哪都能。</p>
+          </div>
+          <div class="visual ai-running" aria-hidden="true">
+            <div class="ln"><span class="t">14:02</span><span class="what">读取 src/auth.ts</span><span class="ok">✓</span></div>
+            <div class="ln"><span class="t">14:03</span><span class="what">改写 LoginForm.tsx</span><span class="ok">✓</span></div>
+            <div class="ln live"><span class="t">14:04</span><span class="what">bun test · 进行中</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="row rise">
+      <div class="shell">
+        <div class="step">
+          <span class="index">04</span>
+          <div>
+            <h3>回家,东西原样在。</h3>
+            <p class="detail">会话、文件、进度都原位。没上传、没迁移、没"恢复"按钮。</p>
+          </div>
+          <div class="visual">
+            <div class="return-card" aria-hidden="true">
+              <div class="head">写一个登录页</div>
+              <div class="what">AI 改完了 LoginForm,加了 eye 图标 toggle,测试 4 / 4 通过。</div>
+              <div class="stat"><span class="live-dot"></span>等你继续指挥</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="glance">
+  <div class="shell">
+    <div class="section-head">
+      <span class="kicker rise">手机上看到什么</span>
+      <div>
+        <h2 class="rise">全貌。<br/>不是快捷方式。</h2>
+        <p class="lede rise">会话列表、文件 diff、终端输出--你坐在桌前能看的,手机上一样能看。</p>
+      </div>
+    </div>
+
+    <div class="gallery" aria-hidden="true">
+      <div class="gallery-card rise">
+        <div class="iphone iphone--mini">
+          <div class="iphone-screen">
+            <div class="iphone-dynamic-island"></div>
+            <div class="iphone-statusbar">
+              <span>09:41</span>
+              <span class="icons">
+                <svg viewBox="0 0 17 11" fill="currentColor"><rect x="0" y="7" width="3" height="4" rx="0.5"/><rect x="4" y="5" width="3" height="6" rx="0.5"/><rect x="8" y="3" width="3" height="8" rx="0.5"/><rect x="12" y="1" width="3" height="10" rx="0.5"/></svg>
+                <svg viewBox="0 0 14 11" fill="currentColor"><path d="M7 2.5c1.9 0 3.6.7 4.9 1.9l1.4-1.5C11.7 1.4 9.5.5 7 .5S2.3 1.4.7 2.9l1.4 1.5C3.4 3.2 5.1 2.5 7 2.5Zm0 3c1.1 0 2.1.4 2.9 1.1l1.4-1.5C10.2 4 8.7 3.5 7 3.5s-3.2.5-4.3 1.6l1.4 1.5C4.9 5.9 5.9 5.5 7 5.5ZM7 9.5l2.3-2.3C8.6 6.7 7.8 6.5 7 6.5s-1.6.2-2.3.7L7 9.5Z"/></svg>
+                <svg viewBox="0 0 26 12" fill="none"><rect x="0.5" y="0.5" width="22" height="11" rx="2.5" stroke="currentColor" opacity="0.5"/><rect x="2" y="2" width="17" height="8" rx="1.2" fill="currentColor"/><rect x="23.5" y="3.5" width="2" height="5" rx="0.8" fill="currentColor" opacity="0.5"/></svg>
+              </span>
+            </div>
+            <div class="phone-app">
+              <div class="panel-list">
+                <div class="panel-title">
+                  <span class="t">Viby</span>
+                  <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.7l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.7-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1.1-1.5 1.6 1.6 0 0 0-1.7.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.7 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1.1 1.6 1.6 0 0 0-.3-1.7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.7.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.7-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.7V9c.2.5.6.9 1.1 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1Z"/></svg></span>
+                </div>
+                <div class="panel-tabs">
+                  <span class="tab active">进行中<span class="badge">2</span></span>
+                  <span class="tab">历史</span>
+                </div>
+                <div class="panel-item">
+                  <span class="av"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 2 6 10l4.5-8"/></svg></span>
+                  <div class="meta">
+                    <div class="nm">重构登录页</div>
+                    <div class="mt">你的 Mac · 2 分钟前</div>
+                  </div>
+                  <span class="chip pending">待审批</span>
+                </div>
+                <div class="panel-item">
+                  <span class="av"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 2 6 10l4.5-8"/></svg></span>
+                  <div class="meta">
+                    <div class="nm">优化首页加载</div>
+                    <div class="mt">你的 Mac · 则刚刚</div>
+                  </div>
+                  <span class="chip live">在跑</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="label">会话</div>
+        <div class="cap">什么在跑。什么在等你。</div>
+      </div>
+
+      <div class="gallery-card rise">
+        <div class="iphone iphone--mini">
+          <div class="iphone-screen">
+            <div class="iphone-dynamic-island"></div>
+            <div class="iphone-statusbar">
+              <span>09:41</span>
+              <span class="icons">
+                <svg viewBox="0 0 17 11" fill="currentColor"><rect x="0" y="7" width="3" height="4" rx="0.5"/><rect x="4" y="5" width="3" height="6" rx="0.5"/><rect x="8" y="3" width="3" height="8" rx="0.5"/><rect x="12" y="1" width="3" height="10" rx="0.5"/></svg>
+                <svg viewBox="0 0 14 11" fill="currentColor"><path d="M7 2.5c1.9 0 3.6.7 4.9 1.9l1.4-1.5C11.7 1.4 9.5.5 7 .5S2.3 1.4.7 2.9l1.4 1.5C3.4 3.2 5.1 2.5 7 2.5Zm0 3c1.1 0 2.1.4 2.9 1.1l1.4-1.5C10.2 4 8.7 3.5 7 3.5s-3.2.5-4.3 1.6l1.4 1.5C4.9 5.9 5.9 5.5 7 5.5ZM7 9.5l2.3-2.3C8.6 6.7 7.8 6.5 7 6.5s-1.6.2-2.3.7L7 9.5Z"/></svg>
+                <svg viewBox="0 0 26 12" fill="none"><rect x="0.5" y="0.5" width="22" height="11" rx="2.5" stroke="currentColor" opacity="0.5"/><rect x="2" y="2" width="17" height="8" rx="1.2" fill="currentColor"/><rect x="23.5" y="3.5" width="2" height="5" rx="0.8" fill="currentColor" opacity="0.5"/></svg>
+              </span>
+            </div>
+            <div class="phone-app">
+              <div class="panel-file">
+                <div class="panel-title"><span class="t">文件</span></div>
+                <div class="bc">~ / storefront / src / auth</div>
+                <div class="tree">
+                  <div class="e"><span class="ic">▾</span>auth/</div>
+                  <div class="e dirty">&nbsp;&nbsp;LoginForm.tsx</div>
+                  <div class="e">&nbsp;&nbsp;LoginForm.test.tsx</div>
+                  <div class="e">&nbsp;&nbsp;useAuth.ts</div>
+                </div>
+                <div class="diff">
+                  <div class="ln"><span class="n">42</span><span><span class="del">type="password"</span></span></div>
+                  <div class="ln"><span class="n">42</span><span><span class="add">type={showPw ? "text" : "password"}</span></span></div>
+                  <div class="ln"><span class="n">43</span><span><span class="add">&lt;EyeButton onClick={togglePw} /&gt;</span></span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="label">文件</div>
+        <div class="cap">AI 改了什么。每一行。</div>
+      </div>
+
+      <div class="gallery-card rise">
+        <div class="iphone iphone--mini">
+          <div class="iphone-screen">
+            <div class="iphone-dynamic-island"></div>
+            <div class="iphone-statusbar">
+              <span>09:41</span>
+              <span class="icons">
+                <svg viewBox="0 0 17 11" fill="currentColor"><rect x="0" y="7" width="3" height="4" rx="0.5"/><rect x="4" y="5" width="3" height="6" rx="0.5"/><rect x="8" y="3" width="3" height="8" rx="0.5"/><rect x="12" y="1" width="3" height="10" rx="0.5"/></svg>
+                <svg viewBox="0 0 14 11" fill="currentColor"><path d="M7 2.5c1.9 0 3.6.7 4.9 1.9l1.4-1.5C11.7 1.4 9.5.5 7 .5S2.3 1.4.7 2.9l1.4 1.5C3.4 3.2 5.1 2.5 7 2.5Zm0 3c1.1 0 2.1.4 2.9 1.1l1.4-1.5C10.2 4 8.7 3.5 7 3.5s-3.2.5-4.3 1.6l1.4 1.5C4.9 5.9 5.9 5.5 7 5.5ZM7 9.5l2.3-2.3C8.6 6.7 7.8 6.5 7 6.5s-1.6.2-2.3.7L7 9.5Z"/></svg>
+                <svg viewBox="0 0 26 12" fill="none"><rect x="0.5" y="0.5" width="22" height="11" rx="2.5" stroke="currentColor" opacity="0.5"/><rect x="2" y="2" width="17" height="8" rx="1.2" fill="currentColor"/><rect x="23.5" y="3.5" width="2" height="5" rx="0.8" fill="currentColor" opacity="0.5"/></svg>
+              </span>
+            </div>
+            <div class="phone-app">
+              <div class="panel-term">
+                <div class="hd"><span class="t">终端</span><span class="live-dot"></span></div>
+                <div class="term">
+                  <div class="l"><span class="ai">$</span><span>bun test</span></div>
+                  <div class="l"><span class="hint">running 4 tests</span></div>
+                  <div class="l"><span class="ok">✓</span><span>renders form</span></div>
+                  <div class="l"><span class="ok">✓</span><span>submits creds</span></div>
+                  <div class="l"><span class="ok">✓</span><span>toggles password</span></div>
+                  <div class="l"><span class="ok">✓</span><span>validates email</span></div>
+                  <div class="l"><span class="num">4 passed</span><span class="hint">· 218ms</span></div>
+                  <div class="l"><span class="ai">$</span><span class="cur"></span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="label">终端</div>
+        <div class="cap">命令输出。实时跳。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="agents">
+  <div class="shell">
+    <div class="section-head">
+      <span class="kicker rise">支持的 AI</span>
+      <div>
+        <h2 class="rise">你已经在用的<br/>那些 AI。</h2>
+        <p class="lede rise">Viby 不重新发明 AI。只把你信赖的工具,接到你手里。</p>
+      </div>
+    </div>
+    <div class="agents-core">
+      <article class="agent-core rise">
+        <div class="top">
+          <span class="icon"><img src="/assets/agent-claude.png" alt="" /></span>
+          <span class="name">Claude Code</span>
+        </div>
+        <p class="desc">长上下文、多文件重构。看全项目不费力。</p>
+        <span class="tag">已支持</span>
+      </article>
+      <article class="agent-core rise">
+        <div class="top">
+          <span class="icon"><img src="/assets/agent-codex.png" alt="" /></span>
+          <span class="name">Codex</span>
+        </div>
+        <p class="desc">OpenAI 官方 agent。快、准、会调工具。</p>
+        <span class="tag">已支持</span>
+      </article>
+      <article class="agent-core rise">
+        <div class="top">
+          <span class="icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H8l-5 4V6a2 2 0 0 1 2-2Z"/></svg>
+          </span>
+          <span class="name">Pi</span>
+        </div>
+        <p class="desc">Viby 自带的本地 agent。成本最低，隐私最高。</p>
+        <span class="tag">已支持</span>
+      </article>
+    </div>
+    <div class="agents-strip rise">
+      <div class="agent-mini"><span class="icon"><img src="/assets/agent-gemini.svg" alt="" /></span><span class="nm">Gemini</span><span class="tg">实验</span></div>
+      <div class="agent-mini"><span class="icon"><img src="/assets/agent-copilot.svg" alt="" /></span><span class="nm">Copilot</span><span class="tg">实验</span></div>
+      <div class="agent-mini"><span class="icon"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11.8 2.2 2.5 7.5v9l9.3 5.3 9.3-5.3v-9L11.8 2.2Zm0 2.3 7 4-7 4-7-4 7-4Zm-8 5.7 7 4v8l-7-4v-8Zm9 12v-8l7-4v8l-7 4Z"/></svg></span><span class="nm">Cursor</span><span class="tg">实验</span></div>
+      <div class="agent-mini"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 7-5 5 5 5M16 7l5 5-5 5"/></svg></span><span class="nm">OpenCode</span><span class="tg">实验</span></div>
+      <a href="https://github.com/Suge8/Viby" class="agent-mini more" rel="noopener noreferrer">
+        <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 5l7 7-7 7"/></svg></span>
+        <span class="nm">更多接入中</span>
+        <span class="tg">GitHub →</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section id="everywhere">
+  <div class="shell">
+    <div class="section-head">
+      <span class="kicker rise">多端</span>
+      <div>
+        <h2 class="rise">从手掌<br/>到屏幕。</h2>
+        <p class="lede rise">同一个会话,跟着你换设备。</p>
+      </div>
+    </div>
+    <div class="surfaces">
+      <article class="surface rise">
+        <span class="label">Web</span>
+        <h3>打开浏览器</h3>
+        <p>不装 App、不要账号。打开网址、扫码、接管。</p>
+        <div class="surface-vis" aria-hidden="true">
+          <div class="browser-bar">
+            <span class="d"></span><span class="d"></span><span class="d"></span>
+            <span class="url">viby.run</span>
+          </div>
+          <div class="browser-content">
+            <div class="b-bar" style="height: 30%"></div>
+            <div class="b-bar" style="height: 60%"></div>
+            <div class="b-bar" style="height: 80%"></div>
+            <div class="b-bar" style="height: 45%"></div>
+            <div class="b-bar" style="height: 70%; background: var(--coral); opacity: 0.6"></div>
+            <div class="b-bar" style="height: 50%"></div>
+          </div>
+        </div>
+      </article>
+      <article class="surface rise">
+        <span class="label">PWA</span>
+        <h3>装到主屏</h3>
+        <p>iPhone、Android 都行。像原生 App。离线照常用。</p>
+        <div class="surface-vis" aria-hidden="true">
+          <div class="pwa-tile">
+            <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 2 6 10l4.5-8"/></svg>
+          </div>
+        </div>
+      </article>
+      <article class="surface rise">
+        <span class="label">Desktop</span>
+        <h3>macOS · Windows · Linux</h3>
+        <p>常驻菜单栏。一键唤起,一键藏起。</p>
+        <div class="surface-vis" aria-hidden="true">
+          <div class="desktop-mini">
+            <div class="ch"><span class="d r"></span><span class="d y"></span><span class="d g"></span></div>
+            <div class="bd">
+              <div class="side"></div>
+              <div class="main" style="display:flex;flex-direction:column;padding:6px;gap:3px;">
+                <div style="height:6px;width:60%;background:oklch(28% 0.013 35);border-radius:2px"></div>
+                <div style="height:6px;width:40%;background:oklch(22% 0.008 75);border-radius:2px"></div>
+                <div style="height:6px;width:80%;background:oklch(22% 0.008 75);border-radius:2px"></div>
+                <div style="height:6px;width:35%;background:var(--coral);opacity:0.7;border-radius:2px"></div>
+                <div style="height:6px;width:55%;background:oklch(22% 0.008 75);border-radius:2px"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section id="compare">
+  <div class="shell">
+    <div class="section-head">
+      <span class="kicker rise">为什么不选别的</span>
+      <div>
+        <h2 class="rise">同价 0 元。<br/>同能力更远。</h2>
+        <p class="lede rise">不重新发明 AI。只是让你在任何地方控制你自己的。</p>
+      </div>
+    </div>
+  </div>
+  <div class="claims" aria-label="与主流订阅 AI 对比">
+    <div class="shell">
+      <div class="claim rise">
+        <span class="idx">01</span>
+        <div class="v">付 <em>0 元</em>。用你自己的电脑跑。</div>
+        <div class="alt"><span class="other">ChatGPT Plus · Cursor Pro</span><span>¥ 145 / 月。厂商云·计量。</span></div>
+      </div>
+    </div>
+    <div class="shell">
+      <div class="claim rise">
+        <span class="idx">02</span>
+        <div class="v">代码<em>哪也不去</em>。文件、会话、命令输出都在本机。</div>
+        <div class="alt"><span class="other">云 AI 平台</span><span>代码上传、请求留存、可能被训练。</span></div>
+      </div>
+    </div>
+    <div class="shell">
+      <div class="claim rise">
+        <span class="idx">03</span>
+        <div class="v"><em>无限</em> token。AI 想跑多久跑多久。</div>
+        <div class="alt"><span class="other">订阅制</span><span>按额度 / 按调用 / 有限流。</span></div>
+      </div>
+    </div>
+    <div class="shell">
+      <div class="claim rise">
+        <span class="idx">04</span>
+        <div class="v"><em>随你选</em> AI。Claude、Codex、Pi、Gemini 一起用。</div>
+        <div class="alt"><span class="other">官方 App</span><span>只绑一家厂商。</span></div>
+      </div>
+    </div>
+    <div class="shell">
+      <div class="claim rise">
+        <span class="idx">05</span>
+        <div class="v">手机<em>接力</em>看、改、跑命令、看终端。</div>
+        <div class="alt"><span class="other">官方 App</span><span>只能聊天。</span></div>
+      </div>
+    </div>
+    <div class="shell">
+      <div class="claim rise">
+        <span class="idx">06</span>
+        <div class="v"><em>开源</em>、可审计。你看得见代码怎么跑。</div>
+        <div class="alt"><span class="other">付费产品</span><span>黑盒。</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="shell">
+    <div class="compare-foot" style="margin-top:18px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;letter-spacing:0.04em;color:var(--ink-faint);text-align:center;">价格参考 2025 月价。各厂商为准。</div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="shell">
+    <div class="section-head">
+      <span class="kicker rise">常问</span>
+      <div>
+        <h2 class="rise">你在担心<br/>的那几件事。</h2>
+        <p class="lede rise">老实回。不转弯。</p>
+      </div>
+    </div>
+    <div class="faq rise">
+      <details open>
+        <summary>
+          我的代码会传给 OpenAI 或 Anthropic 吗?
+          <span class="toggle"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 1v10M1 6h10"/></svg></span>
+        </summary>
+        <div class="answer">你选哪家 AI 、他们看到什么,跟 Viby 无关。Viby 只是让 AI 进程跑在你本机。你在手机上看到的所有东西,数据在你两台设备之间加密传输,不经过我们服务器存储。</div>
+      </details>
+      <details>
+        <summary>
+          这跟 ChatGPT、Claude 官方 App 区别在哪?
+          <span class="toggle"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 1v10M1 6h10"/></svg></span>
+        </summary>
+        <div class="answer">官方 App 只能聊天。Viby 让 AI 在你的电脑上读代码、改文件、跑命令、看终端,手机只是你的远程读者和审批按钮。理论上类似"SSH 加 GUI 加安全护栏",但不需要你配网络、不需要公网服务器、不需要账号。</div>
+      </details>
+      <details>
+        <summary>
+          电脑不在同一个 Wi-Fi 上也能用吗?
+          <span class="toggle"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 1v10M1 6h10"/></svg></span>
+        </summary>
+        <div class="answer">能。两台设备优先绕 NAT 直连,连不上就走加密中继。中继服务器只转发加密数据包,看不到里面的代码。</div>
+      </details>
+      <details>
+        <summary>
+          不会代码、不是程序员,能用吗?
+          <span class="toggle"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 1v10M1 6h10"/></svg></span>
+        </summary>
+        <div class="answer">能。调研、写报告、整理资料、阅读长文档都能读 80% 的 AI 代理都能干。你给 AI 一个项目文件夹,在手机上跟他聊你要什么,他在你电脑上看、写、整理。</div>
+      </details>
+      <details>
+        <summary>
+          离线能用吗?
+          <span class="toggle"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 1v10M1 6h10"/></svg></span>
+        </summary>
+        <div class="answer">你的电脑和手机需要能互相联系(同一 Wi-Fi 或有网)。但 AI 本身是否能离线,取决于你选的那个模型是云调用还是本地部署。Pi 和 <code>llama.cpp</code> 这类本地模型可以完全离线。</div>
+      </details>
+      <details>
+        <summary>
+          要付费吗?以后会收费吗?
+          <span class="toggle"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 1v10M1 6h10"/></svg></span>
+        </summary>
+        <div class="answer">免费,开源 (AGPL-3.0)。本体不收你的钱,也不看你的代码。你付给 AI 厂商的费照旧付、或者他们不收费。</div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<section class="closing">
+  <div class="shell">
+    <h2 class="mega rise">你的<span class="accent">。</span></h2>
+    <p class="tagline rise">AI 、代码、会话、进度。</p>
+    <p class="micro rise">免费 · 开源 · 今晚就装</p>
+    <div class="hero-actions rise">
+      <a href="https://github.com/Suge8/Viby#快速开始" class="btn btn-primary" rel="noopener noreferrer">
+        立即开始
+        <svg class="arrow" width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </a>
+      <a href="https://github.com/Suge8/Viby" class="btn btn-ghost" rel="noopener noreferrer">阅读源码</a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="shell row">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 2 6 10l4.5-8"/></svg>
+      </span>
+      <span>Viby</span>
+    </div>
+    <div class="foot-links">
+      <a href="https://github.com/Suge8/Viby" rel="noopener noreferrer">GitHub</a>
+      <a href="https://github.com/Suge8/Viby#文档分层" rel="noopener noreferrer">文档</a>
+      <a href="https://github.com/Suge8/Viby/blob/main/LICENSE" rel="noopener noreferrer">License</a>
+    </div>
+    <span class="meta">Built with Bun · Tauri · Vite</span>
+  </div>
+</footer>
+
+<script>
+  const nav = document.getElementById("nav");
+  const heroPhone = document.querySelector(".hero .iphone");
+  const hero = document.querySelector(".hero");
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let ticking = false;
+  // delay parallax until hero entrance animation completes (~1.5s)
+  let parallaxReady = false;
+  setTimeout(() => { parallaxReady = true; }, 1500);
+  const update = () => {
+    nav.classList.toggle("is-scrolled", window.scrollY > 8);
+    if (parallaxReady && heroPhone && hero && !reduceMotion) {
+      const rect = hero.getBoundingClientRect();
+      const p = Math.max(0, Math.min(1, -rect.top / Math.max(1, rect.height * 0.9)));
+      const rot = -1.5 - p * 6;
+      const ty = -p * 60;
+      const sc = 1 - p * 0.08;
+      heroPhone.style.transform = `rotate(${rot.toFixed(2)}deg) translateY(${ty.toFixed(1)}px) scale(${sc.toFixed(3)})`;
+    }
+    ticking = false;
+  };
+  const onScroll = () => {
+    if (!ticking) { ticking = true; requestAnimationFrame(update); }
+  };
+  window.addEventListener("scroll", onScroll, { passive: true });
+  update();
+
+  // theme toggle
+  const themeBtn = document.getElementById("theme-toggle");
+  const currentTheme = () => {
+    const explicit = document.documentElement.dataset.theme;
+    if (explicit === "dark" || explicit === "light") return explicit;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  };
+  themeBtn.addEventListener("click", () => {
+    const next = currentTheme() === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem("viby-theme", next); } catch (e) {}
+  });
+
+  // mac terminal: inject char count for typewriter animation
+  document.querySelectorAll(".mac-term").forEach((term) => {
+    const lines = term.querySelectorAll(".ln");
+    lines.forEach((ln, i) => {
+      ln.style.setProperty("--i", i);
+      const text = ln.textContent.replace(/\s+/g, " ").trim();
+      const chars = Math.max(text.length, 6);
+      ln.style.setProperty("--chars", chars);
+    });
+  });
+  const trigger = (selector, cls) => {
+    document.querySelectorAll(selector).forEach((el) => {
+      const tio = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((e) => {
+            if (e.isIntersecting) { e.target.classList.add(cls); tio.unobserve(e.target); }
+          });
+        },
+        { threshold: 0.3 }
+      );
+      tio.observe(el);
+    });
+  };
+  trigger(".mac-term", "go");
+  trigger(".phone-stage", "go");
+
+  const els = document.querySelectorAll(".rise");
+  if ("IntersectionObserver" in window) {
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) {
+            e.target.classList.add("show");
+            io.unobserve(e.target);
+          }
+        }
+      },
+      { rootMargin: "0px 0px -6% 0px", threshold: 0.04 }
+    );
+    els.forEach((el) => io.observe(el));
+  } else {
+    els.forEach((el) => el.classList.add("show"));
+  }
+  setTimeout(() => {
+    document.querySelectorAll(".rise:not(.show)").forEach((el) => el.classList.add("show"));
+    document.querySelectorAll(".phone-stage:not(.go)").forEach((el) => el.classList.add("go"));
+    document.querySelectorAll(".mac-term:not(.go)").forEach((el) => el.classList.add("go"));
+  }, 1400);
+</script>
+
+</body>
+</html>
