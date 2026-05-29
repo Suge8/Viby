@@ -3,6 +3,7 @@ import type {
     PairingPeerMessagesResult,
     PairingPeerPushSubscriptionParams,
     PairingPeerPushUnsubscribeParams,
+    PairingPeerSendMessageResult,
     PairingPeerSpawnSessionParams,
     PairingPeerSpawnSessionResult,
     PairingPeerTerminalEventPayload,
@@ -134,8 +135,8 @@ export class LocalHubPairingClient extends LocalHubPairingClientCore {
             nextAfterSeq,
         }
     }
-    async sendMessage(sessionId: string, text: string, localId?: string): Promise<Session> {
-        const response = await this.requestJson<{ session: Session }>(
+    async sendMessage(sessionId: string, text: string, localId?: string): Promise<PairingPeerSendMessageResult> {
+        return await this.requestJson<PairingPeerSendMessageResult>(
             `/api/sessions/${encodeURIComponent(sessionId)}/messages`,
             {
                 method: 'POST',
@@ -145,7 +146,6 @@ export class LocalHubPairingClient extends LocalHubPairingClientCore {
                 }),
             }
         )
-        return response.session
     }
     async abortSession(sessionId: string): Promise<Session> {
         return await postSessionAction(this.request, sessionId, 'abort', {})

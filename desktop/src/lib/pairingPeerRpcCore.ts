@@ -141,13 +141,9 @@ export async function executePairingPeerRequest(
                 return successResponse(request.id, result)
             }
             case 'session.send': {
-                const result: PairingPeerSendMessageResult = PairingPeerSendMessageResultSchema.parse({
-                    session: await client.sendMessage(
-                        request.params.sessionId,
-                        request.params.text,
-                        request.params.localId
-                    ),
-                })
+                const result: PairingPeerSendMessageResult = PairingPeerSendMessageResultSchema.parse(
+                    await client.sendMessage(request.params.sessionId, request.params.text, request.params.localId)
+                )
                 return successResponse(request.id, result)
             }
             case 'session.abort':

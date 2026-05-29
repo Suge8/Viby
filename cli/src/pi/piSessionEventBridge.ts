@@ -21,6 +21,25 @@ function isToolResultMessage(message: unknown): message is PiToolResultMessage {
     return isRecord(message) && message.role === 'toolResult'
 }
 
+function emitPiTerminalEvent(options: {
+    piSession: PiSession
+    message: PiAssistantMessage
+    assistantTurnId: string
+}): void {
+    const { stopReason } = options.message
+    if (stopReason === 'stop' || stopReason === 'toolUse') {
+        return
+    }
+    const status = stopReason === 'length' ? 'truncated' : stopReason === 'aborted' ? 'aborted' : 'failed'
+    options.piSession.sendSessionEvent({
+        type: 'turn-terminal',
+        provider: 'pi',
+        status,
+        reason: stopReason,
+        assistantTurnId: options.assistantTurnId,
+    })
+}
+
 export function subscribeToPiSessionEvents(options: { piSession: PiSession; rpcClient: PiRpcClient }): () => void {
     const assistantStream = new AssistantStreamBridge({
         append: ({ assistantTurnId, delta }) =>
@@ -54,6 +73,7 @@ export function subscribeToPiSessionEvents(options: { piSession: PiSession; rpcC
                         assistantTurnId,
                     })
                     assistantStream.acknowledgeDurableTurn(assistantTurnId)
+                    emitPiTerminalEvent({ piSession: options.piSession, message: event.message, assistantTurnId })
                     return
                 }
                 if (isToolResultMessage(event.message)) {

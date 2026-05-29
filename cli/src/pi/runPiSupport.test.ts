@@ -65,6 +65,48 @@ describe('subscribeToPiSessionEvents', () => {
         unsubscribe()
     })
 
+    it('emits a durable terminal marker when Pi truncates a reply', () => {
+        let handler: PiEventListener | null = null
+        const sendSessionEvent = vi.fn()
+        const assistantMessage = {
+            role: 'assistant',
+            api: 'pi',
+            provider: 'openai',
+            model: 'gpt-5.4-mini',
+            usage: {
+                input: 1,
+                output: 1,
+                cacheRead: 0,
+                cacheWrite: 0,
+                totalTokens: 2,
+                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+            },
+            stopReason: 'length',
+            timestamp: 1_000,
+            content: [{ type: 'text', text: 'partial' }],
+        }
+
+        subscribeToPiSessionEvents({
+            piSession: { sendOutputMessage: vi.fn(), sendStreamUpdate: vi.fn(), sendSessionEvent } as never,
+            rpcClient: {
+                onEvent(next: (event: Record<string, unknown>) => void) {
+                    handler = next
+                    return vi.fn()
+                },
+            } as never,
+        })
+
+        requirePiEventListener(handler)({ type: 'message_end', message: assistantMessage })
+
+        expect(sendSessionEvent).toHaveBeenCalledWith({
+            type: 'turn-terminal',
+            provider: 'pi',
+            status: 'truncated',
+            reason: 'length',
+            assistantTurnId: 'pi-assistant-1000',
+        })
+    })
+
     it('clears stale Pi stream when final response id differs from the streamed id', () => {
         let handler: PiEventListener | null = null
         const sendOutputMessage = vi.fn()

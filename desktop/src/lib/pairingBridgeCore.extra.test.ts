@@ -249,7 +249,17 @@ describe('pairingBridgeCore extra request coverage', () => {
                 expect(sessionId).toBe('session-send')
                 expect(text).toBe('hello from phone')
                 expect(localId).toBe('mobile-1')
-                return refreshedSession
+                return {
+                    session: refreshedSession,
+                    message: {
+                        id: 'message-send',
+                        seq: 7,
+                        localId,
+                        createdAt: 2_000,
+                        invokedAt: null,
+                        content: { role: 'user', content: { type: 'text', text } },
+                    },
+                }
             },
         }
 
@@ -276,6 +286,11 @@ describe('pairingBridgeCore extra request coverage', () => {
                     metadata: {
                         path: refreshedSession.metadata.path,
                     },
+                },
+                message: {
+                    id: 'message-send',
+                    localId: 'mobile-1',
+                    invokedAt: null,
                 },
             },
         })

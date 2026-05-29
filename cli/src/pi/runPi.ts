@@ -85,6 +85,12 @@ export async function runPi(
     const defaultModel = state.model ?? resolvePiRuntimeModel(selectableModels, opts.model, null)
     const piModelCapabilities = toPiModelCapabilities(selectableModels)
 
+    const initialRuntimeState = getRuntimeStateFromPiState(opts.permissionMode ?? 'default', state)
+    const selectedStartupRuntimeState: PiRuntimeState = {
+        ...initialRuntimeState,
+        ...(opts.model ? { model: normalizePiModelSelection(opts.model) ?? initialRuntimeState.model } : {}),
+        ...(opts.modelReasoningEffort !== undefined ? { modelReasoningEffort: opts.modelReasoningEffort } : {}),
+    }
     const initialState: AgentState = { controlledByUser: false }
     const { api, session } = await bootstrapSession({
         driver: 'pi',
@@ -93,9 +99,9 @@ export async function runPi(
         driverSwitchBootstrap: opts.driverSwitchBootstrap,
         workingDirectory,
         agentState: initialState,
-        permissionMode: opts.permissionMode ?? 'default',
-        model: normalizePiModelSelection(opts.model) ?? formatPiModel(defaultModel) ?? undefined,
-        modelReasoningEffort: opts.modelReasoningEffort,
+        permissionMode: selectedStartupRuntimeState.permissionMode,
+        model: selectedStartupRuntimeState.model ?? formatPiModel(defaultModel) ?? undefined,
+        modelReasoningEffort: selectedStartupRuntimeState.modelReasoningEffort,
         metadataOverrides: { piModelScope: { models: piModelCapabilities } },
     })
     setControlledByUser(session, false)
@@ -133,13 +139,8 @@ export async function runPi(
     registerKillSessionHandler(session.rpcHandlerManager, requestPiShutdown)
 
     await recoverPiMessages(api, opts.vibySessionId)
-    const startupRuntimeState = getRuntimeStateFromPiState(opts.permissionMode ?? 'default', state)
-    let selectedRuntimeState: PiRuntimeState = {
-        ...startupRuntimeState,
-        ...(opts.model ? { model: normalizePiModelSelection(opts.model) ?? startupRuntimeState.model } : {}),
-        ...(opts.modelReasoningEffort !== undefined ? { modelReasoningEffort: opts.modelReasoningEffort } : {}),
-    }
-    let activeRuntimeHash = createModeHash(startupRuntimeState)
+    let selectedRuntimeState: PiRuntimeState = selectedStartupRuntimeState
+    let activeRuntimeHash = createModeHash(initialRuntimeState)
 
     const applyRuntimeState = async (
         runtimeState: PiRuntimeState,

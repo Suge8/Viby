@@ -179,6 +179,17 @@ describe('runPi', () => {
         })
     })
 
+    it('persists the resolved Pi thinking level in the bootstrap session snapshot', async () => {
+        harness.piState = { ...harness.piState, thinkingLevel: 'high' }
+
+        await runPi({ startedBy: 'runner' })
+
+        expect(harness.bootstrapPayloads[0]).toMatchObject({
+            model: 'openai-codex/gpt-5.4-mini',
+            modelReasoningEffort: 'high',
+        })
+    })
+
     it('applies requested startup reasoning before syncing the session snapshot', async () => {
         harness.piState = { ...harness.piState, thinkingLevel: 'xhigh' }
 
