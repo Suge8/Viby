@@ -38,6 +38,19 @@ export const AgentLaunchConfigSchema = z.object({
 
 export type AgentLaunchConfig = z.infer<typeof AgentLaunchConfigSchema>
 
+export function requiresAgentLaunchConfig(options: {
+    agent: z.infer<typeof SessionDriverSchema>
+    model?: string | null
+    modelReasoningEffort?: z.infer<typeof ModelReasoningEffortSchema> | null
+}): boolean {
+    return options.agent === 'pi' || isModelOverride(options.model) || Boolean(options.modelReasoningEffort)
+}
+
+function isModelOverride(model: string | null | undefined): boolean {
+    const trimmed = model?.trim()
+    return Boolean(trimmed && trimmed !== 'auto' && trimmed !== 'default')
+}
+
 export const ResolveAgentLaunchConfigResponseSchema = z.union([
     z.object({
         type: z.literal('success'),

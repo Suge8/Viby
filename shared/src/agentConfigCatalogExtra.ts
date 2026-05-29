@@ -9,7 +9,7 @@ export const EXTRA_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefinition[] = 
         path: 'model_reasoning_summary',
         control: 'select',
         label: ['Reasoning summary', '思考摘要'],
-        help: ['Controls how much reasoning summary Codex shows.', '控制 Codex 显示多少思考摘要。'],
+        help: ['Controls how much reasoning summary Codex shows', '控制 Codex 显示多少思考摘要'],
         options: [
             ['auto', 'Auto', '自动'],
             ['concise', 'Concise', '简短'],
@@ -25,8 +25,8 @@ export const EXTRA_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefinition[] = 
         control: 'select',
         label: ['Web search mode', '网页搜索模式'],
         help: [
-            'Cached uses OpenAI index; live fetches current pages; disabled removes the tool.',
-            'Cached 用 OpenAI 索引，Live 抓取最新网页，Disabled 移除工具。',
+            'Cached uses OpenAI index; live fetches current pages; disabled removes the tool',
+            'Cached 用 OpenAI 索引，Live 抓取最新网页，Disabled 移除工具',
         ],
         defaultValue: 'cached',
         options: [
@@ -42,7 +42,47 @@ export const EXTRA_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefinition[] = 
         path: 'sandbox_workspace_write.writable_roots',
         control: 'list',
         label: ['Extra writable roots', '额外可写目录'],
-        help: ['Additional directories writable in workspace sandbox mode.', '工作区沙箱下额外允许写入的目录。'],
+        help: ['Additional directories writable in workspace sandbox mode', '工作区沙箱下额外允许写入的目录'],
+    }),
+    field({
+        id: 'codex.personality',
+        driver: 'codex',
+        group: 'model',
+        path: 'personality',
+        control: 'select',
+        label: ['Reply style', '回复风格'],
+        help: ['Tone Codex uses when replying', 'Codex 回复时使用的语气'],
+        options: [
+            ['none', 'None', '关闭'],
+            ['friendly', 'Friendly', '友好'],
+            ['pragmatic', 'Pragmatic', '直接'],
+        ],
+    }),
+    field({
+        id: 'codex.features.tool_suggest',
+        driver: 'codex',
+        group: 'experimental',
+        path: 'features.tool_suggest',
+        control: 'toggle',
+        label: ['Tool suggestions', '工具建议'],
+        help: [
+            'Codex feature flag. Lets Codex propose tools before invoking them',
+            'Codex 特性开关。让 Codex 调用前先建议合适工具',
+        ],
+        defaultValue: true,
+    }),
+    field({
+        id: 'codex.features.image_generation',
+        driver: 'codex',
+        group: 'experimental',
+        path: 'features.image_generation',
+        control: 'toggle',
+        label: ['Image generation', '图片生成'],
+        help: [
+            'Codex feature flag. Enables in-session image generation tools',
+            'Codex 特性开关。启用会话内图片生成工具',
+        ],
+        defaultValue: true,
     }),
     field({
         id: 'claude.autoUpdatesChannel',
@@ -51,12 +91,40 @@ export const EXTRA_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefinition[] = 
         path: 'autoUpdatesChannel',
         control: 'select',
         label: ['Update channel', '更新通道'],
-        help: ['Choose the Claude Code release channel.', '选择 Claude Code 更新通道。'],
+        help: ['Choose the Claude Code release channel', '选择 Claude Code 更新通道'],
         options: [
             ['latest', 'Latest', '最新'],
             ['stable', 'Stable', '稳定'],
         ],
     }),
+    field({
+        id: 'claude.autoUpdates',
+        driver: 'claude',
+        group: 'runtime',
+        path: 'autoUpdates',
+        control: 'toggle',
+        label: ['Auto update', '自动更新'],
+        help: ['Lets Claude Code download new versions in the background', '让 Claude Code 后台下载新版本'],
+        defaultValue: true,
+    }),
+    field({
+        id: 'claude.theme',
+        driver: 'claude',
+        group: 'ui',
+        path: 'theme',
+        control: 'select',
+        label: ['Theme', '主题'],
+        help: ['Claude Code terminal theme', 'Claude Code 终端主题'],
+        options: [
+            ['dark', 'Dark', '深色'],
+            ['light', 'Light', '浅色'],
+            ['dark-daltonized', 'Dark (colorblind-friendly)', '深色 (色弱友好)'],
+            ['light-daltonized', 'Light (colorblind-friendly)', '浅色 (色弱友好)'],
+            ['dark-ansi', 'Dark (ANSI)', '深色 (ANSI)'],
+            ['light-ansi', 'Light (ANSI)', '浅色 (ANSI)'],
+        ],
+    }),
+
     field({
         id: 'claude.editorMode',
         driver: 'claude',
@@ -64,7 +132,7 @@ export const EXTRA_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefinition[] = 
         path: 'editorMode',
         control: 'select',
         label: ['Editor keys', '编辑按键'],
-        help: ['Input editor key binding mode.', '输入框按键模式。'],
+        help: ['Input editor key binding mode', '输入框按键模式'],
         options: [
             ['normal', 'Normal', '普通'],
             ['vim', 'Vim', 'Vim'],
@@ -77,7 +145,7 @@ export const EXTRA_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefinition[] = 
         path: 'permissions.additionalDirectories',
         control: 'list',
         label: ['Additional directories', '额外目录'],
-        help: ['Extra working directories Claude may access.', 'Claude 可访问的额外工作目录。'],
+        help: ['Extra working directories Claude may access', 'Claude 可访问的额外工作目录'],
     }),
     field({
         id: 'gemini.general.enableAutoUpdate',
@@ -86,7 +154,7 @@ export const EXTRA_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefinition[] = 
         path: 'general.enableAutoUpdate',
         control: 'toggle',
         label: ['Auto update', '自动更新'],
-        help: ['Allows Gemini CLI to check and install updates.', '允许 Gemini CLI 检查并安装更新。'],
+        help: ['Allows Gemini CLI to check and install updates', '允许 Gemini CLI 检查并安装更新'],
         defaultValue: true,
     }),
     field({
@@ -96,7 +164,7 @@ export const EXTRA_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefinition[] = 
         path: 'general.enableNotifications',
         control: 'toggle',
         label: ['Terminal notifications', '终端通知'],
-        help: ['Sends terminal notifications for prompts and completions.', '需要操作或完成时发送终端通知。'],
+        help: ['Sends terminal notifications for prompts and completions', '需要操作或完成时发送终端通知'],
         defaultValue: false,
     }),
     field({
@@ -106,8 +174,26 @@ export const EXTRA_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefinition[] = 
         path: 'ui.hideTips',
         control: 'toggle',
         label: ['Hide tips', '隐藏提示'],
-        help: ['Hides helpful tips in the Gemini CLI UI.', '隐藏 Gemini CLI 界面提示。'],
+        help: ['Hides helpful tips in the Gemini CLI UI', '隐藏 Gemini CLI 界面提示'],
         defaultValue: false,
+    }),
+    field({
+        id: 'gemini.ui.theme',
+        driver: 'gemini',
+        group: 'ui',
+        path: 'ui.theme',
+        control: 'select',
+        label: ['Theme', '主题'],
+        help: ['Gemini CLI terminal theme', 'Gemini CLI 终端主题'],
+        options: [
+            ['Default', 'Default', '默认'],
+            ['GitHub', 'GitHub', 'GitHub'],
+            ['Dracula', 'Dracula', 'Dracula'],
+            ['Atom One', 'Atom One', 'Atom One'],
+            ['Ayu', 'Ayu', 'Ayu'],
+            ['Default Light', 'Default Light', '默认浅色'],
+            ['GitHub Light', 'GitHub Light', 'GitHub 浅色'],
+        ],
     }),
     field({
         id: 'gemini.context.fileFiltering.respectGitIgnore',
@@ -116,7 +202,7 @@ export const EXTRA_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefinition[] = 
         path: 'context.fileFiltering.respectGitIgnore',
         control: 'toggle',
         label: ['Respect .gitignore', '遵守 .gitignore'],
-        help: ['Excludes gitignored files from file search.', '文件搜索排除 gitignore 文件。'],
+        help: ['Excludes gitignored files from file search', '文件搜索排除 gitignore 文件'],
         defaultValue: true,
     }),
     field({
@@ -126,7 +212,7 @@ export const EXTRA_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefinition[] = 
         path: 'context.fileFiltering.respectGeminiIgnore',
         control: 'toggle',
         label: ['Respect .geminiignore', '遵守 .geminiignore'],
-        help: ['Excludes files matched by .geminiignore.', '排除 .geminiignore 命中的文件。'],
+        help: ['Excludes files matched by .geminiignore', '排除 .geminiignore 命中的文件'],
         defaultValue: true,
     }),
     field({
@@ -136,7 +222,7 @@ export const EXTRA_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefinition[] = 
         path: 'security.disableAlwaysAllow',
         control: 'toggle',
         label: ['Disable always allow', '禁用永久允许'],
-        help: ['Removes always-allow choices from approval dialogs.', '从审批弹窗移除永久允许选项。'],
+        help: ['Removes always-allow choices from approval dialogs', '从审批弹窗移除永久允许选项'],
         defaultValue: false,
     }),
     field({
@@ -146,7 +232,7 @@ export const EXTRA_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefinition[] = 
         path: 'enabledModels',
         control: 'list',
         label: ['Model cycling', '模型轮换'],
-        help: ['Model patterns used by Pi model cycling.', 'Pi 模型轮换使用的模型匹配规则。'],
+        help: ['Model patterns used by Pi model cycling', 'Pi 模型轮换使用的模型匹配规则'],
     }),
     field({
         id: 'pi.doubleEscapeAction',
@@ -155,7 +241,7 @@ export const EXTRA_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefinition[] = 
         path: 'doubleEscapeAction',
         control: 'select',
         label: ['Double Escape', '双击 Esc'],
-        help: ['Action triggered by pressing Escape twice.', '连续按两次 Esc 时触发的动作。'],
+        help: ['Action triggered by pressing Escape twice', '连续按两次 Esc 时触发的动作'],
         options: [
             ['tree', 'Tree', '文件树'],
             ['fork', 'Fork', '分叉'],
@@ -169,7 +255,7 @@ export const EXTRA_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefinition[] = 
         path: 'enableSkillCommands',
         control: 'toggle',
         label: ['Skill commands', 'Skill 命令'],
-        help: ['Registers loaded skills as slash commands.', '把已加载 skills 注册成斜杠命令。'],
+        help: ['Registers loaded skills as slash commands', '把已加载 skills 注册成斜杠命令'],
         defaultValue: true,
     }),
     field({
@@ -179,7 +265,7 @@ export const EXTRA_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefinition[] = 
         path: 'askUser',
         control: 'toggle',
         label: ['Ask questions', '允许提问'],
-        help: ['Allows Copilot CLI to ask clarifying questions.', '允许 Copilot CLI 询问澄清问题。'],
+        help: ['Allows Copilot CLI to ask clarifying questions', '允许 Copilot CLI 询问澄清问题'],
         defaultValue: true,
     }),
     field({
@@ -189,7 +275,7 @@ export const EXTRA_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefinition[] = 
         path: 'autoUpdate',
         control: 'toggle',
         label: ['Auto update', '自动更新'],
-        help: ['Automatically downloads Copilot CLI updates.', '自动下载 Copilot CLI 更新。'],
+        help: ['Automatically downloads Copilot CLI updates', '自动下载 Copilot CLI 更新'],
         defaultValue: true,
     }),
     field({
@@ -199,7 +285,7 @@ export const EXTRA_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefinition[] = 
         path: 'renderMarkdown',
         control: 'toggle',
         label: ['Render Markdown', '渲染 Markdown'],
-        help: ['Renders Markdown in terminal output.', '在终端输出中渲染 Markdown。'],
+        help: ['Renders Markdown in terminal output', '在终端输出中渲染 Markdown'],
         defaultValue: true,
     }),
     field({
@@ -209,7 +295,7 @@ export const EXTRA_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefinition[] = 
         path: 'respectGitignore',
         control: 'toggle',
         label: ['Respect .gitignore', '遵守 .gitignore'],
-        help: ['Excludes gitignored files from @ file mention picker.', '在 @ 文件选择中排除 gitignore 文件。'],
+        help: ['Excludes gitignored files from @ file mention picker', '在 @ 文件选择中排除 gitignore 文件'],
         defaultValue: true,
     }),
     field({
@@ -219,7 +305,7 @@ export const EXTRA_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefinition[] = 
         path: 'stream',
         control: 'toggle',
         label: ['Stream output', '流式输出'],
-        help: ['Streams responses as they arrive.', '边生成边显示回复。'],
+        help: ['Streams responses as they arrive', '边生成边显示回复'],
         defaultValue: true,
     }),
     field({
@@ -229,6 +315,6 @@ export const EXTRA_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefinition[] = 
         path: 'allowedUrls',
         control: 'list',
         label: ['Allowed URLs', '允许网址'],
-        help: ['URLs or domains allowed without prompting.', '无需询问即可访问的网址或域名。'],
+        help: ['URLs or domains allowed without prompting', '无需询问即可访问的网址或域名'],
     }),
 ]

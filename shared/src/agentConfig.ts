@@ -2,28 +2,28 @@ import { z } from 'zod'
 
 export const AGENT_CONFIG_DRIVERS = ['codex', 'claude', 'gemini', 'pi', 'copilot'] as const
 export const AGENT_CONFIG_CONTROLS = ['select', 'toggle', 'text', 'number', 'list'] as const
-export const AGENT_CONFIG_VERSION_STATUSES = ['supported', 'unsupported', 'missing', 'unknown'] as const
+export const AGENT_CONFIG_VERSION_STATUSES = ['supported', 'outdated', 'missing', 'unknown'] as const
 
 export const AGENT_CONFIG_SUPPORTED_VERSIONS = {
     codex: {
         version: '0.130.0',
-        source: 'npm:@openai/codex latest; darwin/win32 platform tags match 0.130.0',
+        source: 'npm:@openai/codex minimum verified version; newer versions use the stable baseline catalog',
     },
     claude: {
         version: '2.1.143',
-        source: 'npm:@anthropic-ai/claude-code latest',
+        source: 'npm:@anthropic-ai/claude-code minimum verified version; newer versions use the stable baseline catalog',
     },
     gemini: {
         version: '0.42.0',
-        source: 'npm:@google/gemini-cli latest',
+        source: 'npm:@google/gemini-cli minimum verified version; newer versions use the stable baseline catalog',
     },
     pi: {
         version: '0.75.1',
-        source: 'github:earendil-works/pi latest release',
+        source: 'github:earendil-works/pi minimum verified version; newer versions use the stable baseline catalog',
     },
     copilot: {
         version: '1.0.48',
-        source: 'github:github/copilot-cli latest release',
+        source: 'github:github/copilot-cli minimum verified version; newer versions use the stable baseline catalog',
     },
 } as const satisfies Record<AgentConfigDriver, { version: string; source: string }>
 
@@ -106,6 +106,15 @@ export const RestoreAgentConfigResponseSchema = z.object({
     agent: AgentConfigFileStateSchema,
 })
 
+export const OpenAgentConfigRequestSchema = z.object({
+    driver: AgentConfigDriverSchema,
+})
+
+export const OpenAgentConfigResponseSchema = z.object({
+    ok: z.literal(true),
+    path: z.string().min(1),
+})
+
 export type AgentConfigDriver = z.infer<typeof AgentConfigDriverSchema>
 export type AgentConfigControl = z.infer<typeof AgentConfigControlSchema>
 export type AgentConfigVersionStatus = z.infer<typeof AgentConfigVersionStatusSchema>
@@ -120,6 +129,8 @@ export type SaveAgentConfigRequest = z.infer<typeof SaveAgentConfigRequestSchema
 export type SaveAgentConfigResponse = z.infer<typeof SaveAgentConfigResponseSchema>
 export type RestoreAgentConfigRequest = z.infer<typeof RestoreAgentConfigRequestSchema>
 export type RestoreAgentConfigResponse = z.infer<typeof RestoreAgentConfigResponseSchema>
+export type OpenAgentConfigRequest = z.infer<typeof OpenAgentConfigRequestSchema>
+export type OpenAgentConfigResponse = z.infer<typeof OpenAgentConfigResponseSchema>
 
 export function areAgentConfigValuesEqual(left: AgentConfigFieldValue, right: AgentConfigFieldValue): boolean {
     return JSON.stringify(left) === JSON.stringify(right)
@@ -135,9 +146,44 @@ export function normalizeAgentConfigVersion(version: string): string {
     return version.trim().replace(/^v/i, '')
 }
 
+export function parseAgentConfigVersionOutput(output: string): string | undefined {
+    return output.match(/\bv?(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)\b/)?.[1]
+}
+
+function parseAgentConfigVersionCore(version: string): { major: number; minor: number; patch: number } | null {
+    const match = normalizeAgentConfigVersion(version).match(/^(\d+)\.(\d+)\.(\d+)/)
+    if (!match) return null
+    return {
+        major: Number(match[1]),
+        minor: Number(match[2]),
+        patch: Number(match[3]),
+    }
+}
+
+function isPrerelease(version: string): boolean {
+    return /^\d+\.\d+\.\d+-/.test(normalizeAgentConfigVersion(version))
+}
+
+export function compareAgentConfigVersions(left: string, right: string): number | null {
+    const leftCore = parseAgentConfigVersionCore(left)
+    const rightCore = parseAgentConfigVersionCore(right)
+    if (!leftCore || !rightCore) return null
+
+    for (const key of ['major', 'minor', 'patch'] as const) {
+        const delta = leftCore[key] - rightCore[key]
+        if (delta !== 0) return delta > 0 ? 1 : -1
+    }
+
+    if (isPrerelease(left) && !isPrerelease(right)) return -1
+    if (!isPrerelease(left) && isPrerelease(right)) return 1
+    return 0
+}
+
 export function isAgentConfigVersionSupported(driver: AgentConfigDriver, version: string | undefined): boolean {
     if (!version) return false
-    return normalizeAgentConfigVersion(version) === getAgentConfigSupportedVersion(driver).version
+    const minimumVersion = getAgentConfigSupportedVersion(driver).version
+    const comparison = compareAgentConfigVersions(version, minimumVersion)
+    return comparison !== null && comparison >= 0
 }
 
 export function createAgentConfigValuePatch(

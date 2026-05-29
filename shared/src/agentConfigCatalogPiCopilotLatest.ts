@@ -9,7 +9,7 @@ export const PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinitio
         path: 'compaction.enabled',
         control: 'toggle',
         label: ['Auto compaction', '自动压缩'],
-        help: ['Enables Pi context compaction.', '启用 Pi 上下文压缩。'],
+        help: ['Enables Pi context compaction', '启用 Pi 上下文压缩'],
         defaultValue: true,
     }),
     field({
@@ -19,7 +19,7 @@ export const PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinitio
         path: 'compaction.reserveTokens',
         control: 'number',
         label: ['Reserve tokens', '保留输出 Token'],
-        help: ['Tokens reserved for the next LLM response.', '为下一次模型回复预留的 Token。'],
+        help: ['Tokens reserved for the next LLM response', '为下一次模型回复预留的 Token'],
         defaultValue: 16384,
     }),
     field({
@@ -29,7 +29,7 @@ export const PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinitio
         path: 'retry.enabled',
         control: 'toggle',
         label: ['Agent retry', 'Agent 重试'],
-        help: ['Retries transient agent-level failures.', '对临时 Agent 层失败自动重试。'],
+        help: ['Retries transient agent-level failures', '对临时 Agent 层失败自动重试'],
         defaultValue: true,
     }),
     field({
@@ -39,7 +39,7 @@ export const PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinitio
         path: 'retry.provider.maxRetryDelayMs',
         control: 'number',
         label: ['Max retry delay', '最大重试延迟'],
-        help: ['Provider retry delays above this fail immediately.', '供应商要求的重试延迟超过此值时立即失败。'],
+        help: ['Provider retry delays above this fail immediately', '供应商要求的重试延迟超过此值时立即失败'],
         defaultValue: 60000,
     }),
     field({
@@ -49,7 +49,7 @@ export const PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinitio
         path: 'transport',
         control: 'select',
         label: ['Transport', '传输'],
-        help: ['Preferred provider transport when multiple are supported.', '供应商支持多种传输时的优先选择。'],
+        help: ['Preferred provider transport when multiple are supported', '供应商支持多种传输时的优先选择'],
         defaultValue: 'sse',
         options: [
             ['sse', 'SSE', 'SSE'],
@@ -64,7 +64,7 @@ export const PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinitio
         path: 'terminal.showImages',
         control: 'toggle',
         label: ['Show images', '显示图片'],
-        help: ['Shows inline images when the terminal supports them.', '终端支持时显示内联图片。'],
+        help: ['Shows inline images when the terminal supports them', '终端支持时显示内联图片'],
         defaultValue: true,
     }),
     field({
@@ -74,7 +74,7 @@ export const PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinitio
         path: 'images.blockImages',
         control: 'toggle',
         label: ['Block images', '阻止图片'],
-        help: ['Blocks images from being sent to the model.', '阻止图片发送给模型。'],
+        help: ['Blocks images from being sent to the model', '阻止图片发送给模型'],
         defaultValue: false,
     }),
     field({
@@ -84,7 +84,7 @@ export const PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinitio
         path: 'shellPath',
         control: 'text',
         label: ['Shell path', 'Shell 路径'],
-        help: ['Custom shell executable path.', '自定义 Shell 可执行文件路径。'],
+        help: ['Custom shell executable path', '自定义 Shell 可执行文件路径'],
     }),
     field({
         id: 'pi.npmCommand',
@@ -93,7 +93,7 @@ export const PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinitio
         path: 'npmCommand',
         control: 'list',
         label: ['NPM command', 'NPM 命令'],
-        help: ['Command argv used for npm operations, one item per line.', 'npm 操作使用的命令参数，每行一个。'],
+        help: ['Command argv used for npm operations, one item per line', 'npm 操作使用的命令参数，每行一个'],
     }),
     field({
         id: 'pi.sessionDir',
@@ -102,7 +102,7 @@ export const PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinitio
         path: 'sessionDir',
         control: 'text',
         label: ['Session directory', '会话目录'],
-        help: ['Directory where Pi stores session files.', 'Pi 保存会话文件的目录。'],
+        help: ['Directory where Pi stores session files', 'Pi 保存会话文件的目录'],
     }),
     field({
         id: 'copilot.deniedUrls',
@@ -111,7 +111,7 @@ export const PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinitio
         path: 'deniedUrls',
         control: 'list',
         label: ['Denied URLs', '拒绝网址'],
-        help: ['URLs or domains Copilot CLI should always deny.', 'Copilot CLI 总是拒绝的网址或域名。'],
+        help: ['URLs or domains Copilot CLI should always deny', 'Copilot CLI 总是拒绝的网址或域名'],
     }),
     field({
         id: 'copilot.autoUpdatesChannel',
@@ -120,7 +120,7 @@ export const PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinitio
         path: 'autoUpdatesChannel',
         control: 'select',
         label: ['Update channel', '更新通道'],
-        help: ['Chooses stable or prerelease Copilot CLI updates.', '选择稳定版或预发布 Copilot CLI 更新。'],
+        help: ['Chooses stable or prerelease Copilot CLI updates', '选择稳定版或预发布 Copilot CLI 更新'],
         defaultValue: 'stable',
         options: [
             ['stable', 'Stable', '稳定'],
@@ -134,7 +134,7 @@ export const PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinitio
         path: 'banner',
         control: 'select',
         label: ['Banner', '横幅'],
-        help: ['Controls animated banner display frequency.', '控制动态横幅显示频率。'],
+        help: ['Controls animated banner display frequency', '控制动态横幅显示频率'],
         defaultValue: 'once',
         options: [
             ['always', 'Always', '总是'],
@@ -149,7 +149,7 @@ export const PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinitio
         path: 'colorMode',
         control: 'select',
         label: ['Color mode', '颜色模式'],
-        help: ['Adjusts terminal contrast and color accessibility.', '调整终端对比度与颜色可访问性。'],
+        help: ['Adjusts terminal contrast and color accessibility', '调整终端对比度与颜色可访问性'],
         defaultValue: 'default',
         options: [
             ['default', 'Default', '默认'],
@@ -165,7 +165,7 @@ export const PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinitio
         path: 'disabledMcpServers',
         control: 'list',
         label: ['Disabled MCP servers', '禁用 MCP 服务'],
-        help: ['Configured MCP servers that should not start.', '已配置但不应启动的 MCP 服务。'],
+        help: ['Configured MCP servers that should not start', '已配置但不应启动的 MCP 服务'],
     }),
     field({
         id: 'copilot.enabledMcpServers',
@@ -174,7 +174,7 @@ export const PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinitio
         path: 'enabledMcpServers',
         control: 'list',
         label: ['Enabled MCP servers', '启用 MCP 服务'],
-        help: ['Built-in MCP servers to enable.', '要启用的内置 MCP 服务。'],
+        help: ['Built-in MCP servers to enable', '要启用的内置 MCP 服务'],
     }),
     field({
         id: 'copilot.ide.autoConnect',
@@ -183,7 +183,7 @@ export const PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinitio
         path: 'ide.autoConnect',
         control: 'toggle',
         label: ['IDE auto-connect', '自动连接 IDE'],
-        help: ['Automatically connects to an IDE workspace on startup.', '启动时自动连接 IDE 工作区。'],
+        help: ['Automatically connects to an IDE workspace on startup', '启动时自动连接 IDE 工作区'],
         defaultValue: true,
     }),
     field({
@@ -193,7 +193,7 @@ export const PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinitio
         path: 'ide.openDiffOnEdit',
         control: 'toggle',
         label: ['Open edit diffs', '打开编辑 Diff'],
-        help: ['Opens file edit diffs in the connected IDE.', '在已连接 IDE 中打开文件编辑 Diff。'],
+        help: ['Opens file edit diffs in the connected IDE', '在已连接 IDE 中打开文件编辑 Diff'],
         defaultValue: true,
     }),
     field({
@@ -203,7 +203,7 @@ export const PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinitio
         path: 'logLevel',
         control: 'select',
         label: ['Log level', '日志级别'],
-        help: ['Logging verbosity for Copilot CLI.', 'Copilot CLI 日志详细程度。'],
+        help: ['Logging verbosity for Copilot CLI', 'Copilot CLI 日志详细程度'],
         defaultValue: 'default',
         options: [
             ['default', 'Default', '默认'],
@@ -222,7 +222,7 @@ export const PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinitio
         path: 'screenReader',
         control: 'toggle',
         label: ['Screen reader', '屏幕阅读器'],
-        help: ['Enables terminal output optimized for screen readers.', '启用适合屏幕阅读器的终端输出。'],
+        help: ['Enables terminal output optimized for screen readers', '启用适合屏幕阅读器的终端输出'],
         defaultValue: false,
     }),
     field({
@@ -232,7 +232,7 @@ export const PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinitio
         path: 'updateTerminalTitle',
         control: 'toggle',
         label: ['Terminal title', '终端标题'],
-        help: ['Shows current intent in the terminal title.', '在终端标题显示当前意图。'],
+        help: ['Shows current intent in the terminal title', '在终端标题显示当前意图'],
         defaultValue: true,
     }),
 ]

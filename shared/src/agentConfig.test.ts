@@ -8,6 +8,7 @@ import {
     AgentConfigFieldValueSchema,
     AgentConfigResponseSchema,
     AgentConfigVersionStateSchema,
+    compareAgentConfigVersions,
     createAgentConfigValuePatch,
     getAgentConfigFields,
     isAgentConfigVersionSupported,
@@ -224,13 +225,15 @@ describe('agent config catalog', () => {
         expect(() => SaveAgentConfigRequestSchema.parse({ driver: 'unknown', values: {} })).toThrow()
     })
 
-    it('keeps latest supported versions as the single config write gate', () => {
+    it('keeps minimum verified versions as the config write floor', () => {
         expect(Object.keys(AGENT_CONFIG_SUPPORTED_VERSIONS).sort()).toEqual([...AGENT_CONFIG_DRIVERS].sort())
         for (const driver of AGENT_CONFIG_DRIVERS) {
             const requirement = AGENT_CONFIG_SUPPORTED_VERSIONS[driver]
             expect(requirement.version).toMatch(/^\d+\.\d+\.\d+/)
             expect(requirement.source).not.toBe('')
             expect(isAgentConfigVersionSupported(driver, requirement.version)).toBe(true)
+            const [major, minor, patch] = requirement.version.split('.').map(Number)
+            expect(isAgentConfigVersionSupported(driver, `${major}.${minor}.${patch + 1}`)).toBe(true)
             expect(isAgentConfigVersionSupported(driver, '0.0.1')).toBe(false)
             expect(normalizeAgentConfigVersion(`v${requirement.version}`)).toBe(requirement.version)
             expect(() =>
@@ -243,6 +246,14 @@ describe('agent config catalog', () => {
                 })
             ).not.toThrow()
         }
+    })
+
+    it('compares provider CLI versions without blocking newer releases', () => {
+        expect(compareAgentConfigVersions('0.131.0', '0.130.0')).toBe(1)
+        expect(compareAgentConfigVersions('0.130.0', '0.130.0')).toBe(0)
+        expect(compareAgentConfigVersions('0.129.9', '0.130.0')).toBe(-1)
+        expect(compareAgentConfigVersions('0.130.0-beta.1', '0.130.0')).toBe(-1)
+        expect(compareAgentConfigVersions('not-a-version', '0.130.0')).toBeNull()
     })
 
     it('keeps driver field groups stable enough for dense configuration screens', () => {

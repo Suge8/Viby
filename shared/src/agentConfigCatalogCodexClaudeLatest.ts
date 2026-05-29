@@ -10,8 +10,8 @@ export const CODEX_CLAUDE_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinit
         control: 'text',
         label: ['Model provider', '模型供应商'],
         help: [
-            'Provider key from Codex model_providers, such as openai or azure.',
-            'Codex model_providers 中的供应商键。',
+            'Provider key from Codex model_providers, such as openai or azure',
+            'Codex model_providers 中的供应商键',
         ],
     }),
     field({
@@ -21,7 +21,7 @@ export const CODEX_CLAUDE_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinit
         path: 'model_verbosity',
         control: 'select',
         label: ['Verbosity', '输出细节'],
-        help: ['Output detail for GPT-5 family models.', 'GPT-5 系列模型的输出细节。'],
+        help: ['Output detail for GPT-5 family models', 'GPT-5 系列模型的输出细节'],
         options: [
             ['low', 'Low', '低'],
             ['medium', 'Medium', '中'],
@@ -35,7 +35,7 @@ export const CODEX_CLAUDE_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinit
         path: 'plan_mode_reasoning_effort',
         control: 'select',
         label: ['Plan reasoning', '规划思考'],
-        help: ['Reasoning effort Codex uses in plan mode.', 'Codex 规划模式使用的思考强度。'],
+        help: ['Reasoning effort Codex uses in plan mode', 'Codex 规划模式使用的思考强度'],
         options: reasoningOptions,
     }),
     field({
@@ -45,7 +45,7 @@ export const CODEX_CLAUDE_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinit
         path: 'hide_agent_reasoning',
         control: 'toggle',
         label: ['Hide reasoning events', '隐藏思考事件'],
-        help: ['Hides agent reasoning events from the UI/output.', '从界面和输出中隐藏 Agent 思考事件。'],
+        help: ['Hides agent reasoning events from the UI/output', '从界面和输出中隐藏 Agent 思考事件'],
         defaultValue: false,
     }),
     field({
@@ -56,8 +56,8 @@ export const CODEX_CLAUDE_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinit
         control: 'toggle',
         label: ['Show raw reasoning', '显示原始思考'],
         help: [
-            'Shows raw reasoning events when the model/provider supports them.',
-            '模型或供应商支持时显示原始思考事件。',
+            'Shows raw reasoning events when the model/provider supports them',
+            '模型或供应商支持时显示原始思考事件',
         ],
         defaultValue: false,
     }),
@@ -69,8 +69,8 @@ export const CODEX_CLAUDE_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinit
         control: 'select',
         label: ['File links', '文件链接'],
         help: [
-            'Editor used when Codex turns file citations into clickable links.',
-            'Codex 把文件引用变成链接时使用的编辑器。',
+            'Editor used when Codex turns file citations into clickable links',
+            'Codex 把文件引用变成链接时使用的编辑器',
         ],
         options: [
             ['none', 'Off', '关闭'],
@@ -87,7 +87,7 @@ export const CODEX_CLAUDE_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinit
         path: 'cli_auth_credentials_store',
         control: 'select',
         label: ['Credential store', '凭据存储'],
-        help: ['Where Codex stores CLI auth credentials.', 'Codex CLI 认证凭据的存储位置。'],
+        help: ['Where Codex stores CLI auth credentials', 'Codex CLI 认证凭据的存储位置'],
         options: [
             ['file', 'File', '文件'],
             ['keyring', 'Keyring', '钥匙串'],
@@ -102,7 +102,7 @@ export const CODEX_CLAUDE_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinit
         path: 'forced_login_method',
         control: 'select',
         label: ['Login method', '登录方式'],
-        help: ['Restricts Codex login to ChatGPT or API authentication.', '限制 Codex 只能使用 ChatGPT 或 API 登录。'],
+        help: ['Restricts Codex login to ChatGPT or API authentication', '限制 Codex 只能使用 ChatGPT 或 API 登录'],
         options: [
             ['chatgpt', 'ChatGPT', 'ChatGPT'],
             ['api', 'API', 'API'],
@@ -115,7 +115,7 @@ export const CODEX_CLAUDE_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinit
         path: 'service_tier',
         control: 'select',
         label: ['Service tier', '服务档位'],
-        help: ['Optional speed/cost preference for new turns.', '新回合可选的速度和成本偏好。'],
+        help: ['Optional speed/cost preference for new turns', '新回合可选的速度和成本偏好'],
         options: [
             ['fast', 'Fast', '快速'],
             ['flex', 'Flex', '弹性'],
@@ -128,7 +128,7 @@ export const CODEX_CLAUDE_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinit
         path: 'history.max_bytes',
         control: 'number',
         label: ['History size cap', '历史大小上限'],
-        help: ['Maximum history file bytes before old entries are dropped.', '历史文件超过此字节数后删除旧记录。'],
+        help: ['Maximum history file bytes before old entries are dropped', '历史文件超过此字节数后删除旧记录'],
     }),
     field({
         id: 'codex.tools.view_image',
@@ -137,7 +137,7 @@ export const CODEX_CLAUDE_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinit
         path: 'tools.view_image',
         control: 'toggle',
         label: ['View image tool', '查看图片工具'],
-        help: ['Allows Codex to attach and inspect local images.', '允许 Codex 附加并查看本地图片。'],
+        help: ['Allows Codex to attach and inspect local images', '允许 Codex 附加并查看本地图片'],
     }),
     field({
         id: 'claude.cleanupPeriodDays',
@@ -146,7 +146,7 @@ export const CODEX_CLAUDE_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinit
         path: 'cleanupPeriodDays',
         control: 'number',
         label: ['Transcript cleanup', '记录清理天数'],
-        help: ['Deletes session files older than this many days.', '删除早于这些天数的会话文件。'],
+        help: ['Deletes session files older than this many days', '删除早于这些天数的会话文件'],
     }),
     field({
         id: 'claude.autoMemoryEnabled',
@@ -155,7 +155,7 @@ export const CODEX_CLAUDE_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinit
         path: 'autoMemoryEnabled',
         control: 'toggle',
         label: ['Auto memory', '自动记忆'],
-        help: ['Lets Claude read and write auto memory.', '允许 Claude 读取和写入自动记忆。'],
+        help: ['Lets Claude read and write auto memory', '允许 Claude 读取和写入自动记忆'],
         defaultValue: true,
     }),
     field({
@@ -165,7 +165,7 @@ export const CODEX_CLAUDE_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinit
         path: 'alwaysThinkingEnabled',
         control: 'toggle',
         label: ['Thinking by default', '默认思考'],
-        help: ['Starts sessions with extended thinking enabled.', '启动会话时默认开启扩展思考。'],
+        help: ['Starts sessions with extended thinking enabled', '启动会话时默认开启扩展思考'],
     }),
     field({
         id: 'claude.showThinkingSummaries',
@@ -174,7 +174,7 @@ export const CODEX_CLAUDE_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinit
         path: 'showThinkingSummaries',
         control: 'toggle',
         label: ['Thinking summaries', '思考摘要'],
-        help: ['Shows summaries for extended thinking in interactive sessions.', '交互会话中显示扩展思考摘要。'],
+        help: ['Shows summaries for extended thinking in interactive sessions', '交互会话中显示扩展思考摘要'],
     }),
     field({
         id: 'claude.forceLoginMethod',
@@ -183,7 +183,7 @@ export const CODEX_CLAUDE_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinit
         path: 'forceLoginMethod',
         control: 'select',
         label: ['Login method', '登录方式'],
-        help: ['Restricts Claude Code authentication method.', '限制 Claude Code 的认证方式。'],
+        help: ['Restricts Claude Code authentication method', '限制 Claude Code 的认证方式'],
         options: [
             ['claudeai', 'Claude.ai', 'Claude.ai'],
             ['console', 'Console', 'Console'],
@@ -196,7 +196,7 @@ export const CODEX_CLAUDE_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinit
         path: 'disableAllHooks',
         control: 'toggle',
         label: ['Disable hooks', '禁用 Hooks'],
-        help: ['Disables user and project hooks.', '禁用用户与项目 Hooks。'],
+        help: ['Disables user and project hooks', '禁用用户与项目 Hooks'],
         defaultValue: false,
     }),
     field({
@@ -206,7 +206,7 @@ export const CODEX_CLAUDE_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinit
         path: 'skipWebFetchPreflight',
         control: 'toggle',
         label: ['Skip fetch preflight', '跳过网页预检'],
-        help: ['Skips Claude WebFetch domain safety preflight.', '跳过 Claude WebFetch 域名安全预检。'],
+        help: ['Skips Claude WebFetch domain safety preflight', '跳过 Claude WebFetch 域名安全预检'],
     }),
     field({
         id: 'claude.tui',
@@ -215,7 +215,7 @@ export const CODEX_CLAUDE_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinit
         path: 'tui',
         control: 'select',
         label: ['Terminal UI', '终端界面'],
-        help: ['Selects fullscreen or classic terminal rendering.', '选择全屏或经典终端渲染。'],
+        help: ['Selects fullscreen or classic terminal rendering', '选择全屏或经典终端渲染'],
         options: [
             ['default', 'Default', '默认'],
             ['fullscreen', 'Fullscreen', '全屏'],
@@ -228,7 +228,7 @@ export const CODEX_CLAUDE_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinit
         path: 'viewMode',
         control: 'select',
         label: ['Transcript view', '记录视图'],
-        help: ['Default transcript view mode at startup.', '启动时默认记录视图。'],
+        help: ['Default transcript view mode at startup', '启动时默认记录视图'],
         options: [
             ['default', 'Default', '默认'],
             ['verbose', 'Verbose', '详细'],
@@ -242,7 +242,7 @@ export const CODEX_CLAUDE_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinit
         path: 'verbose',
         control: 'toggle',
         label: ['Verbose output', '详细输出'],
-        help: ['Shows more terminal output detail.', '显示更多终端输出细节。'],
+        help: ['Shows more terminal output detail', '显示更多终端输出细节'],
     }),
     field({
         id: 'claude.syntaxHighlightingDisabled',
@@ -251,6 +251,6 @@ export const CODEX_CLAUDE_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDefinit
         path: 'syntaxHighlightingDisabled',
         control: 'toggle',
         label: ['Disable syntax color', '禁用语法高亮'],
-        help: ['Turns off highlighting in diffs and code blocks.', '关闭 diff 和代码块高亮。'],
+        help: ['Turns off highlighting in diffs and code blocks', '关闭 diff 和代码块高亮'],
     }),
 ]

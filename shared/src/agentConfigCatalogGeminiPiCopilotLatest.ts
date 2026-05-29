@@ -9,7 +9,7 @@ export const GEMINI_PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDe
         path: 'general.vimMode',
         control: 'toggle',
         label: ['Vim mode', 'Vim 模式'],
-        help: ['Enables Vim keybindings in Gemini CLI.', '在 Gemini CLI 中启用 Vim 按键。'],
+        help: ['Enables Vim keybindings in Gemini CLI', '在 Gemini CLI 中启用 Vim 按键'],
         defaultValue: false,
     }),
     field({
@@ -19,7 +19,7 @@ export const GEMINI_PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDe
         path: 'output.format',
         control: 'select',
         label: ['Output format', '输出格式'],
-        help: ['Terminal output format for Gemini CLI.', 'Gemini CLI 的终端输出格式。'],
+        help: ['Terminal output format for Gemini CLI', 'Gemini CLI 的终端输出格式'],
         defaultValue: 'text',
         options: [
             ['text', 'Text', '文本'],
@@ -33,7 +33,7 @@ export const GEMINI_PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDe
         path: 'ui.inlineThinkingMode',
         control: 'select',
         label: ['Inline thinking', '内联思考'],
-        help: ['Controls whether Gemini shows model thinking inline.', '控制 Gemini 是否内联显示模型思考。'],
+        help: ['Controls whether Gemini shows model thinking inline', '控制 Gemini 是否内联显示模型思考'],
         defaultValue: 'off',
         options: [
             ['off', 'Off', '关闭'],
@@ -47,7 +47,7 @@ export const GEMINI_PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDe
         path: 'ui.footer.hideModelInfo',
         control: 'toggle',
         label: ['Hide model footer', '隐藏模型状态'],
-        help: ['Hides model and context usage from the footer.', '在底部隐藏模型和上下文用量。'],
+        help: ['Hides model and context usage from the footer', '在底部隐藏模型和上下文用量'],
         defaultValue: false,
     }),
     field({
@@ -57,7 +57,7 @@ export const GEMINI_PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDe
         path: 'ui.errorVerbosity',
         control: 'select',
         label: ['Error detail', '错误细节'],
-        help: ['Low hides recoverable details; full shows them.', 'Low 隐藏可恢复错误细节，full 显示完整信息。'],
+        help: ['Low hides recoverable details; full shows them', 'Low 隐藏可恢复错误细节，full 显示完整信息'],
         defaultValue: 'low',
         options: [
             ['low', 'Low', '低'],
@@ -71,7 +71,7 @@ export const GEMINI_PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDe
         path: 'ide.enabled',
         control: 'toggle',
         label: ['IDE mode', 'IDE 模式'],
-        help: ['Enables Gemini CLI IDE integration mode.', '启用 Gemini CLI 的 IDE 集成模式。'],
+        help: ['Enables Gemini CLI IDE integration mode', '启用 Gemini CLI 的 IDE 集成模式'],
         defaultValue: false,
     }),
     field({
@@ -81,7 +81,7 @@ export const GEMINI_PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDe
         path: 'billing.overageStrategy',
         control: 'select',
         label: ['Overage strategy', '额度耗尽策略'],
-        help: ['Chooses how Gemini handles quota exhaustion.', '选择 Gemini 在额度耗尽时如何处理。'],
+        help: ['Chooses how Gemini handles quota exhaustion', '选择 Gemini 在额度耗尽时如何处理'],
         defaultValue: 'ask',
         options: [
             ['ask', 'Ask', '询问'],
@@ -96,7 +96,7 @@ export const GEMINI_PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDe
         path: 'model.maxSessionTurns',
         control: 'number',
         label: ['Max session turns', '最大会话轮数'],
-        help: ['Maximum turns retained in a session; -1 means unlimited.', '会话保留的最大轮数；-1 表示不限。'],
+        help: ['Maximum turns retained in a session; -1 means unlimited', '会话保留的最大轮数；-1 表示不限'],
         defaultValue: -1,
     }),
     field({
@@ -106,7 +106,7 @@ export const GEMINI_PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDe
         path: 'model.compressionThreshold',
         control: 'number',
         label: ['Compression threshold', '压缩阈值'],
-        help: ['Context usage fraction that triggers compression.', '触发上下文压缩的用量比例。'],
+        help: ['Context usage fraction that triggers compression', '触发上下文压缩的用量比例'],
         defaultValue: 0.5,
     }),
     field({
@@ -116,7 +116,7 @@ export const GEMINI_PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDe
         path: 'context.fileFiltering.enableFuzzySearch',
         control: 'toggle',
         label: ['Fuzzy file search', '模糊文件搜索'],
-        help: ['Enables fuzzy matching for file search.', '为文件搜索启用模糊匹配。'],
+        help: ['Enables fuzzy matching for file search', '为文件搜索启用模糊匹配'],
         defaultValue: true,
     }),
     field({
@@ -126,7 +126,7 @@ export const GEMINI_PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDe
         path: 'tools.sandboxAllowedPaths',
         control: 'list',
         label: ['Sandbox allowed paths', '沙箱允许路径'],
-        help: ['Extra paths Gemini sandbox tools may access.', 'Gemini 沙箱工具可访问的额外路径。'],
+        help: ['Extra paths Gemini sandbox tools may access', 'Gemini 沙箱工具可访问的额外路径'],
     }),
     field({
         id: 'gemini.tools.truncateToolOutputThreshold',
@@ -135,7 +135,7 @@ export const GEMINI_PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDe
         path: 'tools.truncateToolOutputThreshold',
         control: 'number',
         label: ['Tool output cap', '工具输出上限'],
-        help: ['Maximum characters before large tool output is truncated.', '工具输出超过此字符数后截断。'],
+        help: ['Maximum characters before large tool output is truncated', '工具输出超过此字符数后截断'],
         defaultValue: 40000,
     }),
     field({
@@ -145,7 +145,7 @@ export const GEMINI_PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDe
         path: 'security.toolSandboxing',
         control: 'toggle',
         label: ['Tool sandboxing', '工具沙箱'],
-        help: ['Isolates individual tools instead of the whole CLI.', '隔离单个工具而不是整个 CLI。'],
+        help: ['Isolates individual tools instead of the whole CLI', '隔离单个工具而不是整个 CLI'],
         defaultValue: false,
     }),
     field({
@@ -155,7 +155,7 @@ export const GEMINI_PI_COPILOT_LATEST_CONFIG_FIELDS: readonly AgentConfigFieldDe
         path: 'advanced.ignoreLocalEnv',
         control: 'toggle',
         label: ['Ignore local .env', '忽略本地 .env'],
-        help: ['Prevents Gemini from loading generic .env files.', '阻止 Gemini 加载通用 .env 文件。'],
+        help: ['Prevents Gemini from loading generic .env files', '阻止 Gemini 加载通用 .env 文件'],
         defaultValue: false,
     }),
 ]

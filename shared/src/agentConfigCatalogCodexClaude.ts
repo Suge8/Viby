@@ -9,7 +9,7 @@ export const CODEX_CLAUDE_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefiniti
         path: 'model',
         control: 'select',
         label: ['Default model', '默认模型'],
-        help: ['Model Codex starts with when no session override is set.', '没有会话覆盖时 Codex 默认使用的模型。'],
+        help: ['Model Codex starts with when no session override is set', '没有会话覆盖时 Codex 默认使用的模型'],
         options: [
             ['gpt-5.5', 'GPT-5.5', 'GPT-5.5'],
             ['gpt-5.4', 'GPT-5.4', 'GPT-5.4'],
@@ -25,7 +25,7 @@ export const CODEX_CLAUDE_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefiniti
         path: 'model_reasoning_effort',
         control: 'select',
         label: ['Reasoning effort', '思考强度'],
-        help: ['Higher effort spends more compute on hard tasks.', '越高越适合复杂任务，也会更慢。'],
+        help: ['Higher effort spends more compute on hard tasks', '越高越适合复杂任务，也会更慢'],
         options: reasoningOptions,
     }),
     field({
@@ -35,7 +35,7 @@ export const CODEX_CLAUDE_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefiniti
         path: 'approval_policy',
         control: 'select',
         label: ['Approval policy', '审批策略'],
-        help: ['Controls when Codex asks before running commands.', '控制 Codex 运行命令前什么时候询问。'],
+        help: ['Controls when Codex asks before running commands', '控制 Codex 运行命令前什么时候询问'],
         options: approvalOptions,
     }),
     field({
@@ -45,7 +45,7 @@ export const CODEX_CLAUDE_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefiniti
         path: 'sandbox_mode',
         control: 'select',
         label: ['Sandbox', '沙箱'],
-        help: ['Limits command file-system access.', '限制命令能读写的文件范围。'],
+        help: ['Limits command file-system access', '限制命令能读写的文件范围'],
         options: [
             ['read-only', 'Read only', '只读'],
             ['workspace-write', 'Workspace write', '可写工作区'],
@@ -59,7 +59,7 @@ export const CODEX_CLAUDE_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefiniti
         path: 'sandbox_workspace_write.network_access',
         control: 'toggle',
         label: ['Network in workspace sandbox', '工作区沙箱允许联网'],
-        help: ['Only applies when sandbox is workspace-write.', '只在可写工作区沙箱下生效。'],
+        help: ['Only applies when sandbox is workspace-write', '只在可写工作区沙箱下生效'],
         defaultValue: false,
     }),
     field({
@@ -69,7 +69,7 @@ export const CODEX_CLAUDE_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefiniti
         path: 'history.persistence',
         control: 'select',
         label: ['History', '历史记录'],
-        help: ['Choose whether Codex saves local conversation history.', '选择 Codex 是否保存本机会话历史。'],
+        help: ['Choose whether Codex saves local conversation history', '选择 Codex 是否保存本机会话历史'],
         options: [
             ['save-all', 'Save history', '保存历史'],
             ['none', 'Do not save', '不保存'],
@@ -83,8 +83,8 @@ export const CODEX_CLAUDE_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefiniti
         control: 'select',
         label: ['Default model', '默认模型'],
         help: [
-            'Initial Claude Code model. Users can still switch in a session.',
-            'Claude Code 启动模型，会话中仍可切换。',
+            'Initial Claude Code model. Users can still switch in a session',
+            'Claude Code 启动模型，会话中仍可切换',
         ],
         options: [
             ['default', 'Default', '默认'],
@@ -100,11 +100,8 @@ export const CODEX_CLAUDE_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefiniti
         group: 'model',
         path: 'effortLevel',
         control: 'select',
-        label: ['Effort level', '思考强度'],
-        help: [
-            'Persistent Claude Code reasoning level. Max is session-only, so it is not saved here.',
-            'Claude Code 持久思考强度。Max 只能单会话使用，所以这里不写入。',
-        ],
+        label: ['Effort level', '默认思考强度'],
+        help: ['Default thinking effort. Max only works per session', '默认思考强度，Max 仅支持会话内启用'],
         options: reasoningOptions.filter((item) => item[0] !== 'none' && item[0] !== 'minimal'),
     }),
     field({
@@ -114,7 +111,7 @@ export const CODEX_CLAUDE_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefiniti
         path: 'permissions.defaultMode',
         control: 'select',
         label: ['Permission mode', '权限模式'],
-        help: ['Default tool approval mode when Claude Code opens.', 'Claude Code 打开时默认工具审批模式。'],
+        help: ['Default tool approval mode when Claude Code opens', 'Claude Code 打开时默认工具审批模式'],
         options: [
             ['default', 'Default', '默认'],
             ['acceptEdits', 'Accept edits', '自动接受编辑'],
@@ -131,7 +128,7 @@ export const CODEX_CLAUDE_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefiniti
         path: 'permissions.disableBypassPermissionsMode',
         control: 'toggle',
         label: ['Block bypass mode', '禁用跳过权限'],
-        help: ['Prevents dangerous bypass permissions mode from being activated.', '阻止启用危险的跳过权限模式。'],
+        help: ['Prevents dangerous bypass permissions mode from being activated', '阻止启用危险的跳过权限模式'],
     }),
     field({
         id: 'claude.permissions.denySensitiveFiles',
@@ -140,7 +137,7 @@ export const CODEX_CLAUDE_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefiniti
         path: 'permissions.deny',
         control: 'toggle',
         label: ['Deny common secret files', '拒绝常见密钥文件'],
-        help: ['Adds deny rules for .env and secrets folders.', '加入 .env 和 secrets 目录的拒绝规则。'],
+        help: ['Adds deny rules for .env and secrets folders', '加入 .env 和 secrets 目录的拒绝规则'],
     }),
     field({
         id: 'claude.sandbox.enabled',
@@ -150,8 +147,8 @@ export const CODEX_CLAUDE_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefiniti
         control: 'toggle',
         label: ['Bash sandbox', 'Bash 沙箱'],
         help: [
-            'Isolates shell commands from broad filesystem and network access.',
-            '隔离 shell 命令，减少文件和网络越界。',
+            'Isolates shell commands from broad filesystem and network access',
+            '隔离 shell 命令，减少文件和网络越界',
         ],
     }),
     field({
@@ -161,7 +158,7 @@ export const CODEX_CLAUDE_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDefiniti
         path: 'includeCoAuthoredBy',
         control: 'toggle',
         label: ['Commit attribution', '提交署名'],
-        help: ['Adds Claude co-author trailers to generated commits.', '为 Claude 生成的提交加入共同作者署名。'],
+        help: ['Adds Claude co-author trailers to generated commits', '为 Claude 生成的提交加入共同作者署名'],
         defaultValue: true,
     }),
 ]

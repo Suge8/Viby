@@ -9,7 +9,7 @@ export const GEMINI_PI_COPILOT_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDef
         path: 'model.name',
         control: 'select',
         label: ['Default model', '默认模型'],
-        help: ['Model Gemini CLI starts with.', 'Gemini CLI 默认启动模型。'],
+        help: ['Model Gemini CLI starts with', 'Gemini CLI 默认启动模型'],
         options: [
             ['gemini-3-pro-preview', 'Gemini 3 Pro Preview', 'Gemini 3 Pro Preview'],
             ['gemini-3-flash-preview', 'Gemini 3 Flash Preview', 'Gemini 3 Flash Preview'],
@@ -24,7 +24,7 @@ export const GEMINI_PI_COPILOT_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDef
         path: 'general.defaultApprovalMode',
         control: 'select',
         label: ['Approval mode', '审批模式'],
-        help: ['Default tool execution approval mode.', '默认工具执行审批模式。'],
+        help: ['Default tool execution approval mode', '默认工具执行审批模式'],
         options: [
             ['default', 'Ask first', '先询问'],
             ['auto_edit', 'Auto-approve edits', '自动批准编辑'],
@@ -38,7 +38,7 @@ export const GEMINI_PI_COPILOT_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDef
         path: 'tools.sandboxNetworkAccess',
         control: 'toggle',
         label: ['Sandbox network', '沙箱联网'],
-        help: ['Allows network access inside Gemini tool sandbox.', '允许 Gemini 工具沙箱访问网络。'],
+        help: ['Allows network access inside Gemini tool sandbox', '允许 Gemini 工具沙箱访问网络'],
         defaultValue: false,
     }),
     field({
@@ -48,7 +48,7 @@ export const GEMINI_PI_COPILOT_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDef
         path: 'security.disableYoloMode',
         control: 'toggle',
         label: ['Disable YOLO mode', '禁用 YOLO'],
-        help: ['Blocks full auto-approval even if launched with a flag.', '即使命令行开启也阻止全自动放行。'],
+        help: ['Blocks full auto-approval even if launched with a flag', '即使命令行开启也阻止全自动放行'],
         defaultValue: false,
     }),
     field({
@@ -58,7 +58,7 @@ export const GEMINI_PI_COPILOT_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDef
         path: 'general.plan.enabled',
         control: 'toggle',
         label: ['Plan mode', '规划模式'],
-        help: ['Enables read-only planning flow.', '启用只读规划流程。'],
+        help: ['Enables read-only planning flow', '启用只读规划流程'],
         defaultValue: true,
     }),
     field({
@@ -68,7 +68,7 @@ export const GEMINI_PI_COPILOT_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDef
         path: 'tools.useRipgrep',
         control: 'toggle',
         label: ['Use ripgrep', '使用 ripgrep'],
-        help: ['Uses ripgrep for faster file search.', '用 ripgrep 加速文件搜索。'],
+        help: ['Uses ripgrep for faster file search', '用 ripgrep 加速文件搜索'],
         defaultValue: true,
     }),
     field({
@@ -78,7 +78,7 @@ export const GEMINI_PI_COPILOT_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDef
         path: 'skills.enabled',
         control: 'toggle',
         label: ['Agent skills', 'Agent Skills'],
-        help: ['Loads Gemini CLI skills when available.', '可用时加载 Gemini CLI skills。'],
+        help: ['Loads Gemini CLI skills when available', '可用时加载 Gemini CLI skills'],
         defaultValue: true,
     }),
     field({
@@ -88,7 +88,7 @@ export const GEMINI_PI_COPILOT_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDef
         path: 'defaultProvider',
         control: 'select',
         label: ['Default provider', '默认供应商'],
-        help: ['Provider used when a model is not fully qualified.', '模型未写完整前缀时使用的供应商。'],
+        help: ['Provider used when a model is not fully qualified', '模型未写完整前缀时使用的供应商'],
         options: [
             ['anthropic', 'Anthropic', 'Anthropic'],
             ['openai', 'OpenAI', 'OpenAI'],
@@ -104,8 +104,8 @@ export const GEMINI_PI_COPILOT_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDef
         control: 'text',
         label: ['Default model', '默认模型'],
         help: [
-            'Pi model ID, for example gpt-5.4 or claude-sonnet-4.6.',
-            'Pi 模型 ID，例如 gpt-5.4 或 claude-sonnet-4.6。',
+            'Pi model ID, for example gpt-5.4 or claude-sonnet-4.6',
+            'Pi 模型 ID，例如 gpt-5.4 或 claude-sonnet-4.6',
         ],
     }),
     field({
@@ -115,7 +115,7 @@ export const GEMINI_PI_COPILOT_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDef
         path: 'defaultThinkingLevel',
         control: 'select',
         label: ['Thinking level', '思考强度'],
-        help: ['Pi thinking level saved in settings.json.', '写入 Pi settings.json 的思考强度。'],
+        help: ['Pi thinking level saved in settings.json', '写入 Pi settings.json 的思考强度'],
         options: [['off', 'Off', '关闭'], ...reasoningOptions.filter((item) => item[0] !== 'none')],
     }),
     field({
@@ -125,7 +125,7 @@ export const GEMINI_PI_COPILOT_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDef
         path: 'hideThinkingBlock',
         control: 'toggle',
         label: ['Hide thinking blocks', '隐藏思考块'],
-        help: ['Keeps reasoning blocks out of terminal output.', '不在终端输出思考块。'],
+        help: ['Keeps reasoning blocks out of terminal output', '不在终端输出思考块'],
         defaultValue: false,
     }),
     field({
@@ -135,7 +135,7 @@ export const GEMINI_PI_COPILOT_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDef
         path: 'theme',
         control: 'select',
         label: ['Theme', '主题'],
-        help: ['Pi terminal theme.', 'Pi 终端主题。'],
+        help: ['Pi terminal theme', 'Pi 终端主题'],
         options: [
             ['dark', 'Dark', '深色'],
             ['light', 'Light', '浅色'],
@@ -149,7 +149,7 @@ export const GEMINI_PI_COPILOT_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDef
         path: 'quietStartup',
         control: 'toggle',
         label: ['Quiet startup', '安静启动'],
-        help: ['Hides the startup header.', '隐藏启动头部信息。'],
+        help: ['Hides the startup header', '隐藏启动头部信息'],
         defaultValue: false,
     }),
     field({
@@ -159,10 +159,7 @@ export const GEMINI_PI_COPILOT_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDef
         path: 'model',
         control: 'select',
         label: ['Default model', '默认模型'],
-        help: [
-            'Model used by Copilot CLI. Auto lets Copilot choose.',
-            'Copilot CLI 使用的模型。Auto 交给 Copilot 选择。',
-        ],
+        help: ['Model used by Copilot CLI. Auto lets Copilot choose', 'Copilot CLI 使用的模型。Auto 交给 Copilot 选择'],
         options: [
             ['auto', 'Auto', '自动'],
             ['gpt-5', 'GPT-5', 'GPT-5'],
@@ -179,7 +176,7 @@ export const GEMINI_PI_COPILOT_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDef
         path: 'effortLevel',
         control: 'select',
         label: ['Effort level', '思考强度'],
-        help: ['Extended thinking level for Copilot CLI.', 'Copilot CLI 扩展思考强度。'],
+        help: ['Extended thinking level for Copilot CLI', 'Copilot CLI 扩展思考强度'],
         defaultValue: 'medium',
         options: reasoningOptions.filter((item) => item[0] !== 'none' && item[0] !== 'minimal'),
     }),
@@ -190,7 +187,7 @@ export const GEMINI_PI_COPILOT_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDef
         path: 'includeCoAuthoredBy',
         control: 'toggle',
         label: ['Commit attribution', '提交署名'],
-        help: ['Adds a co-author trailer to agent commits.', '给 Agent 提交加入共同作者署名。'],
+        help: ['Adds a co-author trailer to agent commits', '给 Agent 提交加入共同作者署名'],
         defaultValue: true,
     }),
     field({
@@ -200,7 +197,7 @@ export const GEMINI_PI_COPILOT_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDef
         path: 'theme',
         control: 'select',
         label: ['Theme', '主题'],
-        help: ['Copilot CLI terminal color theme.', 'Copilot CLI 终端主题。'],
+        help: ['Copilot CLI terminal color theme', 'Copilot CLI 终端主题'],
         defaultValue: 'auto',
         options: [
             ['auto', 'Auto', '自动'],
@@ -215,7 +212,7 @@ export const GEMINI_PI_COPILOT_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDef
         path: 'streamerMode',
         control: 'toggle',
         label: ['Streamer mode', '演示模式'],
-        help: ['Hides preview model names and quota details.', '隐藏预览模型名和额度细节。'],
+        help: ['Hides preview model names and quota details', '隐藏预览模型名和额度细节'],
         defaultValue: false,
     }),
     field({
@@ -225,7 +222,7 @@ export const GEMINI_PI_COPILOT_AGENT_CONFIG_FIELDS: readonly AgentConfigFieldDef
         path: 'keepAlive',
         control: 'select',
         label: ['Keep awake', '保持唤醒'],
-        help: ['Prevents the computer from sleeping while Copilot is active.', 'Copilot 活跃时阻止电脑睡眠。'],
+        help: ['Prevents the computer from sleeping while Copilot is active', 'Copilot 活跃时阻止电脑睡眠'],
         defaultValue: 'off',
         options: [
             ['off', 'Off', '关闭'],
