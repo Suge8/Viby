@@ -2,6 +2,7 @@ import type {
     AgentConfigDriver,
     AgentConfigFileState,
     AgentConfigResponse,
+    OpenAgentConfigRequest,
     RestoreAgentConfigRequest,
     SaveAgentConfigRequest,
 } from '@viby/protocol/types'
@@ -9,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LocalHubPairingClient } from '@/lib/localHubPairingClient'
 import type { HubRuntimeStatus } from '@/types'
 
-export type AgentConfigErrorCode = 'hub_unavailable' | 'load_failed' | 'save_failed'
+export type AgentConfigErrorCode = 'hub_unavailable' | 'load_failed' | 'save_failed' | 'restore_failed' | 'open_failed'
 
 type AgentConfigState = {
     response: AgentConfigResponse | null
@@ -17,9 +18,11 @@ type AgentConfigState = {
     loading: boolean
     savingDriver: AgentConfigDriver | null
     restoringDriver: AgentConfigDriver | null
+    openingDriver: AgentConfigDriver | null
     load(): void
     save(request: SaveAgentConfigRequest): Promise<AgentConfigFileState | null>
     restore(request: RestoreAgentConfigRequest): Promise<AgentConfigFileState | null>
+    open(request: OpenAgentConfigRequest): Promise<boolean>
 }
 
 function createClient(status?: HubRuntimeStatus): LocalHubPairingClient | null {
@@ -48,6 +51,7 @@ export function useAgentConfig(
     const [loading, setLoading] = useState(false)
     const [savingDriver, setSavingDriver] = useState<AgentConfigDriver | null>(null)
     const [restoringDriver, setRestoringDriver] = useState<AgentConfigDriver | null>(null)
+    const [openingDriver, setOpeningDriver] = useState<AgentConfigDriver | null>(null)
     const [loadedSourceKey, setLoadedSourceKey] = useState<string | null>(null)
     const requestRef = useRef(0)
 
@@ -120,13 +124,45 @@ export function useAgentConfig(
                 }))
                 return result.agent
             } catch {
-                setError('save_failed')
+                setError('restore_failed')
                 return null
             } finally {
                 setRestoringDriver(null)
             }
         },
         [client]
+    )
+
+    const open = useCallback(
+        async (request: OpenAgentConfigRequest): Promise<boolean> => {
+            if (!client) {
+                setError('hub_unavailable')
+                return false
+            }
+            setOpeningDriver(request.driver)
+            setError(null)
+            try {
+                const requestId = requestRef.current + 1
+                requestRef.current = requestId
+                await client.openAgentConfig(request)
+                try {
+                    const nextResponse = await client.getAgentConfig()
+                    if (requestRef.current === requestId) {
+                        setResponse(nextResponse)
+                        setLoadedSourceKey(sourceKey)
+                    }
+                } catch {
+                    if (requestRef.current === requestId) setError('load_failed')
+                }
+                return true
+            } catch {
+                setError('open_failed')
+                return false
+            } finally {
+                setOpeningDriver(null)
+            }
+        },
+        [client, sourceKey]
     )
 
     useEffect(() => {
@@ -136,6 +172,7 @@ export function useAgentConfig(
         setLoading(false)
         setSavingDriver(null)
         setRestoringDriver(null)
+        setOpeningDriver(null)
         setLoadedSourceKey(null)
     }, [sourceKey])
 
@@ -144,5 +181,5 @@ export function useAgentConfig(
         load()
     }, [enabled, load, loadedSourceKey, sourceKey])
 
-    return { response, error, loading, savingDriver, restoringDriver, load, save, restore }
+    return { response, error, loading, savingDriver, restoringDriver, openingDriver, load, save, restore, open }
 }

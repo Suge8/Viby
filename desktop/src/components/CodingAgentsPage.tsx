@@ -10,15 +10,18 @@ import {
     type RuntimeAgentCapabilitySnapshot,
     type SaveAgentConfigRequest,
 } from '@viby/protocol'
-import { AnimatePresence, LayoutGroup, m } from 'motion/react'
+import { AnimatePresence, m } from 'motion/react'
 import { type JSX, useEffect, useMemo, useState } from 'react'
+import { AgentBrandIcon } from '@/components/AgentBrandIcon'
 import { AgentConfigPanel } from '@/components/AgentConfigPanel'
 import { AgentModelPanel, AgentModelToggle, shouldShowAgentModels } from '@/components/AgentModelDropdown'
 import { AGENT_ITEM_MOTION, AgentStatusIcon, AgentStatusText } from '@/components/AgentPresenceMotion'
+import { DesktopSegmentedControl } from '@/components/DesktopSegmentedControl'
 import { LinkIcon, RefreshIcon, SpinnerIcon } from '@/components/icons'
+import { PresenceSwap } from '@/components/motion'
 import type { AgentAvailabilityErrorCode } from '@/hooks/useAgentAvailability'
 import type { AgentConfigErrorCode } from '@/hooks/useAgentConfig'
-import { AGENT_DESCRIPTION_KEYS, AGENT_ICONS, AGENT_LABELS } from '@/lib/agentPresentation'
+import { AGENT_DESCRIPTION_KEYS, AGENT_LABELS } from '@/lib/agentPresentation'
 import type { DesktopCopy } from '@/lib/desktopCopy'
 
 const STATUS_TRANSITION = { duration: 0.22, ease: [0.22, 1, 0.36, 1] } as const
@@ -28,6 +31,7 @@ type CodingAgentsPageProps = {
     configError: AgentConfigErrorCode | null
     configLoading: boolean
     configResponse: AgentConfigResponse | null
+    configOpeningDriver: AgentConfigDriver | null
     configRestoringDriver: AgentConfigDriver | null
     configSavingDriver: AgentConfigDriver | null
     copy: DesktopCopy
@@ -37,6 +41,7 @@ type CodingAgentsPageProps = {
     refreshing: boolean
     onRestoreAgentConfig(request: RestoreAgentConfigRequest): Promise<boolean>
     onSaveAgentConfig(request: SaveAgentConfigRequest): Promise<boolean>
+    onOpenAgentConfig(driver: AgentConfigDriver): Promise<boolean>
     onLoadAgentCapability(driver: AgentFlavor): void
     onOpenUrl(url: string): void
     onRefresh(): void
@@ -151,7 +156,6 @@ function AgentRow(props: {
     const description = props.copy[AGENT_DESCRIPTION_KEYS[props.driver]]
     const ready = props.agent?.status === 'ready'
     const href = props.agent ? getAgentSupportLink(props.driver, props.agent.resolution) : null
-    const logoClassName = props.driver === 'pi' ? 'is-template' : props.driver
     const showStatus = shouldShowStatus(props.agent, detecting)
     const showSideReason = shouldShowSideReason(props.agent, detecting)
     const showModels = shouldShowAgentModels(props.agent)
@@ -162,9 +166,7 @@ function AgentRow(props: {
     return (
         <m.div className="desktop-agent-row" role="listitem" layout transition={STATUS_TRANSITION}>
             <div className="desktop-agent-main">
-                <span className="desktop-agent-logo">
-                    <img className={logoClassName} src={AGENT_ICONS[props.driver]} alt="" />
-                </span>
+                <AgentBrandIcon driver={props.driver} size={40} />
                 <div>
                     <span className="desktop-agent-title-line">
                         <strong>{AGENT_LABELS[props.driver]}</strong>
@@ -249,6 +251,12 @@ export function CodingAgentsPage(props: CodingAgentsPageProps): JSX.Element {
     const showRefresh =
         activeView === 'status' &&
         (props.error === 'check_failed' || props.loading || props.refreshing || hasRuntimeSnapshot)
+    const toolbarNotice =
+        activeView === 'status' && props.error
+            ? getErrorLabel(props.copy, props.error)
+            : activeView === 'config' && props.configError === 'hub_unavailable'
+              ? props.copy.agentConfigHubUnavailable
+              : null
 
     useEffect(() => {
         if (hasRuntimeSnapshot && !props.loading && !props.refreshing) setDisplayDrivers(orderedDrivers)
@@ -258,36 +266,25 @@ export function CodingAgentsPage(props: CodingAgentsPageProps): JSX.Element {
         <div className="desktop-page desktop-agents-page" aria-busy={props.loading || props.refreshing}>
             <div className="desktop-page-toolbar desktop-agent-toolbar">
                 <div className="desktop-agent-toolbar-left">
-                    <div
-                        className="desktop-agent-view-switch"
+                    <DesktopSegmentedControl<'status' | 'config'>
+                        ariaLabel={props.copy.agentViewSwitchLabel}
+                        layoutId="agent-view"
                         role="tablist"
-                        aria-label={props.copy.agentViewSwitchLabel}
-                    >
-                        <button
-                            type="button"
-                            className={activeView === 'status' ? 'is-active' : ''}
-                            onClick={() => setActiveView('status')}
-                        >
-                            {props.copy.agentStatusTab}
-                        </button>
-                        <button
-                            type="button"
-                            className={activeView === 'config' ? 'is-active' : ''}
-                            onClick={() => setActiveView('config')}
-                        >
-                            {props.copy.agentConfigTab}
-                        </button>
-                    </div>
-                    <AnimatePresence initial={false}>
-                        {activeView === 'status' && props.error ? (
-                            <m.div key="notice" className="desktop-inline-notice is-error" {...AGENT_ITEM_MOTION}>
-                                {getErrorLabel(props.copy, props.error)}
-                            </m.div>
-                        ) : null}
-                    </AnimatePresence>
+                        value={activeView}
+                        onChange={(value) => setActiveView(value)}
+                        options={[
+                            { value: 'status', label: props.copy.agentStatusTab },
+                            { value: 'config', label: props.copy.agentConfigTab },
+                        ]}
+                    />
                 </div>
                 <div className="desktop-agent-toolbar-right">
                     <AnimatePresence initial={false}>
+                        {toolbarNotice ? (
+                            <m.div key="notice" className="desktop-inline-notice is-warning" {...AGENT_ITEM_MOTION}>
+                                {toolbarNotice}
+                            </m.div>
+                        ) : null}
                         {showRefresh ? (
                             <m.button
                                 key="refresh"
@@ -312,7 +309,7 @@ export function CodingAgentsPage(props: CodingAgentsPageProps): JSX.Element {
                 </div>
             </div>
 
-            <LayoutGroup>
+            <PresenceSwap switchKey={activeView}>
                 {activeView === 'status' ? (
                     <m.div className="desktop-agent-list" role="list" aria-label={props.copy.agentsListLabel} layout>
                         {displayDrivers.map((driver) => (
@@ -338,15 +335,17 @@ export function CodingAgentsPage(props: CodingAgentsPageProps): JSX.Element {
                         error={props.configError}
                         language={props.language}
                         loading={props.configLoading}
+                        openingDriver={props.configOpeningDriver}
                         response={props.configResponse}
                         restoringDriver={props.configRestoringDriver}
                         savingDriver={props.configSavingDriver}
                         onRefresh={props.onRefresh}
+                        onOpen={props.onOpenAgentConfig}
                         onRestore={(driver, backupPath) => props.onRestoreAgentConfig({ driver, backupPath })}
                         onSave={props.onSaveAgentConfig}
                     />
                 )}
-            </LayoutGroup>
+            </PresenceSwap>
         </div>
     )
 }
