@@ -5,10 +5,16 @@ import type { Socket } from 'socket.io-client'
 import { enterControllerSurface } from '@/lib/controllerOwnershipProbe'
 import { subscribeForegroundPulse } from '@/lib/foregroundPulse'
 import { createRealtimeEventController, type ToastEvent } from '@/lib/realtimeEventController'
+import type { SessionAttentionSnapshot } from '@/lib/sessionAttentionToastController'
 import { createLazyRealtimeSocketOptions } from '@/lib/socketOptions'
 import type { SyncEvent } from '@/types/api'
 
 const EMPTY_SUBSCRIPTION: WebSubscription = {}
+
+type SessionAttentionChange = {
+    before: SessionAttentionSnapshot | null
+    after: SessionAttentionSnapshot | null
+}
 
 type RealtimeCallbacks = {
     onEvent: (event: SyncEvent) => void
@@ -16,6 +22,7 @@ type RealtimeCallbacks = {
     onDisconnect?: (reason: string) => void
     onError?: (error: unknown) => void
     onToast?: (event: ToastEvent) => void
+    onSessionAttentionChange?: (change: SessionAttentionChange) => void
 }
 
 function getVisibilityState(): WebVisibilityState {
@@ -65,6 +72,7 @@ export function useRealtimeConnection(options: {
     onDisconnect?: (reason: string) => void
     onError?: (error: unknown) => void
     onToast?: (event: ToastEvent) => void
+    onSessionAttentionChange?: (change: SessionAttentionChange) => void
 }): void {
     const queryClient = useQueryClient()
     useEffect(() => {
@@ -79,6 +87,7 @@ export function useRealtimeConnection(options: {
         onDisconnect: options.onDisconnect,
         onError: options.onError,
         onToast: options.onToast,
+        onSessionAttentionChange: options.onSessionAttentionChange,
     })
     const socketRef = useRef<Socket | null>(null)
     const tokenRef = useRef(options.token)
@@ -96,8 +105,16 @@ export function useRealtimeConnection(options: {
             onDisconnect: options.onDisconnect,
             onError: options.onError,
             onToast: options.onToast,
+            onSessionAttentionChange: options.onSessionAttentionChange,
         }
-    }, [options.onConnect, options.onDisconnect, options.onError, options.onEvent, options.onToast])
+    }, [
+        options.onConnect,
+        options.onDisconnect,
+        options.onError,
+        options.onEvent,
+        options.onSessionAttentionChange,
+        options.onToast,
+    ])
 
     useEffect(() => {
         tokenRef.current = options.token
@@ -130,6 +147,7 @@ export function useRealtimeConnection(options: {
             queryClient,
             onEvent: (event) => callbacksRef.current.onEvent(event),
             onToast: (event) => callbacksRef.current.onToast?.(event),
+            onSessionAttentionChange: (change) => callbacksRef.current.onSessionAttentionChange?.(change),
         })
         let isDisposed = false
         let cleanupSocket: Socket | null = null
@@ -244,19 +262,22 @@ export function useRealtimeEventBridge(options: {
     subscribe: (listener: (event: SyncEvent) => void) => () => void
     onEvent: (event: SyncEvent) => void
     onToast?: (event: ToastEvent) => void
+    onSessionAttentionChange?: (change: SessionAttentionChange) => void
 }): void {
     const queryClient = useQueryClient()
-    const callbacksRef = useRef<Pick<RealtimeCallbacks, 'onEvent' | 'onToast'>>({
+    const callbacksRef = useRef<Pick<RealtimeCallbacks, 'onEvent' | 'onToast' | 'onSessionAttentionChange'>>({
         onEvent: options.onEvent,
         onToast: options.onToast,
+        onSessionAttentionChange: options.onSessionAttentionChange,
     })
 
     useEffect(() => {
         callbacksRef.current = {
             onEvent: options.onEvent,
             onToast: options.onToast,
+            onSessionAttentionChange: options.onSessionAttentionChange,
         }
-    }, [options.onEvent, options.onToast])
+    }, [options.onEvent, options.onSessionAttentionChange, options.onToast])
 
     useEffect(() => {
         if (!options.enabled) {
@@ -266,6 +287,7 @@ export function useRealtimeEventBridge(options: {
             queryClient,
             onEvent: (event) => callbacksRef.current.onEvent(event),
             onToast: (event) => callbacksRef.current.onToast?.(event),
+            onSessionAttentionChange: (change) => callbacksRef.current.onSessionAttentionChange?.(change),
         })
         const unsubscribe = options.subscribe((event) => {
             eventController.handleEvent(event)

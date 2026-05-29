@@ -1,15 +1,15 @@
 import { useQuery } from '@tanstack/react-query'
 import type { ApiClient } from '@/api/client'
-import type { GitStatusFiles } from '@/types/api'
 import { buildGitStatusFiles } from '@/lib/gitParsers'
 import { queryKeys } from '@/lib/query-keys'
-import {
-    formatOptionalUserFacingErrorMessage,
-    formatUserFacingErrorMessage
-} from '@/lib/userFacingError'
 import { useTranslation } from '@/lib/use-translation'
+import { formatOptionalUserFacingErrorMessage, formatUserFacingErrorMessage } from '@/lib/userFacingError'
+import type { GitStatusFiles } from '@/types/api'
 
-export function useGitStatusFiles(api: ApiClient | null, sessionId: string | null): {
+export function useGitStatusFiles(
+    api: ApiClient | null,
+    sessionId: string | null
+): {
     status: GitStatusFiles | null
     error: string | null
     isLoading: boolean
@@ -28,19 +28,16 @@ export function useGitStatusFiles(api: ApiClient | null, sessionId: string | nul
             if (!statusResult.success) {
                 return {
                     status: null,
-                    error: formatUserFacingErrorMessage(
-                        statusResult.error ?? statusResult.stderr,
-                        {
-                            t,
-                            fallbackKey: 'error.files.git'
-                        }
-                    )
+                    error: formatUserFacingErrorMessage(statusResult.error ?? statusResult.stderr, {
+                        t,
+                        fallbackKey: 'error.files.git',
+                    }),
                 }
             }
 
             const [unstagedResult, stagedResult] = await Promise.all([
                 api.getGitDiffNumstat(sessionId, false),
-                api.getGitDiffNumstat(sessionId, true)
+                api.getGitDiffNumstat(sessionId, true),
             ])
 
             const status = buildGitStatusFiles(
@@ -51,22 +48,20 @@ export function useGitStatusFiles(api: ApiClient | null, sessionId: string | nul
 
             const errors: string[] = []
             if (!unstagedResult.success) {
-                errors.push(formatUserFacingErrorMessage(
-                    unstagedResult.error ?? unstagedResult.stderr,
-                    {
+                errors.push(
+                    formatUserFacingErrorMessage(unstagedResult.error ?? unstagedResult.stderr, {
                         t,
-                        fallbackKey: 'file.error.diffUnavailable'
-                    }
-                ))
+                        fallbackKey: 'file.error.diffUnavailable',
+                    })
+                )
             }
             if (!stagedResult.success) {
-                errors.push(formatUserFacingErrorMessage(
-                    stagedResult.error ?? stagedResult.stderr,
-                    {
+                errors.push(
+                    formatUserFacingErrorMessage(stagedResult.error ?? stagedResult.stderr, {
                         t,
-                        fallbackKey: 'file.error.diffUnavailable'
-                    }
-                ))
+                        fallbackKey: 'file.error.diffUnavailable',
+                    })
+                )
             }
 
             return { status, error: errors.length ? errors.join(' ') : null }
@@ -76,13 +71,13 @@ export function useGitStatusFiles(api: ApiClient | null, sessionId: string | nul
 
     const queryError = formatOptionalUserFacingErrorMessage(query.error, {
         t,
-        fallbackKey: 'error.files.git'
+        fallbackKey: 'error.files.git',
     })
 
     return {
         status: query.data?.status ?? null,
         error: queryError ?? query.data?.error ?? null,
         isLoading: query.isLoading,
-        refetch: query.refetch
+        refetch: query.refetch,
     }
 }

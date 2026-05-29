@@ -7,9 +7,9 @@ import type { RealtimeBannerState } from '@/hooks/useRealtimeFeedback'
 import { useRuntimeUpdateState } from '@/hooks/useRuntimeUpdateState'
 import { type Notice, usePersistentNotices } from '@/lib/notice-center'
 import { getNoticePreset } from '@/lib/noticePresets'
-import { buildCompactPersistentNotice, PERSISTENT_NOTICE_IDS } from '@/lib/persistentNoticePresentation'
 import { getRuntimeAvailabilityCopy, getRuntimeAvailabilityPresentation } from '@/lib/runtimeAvailabilityPresentation'
-import { buildOfflineNotice, buildRuntimeNotice } from '@/lib/runtimeNoticePresentation'
+import { reportWebRuntimeError } from '@/lib/runtimeDiagnostics'
+import { buildOfflineNotice, buildRuntimeNotice, buildRuntimeUpdateNotice } from '@/lib/runtimeNoticePresentation'
 import { useTranslation } from '@/lib/use-translation'
 import { NEW_SESSION_ROUTE } from '@/routes/sessions/sessionRoutePaths'
 
@@ -21,7 +21,6 @@ export function AppFloatingNoticeLayer(props: { api: ApiClient; banner: Realtime
     const isOnline = useOnlineStatus()
     const { snapshot: pendingRuntimeUpdate, applyUpdate } = useRuntimeUpdateState()
     const { runtime, isLoading: runtimeLoading, error: runtimeError } = useRuntime(props.api, true)
-    const currentOrigin = typeof window === 'undefined' ? '' : window.location.origin
     const loadRuntimeErrorPreset = getNoticePreset('newSessionLoadRuntimeError', t)
     const runtimeAvailability = useMemo(
         () =>
@@ -43,7 +42,11 @@ export function AppFloatingNoticeLayer(props: { api: ApiClient; banner: Realtime
     )
     const suppressRouteOwnedRuntimeNotice = pathname === NEW_SESSION_ROUTE
     const handleRuntimeUpdatePress = useCallback(async () => {
-        await applyUpdate()
+        try {
+            await applyUpdate()
+        } catch (error) {
+            reportWebRuntimeError('Failed to apply runtime update.', error)
+        }
     }, [applyUpdate])
 
     const persistentNotices = useMemo(() => {
@@ -58,8 +61,6 @@ export function AppFloatingNoticeLayer(props: { api: ApiClient; banner: Realtime
             banner: props.banner,
             isOnline,
             t,
-            currentOrigin,
-            isDevRuntime: import.meta.env.DEV,
             localRuntimeUnavailableTitle: suppressRouteOwnedRuntimeNotice
                 ? null
                 : (runtimeAvailabilityCopy?.noticeTitle ?? null),
@@ -72,20 +73,12 @@ export function AppFloatingNoticeLayer(props: { api: ApiClient; banner: Realtime
             notices.push(runtimeNotice)
         }
 
-        if (pendingRuntimeUpdate) {
-            notices.push(
-                buildCompactPersistentNotice({
-                    id: PERSISTENT_NOTICE_IDS.runtimeUpdate,
-                    title: t('updateReady.title'),
-                    tone: 'info',
-                    onPress: handleRuntimeUpdatePress,
-                })
-            )
+        if (pendingRuntimeUpdate && isOnline) {
+            notices.push(buildRuntimeUpdateNotice({ t, onApply: handleRuntimeUpdatePress }))
         }
 
         return notices
     }, [
-        currentOrigin,
         handleRuntimeUpdatePress,
         isOnline,
         pendingRuntimeUpdate,

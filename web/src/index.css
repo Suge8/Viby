@@ -12,8 +12,21 @@
     --app-interactive-request-max-width: 30rem;
     --app-interactive-request-max-height: min(68vh, 34rem);
     --app-interactive-request-shadow: 0 20px 48px rgba(15, 23, 42, 0.22);
-    --app-remote-link-badge-mobile-bottom: 4.75rem;
     --app-remote-link-badge-max-width: min(calc(100vw - 2rem), 14rem);
+    --app-remote-link-badge-min-height: 2.25rem;
+    /* `.remote-pairing-link-badge` aligns its centerline with the sessions
+       create FAB (Button `iconLg`, 3.5rem) when the chat composer is
+       absent. The baseline is the FAB wrapper edge-offset plus half the
+       height delta between the iconLg button and the badge: `(3.5rem -
+       --app-remote-link-badge-min-height) / 2`. Keeping the FAB size
+       literal here ties the baseline to the design-token contract in
+       `ui/button.tsx` (`iconLg: h-14`); if either side changes, update
+       this expression so the centerline alignment survives. */
+    --app-remote-link-badge-corner-baseline: calc(
+        var(--app-overlay-edge-offset) +
+        (3.5rem - var(--app-remote-link-badge-min-height)) /
+        2
+    );
 }
 
 .interactive-request-owner-shell {
@@ -63,14 +76,33 @@ body {
     pointer-events: none;
 }
 
+/* The badge has two alignment targets that switch by route, expressed as
+   one `max()` so we keep a single bottom expression:
+     (a) `--app-remote-link-badge-corner-baseline` keeps the badge
+         centerline on the sessions create FAB centerline (see the
+         token definition above). Used on sessions / settings routes.
+     (b) the outline trigger anchor (see design-session-shell.css
+         `.ds-thread-outline-trigger-wrapper`), composed solely of the
+         chat composer geometry without re-adding safe-area-bottom —
+         the composer-offset already lives above the safe-area gesture
+         strip, matching the outline trigger pixel-for-pixel on PWA.
+   On chat routes (b) dominates as the composer grows; on non-chat
+   routes the composer vars resolve to zero so (a) prevails. */
 .remote-pairing-link-badge {
     position: absolute;
-    right: calc(var(--app-safe-area-inset-right) + var(--app-overlay-edge-offset));
-    bottom: calc(var(--app-safe-area-inset-bottom) + var(--app-remote-link-badge-mobile-bottom));
+    left: calc(var(--app-safe-area-inset-left) + var(--app-overlay-edge-offset));
+    bottom: max(
+        calc(var(--app-safe-area-inset-bottom) + var(--app-remote-link-badge-corner-baseline)),
+        calc(
+            var(--chat-composer-offset-bottom) +
+            var(--chat-composer-reserved-space) +
+            var(--chat-desktop-bottom-control-gap)
+        )
+    );
     display: inline-flex;
     align-items: center;
     gap: 0.45rem;
-    min-height: 2.25rem;
+    min-height: var(--app-remote-link-badge-min-height);
     max-width: var(--app-remote-link-badge-max-width);
     padding: 0.42rem 0.65rem;
     border: 1px solid var(--ds-border-default);
@@ -105,6 +137,11 @@ body {
     box-shadow: 0 0 0 0.22rem var(--ds-warning-soft);
 }
 
+.remote-pairing-link-badge.is-danger .remote-pairing-link-badge-dot {
+    background: var(--ds-danger);
+    box-shadow: 0 0 0 0.22rem var(--ds-danger-soft);
+}
+
 .remote-pairing-link-badge-label,
 .remote-pairing-link-badge-latency {
     min-width: 0;
@@ -116,12 +153,6 @@ body {
 .remote-pairing-link-badge-latency {
     color: var(--ds-text-muted);
     font-variant-numeric: tabular-nums;
-}
-
-@media (min-width: 768px) {
-    .remote-pairing-link-badge {
-        bottom: calc(var(--app-safe-area-inset-bottom) + var(--app-overlay-edge-offset));
-    }
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -225,6 +256,9 @@ html[data-theme="dark"] .shiki span {
 
 .animate-spin {
     animation: spin 1s linear infinite;
+    contain: paint;
+    transform-origin: center;
+    will-change: transform;
 }
 
 @keyframes loading-shimmer {
@@ -280,6 +314,7 @@ html[data-theme="dark"] .shiki span {
 }
 
 @media (prefers-reduced-motion: reduce) {
+    .animate-spin,
     .ds-loading-shimmer::after {
         animation: none;
         transform: none;

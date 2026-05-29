@@ -1,7 +1,7 @@
 import { QueryClient } from '@tanstack/react-query'
 import { waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { getMessageWindowState, ingestIncomingMessages } from '@/lib/message-window-store'
+import { applySessionStream, getMessageWindowState, ingestIncomingMessages } from '@/lib/message-window-store'
 import { queryKeys } from '@/lib/query-keys'
 import type { ResumableSession } from '@/lib/sessionQueryCacheSupport'
 import {
@@ -16,7 +16,9 @@ import {
     getSessionPlaceholderSeed,
     markSessionPendingUserTurnInQueryCache,
     patchSessionInQueryCache,
+    projectActiveSessionStreamsInSessionsResponse,
     removeSessionClientState,
+    writeSessionHeadToQueryCache,
     writeSessionToQueryCache,
     writeSessionViewToQueryCache,
 } from './sessionQueryCache'
@@ -201,6 +203,132 @@ describe('getSessionPlaceholderSeed', () => {
     })
 })
 
+describe('projectActiveSessionStreamsInSessionsResponse', () => {
+    it('keeps full list replacement from clearing an active transient stream state', () => {
+        applySessionStream('session-stream-list', {
+            assistantTurnId: 'turn-1',
+            startedAt: 3_000,
+            updatedAt: 3_100,
+            text: 'working',
+        })
+
+        const result = projectActiveSessionStreamsInSessionsResponse({
+            sessions: [
+                createSummary({
+                    id: 'session-stream-list',
+                    active: true,
+                    latestActivityAt: 2_000,
+                    latestActivityKind: 'ready',
+                    latestCompletedReplyAt: 2_000,
+                }),
+            ],
+        })
+
+        expect(result.sessions[0]).toMatchObject({
+            id: 'session-stream-list',
+            latestActivityAt: 3_100,
+            latestActivityKind: 'reply',
+            latestCompletedReplyAt: 2_000,
+        })
+    })
+})
+
+describe('writeSessionHeadToQueryCache', () => {
+    it('clears stale stream state before projecting the session list', () => {
+        const queryClient = new QueryClient()
+        const sessionId = 'session-head-stream-clear'
+        const session = createTestSession({
+            id: sessionId,
+            active: true,
+            thinking: false,
+            updatedAt: 2_000,
+            latestActivityAt: 2_000,
+            latestActivityKind: 'ready',
+            latestCompletedReplyAt: 2_000,
+        })
+        queryClient.setQueryData<SessionsResponse>(queryKeys.sessions, {
+            sessions: [
+                createSummary({
+                    id: sessionId,
+                    active: true,
+                    latestActivityAt: 2_000,
+                    latestActivityKind: 'ready',
+                    latestCompletedReplyAt: 2_000,
+                }),
+            ],
+        })
+        applySessionStream(sessionId, {
+            assistantTurnId: 'turn-1',
+            startedAt: 3_000,
+            updatedAt: 3_100,
+            text: 'stale stream',
+        })
+
+        writeSessionHeadToQueryCache(queryClient, { session: { ...session, resumeAvailable: true }, stream: null })
+
+        expect(getMessageWindowState(sessionId).stream).toBeNull()
+        expect(queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)?.sessions[0]).toMatchObject({
+            id: sessionId,
+            latestActivityAt: 2_000,
+            latestActivityKind: 'ready',
+        })
+    })
+})
+
+describe('writeSessionToQueryCache', () => {
+    it('keeps a rename/full-session write from clearing an active transient stream state', () => {
+        const queryClient = new QueryClient()
+        const session = createTestSession({
+            id: 'session-rename-stream',
+            active: true,
+            thinking: false,
+            updatedAt: 2_000,
+            latestActivityAt: 1_000,
+            latestActivityKind: 'ready',
+            latestCompletedReplyAt: 1_000,
+            metadata: {
+                path: TEST_PROJECT_PATH,
+                host: 'demo.local',
+                driver: 'pi',
+                name: 'Old name',
+            },
+        })
+
+        queryClient.setQueryData<SessionsResponse>(queryKeys.sessions, {
+            sessions: [
+                createSummary({
+                    id: session.id,
+                    active: true,
+                    lifecycleState: 'running',
+                    latestActivityAt: 1_000,
+                    latestActivityKind: 'ready',
+                    latestCompletedReplyAt: 1_000,
+                }),
+            ],
+        })
+        applySessionStream(session.id, {
+            assistantTurnId: 'turn-1',
+            startedAt: 2_500,
+            updatedAt: 2_600,
+            text: 'still working',
+        })
+
+        writeSessionToQueryCache(queryClient, {
+            ...session,
+            metadata: session.metadata ? { ...session.metadata, name: 'Renamed' } : session.metadata,
+        })
+
+        expect(queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)?.sessions[0]).toMatchObject({
+            id: session.id,
+            thinking: false,
+            latestActivityAt: 2_600,
+            latestActivityKind: 'reply',
+            latestCompletedReplyAt: 1_000,
+            metadata: expect.objectContaining({ name: 'Renamed' }),
+        })
+    })
+})
+
 describe('patchSessionInQueryCache', () => {
     it('patches cached detail and list state through one owner while preserving resumable hints', () => {
         const queryClient = new QueryClient()
@@ -321,7 +449,7 @@ describe('writeSessionToQueryCache', () => {
                     thinking: false,
                     activeAt: 1_500,
                     updatedAt: 2_500,
-                    latestActivityAt: 2_500,
+                    latestActivityAt: 2_600,
                     latestActivityKind: 'user',
                     latestCompletedReplyAt: 2_000,
                     lifecycleState: 'running',
@@ -354,7 +482,7 @@ describe('writeSessionToQueryCache', () => {
         })
 
         expect(queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)?.sessions[0]).toMatchObject({
-            latestActivityAt: 2_500,
+            latestActivityAt: 2_600,
             latestActivityKind: 'user',
             latestCompletedReplyAt: 2_000,
             lifecycleState: 'running',

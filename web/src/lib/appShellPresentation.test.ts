@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { getAppViewportRoute, getSelectedSessionId, shouldRestoreWindowScroll } from './appShellPresentation'
+import {
+    getAppViewportRoute,
+    getSelectedSessionId,
+    shouldRestoreWindowScroll,
+    shouldSuppressInstallPrompt,
+} from './appShellPresentation'
 
 describe('appShellPresentation', () => {
     it('classifies direct session routes as chat viewports', () => {
@@ -21,5 +26,43 @@ describe('appShellPresentation', () => {
         expect(getSelectedSessionId({ sessionId: 'session-1' })).toBe('session-1')
         expect(getSelectedSessionId({ sessionId: 'new' })).toBeNull()
         expect(getSelectedSessionId({ sessionId: 'settings' })).toBeNull()
+    })
+
+    it('keeps install prompt available on the sessions list and suppresses it in chat', () => {
+        expect(
+            shouldSuppressInstallPrompt({
+                isReady: true,
+                isAuthLoading: false,
+                bannerKind: 'hidden',
+                pathname: '/sessions',
+            })
+        ).toBe(false)
+        expect(
+            shouldSuppressInstallPrompt({
+                isReady: true,
+                isAuthLoading: false,
+                bannerKind: 'hidden',
+                pathname: '/sessions/session-1',
+            })
+        ).toBe(true)
+    })
+
+    it('keeps realtime notices above the install prompt outside sessions workspace', () => {
+        expect(
+            shouldSuppressInstallPrompt({
+                isReady: true,
+                isAuthLoading: false,
+                bannerKind: 'busy',
+                pathname: '/other',
+            })
+        ).toBe(true)
+        expect(
+            shouldSuppressInstallPrompt({
+                isReady: true,
+                isAuthLoading: false,
+                bannerKind: 'hidden',
+                pathname: '/other',
+            })
+        ).toBe(false)
     })
 })

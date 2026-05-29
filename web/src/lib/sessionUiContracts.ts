@@ -84,5 +84,11 @@ export const TERMINAL_SURFACE_INTERACTIVE_SELECTOR = getTestIdSelector(TERMINAL_
 
 export const THREAD_BOTTOM_CONTROL_TEST_ID = 'thread-bottom-control'
 export const THREAD_BOTTOM_CONTROL_SELECTOR = getTestIdSelector(THREAD_BOTTOM_CONTROL_TEST_ID)
-export const THREAD_HISTORY_CONTROL_TEST_ID = 'thread-history-control'
-export const THREAD_HISTORY_CONTROL_SELECTOR = getTestIdSelector(THREAD_HISTORY_CONTROL_TEST_ID)
+export const THREAD_HISTORY_LOADING_TEST_ID = 'thread-history-loading'
+export const THREAD_HISTORY_LOADING_SELECTOR = getTestIdSelector(THREAD_HISTORY_LOADING_TEST_ID)
+export const THREAD_OUTLINE_TRIGGER_TEST_ID = 'thread-outline-trigger'
+export const THREAD_OUTLINE_TRIGGER_SELECTOR = getTestIdSelector(THREAD_OUTLINE_TRIGGER_TEST_ID)
+export const THREAD_OUTLINE_POPOVER_TEST_ID = 'thread-outline-popover'
+export const THREAD_OUTLINE_POPOVER_SELECTOR = getTestIdSelector(THREAD_OUTLINE_POPOVER_TEST_ID)
+export const THREAD_OUTLINE_ITEM_TEST_ID = 'thread-outline-item'
+export const THREAD_OUTLINE_ITEM_SELECTOR = getTestIdSelector(THREAD_OUTLINE_ITEM_TEST_ID)

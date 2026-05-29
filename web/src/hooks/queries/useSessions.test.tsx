@@ -3,6 +3,7 @@ import { renderHook, waitFor } from '@testing-library/react'
 import type { PropsWithChildren } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/lib/i18n-context'
+import { applySessionStream } from '@/lib/message-window-store'
 import { readSessionsWarmSnapshot, writeSessionsWarmSnapshot } from '@/lib/sessionsWarmSnapshot'
 import { useSessions } from './useSessions'
 
@@ -69,6 +70,33 @@ describe('useSessions', () => {
         expect(result.current.hasWarmSnapshot).toBe(true)
         expect(result.current.isPlaceholderData).toBe(true)
         expect(result.current.isLoading).toBe(false)
+    })
+
+    it('keeps refetched sessions processing while a transient stream is active', async () => {
+        const queryClient = createQueryClient()
+        const session = createSessionSummary('session-stream')
+        const api = {
+            getSessions: vi.fn(async () => ({ sessions: [session] })),
+        }
+        applySessionStream(session.id, {
+            assistantTurnId: 'turn-1',
+            startedAt: 30,
+            updatedAt: 40,
+            text: 'working',
+        })
+
+        const { result } = renderHook(() => useSessions(api as never), {
+            wrapper: createWrapper(queryClient),
+        })
+
+        await waitFor(() => {
+            expect(result.current.sessions[0]).toMatchObject({
+                id: session.id,
+                latestActivityAt: 40,
+                latestActivityKind: 'reply',
+                latestCompletedReplyAt: 20,
+            })
+        })
     })
 
     it('writes the latest sessions list back to warm storage after a successful fetch', async () => {

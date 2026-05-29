@@ -80,6 +80,14 @@ export function isPotentiallyTrustworthyWebOrigin(origin: string): boolean {
     return parsed.protocol === 'http:' && isTrustworthyLoopbackHostname(parsed.hostname)
 }
 
+export function isPairingBootServiceWorkerBypassPath(pathname: string): boolean {
+    return pathname.startsWith('/p/')
+}
+
 export function shouldRegisterServiceWorkerForOrigin(origin: string): boolean {
     return isPotentiallyTrustworthyWebOrigin(origin)
+}
+
+export function shouldRegisterServiceWorkerForLocation(origin: string, pathname: string): boolean {
+    return shouldRegisterServiceWorkerForOrigin(origin) && !isPairingBootServiceWorkerBypassPath(pathname)
 }

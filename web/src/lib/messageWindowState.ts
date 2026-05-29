@@ -124,7 +124,9 @@ export function restoreWarmSnapshotState(sessionId: string): InternalState | nul
         messages: [...snapshot.messages],
         hasLoadedLatest: snapshot.hasLoadedLatest,
         hasMore: snapshot.hasMore,
-        atBottom: snapshot.atBottom,
+        // Session entry always lands at latest. Warm snapshots are only a
+        // recoverable message cache, not a scroll-position owner.
+        atBottom: true,
         oldestSeq,
         newestSeq,
         messagesVersion: snapshot.messages.length > 0 ? 1 : 0,

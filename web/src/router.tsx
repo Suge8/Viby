@@ -29,7 +29,6 @@ type NewSessionMode = 'start' | 'recover-local'
 type SessionsSection = 'running' | 'history'
 type NewSessionSearch = {
     mode?: NewSessionMode
-    directory?: string
 }
 type SessionFileSearch = {
     path: string
@@ -55,11 +54,6 @@ function parseSessionSearchTab(search: Record<string, unknown>): SessionSearchTa
 
 function parseNewSessionMode(search: Record<string, unknown>): NewSessionMode | undefined {
     return search.mode === 'recover-local' ? 'recover-local' : undefined
-}
-
-function parseNewSessionDirectory(search: Record<string, unknown>): string | undefined {
-    const directory = typeof search.directory === 'string' ? search.directory.trim() : ''
-    return directory.length > 0 ? directory : undefined
 }
 
 function parseSessionsSection(search: Record<string, unknown>): SessionsSection | undefined {
@@ -235,11 +229,7 @@ const newSessionRoute = createRoute({
     path: 'new',
     validateSearch: (search: Record<string, unknown>): NewSessionSearch => {
         const mode = parseNewSessionMode(search)
-        const directory = parseNewSessionDirectory(search)
-        return {
-            ...(mode ? { mode } : {}),
-            ...(directory ? { directory } : {}),
-        }
+        return mode ? { mode } : {}
     },
     component: NewSessionRoutePageShell,
 })

@@ -12,7 +12,7 @@ import {
     updateMessageStatus,
 } from '@/lib/messageWindowStoreCore'
 import { queryKeys } from '@/lib/query-keys'
-import { markSessionPendingUserTurnInQueryCache } from '@/lib/sessionQueryCache'
+import { markSessionPendingUserTurnInQueryCache, writeSessionsResponseToQueryCache } from '@/lib/sessionQueryCache'
 import type { AttachmentMetadata, DecryptedMessage, Session, SessionsResponse } from '@/types/api'
 
 type SendMessageInput = {
@@ -168,7 +168,7 @@ export function useSendMessage(
                 void queryClient.invalidateQueries({ queryKey: queryKeys.session(input.sessionId) })
                 void queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
             } else if (context?.previousSessions) {
-                queryClient.setQueryData(queryKeys.sessions, context.previousSessions)
+                writeSessionsResponseToQueryCache(queryClient, context.previousSessions)
             }
 
             updateMessageStatus(input.sessionId, input.localId, 'failed')

@@ -15,19 +15,15 @@ interface Selection {
 }
 
 export interface ActiveWord {
-    word: string           // Full word from prefix to end (e.g., "@username")
-    activeWord: string     // Part from prefix to cursor (e.g., "@use")
-    offset: number         // Starting position of the word
-    length: number         // Total length of the complete word
-    activeLength: number   // Length from prefix to cursor
-    endOffset: number      // Position where the word ends (offset + length)
+    word: string // Full word from prefix to end (e.g., "@username")
+    activeWord: string // Part from prefix to cursor (e.g., "@use")
+    offset: number // Starting position of the word
+    length: number // Total length of the complete word
+    activeLength: number // Length from prefix to cursor
+    endOffset: number // Position where the word ends (offset + length)
 }
 
-function findActiveWordStart(
-    content: string,
-    selection: Selection,
-    prefixes: string[]
-): number {
+function findActiveWordStart(content: string, selection: Selection, prefixes: string[]): number {
     let startIndex = selection.start - 1
     let spaceIndex = -1
     let foundPrefix = false
@@ -85,11 +81,7 @@ function findActiveWordStart(
     return (spaceIndex >= 0 ? spaceIndex : startIndex) + 1
 }
 
-function findActiveWordEnd(
-    content: string,
-    cursorPos: number,
-    wordStartPos?: number
-): number {
+function findActiveWordEnd(content: string, cursorPos: number, wordStartPos?: number): number {
     let endIndex = cursorPos
 
     // Check if this is a file path (starts with @ and may contain /)
@@ -157,7 +149,7 @@ export function findActiveWord(
                     offset: startIndex,
                     length: fullWord.length,
                     activeLength: activeWordPart.length,
-                    endOffset: endIndex
+                    endOffset: endIndex,
                 } // Return single prefix to show suggestions immediately
             }
             return {
@@ -166,7 +158,7 @@ export function findActiveWord(
                 offset: startIndex,
                 length: fullWord.length,
                 activeLength: activeWordPart.length,
-                endOffset: endIndex
+                endOffset: endIndex,
             }
         }
     }

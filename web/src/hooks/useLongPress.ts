@@ -34,7 +34,6 @@ export function useLongPress(options: UseLongPressOptions): UseLongPressHandlers
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const activePointerIdRef = useRef<number | null>(null)
     const didLongPressRef = useRef(false)
-    const movedBeyondToleranceRef = useRef(false)
     const pressPointRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
     const suppressClickRef = useRef(false)
 
@@ -47,7 +46,6 @@ export function useLongPress(options: UseLongPressOptions): UseLongPressHandlers
 
     const resetPointerState = useCallback(() => {
         activePointerIdRef.current = null
-        movedBeyondToleranceRef.current = false
     }, [])
 
     const resetInteractionState = useCallback(() => {
@@ -72,7 +70,6 @@ export function useLongPress(options: UseLongPressOptions): UseLongPressHandlers
             clearTimer()
             activePointerIdRef.current = pointerId
             didLongPressRef.current = false
-            movedBeyondToleranceRef.current = false
             pressPointRef.current = { x: clientX, y: clientY }
 
             timerRef.current = setTimeout(() => {
@@ -84,19 +81,10 @@ export function useLongPress(options: UseLongPressOptions): UseLongPressHandlers
         [clearTimer, disabled, onLongPress, threshold]
     )
 
-    const finishPress = useCallback(
-        (shouldTriggerClick: boolean) => {
-            clearTimer()
-
-            if (shouldTriggerClick && !didLongPressRef.current && !movedBeyondToleranceRef.current && onClick) {
-                suppressClickRef.current = true
-                onClick()
-            }
-
-            resetPointerState()
-        },
-        [clearTimer, onClick, resetPointerState]
-    )
+    const finishPress = useCallback(() => {
+        clearTimer()
+        resetPointerState()
+    }, [clearTimer, resetPointerState])
 
     const onPointerDown = useCallback<React.PointerEventHandler>(
         (event) => {
@@ -126,8 +114,6 @@ export function useLongPress(options: UseLongPressOptions): UseLongPressHandlers
                 return
             }
 
-            movedBeyondToleranceRef.current = true
-            suppressClickRef.current = true
             clearTimer()
         },
         [clearTimer]
@@ -139,7 +125,7 @@ export function useLongPress(options: UseLongPressOptions): UseLongPressHandlers
                 return
             }
 
-            finishPress(true)
+            finishPress()
         },
         [finishPress]
     )
@@ -150,7 +136,7 @@ export function useLongPress(options: UseLongPressOptions): UseLongPressHandlers
                 return
             }
 
-            finishPress(false)
+            finishPress()
         },
         [finishPress]
     )
@@ -160,7 +146,7 @@ export function useLongPress(options: UseLongPressOptions): UseLongPressHandlers
             if (activePointerIdRef.current !== event.pointerId) {
                 return
             }
-            finishPress(false)
+            finishPress()
         },
         [finishPress]
     )
@@ -194,14 +180,25 @@ export function useLongPress(options: UseLongPressOptions): UseLongPressHandlers
             resetPointerState()
             suppressClickRef.current = true
 
+            // `didLongPressRef === true` already means the touch long-press timer
+            // fired in this gesture; skip the contextmenu echo so we do not
+            // double-trigger onLongPress for touch users whose browsers also
+            // synthesize a contextmenu event after the long-press.
             if (didLongPressRef.current) {
                 return
             }
 
-            didLongPressRef.current = true
+            // For mouse right-click there is no pointerdown/up cycle and no
+            // follow-up click event that would consume the latched refs (see
+            // onPointerDown's mouse early-return). If we latched
+            // didLongPressRef = true here, the next right-click on the same card
+            // would early-return above and silently swallow the menu. Fire
+            // onLongPress and reset the interaction state synchronously so
+            // subsequent right-clicks stay responsive.
             onLongPress({ x: event.clientX, y: event.clientY })
+            resetInteractionState()
         },
-        [clearTimer, disabled, enableContextMenu, onLongPress]
+        [clearTimer, disabled, enableContextMenu, onLongPress, resetInteractionState, resetPointerState]
     )
 
     return {

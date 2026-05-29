@@ -9,6 +9,10 @@ const useRuntimeMock = vi.fn()
 const useOnlineStatusMock = vi.fn()
 const useRuntimeUpdateStateMock = vi.fn()
 const useLocationMock = vi.fn()
+const translate = vi.hoisted(
+    () => (key: string, values?: Record<string, unknown>) =>
+        key === 'runtime.unavailable.lastError' ? `runtime.unavailable.lastError:${String(values?.error ?? '')}` : key
+)
 
 vi.mock('@tanstack/react-router', () => ({
     useLocation: (...args: unknown[]) => useLocationMock(...args),
@@ -27,12 +31,7 @@ vi.mock('@/hooks/useRuntimeUpdateState', () => ({
 }))
 
 vi.mock('@/lib/use-translation', () => ({
-    useTranslation: () => ({
-        t: (key: string, values?: Record<string, unknown>) =>
-            key === 'runtime.unavailable.lastError'
-                ? `runtime.unavailable.lastError:${String(values?.error ?? '')}`
-                : key,
-    }),
+    useTranslation: () => ({ t: translate }),
 }))
 
 function renderWithNotices(node: ReactNode) {
@@ -52,6 +51,7 @@ function NoticeProbe() {
                 <div key={notice.id}>
                     <span>{notice.title}</span>
                     {notice.description ? <span>{notice.description}</span> : null}
+                    {notice.action}
                 </div>
             ))}
         </div>
@@ -111,22 +111,25 @@ describe('AppFloatingNoticeLayer', () => {
         expect(screen.getByText('runtime query failed')).toBeInTheDocument()
     })
 
-    it('publishes pending runtime updates through the persistent floating notice owner', () => {
+    it('publishes pending runtime updates with an explicit refresh action', () => {
+        const applyUpdate = vi.fn(async () => true)
         useLocationMock.mockReturnValue('/sessions')
         useRuntimeMock.mockReturnValue({
-            runtime: null,
+            runtime: { id: 'runtime-1', active: true, metadata: null },
             isLoading: false,
             error: null,
         })
         useOnlineStatusMock.mockReturnValue(true)
         useRuntimeUpdateStateMock.mockReturnValue({
             snapshot: { availableAt: 1, mode: 'reload' },
-            applyUpdate: async () => true,
+            applyUpdate,
         })
 
         renderWithNotices(<AppFloatingNoticeLayer api={{} as never} banner={{ kind: 'hidden' }} />)
 
         expect(screen.getByText('updateReady.title')).toBeInTheDocument()
+        expect(screen.getByText('updateReady.action')).toBeInTheDocument()
+        expect(applyUpdate).not.toHaveBeenCalled()
     })
 
     it('suppresses the floating runtime unavailable notice on the new-session route', () => {

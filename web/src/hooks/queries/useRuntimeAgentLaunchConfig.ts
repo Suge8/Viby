@@ -18,14 +18,21 @@ type UseAgentLaunchConfigOptions = {
 type AgentLaunchConfigState = {
     config: AgentLaunchConfig | null
     error: string | null
+    isLoading: boolean
+    isFetching: boolean
     refetch: () => Promise<unknown>
 }
 
 const AGENT_LAUNCH_CONFIG_DIRECTORY_DEBOUNCE_MS = 200
+const AGENT_LAUNCH_CONFIG_STALE_TIME_MS = 5 * 60_000
 const UNSUPPORTED_CONFIG_RESPONSE_MESSAGE = 'Unsupported agent launch config response'
 
 function getDirectoryAwareCacheKey(agent: AgentFlavor, directory: string): string {
     return agent === 'claude' || agent === 'codex' || agent === 'gemini' || agent === 'pi' ? directory : ''
+}
+
+function getLaunchConfigSnapshot(snapshot: RuntimeCapabilitySnapshot | null, agent: AgentFlavor) {
+    return snapshot?.agents.find((candidate) => candidate.driver === agent)?.launchConfig ?? null
 }
 
 function getLaunchConfigError(
@@ -33,7 +40,7 @@ function getLaunchConfigError(
     agent: AgentFlavor,
     t: TranslationFn
 ): string | null {
-    const item = snapshot?.agents.find((candidate) => candidate.driver === agent)?.launchConfig
+    const item = getLaunchConfigSnapshot(snapshot, agent)
     if (!item?.error) return null
     return t(`runtimeCapability.error.${item.error.code}`)
 }
@@ -46,8 +53,9 @@ export function useRuntimeAgentLaunchConfig(options: UseAgentLaunchConfigOptions
     const query = useQuery({
         queryKey: queryKeys.runtimeCapabilities(configDirectoryKey, options.agent, 'launch_config'),
         enabled: Boolean(directory),
-        refetchOnWindowFocus: true,
-        refetchOnReconnect: true,
+        staleTime: AGENT_LAUNCH_CONFIG_STALE_TIME_MS,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
         queryFn: async ({ signal }) => {
             const forceRefresh = forceRefreshRef.current
             forceRefreshRef.current = false
@@ -69,15 +77,17 @@ export function useRuntimeAgentLaunchConfig(options: UseAgentLaunchConfigOptions
         return await query.refetch()
     }, [query.refetch])
 
-    const config = query.data?.agents.find((agent) => agent.driver === options.agent)?.launchConfig.config ?? null
+    const launchConfig = getLaunchConfigSnapshot(query.data ?? null, options.agent)
     return {
-        config,
+        config: launchConfig?.config ?? null,
         error:
             getLaunchConfigError(query.data ?? null, options.agent, options.t) ??
             formatOptionalUserFacingErrorMessage(query.error, {
                 t: options.t,
                 fallbackKey: 'error.session.create',
             }),
+        isLoading: (query.isLoading && query.fetchStatus !== 'idle') || launchConfig?.refreshing === true,
+        isFetching: query.fetchStatus === 'fetching',
         refetch: refresh,
     }
 }

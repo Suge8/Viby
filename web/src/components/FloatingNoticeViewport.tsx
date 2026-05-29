@@ -16,7 +16,7 @@ const VIEWPORT_BASE_CLASS_NAME =
 const DEFAULT_VIEWPORT_WIDTH_CLASS_NAME = 'w-[min(calc(100vw-2.5rem),20rem)] sm:w-[min(calc(100vw-1.5rem),24rem)]'
 const COMPACT_VIEWPORT_WIDTH_CLASS_NAME = 'w-[min(calc(100vw-4.25rem),14rem)] sm:w-[min(calc(100vw-2rem),16rem)]'
 const NOTICE_BUTTON_CLASS_NAME =
-    'pointer-events-auto block w-full border-transparent bg-transparent px-0 py-0 text-left outline-none shadow-none [&>[data-button-content]]:w-full'
+    'ds-floating-notice-trigger pointer-events-auto block w-full border-transparent bg-transparent px-0 py-0 text-left outline-none shadow-none hover:bg-transparent [&>[data-button-content]]:w-full'
 const NOTICE_PENDING_BUTTON_CLASS_NAME = `${NOTICE_BUTTON_CLASS_NAME} data-[pending=true]:cursor-progress data-[pending=true]:opacity-80`
 
 type FloatingNoticeCardProps = {
@@ -44,7 +44,7 @@ const FloatingNoticeCard = memo(function FloatingNoticeCard(props: FloatingNotic
             description={props.notice.description}
             compact={props.notice.compact}
             action={props.notice.action}
-            className="w-full transition-transform duration-200 hover:-translate-y-0.5"
+            className="ds-floating-notice-card w-full"
         />
     )
 
@@ -54,6 +54,7 @@ const FloatingNoticeCard = memo(function FloatingNoticeCard(props: FloatingNotic
                 type="button"
                 variant="ghost"
                 className={NOTICE_PENDING_BUTTON_CLASS_NAME}
+                pointerEffect="none"
                 onClick={() => props.onPress(onPress, props.notice.id)}
             >
                 {content}
@@ -70,6 +71,7 @@ const FloatingNoticeCard = memo(function FloatingNoticeCard(props: FloatingNotic
             type="button"
             variant="ghost"
             className={NOTICE_BUTTON_CLASS_NAME}
+            pointerEffect="none"
             onClick={() => props.onNavigate(href, props.notice.id)}
         >
             {content}

@@ -26,6 +26,7 @@ export const SESSION_STORAGE_KEYS = {
     localServiceWorkerReset: 'viby-local-service-worker-reset',
     runtimeAssetRecovery: 'viby-runtime-asset-recovery',
     runtimeUpdateSnapshot: 'viby-runtime-update-ready',
+    remotePairingDiagnostics: 'viby:remote-pairing-diagnostics',
     testPrefix: 'viby:test-',
 } as const
 

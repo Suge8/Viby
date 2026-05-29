@@ -1,4 +1,4 @@
-import { type RefObject, useLayoutEffect, useState } from 'react'
+import { type RefObject, useLayoutEffect, useRef, useState } from 'react'
 
 export type ElementFrame = {
     left: number
@@ -36,9 +36,19 @@ function areElementFramesEqual(previousFrame: ElementFrame | null, nextFrame: El
 
 export function useElementFrame(elementRef: RefObject<HTMLElement | null>): ElementFrame | null {
     const [frame, setFrame] = useState<ElementFrame | null>(null)
+    const observedElementRef = useRef<HTMLElement | null>(null)
+    const cleanupRef = useRef<(() => void) | null>(null)
 
     useLayoutEffect(() => {
         const element = elementRef.current
+        if (observedElementRef.current === element) {
+            return
+        }
+
+        cleanupRef.current?.()
+        cleanupRef.current = null
+        observedElementRef.current = element
+
         if (!element) {
             setFrame(null)
             return
@@ -71,7 +81,7 @@ export function useElementFrame(elementRef: RefObject<HTMLElement | null>): Elem
         window.visualViewport?.addEventListener('resize', scheduleFrameSync)
         window.visualViewport?.addEventListener('scroll', scheduleFrameSync)
 
-        return () => {
+        cleanupRef.current = () => {
             if (animationFrameId !== 0) {
                 window.cancelAnimationFrame(animationFrameId)
             }
@@ -81,7 +91,15 @@ export function useElementFrame(elementRef: RefObject<HTMLElement | null>): Elem
             window.visualViewport?.removeEventListener('resize', scheduleFrameSync)
             window.visualViewport?.removeEventListener('scroll', scheduleFrameSync)
         }
-    }, [elementRef])
+    })
+
+    useLayoutEffect(() => {
+        return () => {
+            cleanupRef.current?.()
+            cleanupRef.current = null
+            observedElementRef.current = null
+        }
+    }, [])
 
     return frame
 }

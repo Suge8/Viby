@@ -7,16 +7,16 @@ describe('safeCopyToClipboard', () => {
         vi.restoreAllMocks()
         Object.defineProperty(window, 'isSecureContext', {
             configurable: true,
-            value: true
+            value: true,
         })
         Object.defineProperty(navigator, 'clipboard', {
             configurable: true,
-            value: undefined
+            value: undefined,
         })
         Object.defineProperty(document, 'execCommand', {
             configurable: true,
             writable: true,
-            value: vi.fn(() => false)
+            value: vi.fn(() => false),
         })
     })
 
@@ -24,7 +24,7 @@ describe('safeCopyToClipboard', () => {
         const writeText = vi.fn(async () => {})
         Object.defineProperty(navigator, 'clipboard', {
             configurable: true,
-            value: { writeText }
+            value: { writeText },
         })
         const execCommand = vi.mocked(document.execCommand)
         execCommand.mockReturnValue(true)
@@ -41,11 +41,11 @@ describe('safeCopyToClipboard', () => {
         })
         Object.defineProperty(window, 'isSecureContext', {
             configurable: true,
-            value: true
+            value: true,
         })
         Object.defineProperty(navigator, 'clipboard', {
             configurable: true,
-            value: { writeText }
+            value: { writeText },
         })
         const execCommand = vi.mocked(document.execCommand)
         execCommand.mockReturnValue(true)
@@ -60,11 +60,11 @@ describe('safeCopyToClipboard', () => {
         const writeText = vi.fn(async () => {})
         Object.defineProperty(window, 'isSecureContext', {
             configurable: true,
-            value: false
+            value: false,
         })
         Object.defineProperty(navigator, 'clipboard', {
             configurable: true,
-            value: { writeText }
+            value: { writeText },
         })
         const execCommand = vi.mocked(document.execCommand)
         execCommand.mockReturnValue(true)
@@ -78,7 +78,7 @@ describe('safeCopyToClipboard', () => {
     it('throws when both modern and legacy copy strategies fail', async () => {
         Object.defineProperty(navigator, 'clipboard', {
             configurable: true,
-            value: undefined
+            value: undefined,
         })
         const execCommand = vi.mocked(document.execCommand)
         execCommand.mockReturnValue(false)
@@ -100,16 +100,14 @@ describe('safeCopyToClipboard', () => {
             return element
         }) as typeof document.createElement)
 
-        const textareaFocusSpy = vi
-            .spyOn(HTMLTextAreaElement.prototype, 'focus')
-            .mockImplementation(() => undefined)
+        const textareaFocusSpy = vi.spyOn(HTMLTextAreaElement.prototype, 'focus').mockImplementation(() => undefined)
 
         const activeButton = document.createElement('button')
         const buttonFocusSpy = vi.fn()
         activeButton.focus = buttonFocusSpy as typeof activeButton.focus
         Object.defineProperty(document, 'activeElement', {
             configurable: true,
-            get: () => activeButton
+            get: () => activeButton,
         })
 
         await safeCopyToClipboard('focus-stable')

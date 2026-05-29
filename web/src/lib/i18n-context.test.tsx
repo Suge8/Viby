@@ -11,7 +11,7 @@ function LocaleProbe(): JSX.Element {
 
 function TranslationProbe(): JSX.Element {
     const { t } = useTranslation()
-    return <div>{t('login.submit')}</div>
+    return <div>{t('login.panel.inviteTitle')}</div>
 }
 
 describe('i18n locale detection', () => {
@@ -142,7 +142,7 @@ describe('i18n locale detection', () => {
         )
 
         await waitFor(() => {
-            expect(screen.getByText('进入')).toBeInTheDocument()
+            expect(screen.getByText('从电脑邀请这台设备')).toBeInTheDocument()
         })
     })
 
@@ -154,7 +154,7 @@ describe('i18n locale detection', () => {
         )
 
         await waitFor(() => {
-            expect(screen.getByText('Enter')).toBeInTheDocument()
+            expect(screen.getByText('Invite this device from your computer')).toBeInTheDocument()
         })
     })
 })

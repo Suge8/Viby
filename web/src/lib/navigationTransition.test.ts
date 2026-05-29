@@ -28,6 +28,7 @@ function installStartViewTransition(value?: ViewTransitionStarter): void {
 
 describe('navigationTransition', () => {
     afterEach(() => {
+        vi.useRealTimers()
         window.sessionStorage.clear()
     })
 
@@ -147,6 +148,23 @@ describe('navigationTransition', () => {
         await expect(task).resolves.toBe(true)
 
         expect(order).toEqual(['commit'])
+        expect(commit).toHaveBeenCalledTimes(1)
+    })
+
+    it('commits navigation when preload stays pending past the UX deadline', async () => {
+        vi.useFakeTimers()
+        const preload = new Promise<void>(() => undefined)
+        const commit = vi.fn()
+        const { runNavigationTransitionAfterPreload } = await import('./navigationTransition')
+
+        const task = runNavigationTransitionAfterPreload(preload, commit, {
+            recoveryHref: '/sessions/new',
+        })
+        expect(commit).not.toHaveBeenCalled()
+
+        await vi.advanceTimersByTimeAsync(800)
+        await expect(task).resolves.toBe(true)
+
         expect(commit).toHaveBeenCalledTimes(1)
     })
 

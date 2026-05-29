@@ -8,6 +8,8 @@ import type {
     ListAgentAvailabilityRequest,
     LocalSessionExportRequest,
     ModelReasoningEffort,
+    OpenAgentConfigRequest,
+    OpenAgentConfigResponse,
     PermissionMode,
     RestoreAgentConfigRequest,
     RestoreAgentConfigResponse,
@@ -37,7 +39,7 @@ type SpawnSuccessResponse = {
     session: Session
 }
 
-const SPAWN_SESSION_REQUEST_TIMEOUT_MS = 20_000
+const SPAWN_SESSION_REQUEST_TIMEOUT_MS = 25_000
 
 type SpawnLegacySuccessResponse = {
     type: 'success'
@@ -127,6 +129,19 @@ export async function restoreAgentConfig(
 ): Promise<RestoreAgentConfigResponse> {
     return await request<RestoreAgentConfigResponse>(
         `/api/runtime/agent-config/${encodeURIComponent(input.driver)}/restore`,
+        {
+            method: 'POST',
+            body: JSON.stringify(input),
+        }
+    )
+}
+
+export async function openAgentConfig(
+    request: ApiClientRequest,
+    input: OpenAgentConfigRequest
+): Promise<OpenAgentConfigResponse> {
+    return await request<OpenAgentConfigResponse>(
+        `/api/runtime/agent-config/${encodeURIComponent(input.driver)}/open`,
         {
             method: 'POST',
             body: JSON.stringify(input),

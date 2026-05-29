@@ -4,11 +4,11 @@ const registerSWMock = vi.fn()
 const publishRuntimeUpdateReadyMock = vi.fn()
 
 vi.mock('virtual:pwa-register', () => ({
-    registerSW: (options: unknown) => registerSWMock(options)
+    registerSW: (options: unknown) => registerSWMock(options),
 }))
 
 vi.mock('@/lib/runtimeUpdateChannel', () => ({
-    publishRuntimeUpdateReady: (action: unknown) => publishRuntimeUpdateReadyMock(action)
+    publishRuntimeUpdateReady: (action: unknown) => publishRuntimeUpdateReadyMock(action),
 }))
 
 describe('registerRuntimeServiceWorker', () => {
@@ -23,7 +23,7 @@ describe('registerRuntimeServiceWorker', () => {
         if (originalRequestIdleCallback) {
             Object.defineProperty(window, 'requestIdleCallback', {
                 configurable: true,
-                value: originalRequestIdleCallback
+                value: originalRequestIdleCallback,
             })
             return
         }
@@ -46,7 +46,7 @@ describe('registerRuntimeServiceWorker', () => {
         options.onNeedRefresh?.()
 
         expect(publishRuntimeUpdateReadyMock).toHaveBeenCalledTimes(1)
-        const apply = publishRuntimeUpdateReadyMock.mock.calls[0]?.[0] as (() => Promise<void>)
+        const apply = publishRuntimeUpdateReadyMock.mock.calls[0]?.[0] as () => Promise<void>
         await apply()
         expect(updateSWMock).toHaveBeenCalledWith(true)
     })
@@ -56,13 +56,13 @@ describe('registerRuntimeServiceWorker', () => {
         const requestIdleCallbackMock = vi.fn((callback: IdleRequestCallback) => {
             callback({
                 didTimeout: false,
-                timeRemaining: () => 16
+                timeRemaining: () => 16,
             })
             return 1
         })
         Object.defineProperty(window, 'requestIdleCallback', {
             configurable: true,
-            value: requestIdleCallbackMock
+            value: requestIdleCallbackMock,
         })
 
         const { scheduleRuntimeServiceWorkerRegistration } = await import('./registerRuntimeServiceWorker')

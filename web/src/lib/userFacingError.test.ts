@@ -53,6 +53,13 @@ describe('formatUserFacingErrorMessage', () => {
                 fallbackKey: 'error.session.load',
             })
         ).toBe('error.session.load')
+        expect(
+            formatUserFacingErrorMessage(new Error('WebSocket closed with code 1006'), {
+                t: translate,
+                fallbackKey: 'error.session.load',
+                allowPassthrough: true,
+            })
+        ).toBe('error.session.load')
     })
 
     it('returns the original message only when explicitly allowed', () => {

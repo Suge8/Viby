@@ -107,7 +107,7 @@ export function NoticeProvider(props: { children: ReactNode }) {
 
     const addToast = useCallback(
         (toast: ToastInput) => {
-            const { dismissAfterMs = NOTICE_TOAST_DURATION_MS, ...notice } = toast
+            const { dismissAfterMs = NOTICE_TOAST_DURATION_MS, compact = true, ...notice } = toast
             const id = createRandomId()
 
             setToastNotices((prev) => {
@@ -115,7 +115,7 @@ export function NoticeProvider(props: { children: ReactNode }) {
                 for (const notice of prev.slice(0, overflowCount)) {
                     clearToastTimer(notice.id)
                 }
-                return [...prev.slice(overflowCount), { id, ...notice }]
+                return [...prev.slice(overflowCount), { id, compact, ...notice }]
             })
             if (dismissAfterMs > 0) {
                 const timer = setTimeout(() => {

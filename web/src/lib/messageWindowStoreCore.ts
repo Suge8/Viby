@@ -115,6 +115,10 @@ export function getMessageWindowState(sessionId: string): MessageWindowState {
     return getState(sessionId)
 }
 
+export function peekSessionStream(sessionId: string): SessionStreamState | null {
+    return states.get(sessionId)?.stream ?? null
+}
+
 export function subscribeMessageWindow(sessionId: string, listener: () => void): () => void {
     stateEvictor.clear(sessionId)
     const subs = listeners.get(sessionId) ?? new Set()

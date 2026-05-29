@@ -32,7 +32,7 @@ export function applySuggestion(
 
         return {
             text: beforeCursor + suggestionWithSpace + afterCursor,
-            cursorPosition: selection.start + suggestionWithSpace.length
+            cursorPosition: selection.start + suggestionWithSpace.length,
         }
     }
 
@@ -56,6 +56,6 @@ export function applySuggestion(
 
     return {
         text: newText,
-        cursorPosition: newCursorPosition
+        cursorPosition: newCursorPosition,
     }
 }

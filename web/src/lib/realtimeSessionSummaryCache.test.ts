@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { createTestSessionSummary } from '@/test/sessionFactories'
 import type { SessionSummary, SessionsResponse } from '@/types/api'
-import { patchSessionSummaryCache, patchSessionSummaryFromMessageCache } from './realtimeSessionSummaryCache'
+import {
+    patchSessionSummaryCache,
+    patchSessionSummaryFromMessageCache,
+    patchSessionSummaryStreamStartedCache,
+} from './realtimeSessionSummaryCache'
 
 function createSessionSummary(overrides: Partial<SessionSummary> & Pick<SessionSummary, 'id'>): SessionSummary {
     return createTestSessionSummary(overrides)
@@ -85,6 +89,37 @@ describe('patchSessionSummaryCache', () => {
             modelReasoningEffort: 'high',
             permissionMode: 'yolo',
             collaborationMode: 'plan',
+        })
+    })
+})
+
+describe('patchSessionSummaryStreamStartedCache', () => {
+    it('marks transient streams as uncompleted replies without mutating authoritative thinking', () => {
+        const previous: SessionsResponse = {
+            sessions: [
+                createSessionSummary({
+                    id: 'session-1',
+                    thinking: false,
+                    latestActivityAt: 4_000,
+                    latestActivityKind: 'ready',
+                    latestCompletedReplyAt: 4_000,
+                }),
+            ],
+        }
+
+        const result = patchSessionSummaryStreamStartedCache(previous, 'session-1', {
+            assistantTurnId: 'turn-1',
+            startedAt: 5_000,
+            updatedAt: 5_100,
+            text: 'working',
+        })
+
+        expect(result.patched).toBe(true)
+        expect(result.next?.sessions[0]).toMatchObject({
+            thinking: false,
+            latestActivityAt: 5_100,
+            latestActivityKind: 'reply',
+            latestCompletedReplyAt: 4_000,
         })
     })
 })

@@ -1,9 +1,16 @@
 import type { QueryClient } from '@tanstack/react-query'
 import { resolveCommandCapabilityScopeKey } from '@viby/protocol'
-import { hydrateLatestMessagesFromSessionView, removeMessageWindow } from '@/lib/message-window-store'
+import {
+    applySessionStream,
+    clearSessionStream,
+    hydrateLatestMessagesFromSessionView,
+    peekSessionStream,
+    removeMessageWindow,
+} from '@/lib/message-window-store'
 import { queryKeys } from '@/lib/query-keys'
 import {
     markSessionSummaryPendingUserTurn,
+    patchSessionSummaryStreamStartedCache,
     removeSessionSummaryCache,
     upsertSessionSummaryCache,
 } from '@/lib/realtimeSessionSummaryCache'
@@ -28,6 +35,15 @@ function createSessionCacheEntry(
     return options.detailHydrated ? { session, detailHydrated: true } : { session }
 }
 
+export function projectActiveSessionStreamsInSessionsResponse(response: SessionsResponse): SessionsResponse {
+    return response.sessions.reduce((currentResponse, session) => {
+        const stream = peekSessionStream(session.id)
+        return stream
+            ? (patchSessionSummaryStreamStartedCache(currentResponse, session.id, stream).next ?? currentResponse)
+            : currentResponse
+    }, response)
+}
+
 function writeSessionCacheEntry(queryClient: QueryClient, entry: SessionCacheEntry): void {
     const nextSession = entry.session
     const previousSession = getSessionResponseFromCache(queryClient, nextSession.id)?.session ?? null
@@ -40,12 +56,23 @@ function writeSessionCacheEntry(queryClient: QueryClient, entry: SessionCacheEnt
     }
     writeSessionWarmSnapshot(nextSession)
     queryClient.setQueryData<SessionsResponse | undefined>(queryKeys.sessions, (previous) => {
-        const next = upsertSessionSummaryCache(previous, nextSession)
+        const upserted = upsertSessionSummaryCache(previous, nextSession)
+        const next = upserted ? projectActiveSessionStreamsInSessionsResponse(upserted) : upserted
         if (next) {
             writeSessionsWarmSnapshot(next.sessions)
         }
         return next
     })
+}
+
+export function writeSessionsResponseToQueryCache(
+    queryClient: Pick<QueryClient, 'setQueryData'>,
+    response: SessionsResponse | undefined
+): void {
+    queryClient.setQueryData(
+        queryKeys.sessions,
+        response ? projectActiveSessionStreamsInSessionsResponse(response) : response
+    )
 }
 
 export function writeSessionToQueryCache(queryClient: QueryClient, session: Session): void {
@@ -76,15 +103,25 @@ export function patchSessionInQueryCache(
     return nextSession
 }
 
-export function writeSessionViewToQueryCache(queryClient: QueryClient, sessionView: SessionViewSnapshot): void {
+export function writeSessionHeadToQueryCache(
+    queryClient: QueryClient,
+    sessionView: Pick<SessionViewSnapshot, 'session' | 'stream'>
+): void {
+    if (sessionView.stream) applySessionStream(sessionView.session.id, sessionView.stream)
+    else clearSessionStream(sessionView.session.id)
     const nextSession = attachResumeAvailability(queryClient, sessionView.session)
     writeSessionCacheEntry(queryClient, createSessionCacheEntry(nextSession, { detailHydrated: true }))
+}
+
+export function writeSessionViewToQueryCache(queryClient: QueryClient, sessionView: SessionViewSnapshot): void {
     hydrateLatestMessagesFromSessionView({
         sessionId: sessionView.session.id,
         messages: sessionView.latestWindow.messages,
         hasMore: sessionView.latestWindow.page.hasMore,
         stream: sessionView.stream,
     })
+    const nextSession = attachResumeAvailability(queryClient, sessionView.session)
+    writeSessionCacheEntry(queryClient, createSessionCacheEntry(nextSession, { detailHydrated: true }))
 }
 
 export function markSessionPendingUserTurnInQueryCache(

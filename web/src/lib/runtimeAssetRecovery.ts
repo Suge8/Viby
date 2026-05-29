@@ -6,13 +6,14 @@ const APP_BUILD_ID_STORAGE_KEY = 'viby-app-build-id'
 const RUNTIME_ASSET_RECOVERY_KEY = 'viby-runtime-asset-recovery'
 const LOCAL_SERVICE_WORKER_RESET_KEY = 'viby-local-service-worker-reset'
 
+// 一个 tab 会话内最多标记一次恢复，干净防死循环。React mount 后
+// clearRuntimeAssetRecoveryMarker 会清除标记，后续错误可再次触发。
 function markRuntimeAssetRecovery(reason: string): boolean {
     if (typeof window === 'undefined') {
         return true
     }
 
-    const existing = readBrowserStorageItem('session', RUNTIME_ASSET_RECOVERY_KEY)
-    if (existing === reason) {
+    if (readBrowserStorageItem('session', RUNTIME_ASSET_RECOVERY_KEY)) {
         return false
     }
 
@@ -52,7 +53,7 @@ export async function resetRuntimeAssets(): Promise<void> {
 }
 
 export async function disableServiceWorkerForCurrentOrigin(
-    options: { keepServiceWorker?: boolean } = {}
+    options: { clearCaches?: boolean; keepServiceWorker?: boolean } = {}
 ): Promise<boolean> {
     if (typeof window === 'undefined') {
         return false
@@ -67,7 +68,8 @@ export async function disableServiceWorkerForCurrentOrigin(
         typeof navigator !== 'undefined' && 'serviceWorker' in navigator && Boolean(navigator.serviceWorker.controller)
     const hasResetMarker = readBrowserStorageItem('session', LOCAL_SERVICE_WORKER_RESET_KEY) === 'done'
 
-    await resetRuntimeAssets()
+    await unregisterServiceWorkers()
+    if (options.clearCaches !== false) await deleteRuntimeCaches()
     writeBrowserStorageItem('session', LOCAL_SERVICE_WORKER_RESET_KEY, 'done')
 
     return hasController && !hasResetMarker

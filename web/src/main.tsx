@@ -6,12 +6,13 @@ import { resolveInitialLocale } from '@/lib/i18n-context'
 import { preloadTranslations } from '@/lib/i18nCatalog'
 import { installVitePreloadErrorHandler } from '@/lib/installVitePreloadErrorHandler'
 import { ensureAppOverlayRoot } from '@/lib/overlayRoot'
-import { shouldRegisterServiceWorkerForOrigin } from '@/lib/runtimeAssetPolicy'
+import { isPairingBootServiceWorkerBypassPath, shouldRegisterServiceWorkerForLocation } from '@/lib/runtimeAssetPolicy'
 import {
     clearRuntimeAssetRecoveryMarker,
     disableServiceWorkerForCurrentOrigin,
     publishRuntimeUpdateForBuild,
 } from '@/lib/runtimeAssetRecovery'
+import { reportWebRuntimeWarning } from '@/lib/runtimeDiagnostics'
 import { preloadAppCacheRuntime } from '@/lib/storage/preloadAppCacheRuntime'
 import { createAppElement } from './app-bootstrap'
 
@@ -22,21 +23,39 @@ function renderApplication(rootElement: HTMLElement): void {
     clearRuntimeAssetRecoveryMarker()
 }
 
+function isPairingServiceWorkerResetPending(): boolean {
+    return Boolean(
+        (window as unknown as { __vibyPairingServiceWorkerResetPending?: boolean })
+            .__vibyPairingServiceWorkerResetPending
+    )
+}
+
+function warmRecoverableAppCache(): void {
+    void preloadAppCacheRuntime().catch((error) => {
+        reportWebRuntimeWarning('app cache warm preload failed', {
+            message: error instanceof Error ? error.message : String(error),
+        })
+    })
+}
+
 async function bootstrap(): Promise<void> {
+    if (isPairingServiceWorkerResetPending()) return
     initializeFontScale()
     ensureAppOverlayRoot()
     const currentOrigin = window.location.origin
-    const shouldUseServiceWorker = import.meta.env.PROD && shouldRegisterServiceWorkerForOrigin(currentOrigin)
-    await preloadTranslations(resolveInitialLocale())
-    await preloadAppCacheRuntime()
-
+    const isPairingBootPath = isPairingBootServiceWorkerBypassPath(window.location.pathname)
+    const shouldUseServiceWorker =
+        import.meta.env.PROD && shouldRegisterServiceWorkerForLocation(currentOrigin, window.location.pathname)
     const shouldReloadAfterServiceWorkerReset = await disableServiceWorkerForCurrentOrigin({
+        clearCaches: !isPairingBootPath,
         keepServiceWorker: shouldUseServiceWorker,
     })
     if (shouldReloadAfterServiceWorkerReset) {
         reloadWindowForRecovery('local-service-worker-reset')
         return
     }
+
+    await preloadTranslations(resolveInitialLocale())
 
     if (import.meta.env.PROD) {
         installVitePreloadErrorHandler()
@@ -51,6 +70,7 @@ async function bootstrap(): Promise<void> {
     }
 
     renderApplication(rootElement)
+    warmRecoverableAppCache()
 
     if (import.meta.env.PROD && shouldUseServiceWorker) {
         const { scheduleRuntimeServiceWorkerRegistration } = await import('@/boot/registerRuntimeServiceWorker')

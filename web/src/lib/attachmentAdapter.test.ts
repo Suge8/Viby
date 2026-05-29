@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { ApiError } from '@/api/client'
 import { createAttachmentAdapter, getCachedAttachmentAdapter } from '@/lib/attachmentAdapter'
 
 async function collectAttachmentStates(adapter: ReturnType<typeof createAttachmentAdapter>, file: File) {
@@ -148,6 +149,65 @@ describe('createAttachmentAdapter', () => {
                 path: '/tmp/uploaded.png',
             },
         })
+    })
+
+    it('surfaces a `tooLarge` descriptor when the file is rejected before upload by client-side size check', async () => {
+        const api = {
+            uploadFile: vi.fn(),
+            deleteUploadFile: vi.fn(),
+        }
+        const adapter = createAttachmentAdapter(api as never, 'session-1')
+        // 51 MB > 50 MB ceiling, so the adapter must short-circuit with a
+        // tooLarge descriptor instead of forwarding the request. The chip
+        // tooltip then renders `文件过大 (51.0MB > 上限 50MB)` for the user.
+        const oversize = new File([new Uint8Array(51 * 1024 * 1024)], 'huge.png', { type: 'image/png' })
+
+        const states = await collectAttachmentStates(adapter, oversize)
+        const last = states.at(-1) as { status?: { type?: string }; errorDescriptor?: unknown }
+
+        expect(last.status?.type).toBe('incomplete')
+        expect(last.errorDescriptor).toEqual({
+            titleKey: 'composer.attachment.error.tooLarge',
+            titleParams: { actual: '51.0MB', max: '50MB' },
+        })
+        expect(api.uploadFile).not.toHaveBeenCalled()
+    })
+
+    it('classifies a server 413 reply as the tooLarge descriptor so the tooltip explains the cap', async () => {
+        const api = {
+            uploadFile: vi.fn().mockRejectedValue(new ApiError('Request Entity Too Large', 413)),
+            deleteUploadFile: vi.fn(),
+        }
+        const adapter = createAttachmentAdapter(api as never, 'session-1')
+        const file = new File(['x'], 'photo.png', { type: 'image/png' })
+        const states = await collectAttachmentStates(adapter, file)
+        const last = states.at(-1) as { errorDescriptor?: { titleKey?: string } }
+        expect(last.errorDescriptor?.titleKey).toBe('composer.attachment.error.tooLarge')
+    })
+
+    it('classifies arbitrary upload failures into uploadFailed with HTTP status + message', async () => {
+        const api = {
+            uploadFile: vi.fn().mockRejectedValue(new ApiError('boom', 500)),
+            deleteUploadFile: vi.fn(),
+        }
+        const adapter = createAttachmentAdapter(api as never, 'session-1')
+        const file = new File(['x'], 'photo.png', { type: 'image/png' })
+        const states = await collectAttachmentStates(adapter, file)
+        const last = states.at(-1) as { errorDescriptor?: { titleKey?: string; titleParams?: { status?: number } } }
+        expect(last.errorDescriptor?.titleKey).toBe('composer.attachment.error.uploadFailed')
+        expect(last.errorDescriptor?.titleParams?.status).toBe(500)
+    })
+
+    it('classifies network-level errors (no HTTP status) as networkError descriptor', async () => {
+        const api = {
+            uploadFile: vi.fn().mockRejectedValue(new TypeError('Failed to fetch')),
+            deleteUploadFile: vi.fn(),
+        }
+        const adapter = createAttachmentAdapter(api as never, 'session-1')
+        const file = new File(['x'], 'photo.png', { type: 'image/png' })
+        const states = await collectAttachmentStates(adapter, file)
+        const last = states.at(-1) as { errorDescriptor?: { titleKey?: string } }
+        expect(last.errorDescriptor?.titleKey).toBe('composer.attachment.error.networkError')
     })
 
     it('reuses the same adapter instance for the same api/session pair', () => {

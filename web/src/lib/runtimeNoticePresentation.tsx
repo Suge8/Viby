@@ -1,134 +1,37 @@
-import {
-    FeatureGlobeIcon as GlobeIcon,
-    FeatureMonitorIcon as MonitorIcon,
-    FeatureRefreshIcon as RefreshIcon,
-} from '@/components/featureIcons'
+import { FeatureGlobeIcon as GlobeIcon, FeatureMonitorIcon as MonitorIcon } from '@/components/featureIcons'
+import { ReconnectingNoticeIcon } from '@/components/loading/ReconnectingNoticeIcon'
+import { Button } from '@/components/ui/button'
 import type { RealtimeBannerState } from '@/hooks/useRealtimeFeedback'
-import type { AppRecoveryReason } from '@/lib/appRecovery'
 import type { Notice } from '@/lib/notice-center'
 import { buildCompactPersistentNotice, PERSISTENT_NOTICE_IDS } from '@/lib/persistentNoticePresentation'
-import { isLocalNetworkOrigin } from '@/lib/runtimeAssetPolicy'
 
 type TranslationFn = (key: string) => string
-type RuntimeNoticeTone = 'offline' | 'busy' | 'restoring' | 'unavailable'
-type AssetRecoveryDescriptionKey =
-    | 'recovery.runtimeAssets.devMessage'
-    | 'recovery.runtimeAssets.localStaticMessage'
-    | 'recovery.runtimeAssets.message'
-type RecoveryLabels = {
-    title: string
-    description: string
-}
+type RuntimeNoticeTone = 'offline' | 'recovering' | 'unavailable'
 
 type RuntimeNoticeOptions = {
     banner: RealtimeBannerState
     isOnline: boolean
     t: TranslationFn
-    currentOrigin: string
-    isDevRuntime: boolean
     localRuntimeUnavailableTitle?: string | null
     localRuntimeUnavailableDescription?: string | null
-}
-
-function buildIconBadge(className: string, icon: React.JSX.Element): React.JSX.Element {
-    return <span className={className}>{icon}</span>
 }
 
 function buildNoticeIcon(tone: RuntimeNoticeTone): React.JSX.Element {
     switch (tone) {
         case 'offline':
-            return buildIconBadge(
-                'ds-runtime-notice-icon-shell inline-flex items-center justify-center border border-[color-mix(in_srgb,var(--ds-accent-gold)_26%,transparent)] bg-[color-mix(in_srgb,var(--ds-accent-gold)_12%,var(--ds-panel-strong))] text-[var(--ds-accent-gold)] shadow-[var(--ds-shadow-soft)]',
-                <GlobeIcon className="h-4 w-4" />
-            )
-        case 'busy':
-        case 'restoring':
-            return buildRuntimeBusyIcon()
+            return <GlobeIcon className="h-4 w-4" />
+        case 'recovering':
+            return <ReconnectingNoticeIcon />
         case 'unavailable':
-            return buildIconBadge(
-                'ds-runtime-notice-icon-shell inline-flex items-center justify-center border border-[color-mix(in_srgb,var(--ds-accent-coral)_24%,transparent)] bg-[color-mix(in_srgb,var(--ds-accent-coral)_10%,var(--ds-panel-strong))] text-[var(--ds-accent-coral)] shadow-[var(--ds-shadow-soft)]',
-                <MonitorIcon className="h-4 w-4" />
-            )
+            return <MonitorIcon className="h-4 w-4" />
     }
 }
 
-function buildRuntimeBusyIcon(): React.JSX.Element {
-    return (
-        <span className="ds-runtime-notice-icon-shell inline-flex items-center justify-center border border-[color-mix(in_srgb,var(--ds-brand)_24%,transparent)] bg-[linear-gradient(135deg,color-mix(in_srgb,var(--ds-brand)_12%,var(--ds-panel-strong))_0%,color-mix(in_srgb,var(--ds-accent-coral)_10%,var(--ds-panel-strong))_100%)] text-[var(--ds-brand)] shadow-[var(--ds-shadow-soft)]">
-            <RefreshIcon className="h-4 w-4 animate-[spin_2.4s_linear_infinite]" />
-        </span>
-    )
-}
-
-function isAssetRecoveryReason(reason: AppRecoveryReason): boolean {
-    switch (reason) {
-        case 'local-service-worker-reset':
-        case 'vite-preload-error':
-        case 'runtime-asset-reload':
-            return true
-        default:
-            return false
-    }
-}
-
-function getAssetRecoveryDescriptionKey(options: {
-    currentOrigin: string
-    isDevRuntime: boolean
-}): AssetRecoveryDescriptionKey {
-    if (options.isDevRuntime) {
-        return 'recovery.runtimeAssets.devMessage'
-    }
-
-    if (isLocalNetworkOrigin(options.currentOrigin)) {
-        return 'recovery.runtimeAssets.localStaticMessage'
-    }
-
-    return 'recovery.runtimeAssets.message'
-}
-
-function getRecoveryLabels(
-    reason: AppRecoveryReason,
-    currentOrigin: string,
-    isDevRuntime: boolean,
-    t: TranslationFn
-): RecoveryLabels {
-    if (reason === 'page-discarded') {
-        return {
-            title: t('recovery.pageDiscarded.title'),
-            description: t('recovery.pageDiscarded.message'),
-        }
-    }
-
-    if (reason === 'page-restored') {
-        return {
-            title: t('recovery.pageRestored.title'),
-            description: t('recovery.pageRestored.message'),
-        }
-    }
-
-    if (!isAssetRecoveryReason(reason)) {
-        return {
-            title: t('recovery.runtimeAssets.title'),
-            description: t('recovery.runtimeAssets.message'),
-        }
-    }
-
-    return {
-        title: t('recovery.runtimeAssets.title'),
-        description: t(
-            getAssetRecoveryDescriptionKey({
-                currentOrigin,
-                isDevRuntime,
-            })
-        ),
-    }
-}
-
-function buildRuntimeBusyNotice(t: TranslationFn): Notice {
+function buildRuntimeRecoveringNotice(t: TranslationFn): Notice {
     return buildCompactPersistentNotice({
         id: PERSISTENT_NOTICE_IDS.runtime,
-        tone: 'info',
-        icon: buildRuntimeBusyIcon(),
+        tone: 'warning',
+        icon: buildNoticeIcon('recovering'),
         title: t('runtime.recovering.title'),
         description: t('runtime.recovering.message'),
     })
@@ -148,15 +51,7 @@ export function buildOfflineNotice(isOnline: boolean, t: TranslationFn): Notice 
 }
 
 export function buildRuntimeNotice(options: RuntimeNoticeOptions): Notice | null {
-    const {
-        banner,
-        isOnline,
-        t,
-        currentOrigin,
-        isDevRuntime,
-        localRuntimeUnavailableTitle,
-        localRuntimeUnavailableDescription,
-    } = options
+    const { banner, isOnline, t, localRuntimeUnavailableTitle, localRuntimeUnavailableDescription } = options
     if (!isOnline) {
         return null
     }
@@ -171,20 +66,22 @@ export function buildRuntimeNotice(options: RuntimeNoticeOptions): Notice | null
         })
     }
 
-    if (banner.kind === 'restoring') {
-        const labels = getRecoveryLabels(banner.reason, currentOrigin, isDevRuntime, t)
-        return buildCompactPersistentNotice({
-            id: PERSISTENT_NOTICE_IDS.runtime,
-            tone: 'info',
-            icon: buildNoticeIcon('restoring'),
-            title: labels.title,
-            description: labels.description,
-        })
-    }
-
-    if (banner.kind === 'busy') {
-        return buildRuntimeBusyNotice(t)
+    if (banner.kind === 'busy' || banner.kind === 'restoring') {
+        return buildRuntimeRecoveringNotice(t)
     }
 
     return null
+}
+
+export function buildRuntimeUpdateNotice(options: { onApply: () => void | Promise<void>; t: TranslationFn }): Notice {
+    return buildCompactPersistentNotice({
+        id: PERSISTENT_NOTICE_IDS.runtimeUpdate,
+        tone: 'info',
+        title: options.t('updateReady.title'),
+        action: (
+            <Button type="button" size="sm" variant="ghost" onClick={options.onApply}>
+                {options.t('updateReady.action')}
+            </Button>
+        ),
+    })
 }

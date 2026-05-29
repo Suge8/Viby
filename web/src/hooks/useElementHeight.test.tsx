@@ -1,5 +1,5 @@
 import { act, render, screen } from '@testing-library/react'
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useElementHeight } from '@/hooks/useElementHeight'
 
@@ -35,6 +35,26 @@ function HeightProbe(): React.JSX.Element {
     )
 }
 
+function RemountingHeightProbe(): React.JSX.Element {
+    const [version, setVersion] = useState(0)
+    const elementRef = useRef<HTMLDivElement | null>(null)
+    const height = useElementHeight(elementRef)
+
+    return (
+        <div>
+            <button type="button" onClick={() => setVersion(1)}>
+                switch
+            </button>
+            {version === 0 ? (
+                <div key="first" ref={elementRef} data-testid="target" />
+            ) : (
+                <div key="second" ref={elementRef} data-testid="target-next" />
+            )}
+            <output data-testid="height">{height}</output>
+        </div>
+    )
+}
+
 describe('useElementHeight', () => {
     beforeEach(() => {
         mockedHeight = 120
@@ -49,6 +69,21 @@ describe('useElementHeight', () => {
                     left: 0,
                     right: 0,
                     bottom: mockedHeight,
+                    x: 0,
+                    y: 0,
+                    toJSON() {
+                        return {}
+                    },
+                }
+            }
+            if ((this as HTMLElement).dataset.testid === 'target-next') {
+                return {
+                    width: 0,
+                    height: 240,
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 240,
                     x: 0,
                     y: 0,
                     toJSON() {
@@ -89,5 +124,17 @@ describe('useElementHeight', () => {
 
         expect(screen.getByTestId('height').textContent).toBe('120')
         expect(Number(screen.getByTestId('render-count').textContent)).toBe(renderCountAfterSync)
+    })
+
+    it('re-observes when a stable ref points at a remounted element', () => {
+        render(<RemountingHeightProbe />)
+
+        expect(screen.getByTestId('height').textContent).toBe('120')
+
+        act(() => {
+            screen.getByRole('button', { name: 'switch' }).click()
+        })
+
+        expect(screen.getByTestId('height').textContent).toBe('240')
     })
 })

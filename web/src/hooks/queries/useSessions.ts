@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import type { ApiClient } from '@/api/client'
-import type { SessionSummary } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
+import { projectActiveSessionStreamsInSessionsResponse } from '@/lib/sessionQueryCache'
 import { readSessionsWarmSnapshot, writeSessionsWarmSnapshot } from '@/lib/sessionsWarmSnapshot'
-import { formatOptionalUserFacingErrorMessage } from '@/lib/userFacingError'
 import { useTranslation } from '@/lib/use-translation'
+import { formatOptionalUserFacingErrorMessage } from '@/lib/userFacingError'
+import type { SessionSummary } from '@/types/api'
 import { realtimeQueryOptions } from './realtimeQueryOptions'
 
 export function useSessions(api: ApiClient | null): {
@@ -24,7 +25,7 @@ export function useSessions(api: ApiClient | null): {
             if (!api) {
                 throw new Error('API unavailable')
             }
-            return await api.getSessions()
+            return projectActiveSessionStreamsInSessionsResponse(await api.getSessions())
         },
         enabled: Boolean(api),
         placeholderData: () => warmSnapshot,
@@ -49,7 +50,7 @@ export function useSessions(api: ApiClient | null): {
         hasWarmSnapshot,
         error: formatOptionalUserFacingErrorMessage(query.error, {
             t,
-            fallbackKey: 'error.sessions.load'
+            fallbackKey: 'error.sessions.load',
         }),
         refetch: query.refetch,
     }

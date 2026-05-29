@@ -6,7 +6,7 @@ describe('id helpers', () => {
         const randomUUID = vi.fn(() => 'uuid-from-crypto')
         vi.stubGlobal('crypto', {
             randomUUID,
-            getRandomValues: vi.fn()
+            getRandomValues: vi.fn(),
         })
 
         expect(createRandomId()).toBe('uuid-from-crypto')
@@ -18,7 +18,7 @@ describe('id helpers', () => {
             getRandomValues: (values: Uint8Array) => {
                 values.fill(0xab)
                 return values
-            }
+            },
         })
 
         expect(createRandomId()).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
@@ -27,7 +27,7 @@ describe('id helpers', () => {
     it('creates scoped ids', () => {
         vi.stubGlobal('crypto', {
             randomUUID: () => 'scoped-uuid',
-            getRandomValues: vi.fn()
+            getRandomValues: vi.fn(),
         })
 
         expect(createScopedId('message')).toBe('message-scoped-uuid')

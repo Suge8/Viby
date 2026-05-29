@@ -1,7 +1,7 @@
 import { useContext } from 'react'
 import { I18nContext } from './i18n-context'
 
-export type { Locale, LocalePreference, I18nContextValue } from './i18n-context'
+export type { I18nContextValue, Locale, LocalePreference } from './i18n-context'
 
 export function useTranslation(): import('./i18n-context').I18nContextValue {
     const context = useContext(I18nContext)

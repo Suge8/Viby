@@ -19,10 +19,9 @@
 
         <!-- Favicon -->
         <link rel="icon" href="/favicon.ico" sizes="48x48" />
-        <link rel="icon" href="/icon.svg" sizes="any" type="image/svg+xml" />
+        <link rel="icon" href="/pwa-192x192.png" type="image/png" sizes="192x192" />
+        <link rel="icon" href="/pwa-512x512.png" type="image/png" sizes="512x512" />
 
-        <!-- Safari Pinned Tab -->
-        <link rel="mask-icon" href="/mask-icon.svg" color="#ff8d5d" />
 
         <!-- Prevent flash of white background on dark mode -->
         <style>
@@ -145,21 +144,6 @@
                 transition: width 520ms cubic-bezier(0.16, 1, 0.3, 1);
             }
 
-            .boot-shell-rail-fill::after {
-                content: '';
-                position: absolute;
-                inset: 0;
-                border-radius: inherit;
-                background: linear-gradient(
-                    90deg,
-                    transparent 0%,
-                    rgba(255, 255, 255, 0.55) 50%,
-                    transparent 100%
-                );
-                transform: translateX(-120%);
-                animation: boot-shell-sheen 1.6s ease-in-out infinite;
-            }
-
             @media (prefers-color-scheme: dark) {
                 .boot-shell-mark { background-color: #fafafa }
                 .boot-shell-title { color: #fafafc }
@@ -177,15 +161,9 @@
                 }
             }
 
-            @keyframes boot-shell-sheen {
-                0% { transform: translateX(-120%) }
-                65%, 100% { transform: translateX(220%) }
-            }
-
             @media (prefers-reduced-motion: reduce) {
                 #app-boot-shell,
-                .boot-shell-rail-fill,
-                .boot-shell-rail-fill::after {
+                .boot-shell-rail-fill {
                     animation: none;
                     transition: none;
                 }
@@ -237,6 +215,7 @@
                 var RECOVERY_KEY = 'viby-pending-app-recovery'
                 var BOOT_RECOVERY_SURFACE_OWNER_KEY = 'viby-boot-recovery-surface-owner'
                 var APP_SHELL_REVEALED_KEY = 'viby-app-shell-revealed'
+                var PAIRING_SW_RESET_KEY = 'viby-pairing-service-worker-reset'
 
                 function hasSearchParam(name, value) {
                     var targetName = name.toLowerCase()
@@ -254,7 +233,30 @@
                         || hasSearchParam('remote', '1')
                 }
 
+                function isPairingServiceWorkerResetRoute() {
+                    return window.location.pathname.indexOf('/p/') === 0
+                }
+
+                function resetPairingServiceWorkerIfNeeded() {
+                    if (!isPairingServiceWorkerResetRoute()) return
+                    if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) return
+                    var resetKey = PAIRING_SW_RESET_KEY + ':' + window.location.pathname
+                    if (sessionStorage.getItem(resetKey) === 'done') return
+                    sessionStorage.setItem(resetKey, 'done')
+                    window.__vibyPairingServiceWorkerResetPending = true
+                    var reload = function () { window.location.reload() }
+                    navigator.serviceWorker.getRegistrations()
+                        .then(function (registrations) {
+                            return Promise.all(registrations.map(function (registration) {
+                                return registration.unregister()
+                            }))
+                        })
+                        .then(reload, reload)
+                }
+
                 try {
+                    resetPairingServiceWorkerIfNeeded()
+
                     if (document.wasDiscarded) {
                         sessionStorage.setItem(RECOVERY_KEY, JSON.stringify({
                             reason: 'page-discarded',
@@ -278,8 +280,16 @@
             })()
         </script>
         <script>
-            (function () {
+            // 零信任 boot 兜底：仅当出现明确的 vite/chunk 加载失败信号（或致命的
+            // <script src=/assets/*> / <link rel=stylesheet href=/assets/*> 元素级失败）
+            // 时才清 SW + 缓存并 reload。一个 tab 内最多触发一次；React mount 成功后
+            // 由 clearRuntimeAssetRecoveryMarker 解锁。详见 web/src/lib/runtimeAssetRecovery.ts。
+            ;(function () {
                 var IS_VITE_DEV = '%MODE%' === 'development'
+                if (IS_VITE_DEV) {
+                    return
+                }
+
                 var RECOVERY_KEY = 'viby-runtime-asset-recovery'
                 var APP_RECOVERY_KEY = 'viby-pending-app-recovery'
                 var APP_SHELL_REVEALED_KEY = 'viby-app-shell-revealed'
@@ -292,16 +302,8 @@
                     'dynamically imported module'
                 ]
 
-                if (IS_VITE_DEV) {
-                    return
-                }
-
                 function normalize(value) {
                     return typeof value === 'string' ? value.trim().toLowerCase() : ''
-                }
-
-                function containsAssetPath(value) {
-                    return value.indexOf('/assets/') !== -1
                 }
 
                 function hasKnownLoadFailure(values) {
@@ -312,13 +314,23 @@
                     })
                 }
 
-                function isLikelyAssetFailure(details) {
-                    var filename = normalize(details && details.filename)
-                    var message = normalize(details && details.message)
-                    var stack = normalize(details && details.stack)
+                function isFatalAssetTagFailure(target) {
+                    if (!target || target === window || target === document) {
+                        return false
+                    }
+                    var tag = (target.tagName || '').toUpperCase()
+                    if (tag === 'SCRIPT') {
+                        return normalize(target.src).indexOf('/assets/') !== -1
+                    }
+                    if (tag === 'LINK') {
+                        return normalize(target.rel) === 'stylesheet'
+                            && normalize(target.href).indexOf('/assets/') !== -1
+                    }
+                    return false
+                }
 
-                    return hasKnownLoadFailure([message, stack])
-                        || (containsAssetPath(filename) && hasKnownLoadFailure([message]))
+                function isLikelyAssetFailure(message, stack) {
+                    return hasKnownLoadFailure([normalize(message), normalize(stack)])
                 }
 
                 async function clearRuntimeAssets() {
@@ -338,62 +350,64 @@
                 }
 
                 async function recoverRuntimeAssets(reason) {
+                    if (sessionStorage.getItem(RECOVERY_KEY)) {
+                        return
+                    }
+                    sessionStorage.setItem(RECOVERY_KEY, reason)
+
                     try {
-                        if (sessionStorage.getItem(RECOVERY_KEY) === reason) {
-                            return
-                        }
-                        sessionStorage.setItem(RECOVERY_KEY, reason)
                         await clearRuntimeAssets()
-
-                        if (sessionStorage.getItem(APP_SHELL_REVEALED_KEY) === 'done') {
-                            var snapshot = {
-                                availableAt: Date.now(),
-                                mode: 'reload',
-                                recoveryReason: 'runtime-asset-reload',
-                                resumeHref: window.location.pathname + window.location.search + window.location.hash
-                            }
-                            sessionStorage.setItem(RUNTIME_UPDATE_STORAGE_KEY, JSON.stringify(snapshot))
-                            window.dispatchEvent(new CustomEvent(RUNTIME_UPDATE_READY_EVENT, {
-                                detail: snapshot
-                            }))
-                            return
-                        }
-
-                        sessionStorage.setItem(APP_RECOVERY_KEY, JSON.stringify({
-                            reason: 'runtime-asset-reload',
-                            at: Date.now()
-                        }))
                     } catch (error) {
                         console.error('Failed to clear stale runtime assets', error)
-                    } finally {
-                        if (sessionStorage.getItem(APP_SHELL_REVEALED_KEY) !== 'done') {
-                            window.location.reload()
-                        }
-                    }
-                }
-
-                window.addEventListener('error', function (event) {
-                    if (!isLikelyAssetFailure(event)) {
                         return
                     }
 
+                    if (sessionStorage.getItem(APP_SHELL_REVEALED_KEY) === 'done') {
+                        var snapshot = {
+                            availableAt: Date.now(),
+                            mode: 'reload',
+                            recoveryReason: 'runtime-asset-reload',
+                            resumeHref: window.location.pathname + window.location.search + window.location.hash
+                        }
+                        sessionStorage.setItem(RUNTIME_UPDATE_STORAGE_KEY, JSON.stringify(snapshot))
+                        window.dispatchEvent(new CustomEvent(RUNTIME_UPDATE_READY_EVENT, { detail: snapshot }))
+                        return
+                    }
+
+                    sessionStorage.setItem(APP_RECOVERY_KEY, JSON.stringify({
+                        reason: 'runtime-asset-reload',
+                        at: Date.now()
+                    }))
+                    window.location.reload()
+                }
+
+                window.addEventListener('error', function (event) {
+                    if (event.target && event.target !== window) {
+                        if (!isFatalAssetTagFailure(event.target)) {
+                            return
+                        }
+                        event.preventDefault()
+                        void recoverRuntimeAssets('asset:' + (event.target.tagName || '').toLowerCase())
+                        return
+                    }
+
+                    var stack = event.error && event.error.stack
+                    if (!isLikelyAssetFailure(event.message, stack)) {
+                        return
+                    }
                     event.preventDefault()
                     void recoverRuntimeAssets('error:' + normalize(event.message))
                 }, true)
 
                 window.addEventListener('unhandledrejection', function (event) {
                     var reason = event.reason
-                    var details = {
-                        message: normalize(reason && reason.message ? reason.message : String(reason || '')),
-                        stack: normalize(reason && reason.stack ? reason.stack : '')
-                    }
-
-                    if (!isLikelyAssetFailure(details)) {
+                    var message = reason && reason.message ? reason.message : String(reason || '')
+                    var stack = reason && reason.stack ? reason.stack : ''
+                    if (!isLikelyAssetFailure(message, stack)) {
                         return
                     }
-
                     event.preventDefault()
-                    void recoverRuntimeAssets('rejection:' + details.message)
+                    void recoverRuntimeAssets('rejection:' + normalize(message))
                 })
             })()
         </script>
@@ -419,12 +433,12 @@
                 var STRINGS = {
                     en: {
                         normal: '',
-                        pairing: 'Waking Viby…',
+                        pairing: 'Connecting to your computer…',
                         recovery: 'Restoring your session…'
                     },
                     'zh-CN': {
                         normal: '',
-                        pairing: '叫醒 Viby…',
+                        pairing: '正在连接你的电脑…',
                         recovery: '正在恢复刚才的会话…'
                     }
                 }

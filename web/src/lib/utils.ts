@@ -1,4 +1,4 @@
-import { clsx, type ClassValue } from 'clsx'
+import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 
 export function cn(...inputs: ClassValue[]): string {
@@ -27,4 +27,3 @@ export function encodeBase64(value: string): string {
     const binaryString = Array.from(bytes, (byte) => String.fromCharCode(byte)).join('')
     return btoa(binaryString)
 }
-

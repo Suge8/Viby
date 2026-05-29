@@ -5,6 +5,7 @@ import {
     isLocalNetworkOrigin,
     isLoopbackOrigin,
     isPotentiallyTrustworthyWebOrigin,
+    shouldRegisterServiceWorkerForLocation,
     shouldRegisterServiceWorkerForOrigin,
 } from '@/lib/runtimeAssetPolicy'
 import {
@@ -113,7 +114,7 @@ describe('runtimeAssetRecovery', () => {
         expect(isLocalNetworkOrigin('https://studio.example.com')).toBe(false)
     })
 
-    it('registers service workers for trustworthy web origins', () => {
+    it('registers service workers for trustworthy web origins outside pairing boot', () => {
         expect(isPotentiallyTrustworthyWebOrigin('https://app.viby.run')).toBe(true)
         expect(isPotentiallyTrustworthyWebOrigin('http://127.0.0.1:37173')).toBe(true)
         expect(isPotentiallyTrustworthyWebOrigin('http://dev.viby.localhost:37173')).toBe(true)
@@ -121,6 +122,8 @@ describe('runtimeAssetRecovery', () => {
         expect(isPotentiallyTrustworthyWebOrigin('http://192.168.1.10:37173')).toBe(false)
         expect(isPotentiallyTrustworthyWebOrigin('http://0.0.0.0:37173')).toBe(false)
         expect(shouldRegisterServiceWorkerForOrigin('http://localhost:37173')).toBe(true)
+        expect(shouldRegisterServiceWorkerForLocation('https://pair.viby.run', '/p/pairing-1')).toBe(false)
+        expect(shouldRegisterServiceWorkerForLocation('https://pair.viby.run', '/sessions')).toBe(true)
     })
 
     it('unregisters service workers and clears caches when recovering', async () => {
@@ -145,7 +148,7 @@ describe('runtimeAssetRecovery', () => {
         expect(deleteCache).toHaveBeenCalledWith('precache-v1')
     })
 
-    it('avoids repeating the same recovery attempt in one tab session', async () => {
+    it('refuses any further recovery in one tab session once a marker is set, regardless of reason', async () => {
         vi.stubGlobal('navigator', {
             ...navigator,
             serviceWorker: { getRegistrations: vi.fn().mockResolvedValue([]) },
@@ -157,6 +160,7 @@ describe('runtimeAssetRecovery', () => {
 
         await expect(recoverRuntimeAssets('runtime:error')).resolves.toBe(true)
         await expect(recoverRuntimeAssets('runtime:error')).resolves.toBe(false)
+        await expect(recoverRuntimeAssets('vite:preloadError')).resolves.toBe(false)
     })
 
     it('does not publish when migrating from legacy timestamp build ids of the same version', () => {
@@ -208,5 +212,29 @@ describe('runtimeAssetRecovery', () => {
         expect(deleteCache).toHaveBeenCalledWith('local-cache')
 
         await expect(disableServiceWorkerForCurrentOrigin({ keepServiceWorker: false })).resolves.toBe(false)
+    })
+
+    it('can unregister a pairing boot controller without deleting runtime caches', async () => {
+        const unregister = vi.fn().mockResolvedValue(true)
+        const getRegistrations = vi.fn().mockResolvedValue([{ unregister }])
+        const deleteCache = vi.fn().mockResolvedValue(true)
+
+        vi.stubGlobal('navigator', {
+            ...navigator,
+            serviceWorker: {
+                controller: {},
+                getRegistrations,
+            },
+        })
+        vi.stubGlobal('caches', {
+            keys: vi.fn().mockResolvedValue(['precache-v1']),
+            delete: deleteCache,
+        })
+
+        await expect(
+            disableServiceWorkerForCurrentOrigin({ clearCaches: false, keepServiceWorker: false })
+        ).resolves.toBe(true)
+        expect(unregister).toHaveBeenCalledTimes(1)
+        expect(deleteCache).not.toHaveBeenCalled()
     })
 })

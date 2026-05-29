@@ -26,8 +26,8 @@ describe('useLongPress', () => {
 
         expect(onClick).toHaveBeenCalledTimes(1)
         expect(onLongPress).not.toHaveBeenCalled()
-        expect(clickEvent.preventDefault).toHaveBeenCalledTimes(1)
-        expect(clickEvent.stopPropagation).toHaveBeenCalledTimes(1)
+        expect(clickEvent.preventDefault).not.toHaveBeenCalled()
+        expect(clickEvent.stopPropagation).not.toHaveBeenCalled()
     })
 
     it('fires long press once and suppresses the follow-up click', () => {
@@ -100,7 +100,7 @@ describe('useLongPress', () => {
         expect(handlers.onClick(createMouseEvent())).toBe(clickResult)
     })
 
-    it('suppresses the follow-up click when the pointer moves beyond tolerance', () => {
+    it('cancels long press without suppressing the browser click when the pointer moves beyond tolerance', () => {
         vi.useFakeTimers()
         const onClick = vi.fn()
         const onLongPress = vi.fn()
@@ -129,9 +129,9 @@ describe('useLongPress', () => {
         handlers.onClick(clickEvent)
 
         expect(onLongPress).not.toHaveBeenCalled()
-        expect(onClick).not.toHaveBeenCalled()
-        expect(clickEvent.preventDefault).toHaveBeenCalledTimes(1)
-        expect(clickEvent.stopPropagation).toHaveBeenCalledTimes(1)
+        expect(onClick).toHaveBeenCalledTimes(1)
+        expect(clickEvent.preventDefault).not.toHaveBeenCalled()
+        expect(clickEvent.stopPropagation).not.toHaveBeenCalled()
     })
 
     it('cancels the pending long-press timer when click arrives before pointer-up', () => {

@@ -34,6 +34,28 @@ describe('useLongPress contextmenu routing', () => {
         expect(contextMenuEvent.preventDefault).toHaveBeenCalledTimes(1)
     })
 
+    it('keeps firing onLongPress for repeated mouse right-clicks on the same card', () => {
+        const onLongPress = vi.fn()
+        const handlers = setupLongPressHarness({
+            enableContextMenu: true,
+            onLongPress,
+        })
+
+        const firstEvent = createMouseEvent()
+        firstEvent.clientX = 100
+        firstEvent.clientY = 200
+        handlers.onContextMenu(firstEvent)
+
+        const secondEvent = createMouseEvent()
+        secondEvent.clientX = 110
+        secondEvent.clientY = 210
+        handlers.onContextMenu(secondEvent)
+
+        expect(onLongPress).toHaveBeenCalledTimes(2)
+        expect(onLongPress).toHaveBeenNthCalledWith(1, { x: 100, y: 200 })
+        expect(onLongPress).toHaveBeenNthCalledWith(2, { x: 110, y: 210 })
+    })
+
     it('suppresses the duplicate native contextmenu after a touch long press', () => {
         vi.useFakeTimers()
         const onLongPress = vi.fn()

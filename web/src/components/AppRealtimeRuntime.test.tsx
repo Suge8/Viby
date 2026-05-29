@@ -17,11 +17,14 @@ vi.mock('@tanstack/react-query', () => ({
     }),
 }))
 
+const routerLocation = vi.hoisted(() => ({ pathname: '/sessions/session-1', search: '', hash: '', state: null }))
+
 vi.mock('@tanstack/react-router', () => ({
+    useLocation: ({ select }: { select: (location: typeof routerLocation) => string }) => select(routerLocation),
     useMatchRoute: () => () => ({ sessionId: 'session-1' }),
     useRouter: () => ({
         history: {
-            location: { pathname: '/sessions/session-1', search: '', hash: '', state: null },
+            location: routerLocation,
             replace: vi.fn(),
         },
     }),

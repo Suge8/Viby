@@ -16,6 +16,124 @@ function createSessionRecord(overrides: Partial<Session> & Pick<Session, 'id'>):
 }
 
 describe('createRealtimeEventController', () => {
+    it('reports permission attention from lightweight pending request patches', () => {
+        const queryClient = new QueryClient()
+        const changes: unknown[] = []
+        const session = createSessionSummary({
+            id: 'session-1',
+            active: true,
+            pendingRequestsCount: 0,
+            lifecycleState: 'running',
+        })
+        queryClient.setQueryData<SessionsResponse>(queryKeys.sessions, { sessions: [session] })
+        queryClient.setQueryData(queryKeys.session(session.id), {
+            session: createSessionRecord({
+                id: session.id,
+                agentState: { controlledByUser: false, requests: {}, completedRequests: {} },
+            }),
+        })
+
+        const controller = createRealtimeEventController({
+            queryClient,
+            onEvent: vi.fn(),
+            onSessionAttentionChange: (change) => changes.push(change),
+        })
+
+        controller.handleEvent({
+            type: 'session-updated',
+            sessionId: session.id,
+            data: { sid: session.id, pendingRequestsCount: 1, pendingRequestIds: ['request-1'] },
+        } as SyncEvent)
+
+        expect(queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)?.sessions[0]).toMatchObject({
+            pendingRequestsCount: 1,
+        })
+        expect(changes).toEqual([
+            expect.objectContaining({
+                before: expect.objectContaining({ pendingRequestsCount: 0, requestIds: [] }),
+                after: expect.objectContaining({ pendingRequestsCount: 1, requestIds: ['request-1'] }),
+            }),
+        ])
+    })
+
+    it('remembers pending request ids so flat-count replacements still notify', () => {
+        const queryClient = new QueryClient()
+        const changes: Array<{ before: unknown; after: unknown }> = []
+        const session = createSessionSummary({
+            id: 'session-1',
+            active: true,
+            pendingRequestsCount: 1,
+            lifecycleState: 'running',
+        })
+        queryClient.setQueryData<SessionsResponse>(queryKeys.sessions, { sessions: [session] })
+
+        const controller = createRealtimeEventController({
+            queryClient,
+            onEvent: vi.fn(),
+            onSessionAttentionChange: (change) => changes.push(change),
+        })
+
+        controller.handleEvent({
+            type: 'session-updated',
+            sessionId: session.id,
+            data: { sid: session.id, pendingRequestsCount: 1, pendingRequestIds: ['request-1'] },
+        } as SyncEvent)
+        controller.handleEvent({
+            type: 'session-updated',
+            sessionId: session.id,
+            data: { sid: session.id, pendingRequestsCount: 1, pendingRequestIds: ['request-2'] },
+        } as SyncEvent)
+
+        expect(changes[1]).toMatchObject({
+            before: { pendingRequestsCount: 1, requestIds: ['request-1'] },
+            after: { pendingRequestsCount: 1, requestIds: ['request-2'] },
+        })
+    })
+
+    it('reports session attention state changes after realtime cache patches', () => {
+        const queryClient = new QueryClient()
+        const changes: unknown[] = []
+        const session = createSessionSummary({
+            id: 'session-1',
+            active: true,
+            thinking: true,
+            latestActivityAt: 100,
+            latestActivityKind: 'reply',
+            latestCompletedReplyAt: null,
+            lifecycleState: 'running',
+        })
+        queryClient.setQueryData<SessionsResponse>(queryKeys.sessions, { sessions: [session] })
+
+        const controller = createRealtimeEventController({
+            queryClient,
+            onEvent: vi.fn(),
+            onSessionAttentionChange: (change) => changes.push(change),
+        })
+
+        controller.handleEvent({
+            type: 'message-received',
+            sessionId: session.id,
+            message: {
+                id: 'ready-1',
+                seq: 2,
+                localId: null,
+                createdAt: 200,
+                content: { role: 'agent', content: { id: 'event-1', type: 'event', data: { type: 'ready' } } },
+            },
+        } as SyncEvent)
+        controller.handleEvent({
+            type: 'session-updated',
+            sessionId: session.id,
+            data: { thinking: false, updatedAt: 220 },
+        } as SyncEvent)
+
+        expect(changes).toHaveLength(2)
+        expect(changes[1]).toMatchObject({
+            before: { turnState: 'processing', latestCompletedReplyAt: 100 },
+            after: { turnState: 'awaiting-input', latestCompletedReplyAt: 100 },
+        })
+    })
+
     it('recomputes session summary lifecycle state when a realtime patch changes active state', () => {
         const queryClient = new QueryClient()
         const session = createSessionSummary({
@@ -52,7 +170,7 @@ describe('createRealtimeEventController', () => {
             active: false,
             thinking: false,
             updatedAt: 3_000,
-            lifecycleState: 'closed',
+            lifecycleState: 'open',
             lifecycleStateSince: 3_000,
         })
     })
@@ -642,6 +760,118 @@ describe('createRealtimeEventController', () => {
         } as SyncEvent)
 
         expect(getMessageWindowState('session-stream').stream).toBeNull()
+    })
+
+    it('marks the session list summary as processing while a transient stream is active', () => {
+        const queryClient = new QueryClient()
+        const session = createSessionSummary({
+            id: 'session-stream-card',
+            active: true,
+            thinking: false,
+            updatedAt: 1_000,
+            latestActivityAt: 900,
+            latestActivityKind: 'ready',
+            latestCompletedReplyAt: 800,
+            lifecycleState: 'running',
+            lifecycleStateSince: 500,
+        })
+
+        queryClient.setQueryData<SessionsResponse>(queryKeys.sessions, { sessions: [session] })
+
+        const controller = createRealtimeEventController({
+            queryClient,
+            onEvent: vi.fn(),
+        })
+
+        controller.handleEvent({
+            type: 'session-stream-updated',
+            sessionId: session.id,
+            stream: {
+                assistantTurnId: 'stream-1',
+                startedAt: 1_100,
+                updatedAt: 1_200,
+                text: 'Still working',
+            },
+        })
+
+        const processingSnapshot = queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)
+        expect(processingSnapshot?.sessions[0]).toMatchObject({
+            id: session.id,
+            thinking: false,
+            updatedAt: 1_000,
+            latestActivityAt: 1_200,
+            latestActivityKind: 'reply',
+            latestCompletedReplyAt: 800,
+        })
+
+        controller.handleEvent({
+            type: 'session-stream-updated',
+            sessionId: session.id,
+            stream: {
+                assistantTurnId: 'stream-1',
+                startedAt: 1_100,
+                updatedAt: 1_300,
+                text: 'Still working.',
+            },
+        })
+        expect(queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)).toBe(processingSnapshot)
+
+        controller.handleEvent({
+            type: 'session-stream-cleared',
+            sessionId: session.id,
+            assistantTurnId: 'stream-1',
+        } as SyncEvent)
+
+        expect(queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)?.sessions[0]).toMatchObject({
+            id: session.id,
+            thinking: false,
+            latestActivityKind: 'reply',
+            latestCompletedReplyAt: 800,
+        })
+    })
+
+    it('does not let a stream clear override processing activity', () => {
+        const queryClient = new QueryClient()
+        const session = createSessionSummary({
+            id: 'session-authoritative-thinking',
+            active: true,
+            thinking: true,
+            updatedAt: 1_000,
+            latestActivityAt: 900,
+            latestActivityKind: 'ready',
+            latestCompletedReplyAt: 800,
+            lifecycleState: 'running',
+            lifecycleStateSince: 500,
+        })
+
+        queryClient.setQueryData<SessionsResponse>(queryKeys.sessions, { sessions: [session] })
+
+        const controller = createRealtimeEventController({
+            queryClient,
+            onEvent: vi.fn(),
+        })
+
+        controller.handleEvent({
+            type: 'session-stream-updated',
+            sessionId: session.id,
+            stream: {
+                assistantTurnId: 'stream-1',
+                startedAt: 1_100,
+                updatedAt: 1_200,
+                text: 'Still working',
+            },
+        })
+        controller.handleEvent({
+            type: 'session-stream-cleared',
+            sessionId: session.id,
+            assistantTurnId: 'stream-1',
+        } as SyncEvent)
+
+        expect(queryClient.getQueryData<SessionsResponse>(queryKeys.sessions)?.sessions[0]).toMatchObject({
+            id: session.id,
+            thinking: true,
+            latestActivityKind: 'ready',
+        })
     })
 
     it('removes session detail, summary, and message window state when a session is removed', async () => {

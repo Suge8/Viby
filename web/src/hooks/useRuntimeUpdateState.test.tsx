@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { publishRuntimeUpdateReady, resetPendingRuntimeUpdate } from '@/lib/runtimeUpdateChannel'
 import { useRuntimeUpdateState } from '@/hooks/useRuntimeUpdateState'
+import { publishRuntimeUpdateReady, resetPendingRuntimeUpdate } from '@/lib/runtimeUpdateChannel'
 
 describe('useRuntimeUpdateState', () => {
     afterEach(() => {

@@ -16,8 +16,13 @@ import {
     type SessionPatch,
 } from '@/lib/realtimeEventGuards'
 import { createRealtimeInvalidationBatch } from '@/lib/realtimeInvalidationBatch'
-import { patchSessionSummaryCache, patchSessionSummaryFromMessageCache } from '@/lib/realtimeSessionSummaryCache'
+import {
+    patchSessionSummaryCache,
+    patchSessionSummaryFromMessageCache,
+    patchSessionSummaryStreamStartedCache,
+} from '@/lib/realtimeSessionSummaryCache'
 import { reportWebRuntimeError } from '@/lib/runtimeDiagnostics'
+import { readSessionAttentionSnapshot, type SessionAttentionSnapshot } from '@/lib/sessionAttentionToastController'
 import { removeSessionClientState, writeSessionToQueryCache } from '@/lib/sessionQueryCache'
 import type { Session, SessionResponse, SessionsResponse, SyncEvent } from '@/types/api'
 export type ToastEvent = Extract<SyncEvent, { type: 'toast' }>
@@ -25,6 +30,10 @@ type RealtimeEventControllerOptions = {
     queryClient: QueryClient
     onEvent: (event: SyncEvent) => void
     onToast?: (event: ToastEvent) => void
+    onSessionAttentionChange?: (change: {
+        before: SessionAttentionSnapshot | null
+        after: SessionAttentionSnapshot | null
+    }) => void
 }
 export function createRealtimeEventController(options: RealtimeEventControllerOptions): {
     handleEvent: (event: SyncEvent) => void
@@ -36,6 +45,7 @@ export function createRealtimeEventController(options: RealtimeEventControllerOp
             reportWebRuntimeError('Failed to flush realtime query invalidations.', error)
         },
     })
+    const latestPendingRequestIds = new Map<string, readonly string[]>()
 
     function patchSessionSummary(sessionId: string, patch: SessionPatch): boolean {
         let patched = false
@@ -62,6 +72,29 @@ export function createRealtimeEventController(options: RealtimeEventControllerOp
         })
 
         return patched
+    }
+
+    function patchSessionSummaryStream(
+        sessionId: string,
+        stream: Extract<SyncEvent, { type: 'session-stream-updated' }>['stream']
+    ): boolean {
+        let changed = false
+        options.queryClient.setQueryData<SessionsResponse | undefined>(queryKeys.sessions, (previous) => {
+            const result = patchSessionSummaryStreamStartedCache(previous, sessionId, stream)
+            changed = result.next !== previous
+            return result.next
+        })
+        return changed
+    }
+
+    function getPatchAttentionOptions(patch: SessionPatch | null): {
+        requestIds?: readonly string[]
+        pendingRequestsCount?: number
+    } {
+        return {
+            requestIds: patch?.pendingRequestIds,
+            pendingRequestsCount: patch?.pendingRequestsCount,
+        }
     }
 
     function patchSessionDetail(sessionId: string, patch: SessionPatch): boolean {
@@ -123,6 +156,14 @@ export function createRealtimeEventController(options: RealtimeEventControllerOp
             return
         }
 
+        const attentionSessionId = getEventSessionId(event)
+        const attentionBefore = attentionSessionId
+            ? readSessionAttentionSnapshot(options.queryClient, attentionSessionId, {
+                  requestIds: latestPendingRequestIds.get(attentionSessionId),
+              })
+            : null
+        let attentionPatch: SessionPatch | null = null
+
         if (event.type === 'message-received') {
             ingestIncomingMessages(event.sessionId, [event.message])
             if (!patchSessionSummaryFromMessage(event.sessionId, event.message)) {
@@ -132,6 +173,7 @@ export function createRealtimeEventController(options: RealtimeEventControllerOp
 
         if (event.type === 'session-stream-updated') {
             applySessionStream(event.sessionId, event.stream)
+            patchSessionSummaryStream(event.sessionId, event.stream)
         }
 
         if (event.type === 'session-stream-cleared') {
@@ -157,6 +199,7 @@ export function createRealtimeEventController(options: RealtimeEventControllerOp
                 writeSessionToQueryCache(options.queryClient, event.data)
             } else {
                 const patch = getSessionPatch(event.data)
+                attentionPatch = patch
                 if (patch) {
                     const detailPatched = patchSessionDetail(event.sessionId, patch)
                     const summaryPatched = patchSessionSummary(event.sessionId, patch)
@@ -188,6 +231,22 @@ export function createRealtimeEventController(options: RealtimeEventControllerOp
             invalidationBatch.queueRuntimeCapability()
         }
 
+        if (attentionSessionId) {
+            const attentionOptions = getPatchAttentionOptions(attentionPatch)
+            const attentionAfter = readSessionAttentionSnapshot(
+                options.queryClient,
+                attentionSessionId,
+                attentionOptions
+            )
+            options.onSessionAttentionChange?.({
+                before: attentionBefore,
+                after: attentionAfter,
+            })
+            if (attentionOptions.requestIds) {
+                latestPendingRequestIds.set(attentionSessionId, attentionOptions.requestIds)
+            }
+        }
+
         options.onEvent(event)
     }
 
@@ -199,6 +258,10 @@ export function createRealtimeEventController(options: RealtimeEventControllerOp
         handleEvent,
         dispose,
     }
+}
+
+function getEventSessionId(event: SyncEvent): string | null {
+    return 'sessionId' in event ? event.sessionId : null
 }
 
 function hasLifecycleMetadataHint(patch: SessionPatch): boolean {

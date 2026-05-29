@@ -10,7 +10,7 @@ const CLIPBOARD_BUFFER_STYLE = [
     'padding: 0',
     'border: 0',
     'opacity: 0',
-    'pointer-events: none'
+    'pointer-events: none',
 ].join('; ')
 
 function focusElementWithoutScroll(element: HTMLElement): void {

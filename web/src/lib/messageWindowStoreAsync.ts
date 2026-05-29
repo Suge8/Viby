@@ -95,6 +95,16 @@ async function recoverMessagesAfter(api: ApiClient, sessionId: string, afterSeq:
             limit: CATCHUP_PAGE_SIZE,
         })
 
+        // Ingest first so the warm-snapshot skeleton stays mounted until the
+        // first real message page has merged into the window. Flipping
+        // `restoredFromWarmSnapshot=false` before ingestion lets virtuoso mount
+        // against the stale snapshot rows and then immediately re-render once
+        // the new rows land, producing the double-spinner flash the user saw
+        // on session entry.
+        if (recovery.messages.length > 0) {
+            ingestIncomingMessages(sessionId, recovery.messages)
+        }
+
         updateMessageWindowState(sessionId, (prev) => {
             if (prev.hasLoadedLatest && prev.warning === null && !prev.restoredFromWarmSnapshot) {
                 return prev
@@ -111,7 +121,6 @@ async function recoverMessagesAfter(api: ApiClient, sessionId: string, afterSeq:
             return
         }
 
-        ingestIncomingMessages(sessionId, recovery.messages)
         const nextCursor = recovery.page.nextAfterSeq
         if (!recovery.page.hasMore || nextCursor <= cursor) {
             return

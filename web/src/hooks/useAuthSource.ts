@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { readBrowserStorageItem, removeBrowserStorageItem, writeBrowserStorageItem } from '@/lib/browserStorage'
+import { readBrowserStorageItem, removeBrowserStorageItem } from '@/lib/browserStorage'
 import { type BrowserLocalStorageKey, getAccessTokenStorageKey } from '@/lib/storage/storageRegistry'
 import { clearStoredDeviceBinding, readStoredDeviceBinding } from './deviceBindingStorage'
 import type { AuthSource } from './useAuth'
@@ -14,10 +14,6 @@ function removeTokenFromUrlParams(): void {
 
 function readStoredAccessToken(key: BrowserLocalStorageKey): string | null {
     return readBrowserStorageItem('local', key)
-}
-
-function writeStoredAccessToken(key: BrowserLocalStorageKey, token: string): void {
-    writeBrowserStorageItem('local', key, token)
 }
 
 function clearStoredAccessToken(key: BrowserLocalStorageKey): void {
@@ -47,23 +43,19 @@ function createAuthSourceState(accessTokenKey: BrowserLocalStorageKey): AuthSour
 
 export function useAuthSource(baseUrl: string): {
     authSource: AuthSource | null
-    setPairingCode: (code: string) => void
+    refreshAuthSource: () => void
     clearAuth: () => void
 } {
     const accessTokenKey = useMemo(() => getAccessTokenStorageKey(baseUrl), [baseUrl])
     const [state, setState] = useState<AuthSourceState>(() => createAuthSourceState(accessTokenKey))
     const authSource = state.accessTokenKey === accessTokenKey ? state.authSource : resolveAuthSource(accessTokenKey)
 
-    const setPairingCode = useCallback(
-        (code: string) => {
-            clearStoredAccessToken(accessTokenKey)
-            setState({
-                accessTokenKey,
-                authSource: { type: 'pairingCode', code },
-            })
-        },
-        [accessTokenKey]
-    )
+    const refreshAuthSource = useCallback(() => {
+        setState({
+            accessTokenKey,
+            authSource: resolveAuthSource(accessTokenKey),
+        })
+    }, [accessTokenKey])
 
     const clearAuth = useCallback(() => {
         clearStoredAccessToken(accessTokenKey)
@@ -76,7 +68,7 @@ export function useAuthSource(baseUrl: string): {
 
     return {
         authSource,
-        setPairingCode,
+        refreshAuthSource,
         clearAuth,
     }
 }

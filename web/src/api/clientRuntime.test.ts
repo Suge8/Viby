@@ -6,6 +6,7 @@ import {
     getAgentConfig,
     getRuntimeAgentAvailability,
     getRuntimeCapabilities,
+    openAgentConfig,
     resolveAgentLaunchConfig,
     restoreAgentConfig,
     saveAgentConfig,
@@ -57,7 +58,7 @@ describe('clientRuntime', () => {
         ).resolves.toEqual({ agents: [] })
     })
 
-    it('uses the runtime agent config endpoints for load, save, and restore', async () => {
+    it('uses the runtime agent config endpoints for load, save, restore, and open', async () => {
         const request = vi.fn(async (path: string, init?: RequestInit) => {
             if (!init) {
                 expect(path).toBe('/api/runtime/agent-config')
@@ -66,6 +67,10 @@ describe('clientRuntime', () => {
             if (init.method === 'PUT') {
                 expect(path).toBe('/api/runtime/agent-config/codex')
                 expect(JSON.parse(String(init.body))).toEqual({ driver: 'codex', values: { 'codex.model': 'gpt-5.4' } })
+            } else if (path.endsWith('/open')) {
+                expect(path).toBe('/api/runtime/agent-config/codex/open')
+                expect(JSON.parse(String(init.body))).toEqual({ driver: 'codex' })
+                return { ok: true, path: '/tmp/config.toml' }
             } else {
                 expect(path).toBe('/api/runtime/agent-config/codex/restore')
                 expect(JSON.parse(String(init.body))).toEqual({ driver: 'codex', backupPath: '/tmp/config.bak' })
@@ -79,6 +84,10 @@ describe('clientRuntime', () => {
         ).resolves.toEqual({ agent: { driver: 'codex', path: '/tmp/config.toml', exists: true, values: {} } })
         await expect(restoreAgentConfig(request, { driver: 'codex', backupPath: '/tmp/config.bak' })).resolves.toEqual({
             agent: { driver: 'codex', path: '/tmp/config.toml', exists: true, values: {} },
+        })
+        await expect(openAgentConfig(request, { driver: 'codex' })).resolves.toEqual({
+            ok: true,
+            path: '/tmp/config.toml',
         })
     })
 })

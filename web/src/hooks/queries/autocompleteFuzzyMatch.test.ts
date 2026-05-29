@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-    getAutocompleteMatchScore,
-    getAutocompleteSearchTerm
-} from '@/hooks/queries/autocompleteFuzzyMatch'
+import { getAutocompleteMatchScore, getAutocompleteSearchTerm } from '@/hooks/queries/autocompleteFuzzyMatch'
 
 describe('autocompleteFuzzyMatch', () => {
     it('normalizes prefixed query text into a lowercase search term', () => {

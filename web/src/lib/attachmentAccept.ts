@@ -27,7 +27,7 @@ const SUPPORTED_ATTACHMENT_ACCEPT_PARTS = [
     'application/json',
     'application/yaml',
     'application/toml',
-    'application/xml'
+    'application/xml',
 ] as const
 
 export const SUPPORTED_ATTACHMENT_ACCEPT = SUPPORTED_ATTACHMENT_ACCEPT_PARTS.join(',')

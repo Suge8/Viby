@@ -5,6 +5,7 @@ import type {
     ListAgentAvailabilityRequest,
     LocalSessionExportRequest,
     ModelReasoningEffort,
+    OpenAgentConfigRequest,
     PermissionMode,
     RestoreAgentConfigRequest,
     RuntimeCapabilityRequest,
@@ -20,6 +21,7 @@ import {
     getRuntimeCapabilities,
     importRuntimeLocalSession,
     listRuntimeLocalSessions,
+    openAgentConfig,
     resolveAgentLaunchConfig,
     restoreAgentConfig,
     saveAgentConfig,
@@ -48,6 +50,9 @@ export function createApiClientRuntimeMethods(
         },
         async restoreAgentConfig(input: RestoreAgentConfigRequest) {
             return await restoreAgentConfig(request, input)
+        },
+        async openAgentConfig(input: OpenAgentConfigRequest) {
+            return await openAgentConfig(request, input)
         },
         async checkRuntimePathsExists(paths: string[]) {
             return await checkRuntimePathsExists(request, paths)

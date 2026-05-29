@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { authenticateWithAccessToken, authenticateWithDevice, authenticateWithPairingCode } from '@/api/authClient'
+import { authenticateWithAccessToken, authenticateWithDevice } from '@/api/authClient'
 import type { ApiClient } from '@/api/client'
 import { resolveClientPlatform } from '@/lib/clientPlatform'
 import { subscribeForegroundPulse } from '@/lib/foregroundPulse'
+import { assertHubProtocolCompatibility } from '@/lib/runtimeCompatibility'
 import type { AuthResponse } from '@/types/api'
 import {
     decodeJwtExpMs,
@@ -13,10 +14,7 @@ import {
     writeStoredSessionToken,
 } from './authSessionToken'
 
-export type AuthSource =
-    | { type: 'accessToken'; token: string }
-    | { type: 'pairingCode'; code: string }
-    | { type: 'device'; deviceId: string; secret: string }
+export type AuthSource = { type: 'accessToken'; token: string } | { type: 'device'; deviceId: string; secret: string }
 
 const SESSION_REFRESH_DEBOUNCE_MS = 15_000
 const SESSION_REFRESH_RETRY_MS = 15_000
@@ -100,11 +98,9 @@ export function useAuth(
                 try {
                     const platform = resolveClientPlatform()
                     const auth =
-                        source.type === 'pairingCode'
-                            ? await authenticateWithPairingCode(baseUrl, source.code, { platform })
-                            : source.type === 'device'
-                              ? await authenticateWithDevice(baseUrl, source.deviceId, source.secret)
-                              : await authenticateWithAccessToken(baseUrl, source.token, { platform })
+                        source.type === 'device'
+                            ? await authenticateWithDevice(baseUrl, source.deviceId, source.secret)
+                            : await authenticateWithAccessToken(baseUrl, source.token, { platform })
                     tokenRef.current = auth.token
                     setToken(auth.token)
                     setUser(auth.user)
@@ -146,10 +142,20 @@ export function useAuth(
 
         void (async () => {
             const module = await loadApiClientModule()
+            try {
+                await assertHubProtocolCompatibility(baseUrl)
+            } catch (failure) {
+                if (!isCancelled) {
+                    setApi(null)
+                    setError(failure instanceof Error ? failure.message : 'runtimeCompatibility.error.updateDesktop')
+                }
+                return
+            }
             if (isCancelled) {
                 return
             }
 
+            setError(null)
             setApi(
                 new module.ApiClient(token, {
                     baseUrl,

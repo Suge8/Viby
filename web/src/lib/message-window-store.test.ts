@@ -421,6 +421,25 @@ describe('message-window-store', () => {
         expect(getMessageWindowState('session-1').hasLoadedLatest).toBe(true)
     })
 
+    it('does not auto-prepend older history to seed the outline during session entry', async () => {
+        const api = createFixedMessagesApi([
+            ...Array.from({ length: 70 }, (_, index) => buildRoleMessage(index + 1, 'assistant')),
+            buildRoleMessage(71, 'user'),
+            buildRoleMessage(72, 'user'),
+        ])
+        const getMessagesSpy = vi.spyOn(api, 'getMessages')
+
+        await ensureLatestMessagesLoaded(api, 'session-1')
+
+        expect(getMessagesSpy).toHaveBeenCalledTimes(1)
+        expect(getMessagesSpy).toHaveBeenCalledWith('session-1', { limit: 50, beforeSeq: null })
+        const state = getMessageWindowState('session-1')
+        expect(state.messages[0]?.seq).toBe(23)
+        expect(state.messages.at(-1)?.seq).toBe(72)
+        expect(state.hasMore).toBe(true)
+        expect(state.hasLoadedLatest).toBe(true)
+    })
+
     it('awaits the in-flight initial latest-page load instead of returning early on a second ensure call', async () => {
         let resolveMessages!: (value: MessagesResponse) => void
         const api = {
@@ -633,6 +652,27 @@ describe('message-window-store', () => {
             expect(restored.messages.at(-1)?.seq).toBe(1)
             expect(restored.hasLoadedLatest).toBe(true)
             expect(restored.restoredFromWarmSnapshot).toBe(true)
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    it('restores warm snapshots as entry-at-latest even if the snapshot was captured while detached', async () => {
+        vi.useFakeTimers()
+
+        try {
+            const api = createFixedMessagesApi([buildMessage(1)])
+
+            await fetchLatestMessages(api, 'session-1')
+            setAtBottom('session-1', false)
+            flushMessageWindowSnapshot('session-1')
+
+            const unsubscribe = subscribeMessageWindow('session-1', () => undefined)
+            unsubscribe()
+            vi.advanceTimersByTime(60_000)
+
+            expect(getMessageWindowState('session-1').atBottom).toBe(true)
+            expect(getMessageWindowState('session-1').restoredFromWarmSnapshot).toBe(true)
         } finally {
             vi.useRealTimers()
         }

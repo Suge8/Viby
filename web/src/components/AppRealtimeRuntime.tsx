@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { useMatchRoute, useRouter } from '@tanstack/react-router'
+import { useLocation, useMatchRoute, useRouter } from '@tanstack/react-router'
 import { type JSX, lazy, Suspense, useCallback, useEffect, useMemo, useRef } from 'react'
 import type { ApiClient } from '@/api/client'
 import { AppInstallPromptLayer } from '@/components/AppInstallPromptLayer'
@@ -20,6 +20,7 @@ import { type ForegroundPulse, subscribeForegroundPulse } from '@/lib/foreground
 import { useNoticeCenter } from '@/lib/notice-center'
 import { runRealtimeRecovery } from '@/lib/realtimeRecovery'
 import { reportWebRuntimeError } from '@/lib/runtimeDiagnostics'
+import { presentSessionAttentionToast, type SessionAttentionSnapshot } from '@/lib/sessionAttentionToastController'
 import { presentToastEvent } from '@/lib/toastNoticePresentation'
 import { useTranslation } from '@/lib/use-translation'
 import type { SyncEvent } from '@/types/api'
@@ -52,6 +53,7 @@ const FOREGROUND_RECOVERY_DEDUP_MS = 1_000
 export function AppRealtimeRuntime(props: AppRealtimeRuntimeProps): JSX.Element {
     const matchRoute = useMatchRoute()
     const router = useRouter()
+    const pathname = useLocation({ select: (location) => location.pathname })
     const queryClient = useQueryClient()
     const { addToast } = useNoticeCenter()
     const { t } = useTranslation()
@@ -69,6 +71,7 @@ export function AppRealtimeRuntime(props: AppRealtimeRuntimeProps): JSX.Element 
         isReady: true,
         isAuthLoading: false,
         bannerKind: banner.kind,
+        pathname,
     })
 
     const scheduleAuthoritativeRecovery = useCallback(
@@ -198,7 +201,11 @@ export function AppRealtimeRuntime(props: AppRealtimeRuntimeProps): JSX.Element 
 
     const handleToast = useCallback(
         (event: ToastEvent) => {
-            const notice = presentToastEvent(event, t)
+            if (event.data.kind === 'ready' || event.data.kind === 'permission-request') {
+                return
+            }
+
+            const notice = presentToastEvent(event)
             addToast({
                 title: notice.title,
                 description: notice.description,
@@ -206,7 +213,25 @@ export function AppRealtimeRuntime(props: AppRealtimeRuntimeProps): JSX.Element 
                 href: event.data.url,
             })
         },
-        [addToast, t]
+        [addToast]
+    )
+
+    const handleSessionAttentionChange = useCallback(
+        (change: { before: SessionAttentionSnapshot | null; after: SessionAttentionSnapshot | null }) => {
+            if (document.visibilityState !== 'visible') {
+                return
+            }
+
+            const notice = presentSessionAttentionToast({
+                ...change,
+                selectedSessionId,
+                t,
+            })
+            if (notice) {
+                addToast(notice)
+            }
+        },
+        [addToast, selectedSessionId, t]
     )
 
     const eventSubscription = useMemo(() => buildRealtimeSubscription(selectedSessionId), [selectedSessionId])
@@ -251,6 +276,7 @@ export function AppRealtimeRuntime(props: AppRealtimeRuntimeProps): JSX.Element 
         onError: handleRealtimeError,
         onEvent: handleRealtimeEvent,
         onToast: handleToast,
+        onSessionAttentionChange: handleSessionAttentionChange,
     })
 
     return (

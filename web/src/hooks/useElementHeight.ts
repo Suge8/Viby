@@ -1,4 +1,4 @@
-import { type RefObject, useLayoutEffect, useState } from 'react'
+import { type RefObject, useLayoutEffect, useRef, useState } from 'react'
 
 function readElementHeight(element: HTMLElement | null): number {
     if (!element) {
@@ -10,9 +10,19 @@ function readElementHeight(element: HTMLElement | null): number {
 
 export function useElementHeight(elementRef: RefObject<HTMLElement | null>): number {
     const [height, setHeight] = useState(0)
+    const observedElementRef = useRef<HTMLElement | null>(null)
+    const cleanupRef = useRef<(() => void) | null>(null)
 
     useLayoutEffect(() => {
         const element = elementRef.current
+        if (observedElementRef.current === element) {
+            return
+        }
+
+        cleanupRef.current?.()
+        cleanupRef.current = null
+        observedElementRef.current = element
+
         if (!element) {
             setHeight((previousHeight) => (previousHeight === 0 ? previousHeight : 0))
             return
@@ -29,11 +39,19 @@ export function useElementHeight(elementRef: RefObject<HTMLElement | null>): num
         resizeObserver.observe(element)
         window.addEventListener('resize', syncHeight)
 
-        return () => {
+        cleanupRef.current = () => {
             resizeObserver.disconnect()
             window.removeEventListener('resize', syncHeight)
         }
-    }, [elementRef])
+    })
+
+    useLayoutEffect(() => {
+        return () => {
+            cleanupRef.current?.()
+            cleanupRef.current = null
+            observedElementRef.current = null
+        }
+    }, [])
 
     return height
 }

@@ -10,26 +10,26 @@ describe('useServerUrl helpers', () => {
     })
 
     it('rewrites equivalent local loopback aliases to the current origin', () => {
-        expect(
-            resolveServerUrlForCurrentOrigin('http://localhost:5173', 'http://127.0.0.1:5173')
-        ).toBe('http://127.0.0.1:5173')
+        expect(resolveServerUrlForCurrentOrigin('http://localhost:5173', 'http://127.0.0.1:5173')).toBe(
+            'http://127.0.0.1:5173'
+        )
     })
 
     it('keeps explicit custom hub origins unchanged when port differs', () => {
-        expect(
-            resolveServerUrlForCurrentOrigin('http://localhost:3007', 'http://127.0.0.1:5173')
-        ).toBe('http://localhost:3007')
+        expect(resolveServerUrlForCurrentOrigin('http://localhost:3007', 'http://127.0.0.1:5173')).toBe(
+            'http://localhost:3007'
+        )
     })
 
     it('keeps explicit remote origins unchanged', () => {
-        expect(
-            resolveServerUrlForCurrentOrigin('https://hub.example.com', 'http://127.0.0.1:5173')
-        ).toBe('https://hub.example.com')
+        expect(resolveServerUrlForCurrentOrigin('https://hub.example.com', 'http://127.0.0.1:5173')).toBe(
+            'https://hub.example.com'
+        )
     })
 
     it('derives same-host remote dev hub urls from the proxy target port', () => {
-        expect(
-            resolveRemoteDevHubUrl('http://100.121.243.108:5173', 'http://127.0.0.1:37173')
-        ).toBe('http://100.121.243.108:37173')
+        expect(resolveRemoteDevHubUrl('http://100.121.243.108:5173', 'http://127.0.0.1:37173')).toBe(
+            'http://100.121.243.108:37173'
+        )
     })
 })

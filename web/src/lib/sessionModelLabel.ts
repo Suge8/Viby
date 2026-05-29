@@ -1,9 +1,6 @@
 import { resolveSessionDriver, type SessionDriver } from '@viby/protocol'
+import { getSessionModelDisplayLabelWithCapabilities } from '@/lib/sessionConfigOptions'
 import type { ModelReasoningEffort, PiModelScope } from '@/types/api'
-import {
-    getModelReasoningEffortDisplayLabel,
-    getSessionModelDisplayLabelWithCapabilities
-} from '@/lib/sessionConfigOptions'
 
 type SessionModelSource = {
     model?: string | null
@@ -29,18 +26,9 @@ export function getSessionModelLabel(session: SessionModelSource): SessionModelL
                 explicitModel,
                 driver,
                 driver === 'pi' ? session.metadata?.piModelScope?.models : undefined
-            )
+            ),
         }
     }
 
     return null
-}
-
-export function getSessionReasoningEffortLabel(session: SessionModelSource): string | null {
-    const effort = session.modelReasoningEffort
-    if (!effort) {
-        return null
-    }
-
-    return getModelReasoningEffortDisplayLabel(effort)
 }

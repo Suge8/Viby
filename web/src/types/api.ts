@@ -71,6 +71,8 @@ export type {
     MachineDirectoryRoot,
     MachineDirectoryRootKind,
     ModelReasoningEffort,
+    OpenAgentConfigRequest,
+    OpenAgentConfigResponse,
     PermissionMode,
     PiModelCapability,
     PiModelScope,

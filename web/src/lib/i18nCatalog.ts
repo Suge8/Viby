@@ -14,7 +14,7 @@ async function loadZhCNTranslations(): Promise<Translations> {
 
 const localeLoaders: Record<Locale, () => Promise<Translations>> = {
     en: loadEnTranslations,
-    'zh-CN': loadZhCNTranslations
+    'zh-CN': loadZhCNTranslations,
 }
 
 export function getCachedTranslations(locale: Locale): Translations | null {

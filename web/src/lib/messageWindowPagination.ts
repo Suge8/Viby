@@ -1,8 +1,8 @@
 import { findNextRecoveryCursor } from '@viby/protocol'
 import type { ApiClient } from '@/api/client'
-import type { DecryptedMessage } from '@/types/api'
 import { mergeMessages } from '@/lib/messages'
 import { batchContainsHistoryJumpTarget } from '@/lib/messageWindowState'
+import type { DecryptedMessage } from '@/types/api'
 
 export async function loadMessagesAfter(
     api: ApiClient,
@@ -16,7 +16,7 @@ export async function loadMessagesAfter(
     while (true) {
         const response = await api.getMessages(sessionId, {
             afterSeq: cursor,
-            limit: pageSize
+            limit: pageSize,
         })
         const messages = response.messages
         if (messages.length === 0) {
@@ -56,7 +56,7 @@ export async function loadOlderMessagesUntilPreviousUser(options: {
     while (hasMore && beforeSeq !== null) {
         const response = await options.api.getMessages(options.sessionId, {
             limit: options.pageSize,
-            beforeSeq
+            beforeSeq,
         })
         const pageMessages = response.messages
 
@@ -66,9 +66,11 @@ export async function loadOlderMessagesUntilPreviousUser(options: {
             continue
         }
 
-        didLoadOlderMessages = didLoadOlderMessages || pageMessages.some((message) => {
-            return typeof message.seq === 'number' && message.seq < options.initialOldestSeq
-        })
+        didLoadOlderMessages =
+            didLoadOlderMessages ||
+            pageMessages.some((message) => {
+                return typeof message.seq === 'number' && message.seq < options.initialOldestSeq
+            })
         accumulated = mergeMessages(pageMessages, accumulated)
         hasMore = response.page.hasMore
         beforeSeq = response.page.nextBeforeSeq
@@ -81,6 +83,6 @@ export async function loadOlderMessagesUntilPreviousUser(options: {
     return {
         accumulated,
         didLoadOlderMessages,
-        hasMore
+        hasMore,
     }
 }

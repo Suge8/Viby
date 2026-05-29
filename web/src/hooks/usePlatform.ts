@@ -39,18 +39,15 @@ const haptic: PlatformHaptic = {
     },
     selection: () => {
         vibrate(vibrationPatterns.selection)
-    }
+    },
 }
 
 export function usePlatform(): Platform {
-    const isTouch = useMemo(
-        () => typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches,
-        []
-    )
+    const isTouch = useMemo(() => typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches, [])
 
     return {
         isTouch,
-        haptic
+        haptic,
     }
 }
 
@@ -58,6 +55,6 @@ export function getPlatform(): Platform {
     const isTouch = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
     return {
         isTouch,
-        haptic
+        haptic,
     }
 }

@@ -1,6 +1,11 @@
 import type { Attachment, AttachmentAdapter, CompleteAttachment, PendingAttachment } from '@assistant-ui/react'
-import { SESSION_ATTACHMENT_MAX_UPLOAD_BYTES } from '@viby/protocol'
+import {
+    formatAttachmentSizeForUser,
+    SESSION_ATTACHMENT_MAX_UPLOAD_BYTES,
+    SESSION_ATTACHMENT_MAX_UPLOAD_MB,
+} from '@viby/protocol'
 import type { ApiClient } from '@/api/client'
+import { ApiError } from '@/api/client'
 import { SUPPORTED_ATTACHMENT_ACCEPT } from '@/lib/attachmentAccept'
 import { createObjectPreviewUrl, revokeObjectPreviewUrl } from '@/lib/attachmentPreviews'
 import { isImageMimeType } from '@/lib/fileAttachments'
@@ -8,9 +13,64 @@ import { createRandomId } from '@/lib/id'
 import { reportWebRuntimeError } from '@/lib/runtimeDiagnostics'
 import type { AttachmentMetadata } from '@/types/api'
 
+/**
+ * Carries a localizable explanation when an attachment lands in the
+ * `incomplete` error state. The `@assistant-ui/react` `AttachmentStatus`
+ * type only stores `{ type: 'incomplete', reason: 'error' | 'upload-paused' }`,
+ * which collapses every upload failure into the same red icon. The view
+ * layer (`AttachmentItem`) renders this descriptor as a hover tooltip /
+ * `title=` so the user actually sees `文件过大 / HTTP 413 / 网络中断`
+ * instead of a silent exclamation mark.
+ */
+export type AttachmentErrorDescriptor = {
+    titleKey: string
+    titleParams?: Record<string, string | number>
+}
+
 type PendingUploadAttachment = PendingAttachment & {
     path?: string
     previewUrl?: string
+    errorDescriptor?: AttachmentErrorDescriptor
+}
+
+function describeTooLarge(actualBytes: number): AttachmentErrorDescriptor {
+    return {
+        titleKey: 'composer.attachment.error.tooLarge',
+        titleParams: {
+            actual: formatAttachmentSizeForUser(actualBytes),
+            max: `${SESSION_ATTACHMENT_MAX_UPLOAD_MB}MB`,
+        },
+    }
+}
+
+function describeUploadFailure(error: unknown): AttachmentErrorDescriptor {
+    if (error instanceof ApiError) {
+        if (error.status === 413) {
+            return {
+                titleKey: 'composer.attachment.error.tooLarge',
+                titleParams: {
+                    actual: '?',
+                    max: `${SESSION_ATTACHMENT_MAX_UPLOAD_MB}MB`,
+                },
+            }
+        }
+        return {
+            titleKey: 'composer.attachment.error.uploadFailed',
+            titleParams: { status: error.status, message: error.message || 'unknown' },
+        }
+    }
+    const message = error instanceof Error ? error.message : String(error)
+    return {
+        titleKey: 'composer.attachment.error.networkError',
+        titleParams: { message: message || 'unknown' },
+    }
+}
+
+function describeUploadResultFailure(result: { error?: string }): AttachmentErrorDescriptor {
+    return {
+        titleKey: 'composer.attachment.error.uploadFailed',
+        titleParams: { status: 0, message: result.error || 'unknown' },
+    }
 }
 
 const IMAGE_EXTENSION_MIME_TYPES: Record<string, string> = {
@@ -135,6 +195,7 @@ export function createAttachmentAdapter(api: ApiClient, sessionId: string): Atta
                         file,
                         previewUrl,
                         status: { type: 'incomplete', reason: 'error' },
+                        errorDescriptor: describeTooLarge(file.size),
                     } as PendingUploadAttachment
                     return
                 }
@@ -166,6 +227,7 @@ export function createAttachmentAdapter(api: ApiClient, sessionId: string): Atta
                         file,
                         previewUrl,
                         status: { type: 'incomplete', reason: 'error' },
+                        errorDescriptor: describeUploadResultFailure(result),
                     } as PendingUploadAttachment
                     return
                 }
@@ -190,6 +252,7 @@ export function createAttachmentAdapter(api: ApiClient, sessionId: string): Atta
                     file,
                     previewUrl,
                     status: { type: 'incomplete', reason: 'error' },
+                    errorDescriptor: describeUploadFailure(error),
                 } as PendingUploadAttachment
             }
         },

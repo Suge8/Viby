@@ -3,6 +3,7 @@ import {
     getSessionActivityKind,
     mergeSessionMessageActivity,
     normalizeSessionActivityTimestamp,
+    projectSessionSummaryActiveStream,
     resolveSessionLifecyclePatch,
     resolveSessionSummaryUpdatedAt,
     shouldMessageAdvanceSessionUpdatedAt,
@@ -89,6 +90,7 @@ export function patchSessionSummaryCache(
             : target.current.modelReasoningEffort,
         permissionMode: patch.permissionMode ?? target.current.permissionMode,
         collaborationMode: patch.collaborationMode ?? target.current.collaborationMode,
+        pendingRequestsCount: patch.pendingRequestsCount ?? target.current.pendingRequestsCount,
     }
 
     target.nextSessions.sort(compareSessionSummaries)
@@ -145,6 +147,27 @@ export function patchSessionSummaryFromMessageCache(
     }
     target.nextSessions.sort(compareSessionSummaries)
 
+    return {
+        next: { ...previous, sessions: target.nextSessions },
+        patched: true,
+    }
+}
+
+export function patchSessionSummaryStreamStartedCache(
+    previous: SessionsResponse | undefined,
+    sessionId: string,
+    stream: Extract<SyncEvent, { type: 'session-stream-updated' }>['stream']
+): SessionSummaryCacheResult {
+    const target = resolveMutableSessionSummaryTarget(previous, sessionId)
+    if (!target) {
+        return { next: previous, patched: false }
+    }
+
+    const nextSummary = projectSessionSummaryActiveStream(target.current, stream)
+    if (nextSummary === target.current) {
+        return { next: previous, patched: true }
+    }
+    target.nextSessions[target.index] = nextSummary
     return {
         next: { ...previous, sessions: target.nextSessions },
         patched: true,
@@ -211,9 +234,13 @@ export function removeSessionSummaryCache(
     return { ...previous, sessions: nextSessions }
 }
 function resolveMutableSessionSummaryTarget(
-    previous: SessionsResponse,
+    previous: SessionsResponse | undefined,
     sessionId: string
 ): MutableSessionSummaryTarget | null {
+    if (!previous) {
+        return null
+    }
+
     const nextSessions = previous.sessions.slice()
     const index = nextSessions.findIndex((item) => item.id === sessionId)
     if (index < 0) {

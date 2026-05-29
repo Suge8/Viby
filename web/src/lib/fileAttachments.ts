@@ -15,7 +15,7 @@ export function createFileAttachment(file: File): FileAttachment {
     return {
         id: createRandomId(),
         file,
-        status: 'uploading'
+        status: 'uploading',
     }
 }
 

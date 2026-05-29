@@ -5,7 +5,7 @@ import { useFinalizeBootShell } from '@/hooks/useFinalizeBootShell'
 const finalizeBootShellMock = vi.fn()
 
 vi.mock('@/lib/appRecovery', () => ({
-    finalizeBootShell: () => finalizeBootShellMock()
+    finalizeBootShell: () => finalizeBootShellMock(),
 }))
 
 function Harness(props: { when?: boolean }): React.JSX.Element {

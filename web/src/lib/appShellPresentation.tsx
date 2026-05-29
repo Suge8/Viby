@@ -29,8 +29,13 @@ export function shouldSuppressInstallPrompt(options: {
     isReady: boolean
     isAuthLoading: boolean
     bannerKind: RealtimeBannerState['kind']
+    pathname: string
 }): boolean {
     if (options.isAuthLoading || !options.isReady) {
+        return true
+    }
+
+    if (isSessionChatPath(options.pathname)) {
         return true
     }
 

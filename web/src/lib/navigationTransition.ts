@@ -6,6 +6,7 @@ export const NAVIGATION_TRANSITION_EVENT_NAME = 'viby:navigation-transition-chan
 const NAVIGATION_TRANSITION_STATE_ATTRIBUTE = 'data-viby-navigation-transition'
 const NAVIGATION_TRANSITION_FALLBACK_RESET_FRAME_COUNT = 2
 const NAVIGATION_TRANSITION_FALLBACK_RESET_TIMEOUT_MS = 240
+const NAVIGATION_PRELOAD_COMMIT_DEADLINE_MS = 800
 
 type NavigationTransitionOptions = {
     enableViewTransition?: boolean
@@ -119,6 +120,30 @@ async function recordNavigationPreloadFailureRecovery(error: unknown, recoveryHr
         reason: 'vite-preload-error',
         failure: toRuntimeAssetFailure(error),
         resumeHref: recoveryHref,
+    })
+}
+
+function runPreloadTask(preload: PreloadedNavigationTask): Promise<unknown> {
+    return Promise.resolve().then(() => (typeof preload === 'function' ? preload() : preload))
+}
+
+function waitForPreloadReadiness(preloadPromise: Promise<unknown>): Promise<void> {
+    if (typeof window === 'undefined') {
+        return preloadPromise.then(() => undefined)
+    }
+
+    return new Promise((resolve, reject) => {
+        const timeoutId = window.setTimeout(resolve, NAVIGATION_PRELOAD_COMMIT_DEADLINE_MS)
+        preloadPromise.then(
+            () => {
+                window.clearTimeout(timeoutId)
+                resolve()
+            },
+            (error) => {
+                window.clearTimeout(timeoutId)
+                reject(error)
+            }
+        )
     })
 }
 
@@ -249,11 +274,14 @@ export async function runNavigationTransitionAfterPreload(
     const recoveryToken = registerPendingNavigationRecovery(options.recoveryHref)
     const sourceSnapshot = readNavigationSourceSnapshot()
 
-    try {
-        await (typeof preload === 'function' ? preload() : preload)
-    } catch (error) {
+    const preloadPromise = runPreloadTask(preload).catch(async (error) => {
         await recordNavigationPreloadFailureRecovery(error, options.recoveryHref)
+        throw error
+    })
 
+    try {
+        await waitForPreloadReadiness(preloadPromise)
+    } catch {
         // Preload is only an enhancement. Navigation must still proceed so the
         // target route can surface its own loading or error state honestly.
     } finally {

@@ -42,7 +42,7 @@ const LazyAppRealtimeRuntime = lazy(loadAppRealtimeRuntimeModule)
 
 export function AppController(): JSX.Element | null {
     const { serverUrl, baseUrl, setServerUrl, clearServerUrl } = useServerUrl()
-    const { authSource, setPairingCode, clearAuth } = useAuthSource(baseUrl)
+    const { authSource, clearAuth } = useAuthSource(baseUrl)
     const { token, api, error: authError } = useAuth(authSource, baseUrl)
     const pathname = useLocation({ select: (location) => location.pathname })
     const locationHref = useLocation({ select: (location) => location.href })
@@ -164,11 +164,7 @@ export function AppController(): JSX.Element | null {
     if (!authSource || authError) {
         return (
             <Suspense fallback={null}>
-                <LazyLoginPrompt
-                    onLogin={setPairingCode}
-                    server={loginPromptServer}
-                    error={authSource ? authError : undefined}
-                />
+                <LazyLoginPrompt server={loginPromptServer} error={authSource ? authError : undefined} />
             </Suspense>
         )
     }

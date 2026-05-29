@@ -22,7 +22,6 @@ import {
     createTerminalDefaultModelOption,
     createTerminalDefaultReasoningEffortOption,
     getComposerReasoningEffortOptions,
-    getReasoningEffortLabel,
     type ModelReasoningEffortSelection,
     normalizeComposerStringValue,
     type SessionConfigOption,
@@ -114,10 +113,6 @@ export function getSessionModelDisplayLabelWithCapabilities(
     }
 
     return getClaudeModelLabel(normalizedModel) ?? normalizedModel
-}
-
-export function getModelReasoningEffortDisplayLabel(effort: ModelReasoningEffort): string {
-    return getReasoningEffortLabel(effort)
 }
 
 export function getCodexComposerModelOptions(currentModel?: string | null): SessionConfigOption<string | null>[] {

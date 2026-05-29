@@ -9,6 +9,7 @@ import type { AgentAvailability } from '@/types/api'
 
 const AGENT_AVAILABILITY_DIRECTORY_DEBOUNCE_MS = 200
 const AGENT_AVAILABILITY_DRIVER_KEY = 'all'
+const AGENT_AVAILABILITY_STALE_TIME_MS = 60_000
 
 export function useRuntimeAgentAvailability(
     api: ApiClient | null,
@@ -27,9 +28,10 @@ export function useRuntimeAgentAvailability(
     const query = useQuery({
         queryKey: queryKeys.runtimeCapabilities(normalizedDirectory, AGENT_AVAILABILITY_DRIVER_KEY, 'availability'),
         enabled: Boolean(api),
-        refetchOnWindowFocus: true,
-        refetchOnReconnect: true,
-        refetchOnMount: true,
+        staleTime: AGENT_AVAILABILITY_STALE_TIME_MS,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+        refetchOnMount: false,
         queryFn: async ({ signal }) => {
             if (!api) throw new Error('API unavailable')
             const forceRefresh = forceRefreshRef.current

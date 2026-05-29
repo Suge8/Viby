@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-    readLastOpenedSessionId,
-    writeLastOpenedSessionId
-} from '@/lib/sessionEntryPreference'
+import { readLastOpenedSessionId, writeLastOpenedSessionId } from '@/lib/sessionEntryPreference'
 
 describe('sessionEntryPreference', () => {
     it('reads back the last opened session id from browser storage', () => {

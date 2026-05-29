@@ -17,6 +17,7 @@ const TECHNICAL_ERROR_PATTERNS = [
     /\bgrpc\b/i,
     /\brpc\b/i,
     /\bjsonrpc\b/i,
+    /\bwebsocket\b/i,
     /\btransport\b/i,
     /\bstdout\b/i,
     /\bstderr\b/i,

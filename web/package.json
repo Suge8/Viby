@@ -6,7 +6,7 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
-        "build": "VIBY_HARNESS_SCOPE=web bun run --cwd .. harness:check && vite build && bun run scripts/finalizeInjectManifest.ts && cp dist/index.html dist/404.html",
+        "build": "VIBY_HARNESS_SCOPE=web bun run --cwd .. harness:check && vite build && bun run scripts/finalizeInjectManifest.ts && bun run scripts/writeBuildMeta.ts && cp dist/index.html dist/404.html",
         "build:metrics": "bun run build && node scripts/reportBuildMetrics.mjs",
         "build:budget": "bun run build && node scripts/reportBuildMetrics.mjs --check",
         "typecheck": "tsc --noEmit",

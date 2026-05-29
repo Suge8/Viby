@@ -68,6 +68,7 @@ export function useMessages(
     hasLoadedLatest: boolean
     messagesVersion: number
     pendingReply: PendingReplyState | null
+    restoredFromWarmSnapshot: boolean
     stream: SessionStreamState | null
     streamVersion: number
     loadHistoryUntilPreviousUser: () => Promise<LoadMoreMessagesResult>
@@ -148,6 +149,7 @@ export function useMessages(
         hasLoadedLatest: state.hasLoadedLatest,
         messagesVersion: state.messagesVersion,
         pendingReply: state.pendingReply,
+        restoredFromWarmSnapshot: state.restoredFromWarmSnapshot,
         stream: state.stream,
         streamVersion: state.streamVersion,
         loadHistoryUntilPreviousUser,

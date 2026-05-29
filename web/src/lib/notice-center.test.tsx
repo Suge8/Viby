@@ -172,5 +172,6 @@ describe('notice-center persistent notices', () => {
                 'toast-4',
             ])
         })
+        expect(probeHarness.updates.at(-1)?.every((notice) => notice.compact === true)).toBe(true)
     })
 })

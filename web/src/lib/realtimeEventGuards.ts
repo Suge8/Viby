@@ -1,4 +1,9 @@
-import { isSessionArchivedLifecycleState, isSessionLifecycleState } from '@viby/protocol'
+import {
+    isSessionArchivedLifecycleState,
+    isSessionLifecycleState,
+    parseSessionAttentionPatch,
+    type SessionAttentionPatch,
+} from '@viby/protocol'
 import type { Session } from '@/types/api'
 
 export type SessionPatch = Partial<
@@ -13,10 +18,11 @@ export type SessionPatch = Partial<
         | 'permissionMode'
         | 'collaborationMode'
     >
-> & {
-    lifecycleStateHint?: NonNullable<Session['metadata']>['lifecycleState']
-    lifecycleStateSinceHint?: NonNullable<Session['metadata']>['lifecycleStateSince']
-}
+> &
+    Partial<SessionAttentionPatch> & {
+        lifecycleStateHint?: NonNullable<Session['metadata']>['lifecycleState']
+        lifecycleStateSinceHint?: NonNullable<Session['metadata']>['lifecycleStateSince']
+    }
 
 export function isArchivedKeepalivePatch(
     lifecycleState: SessionPatch['lifecycleStateHint'] | null | undefined,
@@ -116,6 +122,11 @@ export function getSessionPatch(value: unknown): SessionPatch | null {
         patch.collaborationMode = value.collaborationMode as Session['collaborationMode']
         hasKnownPatch = true
     }
+    const attentionPatch = parseSessionAttentionPatch(value)
+    if (attentionPatch) {
+        Object.assign(patch, attentionPatch)
+        hasKnownPatch = true
+    }
 
     const lifecyclePatch = getLifecycleMetadataPatch(value)
     if (lifecyclePatch) {
@@ -141,6 +152,9 @@ export function hasUnknownSessionPatchKeys(value: unknown): boolean {
         'permissionMode',
         'collaborationMode',
         'metadata',
+        'pendingRequestsCount',
+        'pendingRequestIds',
+        'sid',
     ])
 
     return Object.entries(value).some(([key, nestedValue]) => {

@@ -48,6 +48,14 @@ function createCapability(agent: AgentFlavor, errorCode?: string): RuntimeCapabi
     }
 }
 
+function createRefreshingCapability(agent: AgentFlavor): RuntimeCapabilityResponse {
+    const response = createCapability(agent)
+    response.snapshot.refreshing = true
+    response.snapshot.agents[0].launchConfig.refreshing = true
+    response.snapshot.agents[0].launchConfig.config = null
+    return response
+}
+
 function createApi(): Pick<ApiClient, 'getRuntimeCapabilities'> {
     return {
         getRuntimeCapabilities: vi.fn(async ({ drivers }) => createCapability(drivers?.[0] ?? 'claude')),
@@ -79,7 +87,7 @@ describe('useRuntimeAgentLaunchConfig', () => {
         await waitFor(() => expect(api.getRuntimeCapabilities).toHaveBeenCalledTimes(1))
     })
 
-    it('keeps project-aware launch config directory-scoped', async () => {
+    it('keeps project-aware launch config directory-scoped and reuses cached projects', async () => {
         const api = createApi()
         const { rerender } = renderHook(
             ({ directory }) =>
@@ -89,6 +97,8 @@ describe('useRuntimeAgentLaunchConfig', () => {
 
         await waitFor(() => expect(api.getRuntimeCapabilities).toHaveBeenCalledTimes(1))
         rerender({ directory: '/repo-b' })
+        await waitFor(() => expect(api.getRuntimeCapabilities).toHaveBeenCalledTimes(2))
+        rerender({ directory: '/repo-a' })
         await waitFor(() => expect(api.getRuntimeCapabilities).toHaveBeenCalledTimes(2))
     })
 
@@ -135,6 +145,43 @@ describe('useRuntimeAgentLaunchConfig', () => {
             forceRefresh: true,
             signal: expect.any(AbortSignal),
         })
+    })
+
+    it('keeps loading visible while Hub reports launch config refresh in progress', async () => {
+        const api = {
+            getRuntimeCapabilities: vi.fn(async () => createRefreshingCapability('pi')),
+        }
+        const { result } = renderHook(
+            () =>
+                useRuntimeAgentLaunchConfig({
+                    api: api as unknown as ApiClient,
+                    agent: 'pi',
+                    directory: '/repo',
+                    t: (key) => key,
+                }),
+            { wrapper: createWrapper() }
+        )
+
+        await waitFor(() => expect(result.current.isFetching).toBe(false))
+        expect(result.current.isLoading).toBe(true)
+    })
+
+    it('reports both isLoading and isFetching during the initial fetch', async () => {
+        const api = createApi()
+        const { result } = renderHook(
+            () =>
+                useRuntimeAgentLaunchConfig({
+                    api: api as ApiClient,
+                    agent: 'pi',
+                    directory: '/repo',
+                    t: (key) => key,
+                }),
+            { wrapper: createWrapper() }
+        )
+
+        expect(result.current.isFetching).toBe(true)
+        await waitFor(() => expect(result.current.isFetching).toBe(false))
+        expect(result.current.isLoading).toBe(false)
     })
 
     it('passes query cancellation to the API owner', async () => {

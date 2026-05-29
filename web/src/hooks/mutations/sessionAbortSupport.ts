@@ -1,7 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query'
 import { getSessionReplyingState, type SessionReplyingState, setSessionReplyingState } from '@/lib/message-window-store'
 import { queryKeys } from '@/lib/query-keys'
-import { patchSessionInQueryCache } from '@/lib/sessionQueryCache'
+import { patchSessionInQueryCache, writeSessionsResponseToQueryCache } from '@/lib/sessionQueryCache'
 import type { SessionResponse, SessionsResponse } from '@/types/api'
 
 export type AbortSessionMutationContext = {
@@ -48,7 +48,7 @@ export function restoreAbortSessionMutationContext(options: {
         options.queryClient.setQueryData(queryKeys.session(options.sessionId), options.context.previousSession)
     }
     if (options.context.previousSessions) {
-        options.queryClient.setQueryData(queryKeys.sessions, options.context.previousSessions)
+        writeSessionsResponseToQueryCache(options.queryClient, options.context.previousSessions)
     }
     if (options.context.previousReplyingState !== undefined) {
         setSessionReplyingState(options.sessionId, options.context.previousReplyingState)
