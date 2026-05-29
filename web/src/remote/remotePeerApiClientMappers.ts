@@ -1,9 +1,9 @@
 import type { PairingRemoteSessionSummary } from '@viby/protocol'
-import type { DecryptedMessage, MessagesResponse, Session, SessionRecoveryPage, SessionSummary } from '@/types/api'
+import type { ClientMessage, MessagesResponse, Session, SessionRecoveryPage, SessionSummary } from '@/types/api'
 
 export const REMOTE_PAGE_LIMIT = 50
 
-function findOldestSeq(messages: readonly DecryptedMessage[]): number | null {
+function findOldestSeq(messages: readonly ClientMessage[]): number | null {
     return messages.reduce<number | null>((oldestSeq, message) => {
         if (typeof message.seq !== 'number') return oldestSeq
         return oldestSeq === null || message.seq < oldestSeq ? message.seq : oldestSeq
@@ -26,7 +26,7 @@ export function limitMessagesResponse(response: MessagesResponse, limit: number)
 
 export function toRecoveryPage(
     session: Session,
-    messages: DecryptedMessage[],
+    messages: ClientMessage[],
     afterSeq: number,
     limit: number
 ): SessionRecoveryPage {

@@ -1,11 +1,11 @@
-import { normalizeDecryptedMessage } from '@/chat/normalize'
+import { normalizeClientMessage } from '@/chat/normalize'
 import { isCliOutputText } from '@/chat/reducerCliOutput'
 import { isUserMessage, mergeMessages } from '@/lib/messages'
 import { countVisiblePendingMessages, syncPendingVisibilityCache } from '@/lib/messageWindowPendingVisibility'
 import { deriveSeqBounds } from '@/lib/messageWindowSnapshotSupport'
 import { readMessageWindowWarmSnapshot } from '@/lib/messageWindowWarmSnapshot'
 import { MESSAGE_WINDOW_PENDING_OVERFLOW_WARNING_KEY, type MessageWindowWarningKey } from '@/lib/messageWindowWarnings'
-import type { DecryptedMessage, MessageStatus, SessionStreamState } from '@/types/api'
+import type { ClientMessage, MessageStatus, SessionStreamState } from '@/types/api'
 
 export type PendingReplyPhase = 'sending' | 'preparing'
 
@@ -18,8 +18,8 @@ export type PendingReplyState = Readonly<{
 
 export type MessageWindowState = {
     sessionId: string
-    messages: DecryptedMessage[]
-    pending: DecryptedMessage[]
+    messages: ClientMessage[]
+    pending: ClientMessage[]
     pendingCount: number
     hasLoadedLatest: boolean
     hasMore: boolean
@@ -54,8 +54,8 @@ export { resolvePendingReplyAfterMessages, resolveStreamAfterMessages } from '@/
 export { createWarmSnapshot } from '@/lib/messageWindowSnapshotSupport'
 
 type BuildStateUpdates = {
-    messages?: DecryptedMessage[]
-    pending?: DecryptedMessage[]
+    messages?: ClientMessage[]
+    pending?: ClientMessage[]
     pendingOverflowCount?: number
     pendingVisibleCount?: number
     pendingOverflowVisibleCount?: number
@@ -186,9 +186,9 @@ export function buildState(prev: InternalState, updates: BuildStateUpdates): Int
 
 export function applyVisibleWindow(
     prev: InternalState,
-    messages: DecryptedMessage[],
+    messages: ClientMessage[],
     mode: 'append' | 'prepend'
-): DecryptedMessage[] {
+): ClientMessage[] {
     if (prev.historyExpanded) {
         return messages
     }
@@ -196,7 +196,7 @@ export function applyVisibleWindow(
     return trimVisible(messages, mode)
 }
 
-function trimVisible(messages: DecryptedMessage[], mode: 'append' | 'prepend'): DecryptedMessage[] {
+function trimVisible(messages: ClientMessage[], mode: 'append' | 'prepend'): ClientMessage[] {
     if (messages.length <= VISIBLE_WINDOW_SIZE) {
         return messages
     }
@@ -206,8 +206,8 @@ function trimVisible(messages: DecryptedMessage[], mode: 'append' | 'prepend'): 
     return messages.slice(messages.length - VISIBLE_WINDOW_SIZE)
 }
 
-function isHistoryJumpTargetMessage(message: DecryptedMessage): boolean {
-    const normalized = normalizeDecryptedMessage(message)
+function isHistoryJumpTargetMessage(message: ClientMessage): boolean {
+    const normalized = normalizeClientMessage(message)
     if (!normalized || normalized.role !== 'user') {
         return false
     }
@@ -215,7 +215,7 @@ function isHistoryJumpTargetMessage(message: DecryptedMessage): boolean {
     return !isCliOutputText(normalized.content.text, normalized.meta)
 }
 
-export function batchContainsHistoryJumpTarget(messages: readonly DecryptedMessage[]): boolean {
+export function batchContainsHistoryJumpTarget(messages: readonly ClientMessage[]): boolean {
     for (const message of messages) {
         if (isHistoryJumpTargetMessage(message)) {
             return true
@@ -227,8 +227,8 @@ export function batchContainsHistoryJumpTarget(messages: readonly DecryptedMessa
 
 function trimPending(
     sessionId: string,
-    messages: DecryptedMessage[]
-): { pending: DecryptedMessage[]; dropped: number; droppedVisible: number } {
+    messages: ClientMessage[]
+): { pending: ClientMessage[]; dropped: number; droppedVisible: number } {
     if (messages.length <= PENDING_WINDOW_SIZE) {
         return { pending: messages, dropped: 0, droppedVisible: 0 }
     }
@@ -240,10 +240,7 @@ function trimPending(
     return { pending, dropped: droppedMessages.length, droppedVisible }
 }
 
-export function filterPendingAgainstVisible(
-    pending: DecryptedMessage[],
-    visible: DecryptedMessage[]
-): DecryptedMessage[] {
+export function filterPendingAgainstVisible(pending: ClientMessage[], visible: ClientMessage[]): ClientMessage[] {
     if (pending.length === 0 || visible.length === 0) {
         return pending
     }
@@ -252,15 +249,15 @@ export function filterPendingAgainstVisible(
     return pending.filter((message) => !visibleIds.has(message.id))
 }
 
-export function isOptimisticMessage(message: DecryptedMessage): boolean {
+export function isOptimisticMessage(message: ClientMessage): boolean {
     return Boolean(message.localId && message.id === message.localId)
 }
 
 export function mergeIntoPending(
     prev: InternalState,
-    incoming: DecryptedMessage[]
+    incoming: ClientMessage[]
 ): {
-    pending: DecryptedMessage[]
+    pending: ClientMessage[]
     pendingVisibleCount: number
     pendingOverflowCount: number
     pendingOverflowVisibleCount: number

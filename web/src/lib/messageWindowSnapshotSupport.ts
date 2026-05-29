@@ -1,7 +1,7 @@
 import type { MessageWindowWarmSnapshot } from '@/lib/messageWindowWarmSnapshot'
-import type { DecryptedMessage } from '@/types/api'
+import type { ClientMessage } from '@/types/api'
 
-export function deriveSeqBounds(messages: DecryptedMessage[]): { oldestSeq: number | null; newestSeq: number | null } {
+export function deriveSeqBounds(messages: ClientMessage[]): { oldestSeq: number | null; newestSeq: number | null } {
     let oldest: number | null = null
     let newest: number | null = null
 
@@ -22,7 +22,7 @@ export function deriveSeqBounds(messages: DecryptedMessage[]): { oldestSeq: numb
 
 export function createWarmSnapshot(state: {
     sessionId: string
-    messages: DecryptedMessage[]
+    messages: ClientMessage[]
     hasLoadedLatest: boolean
     hasMore: boolean
     historyExpanded: boolean

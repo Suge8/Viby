@@ -168,9 +168,9 @@ export function createRemotePeerApiClient(options: RemoteApiOptions): ApiClient 
             text: string,
             localId?: string | null,
             _attachments?: AttachmentMetadata[]
-        ): Promise<Session> {
+        ) {
             const response = await options.bridge.sendMessage({ sessionId, text, localId: localId ?? undefined })
-            return response.session
+            return { ok: true as const, session: response.session, message: response.message }
         },
         async abortSession(sessionId: string): Promise<Session> {
             return (await options.bridge.abortSession({ sessionId })).session

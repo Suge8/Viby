@@ -1,8 +1,8 @@
-import { normalizeDecryptedMessage } from '@/chat/normalize'
-import type { DecryptedMessage } from '@/types/api'
+import { normalizeClientMessage } from '@/chat/normalize'
+import type { ClientMessage } from '@/types/api'
 
 type PendingVisibilityCacheEntry = {
-    source: DecryptedMessage
+    source: ClientMessage
     visible: boolean
 }
 
@@ -23,19 +23,19 @@ export function clearPendingVisibilityCache(sessionId: string): void {
     pendingVisibilityCacheBySession.delete(sessionId)
 }
 
-function isVisiblePendingMessage(sessionId: string, message: DecryptedMessage): boolean {
+function isVisiblePendingMessage(sessionId: string, message: ClientMessage): boolean {
     const cache = getPendingVisibilityCache(sessionId)
     const cached = cache.get(message.id)
     if (cached && cached.source === message) {
         return cached.visible
     }
 
-    const visible = normalizeDecryptedMessage(message) !== null
+    const visible = normalizeClientMessage(message) !== null
     cache.set(message.id, { source: message, visible })
     return visible
 }
 
-export function countVisiblePendingMessages(sessionId: string, messages: DecryptedMessage[]): number {
+export function countVisiblePendingMessages(sessionId: string, messages: ClientMessage[]): number {
     let count = 0
     for (const message of messages) {
         if (isVisiblePendingMessage(sessionId, message)) {
@@ -45,7 +45,7 @@ export function countVisiblePendingMessages(sessionId: string, messages: Decrypt
     return count
 }
 
-export function syncPendingVisibilityCache(sessionId: string, pending: DecryptedMessage[]): void {
+export function syncPendingVisibilityCache(sessionId: string, pending: ClientMessage[]): void {
     const cache = pendingVisibilityCacheBySession.get(sessionId)
     if (!cache) {
         return

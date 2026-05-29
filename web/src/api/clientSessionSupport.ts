@@ -1,16 +1,20 @@
 import { isSameSessionSwitchTargetDriver, type SameSessionSwitchTargetDriver } from '@viby/protocol'
+import { SessionSendMessageResultSchema } from '@viby/protocol/schemas'
 import type {
     CodexCollaborationMode,
     CodexServiceTier,
     ModelReasoningEffort,
     PermissionMode,
     Session,
+    SessionSendMessageResult,
 } from '@/types/api'
 
 type SessionActionResponse = {
     ok: true
     session: Session
 }
+
+export type SendMessageResponse = { ok: true } & SessionSendMessageResult
 
 type ResumeSessionResponse = {
     type: 'success'
@@ -67,6 +71,10 @@ export function isResumeSessionLegacyResponse(value: unknown): value is ResumeSe
 
 export function isSessionActionResponse(value: unknown): value is SessionActionResponse {
     return isRecord(value) && value.ok === true && isSession(value.session)
+}
+
+export function isSendMessageResponse(value: unknown): value is SendMessageResponse {
+    return isRecord(value) && value.ok === true && SessionSendMessageResultSchema.safeParse(value).success
 }
 
 export function isSessionActionLegacyResponse(value: unknown): value is SessionActionLegacyResponse {

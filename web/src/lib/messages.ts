@@ -1,12 +1,12 @@
 import type { InfiniteData } from '@tanstack/react-query'
 import { createScopedId } from '@/lib/id'
-import type { DecryptedMessage, MessagesResponse } from '@/types/api'
+import type { ClientMessage, MessagesResponse } from '@/types/api'
 
 export function makeClientSideId(prefix: string): string {
     return createScopedId(prefix)
 }
 
-export function isUserMessage(msg: DecryptedMessage): boolean {
+export function isUserMessage(msg: ClientMessage): boolean {
     const content = msg.content
     if (content && typeof content === 'object' && 'role' in content) {
         return (content as { role: string }).role === 'user'
@@ -14,15 +14,15 @@ export function isUserMessage(msg: DecryptedMessage): boolean {
     return false
 }
 
-function isOptimisticMessage(msg: DecryptedMessage): boolean {
+function isOptimisticMessage(msg: ClientMessage): boolean {
     return Boolean(msg.localId && msg.id === msg.localId)
 }
 
-export function isQueuedForInvocation(msg: DecryptedMessage): boolean {
+export function isQueuedForInvocation(msg: ClientMessage): boolean {
     return isUserMessage(msg) && msg.invokedAt === null && msg.status !== 'failed'
 }
 
-function compareMessages(a: DecryptedMessage, b: DecryptedMessage): number {
+function compareMessages(a: ClientMessage, b: ClientMessage): number {
     const aSeq = typeof a.seq === 'number' ? a.seq : null
     const bSeq = typeof b.seq === 'number' ? b.seq : null
 
@@ -38,14 +38,14 @@ function compareMessages(a: DecryptedMessage, b: DecryptedMessage): number {
     return a.id.localeCompare(b.id)
 }
 
-function hasOwnInvokedAt(message: DecryptedMessage): boolean {
+function hasOwnInvokedAt(message: ClientMessage): boolean {
     return Object.prototype.hasOwnProperty.call(message, 'invokedAt')
 }
 
 function mergeIncomingMessage(
-    message: DecryptedMessage,
-    optimisticByLocalId: ReadonlyMap<string, DecryptedMessage>
-): DecryptedMessage {
+    message: ClientMessage,
+    optimisticByLocalId: ReadonlyMap<string, ClientMessage>
+): ClientMessage {
     if (!message.localId || isOptimisticMessage(message)) {
         return message
     }
@@ -57,13 +57,13 @@ function mergeIncomingMessage(
 
     return {
         ...message,
-        status: message.status ?? (message.invokedAt === null ? optimistic.status : 'sent'),
+        status: message.status ?? (message.invokedAt === null ? 'queued' : 'sent'),
         originalText: message.originalText ?? optimistic.originalText,
         invokedAt: hasOwnInvokedAt(message) ? message.invokedAt : optimistic.invokedAt,
     }
 }
 
-export function mergeMessages(existing: DecryptedMessage[], incoming: DecryptedMessage[]): DecryptedMessage[] {
+export function mergeMessages(existing: ClientMessage[], incoming: ClientMessage[]): ClientMessage[] {
     if (existing.length === 0) {
         return [...incoming].sort(compareMessages)
     }
@@ -71,8 +71,8 @@ export function mergeMessages(existing: DecryptedMessage[], incoming: DecryptedM
         return [...existing].sort(compareMessages)
     }
 
-    const byId = new Map<string, DecryptedMessage>()
-    const optimisticByLocalId = new Map<string, DecryptedMessage>()
+    const byId = new Map<string, ClientMessage>()
+    const optimisticByLocalId = new Map<string, ClientMessage>()
     for (const msg of existing) {
         byId.set(msg.id, msg)
         if (msg.localId && isOptimisticMessage(msg)) {
@@ -106,7 +106,7 @@ export function mergeMessages(existing: DecryptedMessage[], incoming: DecryptedM
     // drop it when a server user message appears close in time.
     const optimisticMessages = merged.filter((m) => isOptimisticMessage(m))
     const nonOptimisticMessages = merged.filter((m) => !isOptimisticMessage(m))
-    const result: DecryptedMessage[] = [...nonOptimisticMessages]
+    const result: ClientMessage[] = [...nonOptimisticMessages]
 
     for (const optimistic of optimisticMessages) {
         if (optimistic.status === 'sent') {
@@ -126,7 +126,7 @@ export function mergeMessages(existing: DecryptedMessage[], incoming: DecryptedM
 
 export function upsertMessagesInCache(
     data: InfiniteData<MessagesResponse> | undefined,
-    incoming: DecryptedMessage[]
+    incoming: ClientMessage[]
 ): InfiniteData<MessagesResponse> {
     const mergedIncoming = mergeMessages([], incoming)
 

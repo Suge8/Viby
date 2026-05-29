@@ -30,6 +30,7 @@ import type {
     SessionActivityKind,
     SessionLifecycleState,
     SessionRecoveryPage,
+    SessionSendMessageResult,
     SessionStreamState,
     SessionSummary,
     SessionViewSnapshot,
@@ -89,6 +90,7 @@ export type {
     SessionActivityKind,
     SessionLifecycleState,
     SessionRecoveryPage,
+    SessionSendMessageResult,
     SessionStreamState,
     SessionSummary,
     SessionSummaryMetadata,
@@ -110,8 +112,9 @@ export type SessionMetadataSummary = {
 }
 
 export type MessageStatus = 'queued' | 'sending' | 'sent' | 'failed'
+export type DecryptedMessage = ProtocolDecryptedMessage
 
-export type DecryptedMessage = ProtocolDecryptedMessage & {
+export type ClientMessage = ProtocolDecryptedMessage & {
     status?: MessageStatus
     originalText?: string
 }
@@ -166,7 +169,7 @@ export type AuthResponse = {
 export type SessionsResponse = { sessions: SessionSummary[] }
 export type SessionResponse = { session: Session }
 export type MessagesResponse = {
-    messages: DecryptedMessage[]
+    messages: ClientMessage[]
     page: {
         limit: number
         beforeSeq: number | null

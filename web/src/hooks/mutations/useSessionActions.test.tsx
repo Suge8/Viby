@@ -14,7 +14,7 @@ import {
 } from '@/lib/message-window-store'
 import { queryKeys } from '@/lib/query-keys'
 import { TEST_PROJECT_PATH } from '@/test/sessionFactories'
-import type { DecryptedMessage, Session, SessionsResponse } from '@/types/api'
+import type { ClientMessage, Session, SessionsResponse } from '@/types/api'
 import { useSessionActions } from './useSessionActions'
 
 type CachedSession = Session & {
@@ -73,7 +73,7 @@ function createSession(lifecycleState: 'closed' | 'archived'): Session {
     }
 }
 
-function createOptimisticUserMessage(localId: string): DecryptedMessage {
+function createOptimisticUserMessage(localId: string): ClientMessage {
     return {
         id: localId,
         seq: null,

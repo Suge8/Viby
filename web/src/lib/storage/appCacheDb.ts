@@ -1,6 +1,6 @@
 import { type DBSchema, type IDBPDatabase, openDB } from 'idb'
 import { reportWebRuntimeWarning } from '@/lib/runtimeDiagnostics'
-import type { DecryptedMessage, Session, SessionSummary } from '@/types/api'
+import type { ClientMessage, Session, SessionSummary } from '@/types/api'
 import {
     APP_CACHE_BROADCAST_CHANNEL,
     APP_CACHE_DB_NAME,
@@ -21,7 +21,7 @@ export type MessageWindowWarmCacheRecord = Readonly<{
         hasLoadedLatest: boolean
         hasMore: boolean
         historyExpanded: boolean
-        messages: DecryptedMessage[]
+        messages: ClientMessage[]
         sessionId: string
     }>
 }>

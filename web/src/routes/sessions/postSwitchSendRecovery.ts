@@ -17,7 +17,7 @@ import {
 import { appendRealtimeTrace } from '@/lib/realtimeTrace'
 import { findFirstAgentReplyAfter, runSendCatchup, shouldRunPostSwitchCatchup } from '@/lib/sendCatchup'
 import { writeSessionToQueryCache } from '@/lib/sessionQueryCache'
-import type { DecryptedMessage, Session } from '@/types/api'
+import type { ClientMessage, Session } from '@/types/api'
 
 export type AcceptedSend = {
     sessionId: string
@@ -29,7 +29,7 @@ export type AcceptedSend = {
 
 type SyncResolvedPostSwitchWarningOptions = {
     sessionId: string
-    messages: readonly DecryptedMessage[]
+    messages: readonly ClientMessage[]
     warning: MessageWindowWarningKey | null
     streamText: string
 }
@@ -146,7 +146,7 @@ function clearCurrentPostSwitchWarning(sessionId: string): void {
     clearMessageWindowWarning(sessionId, warning)
 }
 
-function findLatestUserMessageCreatedAt(messages: readonly DecryptedMessage[]): number | null {
+function findLatestUserMessageCreatedAt(messages: readonly ClientMessage[]): number | null {
     for (let index = messages.length - 1; index >= 0; index -= 1) {
         const message = messages[index]
         if (message && isUserMessage(message)) {

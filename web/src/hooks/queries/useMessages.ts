@@ -17,7 +17,7 @@ import {
     subscribeMessageWindow,
 } from '@/lib/messageWindowStoreCore'
 import type { MessageWindowWarningKey } from '@/lib/messageWindowWarnings'
-import type { DecryptedMessage, SessionStreamState } from '@/types/api'
+import type { ClientMessage, SessionStreamState } from '@/types/api'
 
 const EMPTY_STATE: MessageWindowState = {
     sessionId: 'unknown',
@@ -57,8 +57,8 @@ export function useMessages(
     api: ApiClient | null,
     sessionId: string | null
 ): {
-    messages: DecryptedMessage[]
-    pending: DecryptedMessage[]
+    messages: ClientMessage[]
+    pending: ClientMessage[]
     warning: MessageWindowWarningKey | null
     isLoading: boolean
     isLoadingMore: boolean

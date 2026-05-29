@@ -1,11 +1,11 @@
 import { extractAssistantTurnId } from '@viby/protocol'
 import { isUserMessage } from '@/lib/messages'
 import type { PendingReplyState } from '@/lib/messageWindowState'
-import type { DecryptedMessage, SessionStreamState } from '@/types/api'
+import type { ClientMessage, SessionStreamState } from '@/types/api'
 
 export function resolveStreamAfterMessages(
     stream: SessionStreamState | null,
-    messages: DecryptedMessage[]
+    messages: ClientMessage[]
 ): SessionStreamState | null {
     if (!stream) {
         return null
@@ -22,7 +22,7 @@ export function resolveStreamAfterMessages(
 
 export function resolvePendingReplyAfterMessages(
     pendingReply: PendingReplyState | null,
-    messages: readonly DecryptedMessage[]
+    messages: readonly ClientMessage[]
 ): PendingReplyState | null {
     if (!pendingReply) {
         return null

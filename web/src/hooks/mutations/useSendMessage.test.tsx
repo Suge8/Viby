@@ -105,16 +105,27 @@ describe('useSendMessage', () => {
         seedSessionsSummary(queryClient)
         const deferred = createDeferred()
         const api = {
-            sendMessage: vi.fn(async () => {
+            sendMessage: vi.fn(async (_sessionId: string, text: string, localId: string) => {
                 await deferred.promise
                 return {
-                    id: 'session-1',
-                    active: true,
-                    metadata: {
-                        driver: 'codex',
-                        codexSessionId: 'thread-1',
+                    ok: true,
+                    session: {
+                        id: 'session-1',
+                        active: true,
+                        metadata: {
+                            driver: 'codex',
+                            codexSessionId: 'thread-1',
+                        },
                     },
-                } as never
+                    message: {
+                        id: 'server-sent',
+                        seq: 1,
+                        localId,
+                        createdAt: Date.now(),
+                        invokedAt: Date.now(),
+                        content: { role: 'user', content: { type: 'text', text } },
+                    },
+                }
             }),
         } as unknown as ApiClient
 
@@ -198,20 +209,28 @@ describe('useSendMessage', () => {
         const queryClient = createQueryClient()
         seedSessionsSummary(queryClient)
         const api = {
-            sendMessage: vi.fn(
-                async () =>
-                    ({
-                        id: 'session-1',
-                        active: true,
-                        metadata: {
-                            driver: 'codex',
-                            codexSessionId: 'thread-1',
-                        },
-                    }) as never
-            ),
+            sendMessage: vi.fn(async (_sessionId: string, text: string, localId: string) => ({
+                ok: true,
+                session: {
+                    id: 'session-1',
+                    active: true,
+                    metadata: {
+                        driver: 'codex',
+                        codexSessionId: 'thread-1',
+                    },
+                },
+                message: {
+                    id: 'server-queued',
+                    seq: 2,
+                    localId,
+                    createdAt: Date.now(),
+                    invokedAt: null,
+                    content: { role: 'user', content: { type: 'text', text } },
+                },
+            })),
         } as unknown as ApiClient
 
-        const { result } = renderHook(() => useSendMessage(api, 'session-1', { isSessionThinking: () => true }), {
+        const { result } = renderHook(() => useSendMessage(api, 'session-1', { shouldQueueSend: () => true }), {
             wrapper: createWrapper(queryClient),
         })
 
@@ -229,6 +248,97 @@ describe('useSendMessage', () => {
             invokedAt: null,
         })
         expect(state.pendingReply).toBeNull()
+    })
+
+    it('moves a stale optimistic transcript send into the queue when Hub accepts it as uninvoked', async () => {
+        const queryClient = createQueryClient()
+        seedSessionsSummary(queryClient)
+        const api = {
+            sendMessage: vi.fn(async (_sessionId: string, text: string, localId: string) => ({
+                ok: true,
+                session: {
+                    id: 'session-1',
+                    active: true,
+                    metadata: { driver: 'codex' },
+                },
+                message: {
+                    id: 'server-queued',
+                    seq: 3,
+                    localId,
+                    createdAt: Date.now(),
+                    invokedAt: null,
+                    content: {
+                        role: 'user',
+                        content: { type: 'text', text },
+                    },
+                },
+            })),
+        } as unknown as ApiClient
+
+        const { result } = renderHook(() => useSendMessage(api, 'session-1', { shouldQueueSend: () => false }), {
+            wrapper: createWrapper(queryClient),
+        })
+
+        act(() => {
+            result.current.sendMessage('queue according to hub')
+        })
+
+        await waitFor(() => {
+            expect(getMessageWindowState('session-1').messages[0]).toMatchObject({
+                id: 'server-queued',
+                invokedAt: null,
+                status: 'queued',
+            })
+        })
+        expect(getMessageWindowState('session-1').pendingReply).toBeNull()
+    })
+
+    it('starts pending reply when Hub immediately invokes a message Web initially queued', async () => {
+        const queryClient = createQueryClient()
+        seedSessionsSummary(queryClient)
+        const invokedAt = 2_500
+        const api = {
+            sendMessage: vi.fn(async (_sessionId: string, text: string, localId: string) => ({
+                ok: true,
+                session: {
+                    id: 'session-1',
+                    active: true,
+                    metadata: { driver: 'codex' },
+                },
+                message: {
+                    id: 'server-sent',
+                    seq: 4,
+                    localId,
+                    createdAt: Date.now(),
+                    invokedAt,
+                    content: {
+                        role: 'user',
+                        content: { type: 'text', text },
+                    },
+                },
+            })),
+        } as unknown as ApiClient
+
+        const { result } = renderHook(() => useSendMessage(api, 'session-1', { shouldQueueSend: () => true }), {
+            wrapper: createWrapper(queryClient),
+        })
+
+        act(() => {
+            result.current.sendMessage('hub inserted now')
+        })
+
+        await waitFor(() => {
+            expect(getMessageWindowState('session-1').messages[0]).toMatchObject({
+                id: 'server-sent',
+                invokedAt,
+                status: 'sent',
+            })
+        })
+        expect(getMessageWindowState('session-1').pendingReply).toMatchObject({
+            localId: expect.any(String),
+            phase: 'preparing',
+            serverAcceptedAt: invokedAt,
+        })
     })
 
     it('refreshes authoritative session snapshots instead of rolling back lifecycle state after server-side send failures', async () => {
@@ -279,13 +389,24 @@ describe('useSendMessage', () => {
                 .fn()
                 .mockRejectedValueOnce(new Error('send failed'))
                 .mockResolvedValueOnce({
-                    id: 'session-1',
-                    active: true,
-                    metadata: {
-                        driver: 'codex',
-                        codexSessionId: 'thread-1',
+                    ok: true,
+                    session: {
+                        id: 'session-1',
+                        active: true,
+                        metadata: {
+                            driver: 'codex',
+                            codexSessionId: 'thread-1',
+                        },
                     },
-                } as never),
+                    message: {
+                        id: 'server-retry',
+                        seq: 5,
+                        localId: 'local-retry',
+                        createdAt: Date.now(),
+                        invokedAt: Date.now(),
+                        content: { role: 'user', content: { type: 'text', text: 'retry with attachment' } },
+                    },
+                }),
         } as unknown as ApiClient
 
         const { result } = renderHook(() => useSendMessage(api, 'session-1'), { wrapper: createWrapper(queryClient) })

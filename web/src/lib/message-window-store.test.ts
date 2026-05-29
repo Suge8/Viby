@@ -1,8 +1,9 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { ApiClient } from '@/api/client'
-import type { DecryptedMessage, MessagesResponse, SessionRecoveryPage } from '@/types/api'
+import type { ClientMessage, MessagesResponse, SessionRecoveryPage } from '@/types/api'
 import {
     appendOptimisticMessage,
+    applyAcceptedUserMessage,
     applySessionStream,
     catchupMessagesAfter,
     clearMessageWindow,
@@ -22,11 +23,11 @@ import {
 import { setAtBottom } from './messageWindowStoreCore'
 import { readMessageWindowWarmSnapshot } from './messageWindowWarmSnapshot'
 
-function buildMessage(seq: number): DecryptedMessage {
+function buildMessage(seq: number): ClientMessage {
     return buildRoleMessage(seq, seq % 2 === 0 ? 'assistant' : 'user')
 }
 
-function buildRoleMessage(seq: number, role: 'assistant' | 'user'): DecryptedMessage {
+function buildRoleMessage(seq: number, role: 'assistant' | 'user'): ClientMessage {
     return {
         id: `message-${seq}`,
         seq,
@@ -44,7 +45,7 @@ function buildRoleMessage(seq: number, role: 'assistant' | 'user'): DecryptedMes
 
 function createRecoveryPage(
     sessionId: string,
-    messages: DecryptedMessage[],
+    messages: ClientMessage[],
     afterSeq: number,
     limit: number
 ): SessionRecoveryPage {
@@ -128,7 +129,7 @@ function createMessagesApi(totalMessages: number): ApiClient {
     } as ApiClient
 }
 
-function createFixedMessagesApi(messages: DecryptedMessage[]): ApiClient {
+function createFixedMessagesApi(messages: ClientMessage[]): ApiClient {
     return {
         async getMessages(
             _sessionId: string,
@@ -553,6 +554,69 @@ describe('message-window-store', () => {
             serverAcceptedAt: 1_500,
             phase: 'preparing',
         })
+    })
+
+    it('moves accepted uninvoked sends into the queue lane', () => {
+        appendOptimisticMessage('session-1', {
+            id: 'local-queued',
+            seq: null,
+            localId: 'local-queued',
+            createdAt: 1_000,
+            status: 'sending',
+            originalText: 'queued hello',
+            content: { role: 'user', content: { type: 'text', text: 'queued hello' } },
+        })
+
+        applyAcceptedUserMessage({
+            sessionId: 'session-1',
+            localId: 'local-queued',
+            queuedForInvocation: false,
+            acceptedAt: 1_200,
+            message: {
+                id: 'server-queued',
+                seq: 3,
+                localId: 'local-queued',
+                createdAt: 1_100,
+                invokedAt: null,
+                content: { role: 'user', content: { type: 'text', text: 'queued hello' } },
+            },
+        })
+
+        const state = getMessageWindowState('session-1')
+        expect(state.messages[0]).toMatchObject({ id: 'server-queued', status: 'queued', invokedAt: null })
+        expect(state.pendingReply).toBeNull()
+    })
+
+    it('promotes accepted invoked queued sends into the pending-reply lane', () => {
+        appendOptimisticMessage('session-1', {
+            id: 'local-sent',
+            seq: null,
+            localId: 'local-sent',
+            createdAt: 1_000,
+            invokedAt: null,
+            status: 'queued',
+            originalText: 'sent hello',
+            content: { role: 'user', content: { type: 'text', text: 'sent hello' } },
+        })
+
+        applyAcceptedUserMessage({
+            sessionId: 'session-1',
+            localId: 'local-sent',
+            queuedForInvocation: true,
+            acceptedAt: 1_200,
+            message: {
+                id: 'server-sent',
+                seq: 4,
+                localId: 'local-sent',
+                createdAt: 1_100,
+                invokedAt: 1_500,
+                content: { role: 'user', content: { type: 'text', text: 'sent hello' } },
+            },
+        })
+
+        const state = getMessageWindowState('session-1')
+        expect(state.messages[0]).toMatchObject({ id: 'server-sent', status: 'sent', invokedAt: 1_500 })
+        expect(state.pendingReply).toMatchObject({ localId: 'local-sent', phase: 'preparing', serverAcceptedAt: 1_500 })
     })
 
     it('removes only still-queued messages when cancellation arrives', () => {

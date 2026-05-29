@@ -34,7 +34,7 @@ export default function SessionChatRoute(): React.JSX.Element {
             details: { sessionId: routeSessionId },
         })
     }, [routeSessionId])
-    const { session, error: sessionError } = useSession(api, routeSessionId)
+    const { session, isDetailHydrated, error: sessionError } = useSession(api, routeSessionId)
 
     const navigate = useNavigate()
 
@@ -72,6 +72,7 @@ export default function SessionChatRoute(): React.JSX.Element {
     return (
         <ResolvedSessionChatRoute
             api={api}
+            isSessionDetailHydrated={isDetailHydrated}
             session={session}
             sessionId={routeSessionId}
             onRetainedSnapshotReady={(snapshot) => {
@@ -85,6 +86,7 @@ export default function SessionChatRoute(): React.JSX.Element {
 type ResolvedSessionChatRouteProps = {
     api: ReturnType<typeof useAppContext>['api']
     onRetainedSnapshotReady: (snapshot: RetainedSessionChatSnapshot) => void
+    isSessionDetailHydrated: boolean
     retainedSnapshot: RetainedSessionChatSnapshot | null
     session: NonNullable<ReturnType<typeof useSession>['session']>
     sessionId: string

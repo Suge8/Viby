@@ -2,11 +2,11 @@ import { readAllAppCacheRecords, removeAppCacheRecord, writeAppCacheRecord } fro
 import { APP_CACHE_STORES } from '@/lib/storage/storageRegistry'
 import { isWarmSnapshotFresh, WARM_SNAPSHOT_WRITE_DEBOUNCE_MS } from '@/lib/warmSnapshotPolicy'
 import { createWarmSnapshotWriteScheduler } from '@/lib/warmSnapshotWriteScheduler'
-import type { DecryptedMessage } from '@/types/api'
+import type { ClientMessage } from '@/types/api'
 
 export type MessageWindowWarmSnapshot = Readonly<{
     sessionId: string
-    messages: DecryptedMessage[]
+    messages: ClientMessage[]
     hasLoadedLatest: boolean
     hasMore: boolean
     historyExpanded: boolean

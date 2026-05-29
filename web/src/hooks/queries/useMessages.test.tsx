@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { LoadMoreMessagesResult } from '@/lib/message-window-store'
 import type { MessageWindowState } from '@/lib/messageWindowStoreCore'
-import type { DecryptedMessage } from '@/types/api'
+import type { ClientMessage } from '@/types/api'
 import { useMessages } from './useMessages'
 
 function createEmptyState(): MessageWindowState {
@@ -39,7 +39,7 @@ const storeHarness = vi.hoisted(() => ({
     readSessionViewRuntimeLoadMock: vi.fn<(sessionId: string) => Promise<unknown> | null>(() => null),
 }))
 
-const readyMessage: DecryptedMessage = {
+const readyMessage: ClientMessage = {
     id: 'message-1',
     seq: 1,
     localId: null,
@@ -54,7 +54,7 @@ const readyMessage: DecryptedMessage = {
 }
 
 const apiStub = {} as never
-const olderMessage: DecryptedMessage = {
+const olderMessage: ClientMessage = {
     id: 'message-0',
     seq: 0,
     localId: null,

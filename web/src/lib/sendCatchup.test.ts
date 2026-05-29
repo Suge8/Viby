@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { runSendCatchup, shouldRunPostSwitchCatchup } from '@/lib/sendCatchup'
-import type { DecryptedMessage } from '@/types/api'
+import type { ClientMessage } from '@/types/api'
 
-function createUserMessage(createdAt: number): DecryptedMessage {
+function createUserMessage(createdAt: number): ClientMessage {
     return {
         id: `user-${createdAt}`,
         seq: createdAt,
@@ -18,7 +18,7 @@ function createUserMessage(createdAt: number): DecryptedMessage {
     }
 }
 
-function createAgentMessage(createdAt: number): DecryptedMessage {
+function createAgentMessage(createdAt: number): ClientMessage {
     return {
         id: `agent-${createdAt}`,
         seq: createdAt,
@@ -37,7 +37,7 @@ function createAgentMessage(createdAt: number): DecryptedMessage {
     }
 }
 
-function createDriverSwitchedMessage(createdAt: number, targetDriver: 'claude' | 'codex' = 'claude'): DecryptedMessage {
+function createDriverSwitchedMessage(createdAt: number, targetDriver: 'claude' | 'codex' = 'claude'): ClientMessage {
     return {
         id: `switched-${createdAt}`,
         seq: createdAt,
@@ -59,7 +59,7 @@ function createDriverSwitchedMessage(createdAt: number, targetDriver: 'claude' |
 function createDriverSwitchFailureMessage(
     createdAt: number,
     overrides: Partial<{ code: string; stage: string }> = {}
-): DecryptedMessage {
+): ClientMessage {
     return {
         id: `event-${createdAt}`,
         seq: createdAt,
@@ -78,7 +78,7 @@ function createDriverSwitchFailureMessage(
     }
 }
 
-function createUnrelatedEventMessage(createdAt: number): DecryptedMessage {
+function createUnrelatedEventMessage(createdAt: number): ClientMessage {
     return {
         id: `other-event-${createdAt}`,
         seq: createdAt,

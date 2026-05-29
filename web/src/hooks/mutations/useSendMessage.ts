@@ -6,14 +6,14 @@ import { usePlatform } from '@/hooks/usePlatform'
 import { makeClientSideId } from '@/lib/messages'
 import {
     appendOptimisticMessage,
+    applyAcceptedUserMessage,
     clearPendingReply,
     getMessageWindowState,
-    markPendingReplyAccepted,
     updateMessageStatus,
 } from '@/lib/messageWindowStoreCore'
 import { queryKeys } from '@/lib/query-keys'
 import { markSessionPendingUserTurnInQueryCache, writeSessionsResponseToQueryCache } from '@/lib/sessionQueryCache'
-import type { AttachmentMetadata, DecryptedMessage, Session, SessionsResponse } from '@/types/api'
+import type { AttachmentMetadata, ClientMessage, Session, SessionsResponse } from '@/types/api'
 
 type SendMessageInput = {
     sessionId: string
@@ -27,7 +27,7 @@ type SendMessageInput = {
 type BlockedReason = 'no-api' | 'no-session' | 'pending'
 
 type UseSendMessageOptions = {
-    isSessionThinking?: () => boolean
+    shouldQueueSend?: () => boolean
     onBlocked?: (reason: BlockedReason) => void
     onSendStart?: (info: SendStartInfo) => void
     afterServerAccepted?: (info: ServerAcceptedSendInfo) => Promise<void> | void
@@ -56,14 +56,11 @@ export type SendErrorInfo = {
     error: unknown
 }
 
-function findMessageByLocalIdInCollection(
-    messages: readonly DecryptedMessage[],
-    localId: string
-): DecryptedMessage | null {
+function findMessageByLocalIdInCollection(messages: readonly ClientMessage[], localId: string): ClientMessage | null {
     return messages.find((message) => message.localId === localId) ?? null
 }
 
-function findMessageByLocalId(sessionId: string, localId: string): DecryptedMessage | null {
+function findMessageByLocalId(sessionId: string, localId: string): ClientMessage | null {
     const state = getMessageWindowState(sessionId)
 
     return (
@@ -72,7 +69,7 @@ function findMessageByLocalId(sessionId: string, localId: string): DecryptedMess
     )
 }
 
-function createOptimisticMessage(input: SendMessageInput): DecryptedMessage {
+function createOptimisticMessage(input: SendMessageInput): ClientMessage {
     return {
         id: input.localId,
         seq: null,
@@ -92,7 +89,7 @@ function createOptimisticMessage(input: SendMessageInput): DecryptedMessage {
     }
 }
 
-function getOptimisticMessageAttachments(message: DecryptedMessage): AttachmentMetadata[] | undefined {
+function getOptimisticMessageAttachments(message: ClientMessage): AttachmentMetadata[] | undefined {
     const messageEnvelope = message.content
     if (!messageEnvelope || typeof messageEnvelope !== 'object') {
         return undefined
@@ -121,7 +118,7 @@ export function useSendMessage(
     const { haptic } = usePlatform()
     const queryClient = useQueryClient()
     const afterServerAccepted = options?.afterServerAccepted
-    const isSessionThinking = options?.isSessionThinking
+    const shouldQueueSend = options?.shouldQueueSend
     const onBlocked = options?.onBlocked
     const onSendError = options?.onSendError
     const onSendStart = options?.onSendStart
@@ -148,19 +145,22 @@ export function useSendMessage(
             markSessionPendingUserTurnInQueryCache(queryClient, input.sessionId, input.createdAt)
             return { previousSessions }
         },
-        onSuccess: (session, input) => {
+        onSuccess: (response, input) => {
             const acceptedAt = Date.now()
-            updateMessageStatus(input.sessionId, input.localId, input.queuedForInvocation ? 'queued' : 'sent')
-            if (!input.queuedForInvocation) {
-                markPendingReplyAccepted(input.sessionId, input.localId, acceptedAt)
-            }
+            applyAcceptedUserMessage({
+                sessionId: input.sessionId,
+                localId: input.localId,
+                queuedForInvocation: input.queuedForInvocation,
+                message: response.message,
+                acceptedAt,
+            })
             haptic.notification('success')
             void afterServerAccepted?.({
                 sessionId: input.sessionId,
                 localId: input.localId,
                 createdAt: input.createdAt,
                 acceptedAt,
-                session,
+                session: response.session,
             })
         },
         onError: (error, input, context) => {
@@ -230,14 +230,14 @@ export function useSendMessage(
                 text,
                 localId,
                 createdAt,
-                queuedForInvocation: isSessionThinking?.() === true,
+                queuedForInvocation: shouldQueueSend?.() === true,
                 attachments,
             }
 
             appendOptimisticMessage(currentSessionId, createOptimisticMessage(optimisticInput))
             startSendAttempt(optimisticInput)
         },
-        [getBlockedReason, handleBlocked, isSessionThinking, sessionId, startSendAttempt]
+        [getBlockedReason, handleBlocked, shouldQueueSend, sessionId, startSendAttempt]
     )
 
     const retryMessage = useCallback(
@@ -258,14 +258,14 @@ export function useSendMessage(
                 text: message.originalText,
                 localId,
                 createdAt: message.createdAt,
-                queuedForInvocation: isSessionThinking?.() === true,
+                queuedForInvocation: shouldQueueSend?.() === true,
                 attachments: getOptimisticMessageAttachments(message),
             }
 
             updateMessageStatus(sessionId, localId, retryInput.queuedForInvocation ? 'queued' : 'sending')
             startSendAttempt(retryInput)
         },
-        [getBlockedReason, handleBlocked, isSessionThinking, sessionId, startSendAttempt]
+        [getBlockedReason, handleBlocked, shouldQueueSend, sessionId, startSendAttempt]
     )
 
     return {

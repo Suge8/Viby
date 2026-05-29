@@ -18,7 +18,7 @@ import {
     applySessionStreamUpdate,
 } from '@/lib/messageWindowStoreReducers'
 import { MESSAGE_WINDOW_LOAD_FAILED_WARNING_KEY } from '@/lib/messageWindowWarnings'
-import type { DecryptedMessage } from '@/types/api'
+import type { ClientMessage } from '@/types/api'
 
 const PAGE_SIZE = SESSION_TIMELINE_PAGE_SIZE
 const CATCHUP_PAGE_SIZE = SESSION_RECOVERY_PAGE_SIZE
@@ -161,7 +161,7 @@ export async function fetchLatestMessages(
 
 export function hydrateLatestMessagesFromSessionView(options: {
     sessionId: string
-    messages: DecryptedMessage[]
+    messages: ClientMessage[]
     hasMore: boolean
     stream: import('@/types/api').SessionStreamState | null
 }): void {

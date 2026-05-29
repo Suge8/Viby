@@ -9,7 +9,7 @@ import {
     resolvePendingReplyAfterMessages,
     resolveStreamAfterMessages,
 } from '@/lib/messageWindowState'
-import type { DecryptedMessage, MessageStatus, SessionStreamState } from '@/types/api'
+import type { ClientMessage, MessageStatus, SessionStreamState } from '@/types/api'
 
 export function applySessionStreamUpdate(prev: InternalState, stream: SessionStreamState): InternalState {
     if (
@@ -38,7 +38,7 @@ export function applyClearedSessionStream(prev: InternalState, assistantTurnId?:
     return buildState(prev, { stream: null })
 }
 
-export function applyAppendedOptimisticMessage(prev: InternalState, message: DecryptedMessage): InternalState {
+export function applyAppendedOptimisticMessage(prev: InternalState, message: ClientMessage): InternalState {
     const merged = mergeMessages(prev.messages, [message])
     const visible = applyVisibleWindow(prev, merged, 'append')
     const pending = filterPendingAgainstVisible(prev.pending, visible)
@@ -69,9 +69,9 @@ export function applyMessagesConsumed(
 
     const consumedIds = new Set(localIds)
     let changed = false
-    let firstConsumedMessage: DecryptedMessage | null = null
+    let firstConsumedMessage: ClientMessage | null = null
 
-    function updateList(list: DecryptedMessage[]): DecryptedMessage[] {
+    function updateList(list: ClientMessage[]): ClientMessage[] {
         return list.map((message) => {
             if (!message.localId || !consumedIds.has(message.localId)) {
                 return message
@@ -94,7 +94,7 @@ export function applyMessagesConsumed(
     }
 
     let nextPendingReply = prev.pendingReply
-    const consumedMessage = firstConsumedMessage as DecryptedMessage | null
+    const consumedMessage = firstConsumedMessage as ClientMessage | null
     if (prev.pendingReply && consumedIds.has(prev.pendingReply.localId)) {
         nextPendingReply = createPendingReplyState({
             localId: prev.pendingReply.localId,
@@ -121,7 +121,7 @@ export function applyQueuedMessagesCanceled(prev: InternalState, localIds: reado
 
     const canceledIds = new Set(localIds)
     let changed = false
-    const keepMessage = (message: DecryptedMessage): boolean => {
+    const keepMessage = (message: ClientMessage): boolean => {
         const keep = !message.localId || !canceledIds.has(message.localId) || !isQueuedForInvocation(message)
         changed ||= !keep
         return keep
@@ -186,7 +186,7 @@ export function applySessionReplyingState(
 export function applyMessageStatusUpdate(prev: InternalState, localId: string, status: MessageStatus): InternalState {
     let changed = false
 
-    function updateList(list: DecryptedMessage[]): DecryptedMessage[] {
+    function updateList(list: ClientMessage[]): ClientMessage[] {
         return list.map((message) => {
             if (message.localId !== localId || !isOptimisticMessage(message)) {
                 return message

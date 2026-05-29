@@ -116,7 +116,17 @@ export function createBridge(overrides: Partial<RemotePeerBridge> = {}): RemoteP
             ],
             nextAfterSeq: 2,
         })),
-        sendMessage: vi.fn(async () => ({ session: createSession({ updatedAt: 30, thinking: true }) })),
+        sendMessage: vi.fn(async () => ({
+            session: createSession({ updatedAt: 30, thinking: true }),
+            message: {
+                id: 'remote-sent',
+                seq: 3,
+                localId: 'local-1',
+                createdAt: 30,
+                invokedAt: 30,
+                content: { role: 'user', content: { type: 'text', text: 'hello remote' } },
+            },
+        })),
         abortSession: vi.fn(async () => ({ session: createSession({ thinking: false }) })),
         archiveSession: vi.fn(async () => ({ session: createSession({ active: false }) })),
         closeSession: vi.fn(async () => ({ session: createSession({ active: false }) })),

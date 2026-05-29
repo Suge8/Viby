@@ -70,7 +70,7 @@ export function extractMessageContent(message: AppendMessage): { text: string; a
 
 export function useVibyRuntime(props: {
     session: Session
-    isSending: boolean
+    isRunning: boolean
     onSendMessage: (text: string, attachments?: AttachmentMetadata[]) => void
     onAbort: () => Promise<void>
     attachmentAdapter?: AttachmentAdapter
@@ -98,21 +98,14 @@ export function useVibyRuntime(props: {
                 active: props.session.active,
                 allowSendWhenInactive: props.allowSendWhenInactive === true,
             }),
-            isRunning: props.session.thinking,
+            isRunning: props.isRunning,
             messages: EMPTY_MESSAGES,
             onNew,
             onCancel,
             adapters: props.attachmentAdapter ? { attachments: props.attachmentAdapter } : undefined,
             unstable_capabilities: { copy: false },
         }),
-        [
-            props.allowSendWhenInactive,
-            props.attachmentAdapter,
-            props.session.active,
-            props.session.thinking,
-            onCancel,
-            onNew,
-        ]
+        [props.allowSendWhenInactive, props.attachmentAdapter, props.isRunning, props.session.active, onCancel, onNew]
     )
 
     return useExternalStoreRuntime(adapter)

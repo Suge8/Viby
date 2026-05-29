@@ -31,6 +31,7 @@ type SessionWorkspaceRoute = typeof SESSION_WORKSPACE_FILES_ROUTE | typeof SESSI
 
 export type SessionChatRouteModelOptions = {
     api: ApiClient
+    isSessionDetailHydrated: boolean
     session: NonNullable<ReturnType<typeof useSession>['session']>
     sessionId: string
 }
@@ -67,7 +68,7 @@ export function useSessionChatRouteModel(options: SessionChatRouteModelOptions):
     const goBack = useAppGoBack()
     const navigate = useNavigate()
     const queryClient = useQueryClient()
-    const { api, session, sessionId } = options
+    const { api, isSessionDetailHydrated, session, sessionId } = options
     const {
         messages,
         pending,
@@ -105,7 +106,7 @@ export function useSessionChatRouteModel(options: SessionChatRouteModelOptions):
         api,
         queryClient,
         sessionId,
-        isSessionThinking: () => session.active && session.thinking,
+        shouldQueueSend: () => session.active && (session.thinking || pendingReply !== null || stream !== null),
     })
     const { autocompleteRefreshKey, getSuggestions: autocompleteSuggestions } = useSessionAutocompleteSuggestions({
         api,
@@ -236,7 +237,7 @@ export function useSessionChatRouteModel(options: SessionChatRouteModelOptions):
     )
 
     return {
-        isSessionDetailReady: hasLoadedLatest && !restoredFromWarmSnapshot,
+        isSessionDetailReady: isSessionDetailHydrated && hasLoadedLatest && !restoredFromWarmSnapshot,
         sessionChatProps: {
             workspace,
             actions,

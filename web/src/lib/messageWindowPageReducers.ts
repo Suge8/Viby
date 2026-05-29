@@ -9,11 +9,11 @@ import {
     resolveStreamAfterMessages,
 } from '@/lib/messageWindowState'
 import type { MessageWindowWarningKey } from '@/lib/messageWindowWarnings'
-import type { DecryptedMessage } from '@/types/api'
+import type { ClientMessage } from '@/types/api'
 
 export function applyLatestMessagesPage(
     prev: InternalState,
-    messages: DecryptedMessage[],
+    messages: ClientMessage[],
     hasMore: boolean
 ): InternalState {
     const nextStream = resolveStreamAfterMessages(prev.stream, messages)
@@ -64,7 +64,7 @@ export function applyLatestMessagesError(prev: InternalState, warning: MessageWi
 
 export function applyOlderMessagesPage(options: {
     prev: InternalState
-    messages: DecryptedMessage[]
+    messages: ClientMessage[]
     hasMore: boolean
     oldestSeq: number
 }): {
@@ -89,7 +89,7 @@ export function applyOlderMessagesPage(options: {
 
 export function applyOlderMessagesUntilPreviousUserPage(options: {
     prev: InternalState
-    accumulated: DecryptedMessage[]
+    accumulated: ClientMessage[]
     hasMore: boolean
     didLoadOlderMessages: boolean
 }): InternalState {
@@ -109,7 +109,7 @@ export function applyLoadingMoreError(prev: InternalState, warning: MessageWindo
     return buildState(prev, { isLoadingMore: false, warning })
 }
 
-export function applyIncomingMessages(prev: InternalState, incoming: DecryptedMessage[]): InternalState {
+export function applyIncomingMessages(prev: InternalState, incoming: ClientMessage[]): InternalState {
     const nextStream = resolveStreamAfterMessages(prev.stream, incoming)
     const nextPendingReply = resolvePendingReplyAfterMessages(prev.pendingReply, incoming)
 

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getMessageWindowState, removeMessageWindow } from '@/lib/message-window-store'
 import { queryKeys } from '@/lib/query-keys'
-import { createApiHarness, createSessionView } from './remotePeerApiClient.test.support'
+import { createApiHarness, createSession, createSessionView } from './remotePeerApiClient.test.support'
 
 describe('createRemotePeerApiClient', () => {
     afterEach(() => {
@@ -168,14 +168,40 @@ describe('createRemotePeerApiClient', () => {
     it('sends messages through the peer bridge without creating a second Hub client', async () => {
         const { api, bridge } = createApiHarness()
 
-        const session = await api.sendMessage('session-1', 'hello remote', 'local-1')
+        const response = await api.sendMessage('session-1', 'hello remote', 'local-1')
 
         expect(bridge.sendMessage).toHaveBeenCalledWith({
             sessionId: 'session-1',
             text: 'hello remote',
             localId: 'local-1',
         })
-        expect(session.thinking).toBe(true)
+        expect(response.session.thinking).toBe(true)
+    })
+
+    it('preserves authoritative queued messages returned by the peer bridge', async () => {
+        const { api, bridge } = createApiHarness()
+        vi.mocked(bridge.sendMessage).mockResolvedValueOnce({
+            session: createSession({ updatedAt: 31, thinking: true }),
+            message: {
+                id: 'remote-queued',
+                seq: 9,
+                localId: 'local-queued',
+                createdAt: 3_000,
+                invokedAt: null,
+                content: {
+                    role: 'user',
+                    content: { type: 'text', text: 'queued remote' },
+                },
+            },
+        })
+
+        const response = await api.sendMessage('session-1', 'queued remote', 'local-queued')
+
+        expect(response.message).toMatchObject({
+            id: 'remote-queued',
+            localId: 'local-queued',
+            invokedAt: null,
+        })
     })
 
     it('delegates runtime project selection to the desktop bridge', async () => {

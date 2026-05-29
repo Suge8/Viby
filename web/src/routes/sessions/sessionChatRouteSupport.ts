@@ -20,7 +20,7 @@ type SessionSendActionsOptions = {
     api: ApiClient
     queryClient: QueryClient
     sessionId: string
-    isSessionThinking: () => boolean
+    shouldQueueSend: () => boolean
 }
 
 type SessionAutocompleteSuggestionsOptions = {
@@ -42,7 +42,7 @@ type SessionAutocompleteSuggestionsModel = {
 }
 
 export function useSessionChatSendActions(options: SessionSendActionsOptions): ReturnType<typeof useSendMessage> {
-    const { api, isSessionThinking, queryClient, sessionId } = options
+    const { api, shouldQueueSend, queryClient, sessionId } = options
     const { t } = useTranslation()
     const { addToast } = useNoticeCenter()
 
@@ -103,7 +103,7 @@ export function useSessionChatSendActions(options: SessionSendActionsOptions): R
     )
 
     return useSendMessage(api, sessionId, {
-        isSessionThinking,
+        shouldQueueSend,
         onBlocked: handleSendBlocked,
         onSendStart: handleSendStart,
         afterServerAccepted: handleAfterServerAccepted,

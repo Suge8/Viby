@@ -1,13 +1,13 @@
 import { QueryClient } from '@tanstack/react-query'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { ApiClient } from '@/api/client'
-import type { DecryptedMessage, MessagesResponse, SessionRecoveryPage, SessionViewSnapshot } from '@/types/api'
+import type { ClientMessage, MessagesResponse, SessionRecoveryPage, SessionViewSnapshot } from '@/types/api'
 import { clearMessageWindow, fetchLatestMessages, getMessageWindowState } from './message-window-store'
 import { queryKeys } from './query-keys'
 import { runRealtimeRecovery } from './realtimeRecovery'
 import { reconcileSessionView } from './sessionViewReconciler'
 
-function buildMessage(seq: number): DecryptedMessage {
+function buildMessage(seq: number): ClientMessage {
     return {
         id: `message-${seq}`,
         seq,

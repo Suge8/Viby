@@ -10,7 +10,7 @@ import {
     MESSAGE_WINDOW_POST_SWITCH_SEND_FAILED_WARNING_KEY,
     type MessageWindowWarningKey,
 } from '@/lib/messageWindowWarnings'
-import type { DecryptedMessage, Session, SessionStreamState } from '@/types/api'
+import type { ClientMessage, Session, SessionStreamState } from '@/types/api'
 import { useSessionChatRouteModel } from './useSessionChatRouteModel'
 
 const harness = vi.hoisted(() => ({
@@ -19,9 +19,10 @@ const harness = vi.hoisted(() => ({
     clearMessageWindowWarning: vi.fn(),
     clearPendingReply: vi.fn(),
     fetchLatestMessages: vi.fn(async () => undefined),
-    getMessageWindowState: vi.fn<() => { messages: DecryptedMessage[]; warning: MessageWindowWarningKey | null }>(
-        () => ({ messages: [], warning: null })
-    ),
+    getMessageWindowState: vi.fn<() => { messages: ClientMessage[]; warning: MessageWindowWarningKey | null }>(() => ({
+        messages: [],
+        warning: null,
+    })),
     goBack: vi.fn(),
     runSendCatchup: vi.fn(),
     sendMessage: vi.fn(),
@@ -53,8 +54,8 @@ type LoadMoreResult = {
 }
 
 type MessagesState = {
-    messages: DecryptedMessage[]
-    pending: DecryptedMessage[]
+    messages: ClientMessage[]
+    pending: ClientMessage[]
     warning: MessageWindowWarningKey | null
     isLoading: boolean
     isLoadingMore: boolean
@@ -73,8 +74,8 @@ type MessagesState = {
 }
 
 const messagesState: MessagesState = {
-    messages: [] as DecryptedMessage[],
-    pending: [] as DecryptedMessage[],
+    messages: [] as ClientMessage[],
+    pending: [] as ClientMessage[],
     warning: null as MessageWindowWarningKey | null,
     isLoading: false,
     isLoadingMore: false,
@@ -192,7 +193,7 @@ function createSession(): Session {
     }
 }
 
-function createUserMessage(createdAt: number): DecryptedMessage {
+function createUserMessage(createdAt: number): ClientMessage {
     return {
         id: `user-${createdAt}`,
         seq: createdAt,
@@ -208,7 +209,7 @@ function createUserMessage(createdAt: number): DecryptedMessage {
     }
 }
 
-function createAgentMessage(createdAt: number): DecryptedMessage {
+function createAgentMessage(createdAt: number): ClientMessage {
     return {
         id: `agent-${createdAt}`,
         seq: createdAt,
@@ -265,6 +266,7 @@ describe('useSessionChatRouteModel', () => {
             () =>
                 useSessionChatRouteModel({
                     api: {} as ApiClient,
+                    isSessionDetailHydrated: true,
                     session: createSession(),
                     sessionId: 'session-1',
                 }),
@@ -284,6 +286,26 @@ describe('useSessionChatRouteModel', () => {
             () =>
                 useSessionChatRouteModel({
                     api: {} as ApiClient,
+                    isSessionDetailHydrated: true,
+                    session: createSession(),
+                    sessionId: 'session-1',
+                }),
+            {
+                wrapper: createWrapper(queryClient),
+            }
+        )
+
+        expect(result.current.isSessionDetailReady).toBe(false)
+    })
+
+    it('keeps the chat route pending until the authoritative session detail is hydrated', () => {
+        const queryClient = createQueryClient()
+
+        const { result } = renderHook(
+            () =>
+                useSessionChatRouteModel({
+                    api: {} as ApiClient,
+                    isSessionDetailHydrated: false,
                     session: createSession(),
                     sessionId: 'session-1',
                 }),
@@ -311,6 +333,7 @@ describe('useSessionChatRouteModel', () => {
             () =>
                 useSessionChatRouteModel({
                     api,
+                    isSessionDetailHydrated: true,
                     session: createSession(),
                     sessionId: 'session-1',
                 }),
@@ -380,6 +403,7 @@ describe('useSessionChatRouteModel', () => {
             () =>
                 useSessionChatRouteModel({
                     api,
+                    isSessionDetailHydrated: true,
                     session: createSession(),
                     sessionId: 'session-1',
                 }),
@@ -462,6 +486,7 @@ describe('useSessionChatRouteModel', () => {
             () =>
                 useSessionChatRouteModel({
                     api,
+                    isSessionDetailHydrated: true,
                     session: createSession(),
                     sessionId: 'session-1',
                 }),
@@ -542,6 +567,7 @@ describe('useSessionChatRouteModel', () => {
             () =>
                 useSessionChatRouteModel({
                     api,
+                    isSessionDetailHydrated: true,
                     session: createSession(),
                     sessionId: 'session-1',
                 }),
@@ -579,6 +605,7 @@ describe('useSessionChatRouteModel', () => {
             () =>
                 useSessionChatRouteModel({
                     api: {} as ApiClient,
+                    isSessionDetailHydrated: true,
                     session: {
                         ...closedSession,
                         active: false,
@@ -607,6 +634,7 @@ describe('useSessionChatRouteModel', () => {
             () =>
                 useSessionChatRouteModel({
                     api: {} as ApiClient,
+                    isSessionDetailHydrated: true,
                     session: {
                         ...createSession(),
                         active: false,
@@ -640,6 +668,7 @@ describe('useSessionChatRouteModel', () => {
             () =>
                 useSessionChatRouteModel({
                     api: {} as ApiClient,
+                    isSessionDetailHydrated: true,
                     session: {
                         ...createSession(),
                         active: false,
@@ -664,9 +693,34 @@ describe('useSessionChatRouteModel', () => {
             }
         )
 
-        const isSessionThinking = harness.sendMessageOptions?.isSessionThinking as () => boolean
+        const shouldQueueSend = harness.sendMessageOptions?.shouldQueueSend as () => boolean
 
-        expect(isSessionThinking()).toBe(false)
+        expect(shouldQueueSend()).toBe(false)
+    })
+
+    it('queues sends while a stream is active even before session thinking catches up', async () => {
+        const queryClient = createQueryClient()
+        messagesState.stream = {
+            assistantTurnId: 'turn-1',
+            startedAt: 1,
+            updatedAt: 2,
+            text: 'still streaming',
+        }
+
+        renderHook(
+            () =>
+                useSessionChatRouteModel({
+                    api: {} as ApiClient,
+                    isSessionDetailHydrated: true,
+                    session: { ...createSession(), thinking: false },
+                    sessionId: 'session-1',
+                }),
+            { wrapper: createWrapper(queryClient) }
+        )
+
+        const shouldQueueSend = harness.sendMessageOptions?.shouldQueueSend as () => boolean
+
+        expect(shouldQueueSend()).toBe(true)
     })
 
     it('shows the mapped recovery toast when the Hub-owned send chain rejects during recovery', async () => {
@@ -676,6 +730,7 @@ describe('useSessionChatRouteModel', () => {
             () =>
                 useSessionChatRouteModel({
                     api: {} as ApiClient,
+                    isSessionDetailHydrated: true,
                     session: createSession(),
                     sessionId: 'session-1',
                 }),
@@ -723,6 +778,7 @@ describe('useSessionChatRouteModel', () => {
             () =>
                 useSessionChatRouteModel({
                     api,
+                    isSessionDetailHydrated: true,
                     session: createSession(),
                     sessionId: 'session-1',
                 }),

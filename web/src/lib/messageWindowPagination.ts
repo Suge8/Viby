@@ -2,16 +2,16 @@ import { findNextRecoveryCursor } from '@viby/protocol'
 import type { ApiClient } from '@/api/client'
 import { mergeMessages } from '@/lib/messages'
 import { batchContainsHistoryJumpTarget } from '@/lib/messageWindowState'
-import type { DecryptedMessage } from '@/types/api'
+import type { ClientMessage } from '@/types/api'
 
 export async function loadMessagesAfter(
     api: ApiClient,
     sessionId: string,
     afterSeq: number,
     pageSize: number
-): Promise<DecryptedMessage[]> {
+): Promise<ClientMessage[]> {
     let cursor = afterSeq
-    const collected: DecryptedMessage[] = []
+    const collected: ClientMessage[] = []
 
     while (true) {
         const response = await api.getMessages(sessionId, {
@@ -44,14 +44,14 @@ export async function loadOlderMessagesUntilPreviousUser(options: {
     initialHasMore: boolean
     pageSize: number
 }): Promise<{
-    accumulated: DecryptedMessage[]
+    accumulated: ClientMessage[]
     didLoadOlderMessages: boolean
     hasMore: boolean
 }> {
     let beforeSeq: number | null = options.initialOldestSeq
     let hasMore = options.initialHasMore
     let didLoadOlderMessages = false
-    let accumulated: DecryptedMessage[] = []
+    let accumulated: ClientMessage[] = []
 
     while (hasMore && beforeSeq !== null) {
         const response = await options.api.getMessages(options.sessionId, {

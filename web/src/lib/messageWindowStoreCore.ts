@@ -31,7 +31,7 @@ import {
 } from '@/lib/messageWindowWarmSnapshot'
 import type { MessageWindowWarningKey } from '@/lib/messageWindowWarnings'
 import { MESSAGE_WINDOW_PENDING_OVERFLOW_WARNING_KEY } from '@/lib/messageWindowWarnings'
-import type { DecryptedMessage, MessageStatus, SessionStreamState } from '@/types/api'
+import type { ClientMessage, MessageStatus, SessionStreamState } from '@/types/api'
 
 export type {
     InternalState,
@@ -199,7 +199,7 @@ export function clearSessionStream(sessionId: string, assistantTurnId?: string):
     updateMessageWindowState(sessionId, (prev) => applyClearedSessionStream(prev, assistantTurnId))
 }
 
-export function ingestIncomingMessages(sessionId: string, incoming: DecryptedMessage[]): void {
+export function ingestIncomingMessages(sessionId: string, incoming: ClientMessage[]): void {
     if (incoming.length === 0) {
         return
     }
@@ -270,7 +270,7 @@ export function clearMessageWindowWarning(sessionId: string, warning?: MessageWi
     )
 }
 
-export function appendOptimisticMessage(sessionId: string, message: DecryptedMessage): void {
+export function appendOptimisticMessage(sessionId: string, message: ClientMessage): void {
     updateMessageWindowState(sessionId, (prev) => applyAppendedOptimisticMessage(prev, message), { immediate: true })
 }
 
@@ -322,6 +322,30 @@ export function setSessionReplyingState(sessionId: string, replyingState: Sessio
             }),
         { immediate: true }
     )
+}
+
+export function applyAcceptedUserMessage(options: {
+    sessionId: string
+    localId: string
+    queuedForInvocation: boolean
+    message: ClientMessage
+    acceptedAt: number
+}): void {
+    if (options.queuedForInvocation && typeof options.message.invokedAt === 'number') {
+        markMessagesConsumed(options.sessionId, [options.localId], options.message.invokedAt)
+    }
+
+    ingestIncomingMessages(options.sessionId, [options.message])
+    updateMessageStatus(options.sessionId, options.localId, options.message.invokedAt === null ? 'queued' : 'sent')
+
+    if (options.message.invokedAt === null) {
+        clearPendingReply(options.sessionId, options.localId)
+        return
+    }
+
+    if (!options.queuedForInvocation) {
+        markPendingReplyAccepted(options.sessionId, options.localId, options.acceptedAt)
+    }
 }
 
 export function updateMessageStatus(sessionId: string, localId: string, status: MessageStatus): void {

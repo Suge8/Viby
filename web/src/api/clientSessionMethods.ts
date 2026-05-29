@@ -24,9 +24,10 @@ import {
     isDriverSwitchResponse,
     isResumeSessionLegacyResponse,
     isResumeSessionResponse,
+    isSendMessageResponse,
     isSessionActionLegacyResponse,
-    isSessionActionResponse,
     normalizeApprovePermissionBody,
+    type SendMessageResponse,
     type SessionSnapshotAction,
 } from './clientSessionSupport'
 
@@ -146,7 +147,7 @@ export function createApiClientSessionMethods(core: {
             text: string,
             localId?: string | null,
             attachments?: AttachmentMetadata[]
-        ): Promise<Session> {
+        ): Promise<SendMessageResponse> {
             const response = await core.requestUnknown(`/api/sessions/${encodeURIComponent(sessionId)}/messages`, {
                 method: 'POST',
                 body: JSON.stringify({
@@ -156,14 +157,10 @@ export function createApiClientSessionMethods(core: {
                 }),
             })
 
-            if (isSessionActionResponse(response)) {
-                return response.session
+            if (!isSendMessageResponse(response)) {
+                throw new Error('Invalid send message response')
             }
-            if (isSessionActionLegacyResponse(response)) {
-                return await core.fetchSessionSnapshot(sessionId)
-            }
-
-            throw new Error('Invalid send message response')
+            return response
         },
 
         async cancelQueuedMessages(sessionId: string, localIds: string[]): Promise<string[]> {

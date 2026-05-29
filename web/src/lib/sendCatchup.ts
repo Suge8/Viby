@@ -1,14 +1,14 @@
-import { normalizeDecryptedMessage } from '@/chat/normalize'
+import { normalizeClientMessage } from '@/chat/normalize'
 import type { AgentEvent } from '@/chat/types'
 import { isUserMessage } from '@/lib/messages'
-import type { DecryptedMessage } from '@/types/api'
+import type { ClientMessage } from '@/types/api'
 
 export const SEND_CATCHUP_TIMEOUT_MS = 1250
 
 export type DriverSwitchSendFailedEvent = Extract<AgentEvent, { type: 'driver-switch-send-failed' }>
 
 type CatchupSnapshot = {
-    messages: DecryptedMessage[]
+    messages: ClientMessage[]
 }
 
 type DriverSwitchedEvent = Extract<AgentEvent, { type: 'driver-switched' }>
@@ -16,7 +16,7 @@ type DriverSwitchedEvent = Extract<AgentEvent, { type: 'driver-switched' }>
 export type SendCatchupOutcome =
     | {
           type: 'reply-detected'
-          reply: DecryptedMessage
+          reply: ClientMessage
           attempt: number
       }
     | {
@@ -35,13 +35,10 @@ interface CatchupOptions {
     syncOnce?: () => Promise<void>
     subscribe?: (listener: () => void) => () => void
     timeoutMs?: number
-    onReplyDetected?: (info: { reply: DecryptedMessage; attempt: number }) => void
+    onReplyDetected?: (info: { reply: ClientMessage; attempt: number }) => void
 }
 
-export function findFirstAgentReplyAfter(
-    messages: readonly DecryptedMessage[],
-    createdAt: number
-): DecryptedMessage | null {
+export function findFirstAgentReplyAfter(messages: readonly ClientMessage[], createdAt: number): ClientMessage | null {
     for (const message of messages) {
         if (message.createdAt < createdAt) {
             continue
@@ -53,16 +50,16 @@ export function findFirstAgentReplyAfter(
     return null
 }
 
-function isAgentReplyMessage(message: DecryptedMessage): boolean {
+function isAgentReplyMessage(message: ClientMessage): boolean {
     if (isUserMessage(message)) {
         return false
     }
 
-    return normalizeDecryptedMessage(message)?.role === 'agent'
+    return normalizeClientMessage(message)?.role === 'agent'
 }
 
-function normalizeDriverSwitchSendFailedEvent(message: DecryptedMessage): DriverSwitchSendFailedEvent | null {
-    const normalized = normalizeDecryptedMessage(message)
+function normalizeDriverSwitchSendFailedEvent(message: ClientMessage): DriverSwitchSendFailedEvent | null {
+    const normalized = normalizeClientMessage(message)
     if (!normalized || normalized.role !== 'event' || normalized.content.type !== 'driver-switch-send-failed') {
         return null
     }
@@ -77,8 +74,8 @@ function normalizeDriverSwitchSendFailedEvent(message: DecryptedMessage): Driver
     }
 }
 
-function normalizeDriverSwitchedEvent(message: DecryptedMessage): DriverSwitchedEvent | null {
-    const normalized = normalizeDecryptedMessage(message)
+function normalizeDriverSwitchedEvent(message: ClientMessage): DriverSwitchedEvent | null {
+    const normalized = normalizeClientMessage(message)
     if (!normalized || normalized.role !== 'event' || normalized.content.type !== 'driver-switched') {
         return null
     }
@@ -91,7 +88,7 @@ function normalizeDriverSwitchedEvent(message: DecryptedMessage): DriverSwitched
     }
 }
 
-export function shouldRunPostSwitchCatchup(messages: readonly DecryptedMessage[], createdAt: number): boolean {
+export function shouldRunPostSwitchCatchup(messages: readonly ClientMessage[], createdAt: number): boolean {
     for (let index = messages.length - 1; index >= 0; index -= 1) {
         const message = messages[index]
         if (message.createdAt >= createdAt) {
@@ -110,12 +107,12 @@ export function shouldRunPostSwitchCatchup(messages: readonly DecryptedMessage[]
 }
 
 function detectCatchupOutcome(
-    messages: readonly DecryptedMessage[],
+    messages: readonly ClientMessage[],
     createdAt: number
 ):
     | {
           type: 'reply-detected'
-          reply: DecryptedMessage
+          reply: ClientMessage
       }
     | {
           type: 'driver-switch-send-failed'
@@ -149,8 +146,8 @@ function detectCatchupOutcome(
 function readCatchupOutcome(options: {
     createdAt: number
     attempt: number
-    messages: readonly DecryptedMessage[]
-    onReplyDetected?: (info: { reply: DecryptedMessage; attempt: number }) => void
+    messages: readonly ClientMessage[]
+    onReplyDetected?: (info: { reply: ClientMessage; attempt: number }) => void
 }): SendCatchupOutcome | null {
     const outcome = detectCatchupOutcome(options.messages, options.createdAt)
     if (outcome?.type === 'reply-detected') {
