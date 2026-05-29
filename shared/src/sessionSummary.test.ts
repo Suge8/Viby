@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'bun:test'
 import type { SessionSummary } from './sessionSummary'
-import { compareSessionSummaries, getSessionSummarySortTimestamp, toSessionSummary } from './sessionSummary'
+import {
+    compareSessionSummaries,
+    getSessionSummarySortTimestamp,
+    projectSessionSummaryActiveStream,
+    toSessionSummary,
+} from './sessionSummary'
 
 function createSessionSummary(overrides: Partial<SessionSummary> & Pick<SessionSummary, 'id'>): SessionSummary {
     const { id, codexServiceTier = null, ...restOverrides } = overrides
@@ -51,21 +56,43 @@ describe('sessionSummary ordering', () => {
         ).toEqual(['running-newer', 'running-older'])
     })
 
-    it('keeps closed sessions ordered by updatedAt', () => {
+    it('keeps closed sessions ordered by completed reply time instead of noisy updatedAt', () => {
+        const olderCompletedSession = createSessionSummary({
+            id: 'closed-older-completed',
+            updatedAt: 10_000,
+            latestCompletedReplyAt: 1_000,
+            lifecycleState: 'closed',
+            lifecycleStateSince: 1_100,
+        })
+        const newerCompletedSession = createSessionSummary({
+            id: 'closed-newer-completed',
+            updatedAt: 5_000,
+            latestCompletedReplyAt: 4_000,
+            lifecycleState: 'closed',
+            lifecycleStateSince: 4_100,
+        })
+
+        expect(getSessionSummarySortTimestamp(olderCompletedSession)).toBe(1_000)
+        expect(
+            [olderCompletedSession, newerCompletedSession].sort(compareSessionSummaries).map((session) => session.id)
+        ).toEqual(['closed-newer-completed', 'closed-older-completed'])
+    })
+
+    it('falls back to lifecycle time for closed sessions without completed replies', () => {
         const olderClosedSession = createSessionSummary({
             id: 'closed-older',
-            updatedAt: 1_000,
+            updatedAt: 10_000,
             lifecycleState: 'closed',
-            lifecycleStateSince: 100,
+            lifecycleStateSince: 1_000,
         })
         const newerClosedSession = createSessionSummary({
             id: 'closed-newer',
             updatedAt: 5_000,
             lifecycleState: 'closed',
-            lifecycleStateSince: 50,
+            lifecycleStateSince: 4_000,
         })
 
-        expect(getSessionSummarySortTimestamp(newerClosedSession)).toBe(5_000)
+        expect(getSessionSummarySortTimestamp(olderClosedSession)).toBe(1_000)
         expect(
             [olderClosedSession, newerClosedSession].sort(compareSessionSummaries).map((session) => session.id)
         ).toEqual(['closed-newer', 'closed-older'])
@@ -95,6 +122,47 @@ describe('sessionSummary ordering', () => {
         expect(
             [closedSession, openSession, runningSession].sort(compareSessionSummaries).map((session) => session.id)
         ).toEqual(['running', 'open', 'closed'])
+    })
+})
+
+describe('projectSessionSummaryActiveStream', () => {
+    it('projects active transient streams as uncompleted replies without changing sort time', () => {
+        const summary = createSessionSummary({
+            id: 'streaming-session',
+            active: true,
+            updatedAt: 10_000,
+            latestActivityAt: 4_000,
+            latestActivityKind: 'ready',
+            latestCompletedReplyAt: 4_000,
+            lifecycleState: 'running',
+        })
+
+        const projected = projectSessionSummaryActiveStream(summary, {
+            startedAt: 5_000,
+            updatedAt: 5_500,
+        })
+
+        expect(projected).toMatchObject({
+            latestActivityAt: 5_500,
+            latestActivityKind: 'reply',
+            latestCompletedReplyAt: 4_000,
+            updatedAt: 10_000,
+        })
+    })
+
+    it('keeps active streams processing even when their timestamps are stale', () => {
+        const projected = projectSessionSummaryActiveStream(
+            createSessionSummary({
+                id: 'stale-streaming-session',
+                latestActivityAt: 4_000,
+                latestActivityKind: 'ready',
+                latestCompletedReplyAt: 4_000,
+            }),
+            { startedAt: 1, updatedAt: 2 }
+        )
+
+        expect(projected.latestActivityAt).toBe(4_001)
+        expect(projected.latestActivityKind).toBe('reply')
     })
 })
 

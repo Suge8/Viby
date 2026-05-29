@@ -59,7 +59,7 @@ export function resolveInactiveSessionLifecycleState(
         return 'archived'
     }
 
-    if (lifecycleState === 'open') {
+    if (lifecycleState === 'open' || lifecycleState === 'running') {
         return 'open'
     }
 

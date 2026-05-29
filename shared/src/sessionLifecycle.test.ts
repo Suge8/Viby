@@ -14,6 +14,7 @@ import {
 describe('sessionLifecycle section helpers', () => {
     it('normalizes inactive lifecycle state through a single helper', () => {
         expect(resolveInactiveSessionLifecycleState(undefined)).toBe('closed')
+        expect(resolveInactiveSessionLifecycleState('running')).toBe('open')
         expect(resolveInactiveSessionLifecycleState('open')).toBe('open')
         expect(resolveInactiveSessionLifecycleState('archived')).toBe('archived')
         expect(isSessionLifecycleState('open')).toBe(true)

@@ -128,6 +128,15 @@ export const UpdateCancelMessagesBodySchema = z.object({
 
 export type UpdateCancelMessagesBody = z.infer<typeof UpdateCancelMessagesBodySchema>
 
+export const SessionRuntimeStatePayloadSchema = z.object({
+    sid: z.string().min(1),
+    time: z.number(),
+    state: z.literal('stopping'),
+    reason: z.enum(['idle-timeout', 'user-request', 'shutdown']).optional(),
+})
+
+export type SessionRuntimeStatePayload = z.infer<typeof SessionRuntimeStatePayloadSchema>
+
 export const UpdateSessionBodySchema = z.object({
     t: z.literal('update-session'),
     sid: z.string(),
@@ -207,6 +216,7 @@ export interface ClientToServerEvents {
         collaborationMode?: CodexCollaborationMode
     }) => void
     'session-end': (data: { sid: string; time: number }) => void
+    'session-runtime-state': (data: SessionRuntimeStatePayload) => void
     'update-metadata': (
         data: {
             sid: string

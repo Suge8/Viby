@@ -1,5 +1,5 @@
 import type { CodexCollaborationMode, ModelReasoningEffort, PermissionMode } from './modes'
-import type { Session, SessionDriver, SessionDriverHandles, WorktreeMetadata } from './schemas'
+import type { Session, SessionDriver, SessionDriverHandles, SessionStreamState, WorktreeMetadata } from './schemas'
 import {
     createEmptySessionMessageActivity,
     type SessionActivityKind,
@@ -8,7 +8,7 @@ import {
 import { resolveSessionDriver } from './sessionDriver'
 import { getSessionLifecycleRank, resolveSessionInteractivity, type SessionLifecycleState } from './sessionLifecycle'
 import { resolveSessionResumeState, type SessionResumeStrategy } from './sessionResume'
-import { getPendingRequestsCount } from './sessionTurnState'
+import { getActiveSessionTurnState, getPendingRequestsCount } from './sessionTurnState'
 
 export type SessionSummaryMetadata = {
     name?: string
@@ -49,9 +49,15 @@ export type SessionSummary = {
     collaborationMode?: CodexCollaborationMode
 }
 
-type SessionSummarySortTimestampSource = Pick<SessionSummary, 'lifecycleState' | 'lifecycleStateSince' | 'updatedAt'>
+type SessionSummarySortTimestampSource = Pick<
+    SessionSummary,
+    'latestCompletedReplyAt' | 'lifecycleState' | 'lifecycleStateSince' | 'updatedAt'
+>
 
-type SessionSummaryOrderSource = Pick<SessionSummary, 'id' | 'lifecycleState' | 'lifecycleStateSince' | 'updatedAt'>
+type SessionSummaryOrderSource = Pick<
+    SessionSummary,
+    'id' | 'latestCompletedReplyAt' | 'lifecycleState' | 'lifecycleStateSince' | 'updatedAt'
+>
 
 export function resolveSessionSummaryUpdatedAt(
     sessionUpdatedAt: number,
@@ -61,11 +67,11 @@ export function resolveSessionSummaryUpdatedAt(
 }
 
 export function getSessionSummarySortTimestamp(summary: SessionSummarySortTimestampSource): number {
-    if (summary.lifecycleState === 'running') {
-        return summary.lifecycleStateSince ?? 0
+    if (summary.lifecycleState === 'running' || summary.lifecycleState === 'open') {
+        return summary.lifecycleStateSince ?? summary.latestCompletedReplyAt ?? summary.updatedAt
     }
 
-    return summary.updatedAt
+    return summary.latestCompletedReplyAt ?? summary.lifecycleStateSince ?? summary.updatedAt
 }
 
 export function compareSessionSummaries(left: SessionSummaryOrderSource, right: SessionSummaryOrderSource): number {
@@ -80,6 +86,21 @@ export function compareSessionSummaries(left: SessionSummaryOrderSource, right: 
     }
 
     return left.id.localeCompare(right.id)
+}
+
+export function projectSessionSummaryActiveStream(
+    summary: SessionSummary,
+    stream: Pick<SessionStreamState, 'startedAt' | 'updatedAt'> | null | undefined
+): SessionSummary {
+    if (!stream || getActiveSessionTurnState(summary) === 'processing') {
+        return summary
+    }
+
+    return {
+        ...summary,
+        latestActivityAt: getTransientStreamActivityAt(summary, stream),
+        latestActivityKind: 'reply',
+    }
 }
 
 export function toSessionSummary(session: Session, messageActivity?: SessionMessageActivity): SessionSummary {
@@ -163,6 +184,21 @@ export function getSessionMessageActivityFromSession(session: Session): SessionM
         latestActivityKind: session.latestActivityKind ?? null,
         latestCompletedReplyAt: session.latestCompletedReplyAt ?? null,
     }
+}
+
+function getTransientStreamActivityAt(
+    summary: Pick<SessionSummary, 'latestActivityAt' | 'latestCompletedReplyAt'>,
+    stream: Pick<SessionStreamState, 'startedAt' | 'updatedAt'>
+): number {
+    const streamActivityAt = Math.max(
+        normalizeTransientTimestamp(stream.startedAt),
+        normalizeTransientTimestamp(stream.updatedAt)
+    )
+    return Math.max(streamActivityAt, summary.latestActivityAt ?? 0, (summary.latestCompletedReplyAt ?? 0) + 1)
+}
+
+function normalizeTransientTimestamp(value: number): number {
+    return Number.isFinite(value) && value > 0 ? value : 0
 }
 
 function resolveLatestActivityKind(

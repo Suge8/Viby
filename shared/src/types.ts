@@ -17,6 +17,8 @@ export type {
     AgentConfigResponse,
     AgentConfigVersionState,
     AgentConfigVersionStatus,
+    OpenAgentConfigRequest,
+    OpenAgentConfigResponse,
     RestoreAgentConfigRequest,
     RestoreAgentConfigResponse,
     SaveAgentConfigRequest,
@@ -120,10 +122,22 @@ export type {
 } from './schemas'
 export type { SessionActivityKind, SessionMessageActivity } from './sessionActivity'
 export type {
+    SessionAttentionNotificationInput,
+    SessionAttentionNotificationKind,
+    SessionAttentionNotificationPresentation,
+    SessionAttentionNotificationTone,
+} from './sessionAttentionNotification'
+export type { SessionAttentionPatch } from './sessionAttentionPatch'
+export type {
     SessionDriver,
     SessionDriverHandles,
     SessionDriverRuntimeHandle,
 } from './sessionDriver'
+export type {
+    AssistantErrorEvent,
+    CliSessionEventPayload,
+    SessionAgentEvent,
+} from './sessionEvents'
 export type {
     SessionHandoffAttachment,
     SessionHandoffContractErrorCode,

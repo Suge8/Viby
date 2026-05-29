@@ -13,8 +13,9 @@ export interface HubRuntimeStatus {
     preferredBrowserUrl: string
     publicUrl: string
     publicAccessEnabled: boolean
+    /** True when this Hub watches settings.toml and hot-reloads the public access policy. Absent on older Hub builds. */
+    publicAccessHotReload?: boolean
     pairingBrokerUrl?: string | null
-    pairingCode?: string
     hubOwnerToken: string
     settingsFile: string
     dataDir: string

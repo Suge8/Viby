@@ -4,8 +4,11 @@ export type ActiveSessionTurnState = 'processing' | 'awaiting-input'
 
 export type SessionTurnStateOptions = Readonly<{
     thinking: boolean
+    activeAt: number | null
     pendingRequestsCount: number
+    latestActivityAt: number | null
     latestActivityKind: SessionActivityKind | null
+    latestCompletedReplyAt: number | null
 }>
 
 export type SessionReadyForInputOptions = SessionTurnStateOptions &
@@ -13,12 +16,9 @@ export type SessionReadyForInputOptions = SessionTurnStateOptions &
         active: boolean
     }>
 
-const PROCESSING_ACTIVITY_KINDS: readonly SessionActivityKind[] = ['reply', 'user']
+const REPLY_ACTIVITY_KIND: SessionActivityKind = 'reply'
+const USER_ACTIVITY_KIND: SessionActivityKind = 'user'
 const READY_ACTIVITY_KIND: SessionActivityKind = 'ready'
-
-function isProcessingActivityKind(kind: SessionActivityKind | null): boolean {
-    return kind !== null && PROCESSING_ACTIVITY_KINDS.includes(kind)
-}
 
 export function getPendingRequestsCount(
     agentState:
@@ -41,7 +41,11 @@ export function getActiveSessionTurnState(options: SessionTurnStateOptions): Act
         return 'processing'
     }
 
-    if (isProcessingActivityKind(options.latestActivityKind)) {
+    if (options.latestActivityKind === USER_ACTIVITY_KIND) {
+        return 'processing'
+    }
+
+    if (hasUncompletedReply(options)) {
         return 'processing'
     }
 
@@ -57,6 +61,23 @@ export function isSessionReadyForInput(options: SessionReadyForInputOptions): bo
         options.active &&
         !options.thinking &&
         options.pendingRequestsCount === 0 &&
-        options.latestActivityKind === READY_ACTIVITY_KIND
+        options.latestActivityKind === READY_ACTIVITY_KIND &&
+        options.latestCompletedReplyAt !== null
+    )
+}
+
+function hasUncompletedReply(options: SessionTurnStateOptions): boolean {
+    return (
+        options.latestActivityKind === REPLY_ACTIVITY_KIND &&
+        options.latestActivityAt !== null &&
+        !hasCompletedReply(options)
+    )
+}
+
+function hasCompletedReply(options: SessionTurnStateOptions): boolean {
+    return (
+        options.latestCompletedReplyAt !== null &&
+        options.latestActivityAt !== null &&
+        options.latestActivityAt <= options.latestCompletedReplyAt
     )
 }
