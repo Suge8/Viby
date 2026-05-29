@@ -23,11 +23,15 @@ Broker 不维护 connected/ready/peer-left 业务状态。WebSocket 在线只是
 
 ## Socket contract
 
-`/pairings/:id/ws` 只允许 WebRTC signal：
+`/pairings/:id/ws` 客户端只允许 WebRTC signal：
 
 - `description`
 - `candidate`
 - `bye`
+
+Broker 可向 host 发送内部控制帧：
+
+- `peer-replaced`：guest token 被 PWA handoff 或设备重连旋转，host 必须丢弃旧 WebRTC peer 并为新 guest 重建 direct 探测。同 token 的 signaling socket 刷新不会触发；客户端伪造该帧会被 broker 拒绝。
 
 `/pairings/:id/tunnel` 只允许 broker 可见的 `PairingTunnelRelayFrame`：
 
@@ -38,22 +42,26 @@ Broker 不维护 connected/ready/peer-left 业务状态。WebSocket 在线只是
 
 `/ws` 为 attach 竞态保留每个目标角色最多 128 条内存中的早到 signal，晚到 peer 接上即 flush；这只覆盖 offer/candidate 时序，不是 durable history。`/tunnel` 不缓存业务 frame，不补发历史消息。因为 tunnel 不缓存，端点收到对端 `key` 后会重发本端 `key`，修复 host 先打开、guest 后 attach 时的 key 丢失竞态。
 
+Pairing 不使用 Socket.IO：`/ws` 和 `/tunnel` 都是 broker 的原生 WebSocket upgrade。Socket.IO 只属于 Hub realtime / terminal / CLI namespace，不参与 pairing WSS relay。
+
 ## 传输层设计
 
 Tunnel v2 的主规则：
 
-1. WSS relay tunnel 先连接，`WebSocket/TLS` 打开且 ECDH key exchange 完成后进入业务可用态。
-2. WebRTC 并发探测；selected candidate 为 `host/srflx/prflx` 且 heartbeat 证明健康时，只要 RTT 不比 WSS relay 慢超过 30ms，就升级为 `direct-webrtc`。
-3. selected candidate 为 `relay` 时不叫 P2P，内部记为 `turn-webrtc`；只有 TURN RTT 不慢于 WSS relay 时才用它，否则继续 WSS。
-4. `direct-webrtc` / `turn-webrtc` stale、close、missed ACK 达预算时退回 `relay-wss`；WSS relay 保持 standby。
+1. WSS relay tunnel 先连接，`WebSocket/TLS` 打开且 ECDH key exchange 完成后只算通道可发送；收到带兼容 `protocolVersion` 的 Peer heartbeat ACK 后才进入业务可用态。
+2. WebRTC 并发探测；direct DataChannel 的业务 heartbeat ACK 是可用性事实，selected candidate 为 `host/srflx/prflx` 时补充记录候选类型；浏览器未暴露 candidate stats 时，只要 direct heartbeat 证明健康，也升级为 `direct-webrtc`。
+3. selected candidate 明确为 `relay` 时不叫 P2P，标记 `turn-candidate` 并继续 WSS relay。
+4. `direct-webrtc` stale、close、missed ACK 达预算时退回 `relay-wss`；WSS relay 保持 standby。
 5. route 状态只认 `shared/src/pairing/pairingTunnelRoute.ts` reducer；Web / Desktop / broker 不再各自猜测 active route。
 6. `/ws` 继续只做 WebRTC signaling，`/tunnel` 只承载 sealed relay frame；Peer RPC / sync event / terminal event 都在端点内加密后进入 relay。
 
-Route reducer 带事件驱动滞后：第一次 direct 只需少量 ACK 即可从 relay 升级；direct 失败或 missed ACK demote 后，下一次升级需要更多 ACK；direct 探测 RTT 不覆盖当前 active relay RTT，避免 UI 显示和路由状态裂开。当前产品策略是 P2P-preferred：P2P 已证明可用且没有明显慢很多就切；TURN 不是 P2P，只做 WSS relay 前面的低延迟中转层。
+Route reducer 带事件驱动滞后：第一次 direct 只需少量 ACK 即可从 relay 升级；direct 失败或 missed ACK demote 后，下一次升级需要更多 ACK；direct 探测 RTT 不覆盖当前 active relay RTT，避免 UI 显示和路由状态裂开。当前产品策略是 P2P-preferred：DataChannel heartbeat 已经往返就算 direct 可用证明，candidate stats 只负责补充 host/srflx/prflx 观测或明确否决 relay candidate；非 P2P 统一留在 WSS relay。
 
-Relay active 时也要主动争取 direct：relay open、relay heartbeat ACK、foreground pulse 都会在当前不是 `direct-webrtc` 且没有 direct probe 运行时触发一次 ICE restart。Relay heartbeat ACK 是 active relay RTT 的事实源，避免 UI 长期停在“测速中”。Peer heartbeat 带 `id/sentAt/ack`，两端只把 `ack=true` 当作 RTT 样本，普通 heartbeat 只回 ACK，避免双向保活互相误判。这里不是第二套路由控制器；heartbeat 是 NAT keepalive + 观测，route 决策仍只进 reducer。
+Relay active 时也要主动争取 direct：relay open、relay heartbeat ACK、foreground pulse 都会在当前不是 `direct-webrtc` 且没有 direct probe 运行时触发一次 ICE restart。Relay heartbeat ACK 是 active relay RTT 的事实源，避免 UI 长期停在“测速中”。Direct 首个 ACK 后如果 reducer 仍缺少 ACK 证明，移动端立即发下一次 probe ACK，不等 15s steady keepalive；WebKit/Safari stats 透明度差时也能快速升级。Peer heartbeat 带 `id/sentAt/ack`，两端只把 `ack=true` 当作 RTT 样本，普通 heartbeat 只回 ACK，避免双向保活互相误判。这里不是第二套路由控制器；heartbeat 是 NAT keepalive + 观测，route 决策仍只进 reducer。
 
-Desktop host bridge 也消费同一 reducer：`RTCPeerConnection` 不存在或 direct signaling 失败时，Desktop 仍然通过 relay tunnel 进入 ready，不再把 WebRTC 当成可用性的前提。WebRTC selected candidate 非 TURN relay 时才显示“点对点直连”；selected candidate 是 TURN relay 时显示“安全中转”，内部 `activeTransport='turn-webrtc'`。
+PWA handoff 会旋转 guest token 并替换 guest socket；这代表 WebRTC peer identity 已变，不能复用浏览器 tab 留下的 direct 状态。Broker 在 guest token rotation 后通知 host `peer-replaced`；如果 signaling 控制帧丢失，desktop relay bridge 也会在已 ready 的 relay tunnel 收到新 peer key 时触发同一重建。desktop bridge 同事务 demote direct、关闭旧 DataChannel/RTCPeerConnection、创建新 peer 并重新发起 direct probe；relay 继续保持可用，直到新 direct 通过 heartbeat ACK 后再升级。
+
+Desktop host bridge 也消费同一 reducer：`RTCPeerConnection` 不存在或 direct signaling 失败时，Desktop 仍然通过 relay tunnel 进入 ready，不再把 WebRTC 当成可用性的前提。WebRTC selected candidate 非 relay 时才显示“点对点直连”；selected candidate 是 relay 时显示“安全中转”，内部仍保持 `activeTransport='relay-wss'`。
 
 `shared/src/pairing/createPairingTransport` 仍是 WebRTC direct adapter：
 
@@ -63,8 +71,13 @@ Desktop host bridge 也消费同一 reducer：`RTCPeerConnection` 不存在或 d
 4. ICE candidate 早到时排队，remote description 落地后 flush。
 5. ICE restart 由 transport 层触发；不是 broker 业务状态。
 6. DataChannel 只作为 WebRTC route，不再是可用性的前提。
+7. `RTCPeerConnection` 配置只设 `bundlePolicy: 'max-bundle'` + `iceServers`；**不设 `iceCandidatePoolSize`**。非 0 的 pool 会让 WebKit / Chromium 在 `setLocalDescription` 之前就预 gather candidate，那时还没 datachannel / m-line / 真实 ufrag，pool 里的 STUN/TURN candidate 会与 mDNS 匿名化的 host candidate 混合分配到 component，对端验证 ufrag 不一致 → ICE check 全部失败 → datachannel 永不 open → 用户看到的 “安全中转” 是 sealed WSS 兜底。`pairingTransportDefaults.test.ts` 锁住这个选择。
 
-这里不内嵌 NetBird / WireGuard，也不把 Go QUIC / WebTransport 当当前 direct P2P 主路径：手机端仍是 Web/PWA，浏览器不暴露通用 UDP/WireGuard socket；WebTransport 是浏览器到 HTTP/3 server 的 client-server transport，不是 browser-to-desktop P2P socket。当前最佳路径就是 WebRTC P2P direct 第一、WebRTC TURN UDP 第二、sealed WSS relay 兜底。
+Peer RPC / sync / terminal 文本帧走 `shared/src/pairing/pairingPeerTextFrame.ts` 单一 owner：DataChannel 按 RFC 8831 建议把编码后 frame 控制在 16KiB 内（当前 11KiB 原始 payload → base64 JSON frame），发送端通过 `bufferedAmountLowThreshold` 做背压，并用 urgent / interactive / bulk 优先级队列让 heartbeat / 错误 / 小交互不被大响应长期压住；接收端重组后再进原 RPC parser，且只保留有限个未完成 chunk message，超额丢最旧半包，防异常 peer 用半包撑内存。WSS relay 仍可直接承载 sealed text frame。远程列表 payload 只发卡片所需 presentation 字段并裁剪超长 path / summary；远程 `session.open` / `session.resume` 请求带 `includeLatestWindow: false` 时只返回 session head，首屏/历史消息统一走 `session.messages` / `session.load-after`，WebRTC 和 WSS 使用同一 Peer RPC 合同；`session.messages` 从 protocol v2 起是远程消息窗口必需能力，旧 peer 在 heartbeat compatibility 阶段直接提示更新，不等业务 RPC timeout。未带 `includeLatestWindow` 的旧 Web 仍收到完整 `SessionViewSnapshot`。Web 侧记录每次 Peer RPC 的 method / route / bytes / chunks / duration / timeout，右下角徽章保留链路 RTT，同时用 locale 文案显示最近一次业务 RPC 诊断，避免把 heartbeat RTT 误当成打开会话耗时。
+
+Binary upload 同时走两条 route，由 `web/src/remote/remotePairingBinaryUpload.ts` 选发：优先 datachannel 发 `createPairingUploadChunkFrame` magic 帧；channel 不可用时走 sealed relay 发 `PairingTunnelBinaryFrame`，desktop relay bridge 重建同一 magic 帧然后复用 `PairingBinaryUploadManager.accept`。上传不再要求 P2P 升级成功，relay-only 路径也能成包。
+
+这里不内嵌 NetBird / WireGuard，也不把 Go QUIC / WebTransport 当当前 direct P2P 主路径：手机端仍是 Web/PWA，浏览器不暴露通用 UDP/WireGuard socket；WebTransport 是浏览器到 HTTP/3 server 的 client-server transport，不是 browser-to-desktop P2P socket。当前最佳路径就是 sealed WSS relay 先可用、WebRTC P2P direct 成功后升级。
 
 Native desktop UDP/QUIC host 已从当前移动 Web 产品路径裁掉：只替换桌面一端不能让手机浏览器绕开 WebRTC，反而会复制一套 transport/bridge owner。只有当手机端变成 native app，或真实 harness 证明桌面 WebView WebRTC 是主要失败源时，才重新引入 native direct adapter；即便引入，也必须继续消费同一条 route reducer。
 
@@ -74,16 +87,17 @@ Tunnel v2 的链路测试分三层，不把本地模拟当公网结论：
 
 - `harness:pairing-netem`：本机 broker + 两个 Docker endpoint，用 `tc netem` 注入延迟、抖动、丢包、短暂 100% blackhole 和 degraded cellular 恢复；用于稳定复现 relay / sealed frame / handover 回归。
 - `harness:pairing-prod-relay`：两个 Docker endpoint 都连 `https://pair.viby.run`，验证生产 TLS、反代、broker、sealed relay 和公网 RTT。
-- `harness:pairing-public-turn-webrtc`：两份本机 Chromium 强制 `iceTransportPolicy='relay'` 通过生产 TURN 建 WebRTC DataChannel；要求 selected candidate 都是 `relay`，验证 TURN UDP/TCP/TLS 下发与 coturn 可用。
-- `harness:pairing-public-direct-webrtc`：两份本机 Chromium 通过生产 `/ws` signaling 建 WebRTC DataChannel；这是生产 signaling smoke，不代表真实 NAT。
-- `harness:pairing-remote-direct-webrtc`：本机 Chromium host + 远端 SSH runner 上的 aiortc guest 通过生产 broker 信令，要求 DataChannel ACK 成功且本机浏览器 selected ICE candidate 不是 TURN relay；这是当前自动化里最接近真实公网 P2P 的门。
+- `harness:pairing-prod-local-direct-webrtc`：两份本机 Chromium 通过生产 `/ws` signaling 建 WebRTC DataChannel；这是生产 broker 信令 smoke，不代表真实 NAT。
+- `harness:pairing-remote-nat-direct-webrtc`：本机 Chromium host + 远端 SSH runner 上的 aiortc guest 通过生产 broker 信令，要求 DataChannel ACK 成功且本机浏览器 selected ICE candidate 不是 relay；这是当前自动化里最接近真实公网 P2P 的门。
 
-真手机蜂窝/Wi-Fi handover 仍需要真机矩阵；自动化只能覆盖可重复的网络损伤和跨公网 direct。
+真手机蜂窝/Wi-Fi handover 仍需要真机矩阵；自动化只能覆盖可重复的网络损伤和跨公网 direct。端到端测量页建议优先复用服务器 + 桌面浏览器 responder，避免改动主业务代码。
 
 调研依据：
 
 - MDN WebRTC API：浏览器原生支持 peer-to-peer `RTCPeerConnection` / `RTCDataChannel`。
 - MDN WebTransport API：WebTransport 让 user agent 连接 HTTP/3 server，提供 client-server streams/datagrams。
+- Socket.IO WebTransport docs：WebTransport 是 Socket.IO 的 client-server low-level transport；Node 示例需要 HTTP/3 WebTransport server 把 session 转交给 Engine.IO，不能替代 WebRTC P2P。
+- Socket.IO Bun engine 0.1.0：当前只实现 `polling` / `websocket`，没有 `webtransport` server transport。
 - Tailscale connection types：所有连接先经 DERP relay 建立可达性，再尝试升级 direct；失败继续 relay，并周期性重试。
 - NetBird docs：NetBird 用 WireGuard + Pion ICE + Coturn/Relay，ICE 选 host/srflx/prflx/direct，relay 是兜底；这适合 native agent/VPN，不适合只内嵌到手机 Web。
 
@@ -108,8 +122,13 @@ UI 不根据 broker socket 片段状态切全屏 boot。已进入 workspace 的 
 - PWA handoff ticket 一次性、短 TTL、启动后 scrub URL fragment。
 - PWA manifest 恢复 cookie 只用于启动入口识别，生产必须用稳定 `PAIRING_MANIFEST_COOKIE_SECRET` 签名；broker 重启不能让已安装入口因随机进程 secret 失效。
 - `/tunnel` relay 只转发 `key` / `sealed`，broker 不看业务 payload。当前是防被动转发层读取的密文 relay；长期身份认证仍由 pairing token、device proof 和 Hub 授权链负责。
-- TURN 只作为 ICE fallback；不承载业务 owner。
+- relay candidate 只作为 direct 探测失败原因；业务中转 owner 仍是 sealed WSS relay。
 
-## 设备 presence
+## 设备 presence 与 “已配对” 信号
 
-Scan 设备在线状态不由 broker/Hub presence 判定。桌面 Device popover 用 host bridge phase：`ready` 在线，`connecting/fatal` 不计在线。
+Scan 设备是否出现在 device popover / 在线计数，以 host bridge phase 为唯一事实源：
+
+- `phase === 'ready'` 仅在 broker tunnel 上收到真实的 heartbeat ACK（即 guest 已 verify-code 並在线发出 frame）才 fire；ws onopen 只算 `connecting`。
+- 桌面 `usePairingBridges` 在 invite 创建即启动 bridge，不再等 `approvalStatus === 'approved'`。broker WS 端本身不 gate approval，只验 token hash，可以让 host 提前掊着压后、guest 一扫码 就转发。
+- Modal “已配对”动效 + device row 出现：只要 `approvalStatus==='approved'`（SSE推送）或 bridge phase 进 `ready`（本地事实）任一件到位即触发。两个信号补位，避免 SSE 不可靠时 UI 永远不动。
+- SSE 指名不开 `proxy_buffering`：broker `/pairings/:id/events` 头 `X-Accel-Buffering: no` + `Cache-Control: no-cache, no-transform`。反代层需 honor 该提示。

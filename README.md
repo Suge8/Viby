@@ -51,23 +51,19 @@ viby hub
 - CLI：`cli/README.md`
 - Pairing Broker：`pairing/README.md`
 - Desktop：`desktop/README.md`
+- 产品官网（viby.run）：`site/README.md`
 - 架构与边界：`docs/README.md`
 
 ## 本地开发
 
 ```bash
 bun install
-bun run dev
+bun run dev      # 默认产品开发入口：Desktop + Web + Hub/CLI 源码 watch
+bun run check    # 提交前快验证
+bun run build    # Web / Hub / Pairing 发布级构建
 ```
 
-常用链路：
-
-```bash
-bun run dev:remote   # Web + Hub 远程联调
-bun run dev:desktop  # 桌面壳开发
-bun run build:single-exe
-bun run build:pairing # 生成 pairing/deploy-bundle/ + deploy-bundle.tar.gz
-```
+专项命令看 `docs/development/local-development.md`。
 
 ## 文档分层
 

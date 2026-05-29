@@ -25,6 +25,7 @@ README 只保留产品入口；复杂边界和运行约束统一收口到这里�
 
 ## 开发边界
 
+- `docs/development/local-development.md`：本地开发主入口、源码生效边界与命令分层
 - `docs/development/repo-boundaries.md`：仓库级硬规则与模块边界入口
 - `docs/development/web-boundaries.md`：Web/PWA 开发边界
 - `docs/development/web-native-feel.md`：Web 原生质感视觉 owner 与验证边界
@@ -44,6 +45,7 @@ README 只保留产品入口；复杂边界和运行约束统一收口到这里�
 - `docs/deployment/pairing-broker.md`：公网 pairing broker 生产部署手册
 - `docs/deployment/release-distribution.md`：CLI / Desktop 发布与更新 owner、GitHub Release updater 要求
 - `docs/operations/pairing-mode.md`：`viby hub` 接入服务端配对模式的操作手册
+- `site/AGENTS.md`：`viby.run` 产品官网部署与设计契约（单一 owner，不漂移到 `docs/`）
 - `docs/examples/`：systemd / Caddy / compose 示例
 
 ### Pairing 最小部署入口
