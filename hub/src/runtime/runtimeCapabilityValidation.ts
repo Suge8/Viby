@@ -5,6 +5,7 @@ import type {
     ModelReasoningEffort,
     RuntimeCapabilityError,
 } from '@viby/protocol'
+import { requiresAgentLaunchConfig } from '@viby/protocol'
 
 export type RuntimeSpawnValidationOptions = {
     directory: string
@@ -50,6 +51,10 @@ export function rejectRuntimeCapability(
     }
 }
 
+export function requiresRuntimeLaunchConfig(options: RuntimeSpawnValidationOptions): boolean {
+    return requiresAgentLaunchConfig(options)
+}
+
 export function validateRuntimeLaunchOptions(
     options: RuntimeSpawnValidationOptions,
     config: AgentLaunchConfig,
@@ -77,8 +82,7 @@ function redactAvailability(value: AgentAvailability | null | undefined): Record
 }
 
 function isModelRequested(model: string | null | undefined): model is string {
-    const trimmed = model?.trim()
-    return Boolean(trimmed && trimmed !== 'auto' && trimmed !== 'default')
+    return requiresAgentLaunchConfig({ agent: 'claude', model })
 }
 
 function supportsReasoning(

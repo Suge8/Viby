@@ -19,7 +19,6 @@
  * - DB_PATH: SQLite database path (default: {VIBY_HOME}/viby.db)
  */
 
-import { randomInt } from 'node:crypto'
 import { existsSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -43,9 +42,6 @@ export interface ConfigSources {
 class Configuration {
     /** Internal owner token for local Hub management APIs */
     public hubOwnerToken: string
-
-    /** Short user-facing code for device pairing */
-    public readonly pairingCode: string
 
     /** Source of Hub owner token */
     public hubOwnerTokenSource: 'env' | 'file' | 'generated' | ''
@@ -105,8 +101,6 @@ class Configuration {
         this.corsOrigins = serverSettings.corsOrigins
         this.pairingBrokerUrl = serverSettings.pairingBrokerUrl
         this.pairingCreateToken = serverSettings.pairingCreateToken
-
-        this.pairingCode = String(randomInt(0, 1_000_000)).padStart(6, '0')
 
         // Hub owner token - will be set by _setHubOwnerToken() before create() returns
         this.hubOwnerToken = ''

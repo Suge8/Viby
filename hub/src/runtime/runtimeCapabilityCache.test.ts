@@ -170,6 +170,74 @@ describe('RuntimeCapabilityCache', () => {
         })
     })
 
+    it('does not resolve launch config for default spawn options outside Pi', async () => {
+        let configCalls = 0
+        const cache = new RuntimeCapabilityCache(
+            {
+                listAgentAvailability: async () => ({ agents: [ready('claude')] }),
+                resolveAgentLaunchConfig: async () => {
+                    configCalls += 1
+                    return { type: 'error', code: 'provider_unavailable', message: 'slow model probe' }
+                },
+            },
+            { emit: () => undefined }
+        )
+
+        await expect(cache.validateSpawn('machine-1', { directory: '/repo', agent: 'claude' })).resolves.toEqual({
+            ok: true,
+        })
+        expect(configCalls).toBe(0)
+    })
+
+    it('requires Pi launch config before default spawn because Pi startup probes the RPC model state', async () => {
+        let configCalls = 0
+        const cache = new RuntimeCapabilityCache(
+            {
+                listAgentAvailability: async () => ({ agents: [ready('pi')] }),
+                resolveAgentLaunchConfig: async () => {
+                    configCalls += 1
+                    return { type: 'error', code: 'provider_unavailable', message: 'slow model probe' }
+                },
+            },
+            { emit: () => undefined }
+        )
+
+        await expect(cache.validateSpawn('machine-1', { directory: '/repo', agent: 'pi' })).resolves.toMatchObject({
+            ok: false,
+            status: 409,
+            body: { code: 'agent_config_unavailable', capabilityErrorCode: 'provider_unavailable' },
+        })
+        expect(configCalls).toBe(1)
+    })
+
+    it('reuses fresh launch config when validating explicit spawn options', async () => {
+        let configCalls = 0
+        const cache = new RuntimeCapabilityCache(
+            {
+                listAgentAvailability: async () => ({ agents: [ready('pi')] }),
+                resolveAgentLaunchConfig: async () => {
+                    configCalls += 1
+                    return {
+                        type: 'success',
+                        config: {
+                            agent: 'pi',
+                            defaultModel: 'openai/gpt-5',
+                            defaultModelReasoningEffort: null,
+                            availableModels: [{ id: 'openai/gpt-5', label: 'GPT-5', supportedThinkingLevels: ['low'] }],
+                        },
+                    }
+                },
+            },
+            { emit: () => undefined }
+        )
+
+        await cache.resolveAgentLaunchConfig('machine-1', { directory: '/repo', agent: 'pi' })
+        await expect(
+            cache.validateSpawn('machine-1', { directory: '/repo', agent: 'pi', model: 'openai/gpt-5' })
+        ).resolves.toEqual({ ok: true })
+        expect(configCalls).toBe(1)
+    })
+
     it('rejects spawn on stale availability or launch config refresh errors', async () => {
         let failAvailability = false
         let failConfig = false
@@ -209,7 +277,9 @@ describe('RuntimeCapabilityCache', () => {
                 message: 'Agent authentication is missing on this machine',
             }
         )
-        await expect(cache.validateSpawn('machine-1', { directory: '/repo', agent: 'pi' })).resolves.toMatchObject({
+        await expect(
+            cache.validateSpawn('machine-1', { directory: '/repo', agent: 'pi', model: 'openai/gpt-5' })
+        ).resolves.toMatchObject({
             ok: false,
             body: { code: 'agent_config_unavailable', capabilityErrorCode: 'auth_missing' },
         })

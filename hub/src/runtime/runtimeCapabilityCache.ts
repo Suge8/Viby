@@ -26,6 +26,7 @@ import {
     type RuntimeSpawnValidationOptions,
     type RuntimeSpawnValidationResult,
     rejectRuntimeCapability,
+    requiresRuntimeLaunchConfig,
     validateRuntimeLaunchOptions,
 } from './runtimeCapabilityValidation'
 
@@ -118,9 +119,10 @@ export class RuntimeCapabilityCache {
         options: RuntimeSpawnValidationOptions
     ): Promise<RuntimeSpawnValidationResult> {
         const scope = this.getScope(machineId, options.directory)
+        const needsLaunchConfig = requiresRuntimeLaunchConfig(options)
         await Promise.all([
             this.refreshAvailability(scope, options.agent, true),
-            this.refreshLaunchConfig(scope, options.agent, true),
+            needsLaunchConfig ? this.refreshLaunchConfig(scope, options.agent, false) : Promise.resolve(),
         ])
         const entry = scope.agents.get(options.agent)
         const availability = entry?.availability?.value ?? null
@@ -133,6 +135,7 @@ export class RuntimeCapabilityCache {
                 entry?.availability?.error?.code
             )
         }
+        if (!needsLaunchConfig) return { ok: true }
 
         const launchConfig = entry?.launchConfig
         if (launchConfig?.error || !launchConfig?.config) {

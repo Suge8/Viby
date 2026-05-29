@@ -15,7 +15,6 @@ interface HubRuntimeStatusWriterOptions {
     publicUrl: string
     publicAccessEnabled: boolean
     pairingBrokerUrl: string | null
-    pairingCode: string
     hubOwnerToken: string
     settingsFile: string
     launchSource?: HubLaunchSource
@@ -30,6 +29,8 @@ export interface HubRuntimeStatusUpdate {
 export interface HubRuntimeStatusWriter {
     filePath: string
     write(update: HubRuntimeStatusUpdate): Promise<HubRuntimeStatus>
+    /** Hot-reload the public access policy into the status file without a phase change. */
+    updatePublicAccessEnabled(enabled: boolean): Promise<HubRuntimeStatus>
 }
 
 function createBaseStatus(options: HubRuntimeStatusWriterOptions): HubRuntimeStatus {
@@ -44,8 +45,9 @@ function createBaseStatus(options: HubRuntimeStatusWriterOptions): HubRuntimeSta
         preferredBrowserUrl: options.localHubUrl,
         publicUrl: options.publicUrl,
         publicAccessEnabled: options.publicAccessEnabled,
+        // This Hub build watches settings.toml and hot-reloads the policy without a restart.
+        publicAccessHotReload: true,
         pairingBrokerUrl: options.pairingBrokerUrl,
-        pairingCode: options.pairingCode,
         hubOwnerToken: options.hubOwnerToken,
         settingsFile: options.settingsFile,
         dataDir: options.dataDir,
@@ -77,6 +79,16 @@ export function createHubRuntimeStatusWriter(options: HubRuntimeStatusWriterOpti
                 phase: update.phase,
                 preferredBrowserUrl: update.preferredBrowserUrl ?? currentStatus.preferredBrowserUrl,
                 message: update.message,
+                updatedAt: new Date().toISOString(),
+            }
+
+            await writeStatusFile(filePath, currentStatus)
+            return currentStatus
+        },
+        async updatePublicAccessEnabled(enabled: boolean): Promise<HubRuntimeStatus> {
+            currentStatus = {
+                ...currentStatus,
+                publicAccessEnabled: enabled,
                 updatedAt: new Date().toISOString(),
             }
 

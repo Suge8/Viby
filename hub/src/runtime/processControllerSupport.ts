@@ -34,7 +34,7 @@ export function buildProcessWebServerOptions(options: {
     listenHost: string
     listenPort: number
     publicUrl: string
-    publicAccessEnabled: boolean
+    isPublicAccessEnabled: () => boolean
     corsOrigins: string[]
     getActiveDeviceIds?: StartWebServerOptions['getActiveDeviceIds']
 }): StartWebServerOptions {
@@ -48,7 +48,7 @@ export function buildProcessWebServerOptions(options: {
         listenHost: options.listenHost,
         listenPort: options.listenPort,
         publicUrl: options.publicUrl,
-        publicAccessEnabled: options.publicAccessEnabled,
+        isPublicAccessEnabled: options.isPublicAccessEnabled,
         corsOrigins: options.corsOrigins,
         getActiveDeviceIds: options.getActiveDeviceIds,
     }

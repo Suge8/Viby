@@ -2,8 +2,9 @@ import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { HUB_RUNTIME_STATUS_FILE, type HubRuntimeStatus } from '@viby/protocol/runtimeStatus'
+import { startDesktopParentPipeShutdown } from './desktopParentPipeShutdown'
 import { createHubProcessController } from './processController'
-import { reportHubRuntimeError } from './runtimeDiagnostics'
+import { reportHubRuntimeError, reportHubRuntimeInfo } from './runtimeDiagnostics'
 
 export interface RunHubProcessOptions {
     onReady?(status: HubRuntimeStatus): Promise<void> | void
@@ -44,6 +45,12 @@ export async function runHubProcess(options: RunHubProcessOptions = {}): Promise
 
     process.on('SIGINT', requestShutdown)
     process.on('SIGTERM', requestShutdown)
+    const desktopParentPipeShutdown = startDesktopParentPipeShutdown({
+        onOrphaned: () => {
+            reportHubRuntimeInfo('Desktop parent pipe closed; shutting down.')
+            requestShutdown()
+        },
+    })
 
     try {
         await controller.start()
@@ -55,6 +62,7 @@ export async function runHubProcess(options: RunHubProcessOptions = {}): Promise
         }
     } catch (error) {
         reportHubRuntimeError('Fatal hub error.', error)
+        desktopParentPipeShutdown?.dispose()
         const exitCode = await controller.shutdown({
             exitCode: 1,
             logMessage: '\nShutting down after fatal error...',

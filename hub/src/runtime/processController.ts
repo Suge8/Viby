@@ -21,6 +21,8 @@ import {
     logHubStartupConfiguration,
     requireInitialized,
 } from './processControllerSupport'
+import { createPublicAccessRuntime, type PublicAccessRuntime } from './publicAccessRuntime'
+import { reportHubRuntimeError } from './runtimeDiagnostics'
 import { createHubRuntimeHost, type HubRuntimeHost } from './runtimeHost'
 
 export type HubShutdownOptions = {
@@ -55,6 +57,7 @@ export function createHubProcessController(): HubProcessController {
     let webServer: BunServer<WebSocketData> | null = null
     let activeRuntimeStatus: HubRuntimeStatusWriter | null = null
     let runtimeHost: HubRuntimeHost | null = null
+    let publicAccessRuntime: PublicAccessRuntime | null = null
     let shutdownPromise: Promise<number> | null = null
     let shuttingDown = false
     let started = false
@@ -77,6 +80,16 @@ export function createHubProcessController(): HubProcessController {
         return buildReadyStatusMessageBase(portFallbackMessage, overrides)
     }
 
+    /** Current public access policy: runtime holder when wired, startup config before. */
+    function isPublicAccessEnabled(): boolean {
+        return publicAccessRuntime ? publicAccessRuntime.isEnabled() : getConfig().publicAccessEnabled
+    }
+
+    async function applyPublicAccessChange(enabled: boolean): Promise<void> {
+        console.log(`[Hub] public access ${enabled ? 'enabled' : 'disabled'} (settings hot-reload)`)
+        await activeRuntimeStatus?.updatePublicAccessEnabled(enabled)
+    }
+
     function buildWebServerOptions(): StartWebServerOptions {
         const currentStore = getStore()
         const currentSocketServer = getSocketServer()
@@ -91,7 +104,7 @@ export function createHubProcessController(): HubProcessController {
             listenHost: getConfig().listenHost,
             listenPort: runtimeListenPort,
             publicUrl: runtimePublicUrl,
-            publicAccessEnabled: getConfig().publicAccessEnabled,
+            isPublicAccessEnabled,
             corsOrigins,
             getActiveDeviceIds: () => currentSocketServer.devicePresence.activeDeviceIds(),
         })
@@ -148,7 +161,16 @@ export function createHubProcessController(): HubProcessController {
                 runtimeAccessor.getSyncEngine()?.handleSessionAlive(payload)
             },
             onSessionEnd: (payload) => {
-                runtimeAccessor.getSyncEngine()?.handleSessionEnd(payload)
+                const activeEngine = runtimeAccessor.getSyncEngine()
+                if (shuttingDown) {
+                    activeEngine?.handleSessionRuntimeStopping(payload.sid, 'shutdown')
+                }
+                activeEngine?.handleSessionEnd(payload)
+            },
+            onSessionRuntimeState: (payload) => {
+                if (payload.state === 'stopping') {
+                    runtimeAccessor.getSyncEngine()?.handleSessionRuntimeStopping(payload.sid, payload.reason)
+                }
             },
             onMachineAlive: (payload) => {
                 runtimeAccessor.getSyncEngine()?.handleMachineAlive(payload)
@@ -186,7 +208,6 @@ export function createHubProcessController(): HubProcessController {
             publicUrl: runtimePublicUrl,
             publicAccessEnabled: config.publicAccessEnabled,
             pairingBrokerUrl: config.pairingBrokerUrl,
-            pairingCode: config.pairingCode,
             hubOwnerToken: config.hubOwnerToken,
             settingsFile: config.settingsFile,
             launchSource,
@@ -195,6 +216,17 @@ export function createHubProcessController(): HubProcessController {
             phase: 'starting',
             preferredBrowserUrl: runtimePublicUrl,
             message: buildStartingStatusMessage(buildStartupMessage()),
+        })
+
+        publicAccessRuntime = createPublicAccessRuntime({
+            initialEnabled: config.publicAccessEnabled,
+            settingsFile: config.settingsFile,
+            locked: config.sources.publicAccessEnabled === 'env',
+            onChange: (enabled) => {
+                applyPublicAccessChange(enabled).catch((error) => {
+                    reportHubRuntimeError('Failed to persist public access hot-reload.', error)
+                })
+            },
         })
     }
 
@@ -206,7 +238,7 @@ export function createHubProcessController(): HubProcessController {
             rpcRegistry: currentSocketServer.rpcRegistry,
             webRealtimeManager: currentSocketServer.webRealtimeManager,
             notificationChannels: [
-                new PushNotificationChannel(getPushService(), currentSocketServer.webRealtimeManager, runtimePublicUrl),
+                new PushNotificationChannel(getPushService(), currentSocketServer.webRealtimeManager),
             ],
         })
     }
@@ -300,6 +332,8 @@ export function createHubProcessController(): HubProcessController {
             const exitCode = runtimeHost ? await runtimeHost.shutdown(options) : await shutdownProcessOnly(options)
 
             closeStore()
+            publicAccessRuntime?.dispose()
+            publicAccessRuntime = null
             runtimeHost = null
             webServer = null
             activeRuntimeStatus = null
