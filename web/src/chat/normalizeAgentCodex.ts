@@ -1,5 +1,10 @@
 import { asString, isObject } from '@viby/protocol'
-import { appendAssistantTextBlocks, normalizeAssistantOutput, normalizeUserOutput } from '@/chat/normalizeAgentSupport'
+import {
+    appendAssistantTextBlocks,
+    normalizeAssistantErrorEvent,
+    normalizeAssistantOutput,
+    normalizeUserOutput,
+} from '@/chat/normalizeAgentSupport'
 import type { NormalizedMessage } from '@/chat/types'
 import { extractPlanProgressItems } from '@/lib/planProgress'
 
@@ -133,6 +138,10 @@ export function normalizeCodexRecord(
 
     if (data.type === 'user') {
         return normalizeUserOutput(messageId, localId, createdAt, data, meta)
+    }
+
+    if (data.type === 'error') {
+        return normalizeAssistantErrorEvent(messageId, localId, createdAt, data, meta)
     }
 
     return null

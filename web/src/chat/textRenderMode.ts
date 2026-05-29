@@ -16,10 +16,7 @@ export function isLikelyMarkdownText(text: string): boolean {
     return MARKDOWN_PATTERNS.some((pattern) => pattern.test(text))
 }
 
-export function resolveTextRenderMode(
-    text: string,
-    preferredMode: PreferredTextRenderMode = 'auto'
-): TextRenderMode {
+export function resolveTextRenderMode(text: string, preferredMode: PreferredTextRenderMode = 'auto'): TextRenderMode {
     if (preferredMode === 'plain' || preferredMode === 'markdown') {
         return preferredMode
     }

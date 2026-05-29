@@ -1,9 +1,19 @@
 import { isObject } from '@viby/protocol'
 import { normalizeCodexRecord } from '@/chat/normalizeAgentCodex'
-import { isCodexContent, isSkippableAgentContent, normalizeOutputRecord } from '@/chat/normalizeAgentOutput'
+import { isSkippableAgentContent, normalizeOutputRecord } from '@/chat/normalizeAgentOutput'
 import type { NormalizedMessage } from '@/chat/types'
 
-export { isCodexContent, isSkippableAgentContent }
+const RECOGNIZED_AGENT_CONTENT_TYPES = new Set(['output', 'event', 'codex'])
+
+export { isSkippableAgentContent }
+
+export function isRecognizedAgentContent(content: unknown): boolean {
+    if (!isObject(content) || typeof content.type !== 'string') {
+        return false
+    }
+
+    return RECOGNIZED_AGENT_CONTENT_TYPES.has(content.type)
+}
 
 export function normalizeAgentRecord(
     messageId: string,

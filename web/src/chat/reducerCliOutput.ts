@@ -41,7 +41,7 @@ export function createCliOutputBlock(props: {
         createdAt: props.createdAt,
         text: props.text,
         source: props.source,
-        meta: props.meta
+        meta: props.meta,
     }
 }
 
@@ -56,12 +56,12 @@ export function mergeCliOutputBlocks(blocks: ChatBlock[]): ChatBlock[] {
 
         const prev = merged[merged.length - 1]
         if (
-            prev
-            && prev.kind === 'cli-output'
-            && prev.source === block.source
-            && hasCommandNameTag(prev.text)
-            && !hasLocalCommandStdoutTag(prev.text)
-            && hasLocalCommandStdoutTag(block.text)
+            prev &&
+            prev.kind === 'cli-output' &&
+            prev.source === block.source &&
+            hasCommandNameTag(prev.text) &&
+            !hasLocalCommandStdoutTag(prev.text) &&
+            hasLocalCommandStdoutTag(block.text)
         ) {
             const separator = prev.text.endsWith('\n') || block.text.startsWith('\n') ? '' : '\n'
             merged[merged.length - 1] = { ...prev, text: `${prev.text}${separator}${block.text}` }

@@ -8,6 +8,10 @@ import type {
     ToolCallBlock,
     UserTextBlock,
 } from '@/chat/types'
+import type { AssistantReplyingPhase } from '@/components/AssistantChat/assistantReplyingPhase'
+
+export const THINKING_ROW_ID = 'thinking'
+export const THINKING_ROW_CONVERSATION_ID = 'thinking'
 
 export type TranscriptSentFrom = 'cli' | 'webapp' | 'user'
 
@@ -51,6 +55,11 @@ export type TranscriptEventRow = TranscriptRowBase & {
     block: AgentEventBlock
 }
 
+export type TranscriptAssistantThinkingRow = TranscriptRowBase & {
+    type: 'assistant-thinking'
+    phase: AssistantReplyingPhase
+}
+
 export type TranscriptRow =
     | TranscriptUserRow
     | TranscriptAssistantTextRow
@@ -58,6 +67,7 @@ export type TranscriptRow =
     | TranscriptToolRow
     | TranscriptCliOutputRow
     | TranscriptEventRow
+    | TranscriptAssistantThinkingRow
 
 export type TranscriptRowGap = 'compact' | 'base' | 'loose' | 'none'
 
@@ -71,7 +81,6 @@ export type TranscriptModel = {
     renderRows: TranscriptRenderRow[]
     conversationIds: string[]
     rowStartIndexByConversationId: ReadonlyMap<string, number>
-    historyJumpTargetConversationIds: string[]
 }
 
 export const TRANSCRIPT_REASONING_GROUP_PREFIX = 'reasoning-group:'

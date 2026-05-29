@@ -1,3 +1,4 @@
+import type { SessionAgentEvent } from '@viby/protocol'
 import type { TextRenderMode } from '@/chat/textRenderMode'
 import type { AttachmentMetadata, MessageStatus } from '@/types/api'
 
@@ -9,22 +10,7 @@ export type UsageData = {
     service_tier?: string
 }
 
-export type AgentEvent =
-    | { type: 'driver-switched'; previousDriver?: string; targetDriver?: string }
-    | {
-          type: 'driver-switch-send-failed'
-          stage?: 'socket_update' | 'callback_flush'
-          code?: 'empty_first_turn' | 'timeout' | 'unknown'
-      }
-    | { type: 'message'; message: string }
-    | { type: 'limit-reached'; endsAt: number; limitType?: string }
-    | { type: 'limit-warning'; endsAt: number; percent: number; limitType?: string }
-    | { type: 'ready' }
-    | { type: 'api-error'; retryAttempt: number; maxRetries: number; error: unknown }
-    | { type: 'turn-duration'; durationMs: number }
-    | { type: 'microcompact'; trigger: string; preTokens: number; tokensSaved: number }
-    | { type: 'compact'; trigger: string; preTokens: number }
-    | ({ type: string } & Record<string, unknown>)
+export type AgentEvent = SessionAgentEvent
 
 export type ToolResultPermission = {
     date: number

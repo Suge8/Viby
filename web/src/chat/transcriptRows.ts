@@ -29,10 +29,6 @@ function getCopyText(text: string): string | null {
     return normalized.length > 0 ? normalized : null
 }
 
-function isHistoryJumpTarget(block: ChatBlock): block is UserTextBlock {
-    return block.kind === 'user-text'
-}
-
 function collectReasoningGroup(options: { blocks: readonly ChatBlock[]; startIndex: number }): {
     blocks: AgentReasoningBlock[]
     nextIndex: number
@@ -179,11 +175,81 @@ function pushBlockRows(options: {
     }
 }
 
+function arraysShareIdentity<T>(a: readonly T[], b: readonly T[]): boolean {
+    if (a === b) {
+        return true
+    }
+    if (a.length !== b.length) {
+        return false
+    }
+    for (let index = 0; index < a.length; index += 1) {
+        if (a[index] !== b[index]) {
+            return false
+        }
+    }
+    return true
+}
+
+function areTranscriptRowsEquivalent(previous: TranscriptRow, next: TranscriptRow): boolean {
+    if (
+        previous.type !== next.type ||
+        previous.id !== next.id ||
+        previous.conversationId !== next.conversationId ||
+        previous.depth !== next.depth ||
+        previous.copyText !== next.copyText
+    ) {
+        return false
+    }
+
+    switch (next.type) {
+        case 'user':
+        case 'assistant-text':
+        case 'tool':
+        case 'cli-output':
+        case 'event':
+            return (previous as typeof next).block === next.block
+        case 'assistant-reasoning':
+            return (
+                (previous as typeof next).text === next.text &&
+                (previous as typeof next).renderMode === next.renderMode &&
+                arraysShareIdentity((previous as typeof next).blocks, next.blocks)
+            )
+        case 'assistant-thinking':
+            return (previous as typeof next).phase === next.phase
+    }
+}
+
+export function stabilizeTranscriptRowIdentities(
+    rows: readonly TranscriptRow[],
+    cache: Map<string, TranscriptRow>
+): TranscriptRow[] {
+    let changed = false
+    const stabilized: TranscriptRow[] = rows.map((row) => {
+        const cached = cache.get(row.id)
+        if (cached && areTranscriptRowsEquivalent(cached, row)) {
+            if (cached !== row) {
+                changed = true
+            }
+            return cached
+        }
+        return row
+    })
+
+    cache.clear()
+    for (const row of stabilized) {
+        cache.set(row.id, row)
+    }
+
+    if (!changed) {
+        return stabilized
+    }
+    return stabilized
+}
+
 export function createTranscriptModel(blocks: readonly ChatBlock[]): TranscriptModel {
     const rows: TranscriptRow[] = []
     const conversationIds: string[] = []
     const rowStartIndexByConversationId = new Map<string, number>()
-    const historyJumpTargetConversationIds: string[] = []
 
     let index = 0
     while (index < blocks.length) {
@@ -211,10 +277,6 @@ export function createTranscriptModel(blocks: readonly ChatBlock[]): TranscriptM
         conversationIds.push(conversationId)
         rowStartIndexByConversationId.set(conversationId, rows.length)
 
-        if (isHistoryJumpTarget(block)) {
-            historyJumpTargetConversationIds.push(conversationId)
-        }
-
         pushBlockRows({
             rows,
             blocks: [block],
@@ -229,6 +291,5 @@ export function createTranscriptModel(blocks: readonly ChatBlock[]): TranscriptM
         renderRows: buildTranscriptRenderRows(rows),
         conversationIds,
         rowStartIndexByConversationId,
-        historyJumpTargetConversationIds,
     }
 }

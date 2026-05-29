@@ -67,7 +67,6 @@ describe('createTranscriptModel', () => {
             type: 'user',
             copyText: 'continue the task',
         })
-        expect(model.historyJumpTargetConversationIds).toEqual(['user:user-1'])
     })
 
     it('groups consecutive reasoning blocks into one collapsible row', () => {

@@ -46,6 +46,38 @@ export function normalizeAgentEvent(value: unknown): AgentEvent | null {
     return value as AgentEvent
 }
 
+function readAssistantErrorDetail(data: Record<string, unknown>): string | undefined {
+    const direct = asString(data.message) ?? asString(data.error)
+    if (direct?.trim()) {
+        return direct.trim()
+    }
+
+    const error = isObject(data.error) ? asString(data.error.message) : null
+    return error?.trim() || undefined
+}
+
+export function normalizeAssistantErrorEvent(
+    messageId: string,
+    localId: string | null,
+    createdAt: number,
+    data: Record<string, unknown>,
+    meta?: unknown
+): NormalizedMessage {
+    const detail = readAssistantErrorDetail(data)
+    return {
+        id: messageId,
+        localId,
+        createdAt,
+        role: 'event',
+        content: {
+            type: 'assistant-error',
+            ...(detail ? { detail } : {}),
+        },
+        isSidechain: false,
+        meta,
+    }
+}
+
 export function normalizeAssistantOutput(
     messageId: string,
     localId: string | null,

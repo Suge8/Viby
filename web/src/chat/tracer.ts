@@ -1,5 +1,5 @@
-import type { NormalizedMessage } from '@/chat/types'
 import { isObject } from '@viby/protocol'
+import type { NormalizedMessage } from '@/chat/types'
 
 export type TracedMessage = NormalizedMessage & {
     sidechainId?: string
@@ -53,7 +53,7 @@ export function traceMessages(messages: NormalizedMessage[]): TracedMessage[] {
     const state: TracerState = {
         promptToTaskId: new Map(),
         uuidToSidechainId: new Map(),
-        orphanMessages: new Map()
+        orphanMessages: new Map(),
     }
 
     const results: TracedMessage[] = []

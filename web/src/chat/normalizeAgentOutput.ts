@@ -1,5 +1,10 @@
 import { asNumber, asString, isObject } from '@viby/protocol'
-import { normalizeAgentEvent, normalizeAssistantOutput, normalizeUserOutput } from '@/chat/normalizeAgentSupport'
+import {
+    normalizeAgentEvent,
+    normalizeAssistantErrorEvent,
+    normalizeAssistantOutput,
+    normalizeUserOutput,
+} from '@/chat/normalizeAgentSupport'
 import type { NormalizedMessage } from '@/chat/types'
 
 export function isSkippableAgentContent(content: unknown): boolean {
@@ -9,10 +14,6 @@ export function isSkippableAgentContent(content: unknown): boolean {
 
     const data = isObject(content.data) ? content.data : null
     return Boolean(data?.isMeta) || Boolean(data?.isCompactSummary)
-}
-
-export function isCodexContent(content: unknown): boolean {
-    return isObject(content) && content.type === 'codex'
 }
 
 export function normalizeOutputRecord(
@@ -48,6 +49,10 @@ export function normalizeOutputRecord(
 
     if (data.type === 'user') {
         return normalizeUserOutput(messageId, localId, createdAt, data, meta)
+    }
+
+    if (data.type === 'error') {
+        return normalizeAssistantErrorEvent(messageId, localId, createdAt, data, meta)
     }
 
     if (data.type === 'summary' && typeof data.summary === 'string') {

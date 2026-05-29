@@ -2,6 +2,52 @@ import { describe, expect, it } from 'vitest'
 import { getEventPresentation, renderEventLabel } from './presentation'
 
 describe('chat event presentation', () => {
+    it('renders assistant errors without raw technical text in the primary copy', () => {
+        const presentation = getEventPresentation({
+            type: 'assistant-error',
+            detail: 'WebSocket closed with code 1006',
+        })
+
+        expect(presentation).toEqual({
+            icon: '⚠️',
+            text: 'AI reply did not complete. Send again to retry.',
+            tone: 'danger',
+            detail: 'WebSocket closed with code 1006',
+        })
+        expect(renderEventLabel({ type: 'assistant-error', detail: 'WebSocket closed with code 1006' })).not.toContain(
+            'WebSocket'
+        )
+    })
+
+    it('does not stringify unknown event payloads into the transcript', () => {
+        expect(
+            getEventPresentation({
+                type: 'vendor-event',
+                payload: { secret: 'hidden' },
+            } as never)
+        ).toEqual({
+            icon: null,
+            text: 'Session event: vendor-event',
+            tone: 'default',
+        })
+    })
+
+    it('renders API retry events as user-facing AI service states', () => {
+        expect(
+            getEventPresentation({
+                type: 'api-error',
+                retryAttempt: 1,
+                maxRetries: 3,
+                error: 'WebSocket closed with code 1006',
+            })
+        ).toEqual({
+            icon: '⏳',
+            text: 'AI service problem. Retrying (1/3)',
+            tone: 'warning',
+            detail: 'WebSocket closed with code 1006',
+        })
+    })
+
     it('renders driver-switched events with compact target-first copy', () => {
         expect(
             getEventPresentation({

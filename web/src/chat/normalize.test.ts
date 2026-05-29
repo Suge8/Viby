@@ -20,6 +20,80 @@ describe('normalizeAgentRecord', () => {
         expect(normalized).toBeNull()
     })
 
+    it('drops bare provider envelopes instead of rendering raw JSON bubbles', () => {
+        const normalized = normalizeDecryptedMessage({
+            id: 'bare-output-1',
+            seq: 1,
+            localId: null,
+            createdAt: 1_000,
+            content: {
+                type: 'output',
+                data: {
+                    type: 'assistant',
+                    uuid: 'resp_1',
+                    message: {
+                        role: 'assistant',
+                        content: [{ type: 'thinking', thinking: '' }],
+                    },
+                },
+            },
+        })
+
+        expect(normalized).toBeNull()
+    })
+
+    it('drops wrapped provider envelopes with no visible transcript projection', () => {
+        const normalized = normalizeDecryptedMessage({
+            id: 'wrapped-output-1',
+            seq: 1,
+            localId: null,
+            createdAt: 1_000,
+            content: {
+                role: 'agent',
+                content: {
+                    type: 'output',
+                    data: {
+                        type: 'assistant',
+                        uuid: 'resp_1',
+                        message: {
+                            role: 'assistant',
+                            content: [{ type: 'thinking', thinking: '' }],
+                        },
+                    },
+                },
+            },
+        })
+
+        expect(normalized).toBeNull()
+    })
+
+    it('normalizes provider error envelopes as transcript events', () => {
+        const normalized = normalizeDecryptedMessage({
+            id: 'provider-error-1',
+            seq: 1,
+            localId: null,
+            createdAt: 1_000,
+            content: {
+                role: 'agent',
+                content: {
+                    type: 'codex',
+                    data: {
+                        type: 'error',
+                        message: 'WebSocket closed with code 1006',
+                    },
+                },
+            },
+        })
+
+        expect(normalized).toMatchObject({
+            role: 'event',
+            content: {
+                type: 'assistant-error',
+                detail: 'WebSocket closed with code 1006',
+            },
+        })
+    })
+
     it('keeps assistant output records that still contain a visible text block', () => {
         const normalized = normalizeAgentRecord('assistant-1', null, 1_000, {
             type: 'output',
