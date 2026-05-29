@@ -18,7 +18,7 @@ const agentConfigVersion = {
     checkedAt: 1,
 }
 
-function createSession(overrides: Partial<Session> = {}): Session {
+export function createSession(overrides: Partial<Session> = {}): Session {
     const { codexServiceTier = null, ...restOverrides } = overrides
 
     return {
@@ -44,7 +44,7 @@ function createSession(overrides: Partial<Session> = {}): Session {
     }
 }
 
-function createSessionView(session: Session = createSession()): SessionViewSnapshot {
+export function createSessionView(session: Session = createSession()): SessionViewSnapshot {
     return {
         session: { ...session, resumeAvailable: true },
         latestWindow: {
@@ -70,7 +70,7 @@ function createSessionView(session: Session = createSession()): SessionViewSnaps
     }
 }
 
-function createBridge(overrides: Partial<RemotePeerBridge> = {}): RemotePeerBridge {
+export function createBridge(overrides: Partial<RemotePeerBridge> = {}): RemotePeerBridge {
     const view = createSessionView()
     const bridge: RemotePeerBridge = {
         listSessions: vi.fn(async () => ({
@@ -94,8 +94,22 @@ function createBridge(overrides: Partial<RemotePeerBridge> = {}): RemotePeerBrid
                 },
             ],
         })),
-        openSession: vi.fn(async () => view),
-        resumeSession: vi.fn(async () => createSessionView(createSession({ updatedAt: 20 }))),
+        openSession: vi.fn(async () => ({
+            session: view.session,
+            stream: view.stream,
+            watermark: view.watermark,
+            interactivity: view.interactivity,
+        })),
+        resumeSession: vi.fn(async () => {
+            const resumed = createSessionView(createSession({ updatedAt: 20 }))
+            return {
+                session: resumed.session,
+                stream: resumed.stream,
+                watermark: resumed.watermark,
+                interactivity: resumed.interactivity,
+            }
+        }),
+        getMessages: vi.fn(async () => view.latestWindow),
         loadAfter: vi.fn(async () => ({
             messages: [
                 { id: 'message-2', seq: 2, localId: null, content: [{ type: 'text', text: 'after' }], createdAt: 12 },
@@ -163,6 +177,7 @@ function createBridge(overrides: Partial<RemotePeerBridge> = {}): RemotePeerBrid
                 version: agentConfigVersion,
             },
         })),
+        openAgentConfig: vi.fn(async () => ({ ok: true as const, path: '/home/user/.codex/config.toml' })),
         checkRuntimePathsExists: vi.fn(async () => ({ exists: { '/repo': true } })),
         browseRuntimeDirectory: vi.fn(async () => ({
             success: true,

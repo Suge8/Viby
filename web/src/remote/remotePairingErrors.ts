@@ -8,9 +8,11 @@ export type RemotePairingErrorKey =
     | 'remotePairing.error.invalidCode'
     | 'remotePairing.error.rateLimited'
     | 'remotePairing.error.closedRetrying'
+    | 'remotePairing.error.hostOffline'
     | 'remotePairing.error.peerRequestFailed'
     | 'remotePairing.error.uploadFailed'
     | 'remotePairing.error.pairingUnavailable'
+    | 'remotePairing.error.updateDesktop'
     | 'remotePairing.error.userCancelled'
 
 const REMOTE_PAIRING_ERROR_KEYS = new Set<string>([
@@ -18,10 +20,12 @@ const REMOTE_PAIRING_ERROR_KEYS = new Set<string>([
     'remotePairing.error.scanAgain',
     'remotePairing.error.invalidCode',
     'remotePairing.error.rateLimited',
+    'remotePairing.error.hostOffline',
     'remotePairing.error.closedRetrying',
     'remotePairing.error.peerRequestFailed',
     'remotePairing.error.uploadFailed',
     'remotePairing.error.pairingUnavailable',
+    'remotePairing.error.updateDesktop',
     'remotePairing.error.userCancelled',
 ])
 
@@ -68,7 +72,11 @@ export function getRemotePairingErrorKey(error: unknown): RemotePairingErrorKey 
 }
 
 export function canRetryRemotePairingError(key: RemotePairingErrorKey): boolean {
-    return !(key === 'remotePairing.error.regenerateQr' || key === 'remotePairing.error.scanAgain')
+    return !(
+        key === 'remotePairing.error.regenerateQr' ||
+        key === 'remotePairing.error.scanAgain' ||
+        key === 'remotePairing.error.updateDesktop'
+    )
 }
 
 export function getRemotePairingErrorKeyOrFallback(error: unknown): RemotePairingErrorKey {

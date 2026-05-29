@@ -6,13 +6,29 @@ import {
     type PairingTunnelCipher,
     PairingTunnelFrameSchema,
     type PairingTunnelPlainFrame,
+    toPairingTunnelBase64Url,
 } from '@viby/protocol/pairing'
+
+export interface RemotePairingRelayBinaryChunk {
+    transferId: string
+    chunkIndex: number
+    chunkCount: number
+    bytes: Uint8Array
+}
 
 export interface RemotePairingRelaySocket {
     readonly readyState: 'closed' | 'open'
     dispose(): void
     notifyForeground(): void
     send(data: string): void
+    /**
+     * Ship one upload chunk through the sealed tunnel. Mirrors the
+     * datachannel binary upload path so the desktop bridge can rebuild the
+     * magic header and re-use `PairingBinaryUploadManager`. Resolves after
+     * the sealed frame leaves the local socket, not after the peer ack:
+     * the upload-complete RPC owns end-to-end acknowledgement.
+     */
+    sendBinaryChunk(chunk: RemotePairingRelayBinaryChunk): Promise<void>
 }
 
 export function createRemotePairingRelaySocket(options: {
@@ -37,6 +53,7 @@ export function createRemotePairingRelaySocket(options: {
         dispose,
         notifyForeground,
         send,
+        sendBinaryChunk,
         get readyState() {
             return readyState
         },
@@ -82,6 +99,22 @@ export function createRemotePairingRelaySocket(options: {
             payload: PairingPeerMessageSchema.parse(JSON.parse(data) as unknown),
         }
         activeSocket.send(JSON.stringify(await requireCipher().seal(plainFrame)))
+    }
+
+    async function sendBinaryChunk(chunk: RemotePairingRelayBinaryChunk): Promise<void> {
+        if (socket?.readyState !== WebSocket.OPEN || readyState !== 'open') {
+            throw new Error('relay tunnel is closed')
+        }
+        const plainFrame: PairingTunnelPlainFrame = {
+            kind: 'binary',
+            id: `web-relay-binary-${Date.now()}-${seq}`,
+            seq: seq++,
+            transferId: chunk.transferId,
+            chunkIndex: chunk.chunkIndex,
+            chunkCount: chunk.chunkCount,
+            bytesBase64: toPairingTunnelBase64Url(chunk.bytes),
+        }
+        socket.send(JSON.stringify(await requireCipher().seal(plainFrame)))
     }
 
     async function handleOpen(activeSocket: WebSocket | null): Promise<void> {

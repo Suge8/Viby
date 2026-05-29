@@ -6,10 +6,11 @@ export function createRemotePeerSessionRelay(options: {
     onFatal(): void
     onMessage(data: string): void
     onOpen(): void
+    onHeartbeatTimeout(): void
     tunnelUrl: string
 }): { heartbeat: RemoteRelayHeartbeat; relay: RemotePairingRelaySocket } {
     let relay!: RemotePairingRelaySocket
-    const heartbeat = createRemoteRelayHeartbeat({ getRelay: () => relay })
+    const heartbeat = createRemoteRelayHeartbeat({ getRelay: () => relay, onTimeout: options.onHeartbeatTimeout })
     relay = createRemotePairingRelaySocket({
         tunnelUrl: options.tunnelUrl,
         onOpen: () => {

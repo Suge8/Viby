@@ -2,15 +2,14 @@ import type { PairingSessionSnapshot } from '@viby/protocol'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { readBrowserStorageItem } from '@/lib/browserStorage'
 import { getPairingGuestTokenStorageKey, LOCAL_STORAGE_KEYS } from '@/lib/storage/storageRegistry'
+import { loadPairingDeviceIdentity } from '@/remote/remotePairingDevice'
 import {
-    claimRemotePairing,
     claimRemotePwaHandoff,
     clearRemotePairingId,
     clearStoredGuestToken,
     createRemotePwaHandoff,
     getGuestToken,
     getPairingHandoffTicketFromLocation,
-    getPairingTicketFromLocation,
     readRemotePairingId,
     reconnectRemotePairing,
     recoverRemotePairingByDevice,
@@ -39,9 +38,8 @@ function pairingSnapshot(overrides: Partial<PairingSessionSnapshot> = {}): Pairi
         createdAt: 1,
         updatedAt: 2,
         expiresAt: 3,
-        ticketExpiresAt: 4,
         shortCode: null,
-        approvalStatus: 'pending' as const,
+        approvalStatus: null,
         host: { label: 'Desktop' },
         guest: { label: 'Device' },
         ...overrides,
@@ -70,7 +68,7 @@ function installFetch(responses: Response[]): ReturnType<typeof vi.fn> {
 beforeEach(() => {
     window.localStorage.clear()
     window.sessionStorage.clear()
-    window.history.replaceState({}, '', '/p/pairing-1#ticket=ticket-1')
+    window.history.replaceState({}, '', '/p/pairing-1')
 })
 
 afterEach(() => {
@@ -79,14 +77,7 @@ afterEach(() => {
 })
 
 describe('remotePairingHttp', () => {
-    it('reads and removes one-time launch secrets from the URL without touching the path', () => {
-        expect(getPairingTicketFromLocation()).toBe('ticket-1')
-
-        scrubPairingLaunchSecretFromUrl()
-
-        expect(window.location.pathname).toBe('/p/pairing-1')
-        expect(window.location.hash).toBe('')
-
+    it('strips the one-time PWA handoff secret from the URL on scrub', () => {
         // New PWA installs deliver the handoff in the URL query because iOS
         // WebKit standalone PWAs strip the launch URL fragment on cold start;
         // query takes precedence over the back-compat fragment path.
@@ -97,7 +88,6 @@ describe('remotePairingHttp', () => {
 
         expect(window.location.pathname).toBe('/p/pairing-1')
         expect(window.location.search).toBe('?keep=1')
-        expect(window.location.hash).toBe('')
     })
 
     it('persists the active pairing id but only restores from explicit remote workspace URLs', () => {
@@ -113,10 +103,10 @@ describe('remotePairingHttp', () => {
         expect(readBrowserStorageItem('local', LOCAL_STORAGE_KEYS.remoteActivePairing)).toBeNull()
     })
 
-    it('claims a fresh ticket, sends the device public key, and stores the guest token', async () => {
+    it('verifies the desktop code against the broker, sends the device public key, and stores the guest token', async () => {
         const fetchMock = installFetch([
             jsonResponse({
-                pairing: pairingSnapshot(),
+                pairing: pairingSnapshot({ approvalStatus: 'approved', shortCode: '123456' }),
                 guestToken: 'guest-token-1',
                 wsUrl: 'wss://pair.example/ws',
                 tunnelUrl: 'wss://pair.example/tunnel',
@@ -124,46 +114,81 @@ describe('remotePairingHttp', () => {
             }),
         ])
 
-        const response = await claimRemotePairing('pairing-1', 'ticket-1')
+        const result = await verifyRemotePairingCode('pairing-1', '123456')
 
-        expect(response.guestToken).toBe('guest-token-1')
+        expect(result.mode).toBe('broker')
+        if (result.mode !== 'broker') throw new Error('expected broker result')
+        expect(result.auth.guestToken).toBe('guest-token-1')
+        expect(result.auth.pairing.approvalStatus).toBe('approved')
         expect(readBrowserStorageItem('local', getPairingGuestTokenStorageKey('pairing-1'))).toBe('guest-token-1')
         expect(fetchMock).toHaveBeenCalledWith(
-            '/pairings/pairing-1/claim',
+            '/pairings/pairing-1/verify-code',
             expect.objectContaining({
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({
-                    ticket: 'ticket-1',
-                    label: '设备',
-                    publicKey: 'phone-public-key',
-                    metadata: { platform: 'unknown' },
-                }),
                 signal: expect.any(AbortSignal),
             })
         )
+        const sentBody = JSON.parse(((fetchMock.mock.calls[0]?.[1] as RequestInit | undefined)?.body as string) ?? '')
+        expect(sentBody).toMatchObject({
+            code: '123456',
+            publicKey: 'phone-public-key',
+            metadata: { platform: 'unknown' },
+        })
     })
 
-    it('verifies the desktop code and returns the approved pairing snapshot', async () => {
-        installFetch([
+    it('falls back to the hub LAN endpoint when the broker returns 404 for the pairing id', async () => {
+        const fetchMock = installFetch([
+            jsonResponse({ code: 'pairing_not_found', error: 'Pairing session not found' }, 404),
             jsonResponse({
-                pairing: pairingSnapshot({ approvalStatus: 'approved', shortCode: '123456' }),
+                pairing: pairingSnapshot({ approvalStatus: 'approved', shortCode: '654321' }),
+                deviceToken: 'hub-jwt-token',
+                deviceId: '11111111-2222-3333-4444-555555555555',
+                deviceSecret: 'device-secret-1',
             }),
         ])
 
-        const response = await verifyRemotePairingCode('pairing-1', 'guest-token-1', '123456')
+        const result = await verifyRemotePairingCode('pairing-1', '654321')
 
-        expect(response.pairing.approvalStatus).toBe('approved')
-        expect(response.pairing.shortCode).toBe('123456')
+        expect(result.mode).toBe('lan')
+        if (result.mode !== 'lan') throw new Error('expected lan result')
+        expect(result.auth.deviceToken).toBe('hub-jwt-token')
+        expect(fetchMock).toHaveBeenNthCalledWith(
+            1,
+            '/pairings/pairing-1/verify-code',
+            expect.objectContaining({ method: 'POST' })
+        )
+        expect(fetchMock).toHaveBeenNthCalledWith(
+            2,
+            '/api/lan-pairings/pairing-1/verify-code',
+            expect.objectContaining({ method: 'POST' })
+        )
     })
 
-    it('converts broker error payloads into local presentation codes', async () => {
+    it('converts broker error payloads into local presentation codes when verify fails', async () => {
         installFetch([jsonResponse({ code: 'pairing_invalid_code', error: 'server copy is ignored' }, 403)])
 
-        await expect(verifyRemotePairingCode('pairing-1', 'guest-token-1', '000000')).rejects.toMatchObject({
+        await expect(verifyRemotePairingCode('pairing-1', '000000')).rejects.toMatchObject({
             code: 'remotePairing.error.invalidCode',
             message: 'remotePairing.error.invalidCode',
         })
+    })
+
+    it('verifies without a device key when storage is unavailable', async () => {
+        vi.mocked(loadPairingDeviceIdentity).mockRejectedValueOnce(new Error('IndexedDB unavailable'))
+        const fetchMock = installFetch([
+            jsonResponse({
+                pairing: pairingSnapshot({ approvalStatus: 'approved', shortCode: '789012' }),
+                guestToken: 'guest-token-1',
+                wsUrl: 'wss://pair.example/ws',
+                tunnelUrl: 'wss://pair.example/tunnel',
+                iceServers: [{ urls: 'stun:stun.example.com:3478' }],
+            }),
+        ])
+
+        const result = await verifyRemotePairingCode('pairing-1', '789012')
+        expect(result.mode).toBe('broker')
+        expect(fetchMock).toHaveBeenCalledTimes(1)
     })
 
     it('reconnects with a one-time challenge and signed device proof', async () => {
@@ -336,18 +361,18 @@ describe('remotePairingHttp', () => {
         )
     })
 
-    it('exposes the live guest token for both claim and reconnect auth payloads', () => {
+    it('exposes the live guest token for both verify-code and reconnect auth payloads', () => {
         window.localStorage.setItem(getPairingGuestTokenStorageKey('pairing-1'), 'stored-token')
 
         expect(
             getGuestToken({
                 pairing: pairingSnapshot(),
-                guestToken: 'claim-token',
+                guestToken: 'verify-token',
                 wsUrl: 'wss://pair.example/ws',
                 tunnelUrl: 'wss://pair.example/tunnel',
                 iceServers: [],
             })
-        ).toBe('claim-token')
+        ).toBe('verify-token')
         expect(
             getGuestToken({
                 pairing: pairingSnapshot(),

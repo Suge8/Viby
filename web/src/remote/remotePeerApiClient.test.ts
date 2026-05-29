@@ -1,8 +1,13 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { getMessageWindowState, removeMessageWindow } from '@/lib/message-window-store'
 import { queryKeys } from '@/lib/query-keys'
-import { createApiHarness } from './remotePeerApiClient.test.support'
+import { createApiHarness, createSessionView } from './remotePeerApiClient.test.support'
 
 describe('createRemotePeerApiClient', () => {
+    afterEach(() => {
+        removeMessageWindow('session-1')
+    })
+
     it('overwrites stale local runtime cache with the synthetic remote runtime', () => {
         const { queryClient } = createApiHarness()
         expect(queryClient.getQueryData(queryKeys.runtime)).toMatchObject({
@@ -33,11 +38,38 @@ describe('createRemotePeerApiClient', () => {
         const view = await api.getSessionView('session-1')
 
         expect(view.session.id).toBe('session-1')
-        expect(bridge.openSession).toHaveBeenCalledWith({ sessionId: 'session-1' })
+        expect(bridge.openSession).toHaveBeenCalledWith({ sessionId: 'session-1', includeLatestWindow: false })
+        expect(bridge.getMessages).toHaveBeenCalledWith({ sessionId: 'session-1', beforeSeq: null, limit: 50 })
         expect(queryClient.getQueryData(queryKeys.session('session-1'))).toMatchObject({
             session: { id: 'session-1' },
             detailHydrated: true,
         })
+    })
+
+    it('loads session metadata without fetching latest messages', async () => {
+        const { api, bridge } = createApiHarness()
+
+        const sessionResponse = await api.getSession('session-1')
+
+        expect(sessionResponse.session.id).toBe('session-1')
+        expect(bridge.openSession).toHaveBeenCalledWith({ sessionId: 'session-1', includeLatestWindow: false })
+        expect(bridge.getMessages).not.toHaveBeenCalled()
+    })
+
+    it('hydrates active stream state from lazy session heads', async () => {
+        const { api, bridge } = createApiHarness()
+        const view = createSessionView()
+        vi.mocked(bridge.openSession).mockResolvedValueOnce({
+            session: view.session,
+            stream: { assistantTurnId: 'turn-1', startedAt: 12, updatedAt: 13, text: 'streaming' },
+            watermark: view.watermark,
+            interactivity: view.interactivity,
+        })
+
+        await api.getSession('session-1')
+
+        expect(getMessageWindowState('session-1').stream?.text).toBe('streaming')
+        expect(bridge.getMessages).not.toHaveBeenCalled()
     })
 
     it('reuses the opened view for getSession and latest messages', async () => {
@@ -51,6 +83,34 @@ describe('createRemotePeerApiClient', () => {
         expect(messagesResponse.messages.map((message) => message.id)).toEqual(['message-1'])
         expect(messagesResponse.page).toEqual({ limit: 25, beforeSeq: null, nextBeforeSeq: null, hasMore: false })
         expect(bridge.openSession).toHaveBeenCalledTimes(1)
+        expect(bridge.getMessages).toHaveBeenCalledTimes(1)
+    })
+
+    it('limits cached latest messages to the requested page size', async () => {
+        const { api, bridge } = createApiHarness()
+        vi.mocked(bridge.getMessages).mockResolvedValueOnce({
+            messages: [
+                { id: 'message-1', seq: 1, localId: null, content: [{ type: 'text', text: 'old' }], createdAt: 11 },
+                { id: 'message-2', seq: 2, localId: null, content: [{ type: 'text', text: 'new' }], createdAt: 12 },
+            ],
+            page: { limit: 50, beforeSeq: null, nextBeforeSeq: 1, hasMore: false },
+        })
+
+        await api.getSessionView('session-1')
+        const messagesResponse = await api.getMessages('session-1', { limit: 1 })
+
+        expect(messagesResponse.messages.map((message) => message.id)).toEqual(['message-2'])
+        expect(messagesResponse.page).toEqual({ limit: 1, beforeSeq: null, nextBeforeSeq: 2, hasMore: true })
+    })
+
+    it('loads older message pages through the peer messages RPC without opening the session', async () => {
+        const { api, bridge } = createApiHarness()
+
+        const messagesResponse = await api.getMessages('session-1', { beforeSeq: 10, limit: 25 })
+
+        expect(messagesResponse.messages.map((message) => message.id)).toEqual(['message-1'])
+        expect(bridge.getMessages).toHaveBeenCalledWith({ sessionId: 'session-1', beforeSeq: 10, limit: 25 })
+        expect(bridge.openSession).not.toHaveBeenCalled()
     })
 
     it('loads catch-up messages through the peer load-after RPC', async () => {
@@ -64,16 +124,45 @@ describe('createRemotePeerApiClient', () => {
         expect(recovery.session.id).toBe('session-1')
     })
 
+    it('marks remote recovery pages as incomplete when load-after fills the limit', async () => {
+        const { api, bridge } = createApiHarness()
+        vi.mocked(bridge.loadAfter).mockResolvedValueOnce({
+            messages: Array.from({ length: 20 }, (_, index) => ({
+                id: `message-${index + 2}`,
+                seq: index + 2,
+                localId: null,
+                content: [{ type: 'text', text: 'after' }],
+                createdAt: 12 + index,
+            })),
+            nextAfterSeq: 21,
+        })
+
+        const recovery = await api.getSessionRecovery('session-1', { afterSeq: 1, limit: 20 })
+
+        expect(recovery.page).toEqual({ afterSeq: 1, nextAfterSeq: 21, limit: 20, hasMore: true })
+    })
+
     it('resumes sessions by hydrating the returned view', async () => {
         const { api, bridge, queryClient } = createApiHarness()
 
         const session = await api.resumeSession('session-1')
 
-        expect(bridge.resumeSession).toHaveBeenCalledWith({ sessionId: 'session-1' })
+        expect(bridge.resumeSession).toHaveBeenCalledWith({ sessionId: 'session-1', includeLatestWindow: false })
         expect(session.updatedAt).toBe(20)
         expect(queryClient.getQueryData(queryKeys.session('session-1'))).toMatchObject({
             session: { updatedAt: 20 },
         })
+    })
+
+    it('invalidates stale full-view caches after a lazy resume head', async () => {
+        const { api, bridge } = createApiHarness()
+
+        await api.getSessionView('session-1')
+        await api.resumeSession('session-1')
+        const view = await api.getSessionView('session-1')
+
+        expect(view.session.updatedAt).toBe(20)
+        expect(bridge.getMessages).toHaveBeenCalledTimes(2)
     })
 
     it('sends messages through the peer bridge without creating a second Hub client', async () => {
@@ -120,6 +209,10 @@ describe('createRemotePeerApiClient', () => {
                 },
             }
         )
+        await expect(api.openAgentConfig({ driver: 'codex' })).resolves.toEqual({
+            ok: true,
+            path: '/home/user/.codex/config.toml',
+        })
         await expect(api.spawnSession({ directory: '/repo', agent: 'codex' })).resolves.toMatchObject({
             type: 'success',
             session: { id: 'session-2' },
@@ -134,6 +227,7 @@ describe('createRemotePeerApiClient', () => {
         expect(bridge.getAgentConfig).toHaveBeenCalledWith()
         expect(bridge.saveAgentConfig).toHaveBeenCalledWith({ driver: 'codex', values: { 'codex.model': 'gpt-5.4' } })
         expect(bridge.restoreAgentConfig).toHaveBeenCalledWith({ driver: 'codex', backupPath: '/tmp/config.bak' })
+        expect(bridge.openAgentConfig).toHaveBeenCalledWith({ driver: 'codex' })
         expect(bridge.spawnSession).toHaveBeenCalledWith({ directory: '/repo', agent: 'codex' })
     })
 

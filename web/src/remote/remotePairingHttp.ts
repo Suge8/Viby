@@ -1,28 +1,20 @@
 import {
-    hasPairingWorkspaceIntent,
-    PAIRING_PWA_HANDOFF_PARAM,
-    type PairingClaimResponse,
-    PairingClaimResponseSchema,
     PairingDeviceReconnectChallengeRequestSchema,
     PairingDeviceReconnectRequestSchema,
+    type PairingGuestAuthResponse,
+    PairingGuestAuthResponseSchema,
     type PairingHttpErrorCode,
+    type PairingLanVerifyCodeResponse,
+    PairingLanVerifyCodeResponseSchema,
     PairingPwaHandoffClaimRequestSchema,
     PairingPwaHandoffTicketRequestSchema,
     PairingPwaHandoffTicketResponseSchema,
     PairingReconnectChallengeResponseSchema,
     type PairingReconnectResponse,
     PairingReconnectResponseSchema,
-    type PairingVerifyCodeResponse,
-    PairingVerifyCodeResponseSchema,
 } from '@viby/protocol'
-import {
-    readBrowserStorageItem,
-    readBrowserStorageItemOrThrow,
-    removeBrowserStorageItem,
-    writeBrowserStorageItem,
-} from '@/lib/browserStorage'
 import { DEVICE_PLATFORM_DISPLAY_LABELS, resolveClientPlatform } from '@/lib/clientPlatform'
-import { getPairingGuestTokenStorageKey, LOCAL_STORAGE_KEYS } from '@/lib/storage/storageRegistry'
+import { loadClaimDeviceIdentity } from '@/remote/remotePairingClaimIdentity'
 import {
     createReconnectDeviceProof,
     loadCachedPairingDeviceIdentity,
@@ -30,10 +22,36 @@ import {
 } from '@/remote/remotePairingDevice'
 import { requestRemotePairingPersistentStorage } from '@/remote/remotePairingStoragePersistence'
 import type { RemotePairingErrorKey } from './remotePairingErrors'
+import {
+    clearStoredGuestToken as clearStoredGuestTokenStorage,
+    readStoredGuestToken,
+    storeGuestToken,
+} from './remotePairingHttpStorage'
 
-export type PairingRemoteAuth = PairingClaimResponse | PairingReconnectResponse
+export {
+    clearRemotePairingId,
+    clearStoredGuestToken,
+    getPairingHandoffTicketFromLocation,
+    getPairingTokenKey,
+    readRemotePairingId,
+    readRemotePairingPathId,
+    readStoredRemotePairingId,
+    rememberRemotePairingId,
+    scrubPairingLaunchSecretFromUrl,
+} from './remotePairingHttpStorage'
 
-type PairingHttpContext = 'claim' | 'handoff' | 'reconnect' | 'verifyCode'
+/**
+ * Discriminator for the final post-verify outcome. Broker mode keeps the
+ * WebRTC bridge contract; LAN mode hands the phone a hub device token + secret
+ * so it can connect directly to the local hub workspace.
+ */
+export type PairingRemoteVerifyResult =
+    | { mode: 'broker'; auth: PairingGuestAuthResponse }
+    | { mode: 'lan'; auth: PairingLanVerifyCodeResponse }
+
+export type PairingRemoteAuth = PairingGuestAuthResponse | PairingReconnectResponse
+
+type PairingHttpContext = 'handoff' | 'reconnect' | 'verifyCode'
 
 const PAIRING_HTTP_TIMEOUT_MS = 8_000
 
@@ -70,72 +88,6 @@ export function isInvalidStoredPairingCredential(error: RemotePairingHttpError):
         )
     }
     return false
-}
-
-export function readRemotePairingId(pathname: string, search = ''): string | null {
-    return (
-        readRemotePairingPathId(pathname) ??
-        (hasPairingWorkspaceIntent(pathname, search) ? readStoredRemotePairingId() : null)
-    )
-}
-
-export function readRemotePairingPathId(pathname: string): string | null {
-    const match = /^\/p\/([^/?#]+)$/.exec(pathname)
-    if (match?.[1]) {
-        return decodeURIComponent(match[1])
-    }
-    return null
-}
-
-export function readStoredRemotePairingId(): string | null {
-    return readBrowserStorageItem('local', LOCAL_STORAGE_KEYS.remoteActivePairing)
-}
-
-export function rememberRemotePairingId(pairingId: string): void {
-    writeBrowserStorageItem('local', LOCAL_STORAGE_KEYS.remoteActivePairing, pairingId)
-}
-
-export function clearRemotePairingId(): void {
-    removeBrowserStorageItem('local', LOCAL_STORAGE_KEYS.remoteActivePairing)
-}
-
-function getHashParam(key: string): string | null {
-    return new URLSearchParams(window.location.hash.slice(1)).get(key)
-}
-
-function getSearchParam(key: string): string | null {
-    return new URLSearchParams(window.location.search).get(key)
-}
-
-export function getPairingTicketFromLocation(): string | null {
-    return getHashParam('ticket')
-}
-
-export function getPairingHandoffTicketFromLocation(): string | null {
-    return getSearchParam(PAIRING_PWA_HANDOFF_PARAM) ?? getHashParam(PAIRING_PWA_HANDOFF_PARAM)
-}
-
-export function scrubPairingLaunchSecretFromUrl(): void {
-    const searchParams = new URLSearchParams(window.location.search)
-    searchParams.delete(PAIRING_PWA_HANDOFF_PARAM)
-    const nextSearch = searchParams.toString()
-    window.history.replaceState({}, '', `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}`)
-}
-
-export function getPairingTokenKey(pairingId: string): string {
-    return getPairingGuestTokenStorageKey(pairingId)
-}
-
-function readStoredGuestToken(pairingId: string): string | null {
-    return readBrowserStorageItemOrThrow('local', getPairingGuestTokenStorageKey(pairingId))
-}
-
-function storeGuestToken(pairingId: string, token: string): void {
-    writeBrowserStorageItem('local', getPairingGuestTokenStorageKey(pairingId), token)
-}
-
-export function clearStoredGuestToken(pairingId: string): void {
-    removeBrowserStorageItem('local', getPairingGuestTokenStorageKey(pairingId))
 }
 
 async function postJson<T>(
@@ -209,11 +161,6 @@ function resolvePairingHttpErrorKey(
             ? 'remotePairing.error.invalidCode'
             : 'remotePairing.error.scanAgain'
     }
-    if (context === 'claim') {
-        return status >= 500 || status === 408
-            ? 'remotePairing.error.closedRetrying'
-            : 'remotePairing.error.regenerateQr'
-    }
     return status >= 500 || status === 408 ? 'remotePairing.error.closedRetrying' : 'remotePairing.error.scanAgain'
 }
 
@@ -225,26 +172,47 @@ async function readJsonPayload(response: Response): Promise<unknown> {
     }
 }
 
-export async function claimRemotePairing(pairingId: string, ticket: string): Promise<PairingClaimResponse> {
-    const identity = await loadPairingDeviceIdentity(pairingId)
+/**
+ * Single-step Google device-flow verification. Tries the broker endpoint
+ * first; on `404 pairing_not_found` falls back to the hub LAN endpoint. The
+ * active mode is returned so the controller can branch between WebRTC bridge
+ * (broker) and hub device-token install (LAN).
+ */
+export async function verifyRemotePairingCode(pairingId: string, code: string): Promise<PairingRemoteVerifyResult> {
+    const identity = await loadClaimDeviceIdentity(pairingId)
     const platform = resolveClientPlatform()
-    const response = await postJson(
-        'claim',
-        `/pairings/${encodeURIComponent(pairingId)}/claim`,
-        {
-            ticket,
-            label: DEVICE_PLATFORM_DISPLAY_LABELS[platform],
-            publicKey: identity.publicKey,
-            metadata: { platform },
-        },
-        (payload) => PairingClaimResponseSchema.parse(payload)
+    const body = {
+        code,
+        label: DEVICE_PLATFORM_DISPLAY_LABELS[platform],
+        ...(identity ? { publicKey: identity.publicKey } : {}),
+        metadata: { platform },
+        deviceName: DEVICE_PLATFORM_DISPLAY_LABELS[platform],
+        platform,
+    }
+    try {
+        const auth = await postJson(
+            'verifyCode',
+            `/pairings/${encodeURIComponent(pairingId)}/verify-code`,
+            body,
+            (payload) => PairingGuestAuthResponseSchema.parse(payload)
+        )
+        storeGuestToken(pairingId, auth.guestToken)
+        await requestRemotePairingPersistentStorage()
+        return { mode: 'broker', auth }
+    } catch (error) {
+        if (!(error instanceof RemotePairingHttpError && error.status === 404)) throw error
+    }
+    const auth = await postJson(
+        'verifyCode',
+        `/api/lan-pairings/${encodeURIComponent(pairingId)}/verify-code`,
+        body,
+        (payload) => PairingLanVerifyCodeResponseSchema.parse(payload)
     )
-    storeGuestToken(pairingId, response.guestToken)
     await requestRemotePairingPersistentStorage()
-    return response
+    return { mode: 'lan', auth }
 }
 
-export async function recoverRemotePairingByDevice(pairingId: string): Promise<PairingClaimResponse | null> {
+export async function recoverRemotePairingByDevice(pairingId: string): Promise<PairingGuestAuthResponse | null> {
     const identity = await loadCachedPairingDeviceIdentity(pairingId)
     if (!identity) return null
 
@@ -259,7 +227,7 @@ export async function recoverRemotePairingByDevice(pairingId: string): Promise<P
         'reconnect',
         `/pairings/${encodeURIComponent(pairingId)}/device-reconnect`,
         PairingDeviceReconnectRequestSchema.parse({ deviceProof }),
-        (payload) => PairingClaimResponseSchema.parse(payload)
+        (payload) => PairingGuestAuthResponseSchema.parse(payload)
     )
     storeGuestToken(pairingId, response.guestToken)
     await requestRemotePairingPersistentStorage()
@@ -289,7 +257,10 @@ export async function createRemotePwaHandoff(
     return response
 }
 
-export async function claimRemotePwaHandoff(pairingId: string, handoffTicket: string): Promise<PairingClaimResponse> {
+export async function claimRemotePwaHandoff(
+    pairingId: string,
+    handoffTicket: string
+): Promise<PairingGuestAuthResponse> {
     const identity = await loadPairingDeviceIdentity(pairingId)
     const platform = resolveClientPlatform()
     const response = await postJson(
@@ -300,7 +271,7 @@ export async function claimRemotePwaHandoff(pairingId: string, handoffTicket: st
             label: DEVICE_PLATFORM_DISPLAY_LABELS[platform],
             publicKey: identity.publicKey,
         }),
-        (payload) => PairingClaimResponseSchema.parse(payload)
+        (payload) => PairingGuestAuthResponseSchema.parse(payload)
     )
     storeGuestToken(pairingId, response.guestToken)
     await requestRemotePairingPersistentStorage()
@@ -332,25 +303,10 @@ export async function reconnectRemotePairing(pairingId: string): Promise<Pairing
         return response
     } catch (error) {
         if (error instanceof RemotePairingHttpError && isInvalidStoredPairingCredential(error)) {
-            clearStoredGuestToken(pairingId)
+            clearStoredGuestTokenStorage(pairingId)
         }
         throw error
     }
-}
-
-export async function verifyRemotePairingCode(
-    pairingId: string,
-    token: string,
-    code: string
-): Promise<PairingVerifyCodeResponse> {
-    const response = await postJson(
-        'verifyCode',
-        `/pairings/${encodeURIComponent(pairingId)}/verify-code`,
-        { token, code },
-        (payload) => PairingVerifyCodeResponseSchema.parse(payload)
-    )
-    await requestRemotePairingPersistentStorage()
-    return response
 }
 
 export function getGuestToken(auth: PairingRemoteAuth): string | null {

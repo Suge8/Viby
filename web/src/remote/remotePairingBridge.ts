@@ -12,6 +12,8 @@ import {
     PairingPeerListDirectoryResultSchema,
     PairingPeerListSessionsResultSchema,
     PairingPeerLoadAfterResultSchema,
+    PairingPeerMessagesResultSchema,
+    PairingPeerOpenAgentConfigResultSchema,
     PairingPeerOpenSessionResultSchema,
     PairingPeerPathsExistResultSchema,
     PairingPeerPushVapidResultSchema,
@@ -55,6 +57,11 @@ export function createRemotePeerBridge(options: {
             options.requestPeer(
                 createRemotePeerRequest('session.load-after', params),
                 PairingPeerLoadAfterResultSchema.parse
+            ),
+        getMessages: (params) =>
+            options.requestPeer(
+                createRemotePeerRequest('session.messages', params),
+                PairingPeerMessagesResultSchema.parse
             ),
         sendMessage: (params) =>
             options.requestPeer(
@@ -145,6 +152,11 @@ export function createRemotePeerBridge(options: {
             options.requestPeer(
                 createRemotePeerRequest('runtime.restore-agent-config', params),
                 PairingPeerRestoreAgentConfigResultSchema.parse
+            ),
+        openAgentConfig: (params) =>
+            options.requestPeer(
+                createRemotePeerRequest('runtime.open-agent-config', params),
+                PairingPeerOpenAgentConfigResultSchema.parse
             ),
         checkRuntimePathsExists: (params) =>
             options.requestPeer(

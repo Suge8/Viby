@@ -28,20 +28,48 @@ export async function readRemotePairingRouteStats(
             staleAfterMs: PAIRING_LINK_SAMPLE_STALE_MS,
             routeRevision: telemetry.routeRevision,
             directBlockedReason: telemetry.directBlockedReason,
+            directProbe: telemetry.directProbe,
         }
     }
     const stats = await readRemotePeerTransportStats(transport.getPeer() as unknown as RTCPeerConnection, sampledAt)
-    const previousTransport =
-        stats.transport === 'unknown' && telemetry.activeTransport === 'direct-webrtc'
-            ? 'direct'
-            : stats.transport === 'unknown' && telemetry.activeTransport === 'turn-webrtc'
-              ? 'relay'
-              : stats.previousTransport
+    if (telemetry.activeTransport === 'direct-webrtc') return mergeDirectTelemetry(stats, telemetry, sampledAt)
     return {
         ...stats,
-        previousTransport,
         routeRevision: telemetry.routeRevision,
         directBlockedReason: telemetry.directBlockedReason,
+        directProbe: telemetry.directProbe,
+    }
+}
+
+function mergeDirectTelemetry(
+    stats: Awaited<ReturnType<typeof readRemotePeerTransportStats>>,
+    telemetry: ReturnType<typeof readPairingTunnelTelemetry>,
+    sampledAt: number
+) {
+    const telemetryRtt = freshTelemetryRoundTrip(telemetry)
+    const telemetrySampledAt = telemetry.roundTripSampledAt ?? sampledAt
+    if (stats.transport === 'direct') {
+        return {
+            ...stats,
+            currentRoundTripTimeMs: stats.currentRoundTripTimeMs ?? telemetryRtt,
+            sampledAt: stats.currentRoundTripTimeMs === null ? telemetrySampledAt : stats.sampledAt,
+            routeRevision: telemetry.routeRevision,
+            directBlockedReason: telemetry.directBlockedReason,
+            directProbe: telemetry.directProbe,
+        }
+    }
+    return {
+        transport: 'direct' as const,
+        transportMode: 'direct-webrtc' as const,
+        localCandidateType: telemetry.directCandidateType,
+        remoteCandidateType: null,
+        currentRoundTripTimeMs: telemetryRtt,
+        previousTransport: null,
+        sampledAt: telemetrySampledAt,
+        staleAfterMs: PAIRING_LINK_SAMPLE_STALE_MS,
+        routeRevision: telemetry.routeRevision,
+        directBlockedReason: telemetry.directBlockedReason,
+        directProbe: telemetry.directProbe,
     }
 }
 

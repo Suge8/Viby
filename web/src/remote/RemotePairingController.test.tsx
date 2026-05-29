@@ -15,6 +15,7 @@ const queryOnline = vi.hoisted(() => ({
     pause: vi.fn(),
     resume: vi.fn(),
 }))
+const runtimeDiagnostics = vi.hoisted(() => ({ report: vi.fn() }))
 const session = vi.hoisted(() => ({
     onClose: null as null | ((error: Error) => void),
     transportListener: null as null | (() => void),
@@ -33,6 +34,7 @@ vi.mock('@/lib/notice-center', () => ({
     useNoticeCenter: () => ({ addToast: vi.fn() }),
     usePersistentNotice: persistentNotice,
 }))
+vi.mock('@/lib/runtimeDiagnostics', () => ({ reportWebRuntimeError: runtimeDiagnostics.report }))
 vi.mock('@/remote/remotePairingQueryOnlineState', () => ({
     pauseRemotePairingQueries: queryOnline.pause,
     resumeRemotePairingQueries: queryOnline.resume,
@@ -52,10 +54,17 @@ vi.mock('@/remote/RemotePairingScreens', () => ({
     ),
 }))
 vi.mock('@/remote/RemotePairingReadyShell', () => ({
-    RemotePairingReadyShell: (props: { enableRuntime: boolean; interactionBlocked: boolean; pathname: string }) => (
+    RemotePairingReadyShell: (props: {
+        enableRuntime: boolean
+        interactionBlocked: boolean
+        linkBadgeOverride: { label: string; latency: string; tone: string } | null
+        pathname: string
+    }) => (
         <div
             data-testid="ready-shell"
             data-interaction-blocked={String(props.interactionBlocked)}
+            data-link-label={props.linkBadgeOverride?.label ?? ''}
+            data-link-tone={props.linkBadgeOverride?.tone ?? ''}
             data-runtime-enabled={String(props.enableRuntime)}
             data-pathname={props.pathname}
         />
@@ -108,6 +117,14 @@ function renderController(
     return queryClient
 }
 
+function findLatestReconnectNoticeCall() {
+    for (let index = persistentNotice.mock.calls.length - 1; index >= 0; index -= 1) {
+        const notice = persistentNotice.mock.calls[index]?.[0]
+        if (notice?.id === 'pairing:remote-reconnecting') return notice
+    }
+    return null
+}
+
 function approvedAuth() {
     return {
         auth: {
@@ -145,6 +162,7 @@ describe('RemotePairingController', () => {
         persistentNotice.mockClear()
         queryOnline.pause.mockClear()
         queryOnline.resume.mockClear()
+        runtimeDiagnostics.report.mockClear()
         session.onClose = null
         session.transportListener = null
         session.snapshot = { kind: 'connecting', attempt: 0 }
@@ -180,22 +198,22 @@ describe('RemotePairingController', () => {
         expect(persistentNotice.mock.calls.some(([notice]) => Boolean(notice))).toBe(false)
     })
 
-    it('keeps the retained workspace runtime disabled until the peer channel is ready', async () => {
+    it('shows the connecting splash on first connect and reveals the workspace only after the peer channel is ready', async () => {
+        // First-connect path: until the bridge transitions to ready, the
+        // controller renders the connecting splash. The legacy implementation
+        // exposed an empty `RemotePairingReadyShell` skeleton during this
+        // window, which presented as a black page + floating link badge to
+        // freshly-scanning phones.
         let resolveReady!: () => void
         session.untilReady.mockImplementation(
             () => new Promise<undefined>((resolve) => (resolveReady = () => resolve(undefined)))
         )
         renderController()
 
-        expect(await screen.findByTestId('ready-shell')).toHaveAttribute('data-runtime-enabled', 'false')
-        await waitFor(() =>
-            expect(screen.getByTestId('ready-shell')).toHaveAttribute('data-interaction-blocked', 'true')
-        )
-        await waitFor(() =>
-            expect(persistentNotice.mock.calls.some(([notice]) => notice?.id === 'pairing:remote-reconnecting')).toBe(
-                true
-            )
-        )
+        await waitFor(() => expect(screen.getByTestId('status')).toHaveAttribute('data-phase', 'connecting-computer'))
+        expect(screen.queryByTestId('ready-shell')).not.toBeInTheDocument()
+        expect(persistentNotice.mock.calls.some(([notice]) => notice?.id === 'pairing:remote-reconnecting')).toBe(false)
+
         act(() => resolveReady())
         await waitFor(() => expect(screen.getByTestId('ready-shell')).toHaveAttribute('data-runtime-enabled', 'true'))
     })
@@ -210,10 +228,33 @@ describe('RemotePairingController', () => {
         expect(queryClient.getQueryData(queryKeys.runtime)).toBe(runtimeResponse)
     })
 
+    it('does not block the ready workspace on retained-ready persistence', async () => {
+        setRetainedReady.mockImplementationOnce(() => new Promise(() => undefined))
+        session.snapshot = { kind: 'ready' }
+        renderController()
+        expect(await screen.findByTestId('ready-shell')).toHaveAttribute('data-runtime-enabled', 'true')
+        await waitFor(() =>
+            expect(screen.getByTestId('ready-shell')).toHaveAttribute('data-interaction-blocked', 'false')
+        )
+    })
+
+    it('reports retained-ready persistence failures without hiding the workspace', async () => {
+        setRetainedReady.mockRejectedValueOnce(new Error('idb write failed'))
+        renderController()
+        expect(await screen.findByTestId('ready-shell')).toHaveAttribute('data-runtime-enabled', 'true')
+        await waitFor(() =>
+            expect(runtimeDiagnostics.report).toHaveBeenCalledWith(
+                'Failed to persist remote pairing ready marker.',
+                expect.any(Error)
+            )
+        )
+    })
+
     it('resumes remote queries when the transport leaves reconnecting state', async () => {
         renderController()
         await screen.findByTestId('ready-shell')
         await waitFor(() => expect(queryOnline.pause).toHaveBeenCalled())
+        await waitFor(() => expect(screen.getByTestId('ready-shell')).toHaveAttribute('data-runtime-enabled', 'true'))
         queryOnline.pause.mockClear()
         queryOnline.resume.mockClear()
 
@@ -253,7 +294,8 @@ describe('RemotePairingController', () => {
         retained.value = { lastReadyAt: 1 }
         renderController()
         await screen.findByTestId('ready-shell')
-        session.onClose?.(new Error('remotePairing.error.closedRetrying'))
+        await waitFor(() => expect(session.onClose).toBeTruthy())
+        act(() => session.onClose?.(new Error('remotePairing.error.closedRetrying')))
         await waitFor(() => expect(clearRetainedReady).toHaveBeenCalledWith('pairing-1'))
         expect(await screen.findByTestId('status')).toBeInTheDocument()
     })
@@ -282,7 +324,7 @@ describe('RemotePairingController', () => {
         await screen.findByTestId('ready-shell')
 
         act(() => {
-            session.snapshot = { kind: 'connecting', attempt: 1 }
+            session.snapshot = { kind: 'connecting', attempt: 3 }
             session.transportListener?.()
         })
 
@@ -290,6 +332,8 @@ describe('RemotePairingController', () => {
             expect(screen.getByTestId('ready-shell')).toHaveAttribute('data-interaction-blocked', 'true')
         )
         expect(queryOnline.pause).toHaveBeenCalled()
+        expect(screen.getByTestId('ready-shell')).toHaveAttribute('data-link-tone', 'danger')
+        expect(findLatestReconnectNoticeCall()).toHaveProperty('tone', 'danger')
     })
 
     it('clears retained ready through session dispose close', async () => {

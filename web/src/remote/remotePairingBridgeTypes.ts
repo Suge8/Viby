@@ -1,6 +1,7 @@
 import type {
     ListAgentAvailabilityRequest,
     LocalSessionExportRequest,
+    OpenAgentConfigRequest,
     PairingPeerAgentAvailabilityResult,
     PairingPeerAgentConfigResult,
     PairingPeerAgentLaunchConfigResult,
@@ -26,8 +27,11 @@ import type {
     PairingPeerListSessionsResult,
     PairingPeerLoadAfterParams,
     PairingPeerLoadAfterResult,
+    PairingPeerMessagesParams,
+    PairingPeerMessagesResult,
     PairingPeerModelParams,
     PairingPeerModelReasoningEffortParams,
+    PairingPeerOpenAgentConfigResult,
     PairingPeerOpenSessionParams,
     PairingPeerOpenSessionResult,
     PairingPeerPathsExistParams,
@@ -65,6 +69,7 @@ export type RemotePeerBridge = {
     openSession: (params: PairingPeerOpenSessionParams) => Promise<PairingPeerOpenSessionResult>
     resumeSession: (params: PairingPeerResumeSessionParams) => Promise<PairingPeerResumeSessionResult>
     loadAfter: (params: PairingPeerLoadAfterParams) => Promise<PairingPeerLoadAfterResult>
+    getMessages: (params: PairingPeerMessagesParams) => Promise<PairingPeerMessagesResult>
     sendMessage: (params: PairingPeerSendMessageParams) => Promise<PairingPeerSendMessageResult>
     abortSession: (params: PairingPeerSessionParams) => Promise<PairingPeerSessionResult>
     archiveSession: (params: PairingPeerSessionParams) => Promise<PairingPeerSessionResult>
@@ -88,6 +93,7 @@ export type RemotePeerBridge = {
     getAgentConfig: () => Promise<PairingPeerAgentConfigResult>
     saveAgentConfig: (params: SaveAgentConfigRequest) => Promise<PairingPeerSaveAgentConfigResult>
     restoreAgentConfig: (params: RestoreAgentConfigRequest) => Promise<PairingPeerRestoreAgentConfigResult>
+    openAgentConfig: (params: OpenAgentConfigRequest) => Promise<PairingPeerOpenAgentConfigResult>
     checkRuntimePathsExists: (params: PairingPeerPathsExistParams) => Promise<PairingPeerPathsExistResult>
     browseRuntimeDirectory: (params?: PairingPeerBrowseDirectoryParams) => Promise<PairingPeerBrowseDirectoryResult>
     resolveAgentLaunchConfig: (params: ResolveAgentLaunchConfigRequest) => Promise<PairingPeerAgentLaunchConfigResult>

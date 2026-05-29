@@ -3,10 +3,24 @@ import type { DecryptedMessage, MessagesResponse, Session, SessionRecoveryPage, 
 
 export const REMOTE_PAGE_LIMIT = 50
 
-export function toMessagesResponse(messages: DecryptedMessage[], limit: number): MessagesResponse {
+function findOldestSeq(messages: readonly DecryptedMessage[]): number | null {
+    return messages.reduce<number | null>((oldestSeq, message) => {
+        if (typeof message.seq !== 'number') return oldestSeq
+        return oldestSeq === null || message.seq < oldestSeq ? message.seq : oldestSeq
+    }, null)
+}
+
+export function limitMessagesResponse(response: MessagesResponse, limit: number): MessagesResponse {
+    const messages = response.messages.length > limit ? response.messages.slice(-limit) : response.messages
+    const truncated = messages.length !== response.messages.length
     return {
         messages,
-        page: { limit, beforeSeq: null, nextBeforeSeq: null, hasMore: false },
+        page: {
+            ...response.page,
+            limit,
+            nextBeforeSeq: truncated ? findOldestSeq(messages) : response.page.nextBeforeSeq,
+            hasMore: response.page.hasMore || truncated,
+        },
     }
 }
 
@@ -22,7 +36,7 @@ export function toRecoveryPage(
     return {
         session,
         messages,
-        page: { afterSeq, nextAfterSeq, limit, hasMore: false },
+        page: { afterSeq, nextAfterSeq, limit, hasMore: messages.length >= limit },
     }
 }
 

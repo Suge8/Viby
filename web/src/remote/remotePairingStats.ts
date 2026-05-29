@@ -1,12 +1,26 @@
 import {
     PAIRING_LINK_SAMPLE_STALE_MS,
     type PairingTunnelDirectBlockedReason,
+    type PairingTunnelDirectProbe,
     type PairingTunnelTransport,
     resolvePairingLinkTransport,
     resolvePairingSelectedCandidatePairStats,
 } from '@viby/protocol/pairing'
 
 export type RemotePeerTransport = 'direct' | 'relay' | 'unknown'
+
+export type RemotePeerRpcTelemetrySample = {
+    method: string
+    route: 'direct' | 'relay'
+    durationMs: number
+    ok: boolean
+    timedOut: boolean
+    requestBytes: number
+    requestChunks: number
+    responseBytes: number | null
+    responseChunks: number | null
+    sampledAt: number
+}
 
 export type RemotePeerTransportStats = {
     transport: RemotePeerTransport
@@ -19,6 +33,8 @@ export type RemotePeerTransportStats = {
     staleAfterMs: number
     routeRevision: number
     directBlockedReason?: PairingTunnelDirectBlockedReason | null
+    directProbe?: PairingTunnelDirectProbe | null
+    lastRpc?: RemotePeerRpcTelemetrySample | null
 }
 
 export async function readRemotePeerTransportStats(
@@ -45,7 +61,7 @@ export async function readRemotePeerTransportStats(
     const transport = resolvePairingLinkTransport(selected)
     return {
         transport,
-        transportMode: transport === 'direct' ? 'direct-webrtc' : transport === 'relay' ? 'turn-webrtc' : 'unknown',
+        transportMode: transport === 'direct' ? 'direct-webrtc' : 'unknown',
         localCandidateType: selected.localCandidateType,
         remoteCandidateType: selected.remoteCandidateType,
         currentRoundTripTimeMs:

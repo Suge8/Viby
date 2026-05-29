@@ -15,7 +15,12 @@ function formatCode(input: string): string {
     return input.replace(/(\d{3})(\d+)/, '$1 $2')
 }
 
-export function RemotePairingCodeScreen(props: { onSubmit: (code: string) => void; submitting: boolean }): JSX.Element {
+interface RemotePairingCodeScreenProps {
+    onSubmit: (code: string) => void
+    submitting: boolean
+}
+
+export function RemotePairingCodeScreen(props: RemotePairingCodeScreenProps): JSX.Element {
     const { t } = useTranslation()
     const [code, setCode] = useState('')
     const normalizedCode = normalizeCode(code)
@@ -40,7 +45,7 @@ export function RemotePairingCodeScreen(props: { onSubmit: (code: string) => voi
                     className="ds-field-control-elevated ds-connection-code-input"
                     aria-label={t('remotePairing.code.inputLabel')}
                 />
-                <Button type="submit" size="lg" disabled={!canSubmit} className="w-full">
+                <Button type="submit" size="lg" disabled={!canSubmit} pendingIndicator="none" className="w-full">
                     {props.submitting ? (
                         <Spinner size="sm" label={null} className="text-[var(--app-button-text)]" />
                     ) : null}

@@ -1,10 +1,12 @@
 import { PairingPeerEventSchema, type PairingPeerHeartbeat, type PairingPeerTerminalEventPayload } from '@viby/protocol'
+import type { PairingPeerTextAssembler } from '@viby/protocol/pairing'
 import type { SyncEvent } from '@/types/api'
 import type { RemotePeerPendingRequests } from './remotePairingPendingRequests'
 import { parsePeerMessage } from './remotePairingRpc'
 
 export function handleRemotePeerChannelMessage(options: {
     data: unknown
+    textAssembler?: PairingPeerTextAssembler
     pendingRequests: RemotePeerPendingRequests
     syncListeners: ReadonlySet<(event: SyncEvent) => void>
     terminalListeners: ReadonlySet<(event: PairingPeerTerminalEventPayload) => void>
@@ -14,7 +16,10 @@ export function handleRemotePeerChannelMessage(options: {
         return
     }
 
-    const message = parsePeerMessage(options.data)
+    const rawMessage = options.textAssembler ? options.textAssembler.accept(options.data) : options.data
+    if (rawMessage === null) return
+
+    const message = parsePeerMessage(rawMessage)
     if (!message) {
         return
     }

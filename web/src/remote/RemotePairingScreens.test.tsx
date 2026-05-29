@@ -46,7 +46,7 @@ describe('RemotePairingScreens', () => {
 
         const input = await screen.findByLabelText('6-digit code from your computer')
         fireEvent.change(input, { target: { value: '12a3456' } })
-        fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Pair' }))
 
         expect(onSubmit).toHaveBeenCalledWith('123456')
     })

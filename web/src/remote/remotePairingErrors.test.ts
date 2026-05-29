@@ -32,6 +32,6 @@ describe('remotePairingErrors', () => {
     it('hides retry actions for final scan-again states only', () => {
         expect(canRetryRemotePairingError('remotePairing.error.closedRetrying')).toBe(true)
         expect(canRetryRemotePairingError('remotePairing.error.scanAgain')).toBe(false)
-        expect(canRetryRemotePairingError('remotePairing.error.scanAgain')).toBe(false)
+        expect(canRetryRemotePairingError('remotePairing.error.updateDesktop')).toBe(false)
     })
 })

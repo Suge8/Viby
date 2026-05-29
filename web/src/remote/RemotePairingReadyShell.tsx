@@ -8,6 +8,7 @@ import type { RemotePeerBridge } from '@/remote/remotePairingBridgeTypes'
 import { createRemotePeerApiClient } from '@/remote/remotePeerApiClient'
 import { RemotePairingLinkBadge } from './RemotePairingLinkBadge'
 import { RemotePairingInteractionProvider } from './remotePairingInteractionState'
+import type { RemotePairingLinkBadgeOverride } from './remotePairingViewModel'
 
 async function loadRemotePairingRuntimeModule() {
     const module = await import('@/remote/RemotePairingRuntime')
@@ -27,6 +28,7 @@ export type RemotePairingReadyConnection = {
 type RemotePairingReadyShellProps = {
     enableRuntime: boolean
     interactionBlocked: boolean
+    linkBadgeOverride: RemotePairingLinkBadgeOverride | null
     pathname: string
     ready: RemotePairingReadyConnection
 }
@@ -56,7 +58,7 @@ export function RemotePairingReadyShell(props: RemotePairingReadyShellProps): Re
                             </Suspense>
                         ) : null}
                     </AppReadyShell>
-                    <RemotePairingLinkBadge bridge={props.ready.bridge} />
+                    <RemotePairingLinkBadge bridge={props.ready.bridge} override={props.linkBadgeOverride} />
                 </div>
                 {props.interactionBlocked ? (
                     <div className="fixed inset-0 z-40 bg-black/35 backdrop-blur-sm" aria-hidden="true" />

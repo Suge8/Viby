@@ -1,14 +1,32 @@
+import type { PairingTransportState } from '@viby/protocol/pairing'
 import { ReconnectingNoticeIcon } from '@/components/loading/ReconnectingNoticeIcon'
-import { Button } from '@/components/ui/button'
 import type { Notice } from '@/lib/notice-center'
 import { buildCompactPersistentNotice, PERSISTENT_NOTICE_IDS } from '@/lib/persistentNoticePresentation'
 import type { RemotePairingErrorKey } from './remotePairingErrors'
 
-export type RemotePairingRenderState = { kind: 'hydrating' | 'first-pairing' | 'running' | 'fatal' }
+export type RemotePairingRenderState = { kind: 'hydrating' | 'code-input' | 'running' | 'fatal' }
+type RemotePairingReconnectTone = 'warning' | 'danger'
 
 export type RemotePairingStatusSpec = {
     messageKey: RemotePairingErrorKey | null
     retry: boolean
+}
+
+export type RemotePairingReconnectStatus = {
+    attempt: number
+    tone: RemotePairingReconnectTone
+}
+
+export type RemotePairingLinkBadgeOverride = {
+    label: string
+    latency: string
+    tone: RemotePairingReconnectTone
+}
+
+export type RemotePairingConnectionChrome = {
+    interactionBlocked: boolean
+    linkBadgeOverride: RemotePairingLinkBadgeOverride | null
+    reconnect: RemotePairingReconnectStatus | null
 }
 
 type TranslationFn = (key: string, params?: Record<string, string | number>) => string
@@ -18,49 +36,83 @@ const FINAL_SCAN_ERRORS = new Set<RemotePairingErrorKey>([
     'remotePairing.error.pairingUnavailable',
 ])
 
-export function shouldShowRemoteReconnectNotice(options: {
+const RECONNECT_DANGER_ATTEMPT = 3
+
+function shouldShowRemoteReconnect(options: {
     readyWorkspaceVisible: boolean
     state: RemotePairingRenderState
-    transportKind: 'connecting' | 'ready' | 'fatal'
+    transportState: PairingTransportState
 }): boolean {
     if (!options.readyWorkspaceVisible) return false
     if (options.state.kind === 'hydrating') return true
-    return options.state.kind === 'running' && options.transportKind === 'connecting'
+    return options.state.kind === 'running' && options.transportState.kind === 'connecting'
 }
 
-export function shouldBlockRemoteReadyShellInteraction(
-    state: RemotePairingRenderState,
-    reconnecting: boolean
-): boolean {
-    return reconnecting || state.kind !== 'running'
+function getRemoteReconnectAttempt(transportState: PairingTransportState): number {
+    return transportState.kind === 'connecting' ? transportState.attempt : 0
+}
+
+function getRemoteReconnectTone(attempt: number): RemotePairingReconnectTone {
+    return attempt >= RECONNECT_DANGER_ATTEMPT ? 'danger' : 'warning'
+}
+
+export function buildRemotePairingConnectionChrome(options: {
+    readyWorkspaceVisible: boolean
+    state: RemotePairingRenderState
+    t: TranslationFn
+    transportState: PairingTransportState
+}): RemotePairingConnectionChrome {
+    const reconnecting = shouldShowRemoteReconnect(options)
+    const attempt = getRemoteReconnectAttempt(options.transportState)
+    const reconnect = reconnecting ? { attempt, tone: getRemoteReconnectTone(attempt) } : null
+    return {
+        interactionBlocked: reconnecting || options.state.kind !== 'running',
+        linkBadgeOverride: reconnect ? buildRemoteLinkBadgeOverride(reconnect, options.t) : null,
+        reconnect,
+    }
+}
+
+export function buildRemoteLinkBadgeOverride(
+    reconnect: RemotePairingReconnectStatus,
+    t: TranslationFn
+): RemotePairingLinkBadgeOverride {
+    return {
+        label: t('remotePairing.linkBadge.reconnecting'),
+        latency:
+            reconnect.attempt >= RECONNECT_DANGER_ATTEMPT
+                ? t('remotePairing.linkBadge.retryCount', { count: reconnect.attempt })
+                : t('remotePairing.linkBadge.retrying'),
+        tone: reconnect.tone,
+    }
 }
 
 export function buildRemoteReconnectNotice(options: {
-    attempt: number
-    onStop?: () => void
+    action?: Notice['action']
+    reconnect: RemotePairingReconnectStatus
     t: TranslationFn
 }): Notice {
-    const showStop = options.attempt > 2 && options.onStop
     return buildCompactPersistentNotice({
         id: PERSISTENT_NOTICE_IDS.remotePairingReconnect,
-        tone: 'info',
+        tone: options.reconnect.tone,
         title: options.t('remotePairing.reconnectNotice.title'),
         description:
-            options.attempt > 2
-                ? options.t('remotePairing.reconnectNotice.attemptCount', { count: options.attempt })
+            options.reconnect.tone === 'danger'
+                ? options.t('remotePairing.reconnectNotice.attemptCount', { count: options.reconnect.attempt })
                 : undefined,
         icon: <ReconnectingNoticeIcon />,
-        action: showStop ? (
-            <Button type="button" size="sm" variant="ghost" onClick={options.onStop}>
-                {options.t('remotePairing.reconnectNotice.stopAction')}
-            </Button>
-        ) : undefined,
+        action: options.action,
     })
 }
 
 export function buildRemoteStatusSpec(errorKey: RemotePairingErrorKey | null): RemotePairingStatusSpec {
     if (!errorKey) return { messageKey: null, retry: false }
     if (FINAL_SCAN_ERRORS.has(errorKey)) return { messageKey: 'remotePairing.error.scanAgain', retry: false }
-    if (errorKey === 'remotePairing.error.regenerateQr') return { messageKey: errorKey, retry: false }
-    return { messageKey: 'remotePairing.error.closedRetrying', retry: true }
+    if (errorKey === 'remotePairing.error.regenerateQr' || errorKey === 'remotePairing.error.updateDesktop') {
+        return { messageKey: errorKey, retry: false }
+    }
+    // Preserve the actual `errorKey` message instead of collapsing every
+    // retryable failure into the misleading "connection dropped" copy.
+    // `host-unavailable` (`hostOffline`) is a first-connect not-ready state,
+    // not a reconnect; the old text told the user the wrong story.
+    return { messageKey: errorKey, retry: true }
 }

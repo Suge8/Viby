@@ -3,11 +3,13 @@ import type { SyncEvent } from '@/types/api'
 import { uploadRemoteFile } from './remotePairingBinaryUpload'
 import { createRemotePeerBridge } from './remotePairingBridge'
 import type { RemotePeerBridge } from './remotePairingBridgeTypes'
+import type { RemotePairingRelaySocket } from './remotePairingRelaySocket'
 
 export function createRemotePeerSessionBridge(options: {
     close: () => void
     closeListeners: Set<(error: Error) => void>
     getChannel: () => RTCDataChannel | null
+    getRelay: () => RemotePairingRelaySocket | null
     getFatalError: () => Error | null
     getTransportStats: RemotePeerBridge['getTransportStats']
     requestPeer: <T>(request: PairingPeerRequest, parse: (value: unknown) => T) => Promise<T>
@@ -38,6 +40,7 @@ export function createRemotePeerSessionBridge(options: {
         uploadFile: (sessionId, file, mimeType) =>
             uploadRemoteFile({
                 channel: options.getChannel(),
+                relay: options.getRelay(),
                 requestPeer: options.requestPeer,
                 sessionId,
                 file,

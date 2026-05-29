@@ -5,12 +5,13 @@ import type { RemotePairingReadyConnection } from '@/remote/RemotePairingReadySh
 import { RemotePairingReadyShell } from '@/remote/RemotePairingReadyShell'
 import { RemotePairingCodeScreen, RemotePairingStatusScreen } from '@/remote/RemotePairingScreens'
 import { type RemoteState } from './RemotePairingController'
-import { buildRemoteStatusSpec } from './remotePairingViewModel'
+import { buildRemoteStatusSpec, type RemotePairingLinkBadgeOverride } from './remotePairingViewModel'
 
 type ControllerViewProps = {
     activeReady: RemotePairingReadyConnection | null
     installPromptVisible: boolean
     interactionBlocked: boolean
+    linkBadgeOverride: RemotePairingLinkBadgeOverride | null
     onRetry(): void
     onVerify(code: string): void
     pathname: string
@@ -27,6 +28,7 @@ export function RemotePairingControllerView(props: ControllerViewProps): JSX.Ele
                 <RemotePairingReadyShell
                     enableRuntime={state.kind === 'running'}
                     interactionBlocked={props.interactionBlocked}
+                    linkBadgeOverride={props.linkBadgeOverride}
                     pathname={readyPathname}
                     ready={activeReady}
                 />
@@ -35,7 +37,7 @@ export function RemotePairingControllerView(props: ControllerViewProps): JSX.Ele
         )
     }
     if (state.kind === 'hydrating') return <RemotePairingStatusScreen message={null} phase={state.phase} />
-    if (state.kind === 'first-pairing') {
+    if (state.kind === 'code-input') {
         return state.submitting ? (
             <RemotePairingStatusScreen message={null} phase="verifying-code" />
         ) : (

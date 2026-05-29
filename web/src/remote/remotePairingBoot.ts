@@ -23,15 +23,19 @@ export function useRemotePairingBoot(options: {
         async function boot(): Promise<void> {
             setState({ kind: 'hydrating', phase: 'authenticating' })
             const retained = await readRetainedReady(pairingId)
-            const { auth, token } = await resolveRemotePairingAuth(pairingId)
+            const resumed = await resolveRemotePairingAuth(pairingId)
             if (disposed) return
-            if (isRemotePairingApproved(auth)) {
+            if (resumed && isRemotePairingApproved(resumed.auth)) {
                 setState({ kind: 'hydrating', phase: 'opening-relay' })
-                return void (await startSession(auth, token))
+                return void (await startSession(resumed.auth, resumed.token))
             }
-            setState(
-                retained ? { kind: 'fatal', errorKey: 'remotePairing.error.regenerateQr' } : pendingPairing(auth, token)
-            )
+            // No live session — the host's invite is still posted, so the
+            // phone needs to type the 6-digit code displayed on the desktop.
+            if (retained) {
+                setState({ kind: 'fatal', errorKey: 'remotePairing.error.regenerateQr' })
+                return
+            }
+            setState({ kind: 'code-input', submitting: false })
         }
         boot().catch((error) => {
             if (!disposed) setState({ kind: 'fatal', errorKey: getRemotePairingErrorKeyOrFallback(error) })
@@ -48,8 +52,4 @@ async function readRetainedReady(pairingId: string): Promise<{ lastReadyAt: numb
     } catch {
         return null
     }
-}
-
-function pendingPairing(auth: PairingRemoteAuth, token: string): RemoteState {
-    return { kind: 'first-pairing', auth, token, submitting: false }
 }

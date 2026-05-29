@@ -1,10 +1,14 @@
 import type { QueryClient } from '@tanstack/react-query'
-import { MACHINE_BROWSE_DIRECTORY_CAPABILITY } from '@viby/protocol'
+import { MACHINE_BROWSE_DIRECTORY_CAPABILITY, type PairingPeerSessionHeadResult } from '@viby/protocol'
 import type { ApiClient } from '@/api/client'
 import { type ApprovePermissionOptions, normalizeApprovePermissionBody } from '@/api/clientSessionSupport'
 import { withAbortSignal } from '@/api/clientShared'
 import { queryKeys } from '@/lib/query-keys'
-import { writeSessionViewToQueryCache } from '@/lib/sessionQueryCache'
+import {
+    writeSessionHeadToQueryCache,
+    writeSessionsResponseToQueryCache,
+    writeSessionViewToQueryCache,
+} from '@/lib/sessionQueryCache'
 import type {
     AgentFlavor,
     AttachmentMetadata,
@@ -19,6 +23,7 @@ import type {
     LocalSessionExportRequest,
     MessagesResponse,
     ModelReasoningEffort,
+    OpenAgentConfigRequest,
     PermissionMode,
     PushSubscriptionPayload,
     PushUnsubscribePayload,
@@ -33,7 +38,12 @@ import type {
     SessionViewSnapshot,
 } from '@/types/api'
 import type { RemotePeerBridge } from './remotePairingBridgeTypes'
-import { REMOTE_PAGE_LIMIT, toMessagesResponse, toRecoveryPage, toSessionSummary } from './remotePeerApiClientMappers'
+import {
+    limitMessagesResponse,
+    REMOTE_PAGE_LIMIT,
+    toRecoveryPage,
+    toSessionSummary,
+} from './remotePeerApiClientMappers'
 
 type RemoteApiOptions = {
     bridge: RemotePeerBridge
@@ -41,7 +51,13 @@ type RemoteApiOptions = {
 }
 
 function writeSessions(queryClient: QueryClient, response: SessionsResponse): void {
-    queryClient.setQueryData(queryKeys.sessions, response)
+    writeSessionsResponseToQueryCache(queryClient, response)
+}
+
+function isSessionViewSnapshot(
+    value: PairingPeerSessionHeadResult | SessionViewSnapshot
+): value is SessionViewSnapshot {
+    return 'latestWindow' in value
 }
 
 function buildRemoteRuntimeResponse(): RuntimeResponse {
@@ -62,14 +78,36 @@ function buildRemoteRuntimeResponse(): RuntimeResponse {
 
 export function createRemotePeerApiClient(options: RemoteApiOptions): ApiClient {
     const latestViews = new Map<string, SessionViewSnapshot>()
+    const sessionHeads = new Map<string, PairingPeerSessionHeadResult>()
     const remoteRuntime = buildRemoteRuntimeResponse()
     options.queryClient.setQueryData(queryKeys.runtime, remoteRuntime)
 
-    async function openView(sessionId: string): Promise<SessionViewSnapshot> {
-        const view = await options.bridge.openSession({ sessionId })
-        latestViews.set(sessionId, view)
+    function rememberView(view: SessionViewSnapshot): SessionViewSnapshot {
+        latestViews.set(view.session.id, view)
+        sessionHeads.set(view.session.id, view)
         writeSessionViewToQueryCache(options.queryClient, view)
         return view
+    }
+
+    function rememberHead(head: PairingPeerSessionHeadResult): PairingPeerSessionHeadResult {
+        latestViews.delete(head.session.id)
+        sessionHeads.set(head.session.id, head)
+        writeSessionHeadToQueryCache(options.queryClient, head)
+        return head
+    }
+
+    async function openHead(sessionId: string): Promise<PairingPeerSessionHeadResult> {
+        const result = await options.bridge.openSession({ sessionId, includeLatestWindow: false })
+        return isSessionViewSnapshot(result) ? rememberView(result) : rememberHead(result)
+    }
+
+    async function openView(sessionId: string): Promise<SessionViewSnapshot> {
+        const current = latestViews.get(sessionId)
+        if (current) return current
+        const head = sessionHeads.get(sessionId) ?? (await openHead(sessionId))
+        if (isSessionViewSnapshot(head)) return head
+        const latestWindow = await options.bridge.getMessages({ sessionId, beforeSeq: null, limit: REMOTE_PAGE_LIMIT })
+        return rememberView({ ...head, latestWindow })
     }
 
     const client = {
@@ -87,15 +125,29 @@ export function createRemotePeerApiClient(options: RemoteApiOptions): ApiClient 
             }
         },
         async getSession(sessionId: string): Promise<{ session: Session }> {
-            const view = latestViews.get(sessionId) ?? (await openView(sessionId))
-            return { session: view.session }
+            const head = sessionHeads.get(sessionId) ?? latestViews.get(sessionId) ?? (await openHead(sessionId))
+            return { session: head.session }
         },
         async getSessionView(sessionId: string): Promise<SessionViewSnapshot> {
             return await openView(sessionId)
         },
-        async getMessages(sessionId: string, input: { limit?: number }): Promise<MessagesResponse> {
-            const view = latestViews.get(sessionId) ?? (await openView(sessionId))
-            return toMessagesResponse(view.latestWindow.messages, input.limit ?? REMOTE_PAGE_LIMIT)
+        async getMessages(
+            sessionId: string,
+            input: { beforeSeq?: number | null; afterSeq?: number | null; limit?: number }
+        ): Promise<MessagesResponse> {
+            const limit = input.limit ?? REMOTE_PAGE_LIMIT
+            if (typeof input.afterSeq === 'number') {
+                const result = await options.bridge.loadAfter({ sessionId, afterSeq: input.afterSeq, limit })
+                return {
+                    messages: result.messages,
+                    page: { limit, beforeSeq: null, nextBeforeSeq: null, hasMore: false },
+                }
+            }
+            const cached = latestViews.get(sessionId)
+            if (cached && (input.beforeSeq === undefined || input.beforeSeq === null)) {
+                return limitMessagesResponse(cached.latestWindow, limit)
+            }
+            return await options.bridge.getMessages({ sessionId, beforeSeq: input.beforeSeq ?? null, limit })
         },
         async getSessionRecovery(
             sessionId: string,
@@ -103,14 +155,13 @@ export function createRemotePeerApiClient(options: RemoteApiOptions): ApiClient 
         ): Promise<SessionRecoveryPage> {
             const limit = input.limit ?? REMOTE_PAGE_LIMIT
             const result = await options.bridge.loadAfter({ sessionId, afterSeq: input.afterSeq, limit })
-            const view = latestViews.get(sessionId) ?? (await openView(sessionId))
-            return toRecoveryPage(view.session, result.messages, input.afterSeq, limit)
+            const head = sessionHeads.get(sessionId) ?? latestViews.get(sessionId) ?? (await openHead(sessionId))
+            return toRecoveryPage(head.session, result.messages, input.afterSeq, limit)
         },
         async resumeSession(sessionId: string): Promise<Session> {
-            const view = await options.bridge.resumeSession({ sessionId })
-            latestViews.set(sessionId, view)
-            writeSessionViewToQueryCache(options.queryClient, view)
-            return view.session
+            const result = await options.bridge.resumeSession({ sessionId, includeLatestWindow: false })
+            if (isSessionViewSnapshot(result)) return rememberView(result).session
+            return rememberHead(result).session
         },
         async sendMessage(
             sessionId: string,
@@ -215,6 +266,9 @@ export function createRemotePeerApiClient(options: RemoteApiOptions): ApiClient 
         },
         async restoreAgentConfig(input: RestoreAgentConfigRequest) {
             return await options.bridge.restoreAgentConfig(input)
+        },
+        async openAgentConfig(input: OpenAgentConfigRequest) {
+            return await options.bridge.openAgentConfig(input)
         },
         async checkRuntimePathsExists(paths: string[]): Promise<{ exists: Record<string, boolean> }> {
             return await options.bridge.checkRuntimePathsExists({ paths })
