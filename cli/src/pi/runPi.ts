@@ -8,8 +8,14 @@ import { logger } from '@/ui/logger'
 import { formatMessageWithAttachments } from '@/utils/attachmentFormatter'
 import { getInvokedCwd } from '@/utils/invokedCwd'
 import { MessageQueue2 } from '@/utils/MessageQueue2'
-import { formatPiModel, normalizePiModelSelection, resolvePiModel, toPiModelCapabilities } from './launchConfig'
-import { PiRpcClient, resolvePiExecutable } from './piRpcClient'
+import {
+    buildPiModelFromSelection,
+    formatPiModel,
+    normalizePiModelSelection,
+    resolvePiRuntimeModel,
+    toPiModelCapabilities,
+} from './launchConfig'
+import { PiRpcClient, type PiRpcModel, type PiRpcState, resolvePiExecutable } from './piRpcClient'
 import {
     createModeHash,
     getRuntimeStateFromPiState,
@@ -22,6 +28,34 @@ import {
 } from './runPiSupport'
 import { PiSession } from './session'
 import type { PiMode } from './types'
+
+function buildStartupModelFallbacks(state: PiRpcState, requestedModel: string | undefined): PiRpcModel[] {
+    const models = [state.model, buildPiModelFromSelection(requestedModel)].filter((model): model is PiRpcModel =>
+        Boolean(model)
+    )
+    const seen = new Set<string>()
+    return models.filter((model) => {
+        const key = formatPiModel(model) ?? model.id
+        if (seen.has(key)) {
+            return false
+        }
+        seen.add(key)
+        return true
+    })
+}
+
+async function loadStartupPiModels(options: {
+    rpcClient: PiRpcClient
+    state: PiRpcState
+    requestedModel: string | undefined
+}): Promise<PiRpcModel[]> {
+    try {
+        return await options.rpcClient.getAvailableModels()
+    } catch (error) {
+        logger.debug('[pi] Model catalog unavailable during startup; continuing with current model', error)
+        return buildStartupModelFallbacks(options.state, options.requestedModel)
+    }
+}
 
 export async function runPi(
     opts: {
@@ -46,9 +80,9 @@ export async function runPi(
         resumeSessionId: opts.resumeSessionId,
     })
     await rpcClient.start()
-    const selectableModels = await rpcClient.getAvailableModels()
     const state = await rpcClient.getState()
-    const defaultModel = state.model ?? resolvePiModel(selectableModels, opts.model)
+    const selectableModels = await loadStartupPiModels({ rpcClient, state, requestedModel: opts.model })
+    const defaultModel = state.model ?? resolvePiRuntimeModel(selectableModels, opts.model, null)
     const piModelCapabilities = toPiModelCapabilities(selectableModels)
 
     const initialState: AgentState = { controlledByUser: false }
@@ -99,14 +133,19 @@ export async function runPi(
     registerKillSessionHandler(session.rpcHandlerManager, requestPiShutdown)
 
     await recoverPiMessages(api, opts.vibySessionId)
-    let selectedRuntimeState = getRuntimeStateFromPiState(opts.permissionMode ?? 'default', state)
-    let activeRuntimeHash = createModeHash(selectedRuntimeState)
+    const startupRuntimeState = getRuntimeStateFromPiState(opts.permissionMode ?? 'default', state)
+    let selectedRuntimeState: PiRuntimeState = {
+        ...startupRuntimeState,
+        ...(opts.model ? { model: normalizePiModelSelection(opts.model) ?? startupRuntimeState.model } : {}),
+        ...(opts.modelReasoningEffort !== undefined ? { modelReasoningEffort: opts.modelReasoningEffort } : {}),
+    }
+    let activeRuntimeHash = createModeHash(startupRuntimeState)
 
     const applyRuntimeState = async (
         runtimeState: PiRuntimeState,
         options?: { persistSelection?: boolean }
     ): Promise<void> => {
-        const nextModel = resolvePiModel(selectableModels, runtimeState.model ?? undefined) ?? defaultModel
+        const nextModel = resolvePiRuntimeModel(selectableModels, runtimeState.model, defaultModel)
         if (nextModel) {
             await rpcClient.setModel(nextModel)
         }

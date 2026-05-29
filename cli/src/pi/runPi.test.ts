@@ -5,7 +5,19 @@ const harness = vi.hoisted(() => ({
     killSessionHandler: null as null | (() => Promise<unknown> | unknown),
     abortCalls: 0,
     stopCalls: 0,
+    failModelCatalog: false,
+    bootstrapPayloads: [] as Array<Record<string, unknown>>,
     rpcClientOptions: [] as Array<Record<string, unknown>>,
+    rpcCalls: [] as string[],
+    setModelCalls: [] as unknown[],
+    setThinkingLevelCalls: [] as unknown[],
+    piState: {
+        model: { provider: 'openai-codex', id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini', reasoning: true },
+        thinkingLevel: 'off',
+        isStreaming: false,
+        sessionId: 'pi-session',
+    },
+    sessionRuntimeSnapshots: [] as Array<Record<string, unknown>>,
 }))
 
 vi.mock('./piRpcClient', () => ({
@@ -16,18 +28,26 @@ vi.mock('./piRpcClient', () => ({
         }
         async start(): Promise<void> {}
         async getAvailableModels(): Promise<unknown[]> {
+            harness.rpcCalls.push('models:start')
+            await Promise.resolve()
+            if (harness.failModelCatalog) {
+                throw new Error('Pi RPC get_available_models timed out')
+            }
+            harness.rpcCalls.push(`models:saw-state:${harness.rpcCalls.includes('state:start')}`)
             return [{ provider: 'openai-codex', id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini', reasoning: true }]
         }
         async getState(): Promise<unknown> {
-            return {
-                model: { provider: 'openai-codex', id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini', reasoning: true },
-                thinkingLevel: 'off',
-                isStreaming: false,
-                sessionId: 'pi-session',
-            }
+            harness.rpcCalls.push('state:start')
+            return harness.piState
         }
-        async setModel(): Promise<void> {}
-        async setThinkingLevel(): Promise<void> {}
+        async setModel(model: unknown): Promise<void> {
+            harness.setModelCalls.push(model)
+            harness.piState = { ...harness.piState, model: model as typeof harness.piState.model }
+        }
+        async setThinkingLevel(thinkingLevel: unknown): Promise<void> {
+            harness.setThinkingLevelCalls.push(thinkingLevel)
+            harness.piState = { ...harness.piState, thinkingLevel: thinkingLevel as string }
+        }
         async abort(): Promise<void> {
             harness.abortCalls += 1
         }
@@ -41,13 +61,16 @@ vi.mock('./piRpcClient', () => ({
 }))
 
 vi.mock('@/agent/sessionFactory', () => ({
-    bootstrapSession: async () => ({
-        api: {},
-        session: {
-            rpcHandlerManager: { registerHandler() {} },
-            onUserMessage() {},
-        },
-    }),
+    bootstrapSession: async (payload: Record<string, unknown>) => {
+        harness.bootstrapPayloads.push(payload)
+        return {
+            api: {},
+            session: {
+                rpcHandlerManager: { registerHandler() {} },
+                onUserMessage() {},
+            },
+        }
+    },
 }))
 
 vi.mock('@/agent/runnerLifecycle', () => ({
@@ -76,12 +99,22 @@ vi.mock('./runPiSupport', async (importOriginal) => ({
 }))
 vi.mock('./session', () => ({
     PiSession: class {
+        private snapshot: Record<string, unknown> = {}
         stopKeepAlive(): void {}
         onSessionFound(): void {}
         setRuntimeStopHandler(): void {}
-        setPermissionMode(): void {}
-        setModel(): void {}
-        setModelReasoningEffort(): void {}
+        setPermissionMode(permissionMode: unknown): void {
+            this.snapshot.permissionMode = permissionMode
+            harness.sessionRuntimeSnapshots.push({ ...this.snapshot })
+        }
+        setModel(model: unknown): void {
+            this.snapshot.model = model
+            harness.sessionRuntimeSnapshots.push({ ...this.snapshot })
+        }
+        setModelReasoningEffort(modelReasoningEffort: unknown): void {
+            this.snapshot.modelReasoningEffort = modelReasoningEffort
+            harness.sessionRuntimeSnapshots.push({ ...this.snapshot })
+        }
     },
 }))
 
@@ -93,7 +126,19 @@ describe('runPi', () => {
         harness.killSessionHandler = null
         harness.abortCalls = 0
         harness.stopCalls = 0
+        harness.failModelCatalog = false
+        harness.bootstrapPayloads = []
         harness.rpcClientOptions = []
+        harness.rpcCalls = []
+        harness.setModelCalls = []
+        harness.setThinkingLevelCalls = []
+        harness.piState = {
+            model: { provider: 'openai-codex', id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini', reasoning: true },
+            thinkingLevel: 'off',
+            isStreaming: false,
+            sessionId: 'pi-session',
+        }
+        harness.sessionRuntimeSnapshots = []
     })
 
     it('runs Pi through the external RPC client lifecycle', async () => {
@@ -102,6 +147,45 @@ describe('runPi', () => {
         expect(harness.killSessionHandler).toBeTypeOf('function')
         expect(harness.stopCalls).toBe(1)
         expect(harness.cleanupAndExit).toHaveBeenCalledTimes(1)
+    })
+
+    it('loads Pi state before the non-blocking model catalog', async () => {
+        await runPi({ startedBy: 'runner' })
+
+        expect(harness.rpcCalls.slice(0, 3)).toEqual(['state:start', 'models:start', 'models:saw-state:true'])
+    })
+
+    it('continues startup with the current model when Pi model catalog loading times out', async () => {
+        harness.failModelCatalog = true
+
+        await runPi({ startedBy: 'runner' })
+
+        expect(harness.bootstrapPayloads[0]).toMatchObject({
+            model: 'openai-codex/gpt-5.4-mini',
+            metadataOverrides: {
+                piModelScope: {
+                    models: [
+                        {
+                            id: 'openai-codex/gpt-5.4-mini',
+                            label: 'GPT-5.4 Mini',
+                        },
+                    ],
+                },
+            },
+        })
+        expect(harness.setModelCalls[0]).toMatchObject({
+            provider: 'openai-codex',
+            id: 'gpt-5.4-mini',
+        })
+    })
+
+    it('applies requested startup reasoning before syncing the session snapshot', async () => {
+        harness.piState = { ...harness.piState, thinkingLevel: 'xhigh' }
+
+        await runPi({ startedBy: 'runner', modelReasoningEffort: 'medium' })
+
+        expect(harness.setThinkingLevelCalls).toEqual(['medium'])
+        expect(harness.sessionRuntimeSnapshots.at(-1)).toMatchObject({ modelReasoningEffort: 'medium' })
     })
 
     it('passes provider-native resume handles into the external Pi RPC client', async () => {

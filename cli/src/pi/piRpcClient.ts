@@ -1,12 +1,23 @@
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
 import { accessSync, constants } from 'node:fs'
 import { delimiter, isAbsolute } from 'node:path'
-import { createInterface } from 'node:readline'
 import type { PiThinkingLevel } from './messageCodec'
+import { buildPiRpcArgs, resolvePiSessionResumeFlag } from './piRpcLaunch'
+import { PiRpcPendingRequests } from './piRpcPending'
+import {
+    isPiRpcFailure,
+    PiRpcConnectionError,
+    type PiRpcEventListener,
+    PiRpcJsonlReader,
+    type PiRpcResponse,
+    toPiRpcConnectionError,
+} from './piRpcProtocol'
 
 const DEFAULT_PI_COMMAND = 'pi'
 const STOP_TIMEOUT_MS = 1_000
-const REQUEST_TIMEOUT_MS = 8_000
+const CONTROL_REQUEST_TIMEOUT_MS = 12_000
+const MODEL_CATALOG_REQUEST_TIMEOUT_MS = 20_000
+const RUNTIME_CONFIG_REQUEST_TIMEOUT_MS = 30_000
 
 export type PiRpcModel = {
     provider: string
@@ -26,17 +37,10 @@ export type PiRpcState = {
     sessionId: string
 }
 
-type PiRpcResponse =
-    | { id?: string; type: 'response'; command: string; success: true; data?: unknown }
-    | { id?: string; type: 'response'; command: string; success: false; error: string }
-
-type PendingRequest = {
-    timeout: ReturnType<typeof setTimeout>
-    resolve: (value: PiRpcResponse) => void
+type IdleWaiter = {
+    resolve: () => void
     reject: (error: Error) => void
 }
-
-export type PiRpcEventListener = (event: Record<string, unknown>) => void
 
 export function resolvePiExecutable(env: NodeJS.ProcessEnv = process.env): string {
     const explicitPath = env.VIBY_PI_PATH?.trim() || env.PI_PATH?.trim()
@@ -64,11 +68,11 @@ function buildPiEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 
 export class PiRpcClient {
     private process: ChildProcessWithoutNullStreams | null = null
-    private pending = new Map<string, PendingRequest>()
+    private pending = new PiRpcPendingRequests()
     private listeners = new Set<PiRpcEventListener>()
-    private idleWaiters: Array<() => void> = []
+    private idleWaiters: IdleWaiter[] = []
+    private stdoutReader = new PiRpcJsonlReader((line) => this.handleLine(line))
     private streaming = false
-    private nextId = 1
     private stderr = ''
 
     constructor(
@@ -87,19 +91,18 @@ export class PiRpcClient {
         }
 
         const command = this.options.command ?? resolvePiExecutable(this.options.env)
-        const args = ['--mode', 'rpc']
-        const model = this.options.model?.trim()
-        if (model) {
-            args.push('--model', model)
-        }
-        const resumeSessionId = this.options.resumeSessionId?.trim()
-        if (resumeSessionId) {
-            args.push('--session', resumeSessionId)
-        }
+        const env = buildPiEnv(this.options.env ?? process.env)
+        const sessionFlag = this.options.resumeSessionId
+            ? await resolvePiSessionResumeFlag(command, { cwd: this.options.cwd, env })
+            : '--session'
+        const args = buildPiRpcArgs(
+            { model: this.options.model, resumeSessionId: this.options.resumeSessionId },
+            sessionFlag
+        )
 
         const child = spawn(command, args, {
             cwd: this.options.cwd,
-            env: buildPiEnv(this.options.env ?? process.env),
+            env,
             stdio: ['pipe', 'pipe', 'pipe'],
         })
         this.process = child
@@ -121,10 +124,14 @@ export class PiRpcClient {
     async prompt(message: string): Promise<void> {
         this.streaming = true
         try {
-            await this.send('prompt', { message })
+            const response = await this.send('prompt', { message }, { timeoutMs: null })
+            if (isPiRpcFailure(response)) {
+                throw new Error(response.error)
+            }
             await this.waitForIdle()
         } catch (error) {
             this.streaming = false
+            this.resolveIdleWaiters()
             throw error
         }
     }
@@ -138,15 +145,20 @@ export class PiRpcClient {
     }
 
     async getAvailableModels(): Promise<PiRpcModel[]> {
-        return this.getData<{ models: PiRpcModel[] }>(await this.send('get_available_models')).models
+        const response = await this.send('get_available_models', {}, { timeoutMs: MODEL_CATALOG_REQUEST_TIMEOUT_MS })
+        return this.getData<{ models: PiRpcModel[] }>(response).models
     }
 
     async setModel(model: PiRpcModel): Promise<void> {
-        await this.send('set_model', { provider: model.provider, modelId: model.id })
+        await this.send(
+            'set_model',
+            { provider: model.provider, modelId: model.id },
+            { timeoutMs: RUNTIME_CONFIG_REQUEST_TIMEOUT_MS }
+        )
     }
 
     async setThinkingLevel(level: PiThinkingLevel): Promise<void> {
-        await this.send('set_thinking_level', { level })
+        await this.send('set_thinking_level', { level }, { timeoutMs: RUNTIME_CONFIG_REQUEST_TIMEOUT_MS })
     }
 
     async stop(): Promise<void> {
@@ -164,31 +176,40 @@ export class PiRpcClient {
                 resolve()
             })
         })
-        this.rejectAll(new Error('Pi RPC client stopped'))
+        this.rejectAll(new PiRpcConnectionError('Pi RPC client stopped'))
     }
 
     private attach(child: ChildProcessWithoutNullStreams): void {
-        createInterface({ input: child.stdout }).on('line', (line) => this.handleLine(line))
+        child.stdout.on('data', (chunk) => this.stdoutReader.push(chunk.toString()))
+        child.stdout.on('end', () => this.stdoutReader.end())
         child.stderr.on('data', (chunk) => {
             this.stderr += chunk.toString()
         })
-        child.once('error', (error) => this.rejectAll(error))
+        child.stdin.on('error', (error) => this.rejectAll(toPiRpcConnectionError(error)))
+        child.once('error', (error) => this.rejectAll(toPiRpcConnectionError(error)))
         child.once('exit', (code, signal) => {
-            this.rejectAll(new Error(`Pi RPC exited (${signal ?? code ?? 'unknown'}): ${this.stderr.trim()}`))
+            if (this.process === child) {
+                this.process = null
+            }
+            this.rejectAll(
+                new PiRpcConnectionError(`Pi RPC exited (${signal ?? code ?? 'unknown'}): ${this.stderr.trim()}`)
+            )
         })
     }
 
     private handleLine(line: string): void {
         const trimmed = line.trim()
         if (!trimmed) return
-        const parsed = JSON.parse(trimmed) as Record<string, unknown>
+        let parsed: Record<string, unknown>
+        try {
+            parsed = JSON.parse(trimmed) as Record<string, unknown>
+        } catch (error) {
+            const detail = error instanceof Error ? error.message : 'unknown parse failure'
+            this.rejectAll(new PiRpcConnectionError(`Invalid Pi RPC JSON: ${detail}`))
+            return
+        }
         if (parsed.type === 'response' && typeof parsed.id === 'string') {
-            const pending = this.pending.get(parsed.id)
-            if (pending) {
-                this.pending.delete(parsed.id)
-                clearTimeout(pending.timeout)
-                pending.resolve(parsed as PiRpcResponse)
-            }
+            this.pending.resolve(parsed as PiRpcResponse)
             return
         }
         this.updateStreamingState(parsed)
@@ -201,8 +222,8 @@ export class PiRpcClient {
         if (!this.streaming) {
             return
         }
-        await new Promise<void>((resolve) => {
-            this.idleWaiters.push(resolve)
+        await new Promise<void>((resolve, reject) => {
+            this.idleWaiters.push({ resolve, reject })
         })
     }
 
@@ -215,46 +236,52 @@ export class PiRpcClient {
             return
         }
         this.streaming = false
-        const waiters = this.idleWaiters.splice(0)
-        for (const waiter of waiters) {
-            waiter()
-        }
+        this.resolveIdleWaiters()
     }
 
-    private async send(command: string, payload: Record<string, unknown> = {}): Promise<PiRpcResponse> {
+    private async send(
+        command: string,
+        payload: Record<string, unknown> = {},
+        options: { timeoutMs?: number | null } = {}
+    ): Promise<PiRpcResponse> {
         if (!this.process) {
-            throw new Error('Pi RPC client is not running')
+            throw new PiRpcConnectionError('Pi RPC client is not running')
         }
-        const id = String(this.nextId++)
-        const request = { ...payload, id, type: command }
-        const responsePromise = new Promise<PiRpcResponse>((resolve, reject) => {
-            const timeout = setTimeout(() => {
-                this.pending.delete(id)
-                reject(new Error(`Pi RPC ${command} timed out`))
-            }, REQUEST_TIMEOUT_MS)
-            timeout.unref?.()
-            this.pending.set(id, { timeout, resolve, reject })
-        })
-        this.process.stdin.write(`${JSON.stringify(request)}\n`)
-        return await responsePromise
+        const timeoutMs = options.timeoutMs === undefined ? CONTROL_REQUEST_TIMEOUT_MS : options.timeoutMs
+        const request = this.pending.create(command, payload, timeoutMs)
+        try {
+            this.process.stdin.write(request.line)
+        } catch (error) {
+            this.pending.cancel(request.id)
+            throw error
+        }
+        return await request.response
     }
 
     private getData<T>(response: PiRpcResponse): T {
-        if (!response.success) {
+        if (isPiRpcFailure(response)) {
             throw new Error(response.error)
         }
         return response.data as T
     }
 
-    private rejectAll(error: Error): void {
-        for (const pending of this.pending.values()) {
-            clearTimeout(pending.timeout)
-            pending.reject(error)
-        }
-        this.pending.clear()
+    private resolveIdleWaiters(): void {
         const waiters = this.idleWaiters.splice(0)
         for (const waiter of waiters) {
-            waiter()
+            waiter.resolve()
         }
+    }
+
+    private rejectIdleWaiters(error: Error): void {
+        const waiters = this.idleWaiters.splice(0)
+        for (const waiter of waiters) {
+            waiter.reject(error)
+        }
+    }
+
+    private rejectAll(error: Error): void {
+        this.streaming = false
+        this.pending.rejectAll(error)
+        this.rejectIdleWaiters(error)
     }
 }

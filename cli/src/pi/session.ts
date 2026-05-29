@@ -26,6 +26,7 @@ export class PiSession extends AgentSessionBase<PiMode> {
             messageQueue: opts.messageQueue,
             sessionLabel: 'PiSession',
             sessionIdLabel: 'Pi',
+            startedBy: opts.startedBy,
             applySessionIdToMetadata: (metadata, sessionId) => ({
                 ...metadata,
                 ...setSessionDriverRuntimeHandle(metadata, 'pi', { sessionId }),

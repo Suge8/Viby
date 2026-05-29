@@ -43,6 +43,58 @@ export function formatPiModel(model: Pick<PiRpcModel, 'provider' | 'id'> | null 
     return model ? `${model.provider}/${model.id}` : null
 }
 
+export function buildPiModelFromSelection(model: string | null | undefined): PiRpcModel | undefined {
+    const normalizedModel = normalizePiModelSelection(model ?? undefined)
+    if (!normalizedModel) {
+        return undefined
+    }
+
+    const separatorIndex = normalizedModel.indexOf('/')
+    if (separatorIndex <= 0 || separatorIndex >= normalizedModel.length - 1) {
+        return undefined
+    }
+
+    return {
+        provider: normalizedModel.slice(0, separatorIndex),
+        id: normalizedModel.slice(separatorIndex + 1),
+        name: normalizedModel,
+        reasoning: true,
+    }
+}
+
+export function resolvePiRuntimeModel(
+    selectableModels: readonly PiRpcModel[],
+    requestedModel: string | null | undefined,
+    defaultModel: PiRpcModel | null | undefined
+): PiRpcModel | undefined {
+    const normalizedRequestedModel = normalizePiModelSelection(requestedModel ?? undefined)
+    if (!normalizedRequestedModel) {
+        return defaultModel ?? undefined
+    }
+
+    const lowerRequestedModel = normalizedRequestedModel.toLowerCase()
+    const modelMatches = (model: PiRpcModel | null | undefined): model is PiRpcModel => {
+        if (!model) {
+            return false
+        }
+        const qualifiedId = formatPiModel(model)?.toLowerCase()
+        return qualifiedId === lowerRequestedModel || model.id.toLowerCase() === lowerRequestedModel
+    }
+
+    const resolvedModel = selectableModels.find(modelMatches)
+    if (resolvedModel) {
+        return resolvedModel
+    }
+    if (modelMatches(defaultModel)) {
+        return defaultModel ?? undefined
+    }
+    if (selectableModels.length === 0) {
+        return buildPiModelFromSelection(normalizedRequestedModel)
+    }
+
+    throw new Error(`Pi model not found in local Pi runtime: ${normalizedRequestedModel}`)
+}
+
 export function resolvePiModel(
     selectableModels: readonly PiRpcModel[],
     requestedModel: string | undefined
