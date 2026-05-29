@@ -16,7 +16,7 @@ export function readPairingBridgeStats(
     const transport = selected ? resolvePairingLinkTransport(selected) : 'unknown'
     return {
         transport,
-        transportMode: transport === 'direct' ? 'direct-webrtc' : transport === 'relay' ? 'turn-webrtc' : 'unknown',
+        transportMode: transport === 'direct' ? 'direct-webrtc' : 'unknown',
         previousTransport: resolvePreviousTransport(transport, previousTransport),
         localCandidateType: selected?.localCandidateType ?? null,
         remoteCandidateType: selected?.remoteCandidateType ?? null,

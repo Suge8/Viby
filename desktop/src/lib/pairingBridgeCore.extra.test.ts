@@ -61,7 +61,7 @@ function createSessionView(id: string) {
 }
 
 describe('pairingBridgeCore extra request coverage', () => {
-    it('maps session.open onto the local Hub client and preserves the returned snapshot', async () => {
+    it('maps session.open onto the local Hub client and preserves legacy full snapshots by default', async () => {
         const view = createSessionView('session-opened')
         const client = {
             openSession: async (sessionId: string) => {
@@ -88,7 +88,29 @@ describe('pairingBridgeCore extra request coverage', () => {
         })
     })
 
-    it('maps session.resume and session.load-after through the same bridge contract', async () => {
+    it('omits the latest window when remote open requests lazy messages', async () => {
+        const view = {
+            ...createSessionView('session-opened'),
+            latestWindow: {
+                messages: [{ id: 'm-large' }],
+                page: { limit: 50, beforeSeq: null, nextBeforeSeq: null, hasMore: false },
+            },
+        }
+        const response = await executePairingPeerRequest(
+            { openSession: async () => view } as never,
+            parseRequest({
+                kind: 'request',
+                id: 'req-open',
+                method: 'session.open',
+                params: { sessionId: 'session-opened', includeLatestWindow: false },
+            })
+        )
+
+        expect(response).toMatchObject({ id: 'req-open', ok: true, result: { session: { id: 'session-opened' } } })
+        expect(response.ok && 'latestWindow' in response.result).toBe(false)
+    })
+
+    it('maps session.resume and message paging through the same bridge contract', async () => {
         const resumedView = {
             ...createSessionView('session-resume'),
             latestWindow: {
@@ -115,6 +137,27 @@ describe('pairingBridgeCore extra request coverage', () => {
             resumeSession: async (sessionId: string) => {
                 expect(sessionId).toBe('session-resume')
                 return resumedView
+            },
+            getMessages: async (
+                sessionId: string,
+                options: { beforeSeq?: number | null; afterSeq?: number | null; limit?: number }
+            ) => {
+                expect(sessionId).toBe('session-resume')
+                expect(options).toEqual({ sessionId: 'session-resume', beforeSeq: null, limit: 25 })
+                return {
+                    messages: [
+                        {
+                            id: 'm-latest',
+                            seq: 43,
+                            localId: 'local-latest',
+                            createdAt: 3,
+                            sessionId: 'session-resume',
+                            kind: 'assistant',
+                            content: 'latest',
+                        },
+                    ],
+                    page: { limit: 25, beforeSeq: null, nextBeforeSeq: null, hasMore: false },
+                }
             },
             loadMessagesAfter: async (sessionId: string, afterSeq: number, limit: number) => {
                 expect(sessionId).toBe('session-resume')
@@ -161,6 +204,22 @@ describe('pairingBridgeCore extra request coverage', () => {
                     messages: [{ id: 'm-1' }],
                 },
             },
+        })
+
+        await expect(
+            executePairingPeerRequest(
+                client as never,
+                parseRequest({
+                    kind: 'request',
+                    id: 'req-messages',
+                    method: 'session.messages',
+                    params: { sessionId: 'session-resume', beforeSeq: null, limit: 25 },
+                })
+            )
+        ).resolves.toMatchObject({
+            id: 'req-messages',
+            ok: true,
+            result: { messages: [{ id: 'm-latest', seq: 43 }] },
         })
 
         await expect(
@@ -271,6 +330,10 @@ describe('pairingBridgeCore extra request coverage', () => {
                     },
                 }
             },
+            openAgentConfig: async (input: { driver: string }) => {
+                expect(input).toEqual({ driver: 'codex' })
+                return { ok: true as const, path: '/home/user/.codex/config.toml' }
+            },
             checkRuntimePathsExists: async (paths: string[]) => {
                 expect(paths).toEqual(['/repo'])
                 return { exists: { '/repo': true } }
@@ -330,6 +393,18 @@ describe('pairingBridgeCore extra request coverage', () => {
                 })
             )
         ).resolves.toMatchObject({ ok: true, result: { agent: { driver: 'codex' } } })
+
+        await expect(
+            executePairingPeerRequest(
+                client as never,
+                parseRequest({
+                    kind: 'request',
+                    id: 'runtime-open-agent-config',
+                    method: 'runtime.open-agent-config',
+                    params: { driver: 'codex' },
+                })
+            )
+        ).resolves.toMatchObject({ ok: true, result: { ok: true, path: '/home/user/.codex/config.toml' } })
 
         await expect(
             executePairingPeerRequest(

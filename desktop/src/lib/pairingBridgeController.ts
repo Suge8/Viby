@@ -56,18 +56,9 @@ export function startPairingBridge(options: {
     const client = createDeferredHubClient(options.getStatus)
     let transport: PairingTransportHandle | null = null
     let relay: PairingRelayBridgeHandle | null = null
+    let unsubscribeTransport = () => {}
     const directSupported = typeof RTCPeerConnection !== 'undefined'
-    if (directSupported) {
-        transport = createPairingTransport({
-            pairingId: options.pairing.pairing.id,
-            polite: false,
-            iceServers: toIceServers(options.pairing.iceServers),
-            getWsUrl: async () => options.pairing.wsUrl,
-            createDataChannel: true,
-            onChannel: attachChannel,
-        })
-        directState = transport.getSnapshot()
-    }
+    if (directSupported) startDirectTransport()
     relay = startPairingRelayBridge({
         tunnelUrl: options.pairing.tunnelUrl,
         getClient: () => client,
@@ -86,6 +77,7 @@ export function startPairingBridge(options: {
             maybeReprobeDirect()
         },
         onClosed: () => commitRoute({ type: 'relay-lost' }),
+        onPeerReplaced: rebuildDirectTransport,
         reportAsyncError,
     })
     const stats = transport
@@ -108,20 +100,13 @@ export function startPairingBridge(options: {
         getStats: () => readDesktopTunnelRouteStats(routeState, latestStats),
         reportError: reportTelemetryError,
     })
-    const unsubscribe =
-        transport?.subscribe(() => {
-            directState = transport?.getSnapshot() ?? null
-            handleTransportState()
-            void sampleDirectStats().catch(reportDirectProbeError)
-            emitBridgeState()
-        }) ?? (() => {})
     void sampleDirectStats().catch(reportDirectProbeError)
     emitBridgeState()
 
     return () => {
         disposed = true
         if (statsSampleTimer) clearInterval(statsSampleTimer)
-        unsubscribe()
+        unsubscribeTransport()
         relay?.dispose()
         telemetry.dispose()
         stats?.dispose()
@@ -137,6 +122,41 @@ export function startPairingBridge(options: {
     function reportAsyncError(message: string, error: unknown): void {
         if (disposed || isHubPausedError(error)) return
         fatalMessage = `${message}${error instanceof Error ? error.message : String(error)}`
+        emitBridgeState()
+    }
+
+    function startDirectTransport(): void {
+        transport = createPairingTransport({
+            pairingId: options.pairing.pairing.id,
+            polite: false,
+            iceServers: toIceServers(options.pairing.iceServers),
+            getWsUrl: async () => options.pairing.wsUrl,
+            createDataChannel: true,
+            onChannel: attachChannel,
+            onPeerReplaced: rebuildDirectTransport,
+        })
+        directState = transport.getSnapshot()
+        unsubscribeTransport = transport.subscribe(() => {
+            directState = transport?.getSnapshot() ?? null
+            handleTransportState()
+            void sampleDirectStats().catch(reportDirectProbeError)
+            emitBridgeState()
+        })
+    }
+
+    function rebuildDirectTransport(): void {
+        if (disposed || !directSupported || !transport) return
+        if (routeState.activeRoute === 'direct' || routeState.directProbe !== 'idle') {
+            commitRoute({ type: 'direct-failed', reason: 'peer-replaced' })
+        }
+        const staleChannel = channel
+        channel = null
+        staleChannel?.close()
+        unsubscribeTransport()
+        transport?.dispose()
+        latestStats = null
+        startDirectTransport()
+        maybeReprobeDirect(true)
         emitBridgeState()
     }
 

@@ -15,7 +15,7 @@ import {
     isStalePairingDeletionError,
     isStalePairingRefreshError,
 } from '@/lib/hubControllerSupport'
-import type { DesktopPairingSession } from '@/types'
+import type { DesktopPairingSession, PairingSessionSnapshot } from '@/types'
 
 /**
  * Multi-pairing host state.
@@ -38,6 +38,7 @@ export interface DesktopPairingsApi {
     busy: boolean
     createPairing(): Promise<DesktopPairingSession | null>
     refreshPairing(pairingId: string): Promise<void>
+    applySnapshot(snapshot: PairingSessionSnapshot): void
     deletePairing(pairingId: string): Promise<void>
     deleteAll(): Promise<void>
     cancelDraft(pairingId: string): Promise<void>
@@ -78,6 +79,17 @@ export function useDesktopPairings(): DesktopPairingsApi {
         (pairingId: string): void => {
             const next = new Map(sessionsRef.current)
             if (!next.delete(pairingId)) return
+            replaceSessions(next)
+        },
+        [replaceSessions]
+    )
+
+    const applySnapshot = useCallback(
+        (snapshot: PairingSessionSnapshot): void => {
+            const existing = sessionsRef.current.get(snapshot.id)
+            if (!existing) return
+            const next = new Map(sessionsRef.current)
+            next.set(snapshot.id, { ...existing, pairing: snapshot })
             replaceSessions(next)
         },
         [replaceSessions]
@@ -192,6 +204,11 @@ export function useDesktopPairings(): DesktopPairingsApi {
             const target = sessionsRef.current.get(pairingId)
             if (!target) return
             if (target.pairing.approvalStatus === 'approved') return
+            // Optimistic removal: drop the draft from the in-memory list
+            // before awaiting the backend delete so any modal that opens on
+            // the heels of `cancelDraft` cannot accidentally rebind to the
+            // session being cancelled and flash open-then-closed.
+            removePairing(pairingId)
             try {
                 await deletePairingSession(target)
             } catch (error) {
@@ -200,7 +217,6 @@ export function useDesktopPairings(): DesktopPairingsApi {
                 }
                 await removePairingSession(pairingId).catch(() => undefined)
             }
-            removePairing(pairingId)
         },
         [removePairing, tauriRuntimeAvailable]
     )
@@ -229,6 +245,7 @@ export function useDesktopPairings(): DesktopPairingsApi {
         busy,
         createPairing,
         refreshPairing,
+        applySnapshot,
         deletePairing,
         deleteAll,
         cancelDraft,

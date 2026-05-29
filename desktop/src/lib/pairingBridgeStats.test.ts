@@ -41,7 +41,7 @@ describe('readPairingBridgeStats', () => {
         })
     })
 
-    it('classifies TURN relay candidate pairs', () => {
+    it('keeps WebRTC relay candidate pairs out of the product route modes', () => {
         const stats = readPairingBridgeStats(
             statsReport([
                 { id: 'pair', type: 'candidate-pair', nominated: true, state: 'succeeded', localCandidateId: 'local' },
@@ -50,7 +50,7 @@ describe('readPairingBridgeStats', () => {
         )
 
         expect(stats.transport).toBe('relay')
-        expect(stats.transportMode).toBe('turn-webrtc')
+        expect(stats.transportMode).toBe('unknown')
         expect(stats.localCandidateType).toBe('relay')
     })
 

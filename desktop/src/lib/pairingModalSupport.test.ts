@@ -5,7 +5,6 @@ import {
     buildDesktopPairingQrUrl,
     formatPairingCode,
     shouldOfferPairingCodeCopy,
-    shouldStartPairingBridge,
 } from './pairingModalSupport'
 
 const basePairing: DesktopPairingSession = {
@@ -15,45 +14,23 @@ const basePairing: DesktopPairingSession = {
         createdAt: 1,
         updatedAt: 1,
         expiresAt: 2,
-        ticketExpiresAt: 2,
-        shortCode: null,
+        shortCode: '490649',
         approvalStatus: null,
         host: { tokenHint: 'host-1' },
         guest: null,
     },
     hostToken: 'host-token',
-    pairingUrl: 'https://pair.example.com/p/pairing-1#ticket=secret',
+    pairingUrl: 'https://pair.example.com/p/pairing-1',
     wsUrl: 'wss://pair.example.com/pairings/pairing-1/ws?token=host-token',
     tunnelUrl: 'wss://pair.example.com/pairings/pairing-1/tunnel?token=host-token',
     iceServers: [],
 }
 
 describe('pairingModalSupport', () => {
-    it('keeps the bridge off before desktop approval completes', () => {
-        expect(shouldStartPairingBridge(null)).toBe(false)
-        expect(shouldStartPairingBridge(basePairing)).toBe(false)
-        expect(
-            shouldStartPairingBridge({
-                ...basePairing,
-                pairing: { ...basePairing.pairing, approvalStatus: 'pending', guest: { label: 'Device' } },
-            })
-        ).toBe(false)
-    })
-
-    it('allows the bridge to start only after approval', () => {
-        expect(
-            shouldStartPairingBridge({
-                ...basePairing,
-                pairing: { ...basePairing.pairing, approvalStatus: 'approved', guest: { label: 'Device' } },
-            })
-        ).toBe(true)
-    })
-
-    it('builds action-oriented pairing copy instead of generic loading labels', () => {
+    it('shows the six-digit code immediately on the invite stage so copying the link does not hide it', () => {
         expect(buildDesktopPairingPresentation(basePairing)).toMatchObject({
-            codeHint: '',
-            guidance: '',
-            statusHint: '等待设备扫码',
+            codeValue: '490 649',
+            codeHint: '配对码',
             stage: 'invite',
         })
 
@@ -62,24 +39,6 @@ describe('pairingModalSupport', () => {
                 ...basePairing,
                 pairing: {
                     ...basePairing.pairing,
-                    shortCode: '490649',
-                    approvalStatus: 'pending',
-                    guest: { label: 'Device' },
-                },
-            })
-        ).toMatchObject({
-            codeValue: '490 649',
-            codeHint: '配对码',
-            statusHint: null,
-            stage: 'approval',
-        })
-
-        expect(
-            buildDesktopPairingPresentation({
-                ...basePairing,
-                pairing: {
-                    ...basePairing.pairing,
-                    shortCode: '490649',
                     approvalStatus: 'approved',
                     guest: { label: 'Device' },
                 },
@@ -87,8 +46,6 @@ describe('pairingModalSupport', () => {
         ).toMatchObject({
             codeHint: '',
             codeValue: '已连接',
-            guidance: '',
-            statusHint: null,
             stage: 'bound',
         })
     })
@@ -99,40 +56,18 @@ describe('pairingModalSupport', () => {
                 ...basePairing,
                 pairing: {
                     ...basePairing.pairing,
-                    shortCode: '490649',
                     approvalStatus: 'approved',
                     guest: { label: 'Device' },
                 },
             })
         ).toMatchObject({
-            codeHint: '',
-            codeValue: '已连接',
-            guidance: '',
-            statusHint: null,
             stage: 'bound',
+            codeValue: '已连接',
         })
     })
 
-    it('keeps partially claimed snapshots out of the connected state', () => {
-        expect(
-            buildDesktopPairingPresentation({
-                ...basePairing,
-                pairing: {
-                    ...basePairing.pairing,
-                    shortCode: null,
-                    approvalStatus: null,
-                    guest: { label: 'Device' },
-                },
-            })
-        ).toMatchObject({
-            codeHint: '等待确认',
-            statusHint: '等待设备接入',
-            stage: 'invite',
-        })
-    })
-
-    it('keeps used pairing tickets out of bound phone entry QR codes', () => {
-        expect(buildDesktopPairingQrUrl(basePairing)).toBe('https://pair.example.com/p/pairing-1#ticket=secret')
+    it('keeps the invite URL stable across claim, even after a device connects', () => {
+        expect(buildDesktopPairingQrUrl(basePairing)).toBe('https://pair.example.com/p/pairing-1')
         expect(
             buildDesktopPairingQrUrl({
                 ...basePairing,
@@ -147,9 +82,8 @@ describe('pairingModalSupport', () => {
         expect(formatPairingCode('already-done')).toBe('already-done')
     })
 
-    it('only offers the copy affordance while the pairing is in approval stage so users never copy a status label', () => {
-        expect(shouldOfferPairingCodeCopy('approval')).toBe(true)
-        expect(shouldOfferPairingCodeCopy('invite')).toBe(false)
+    it('exposes the copy affordance on the invite stage but hides it once approved', () => {
+        expect(shouldOfferPairingCodeCopy('invite')).toBe(true)
         expect(shouldOfferPairingCodeCopy('bound')).toBe(false)
     })
 })

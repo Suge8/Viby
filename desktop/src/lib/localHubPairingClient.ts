@@ -1,4 +1,6 @@
 import type {
+    PairingPeerMessagesParams,
+    PairingPeerMessagesResult,
     PairingPeerPushSubscriptionParams,
     PairingPeerPushUnsubscribeParams,
     PairingPeerSpawnSessionParams,
@@ -20,6 +22,8 @@ import type {
     LocalSessionExportRequest,
     MachineDirectoryResponse,
     ModelReasoningEffort,
+    OpenAgentConfigRequest,
+    OpenAgentConfigResponse,
     PermissionMode,
     ResolveAgentLaunchConfigRequest,
     ResolveAgentLaunchConfigResponse,
@@ -43,6 +47,7 @@ import {
     getRuntimeCapabilities,
     importRuntimeLocalSession,
     listRuntimeLocalSessions,
+    openAgentConfig,
     resolveAgentLaunchConfig,
     restoreAgentConfig,
     saveAgentConfig,
@@ -99,6 +104,17 @@ export class LocalHubPairingClient extends LocalHubPairingClientCore {
         })
         return await this.openSession(sessionId)
     }
+    async getMessages(sessionId: string, options: PairingPeerMessagesParams): Promise<PairingPeerMessagesResult> {
+        const params = new URLSearchParams()
+        if (typeof options.beforeSeq === 'number') params.set('beforeSeq', `${options.beforeSeq}`)
+        if (typeof options.afterSeq === 'number') params.set('afterSeq', `${options.afterSeq}`)
+        if (typeof options.limit === 'number') params.set('limit', `${options.limit}`)
+        const query = params.toString()
+        return await this.requestJson<PairingPeerMessagesResult>(
+            `/api/sessions/${encodeURIComponent(sessionId)}/messages${query ? `?${query}` : ''}`
+        )
+    }
+
     async loadMessagesAfter(
         sessionId: string,
         afterSeq: number,
@@ -206,6 +222,9 @@ export class LocalHubPairingClient extends LocalHubPairingClientCore {
     }
     async restoreAgentConfig(input: RestoreAgentConfigRequest): Promise<RestoreAgentConfigResponse> {
         return await restoreAgentConfig(this.request, input)
+    }
+    async openAgentConfig(input: OpenAgentConfigRequest): Promise<OpenAgentConfigResponse> {
+        return await openAgentConfig(this.request, input)
     }
     async checkRuntimePathsExists(paths: string[]): Promise<{ exists: Record<string, boolean> }> {
         return await checkRuntimePathsExists(this.request, paths)

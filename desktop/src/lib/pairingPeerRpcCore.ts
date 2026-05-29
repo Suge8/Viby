@@ -7,6 +7,8 @@ import type {
     PairingPeerListSessionsResult,
     PairingPeerLoadAfterResult,
     PairingPeerMessage,
+    PairingPeerMessagesResult,
+    PairingPeerOpenAgentConfigResult,
     PairingPeerOpenSessionResult,
     PairingPeerPathsExistResult,
     PairingPeerRequest,
@@ -30,7 +32,9 @@ import {
     PairingPeerListSessionsResultSchema,
     PairingPeerLoadAfterResultSchema,
     PairingPeerMessageSchema,
+    PairingPeerMessagesResultSchema,
     PairingPeerOkResultSchema,
+    PairingPeerOpenAgentConfigResultSchema,
     PairingPeerOpenSessionResultSchema,
     PairingPeerPathsExistResultSchema,
     PairingPeerRequestSchema,
@@ -47,7 +51,12 @@ import {
 import type { SyncEvent } from '@viby/protocol/types'
 import type { LocalHubPairingClient } from './localHubPairingClient'
 import { executePairingPeerPeripheralRequest } from './pairingPeerPeripheralRequests'
-import { errorResponse, successResponse, toRemoteSessionSummary } from './pairingPeerResponseSupport'
+import {
+    errorResponse,
+    successResponse,
+    toRemoteSessionHead,
+    toRemoteSessionSummary,
+} from './pairingPeerResponseSupport'
 export function serializePairingPeerMessage(message: PairingPeerMessage | PairingPeerResponse): string {
     return JSON.stringify(PairingPeerMessageSchema.parse(message))
 }
@@ -104,15 +113,15 @@ export async function executePairingPeerRequest(
                 return successResponse(request.id, result)
             }
             case 'session.open': {
-                const result: PairingPeerOpenSessionResult = PairingPeerOpenSessionResultSchema.parse(
-                    await client.openSession(request.params.sessionId)
-                )
+                const view = await client.openSession(request.params.sessionId)
+                const payload = request.params.includeLatestWindow === false ? toRemoteSessionHead(view) : view
+                const result: PairingPeerOpenSessionResult = PairingPeerOpenSessionResultSchema.parse(payload)
                 return successResponse(request.id, result)
             }
             case 'session.resume': {
-                const result: PairingPeerResumeSessionResult = PairingPeerResumeSessionResultSchema.parse(
-                    await client.resumeSession(request.params.sessionId)
-                )
+                const view = await client.resumeSession(request.params.sessionId)
+                const payload = request.params.includeLatestWindow === false ? toRemoteSessionHead(view) : view
+                const result: PairingPeerResumeSessionResult = PairingPeerResumeSessionResultSchema.parse(payload)
                 return successResponse(request.id, result)
             }
             case 'session.load-after': {
@@ -122,6 +131,12 @@ export async function executePairingPeerRequest(
                         request.params.afterSeq,
                         request.params.limit ?? 200
                     )
+                )
+                return successResponse(request.id, result)
+            }
+            case 'session.messages': {
+                const result: PairingPeerMessagesResult = PairingPeerMessagesResultSchema.parse(
+                    await client.getMessages(request.params.sessionId, request.params)
                 )
                 return successResponse(request.id, result)
             }
@@ -266,6 +281,12 @@ export async function executePairingPeerRequest(
             case 'runtime.restore-agent-config': {
                 const result: PairingPeerRestoreAgentConfigResult = PairingPeerRestoreAgentConfigResultSchema.parse(
                     await client.restoreAgentConfig(request.params)
+                )
+                return successResponse(request.id, result)
+            }
+            case 'runtime.open-agent-config': {
+                const result: PairingPeerOpenAgentConfigResult = PairingPeerOpenAgentConfigResultSchema.parse(
+                    await client.openAgentConfig(request.params)
                 )
                 return successResponse(request.id, result)
             }

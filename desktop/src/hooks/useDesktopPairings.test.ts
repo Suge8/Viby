@@ -17,7 +17,6 @@ function makeSession(id: string, approval: 'approved' | 'pending' | null = 'appr
             createdAt: 1,
             updatedAt: 2,
             expiresAt: 9_999,
-            ticketExpiresAt: 9_999,
             shortCode: '123456',
             approvalStatus: approval,
             host: {},

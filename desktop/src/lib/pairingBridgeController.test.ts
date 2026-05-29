@@ -128,7 +128,6 @@ function pairingSession(): DesktopPairingSession {
             createdAt: 1,
             updatedAt: 2,
             expiresAt: 9_999,
-            ticketExpiresAt: 9_999,
             shortCode: null,
             approvalStatus: 'approved',
             host: {},
@@ -181,7 +180,7 @@ describe('startPairingBridge', () => {
         globalThis.WebSocket = originalSocket
     })
 
-    it('requires direct candidate proof and channel activity before reporting direct ready', async () => {
+    it('requires direct heartbeat proof before reporting direct ready', async () => {
         const states: PairingBridgeState[] = []
         const cleanup = startPairingBridge({
             pairing: pairingSession(),
@@ -199,6 +198,49 @@ describe('startPairingBridge', () => {
         await Promise.resolve()
         expect(states.at(-1)?.phase).toBe('ready')
         expect(states.at(-1)?.stats?.transport).toBe('direct')
+        cleanup()
+    })
+
+    it('rebuilds direct transport when the browser guest is replaced by PWA handoff', async () => {
+        const firstPeer = peer
+        const secondPeer = new FakePeer()
+        const peers = [firstPeer, secondPeer]
+        globalThis.RTCPeerConnection = function RTCPeerConnection() {
+            return peers.shift() ?? secondPeer
+        } as unknown as typeof RTCPeerConnection
+        const states: PairingBridgeState[] = []
+        const cleanup = startPairingBridge({
+            pairing: pairingSession(),
+            getStatus: hubReady,
+            onStateChange: (state) => states.push(state),
+        })
+        await Promise.resolve()
+        firstPeer.connect()
+        firstPeer.channel.emit('message', JSON.stringify({ kind: 'heartbeat' }))
+        await Promise.resolve()
+        firstPeer.channel.emit('message', JSON.stringify({ kind: 'heartbeat' }))
+        await Promise.resolve()
+        expect(states.at(-1)?.stats?.transportMode).toBe('direct-webrtc')
+
+        FakeSocket.instances
+            .find((socket) => socket.url.includes('/ws'))
+            ?.emitMessage(JSON.stringify({ type: 'peer-replaced' }))
+        await Promise.resolve()
+        await Promise.resolve()
+
+        expect(firstPeer.connectionState).toBe('closed')
+        expect(firstPeer.channel.readyState).toBe('closed')
+        expect(secondPeer.channels).toHaveLength(1)
+        expect(states.at(-1)?.stats?.transportMode).not.toBe('direct-webrtc')
+
+        secondPeer.connect()
+        secondPeer.channel.emit('message', JSON.stringify({ kind: 'heartbeat' }))
+        await Promise.resolve()
+        secondPeer.channel.emit('message', JSON.stringify({ kind: 'heartbeat' }))
+        await Promise.resolve()
+        secondPeer.channel.emit('message', JSON.stringify({ kind: 'heartbeat' }))
+        await Promise.resolve()
+        expect(states.at(-1)?.stats?.transportMode).toBe('direct-webrtc')
         cleanup()
     })
 
@@ -296,7 +338,36 @@ describe('startPairingBridge', () => {
         cleanup()
     })
 
-    it('reports ready through relay when native direct support is unavailable', async () => {
+    it('rebuilds stale direct transport when PWA handoff happens after relay fallback', async () => {
+        const firstPeer = peer
+        const secondPeer = new FakePeer()
+        const peers = [firstPeer, secondPeer]
+        globalThis.RTCPeerConnection = function RTCPeerConnection() {
+            return peers.shift() ?? secondPeer
+        } as unknown as typeof RTCPeerConnection
+        const cleanup = startPairingBridge({
+            pairing: pairingSession(),
+            getStatus: hubReady,
+            onStateChange: () => {},
+        })
+        await Promise.resolve()
+        firstPeer.channel.close()
+        await pairRelaySocket(requireRelaySocket())
+
+        requireSignalingSocket().emitMessage(JSON.stringify({ type: 'peer-replaced' }))
+        await Promise.resolve()
+        await Promise.resolve()
+
+        expect(firstPeer.connectionState).toBe('closed')
+        expect(secondPeer.channels).toHaveLength(1)
+        cleanup()
+    })
+
+    it('stays connecting after the relay socket opens until the guest heartbeat acks', async () => {
+        // `phase: 'ready'` now requires a real round-trip heartbeat ack so
+        // the desktop UI cannot claim a phantom connection just because
+        // the broker accepted the host tunnel socket. Pairing only goes
+        // ready when the guest actually attached and bounced a frame back.
         globalThis.RTCPeerConnection = undefined as unknown as typeof RTCPeerConnection
         const states: PairingBridgeState[] = []
         const cleanup = startPairingBridge({
@@ -307,12 +378,10 @@ describe('startPairingBridge', () => {
 
         expect(states.at(-1)?.phase).toBe('connecting')
         await pairRelaySocket(FakeSocket.instances[0])
-        await waitForCondition(() => states.at(-1)?.phase === 'ready')
-
-        expect(states.at(-1)).toMatchObject({
-            phase: 'ready',
-            stats: { transport: 'relay' },
-        })
+        // Allow microtasks to flush so any phantom `ready` would have already
+        // landed here; the assertion locks down that it does not.
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(states.at(-1)?.phase).toBe('connecting')
         cleanup()
     })
 })
@@ -333,6 +402,12 @@ async function pairRelaySocket(socket: FakeSocket): Promise<void> {
 function requireRelaySocket(): FakeSocket {
     const socket = FakeSocket.instances.find((entry) => entry.url.includes('/tunnel'))
     if (!socket) throw new Error('relay socket missing')
+    return socket
+}
+
+function requireSignalingSocket(): FakeSocket {
+    const socket = FakeSocket.instances.find((entry) => entry.url.includes('/ws'))
+    if (!socket) throw new Error('signaling socket missing')
     return socket
 }
 

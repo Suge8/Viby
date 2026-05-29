@@ -13,7 +13,6 @@ function makeBridgeState(pairingId: string, phase: PairingBridgeState['phase']):
             createdAt: 1,
             updatedAt: 2,
             expiresAt: 9_999,
-            ticketExpiresAt: 9_999,
             shortCode: null,
             approvalStatus: 'approved',
             host: {},
@@ -34,7 +33,6 @@ function makeSession(
             createdAt: 1,
             updatedAt: 2,
             expiresAt: 9_999,
-            ticketExpiresAt: 9_999,
             shortCode: null,
             approvalStatus,
             host: {},
@@ -74,16 +72,20 @@ describe('usePairingBridges support — bridge map invariants', () => {
         expect(bridges.has('gone')).toBe(false)
     })
 
-    it('bridge lifecycle key ignores unapproved drafts so stale bridge state cannot mask the 6-digit code', () => {
+    it('bridge lifecycle key tracks every active invite, including unapproved drafts', () => {
+        // The host bridge spins up as soon as the invite exists so the
+        // broker WS / tunnel is already attached when the guest verifies.
+        // Waiting on `approved` introduced a race where SSE delivery delay
+        // left the phone forever on the connecting splash.
         const approved = makeSession('approved', 'approved')
-        const pending = makeSession('pending', 'pending')
         const invite = makeSession('invite', null)
-        expect(buildPairingBridgeLifecycleKey({ enabled: true, pairings: [approved, pending, invite] })).toBe(
-            buildPairingBridgeLifecycleKey({ enabled: true, pairings: [approved] })
-        )
+        const single = buildPairingBridgeLifecycleKey({ enabled: true, pairings: [approved] })
+        const both = buildPairingBridgeLifecycleKey({ enabled: true, pairings: [approved, invite] })
+        expect(both).not.toBe(single)
+        expect(both).toContain('invite')
     })
 
-    it('bridge lifecycle key ignores Hub status and changes only with enabled/approved pairings', () => {
+    it('bridge lifecycle key changes with the active invite set and disables wholesale when public access is off', () => {
         const first = [makeSession('first')]
         expect(buildPairingBridgeLifecycleKey({ enabled: true, pairings: first })).toBe(
             buildPairingBridgeLifecycleKey({ enabled: true, pairings: first })

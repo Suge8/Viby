@@ -72,11 +72,12 @@ describe('pairingBridgeControllerSupport', () => {
         expect(onChannelClosed).not.toHaveBeenCalled()
     })
 
-    it('echoes heartbeat frames and marks channel active', () => {
+    it('echoes heartbeat frames and marks channel active', async () => {
         const channel = new FakeDataChannel()
         const onChannelActive = mock(() => undefined)
         attach(channel, { onChannelActive })
         channel.emit('message', JSON.stringify({ kind: 'heartbeat', at: 1 }))
+        await Promise.resolve()
         expect(channel.sent).toHaveLength(1)
         expect(onChannelActive).toHaveBeenCalled()
     })

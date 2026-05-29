@@ -161,6 +161,9 @@ describe('LocalHubPairingClient', () => {
                     },
                 })
             }
+            if (url.endsWith('/api/runtime/agent-config/codex/open')) {
+                return jsonResponse({ ok: true, path: '/home/user/.codex/config.toml' })
+            }
             if (url.endsWith('/api/runtime/spawn')) {
                 return jsonResponse({ type: 'success', sessionId: 'session-1' })
             }
@@ -198,6 +201,10 @@ describe('LocalHubPairingClient', () => {
                 values: { 'codex.model': 'gpt-5.2' },
             },
         })
+        await expect(client.openAgentConfig({ driver: 'codex' })).resolves.toEqual({
+            ok: true,
+            path: '/home/user/.codex/config.toml',
+        })
         await expect(client.spawnSession({ directory: '/repo', agent: 'codex' })).resolves.toEqual({
             type: 'success',
             session: { id: 'session-1' },
@@ -212,6 +219,9 @@ describe('LocalHubPairingClient', () => {
         )
         expect(calls.find((call) => call.url.endsWith('/api/runtime/agent-config/codex/restore'))?.body).toBe(
             JSON.stringify({ driver: 'codex', backupPath: '/home/user/.codex/config.toml.bak' })
+        )
+        expect(calls.find((call) => call.url.endsWith('/api/runtime/agent-config/codex/open'))?.body).toBe(
+            JSON.stringify({ driver: 'codex' })
         )
     })
 })

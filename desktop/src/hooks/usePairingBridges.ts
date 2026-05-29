@@ -10,6 +10,12 @@ import type { DesktopPairingSession, HubRuntimeStatus, PairingBridgeState } from
  * disturb already-connected bridges, so this hook diffs the incoming
  * pairings map and only spins up new bridges / tears down the ones that
  * actually disappeared.
+ *
+ * The bridge spins up as soon as the invite exists rather than waiting on
+ * the `approvalStatus === 'approved'` event. Broker WS / tunnel auth is
+ * token-based (no approval gate), so the host can attach immediately and
+ * sit idle until the guest verifies. This removes the SSE-delivery race
+ * that left phones forever on the connecting splash.
  */
 const IDLE_BRIDGE_STATE: PairingBridgeState = {
     phase: 'connecting',
@@ -22,18 +28,8 @@ function getReadyStatus(status: HubRuntimeStatus | undefined): HubRuntimeStatus 
     return status?.phase === 'ready' ? status : null
 }
 
-function isApprovedPairing(session: DesktopPairingSession): boolean {
-    return session.pairing.approvalStatus === 'approved'
-}
-
-function getBridgePairings(pairings: readonly DesktopPairingSession[]): DesktopPairingSession[] {
-    return pairings.filter(isApprovedPairing)
-}
-
 function buildPairingsKey(pairings: readonly DesktopPairingSession[]): string {
-    return getBridgePairings(pairings)
-        .map((session) => `${session.pairing.id}:${session.wsUrl}:${session.tunnelUrl}`)
-        .join('|')
+    return pairings.map((session) => `${session.pairing.id}:${session.wsUrl}:${session.tunnelUrl}`).join('|')
 }
 
 export function buildPairingBridgeLifecycleKey(options: {
@@ -55,7 +51,7 @@ export function usePairingBridges(options: {
 
     const pairingsKey = buildPairingBridgeLifecycleKey(options)
     const enabled = options.enabled
-    const pairings = getBridgePairings(options.pairings)
+    const pairings = options.pairings
 
     useEffect(() => {
         const teardownAll = (): void => {

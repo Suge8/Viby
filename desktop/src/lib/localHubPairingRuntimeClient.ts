@@ -5,6 +5,8 @@ import type {
     LocalSessionCatalog,
     LocalSessionExportRequest,
     MachineDirectoryResponse,
+    OpenAgentConfigRequest,
+    OpenAgentConfigResponse,
     ResolveAgentLaunchConfigRequest,
     ResolveAgentLaunchConfigResponse,
     RestoreAgentConfigRequest,
@@ -66,6 +68,19 @@ export async function restoreAgentConfig(
 ): Promise<RestoreAgentConfigResponse> {
     return await requestJson<RestoreAgentConfigResponse>(
         `/api/runtime/agent-config/${encodeURIComponent(input.driver)}/restore`,
+        {
+            method: 'POST',
+            body: JSON.stringify(input),
+        }
+    )
+}
+
+export async function openAgentConfig(
+    requestJson: LocalHubPairingRequestJson,
+    input: OpenAgentConfigRequest
+): Promise<OpenAgentConfigResponse> {
+    return await requestJson<OpenAgentConfigResponse>(
+        `/api/runtime/agent-config/${encodeURIComponent(input.driver)}/open`,
         {
             method: 'POST',
             body: JSON.stringify(input),

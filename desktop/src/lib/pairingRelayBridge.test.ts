@@ -2,8 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
 import {
     createPairingTunnelCipher,
     createPairingTunnelKeyFrame,
+    isPairingUploadFrameMagic,
+    PAIRING_BINARY_UPLOAD_FINAL_CHUNK_FLAG,
+    PAIRING_BINARY_UPLOAD_FRAME_HEADER_BYTES,
     type PairingTunnelCipher,
     type PairingTunnelSealedFrame,
+    toPairingTunnelBase64Url,
 } from '@viby/protocol/pairing'
 import { startPairingRelayBridge } from './pairingRelayBridge'
 
@@ -43,6 +47,28 @@ class FakeWebSocket {
 function client() {
     return {
         streamEvents: async () => {},
+    }
+}
+
+function clientCapturingUploads(uploads: ArrayBuffer[]) {
+    return {
+        streamEvents: async () => {},
+        acceptUploadChunk: async (data: unknown) => {
+            if (data instanceof ArrayBuffer) {
+                uploads.push(data)
+                return true
+            }
+            return false
+        },
+    }
+}
+
+function clientTrackingStreams(streams: AbortSignal[]) {
+    return {
+        streamEvents: async ({ signal }: { signal: AbortSignal }) => {
+            streams.push(signal)
+            await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }))
+        },
     }
 }
 
@@ -86,6 +112,36 @@ describe('pairingRelayBridge', () => {
         await expect(findSentPayload(socket, peerCipher, isHeartbeatAck)).resolves.toMatchObject({ ack: true })
     })
 
+    it('ignores stale relay socket frames after reconnect starts', async () => {
+        const onOpen = mock()
+        startPairingRelayBridge({
+            tunnelUrl: 'wss://pair.example/tunnel',
+            getClient: () => client() as never,
+            isDisposed: () => false,
+            onOpen,
+            onActive: mock(),
+            onClosed: mock(),
+            reportAsyncError: mock(),
+        })
+        const staleSocket = FakeWebSocket.instances[0]
+        staleSocket.open()
+        await waitForSent(staleSocket, 1)
+        const staleSentCount = staleSocket.sent.length
+        staleSocket.close()
+        await waitForCondition(() => FakeWebSocket.instances.length === 2)
+        const peerCipher = await createPairingTunnelCipher()
+
+        staleSocket.emitMessage(
+            JSON.stringify(
+                createPairingTunnelKeyFrame({ id: 'stale-peer-key', seq: 0, publicKey: peerCipher.publicKey })
+            )
+        )
+        await Promise.resolve()
+
+        expect(staleSocket.sent).toHaveLength(staleSentCount)
+        expect(onOpen).not.toHaveBeenCalled()
+    })
+
     it('reports relay RTT from desktop-origin heartbeat acknowledgements', async () => {
         const onActive = mock()
         startPairingRelayBridge({
@@ -117,15 +173,63 @@ describe('pairingRelayBridge', () => {
         )
     })
 
-    it('rekeys when a PWA replaces the guest relay peer', async () => {
+    it('rebuilds the upload magic frame from sealed binary tunnel frames', async () => {
+        // Web composer ships upload chunks through `PairingTunnelBinaryFrame`
+        // when the WebRTC datachannel is not open. The relay bridge must
+        // re-create the same magic-headered ArrayBuffer that the datachannel
+        // path emits so `PairingBinaryUploadManager` keeps owning chunk
+        // assembly. This protects the composer's image-send path on every
+        // pair that currently never escapes `relay-wss`.
+        const uploads: ArrayBuffer[] = []
         const onOpen = mock()
         startPairingRelayBridge({
             tunnelUrl: 'wss://pair.example/tunnel',
-            getClient: () => client() as never,
+            getClient: () => clientCapturingUploads(uploads) as never,
             isDisposed: () => false,
             onOpen,
             onActive: mock(),
             onClosed: mock(),
+            reportAsyncError: mock(),
+        })
+        const socket = FakeWebSocket.instances[0]
+        const peerCipher = await pairSocket(socket)
+        await waitForCondition(() => onOpen.mock.calls.length > 0)
+
+        const transferId = '11112222-3333-4444-5555-666677778888'
+        const payload = new Uint8Array([42, 43, 44, 45])
+        socket.emitMessage(
+            JSON.stringify(
+                await peerCipher.seal({
+                    kind: 'binary',
+                    id: 'frame-bin-1',
+                    seq: 5,
+                    transferId,
+                    chunkIndex: 0,
+                    chunkCount: 1,
+                    bytesBase64: toPairingTunnelBase64Url(payload),
+                })
+            )
+        )
+        await waitForCondition(() => uploads.length > 0)
+        const frameBytes = new Uint8Array(uploads[0] ?? new ArrayBuffer(0))
+        expect(isPairingUploadFrameMagic(frameBytes)).toBe(true)
+        expect(frameBytes[24]).toBe(PAIRING_BINARY_UPLOAD_FINAL_CHUNK_FLAG)
+        expect(frameBytes.byteLength).toBe(PAIRING_BINARY_UPLOAD_FRAME_HEADER_BYTES + payload.byteLength)
+        expect(Array.from(frameBytes.subarray(PAIRING_BINARY_UPLOAD_FRAME_HEADER_BYTES))).toEqual(Array.from(payload))
+    })
+
+    it('rekeys when a PWA replaces the guest relay peer', async () => {
+        const onOpen = mock()
+        const onPeerReplaced = mock()
+        const streams: AbortSignal[] = []
+        startPairingRelayBridge({
+            tunnelUrl: 'wss://pair.example/tunnel',
+            getClient: () => clientTrackingStreams(streams) as never,
+            isDisposed: () => false,
+            onOpen,
+            onActive: mock(),
+            onClosed: mock(),
+            onPeerReplaced,
             reportAsyncError: mock(),
         })
         const socket = FakeWebSocket.instances[0]
@@ -140,6 +244,8 @@ describe('pairingRelayBridge', () => {
             )
         )
         await waitForCondition(() => countSent(socket, 'key') > keyCount)
+        await waitForCondition(() => streams.length === 2 && streams[0]?.aborted === true)
+        expect(onPeerReplaced).toHaveBeenCalled()
         const localKey = findLastSentKey(socket)
         if (!localKey) throw new Error('local key missing')
         await nextPeerCipher.receivePeerKey(localKey.publicKey)
