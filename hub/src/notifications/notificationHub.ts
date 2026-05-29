@@ -10,8 +10,11 @@ const DEFAULT_PERMISSION_DEBOUNCE_MS = 500
 type ReadyStateSnapshot = {
     active: boolean
     thinking: boolean
+    activeAt: number | null
     pendingRequestsCount: number
+    latestActivityAt: number | null
     latestActivityKind: SessionActivityKind | null
+    latestCompletedReplyAt: number | null
 }
 
 export class NotificationHub {
@@ -23,6 +26,7 @@ export class NotificationHub {
     private readonly lastReadyNotificationAt: Map<string, number> = new Map()
     private readonly lastReadyState: Map<string, boolean> = new Map()
     private readonly lastKnownActivityKinds: Map<string, SessionActivityKind | null> = new Map()
+    private readonly readyNotificationEligible: Map<string, boolean> = new Map()
     private unsubscribeSyncEvents: (() => void) | null = null
 
     constructor(
@@ -52,6 +56,7 @@ export class NotificationHub {
         this.lastReadyNotificationAt.clear()
         this.lastReadyState.clear()
         this.lastKnownActivityKinds.clear()
+        this.readyNotificationEligible.clear()
     }
 
     private handleSyncEvent(event: SyncEvent): void {
@@ -72,7 +77,19 @@ export class NotificationHub {
         }
 
         if (event.type === 'message-received' && event.sessionId) {
-            this.lastKnownActivityKinds.set(event.sessionId, getSessionActivityKind(event.message.content))
+            const previousActivityKind = this.lastKnownActivityKinds.get(event.sessionId) ?? null
+            const activityKind = getSessionActivityKind(event.message.content)
+            if (activityKind) {
+                this.lastKnownActivityKinds.set(event.sessionId, activityKind)
+                if (activityKind === 'ready') {
+                    this.readyNotificationEligible.set(
+                        event.sessionId,
+                        previousActivityKind === 'reply' && this.hasCompletedReply(event.sessionId)
+                    )
+                } else {
+                    this.readyNotificationEligible.delete(event.sessionId)
+                }
+            }
             this.syncReadyNotification(event.sessionId)
         }
     }
@@ -87,6 +104,7 @@ export class NotificationHub {
         this.lastReadyNotificationAt.delete(sessionId)
         this.lastReadyState.delete(sessionId)
         this.lastKnownActivityKinds.delete(sessionId)
+        this.readyNotificationEligible.delete(sessionId)
     }
 
     private getNotifiableSession(sessionId: string): Session | null {
@@ -159,18 +177,36 @@ export class NotificationHub {
             return
         }
 
+        if (!this.readyNotificationEligible.get(sessionId)) {
+            return
+        }
+        this.readyNotificationEligible.delete(sessionId)
+
         this.sendReadyNotification(sessionId).catch((error) => {
             reportHubRuntimeError('Failed to send ready notification.', error)
         })
     }
 
     private getReadyStateOptions(sessionId: string, session: Session): ReadyStateSnapshot {
+        const activity = this.syncEngine.getSessionMessageActivities([sessionId])[sessionId]
         return {
             active: session.active,
             thinking: session.thinking,
+            activeAt: session.activeAt ?? null,
             pendingRequestsCount: getPendingRequestsCount(session.agentState),
+            latestActivityAt: session.latestActivityAt ?? activity?.latestActivityAt ?? null,
             latestActivityKind: this.lastKnownActivityKinds.get(sessionId) ?? null,
+            latestCompletedReplyAt: session.latestCompletedReplyAt ?? activity?.latestCompletedReplyAt ?? null,
         }
+    }
+
+    private hasCompletedReply(sessionId: string): boolean {
+        const session = this.syncEngine.getSession(sessionId)
+        const completedReplyAt =
+            session?.latestCompletedReplyAt ??
+            this.syncEngine.getSessionMessageActivities([sessionId])[sessionId]?.latestCompletedReplyAt ??
+            null
+        return completedReplyAt !== null
     }
 
     private async sendReadyNotification(sessionId: string): Promise<void> {

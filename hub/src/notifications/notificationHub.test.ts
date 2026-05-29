@@ -140,14 +140,35 @@ describe('NotificationHub', () => {
         const session = createSession({ thinking: true })
         engine.setSession(session)
 
+        engine.emit({
+            type: 'message-received',
+            sessionId: session.id,
+            message: {
+                id: 'reply-1',
+                seq: 1,
+                localId: null,
+                createdAt: 1,
+                content: {
+                    role: 'agent',
+                    content: {
+                        type: 'codex',
+                        data: {
+                            type: 'message',
+                            message: 'Done',
+                        },
+                    },
+                },
+            },
+        })
+
         const readyEvent: SyncEvent = {
             type: 'message-received',
             sessionId: session.id,
             message: {
                 id: 'message-1',
-                seq: 1,
+                seq: 2,
                 localId: null,
-                createdAt: 1,
+                createdAt: 2,
                 content: {
                     role: 'agent',
                     content: {
@@ -175,11 +196,83 @@ describe('NotificationHub', () => {
         await sleep(30)
         engine.setSession({ ...session, thinking: true })
         engine.emit({ type: 'session-updated', sessionId: session.id })
+        engine.emit({
+            type: 'message-received',
+            sessionId: session.id,
+            message: {
+                id: 'reply-2',
+                seq: 3,
+                localId: null,
+                createdAt: 3,
+                content: {
+                    role: 'agent',
+                    content: {
+                        type: 'codex',
+                        data: {
+                            type: 'message',
+                            message: 'Done again',
+                        },
+                    },
+                },
+            },
+        })
+        engine.emit({
+            type: 'message-received',
+            sessionId: session.id,
+            message: {
+                id: 'ready-2',
+                seq: 4,
+                localId: null,
+                createdAt: 4,
+                content: {
+                    role: 'agent',
+                    content: {
+                        id: 'event-2',
+                        type: 'event',
+                        data: { type: 'ready' },
+                    },
+                },
+            },
+        })
         engine.setSession({ ...session, thinking: false })
         engine.emit({ type: 'session-updated', sessionId: session.id })
         await sleep(25)
         expect(channel.readySessions).toHaveLength(2)
 
+        hub.stop()
+    })
+
+    it('does not toast the initial agent startup ready event even with older completed replies', async () => {
+        const engine = new FakeSyncEngine()
+        const channel = new StubChannel()
+        const hub = new NotificationHub(engine as unknown as SyncEngine, [channel], {
+            permissionDebounceMs: 1,
+            readyCooldownMs: 1,
+        })
+        const session = createSession({ thinking: false, latestCompletedReplyAt: 10 })
+        engine.setSession(session)
+
+        engine.emit({
+            type: 'message-received',
+            sessionId: session.id,
+            message: {
+                id: 'startup-ready',
+                seq: 1,
+                localId: null,
+                createdAt: 1,
+                content: {
+                    role: 'agent',
+                    content: {
+                        id: 'startup-ready-event',
+                        type: 'event',
+                        data: { type: 'ready' },
+                    },
+                },
+            },
+        })
+        await sleep(5)
+
+        expect(channel.readySessions).toHaveLength(0)
         hub.stop()
     })
 })

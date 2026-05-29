@@ -1,14 +1,18 @@
-import type { Session } from '../sync/syncEngine'
+import {
+    presentSessionAttentionNotification,
+    type SessionAttentionNotificationKind,
+    type SessionAttentionNotificationPresentation,
+} from '@viby/protocol'
 import type { NotificationChannel } from '../notifications/notificationTypes'
-import { getAgentName, getSessionName } from '../notifications/sessionInfo'
-import type { PushPayload, PushService } from './pushService'
+import { getSessionName } from '../notifications/sessionInfo'
 import type { WebRealtimeManager } from '../socket/webRealtimeManager'
+import type { Session } from '../sync/syncEngine'
+import type { PushPayload, PushService } from './pushService'
 
 export class PushNotificationChannel implements NotificationChannel {
     constructor(
         private readonly pushService: PushService,
-        private readonly webRealtimeManager: WebRealtimeManager,
-        _appUrl: string
+        private readonly webRealtimeManager: WebRealtimeManager
     ) {}
 
     async sendPermissionRequest(session: Session): Promise<void> {
@@ -16,41 +20,21 @@ export class PushNotificationChannel implements NotificationChannel {
             return
         }
 
-        const name = getSessionName(session)
-        const request = session.agentState?.requests
-            ? Object.values(session.agentState.requests)[0]
-            : null
-        const toolName = request?.tool ? ` (${request.tool})` : ''
-
-        const payload: PushPayload = {
-            title: 'Permission Request',
-            body: `${name}${toolName}`,
-            tag: `permission-${session.id}`,
-            data: {
-                type: 'permission-request',
-                sessionId: session.id,
-                url: this.buildSessionPath(session.id)
-            }
-        }
-
-        const url = payload.data?.url ?? this.buildSessionPath(session.id)
-        const suppressedPushEndpoints = await this.webRealtimeManager.sendToast({
-            type: 'toast',
-            data: {
-                title: payload.title,
-                body: payload.body,
-                sessionId: session.id,
-                url,
-                tone: 'warning',
-                kind: 'permission-request',
-                sessionName: name,
-                toolName: request?.tool ?? undefined
-            }
+        const sessionTitle = getSessionName(session)
+        const request = session.agentState?.requests ? Object.values(session.agentState.requests)[0] : null
+        const presentation = presentSessionAttentionNotification({
+            kind: 'permission-request',
+            sessionId: session.id,
+            sessionTitle,
+            toolName: request?.tool ?? null,
         })
-
-        await this.pushService.send(payload, {
-            excludeEndpoints: suppressedPushEndpoints
-        })
+        await this.sendNotification(
+            session,
+            sessionTitle,
+            'permission-request',
+            presentation,
+            request?.tool ?? undefined
+        )
     }
 
     async sendReady(session: Session): Promise<void> {
@@ -58,37 +42,45 @@ export class PushNotificationChannel implements NotificationChannel {
             return
         }
 
-        const agentName = getAgentName(session)
-        const name = getSessionName(session)
+        const sessionTitle = getSessionName(session)
+        const presentation = presentSessionAttentionNotification({
+            kind: 'ready',
+            sessionId: session.id,
+            sessionTitle,
+        })
+        await this.sendNotification(session, sessionTitle, 'ready', presentation)
+    }
 
+    private async sendNotification(
+        session: Session,
+        sessionTitle: string,
+        kind: SessionAttentionNotificationKind,
+        presentation: SessionAttentionNotificationPresentation,
+        toolName?: string
+    ): Promise<void> {
         const payload: PushPayload = {
-            title: 'Ready for input',
-            body: `${agentName} is waiting in ${name}`,
-            tag: `ready-${session.id}`,
-            data: {
-                type: 'ready',
-                sessionId: session.id,
-                url: this.buildSessionPath(session.id)
-            }
+            title: presentation.push.title,
+            body: presentation.push.body,
+            tag: presentation.push.tag,
+            data: presentation.push.data,
         }
-
         const url = payload.data?.url ?? this.buildSessionPath(session.id)
         const suppressedPushEndpoints = await this.webRealtimeManager.sendToast({
             type: 'toast',
             data: {
-                title: payload.title,
-                body: payload.body,
+                title: presentation.toast.title,
+                body: presentation.toast.description,
                 sessionId: session.id,
                 url,
-                tone: 'success',
-                kind: 'ready',
-                sessionName: name,
-                agentName
-            }
+                tone: presentation.toast.tone,
+                kind,
+                sessionName: sessionTitle,
+                toolName,
+            },
         })
 
         await this.pushService.send(payload, {
-            excludeEndpoints: suppressedPushEndpoints
+            excludeEndpoints: suppressedPushEndpoints,
         })
     }
 
