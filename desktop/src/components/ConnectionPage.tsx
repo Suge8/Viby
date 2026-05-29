@@ -3,7 +3,7 @@ import hubBootAnimationUrl from '@/assets/hub-boot.lottie?url'
 import monkeySeeAnimationUrl from '@/assets/monkey-see.lottie?url'
 import { DesktopToggle } from '@/components/DesktopToggle'
 import { DeviceCount } from '@/components/DeviceCount'
-import { CopyIcon, DeviceIcon, DoorIcon, LinkIcon, PowerIcon, QrIcon } from '@/components/icons'
+import { DeviceIcon, DoorIcon, LinkIcon, PowerIcon, PublicAccessIcon, QrIcon } from '@/components/icons'
 import { LottiePlayer } from '@/components/LottiePlayer'
 import { OverlayTransition, PageTransition, StaggerGroup, StaggerItem } from '@/components/motion'
 import type { DesktopCopy } from '@/lib/desktopCopy'
@@ -12,73 +12,51 @@ import type { DeviceLinkSnapshotMap } from '@/lib/deviceLinkBadge'
 import type { EntryPreviewModel } from '@/lib/entryMode'
 import type { HubViewState } from '@/lib/hubSnapshot'
 
-type PublicEntryModel = {
+export type AccessEntryRow = {
     label: string
     value: string
-    onCopy(): void
+    source: 'broker' | 'lan'
 }
 
 type ConnectionPageProps = {
     busy: boolean
     copy: DesktopCopy
-    entryPreview: EntryPreviewModel
-    publicEntry: PublicEntryModel | null
+    accessEntries: AccessEntryRow[]
     activeDeviceCount: number
     devices: DeviceAuthDevice[]
     deviceLinks: DeviceLinkSnapshotMap
     publicAccessEnabled: boolean
     publicAccessDisabled: boolean
+    publicAccessBusy: boolean
     deviceActionLabel: string
     deviceActionVisible: boolean
     viewState: HubViewState
-    onOpenEntry(url: string): void
+    onOpenBrokerInvite(): void
+    onOpenLanInvite(): void
     onPairingAction(): void
     onPublicAccessChange(value: boolean): void
     onRevokeDevice(deviceId: string): void | Promise<void>
 }
 
-function PublicEntryAddress(props: { disabled: boolean; entry: PublicEntryModel; copyLabel: string }): JSX.Element {
-    return (
-        <div className="desktop-entry-address">
-            <div>
-                <span>{props.entry.label}</span>
-                <strong>{props.entry.value}</strong>
-            </div>
-            <div className="desktop-entry-actions">
-                <button
-                    type="button"
-                    className="desktop-copy-icon"
-                    disabled={props.disabled}
-                    aria-label={`${props.copyLabel}: ${props.entry.value}`}
-                    onClick={props.entry.onCopy}
-                >
-                    <CopyIcon />
-                </button>
-            </div>
-        </div>
-    )
-}
-
 function EntryAddress(props: {
     disabled: boolean
-    label?: string
+    label: string
     openLabel: string
-    url?: string
     value: string
-    onOpen(url: string): void
+    onOpen(): void
 }): JSX.Element {
     return (
         <div className="desktop-entry-address">
             <div>
-                {props.label ? <span>{props.label}</span> : null}
+                <span>{props.label}</span>
                 <strong>{props.value}</strong>
             </div>
             <button
                 type="button"
-                className="desktop-copy-icon"
-                disabled={props.disabled || !props.url}
+                className="desktop-entry-button"
+                disabled={props.disabled}
                 aria-label={`${props.openLabel}: ${props.value}`}
-                onClick={() => props.url && props.onOpen(props.url)}
+                onClick={props.onOpen}
             >
                 <LinkIcon />
             </button>
@@ -136,39 +114,46 @@ function DeviceCard(props: ConnectionPageProps): JSX.Element {
                 </span>
                 <h2>{props.copy.deviceTitle}</h2>
             </div>
-            {props.deviceActionVisible ? (
-                <button
-                    type="button"
-                    className="desktop-mobile-action"
-                    aria-label={props.deviceActionLabel}
-                    disabled={props.busy}
-                    onClick={props.onPairingAction}
-                >
-                    <span className="desktop-mobile-action-icon" aria-hidden="true">
-                        <QrIcon />
-                    </span>
-                </button>
-            ) : null}
-            <DeviceCount
-                count={props.activeDeviceCount}
-                devices={props.devices}
-                links={props.deviceLinks}
-                onRevokeDevice={props.onRevokeDevice}
-            />
+            <div className="desktop-card-body">
+                {props.deviceActionVisible ? (
+                    <button
+                        type="button"
+                        className="desktop-mobile-action"
+                        aria-label={props.deviceActionLabel}
+                        disabled={props.busy}
+                        onClick={props.onPairingAction}
+                    >
+                        <span className="desktop-mobile-action-icon" aria-hidden="true">
+                            <QrIcon />
+                        </span>
+                    </button>
+                ) : null}
+                <DeviceCount
+                    count={props.activeDeviceCount}
+                    devices={props.devices}
+                    links={props.deviceLinks}
+                    onRevokeDevice={props.onRevokeDevice}
+                />
+            </div>
         </StaggerItem>
     )
 }
 
-function AccessHelpPopover(props: { copy: DesktopCopy }): JSX.Element {
+function AccessHelp(props: { copy: DesktopCopy }): JSX.Element {
     return (
-        <div className="desktop-access-help-popover">
-            <div className="desktop-access-help-item">
-                <QrIcon />
-                <span>{props.copy.accessHelpPublic}</span>
-            </div>
-            <div className="desktop-access-help-item">
-                <LinkIcon />
-                <span>{props.copy.accessHelpLan}</span>
+        <div className="desktop-access-help">
+            <button type="button" className="desktop-help-button" aria-label={props.copy.accessHelp}>
+                <span aria-hidden="true">?</span>
+            </button>
+            <div className="desktop-access-help-popover" role="tooltip">
+                <div className="desktop-access-help-item">
+                    <QrIcon />
+                    <span>{props.copy.accessHelpPublic}</span>
+                </div>
+                <div className="desktop-access-help-item">
+                    <LinkIcon />
+                    <span>{props.copy.accessHelpLan}</span>
+                </div>
             </div>
         </div>
     )
@@ -176,21 +161,26 @@ function AccessHelpPopover(props: { copy: DesktopCopy }): JSX.Element {
 
 function PublicAccessControl(props: ConnectionPageProps): JSX.Element {
     const titleId = 'desktop-public-access-label'
-    const hint = props.publicAccessEnabled ? props.copy.publicAccessOnHint : props.copy.publicAccessOffHint
+    const stateLabel = props.publicAccessBusy
+        ? props.copy.publicAccessStateBusy
+        : props.publicAccessEnabled
+          ? props.copy.publicAccessStateOn
+          : props.copy.publicAccessStateOff
+    const className = `desktop-public-access-control ${props.publicAccessEnabled ? 'is-on' : 'is-off'} ${
+        props.publicAccessBusy ? 'is-busy' : ''
+    }`
     return (
-        <div className={`desktop-public-access-control ${props.publicAccessEnabled ? 'is-on' : 'is-off'}`}>
+        <div className={className} aria-busy={props.publicAccessBusy}>
+            <span className="desktop-public-access-icon" aria-hidden="true">
+                <PublicAccessIcon />
+            </span>
             <div className="desktop-public-access-copy">
-                <span className="desktop-public-access-icon" aria-hidden="true">
-                    {props.publicAccessEnabled ? <QrIcon /> : <LinkIcon />}
-                </span>
-                <div>
-                    <strong id={titleId}>{props.copy.publicAccessTitle}</strong>
-                    <span>{hint}</span>
-                </div>
+                <strong id={titleId}>{props.copy.publicAccessTitle}</strong>
+                <span className="desktop-public-access-state">{stateLabel}</span>
             </div>
             <DesktopToggle
                 checked={props.publicAccessEnabled}
-                disabled={props.publicAccessDisabled}
+                disabled={props.publicAccessDisabled || props.publicAccessBusy}
                 labelId={titleId}
                 onClick={() => props.onPublicAccessChange(!props.publicAccessEnabled)}
             />
@@ -200,38 +190,26 @@ function PublicAccessControl(props: ConnectionPageProps): JSX.Element {
 
 function AccessCard(props: ConnectionPageProps): JSX.Element {
     return (
-        <StaggerItem className="desktop-feature-card desktop-access-card">
-            <div className="desktop-card-heading">
-                <span className="desktop-card-heading-icon" aria-hidden="true">
-                    <DoorIcon />
-                </span>
-                <h2>{props.copy.accessTitle}</h2>
+        <StaggerItem className="desktop-feature-card">
+            <div className="desktop-card-heading-bar">
+                <div className="desktop-card-heading">
+                    <span className="desktop-card-heading-icon" aria-hidden="true">
+                        <DoorIcon />
+                    </span>
+                    <h2>{props.copy.accessTitle}</h2>
+                </div>
+                <AccessHelp copy={props.copy} />
             </div>
-            <div className="desktop-access-help">
-                <button type="button" className="desktop-help-button" aria-label={props.copy.accessHelp}>
-                    <span aria-hidden="true">?</span>
-                </button>
-                <AccessHelpPopover copy={props.copy} />
-            </div>
-            <PublicAccessControl {...props} />
-            <div className="desktop-entry-row">
-                <div className="desktop-entry-copy">
-                    {props.publicEntry ? (
-                        <PublicEntryAddress
-                            disabled={props.busy}
-                            entry={props.publicEntry}
-                            copyLabel={props.copy.copyPublicEntry}
-                        />
-                    ) : null}
-                    {props.entryPreview.entries.map((entry) => (
+            <div className="desktop-card-body">
+                <div className="desktop-entry-row">
+                    {props.accessEntries.map((entry) => (
                         <EntryAddress
-                            key={`${entry.label}:${entry.value}`}
+                            key={`${entry.source}:${entry.value}`}
                             disabled={props.busy}
                             label={entry.label}
                             openLabel={props.copy.openEntry}
-                            url={entry.url}
                             value={entry.value}
-                            onOpen={props.onOpenEntry}
+                            onOpen={entry.source === 'broker' ? props.onOpenBrokerInvite : props.onOpenLanInvite}
                         />
                     ))}
                 </div>
@@ -243,9 +221,14 @@ function AccessCard(props: ConnectionPageProps): JSX.Element {
 function ConnectionReady(props: ConnectionPageProps): JSX.Element {
     return (
         <div className="desktop-page">
-            <StaggerGroup className="desktop-connection-grid" stagger={0.08}>
-                <DeviceCard {...props} />
-                <AccessCard {...props} />
+            <StaggerGroup className="desktop-connection-ready" stagger={0.08}>
+                <StaggerItem className="desktop-public-access-row">
+                    <PublicAccessControl {...props} />
+                </StaggerItem>
+                <div className="desktop-connection-grid">
+                    <DeviceCard {...props} />
+                    <AccessCard {...props} />
+                </div>
             </StaggerGroup>
         </div>
     )

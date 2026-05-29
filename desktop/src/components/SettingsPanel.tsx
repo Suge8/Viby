@@ -97,21 +97,23 @@ export function SettingsPanel({
             <StaggerGroup className="desktop-settings-page" stagger={0.05}>
                 <StaggerItem className="desktop-settings-row">
                     <SettingHeader icon={<LanguageIcon />} title={copy.settingsLanguageTitle} />
-                    <DesktopSegmentedControl
+                    <DesktopSegmentedControl<LanguagePreference>
                         ariaLabel={copy.settingsLanguageTitle}
+                        layoutId="settings-language"
                         options={getLanguageOptions(copy)}
                         value={languagePreference}
-                        onChange={onLanguagePreferenceChange}
+                        onChange={(value) => onLanguagePreferenceChange(value)}
                     />
                 </StaggerItem>
 
                 <StaggerItem className="desktop-settings-row">
                     <SettingHeader icon={<ThemeLightIcon />} title={copy.settingsThemeTitle} />
-                    <DesktopSegmentedControl
+                    <DesktopSegmentedControl<ThemePreference>
                         ariaLabel={copy.settingsThemeTitle}
+                        layoutId="settings-theme"
                         options={getThemeOptions(copy)}
                         value={themePreference}
-                        onChange={onThemePreferenceChange}
+                        onChange={(value) => onThemePreferenceChange(value)}
                     />
                 </StaggerItem>
 

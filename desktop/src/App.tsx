@@ -1,7 +1,6 @@
-import { type JSX, useEffect, useState } from 'react'
-import { CodingAgentsPage } from '@/components/CodingAgentsPage'
+import { type JSX, useEffect, useRef, useState } from 'react'
 import { ConnectionPage } from '@/components/ConnectionPage'
-import { DesktopLanEntryModal } from '@/components/DesktopLanEntryModal'
+import { DesktopAgentsPageBridge } from '@/components/DesktopAgentsPageBridge'
 import { DesktopPairingModal } from '@/components/DesktopPairingModal'
 import { WindowDragRegion } from '@/components/DesktopShellChrome'
 import { type DesktopPage, DesktopSidebar } from '@/components/DesktopSidebar'
@@ -10,12 +9,14 @@ import { DesktopMotionProvider, PageTransition, ToastLayer } from '@/components/
 import { SettingsPanel } from '@/components/SettingsPanel'
 import { useAgentAvailability } from '@/hooks/useAgentAvailability'
 import { useAgentConfig } from '@/hooks/useAgentConfig'
+import { useDesktopLanPairings } from '@/hooks/useDesktopLanPairings'
 import { useDesktopPairings } from '@/hooks/useDesktopPairings'
 import { useDesktopToast } from '@/hooks/useDesktopToast'
 import { useDesktopUpdates } from '@/hooks/useDesktopUpdates'
 import { useDeviceAuthSummary } from '@/hooks/useDeviceAuthSummary'
 import { useHubController } from '@/hooks/useHubController'
 import { usePairingBridges } from '@/hooks/usePairingBridges'
+import { usePairingHostEvents } from '@/hooks/usePairingHostEvents'
 import { DESKTOP_COPY } from '@/lib/desktopCopy'
 import {
     getSystemLanguage,
@@ -29,22 +30,17 @@ import {
     writeLanguagePreference,
     writeThemePreference,
 } from '@/lib/desktopPreferences'
-import {
-    buildHubSwitchModel,
-    COPY_FEEDBACK_DURATION_MS,
-    PAIRING_SUCCESS_DISMISS_MS,
-    shouldPollPairingSnapshot,
-} from '@/lib/desktopShellModel'
+import { buildHubSwitchModel, COPY_FEEDBACK_DURATION_MS, PAIRING_SUCCESS_DISMISS_MS } from '@/lib/desktopShellModel'
 import { buildDeviceLinkSnapshots } from '@/lib/deviceLinkBadge'
 import { buildDevicePresentation, getConnectedDevices } from '@/lib/deviceListPresentation'
 import { buildEntryPreviewModel } from '@/lib/entryMode'
 import { deriveHubViewState } from '@/lib/hubSnapshot'
-import { buildLanEntryQrModel } from '@/lib/lanEntryQr'
 
 const IDLE_BRIDGE_STATE_PHASE = 'connecting' as const
 export function App(): JSX.Element {
     const hub = useHubController()
     const pairings = useDesktopPairings()
+    const lanPairings = useDesktopLanPairings()
     const [activePage, setActivePage] = useState<DesktopPage>('connection')
     const [themePreference, setThemePreferenceState] = useState<ThemePreference>(() =>
         readThemePreference(globalThis.localStorage)
@@ -55,13 +51,26 @@ export function App(): JSX.Element {
     const [systemTheme, setSystemTheme] = useState(() => getSystemTheme(globalThis.matchMedia?.bind(globalThis)))
     const [systemLanguage] = useState(() => getSystemLanguage(globalThis.navigator?.language))
     const [pairingDraftId, setPairingDraftId] = useState<string | null>(null)
+    const [inviteSource, setInviteSource] = useState<'broker' | 'lan' | null>(null)
     const [pairingDialogOpen, setPairingDialogOpen] = useState(false)
-    const [lanEntryDialogOpen, setLanEntryDialogOpen] = useState(false)
+    const [showInviteQr, setShowInviteQr] = useState(true)
     const { message: toastMessage, tone: toastTone, showToast } = useDesktopToast()
     const updates = useDesktopUpdates()
 
     const status = hub.snapshot?.status
     const viewState = deriveHubViewState(hub.snapshot)
+    const lastReadyConnectionSnapshotRef = useRef<typeof hub.snapshot>(null)
+
+    useEffect(() => {
+        if (viewState.ready && hub.snapshot) lastReadyConnectionSnapshotRef.current = hub.snapshot
+    }, [hub.snapshot, viewState.ready])
+
+    const connectionSnapshot =
+        hub.publicAccessBusy && !viewState.ready
+            ? (lastReadyConnectionSnapshotRef.current ?? hub.snapshot)
+            : hub.snapshot
+    const connectionViewState = deriveHubViewState(connectionSnapshot)
+    const connectionStatus = connectionSnapshot?.status
     const agentAvailability = useAgentAvailability(status, viewState.ready, activePage === 'agents')
     const agentConfig = useAgentConfig(status, viewState.ready, activePage === 'agents')
     const bridges = usePairingBridges({
@@ -90,7 +99,7 @@ export function App(): JSX.Element {
           })
         : { phase: IDLE_BRIDGE_STATE_PHASE, message: null, pairing: null, stats: null }
 
-    const entryPreview = buildEntryPreviewModel(hub.snapshot)
+    const entryPreview = buildEntryPreviewModel(connectionSnapshot)
     const switchModel = buildHubSwitchModel({
         action: hub.hubAction,
         busy: hub.hubBusy,
@@ -100,14 +109,25 @@ export function App(): JSX.Element {
     const themeMode = resolveThemePreference(themePreference, systemTheme)
     const language = resolveLanguagePreference(languagePreference, systemLanguage)
     const copy = DESKTOP_COPY[language]
-    const lanEntryQr = buildLanEntryQrModel({ entryPreview, publicAccessEnabled: hub.publicAccessEnabled })
-    const lanEntryQrUrl = lanEntryQr?.url ?? null
-    const devices = buildDevicePresentation(deviceSummary.devices, pairings.pairings)
+    const devices = buildDevicePresentation(deviceSummary.devices, pairings.pairings, bridges)
     const activeDeviceCount = getConnectedDevices(devices, deviceLinks).length
-    const deviceActionVisible = hub.publicAccessEnabled || Boolean(lanEntryQr)
-    const deviceActionLabel = lanEntryQr ? copy.lanEntryQrAction : copy.deviceTitle
-    const notice = hub.actionError || pairings.actionError || hub.snapshot?.lastError || null
-    const busy = hub.busy || pairings.busy
+    const lanDraft = lanPairings.draft
+    const lanInviteAvailable = Boolean(entryPreview.openUrl)
+    const inviteAvailable = hub.publicAccessEnabled || lanInviteAvailable
+    // The active modal binds to whichever source the user opened it with so
+    // closing one source and immediately opening the other does not flash:
+    // closing fires async `cancelDraft` on the prior source, but the new
+    // modal binds to a different `kind` (broker vs lan) and stays stable.
+    const activeInvite =
+        inviteSource === 'lan' && lanDraft
+            ? { kind: 'lan' as const, session: lanDraft }
+            : inviteSource === 'broker' && draftPairing
+              ? { kind: 'broker' as const, session: draftPairing }
+              : null
+    const deviceActionVisible = inviteAvailable
+    const deviceActionLabel = copy.deviceTitle
+    const notice = hub.actionError || pairings.actionError || lanPairings.actionError || hub.snapshot?.lastError || null
+    const busy = hub.busy || hub.publicAccessBusy || pairings.busy || lanPairings.busy
 
     useEffect(() => {
         const query = globalThis.matchMedia?.('(prefers-color-scheme: dark)')
@@ -118,16 +138,17 @@ export function App(): JSX.Element {
     }, [])
 
     useEffect(() => {
-        if (!lanEntryQrUrl) setLanEntryDialogOpen(false)
-    }, [lanEntryQrUrl])
+        if (!activeInvite) setPairingDialogOpen(false)
+    }, [activeInvite])
 
-    useEffect(() => {
-        if (!hub.publicAccessEnabled) {
-            setPairingDialogOpen(false)
-            return
-        }
-        if (!draftPairing) setPairingDialogOpen(false)
-    }, [draftPairing, hub.publicAccessEnabled])
+    usePairingHostEvents({
+        pairingId: activeInvite?.session.pairing.id ?? null,
+        eventsUrl: activeInvite?.session.eventsUrl ?? null,
+        onSnapshot: (snapshot) => {
+            if (activeInvite?.kind === 'broker') pairings.applySnapshot(snapshot)
+            else if (activeInvite?.kind === 'lan') lanPairings.applySnapshot(snapshot)
+        },
+    })
 
     useEffect(() => {
         if (notice) showToast(notice)
@@ -138,32 +159,13 @@ export function App(): JSX.Element {
         showToast(updates.message)
     }, [showToast, updates.message, updates.phase])
 
-    // Poll only the draft pairing (the one whose QR is on screen waiting for
-    // approval). Already-approved pairings rely on their own bridge.
     useEffect(() => {
-        if (!hub.publicAccessEnabled || !draftPairing) return
-        if (!shouldPollPairingSnapshot(draftPairing, draftBridge.phase, pairingDialogOpen)) return
-        let stopped = false
-        let timerId: number | null = null
-        const targetId = draftPairing.pairing.id
-        async function poll(): Promise<void> {
-            await pairings.refreshPairing(targetId)
-            if (!stopped) timerId = window.setTimeout(() => void poll(), 1000)
-        }
-        timerId = window.setTimeout(() => void poll(), 1000)
-        return () => {
-            stopped = true
-            if (timerId !== null) window.clearTimeout(timerId)
-        }
-    }, [draftPairing, draftBridge.phase, hub.publicAccessEnabled, pairingDialogOpen, pairings])
-
-    useEffect(() => {
-        if (!pairingDialogOpen) return
-        const paired = draftPairing?.pairing.approvalStatus === 'approved' || draftBridge.phase === 'ready'
+        if (!pairingDialogOpen || !activeInvite) return
+        const paired = activeInvite.session.pairing.approvalStatus === 'approved' || draftBridge.phase === 'ready'
         if (!paired) return
         const timeoutId = window.setTimeout(() => setPairingDialogOpen(false), PAIRING_SUCCESS_DISMISS_MS)
         return () => window.clearTimeout(timeoutId)
-    }, [draftBridge.phase, draftPairing?.pairing.approvalStatus, pairingDialogOpen])
+    }, [activeInvite, draftBridge.phase, pairingDialogOpen])
 
     const handleHubSwitch = (): void => {
         if (viewState.ready) {
@@ -183,21 +185,52 @@ export function App(): JSX.Element {
         writeLanguagePreference(globalThis.localStorage, preference)
     }
 
-    const handlePairingAction = (): void => {
-        if (!hub.publicAccessEnabled) {
-            if (lanEntryQr) setLanEntryDialogOpen(true)
-            return
-        }
+    /**
+     * Open the invite modal explicitly bound to a source. QR / public /
+     * LAN entry buttons each pass their own source so closing one modal
+     * and immediately opening another never collapses onto the
+     * just-cancelled draft.
+     */
+    const openInviteModal = async (params: { withQr: boolean; source: 'broker' | 'lan' }): Promise<void> => {
         if (!viewState.ready) return
-        void pairings.createPairing().then((created) => {
+        setShowInviteQr(params.withQr)
+        setInviteSource(params.source)
+        if (params.source === 'broker') {
+            const existing = draftPairing ?? pairings.pairings.find((p) => p.pairing.approvalStatus !== 'approved')
+            if (existing) {
+                setPairingDraftId(existing.pairing.id)
+                setPairingDialogOpen(true)
+                return
+            }
+            const created = await pairings.createPairing()
             if (!created) return
             setPairingDraftId(created.pairing.id)
             setPairingDialogOpen(true)
-        })
+            return
+        }
+        const lanBaseUrl = entryPreview.openUrl
+        if (!lanBaseUrl) return
+        if (lanDraft) {
+            setPairingDialogOpen(true)
+            return
+        }
+        const created = await lanPairings.createDraft(lanBaseUrl)
+        if (created) setPairingDialogOpen(true)
     }
 
+    const handlePairingAction = (): void =>
+        void openInviteModal({ withQr: true, source: hub.publicAccessEnabled ? 'broker' : 'lan' })
+    const handleOpenBrokerInvite = (): void => void openInviteModal({ withQr: false, source: 'broker' })
+    const handleOpenLanInvite = (): void => void openInviteModal({ withQr: false, source: 'lan' })
+
     const handleDialogClose = (): void => {
+        const closingSource = inviteSource
         setPairingDialogOpen(false)
+        setInviteSource(null)
+        if (closingSource === 'lan') {
+            if (lanDraft?.pairing.approvalStatus !== 'approved') void lanPairings.cancelDraft()
+            return
+        }
         const draftId = pairingDraftId
         setPairingDraftId(null)
         if (!draftId) return
@@ -218,17 +251,9 @@ export function App(): JSX.Element {
         showToast('已取消配对', COPY_FEEDBACK_DURATION_MS, 'success')
     }
 
-    const getPairingInviteUrl = async (): Promise<string | null> => {
-        if (!viewState.ready || !hub.publicAccessEnabled) return null
-        const existingDraft = draftPairing ?? pairings.pairings.find((p) => p.pairing.approvalStatus !== 'approved')
-        if (existingDraft) return existingDraft.pairingUrl
-        return (await pairings.createPairing())?.pairingUrl ?? null
-    }
-
-    const handleCopyPublicEntry = async (): Promise<void> => {
-        const url = await getPairingInviteUrl()
-        const copied = await hub.copyValue(url ?? undefined, '当前没有可复制的入口。')
-        if (copied) showToast(copy.publicEntryCopied, COPY_FEEDBACK_DURATION_MS, 'success')
+    const handleCopyInviteLink = async (url: string): Promise<void> => {
+        const copied = await hub.copyValue(url, '当前没有可复制的邀请链接。')
+        if (copied) showToast('已复制', COPY_FEEDBACK_DURATION_MS, 'success')
     }
 
     const handleCopyPairingCode = async (code: string): Promise<void> => {
@@ -236,15 +261,16 @@ export function App(): JSX.Element {
         if (copied) showToast('配对码已复制', COPY_FEEDBACK_DURATION_MS, 'success')
     }
 
-    const pairingBrokerHost = status?.pairingBrokerUrl ? new URL(status.pairingBrokerUrl).hostname : null
-    const publicEntry =
-        hub.publicAccessEnabled && viewState.ready && pairingBrokerHost
-            ? {
-                  label: copy.publicEntryLabel,
-                  value: pairingBrokerHost,
-                  onCopy: () => void handleCopyPublicEntry(),
-              }
-            : null
+    const pairingBrokerHost = connectionStatus?.pairingBrokerUrl
+        ? new URL(connectionStatus.pairingBrokerUrl).hostname
+        : null
+    const accessEntries: { label: string; value: string; source: 'broker' | 'lan' }[] = []
+    if (hub.publicAccessEnabled && connectionViewState.ready && pairingBrokerHost) {
+        accessEntries.push({ label: copy.publicEntryLabel, value: pairingBrokerHost, source: 'broker' })
+    }
+    for (const entry of entryPreview.entries) {
+        accessEntries.push({ label: entry.label, value: entry.value, source: 'lan' })
+    }
 
     return (
         <DesktopMotionProvider>
@@ -265,49 +291,31 @@ export function App(): JSX.Element {
                             <ConnectionPage
                                 busy={busy}
                                 copy={copy}
-                                entryPreview={entryPreview}
-                                publicEntry={publicEntry}
+                                accessEntries={accessEntries}
                                 activeDeviceCount={activeDeviceCount}
                                 devices={devices}
                                 deviceLinks={deviceLinks}
                                 publicAccessDisabled={busy}
+                                publicAccessBusy={hub.publicAccessBusy}
                                 publicAccessEnabled={hub.publicAccessEnabled}
                                 deviceActionLabel={deviceActionLabel}
                                 deviceActionVisible={deviceActionVisible}
-                                viewState={viewState}
-                                onOpenEntry={(url) => void hub.openUrl(url)}
+                                viewState={connectionViewState}
+                                onOpenBrokerInvite={handleOpenBrokerInvite}
+                                onOpenLanInvite={handleOpenLanInvite}
                                 onPairingAction={handlePairingAction}
                                 onPublicAccessChange={(value) => void hub.setPublicAccessEnabled(value)}
                                 onRevokeDevice={handleRevokeDevice}
                             />
                         ) : null}
                         {activePage === 'agents' ? (
-                            <CodingAgentsPage
-                                agents={agentAvailability.agents}
-                                capabilities={agentAvailability.capabilities}
-                                configError={agentConfig.error}
-                                configLoading={agentConfig.loading}
-                                configResponse={agentConfig.response}
-                                configRestoringDriver={agentConfig.restoringDriver}
-                                configSavingDriver={agentConfig.savingDriver}
+                            <DesktopAgentsPageBridge
+                                agentAvailability={agentAvailability}
+                                agentConfig={agentConfig}
                                 copy={copy}
-                                error={agentAvailability.error}
                                 language={language}
-                                loading={agentAvailability.loading}
-                                refreshing={agentAvailability.refreshing}
-                                onLoadAgentCapability={agentAvailability.loadAgentCapability}
+                                showToast={showToast}
                                 onOpenUrl={(url) => void hub.openUrl(url)}
-                                onRefresh={agentAvailability.refresh}
-                                onRestoreAgentConfig={async (request) => {
-                                    const restored = await agentConfig.restore(request)
-                                    if (restored) showToast(copy.agentConfigSaved, COPY_FEEDBACK_DURATION_MS, 'success')
-                                    return Boolean(restored)
-                                }}
-                                onSaveAgentConfig={async (request) => {
-                                    const saved = await agentConfig.save(request)
-                                    if (saved) showToast(copy.agentConfigSaved, COPY_FEEDBACK_DURATION_MS, 'success')
-                                    return Boolean(saved)
-                                }}
                             />
                         ) : null}
                         {activePage === 'settings' ? (
@@ -327,16 +335,12 @@ export function App(): JSX.Element {
                 <DesktopPairingModal
                     copy={copy}
                     open={pairingDialogOpen}
-                    pairing={draftPairing}
+                    pairing={activeInvite?.session ?? null}
                     pairingBridge={draftBridge}
+                    showQr={showInviteQr}
                     onClose={handleDialogClose}
                     onCopyCode={(code) => void handleCopyPairingCode(code)}
-                />
-                <DesktopLanEntryModal
-                    copy={copy}
-                    entry={lanEntryQr}
-                    open={lanEntryDialogOpen}
-                    onClose={() => setLanEntryDialogOpen(false)}
+                    onCopyLink={(url) => void handleCopyInviteLink(url)}
                 />
 
                 <ToastLayer

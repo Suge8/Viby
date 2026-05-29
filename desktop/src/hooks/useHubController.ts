@@ -25,6 +25,7 @@ interface HubControllerState {
     hubBusy: boolean
     hubAction: HubAction
     publicAccessEnabled: boolean
+    publicAccessBusy: boolean
     actionError: string | null
     setPublicAccessEnabled: (value: boolean) => Promise<void>
     refresh: () => Promise<void>
@@ -39,9 +40,14 @@ export function useHubController(): HubControllerState {
     const [busy, setBusy] = useState<boolean>(false)
     const [hubBusy, setHubBusy] = useState<boolean>(false)
     const [hubAction, setHubAction] = useState<HubAction>(null)
-    const [publicAccessEnabled, setPublicAccessEnabledState] = useState(true)
+    const [publicAccessTarget, setPublicAccessTarget] = useState<boolean | null>(null)
     const [actionError, setActionError] = useState<string | null>(null)
     const tauriRuntimeAvailable = isTauriRuntimeAvailable()
+    const publicAccessBusy = publicAccessTarget !== null
+    // While a switch is pending, show the user's target. The settings write and the Hub
+    // hot-reload land in two separate snapshots, so a post-write snapshot is briefly
+    // stale; the target keeps the UI stable until the watch stream converges.
+    const publicAccessEnabled = publicAccessTarget ?? (snapshot ? resolvePublicAccessEnabled(snapshot) : true)
 
     const applySnapshot = useCallback(
         (nextSnapshot: HubSnapshot) => {
@@ -49,7 +55,6 @@ export function useHubController(): HubControllerState {
                 setSnapshot,
                 setActionError,
             })
-            setPublicAccessEnabledState(resolvePublicAccessEnabled(nextSnapshot))
         },
         [setActionError, setSnapshot]
     )
@@ -93,6 +98,16 @@ export function useHubController(): HubControllerState {
         }
     }, [applySnapshot, tauriRuntimeAvailable])
 
+    useEffect(() => {
+        if (publicAccessTarget === null) return
+        if (snapshot?.status?.phase === 'ready' && resolvePublicAccessEnabled(snapshot) === publicAccessTarget) {
+            setPublicAccessTarget(null)
+        }
+        if (snapshot?.running === false || snapshot?.status?.phase === 'error') {
+            setPublicAccessTarget(null)
+        }
+    }, [publicAccessTarget, snapshot])
+
     const runAction = useCallback(
         async (action: () => Promise<HubSnapshot | void>): Promise<boolean> => {
             return await runHubAction({
@@ -109,22 +124,24 @@ export function useHubController(): HubControllerState {
 
     const setPublicAccessEnabled = useCallback(
         async (value: boolean): Promise<void> => {
-            if (value === publicAccessEnabled) {
+            if (!tauriRuntimeAvailable) {
+                setActionError(DESKTOP_PREVIEW_MESSAGE)
                 return
             }
 
-            const previousValue = publicAccessEnabled
-            const shouldRestart = snapshot?.running === true
-            setPublicAccessEnabledState(value)
-            const ok = await runAction(async () => {
+            // Optimistic target only. The returned snapshot is captured right after the
+            // settings write but before the Hub hot-reload, so it is stale and must not
+            // be applied. Convergence is driven solely by the snapshot watch stream.
+            setPublicAccessTarget(value)
+            setActionError(null)
+            try {
                 await persistPublicAccessEnabled(value)
-                if (!shouldRestart) return
-                await stopHub()
-                return await startHub()
-            })
-            if (!ok) setPublicAccessEnabledState(previousValue)
+            } catch (error) {
+                setPublicAccessTarget(null)
+                setActionError(describeDesktopError(error, '切换公网访问失败。'))
+            }
         },
-        [publicAccessEnabled, runAction, snapshot?.running]
+        [tauriRuntimeAvailable]
     )
 
     const start = useCallback(async (): Promise<void> => {
@@ -183,6 +200,7 @@ export function useHubController(): HubControllerState {
         hubBusy,
         hubAction,
         publicAccessEnabled,
+        publicAccessBusy,
         actionError,
         setPublicAccessEnabled,
         refresh,

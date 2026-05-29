@@ -22,6 +22,7 @@ import {
     Plug,
     Power,
     QrCode,
+    Radio,
     RefreshCw,
     Settings,
     Smartphone,
@@ -89,6 +90,10 @@ export function KeyIcon(props: DesktopIconProps) {
 
 export function LinkIcon(props: DesktopIconProps) {
     return <Link2 {...props} className={withClass(props.className)} strokeWidth={strokeFor(props)} />
+}
+
+export function PublicAccessIcon(props: DesktopIconProps) {
+    return <Radio {...props} className={withClass(props.className)} strokeWidth={strokeFor(props)} />
 }
 
 export function GithubIcon(props: DesktopIconProps) {
