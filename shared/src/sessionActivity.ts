@@ -59,7 +59,11 @@ export function getSessionActivityKind(content: unknown): SessionActivityKind | 
         if (eventData.type === 'ready') {
             return 'ready'
         }
-        if (eventData.type === 'driver-switched' || eventData.type === 'driver-switch-send-failed') {
+        if (
+            eventData.type === 'driver-switched' ||
+            eventData.type === 'driver-switch-send-failed' ||
+            eventData.type === 'turn-terminal'
+        ) {
             return null
         }
     }

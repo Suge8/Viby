@@ -19,6 +19,7 @@ import {
     PermissionModeSchema,
     SessionDriverSchema,
     SessionSchema,
+    SessionSendMessageResultSchema,
     SyncEventSchema,
 } from '../schemas'
 import {
@@ -105,7 +106,7 @@ export const PairingPeerSpawnSessionParamsSchema = z.object({
 })
 export type PairingPeerSpawnSessionParams = z.infer<typeof PairingPeerSpawnSessionParamsSchema>
 
-export const PairingPeerSendMessageResultSchema = z.object({ session: SessionSchema })
+export const PairingPeerSendMessageResultSchema = SessionSendMessageResultSchema
 export type PairingPeerSendMessageResult = z.infer<typeof PairingPeerSendMessageResultSchema>
 
 export const PairingPeerPathsExistResultSchema = z.object({ exists: z.record(z.string(), z.boolean()) })

@@ -115,6 +115,7 @@ export type {
     PiModelCapability,
     PiModelScope,
     Session,
+    SessionSendMessageResult,
     SessionStreamState,
     SyncEvent,
     TodoItem,

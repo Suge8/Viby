@@ -61,6 +61,24 @@ describe('sessionActivity', () => {
         expect(shouldMessageAdvanceSessionUpdatedAt(getSessionActivityKind(content))).toBe(false)
     })
 
+    it('keeps turn terminal events out of activity classification', () => {
+        const content = {
+            role: 'agent',
+            content: {
+                type: 'event',
+                data: {
+                    type: 'turn-terminal',
+                    status: 'truncated',
+                    provider: 'pi',
+                    reason: 'length',
+                },
+            },
+        }
+
+        expect(getSessionActivityKind(content)).toBeNull()
+        expect(shouldMessageAdvanceSessionUpdatedAt(getSessionActivityKind(content))).toBe(false)
+    })
+
     it('does not advance merged session activity for driver-switch send failure events', () => {
         const current = createEmptySessionMessageActivity()
         const next = mergeSessionMessageActivity(current, {

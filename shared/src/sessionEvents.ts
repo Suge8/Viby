@@ -14,6 +14,14 @@ export const MessageEventSchema = z.object({
 
 export const ReadyEventSchema = z.object({ type: z.literal('ready') })
 
+export const TurnTerminalEventSchema = z.object({
+    type: z.literal('turn-terminal'),
+    status: z.enum(['completed', 'truncated', 'aborted', 'failed', 'needs-input']),
+    provider: z.string().optional(),
+    reason: z.string().optional(),
+    assistantTurnId: z.string().optional(),
+})
+
 export const PermissionModeChangedEventSchema = z.object({
     type: z.literal('permission-mode-changed'),
     mode: PermissionModeSchema,
@@ -36,6 +44,7 @@ export const SessionAgentKnownEventSchema = z.discriminatedUnion('type', [
     AssistantErrorEventSchema,
     MessageEventSchema,
     ReadyEventSchema,
+    TurnTerminalEventSchema,
     PermissionModeChangedEventSchema,
     DriverSwitchSendFailedEventSchema,
     ApiErrorEventSchema,
@@ -44,6 +53,7 @@ export const SessionAgentKnownEventSchema = z.discriminatedUnion('type', [
 export type AssistantErrorEvent = z.infer<typeof AssistantErrorEventSchema>
 export type MessageEvent = z.infer<typeof MessageEventSchema>
 export type ReadyEvent = z.infer<typeof ReadyEventSchema>
+export type TurnTerminalEvent = z.infer<typeof TurnTerminalEventSchema>
 export type PermissionModeChangedEvent = {
     type: 'permission-mode-changed'
     mode: PermissionMode
@@ -55,6 +65,7 @@ export type SessionAgentEvent =
     | AssistantErrorEvent
     | MessageEvent
     | ReadyEvent
+    | TurnTerminalEvent
     | PermissionModeChangedEvent
     | DriverSwitchSendFailedEvent
     | ApiErrorEvent
@@ -72,3 +83,4 @@ export type CliSessionEventPayload =
     | PermissionModeChangedEvent
     | DriverSwitchSendFailedEvent
     | ReadyEvent
+    | TurnTerminalEvent

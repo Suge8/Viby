@@ -214,6 +214,13 @@ export const SessionSchema = z.object({
 })
 
 export type Session = z.infer<typeof SessionSchema>
+
+export const SessionSendMessageResultSchema = z.object({
+    session: SessionSchema,
+    message: DecryptedMessageSchema,
+})
+
+export type SessionSendMessageResult = z.infer<typeof SessionSendMessageResultSchema>
 export * from './messageMeta'
 
 const SessionChangedSchema = z.object({
