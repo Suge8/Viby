@@ -36,6 +36,7 @@ export class GeminiSession extends AgentSessionBase<GeminiMode> {
             messageQueue: opts.messageQueue,
             sessionLabel: 'GeminiSession',
             sessionIdLabel: 'Gemini',
+            startedBy: opts.startedBy,
             applySessionIdToMetadata: (metadata, sessionId) => ({
                 ...metadata,
                 ...setSessionDriverRuntimeHandle(metadata, 'gemini', { sessionId }),

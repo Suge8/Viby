@@ -30,6 +30,7 @@ export class CopilotSession extends AgentSessionBase<EnhancedMode> {
             messageQueue: opts.messageQueue,
             sessionLabel: 'CopilotSession',
             sessionIdLabel: 'Copilot',
+            startedBy: opts.startedBy,
             applySessionIdToMetadata: (metadata, sessionId) => ({
                 ...metadata,
                 ...setSessionDriverRuntimeHandle(metadata, 'copilot', { sessionId }),

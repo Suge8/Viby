@@ -32,6 +32,7 @@ export class CursorSession extends AgentSessionBase<EnhancedMode> {
             messageQueue: opts.messageQueue,
             sessionLabel: 'CursorSession',
             sessionIdLabel: 'Cursor',
+            startedBy: opts.startedBy,
             applySessionIdToMetadata: (metadata, sessionId) => ({
                 ...metadata,
                 ...setSessionDriverRuntimeHandle(metadata, 'cursor', { sessionId }),

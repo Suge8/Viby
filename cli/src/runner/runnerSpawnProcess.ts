@@ -14,7 +14,7 @@ type SpawnFailureDetails = {
 }
 
 type SpawnOutcome = { type: 'success' } | { type: 'error'; details: SpawnFailureDetails }
-const DEFAULT_WEBHOOK_TIMEOUT_MS = 15_000
+const DEFAULT_WEBHOOK_TIMEOUT_MS = 20_000
 
 export function resolveRunnerWebhookTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
     const parsed = Number(env.VIBY_RUNNER_WEBHOOK_TIMEOUT_MS)

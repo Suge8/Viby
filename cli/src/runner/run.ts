@@ -1,5 +1,10 @@
 import { listAgentAvailability } from '@/agent/agentAvailability'
-import { loadAgentConfigFiles, restoreAgentConfigFile, saveAgentConfigFile } from '@/agent/agentConfigFiles'
+import {
+    loadAgentConfigFiles,
+    openAgentConfigFile,
+    restoreAgentConfigFile,
+    saveAgentConfigFile,
+} from '@/agent/agentConfigFiles'
 import { buildMachineMetadata } from '@/agent/sessionFactory'
 import { ApiClient } from '@/api/api'
 import { RunnerState } from '@/api/types'
@@ -168,6 +173,7 @@ export async function startRunner(): Promise<void> {
             loadAgentConfigFiles,
             saveAgentConfigFile,
             restoreAgentConfigFile,
+            openAgentConfigFile,
             stopSession: trackedSessionControl.stopSession,
             requestShutdown: () => requestShutdown('viby-app'),
         })

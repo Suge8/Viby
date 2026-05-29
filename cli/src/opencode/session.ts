@@ -34,6 +34,7 @@ export class OpencodeSession extends AgentSessionBase<OpencodeMode> {
             messageQueue: opts.messageQueue,
             sessionLabel: 'OpencodeSession',
             sessionIdLabel: 'OpenCode',
+            startedBy: opts.startedBy,
             applySessionIdToMetadata: (metadata, sessionId) => ({
                 ...metadata,
                 ...setSessionDriverRuntimeHandle(metadata, 'opencode', { sessionId }),
