@@ -27,7 +27,6 @@ function bridgeState(overrides: Partial<PairingBridgeState>): PairingBridgeState
             createdAt: 1,
             updatedAt: 1,
             expiresAt: 9_999,
-            ticketExpiresAt: 9_999,
             shortCode: null,
             approvalStatus: 'approved',
             host: {},
@@ -127,12 +126,12 @@ describe('buildDeviceLinkStatus', () => {
         })
     })
 
-    it('shows relay transport when bridge stats land on TURN', () => {
+    it('shows relay transport when bridge stats land on relay', () => {
         const snapshot = buildDeviceLinkSnapshot(
             bridgeState({
                 stats: bridgeStats({
                     transport: 'relay',
-                    transportMode: 'turn-webrtc',
+                    transportMode: 'relay-wss',
                     localCandidateType: 'relay',
                     remoteCandidateType: 'srflx',
                     currentRoundTripTimeMs: 120,

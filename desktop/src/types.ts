@@ -19,8 +19,8 @@ export interface HubRuntimeStatus {
     preferredBrowserUrl: string
     publicUrl: string
     publicAccessEnabled: boolean
+    publicAccessHotReload?: boolean
     pairingBrokerUrl?: string | null
-    pairingCode?: string
     hubOwnerToken: string
     settingsFile: string
     dataDir: string
@@ -44,9 +44,9 @@ export interface PairingSessionSnapshot {
     createdAt: number
     updatedAt: number
     expiresAt: number
-    ticketExpiresAt: number
+
     shortCode: string | null
-    approvalStatus: 'pending' | 'approved' | null
+    approvalStatus: 'approved' | null
     host: PairingParticipantSnapshot
     guest?: PairingParticipantSnapshot | null
 }
@@ -64,7 +64,19 @@ export interface DesktopPairingSession {
     pairingUrl: string
     wsUrl: string
     tunnelUrl: string
+    eventsUrl?: string
     iceServers: PairingIceServer[]
+}
+
+/**
+ * LAN pairing invite. Phones connect directly to the hub after verify, so
+ * the desktop only tracks the invite link plus the SSE events URL; there is
+ * no broker host token, WS tunnel, or ICE list to advertise.
+ */
+export interface DesktopLanPairingSession {
+    pairing: PairingSessionSnapshot
+    pairingUrl: string
+    eventsUrl: string
 }
 
 export interface PairingBridgeStats {

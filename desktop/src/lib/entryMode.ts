@@ -13,8 +13,8 @@ const PREVIEW_ADDRESS_LABEL = '启动后地址'
 type EntryMode = 'local' | 'lan'
 
 const SCOPE_LABEL: Record<HubAccessScope, string> = {
-    public: '公网地址',
-    lan: '局域网地址',
+    public: '公网',
+    lan: '局域网',
     local: '本机地址',
 }
 

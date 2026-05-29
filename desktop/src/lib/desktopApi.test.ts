@@ -55,7 +55,6 @@ const pairingFixture: DesktopPairingSession = {
         createdAt: 1,
         updatedAt: 1,
         expiresAt: 2,
-        ticketExpiresAt: 2,
         shortCode: null,
         approvalStatus: null,
         host: {
@@ -89,13 +88,7 @@ describe('desktopApi', () => {
     it('rejects desktop commands when the tauri runtime is unavailable', async () => {
         ;(globalThis as typeof globalThis & { window?: unknown }).window = {}
 
-        await expect(desktopApi.openPreferredUrl()).rejects.toThrow(PREVIEW_MESSAGE)
-    })
-
-    it('opens the current entry through the single preferred-url command', async () => {
-        await desktopApi.openPreferredUrl()
-
-        expect(invokeMock).toHaveBeenCalledWith('open_preferred_url', undefined)
+        await expect(desktopApi.openUrl('http://example.test')).rejects.toThrow(PREVIEW_MESSAGE)
     })
 
     it('opens a concrete entry URL without asking the hub to choose one', async () => {
@@ -111,9 +104,10 @@ describe('desktopApi', () => {
         expect(invokeMock).toHaveBeenCalledWith('start_hub', undefined)
     })
 
-    it('persists the public access switch through the dedicated desktop command', async () => {
-        await desktopApi.setPublicAccessEnabled(false)
+    it('applies the public access switch through the dedicated desktop command', async () => {
+        invokeMock.mockResolvedValueOnce(snapshotFixture)
 
+        await expect(desktopApi.setPublicAccessEnabled(false)).resolves.toBe(snapshotFixture)
         expect(invokeMock).toHaveBeenCalledWith('set_public_access_enabled', { enabled: false })
     })
 
@@ -143,30 +137,13 @@ describe('desktopApi', () => {
         expect(invokeMock).toHaveBeenCalledWith('create_pairing_session', undefined)
     })
 
-    it('approves a pairing session through the dedicated desktop command', async () => {
-        invokeMock.mockResolvedValueOnce({
-            ...pairingFixture,
-            pairing: {
-                ...pairingFixture.pairing,
-                approvalStatus: 'approved',
-            },
-        })
-
-        await expect(desktopApi.approvePairingSession(pairingFixture)).resolves.toMatchObject({
-            pairing: {
-                approvalStatus: 'approved',
-            },
-        })
-        expect(invokeMock).toHaveBeenCalledWith('approve_pairing_session', { pairing: pairingFixture })
-    })
-
     it('refreshes a pairing session through the dedicated desktop command', async () => {
         invokeMock.mockResolvedValueOnce({
             ...pairingFixture,
             pairing: {
                 ...pairingFixture.pairing,
                 shortCode: '490649',
-                approvalStatus: 'pending',
+                approvalStatus: 'approved',
                 guest: {
                     label: 'Device',
                 },
@@ -176,7 +153,7 @@ describe('desktopApi', () => {
         await expect(desktopApi.refreshPairingSession(pairingFixture)).resolves.toMatchObject({
             pairing: {
                 shortCode: '490649',
-                approvalStatus: 'pending',
+                approvalStatus: 'approved',
             },
         })
         expect(invokeMock).toHaveBeenCalledWith('refresh_pairing_session', { pairing: pairingFixture })

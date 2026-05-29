@@ -57,9 +57,9 @@ describe('entryMode', () => {
             })
         )
 
-        expect(model.displayLabel).toBe('局域网地址')
+        expect(model.displayLabel).toBe('局域网')
         expect(model.displayValue).toBe('127.0.0.1:4567')
-        expect(model.entries.map((entry) => entry.label)).toEqual(['局域网地址'])
+        expect(model.entries.map((entry) => entry.label)).toEqual(['局域网'])
         expect(model.openUrl).toBe('http://127.0.0.1:4567')
     })
 
@@ -88,10 +88,10 @@ describe('entryMode', () => {
 
         expect(model.isPreview).toBe(false)
         expect(model.mode).toBe('lan')
-        expect(model.displayLabel).toBe('局域网地址')
+        expect(model.displayLabel).toBe('局域网')
         expect(model.displayValue).toBe('192.168.1.8:4567')
         expect(model.secondaryLabel).toBeUndefined()
-        expect(model.entries.map((entry) => entry.label)).toEqual(['局域网地址'])
+        expect(model.entries.map((entry) => entry.label)).toEqual(['局域网'])
         expect(model.openUrl).toBe('http://192.168.1.8:4567')
     })
 
@@ -118,7 +118,7 @@ describe('entryMode', () => {
             })
         )
 
-        expect(model.entries.map((entry) => entry.label)).toEqual(['公网地址', '局域网地址'])
+        expect(model.entries.map((entry) => entry.label)).toEqual(['公网', '局域网'])
         expect(model.entries.map((entry) => entry.value)).toEqual(['hub.example.test', '192.168.1.8:4567'])
     })
 
@@ -145,9 +145,9 @@ describe('entryMode', () => {
             })
         )
 
-        expect(model.displayLabel).toBe('局域网地址')
+        expect(model.displayLabel).toBe('局域网')
         expect(model.displayValue).toBe('192.168.1.8:4567')
         expect(model.secondaryLabel).toBeUndefined()
-        expect(model.entries.map((entry) => entry.label)).toEqual(['局域网地址'])
+        expect(model.entries.map((entry) => entry.label)).toEqual(['局域网'])
     })
 })

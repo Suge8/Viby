@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import type { DesktopPairingSession } from '@/types'
-import { buildHubSwitchModel, getPairingInviteRenewDelay, shouldPollPairingSnapshot } from './desktopShellModel'
+import { buildHubSwitchModel, getPairingInviteRenewDelay } from './desktopShellModel'
 
 const pairingFixture: DesktopPairingSession = {
     pairing: {
@@ -9,7 +9,7 @@ const pairingFixture: DesktopPairingSession = {
         createdAt: 1,
         updatedAt: 1,
         expiresAt: 2,
-        ticketExpiresAt: 2,
+        expiresAt: 2,
         shortCode: null,
         approvalStatus: null,
         host: { tokenHint: 'host-1' },
@@ -48,16 +48,13 @@ describe('desktopShellModel', () => {
 
     it('renews only unclaimed QR invites shortly before ticket expiry', () => {
         const now = 1_000
-        const ticketExpiresAt = now + 60_000
+        const expiresAt = now + 60_000
         expect(
-            getPairingInviteRenewDelay(
-                { ...pairingFixture, pairing: { ...pairingFixture.pairing, ticketExpiresAt } },
-                now
-            )
+            getPairingInviteRenewDelay({ ...pairingFixture, pairing: { ...pairingFixture.pairing, expiresAt } }, now)
         ).toBe(30_000)
         expect(
             getPairingInviteRenewDelay(
-                { ...pairingFixture, pairing: { ...pairingFixture.pairing, ticketExpiresAt: now + 10_000 } },
+                { ...pairingFixture, pairing: { ...pairingFixture.pairing, expiresAt: now + 10_000 } },
                 now
             )
         ).toBe(0)
@@ -67,25 +64,5 @@ describe('desktopShellModel', () => {
                 now
             )
         ).toBeNull()
-    })
-
-    it('polls only visible invites or claimed approvals, not hidden idle QR codes', () => {
-        expect(shouldPollPairingSnapshot(pairingFixture, 'idle')).toBe(false)
-        expect(shouldPollPairingSnapshot(pairingFixture, 'connecting', true)).toBe(true)
-        expect(shouldPollPairingSnapshot(pairingFixture, 'ready', true)).toBe(false)
-        expect(
-            shouldPollPairingSnapshot(
-                { ...pairingFixture, pairing: { ...pairingFixture.pairing, guest: { label: 'Device' } } },
-                'idle'
-            )
-        ).toBe(true)
-        expect(
-            shouldPollPairingSnapshot(
-                { ...pairingFixture, pairing: { ...pairingFixture.pairing, approvalStatus: 'approved' } },
-                'idle',
-                true
-            )
-        ).toBe(false)
-        expect(shouldPollPairingSnapshot(null, 'idle', true)).toBe(false)
     })
 })

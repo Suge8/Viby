@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { check, type Update } from '@tauri-apps/plugin-updater'
-import type { DesktopPairingSession, HubSnapshot } from '@/types'
+import type { DesktopLanPairingSession, DesktopPairingSession, HubSnapshot } from '@/types'
 
 export interface DesktopUpdateInfo {
     version: string
@@ -74,10 +74,6 @@ export async function stopHub(): Promise<HubSnapshot> {
     return await invokeDesktopCommand<HubSnapshot>('stop_hub')
 }
 
-export async function openPreferredUrl(): Promise<void> {
-    await invokeDesktopCommand('open_preferred_url')
-}
-
 export async function openUrl(url: string): Promise<void> {
     await invokeDesktopCommand('open_url', { url })
 }
@@ -86,8 +82,8 @@ export async function copyText(text: string): Promise<void> {
     await invokeDesktopCommand('copy_text', { text })
 }
 
-export async function setPublicAccessEnabled(enabled: boolean): Promise<void> {
-    await invokeDesktopCommand('set_public_access_enabled', { enabled })
+export async function setPublicAccessEnabled(enabled: boolean): Promise<HubSnapshot> {
+    return await invokeDesktopCommand<HubSnapshot>('set_public_access_enabled', { enabled })
 }
 
 export async function getPairingSessions(): Promise<DesktopPairingSession[]> {
@@ -106,16 +102,32 @@ export async function createPairingSession(): Promise<DesktopPairingSession> {
     return await invokeDesktopCommand<DesktopPairingSession>('create_pairing_session')
 }
 
-export async function approvePairingSession(pairing: DesktopPairingSession): Promise<DesktopPairingSession> {
-    return await invokeDesktopCommand<DesktopPairingSession>('approve_pairing_session', { pairing })
-}
-
 export async function refreshPairingSession(pairing: DesktopPairingSession): Promise<DesktopPairingSession> {
     return await invokeDesktopCommand<DesktopPairingSession>('refresh_pairing_session', { pairing })
 }
 
 export async function deletePairingSession(pairing: DesktopPairingSession): Promise<void> {
     await invokeDesktopCommand('delete_pairing_session', { pairing })
+}
+
+export async function createLanPairingSession(inviteBaseUrl: string): Promise<DesktopLanPairingSession> {
+    return await invokeDesktopCommand<DesktopLanPairingSession>('create_lan_pairing_session', { inviteBaseUrl })
+}
+
+export async function refreshLanPairingSession(pairing: DesktopLanPairingSession): Promise<DesktopLanPairingSession> {
+    return await invokeDesktopCommand<DesktopLanPairingSession>('refresh_lan_pairing_session', { pairing })
+}
+
+export async function deleteLanPairingSession(pairing: DesktopLanPairingSession): Promise<void> {
+    await invokeDesktopCommand('delete_lan_pairing_session', { pairing })
+}
+
+export async function subscribePairingEvents(pairingId: string, eventsUrl: string): Promise<void> {
+    await invokeDesktopCommand('subscribe_pairing_events', { pairingId, eventsUrl })
+}
+
+export async function unsubscribePairingEvents(pairingId: string): Promise<void> {
+    await invokeDesktopCommand('unsubscribe_pairing_events', { pairingId })
 }
 
 export async function checkForDesktopUpdate(): Promise<DesktopUpdateInfo | null> {

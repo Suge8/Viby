@@ -17,7 +17,15 @@ export function buildDesktopTunnelBridgeState(options: {
     stats: PairingBridgeStats | null
 }): PairingBridgeState {
     const { base, directState, routeState, stats } = options
-    if (routeState.phase === 'ready') return { phase: 'ready', message: '已连接', pairing: base.pairing, stats }
+    // `phase: 'ready'` must imply the guest has actually attached and
+    // exchanged at least one heartbeat ack (`roundTripTimeMs` populated).
+    // `routeState.phase === 'ready'` alone fires on `relay-ready`, which
+    // is just the host tunnel WS onopen — broker accepts the host long
+    // before any guest joins. Treating that as paired produced phantom
+    // "connected" UI before anyone scanned.
+    if (routeState.phase === 'ready' && routeState.roundTripTimeMs !== null) {
+        return { phase: 'ready', message: '已连接', pairing: base.pairing, stats }
+    }
     if (routeState.phase === 'fatal') {
         return { phase: 'fatal', message: routeState.fatalReason ?? '连接失败', pairing: base.pairing, stats: null }
     }
@@ -58,7 +66,7 @@ export function readDesktopTunnelRouteStats(
         }
     }
     if (telemetry.activeRoute === 'direct') {
-        const transport = telemetry.activeTransport === 'turn-webrtc' ? 'relay' : 'direct'
+        const transport = 'direct'
         return directStats && directStats.transport === transport
             ? {
                   ...directStats,

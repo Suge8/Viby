@@ -56,18 +56,7 @@ export function buildHubSwitchModel(input: {
 }
 
 export function isExpiredUnclaimedPairing(pairing: DesktopPairingSession, now = Date.now()): boolean {
-    return !pairing.pairing.guest && now > pairing.pairing.ticketExpiresAt
-}
-
-export function shouldPollPairingSnapshot(
-    pairing: DesktopPairingSession | null,
-    bridgePhase: PairingBridgeState['phase'],
-    inviteVisible = false
-): boolean {
-    if (!pairing || bridgePhase === 'ready' || pairing.pairing.approvalStatus === 'approved') {
-        return false
-    }
-    return inviteVisible || Boolean(pairing.pairing.guest)
+    return !pairing.pairing.guest && now > pairing.pairing.expiresAt
 }
 
 export function getPairingInviteRenewDelay(pairing: DesktopPairingSession | null, now = Date.now()): number | null {
@@ -76,5 +65,5 @@ export function getPairingInviteRenewDelay(pairing: DesktopPairingSession | null
     }
     return isExpiredUnclaimedPairing(pairing, now)
         ? 0
-        : Math.max(0, pairing.pairing.ticketExpiresAt - now - PAIRING_INVITE_RENEW_LEAD_MS)
+        : Math.max(0, pairing.pairing.expiresAt - now - PAIRING_INVITE_RENEW_LEAD_MS)
 }

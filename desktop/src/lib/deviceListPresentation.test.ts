@@ -28,7 +28,6 @@ function pairingSession(pairingId: string, approvalStatus: DesktopPairingSession
             createdAt: 1,
             updatedAt: 2,
             expiresAt: 9_999,
-            ticketExpiresAt: 9_999,
             shortCode: null,
             approvalStatus,
             host: {},
@@ -60,17 +59,23 @@ describe('deviceListPresentation', () => {
         expect(getConnectedDevices([ready, connecting], links)).toEqual([ready])
     })
 
-    it('projects approved scan pairings before Hub device rows arrive', () => {
+    it('projects paired scan pairings before Hub device rows arrive', () => {
+        // A pairing surfaces as a device row once EITHER the broker pushed
+        // approval through SSE OR the local bridge witnessed a real guest
+        // heartbeat ack. Both signals confirm a guest verified the code.
+        const bridges = new Map([['heartbeat', { phase: 'ready' as const }]])
         const links: DeviceLinkSnapshotMap = new Map([
             ['pairing:ready', { deviceId: 'pairing:ready', phase: 'ready', stats: null }],
+            ['pairing:heartbeat', { deviceId: 'pairing:heartbeat', phase: 'ready', stats: null }],
         ])
         const devices = buildDevicePresentation(
             [],
-            [pairingSession('ready', 'approved'), pairingSession('pending', 'pending')]
+            [pairingSession('ready', 'approved'), pairingSession('heartbeat', null), pairingSession('pending', null)],
+            bridges
         )
 
-        expect(devices).toMatchObject([{ id: 'pairing:ready', name: 'iPhone', platform: 'ios', channel: 'scan' }])
-        expect(getConnectedDevices(devices, links).map((row) => row.id)).toEqual(['pairing:ready'])
+        expect(devices.map((row) => row.id)).toEqual(['pairing:ready', 'pairing:heartbeat'])
+        expect(getConnectedDevices(devices, links).map((row) => row.id)).toEqual(['pairing:ready', 'pairing:heartbeat'])
     })
 
     it('keeps browser and installed PWA handoff under the same scan device row', () => {
@@ -83,7 +88,7 @@ describe('deviceListPresentation', () => {
         const links: DeviceLinkSnapshotMap = new Map([
             ['pairing:phone', { deviceId: 'pairing:phone', phase: 'ready', stats: null }],
         ])
-        const devices = buildDevicePresentation([staleBrowserRow], [pairingSession('phone', 'approved')])
+        const devices = buildDevicePresentation([staleBrowserRow], [pairingSession('phone', 'approved')], new Map())
 
         expect(devices).toEqual([
             expect.objectContaining({ id: 'pairing:phone', name: 'iPhone', platform: 'ios', channel: 'scan' }),

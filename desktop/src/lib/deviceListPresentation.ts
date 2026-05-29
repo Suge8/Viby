@@ -32,11 +32,18 @@ function pairingDevice(session: DesktopPairingSession): DeviceAuthDevice {
 
 export function buildDevicePresentation(
     devices: DeviceAuthDevice[],
-    pairings: readonly DesktopPairingSession[]
+    pairings: readonly DesktopPairingSession[],
+    bridges: ReadonlyMap<string, { phase: 'connecting' | 'ready' | 'fatal' }>
 ): DeviceAuthDevice[] {
     const rows = new Map(devices.map((device) => [device.id, device]))
     for (const session of pairings) {
-        if (session.pairing.approvalStatus !== 'approved') continue
+        // A pairing only surfaces as a device row once the bridge sees a
+        // real guest heartbeat ack OR the broker confirmed approval through
+        // SSE. Either signal proves a guest verified the code; without
+        // either the invite has no associated device to display.
+        const paired =
+            session.pairing.approvalStatus === 'approved' || bridges.get(session.pairing.id)?.phase === 'ready'
+        if (!paired) continue
         const id = pairingDeviceId(session.pairing.id)
         rows.set(id, pairingDevice(session))
     }
