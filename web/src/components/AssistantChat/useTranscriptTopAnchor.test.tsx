@@ -20,6 +20,37 @@ function createViewportWithTarget(): HTMLDivElement {
 }
 
 describe('useTranscriptTopAnchor', () => {
+    it('uses auto top-anchor when scrollend is unavailable so no smooth scroll outlives the transaction', () => {
+        const viewport = {
+            scrollTop: 40,
+            getBoundingClientRect: () => ({ top: 0, bottom: 400 }) as DOMRect,
+            querySelectorAll: () => [],
+        }
+        const scrollToIndex = vi.fn()
+        const { result } = renderHook(() =>
+            useTranscriptTopAnchor({
+                rowStartIndexByConversationId: new Map([['conversation-1', 3]]),
+                viewportRef: { current: viewport as never },
+                virtuosoRef: {
+                    current: {
+                        scrollTo: vi.fn(),
+                        scrollToIndex,
+                    } as never,
+                },
+            })
+        )
+
+        act(() => {
+            result.current.revealConversationAtTopAnchor('conversation-1')
+        })
+
+        expect(scrollToIndex).toHaveBeenCalledWith({ index: 3, align: 'start', behavior: 'auto', offset: 0 })
+
+        act(() => {
+            result.current.clearTopAnchorScrollEndWait()
+        })
+    })
+
     it('settles top-anchor via scrollend and writes only through the virtuoso handle', () => {
         const viewport = createViewportWithTarget()
         const scrollTo = vi.fn()

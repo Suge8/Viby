@@ -8,6 +8,7 @@ export type RemotePairingErrorKey =
     | 'remotePairing.error.invalidCode'
     | 'remotePairing.error.rateLimited'
     | 'remotePairing.error.closedRetrying'
+    | 'remotePairing.error.connectionReplaced'
     | 'remotePairing.error.hostOffline'
     | 'remotePairing.error.peerRequestFailed'
     | 'remotePairing.error.uploadFailed'
@@ -22,6 +23,7 @@ const REMOTE_PAIRING_ERROR_KEYS = new Set<string>([
     'remotePairing.error.rateLimited',
     'remotePairing.error.hostOffline',
     'remotePairing.error.closedRetrying',
+    'remotePairing.error.connectionReplaced',
     'remotePairing.error.peerRequestFailed',
     'remotePairing.error.uploadFailed',
     'remotePairing.error.pairingUnavailable',
@@ -75,6 +77,7 @@ export function canRetryRemotePairingError(key: RemotePairingErrorKey): boolean 
     return !(
         key === 'remotePairing.error.regenerateQr' ||
         key === 'remotePairing.error.scanAgain' ||
+        key === 'remotePairing.error.connectionReplaced' ||
         key === 'remotePairing.error.updateDesktop'
     )
 }

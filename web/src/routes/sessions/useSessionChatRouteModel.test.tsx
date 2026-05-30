@@ -34,6 +34,14 @@ const harness = vi.hoisted(() => ({
     writeSessionToQueryCache: vi.fn(),
 }))
 
+vi.mock('@tanstack/react-router', async () => {
+    const actual = await vi.importActual<typeof import('@tanstack/react-router')>('@tanstack/react-router')
+    return {
+        ...actual,
+        useNavigate: () => vi.fn(),
+    }
+})
+
 vi.mock('@/hooks/useAppGoBack', () => ({
     useAppGoBack: () => harness.goBack,
 }))

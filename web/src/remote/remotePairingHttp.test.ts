@@ -41,6 +41,7 @@ function pairingSnapshot(overrides: Partial<PairingSessionSnapshot> = {}): Pairi
         shortCode: null,
         approvalStatus: null,
         host: { label: 'Desktop' },
+        authorizedDevice: null,
         guest: { label: 'Device' },
         ...overrides,
     }
@@ -174,21 +175,12 @@ describe('remotePairingHttp', () => {
         })
     })
 
-    it('verifies without a device key when storage is unavailable', async () => {
+    it('fails verify before network when the device key is unavailable', async () => {
         vi.mocked(loadPairingDeviceIdentity).mockRejectedValueOnce(new Error('IndexedDB unavailable'))
-        const fetchMock = installFetch([
-            jsonResponse({
-                pairing: pairingSnapshot({ approvalStatus: 'approved', shortCode: '789012' }),
-                guestToken: 'guest-token-1',
-                wsUrl: 'wss://pair.example/ws',
-                tunnelUrl: 'wss://pair.example/tunnel',
-                iceServers: [{ urls: 'stun:stun.example.com:3478' }],
-            }),
-        ])
+        const fetchMock = installFetch([])
 
-        const result = await verifyRemotePairingCode('pairing-1', '789012')
-        expect(result.mode).toBe('broker')
-        expect(fetchMock).toHaveBeenCalledTimes(1)
+        await expect(verifyRemotePairingCode('pairing-1', '789012')).rejects.toThrow('pairing_device_key_unavailable')
+        expect(fetchMock).toHaveBeenCalledTimes(0)
     })
 
     it('reconnects with a one-time challenge and signed device proof', async () => {

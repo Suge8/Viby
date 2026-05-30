@@ -21,6 +21,8 @@ export default {
     'remotePairing.error.invalidCode': 'Pairing code did not match. Try again.',
     'remotePairing.error.rateLimited': 'Too many attempts. Wait a moment and try again.',
     'remotePairing.error.closedRetrying': 'Connection was interrupted. Reconnecting…',
+    'remotePairing.error.connectionReplaced':
+        'This window was replaced by a newer connection. Use the newly opened window, or connect this device again from your computer.',
     'remotePairing.error.hostOffline': 'Your computer’s Viby is not ready yet. Open Viby on the desktop and try again.',
     'remotePairing.error.peerRequestFailed': 'Remote request failed. Try again.',
     'remotePairing.error.uploadFailed': 'Upload failed. Try again.',

@@ -77,11 +77,59 @@ afterEach(() => {
 })
 
 describe('useTranscriptVirtuoso active turn anchoring', () => {
+    it('keeps the first active user turn at bottom instead of top-anchoring an empty transcript', () => {
+        const frameQueue = installQueuedAnimationFrameHarness()
+
+        try {
+            const activeRows = buildTranscriptRenderRows([
+                createTranscriptRow('user:local-1', 'conversation-user-local-1', 'user', 'local-1'),
+            ])
+            const { result, rerender } = renderHook(
+                ({ options }: { options: ReturnType<typeof createTranscriptOptions> }) =>
+                    useTranscriptVirtuoso(options),
+                {
+                    initialProps: {
+                        options: createTranscriptOptions({
+                            rows: [],
+                            rowStartIndexByConversationId: new Map(),
+                        }),
+                    },
+                }
+            )
+            const scrollToIndex = vi.fn()
+
+            act(() => {
+                result.current.virtuosoRef.current = {
+                    scrollTo: vi.fn(),
+                    scrollToIndex,
+                    getState: vi.fn(),
+                } as never
+            })
+
+            rerender({
+                options: createTranscriptOptions({
+                    rows: activeRows,
+                    rowStartIndexByConversationId: new Map([['conversation-user-local-1', 0]]),
+                    activeTurnLocalId: 'local-1',
+                }),
+            })
+            act(() => {
+                frameQueue.flushAllFrames()
+            })
+
+            expect(result.current.alignToBottom).toBe(true)
+            expect(scrollToIndex).not.toHaveBeenCalled()
+        } finally {
+            frameQueue.restore()
+        }
+    })
+
     it('anchors a new active user turn without showing bottom CTA before the viewport actually leaves bottom', () => {
         const frameQueue = installQueuedAnimationFrameHarness()
 
         try {
             const activeRows = buildTranscriptRenderRows([
+                createTranscriptRow('assistant:1', 'conversation-assistant-1'),
                 createTranscriptRow('user:local-1', 'conversation-user-local-1', 'user', 'local-1'),
             ])
             const onAtBottomChange = vi.fn()
@@ -108,6 +156,9 @@ describe('useTranscriptVirtuoso active turn anchoring', () => {
                         bottom: 480,
                     }) as DOMRect,
                 querySelectorAll: () => [],
+                onscrollend: null,
+                addEventListener: vi.fn(),
+                removeEventListener: vi.fn(),
             }
             const scrollTo = vi.fn()
             const scrollToIndex = vi.fn()
@@ -121,21 +172,31 @@ describe('useTranscriptVirtuoso active turn anchoring', () => {
                 result.current.viewportRef.current = viewport as never
             })
 
-            rerender({
-                options: createTranscriptOptions({
-                    rows: activeRows,
-                    rowStartIndexByConversationId: new Map([['conversation-user-local-1', 0]]),
-                    activeTurnLocalId: 'local-1',
-                    onAtBottomChange,
-                }),
+            act(() => {
+                rerender({
+                    options: createTranscriptOptions({
+                        rows: activeRows,
+                        rowStartIndexByConversationId: new Map([
+                            ['conversation-assistant-1', 0],
+                            ['conversation-user-local-1', 1],
+                        ]),
+                        activeTurnLocalId: 'local-1',
+                        onAtBottomChange,
+                    }),
+                })
             })
 
             act(() => {
                 frameQueue.flushAllFrames()
             })
+            expect(scrollToIndex).toHaveBeenCalledWith({ index: 1, align: 'start', behavior: 'smooth', offset: 0 })
+
+            act(() => {
+                result.current.handleAtBottomStateChange(false)
+                frameQueue.flushAllFrames()
+            })
 
             expect(result.current.alignToBottom).toBe(false)
-            expect(scrollToIndex).toHaveBeenCalledWith({ index: 0, align: 'start', behavior: 'smooth', offset: 0 })
             expect(scrollTo).not.toHaveBeenCalled()
             expect(onAtBottomChange).not.toHaveBeenCalled()
         } finally {
@@ -148,9 +209,11 @@ describe('useTranscriptVirtuoso active turn anchoring', () => {
 
         try {
             const activeRows = buildTranscriptRenderRows([
+                createTranscriptRow('assistant:1', 'conversation-assistant-1'),
                 createTranscriptRow('user:local-1', 'conversation-user-local-1', 'user', 'local-1'),
             ])
             const streamingRows = buildTranscriptRenderRows([
+                createTranscriptRow('assistant:1', 'conversation-assistant-1'),
                 createTranscriptRow('user:local-1', 'conversation-user-local-1', 'user', 'local-1'),
                 createTranscriptRow('assistant:stream-1', 'conversation-assistant-stream-1'),
             ])
@@ -191,7 +254,10 @@ describe('useTranscriptVirtuoso active turn anchoring', () => {
             rerender({
                 options: createTranscriptOptions({
                     rows: activeRows,
-                    rowStartIndexByConversationId: new Map([['conversation-user-local-1', 0]]),
+                    rowStartIndexByConversationId: new Map([
+                        ['conversation-assistant-1', 0],
+                        ['conversation-user-local-1', 1],
+                    ]),
                     activeTurnLocalId: 'local-1',
                 }),
             })
@@ -204,8 +270,9 @@ describe('useTranscriptVirtuoso active turn anchoring', () => {
                 options: createTranscriptOptions({
                     rows: streamingRows,
                     rowStartIndexByConversationId: new Map([
-                        ['conversation-user-local-1', 0],
-                        ['conversation-assistant-stream-1', 1],
+                        ['conversation-assistant-1', 0],
+                        ['conversation-user-local-1', 1],
+                        ['conversation-assistant-stream-1', 2],
                     ]),
                     activeTurnLocalId: 'local-1',
                 }),
@@ -215,8 +282,9 @@ describe('useTranscriptVirtuoso active turn anchoring', () => {
                 options: createTranscriptOptions({
                     rows: streamingRows,
                     rowStartIndexByConversationId: new Map([
-                        ['conversation-user-local-1', 0],
-                        ['conversation-assistant-stream-1', 1],
+                        ['conversation-assistant-1', 0],
+                        ['conversation-user-local-1', 1],
+                        ['conversation-assistant-stream-1', 2],
                     ]),
                     activeTurnLocalId: null,
                 }),
@@ -238,6 +306,7 @@ describe('useTranscriptVirtuoso active turn anchoring', () => {
 
         try {
             const activeRows = buildTranscriptRenderRows([
+                createTranscriptRow('assistant:1', 'conversation-assistant-1'),
                 createTranscriptRow('user:local-1', 'conversation-user-local-1', 'user', 'local-1'),
             ])
             const { result, rerender } = renderHook(
@@ -272,7 +341,10 @@ describe('useTranscriptVirtuoso active turn anchoring', () => {
             rerender({
                 options: createTranscriptOptions({
                     rows: activeRows,
-                    rowStartIndexByConversationId: new Map([['conversation-user-local-1', 0]]),
+                    rowStartIndexByConversationId: new Map([
+                        ['conversation-assistant-1', 0],
+                        ['conversation-user-local-1', 1],
+                    ]),
                     activeTurnLocalId: 'local-1',
                 }),
             })
@@ -377,7 +449,7 @@ describe('useTranscriptVirtuoso active turn anchoring', () => {
             })
 
             expect(result.current.alignToBottom).toBe(false)
-            expect(scrollToIndex).toHaveBeenCalledWith({ index: 2, align: 'start', behavior: 'smooth', offset: 0 })
+            expect(scrollToIndex).toHaveBeenCalledWith({ index: 2, align: 'start', behavior: 'auto', offset: 0 })
             expect(scrollTo).not.toHaveBeenCalled()
         } finally {
             frameQueue.restore()

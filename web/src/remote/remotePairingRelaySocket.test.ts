@@ -114,6 +114,21 @@ describe('remotePairingRelaySocket', () => {
         expect(onFatal).toHaveBeenCalledWith('invalid_token')
     })
 
+    it('turns broker replacement close into a terminal handoff state instead of reconnecting forever', () => {
+        const onFatal = vi.fn()
+        createRemotePairingRelaySocket({
+            tunnelUrl: 'wss://pair.example/tunnel',
+            onOpen: vi.fn(),
+            onClose: vi.fn(),
+            onFatal,
+            onMessage: vi.fn(),
+        })
+        FakeWebSocket.instances[0].onclose?.({ code: 1012, reason: 'replaced' })
+
+        expect(onFatal).toHaveBeenCalledWith('replaced')
+        expect(FakeWebSocket.instances).toHaveLength(1)
+    })
+
     it('rekeys when the peer role is replaced behind the same relay tunnel', async () => {
         const relay = createRemotePairingRelaySocket({
             tunnelUrl: 'wss://pair.example/tunnel',

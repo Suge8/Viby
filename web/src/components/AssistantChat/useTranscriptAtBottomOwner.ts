@@ -108,9 +108,6 @@ export function useTranscriptAtBottomOwner(
                     ? atBottom
                     : resolveViewportAtBottom(viewportRef.current, TRANSCRIPT_AT_BOTTOM_THRESHOLD_PX)
             if (isTopAnchorTransactionPending()) {
-                if (!atBottom) {
-                    reportAtBottom(false)
-                }
                 return
             }
 

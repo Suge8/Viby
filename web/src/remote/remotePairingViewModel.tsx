@@ -107,6 +107,9 @@ export function buildRemoteReconnectNotice(options: {
 export function buildRemoteStatusSpec(errorKey: RemotePairingErrorKey | null): RemotePairingStatusSpec {
     if (!errorKey) return { messageKey: null, retry: false }
     if (FINAL_SCAN_ERRORS.has(errorKey)) return { messageKey: 'remotePairing.error.scanAgain', retry: false }
+    if (errorKey === 'remotePairing.error.connectionReplaced') {
+        return { messageKey: errorKey, retry: false }
+    }
     if (errorKey === 'remotePairing.error.regenerateQr' || errorKey === 'remotePairing.error.updateDesktop') {
         return { messageKey: errorKey, retry: false }
     }

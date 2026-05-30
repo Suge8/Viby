@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { RemotePwaBootstrap } from './RemotePwaBootstrap'
+import { RemotePwaBootstrap, resolveRecoveredPairingHref } from './RemotePwaBootstrap'
 
+const route = vi.hoisted(() => ({ href: '/sessions?remote=1' }))
 const routerHistory = vi.hoisted(() => ({ replace: vi.fn() }))
 const cookieRecover = vi.hoisted(() => vi.fn())
 const cachedRecover = vi.hoisted(() => vi.fn())
@@ -10,7 +11,10 @@ const http = vi.hoisted(() => ({
     rememberRemotePairingId: vi.fn(),
 }))
 
-vi.mock('@tanstack/react-router', () => ({ useRouter: () => ({ history: routerHistory }) }))
+vi.mock('@tanstack/react-router', () => ({
+    useLocation: ({ select }: { select: (location: { href: string }) => string }) => select(route),
+    useRouter: () => ({ history: routerHistory }),
+}))
 vi.mock('@/lib/use-translation', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
 vi.mock('@/lib/runtimeDiagnostics', () => ({ reportWebRuntimeError: vi.fn() }))
 vi.mock('./remotePairingCookieRecover', () => ({ recoverRemotePairingFromCookie: cookieRecover }))
@@ -30,8 +34,21 @@ vi.mock('./RemotePairingScreens', () => ({
     ),
 }))
 
+describe('resolveRecoveredPairingHref', () => {
+    it('normalizes non-workspace launches to the remote sessions shell', () => {
+        expect(resolveRecoveredPairingHref('/p/pairing-1?handoff=secret')).toBe('/sessions?remote=1')
+    })
+
+    it('preserves workspace deep links while normalizing remote intent', () => {
+        expect(resolveRecoveredPairingHref('/sessions/session-1?Remote=1&tab=x#tail')).toBe(
+            '/sessions/session-1?tab=x&remote=1#tail'
+        )
+    })
+})
+
 describe('RemotePwaBootstrap', () => {
     beforeEach(() => {
+        route.href = '/sessions?remote=1'
         vi.clearAllMocks()
     })
 
@@ -47,6 +64,19 @@ describe('RemotePwaBootstrap', () => {
         expect(http.rememberRemotePairingId).toHaveBeenCalledWith('pairing-good')
         expect(onRecovered).toHaveBeenCalledWith('pairing-good')
         expect(screen.queryByTestId('missing')).toBeNull()
+    })
+
+    it('preserves the direct session route after broker cookie handoff', async () => {
+        route.href = '/sessions/session-1?remote=1#tail'
+        cookieRecover.mockResolvedValue({
+            ok: true,
+            value: { pairingId: 'pairing-cookie', handoffTicket: 'handoff-1', expiresAt: 1 },
+        })
+        http.claimRemotePwaHandoff.mockResolvedValue({ pairing: { id: 'pairing-cookie', approvalStatus: 'approved' } })
+
+        render(<RemotePwaBootstrap fallbackPairingId={null} onRecovered={vi.fn()} />)
+
+        await waitFor(() => expect(routerHistory.replace).toHaveBeenCalledWith('/sessions/session-1?remote=1#tail'))
     })
 
     it('uses the broker cookie handoff before cached-device recovery', async () => {

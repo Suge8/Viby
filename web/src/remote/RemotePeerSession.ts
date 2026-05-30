@@ -1,10 +1,8 @@
 import {
-    isProtocolVersionCompatible,
     type PairingIceServer,
     type PairingPeerHeartbeat,
     type PairingPeerRequest,
     type PairingPeerTerminalEventPayload,
-    resolvePeerProtocolVersion,
 } from '@viby/protocol'
 import {
     createPairingPeerTextAssembler,
@@ -40,6 +38,7 @@ import { reduceRouteAfterPeerRpcFailure } from './remotePeerRouteFailure'
 import { createRemotePeerSessionBridge } from './remotePeerSessionBridge'
 import { createRemotePeerReadyGate } from './remotePeerSessionReady'
 import { createRemotePeerSessionRelay } from './remotePeerSessionRelay'
+import { handleRemotePeerSessionRouteHeartbeat } from './remotePeerSessionRouteHeartbeat'
 import { createRemotePeerSessionSender } from './remotePeerSessionSender'
 import { startRemotePeerReadyTimeout } from './remotePeerSessionTimeout'
 export interface RemotePeerSession extends RemotePeerBridge {}
@@ -81,7 +80,12 @@ export class RemotePeerSession {
                 if (this.routeState.activeRoute !== 'direct') this.transport.requestIceRestart()
             },
             onClose: () => this.commitRoute({ type: 'relay-lost' }),
-            onFatal: () => this.fail(new RemotePeerConnectError('closed', 'remotePairing.error.scanAgain')),
+            onFatal: (reason) =>
+                this.fail(
+                    reason === 'replaced'
+                        ? new RemotePeerConnectError('replaced', 'remotePairing.error.connectionReplaced')
+                        : new RemotePeerConnectError('closed', 'remotePairing.error.scanAgain')
+                ),
             onMessage: (data) => this.handlePeerMessage(data, 'relay'),
             onHeartbeatTimeout: () => this.handleRelayHeartbeatTimeout(),
         })
@@ -179,6 +183,7 @@ export class RemotePeerSession {
     }
     private handleForeground(): void {
         recordRemotePairingDiagnostic('foreground', { route: this.routeState.activeRoute ?? 'none' })
+        if (this.routeState.phase === 'ready') this.commitRoute({ type: 'foreground-check' })
         this.relay.notifyForeground()
         this.relayHeartbeat.notifyForeground()
         this.transport.notifyForeground()
@@ -215,26 +220,18 @@ export class RemotePeerSession {
         heartbeat: PairingPeerHeartbeat,
         channel?: RTCDataChannel
     ): void {
-        if (!this.acceptPeerProtocol(heartbeat)) return
-        if (!heartbeat.ack) {
-            const payload = JSON.stringify({ ...heartbeat, ack: true })
-            if (route === 'direct' && channel?.readyState === 'open') channel.send(payload)
-            else if (route === 'relay' && this.relay.readyState === 'open') this.relay.send(payload)
-            return
-        }
-        if (route === 'direct' && channel) return this.handleHeartbeatAck(channel, heartbeat)
-        this.commitRoute({
-            type: 'heartbeat-ack',
-            route: 'relay',
-            roundTripTimeMs: this.relayHeartbeat.markAck(),
-            sampledAt: Date.now(),
+        handleRemotePeerSessionRouteHeartbeat({
+            channel,
+            fail: (error) => this.fail(error),
+            heartbeat,
+            handleDirectAck: (channel, heartbeat) => this.handleHeartbeatAck(channel, heartbeat),
+            maybeReprobeDirect: () => this.maybeReprobeDirect(),
+            relay: this.relay,
+            relayHeartbeat: this.relayHeartbeat,
+            route,
+            commitRelayAck: (roundTripTimeMs, sampledAt) =>
+                this.commitRoute({ type: 'heartbeat-ack', route: 'relay', roundTripTimeMs, sampledAt }),
         })
-        this.maybeReprobeDirect()
-    }
-    private acceptPeerProtocol(heartbeat: PairingPeerHeartbeat): boolean {
-        if (isProtocolVersionCompatible(resolvePeerProtocolVersion(heartbeat.protocolVersion))) return true
-        this.fail(createRemotePairingCodedError('remotePairing.error.updateDesktop'))
-        return false
     }
     private recordRpcTelemetry(sample: RemotePeerRpcTelemetrySample): void {
         this.lastRpcTelemetry = sample

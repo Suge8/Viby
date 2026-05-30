@@ -15,6 +15,7 @@ type RemotePeerSessionSenderOptions = {
 
 export function createRemotePeerSessionSender(options: RemotePeerSessionSenderOptions): RemotePeerMessageSender | null {
     const { channel, directChannelReady, directTextSender, relay, routeState } = options
+    if (routeState.phase !== 'ready') return null
     if (
         routeState.activeRoute === 'direct' &&
         directChannelReady &&
@@ -28,7 +29,7 @@ export function createRemotePeerSessionSender(options: RemotePeerSessionSenderOp
                 directTextSender.send(data, { chunkBytes: REMOTE_DIRECT_TEXT_CHUNK_BYTES, priority }),
         }
     }
-    if (relay.readyState !== 'open') return null
+    if (routeState.activeRoute !== 'relay' || relay.readyState !== 'open') return null
     return {
         readyState: relay.readyState,
         route: 'relay',

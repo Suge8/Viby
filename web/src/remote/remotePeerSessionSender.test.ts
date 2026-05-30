@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from 'vitest'
 import type { RemotePairingRelaySocket } from './remotePairingRelaySocket'
 import { createRemotePeerSessionSender } from './remotePeerSessionSender'
 
-function routeState(activeRoute: 'direct' | 'relay') {
-    return { ...createPairingTunnelRouteState(), activeRoute }
+function readyRouteState(activeRoute: 'direct' | 'relay') {
+    return { ...createPairingTunnelRouteState(), phase: 'ready' as const, activeRoute }
 }
 
 function relaySocket() {
@@ -17,7 +17,7 @@ describe('createRemotePeerSessionSender', () => {
             send: vi.fn(async () => ({ bytes: 1, chunks: 1 })),
         } as unknown as PairingPeerTextSender
         const sender = createRemotePeerSessionSender({
-            routeState: routeState('direct'),
+            routeState: readyRouteState('direct'),
             directChannelReady: true,
             channel: { readyState: 'open' } as RTCDataChannel,
             directTextSender,
@@ -33,7 +33,7 @@ describe('createRemotePeerSessionSender', () => {
     it('falls back to relay while direct is not ready', async () => {
         const relay = relaySocket()
         const sender = createRemotePeerSessionSender({
-            routeState: routeState('relay'),
+            routeState: readyRouteState('relay'),
             directChannelReady: false,
             channel: { readyState: 'open' } as RTCDataChannel,
             directTextSender: null,
@@ -44,5 +44,17 @@ describe('createRemotePeerSessionSender', () => {
 
         expect(sender?.route).toBe('relay')
         expect(relay.send).toHaveBeenCalledWith('x')
+    })
+
+    it('does not send RPC while foreground validation is pending', () => {
+        const sender = createRemotePeerSessionSender({
+            routeState: { ...readyRouteState('relay'), phase: 'reconnecting', activeRoute: null },
+            directChannelReady: false,
+            channel: null,
+            directTextSender: null,
+            relay: relaySocket(),
+        })
+
+        expect(sender).toBeNull()
     })
 })

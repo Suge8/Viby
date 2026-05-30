@@ -253,6 +253,35 @@ describe('message-window-store', () => {
         expect(state.messages.some((message) => message.seq === 51)).toBe(true)
     })
 
+    it('keeps incoming user messages visible while the transcript is away from bottom', () => {
+        ingestIncomingMessages('session-1', [buildRoleMessage(1, 'assistant')])
+        setAtBottom('session-1', false)
+
+        ingestIncomingMessages('session-1', [buildRoleMessage(2, 'user')])
+
+        const state = getMessageWindowState('session-1')
+        expect(state.messages.map((message) => message.seq)).toEqual([1, 2])
+        expect(state.pending).toEqual([])
+    })
+
+    it('keeps fetched user messages visible while preserving non-user pending catch-up', async () => {
+        ingestIncomingMessages('session-1', [buildRoleMessage(1, 'assistant')])
+        setAtBottom('session-1', false)
+
+        await fetchLatestMessages(
+            createFixedMessagesApi([
+                buildRoleMessage(1, 'assistant'),
+                buildRoleMessage(2, 'user'),
+                buildRoleMessage(3, 'assistant'),
+            ]),
+            'session-1'
+        )
+
+        const state = getMessageWindowState('session-1')
+        expect(state.messages.map((message) => message.seq)).toEqual([1, 2])
+        expect(state.pending.map((message) => message.seq)).toEqual([3])
+    })
+
     it('drops a transient stream once the matching durable codex message arrives', () => {
         applySessionStream('session-1', {
             assistantTurnId: 'stream-1',

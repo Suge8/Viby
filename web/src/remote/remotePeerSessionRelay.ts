@@ -3,7 +3,7 @@ import { createRemotePairingRelaySocket, type RemotePairingRelaySocket } from '.
 
 export function createRemotePeerSessionRelay(options: {
     onClose(): void
-    onFatal(): void
+    onFatal(reason: string): void
     onMessage(data: string): void
     onOpen(): void
     onHeartbeatTimeout(): void

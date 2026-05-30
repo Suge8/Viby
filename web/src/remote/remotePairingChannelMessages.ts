@@ -12,17 +12,13 @@ export function handleRemotePeerChannelMessage(options: {
     terminalListeners: ReadonlySet<(event: PairingPeerTerminalEventPayload) => void>
     onHeartbeat?: (heartbeat: PairingPeerHeartbeat) => void
 }): void {
-    if (typeof options.data !== 'string') {
-        return
-    }
+    if (typeof options.data !== 'string') return
 
     const rawMessage = options.textAssembler ? options.textAssembler.accept(options.data) : options.data
     if (rawMessage === null) return
 
     const message = parsePeerMessage(rawMessage)
-    if (!message) {
-        return
-    }
+    if (!message) return
     if (message.kind === 'heartbeat') {
         options.onHeartbeat?.(message)
         return

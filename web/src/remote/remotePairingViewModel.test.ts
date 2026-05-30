@@ -85,6 +85,10 @@ describe('remotePairingViewModel', () => {
             messageKey: 'remotePairing.error.updateDesktop',
             retry: false,
         })
+        expect(buildRemoteStatusSpec('remotePairing.error.connectionReplaced')).toEqual({
+            messageKey: 'remotePairing.error.connectionReplaced',
+            retry: false,
+        })
         expect(buildRemoteStatusSpec('remotePairing.error.closedRetrying')).toEqual({
             messageKey: 'remotePairing.error.closedRetrying',
             retry: true,

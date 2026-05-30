@@ -184,7 +184,7 @@ export async function verifyRemotePairingCode(pairingId: string, code: string): 
     const body = {
         code,
         label: DEVICE_PLATFORM_DISPLAY_LABELS[platform],
-        ...(identity ? { publicKey: identity.publicKey } : {}),
+        publicKey: identity.publicKey,
         metadata: { platform },
         deviceName: DEVICE_PLATFORM_DISPLAY_LABELS[platform],
         platform,

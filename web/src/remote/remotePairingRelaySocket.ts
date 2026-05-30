@@ -134,7 +134,7 @@ export function createRemotePairingRelaySocket(options: {
         cipher = null
         peerPublicKey = null
         if (disposed) return
-        if (code === 1008) {
+        if (code === 1008 || (code === 1012 && reason === 'replaced')) {
             options.onFatal(reason || 'invalid_token')
             return
         }

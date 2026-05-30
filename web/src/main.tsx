@@ -1,7 +1,8 @@
 import './index.css'
-import { createRoot } from 'react-dom/client'
+import { createRoot, type Root } from 'react-dom/client'
+import { AppRootFailureSurface } from '@/components/AppRootErrorBoundary'
 import { initializeFontScale } from '@/hooks/useFontScale'
-import { reloadWindowForRecovery } from '@/lib/appRecovery'
+import { finalizeBootShell, reloadWindowForRecovery } from '@/lib/appRecovery'
 import { resolveInitialLocale } from '@/lib/i18n-context'
 import { preloadTranslations } from '@/lib/i18nCatalog'
 import { installVitePreloadErrorHandler } from '@/lib/installVitePreloadErrorHandler'
@@ -12,14 +13,20 @@ import {
     disableServiceWorkerForCurrentOrigin,
     publishRuntimeUpdateForBuild,
 } from '@/lib/runtimeAssetRecovery'
-import { reportWebRuntimeWarning } from '@/lib/runtimeDiagnostics'
+import { reportWebRuntimeError, reportWebRuntimeWarning } from '@/lib/runtimeDiagnostics'
 import { preloadAppCacheRuntime } from '@/lib/storage/preloadAppCacheRuntime'
 import { createAppElement } from './app-bootstrap'
 
 const APP_ROOT_ELEMENT_ID = 'root'
+let appRoot: Root | null = null
+
+function getAppRoot(rootElement: HTMLElement): Root {
+    appRoot ??= createRoot(rootElement)
+    return appRoot
+}
 
 function renderApplication(rootElement: HTMLElement): void {
-    createRoot(rootElement).render(createAppElement())
+    getAppRoot(rootElement).render(createAppElement())
     clearRuntimeAssetRecoveryMarker()
 }
 
@@ -78,4 +85,11 @@ async function bootstrap(): Promise<void> {
     }
 }
 
-void bootstrap()
+function renderBootstrapFailure(error: unknown): void {
+    reportWebRuntimeError('App bootstrap failed.', error)
+    const rootElement = document.getElementById(APP_ROOT_ELEMENT_ID)
+    if (rootElement) getAppRoot(rootElement).render(<AppRootFailureSurface />)
+    finalizeBootShell()
+}
+
+void bootstrap().catch(renderBootstrapFailure)

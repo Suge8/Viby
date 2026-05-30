@@ -11,6 +11,19 @@ import {
 import type { MessageWindowWarningKey } from '@/lib/messageWindowWarnings'
 import type { ClientMessage } from '@/types/api'
 
+function partitionUserMessages(messages: ClientMessage[]): {
+    otherMessages: ClientMessage[]
+    userMessages: ClientMessage[]
+} {
+    const userMessages: ClientMessage[] = []
+    const otherMessages: ClientMessage[] = []
+    for (const message of messages) {
+        if (isUserMessage(message)) userMessages.push(message)
+        else otherMessages.push(message)
+    }
+    return { otherMessages, userMessages }
+}
+
 export function applyLatestMessagesPage(
     prev: InternalState,
     messages: ClientMessage[],
@@ -38,13 +51,20 @@ export function applyLatestMessagesPage(
         })
     }
 
-    const pendingResult = mergeIntoPending(prev, messages)
+    const { otherMessages, userMessages } = partitionUserMessages(messages)
+    const visible =
+        userMessages.length > 0
+            ? applyVisibleWindow(prev, mergeMessages(prev.messages, userMessages), 'append')
+            : prev.messages
+    const pendingResult = mergeIntoPending(buildState(prev, { messages: visible }), otherMessages)
     return buildState(prev, {
+        messages: visible,
         pending: pendingResult.pending,
         pendingVisibleCount: pendingResult.pendingVisibleCount,
         pendingOverflowCount: pendingResult.pendingOverflowCount,
         pendingOverflowVisibleCount: pendingResult.pendingOverflowVisibleCount,
         hasLoadedLatest: true,
+        hasMore,
         isLoading: false,
         warning: pendingResult.warning,
         pendingReply: nextPendingReply,
@@ -112,56 +132,16 @@ export function applyLoadingMoreError(prev: InternalState, warning: MessageWindo
 export function applyIncomingMessages(prev: InternalState, incoming: ClientMessage[]): InternalState {
     const nextStream = resolveStreamAfterMessages(prev.stream, incoming)
     const nextPendingReply = resolvePendingReplyAfterMessages(prev.pendingReply, incoming)
+    const merged = mergeMessages(prev.messages, incoming)
+    const visible = applyVisibleWindow(prev, merged, 'append')
+    const pending = filterPendingAgainstVisible(prev.pending, visible)
 
-    if (prev.atBottom) {
-        const merged = mergeMessages(prev.messages, incoming)
-        const visible = applyVisibleWindow(prev, merged, 'append')
-        const pending = filterPendingAgainstVisible(prev.pending, visible)
-        return buildState(prev, {
-            messages: visible,
-            pending,
-            pendingReply: nextPendingReply,
-            stream: nextStream,
-        })
-    }
-
-    const agentMessages = incoming.filter((message) => !isUserMessage(message))
-    const userMessages = incoming.filter((message) => isUserMessage(message))
-    let state = prev
-
-    if (agentMessages.length > 0) {
-        const merged = mergeMessages(state.messages, agentMessages)
-        const visible = applyVisibleWindow(state, merged, 'append')
-        const pending = filterPendingAgainstVisible(state.pending, visible)
-        state = buildState(state, {
-            messages: visible,
-            pending,
-            pendingReply: nextPendingReply,
-            stream: nextStream,
-        })
-    }
-
-    if (userMessages.length > 0) {
-        const pendingResult = mergeIntoPending(state, userMessages)
-        state = buildState(state, {
-            pending: pendingResult.pending,
-            pendingVisibleCount: pendingResult.pendingVisibleCount,
-            pendingOverflowCount: pendingResult.pendingOverflowCount,
-            pendingOverflowVisibleCount: pendingResult.pendingOverflowVisibleCount,
-            warning: pendingResult.warning,
-            pendingReply: nextPendingReply,
-            stream: nextStream,
-        })
-    }
-
-    if (userMessages.length === 0 && agentMessages.length === 0) {
-        state = buildState(state, {
-            pendingReply: nextPendingReply,
-            stream: nextStream,
-        })
-    }
-
-    return state
+    return buildState(prev, {
+        messages: visible,
+        pending,
+        pendingReply: nextPendingReply,
+        stream: nextStream,
+    })
 }
 
 export function applyFlushedPendingMessages(

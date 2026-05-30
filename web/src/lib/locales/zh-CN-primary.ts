@@ -22,6 +22,7 @@ export default {
     'remotePairing.error.invalidCode': '配对码不匹配，请核对后重试。',
     'remotePairing.error.rateLimited': '尝试次数过多，请稍后再试。',
     'remotePairing.error.closedRetrying': '连接已断开，正在重连。',
+    'remotePairing.error.connectionReplaced': '这个窗口已被新的连接替换。请回到新打开的窗口，或在电脑上重新连接设备。',
     'remotePairing.error.hostOffline': '电脑端 Viby 还没准备好，请确认已启动后重试。',
     'remotePairing.error.peerRequestFailed': '远程请求失败，请重试。',
     'remotePairing.error.uploadFailed': '上传失败，请重试。',

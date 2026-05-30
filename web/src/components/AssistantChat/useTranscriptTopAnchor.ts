@@ -51,8 +51,13 @@ export function useTranscriptTopAnchor(options: {
     const armTopAnchorScrollEndWait = useCallback(() => {
         clearTopAnchorScrollEndWait()
         const viewport = viewportRef.current as ScrollEndTarget | null
-        if (!viewport || !('onscrollend' in viewport)) {
+        if (!viewport) {
             resetTopAnchorState()
+            return
+        }
+        if (!('onscrollend' in viewport)) {
+            const frame = requestAnimationFrame(() => runTopAnchorSettleCorrectionRef.current())
+            scrollEndCleanupRef.current = () => cancelAnimationFrame(frame)
             return
         }
         const handleScrollEnd = () => runTopAnchorSettleCorrectionRef.current()
@@ -107,6 +112,7 @@ export function useTranscriptTopAnchor(options: {
 
             const viewport = viewportRef.current
             const anchorOffsetPx = viewport ? readTranscriptTopAnchorSpacePx(viewport) : 0
+            const scrollBehavior = viewport && 'onscrollend' in viewport ? 'smooth' : 'auto'
             pendingConversationIdRef.current = conversationId
             topAnchorCorrectionAttemptRef.current = 0
             setTopAnchorPending(true)
@@ -114,7 +120,7 @@ export function useTranscriptTopAnchor(options: {
             virtuosoRef.current?.scrollToIndex({
                 index: targetIndex,
                 align: 'start',
-                behavior: 'smooth',
+                behavior: scrollBehavior,
                 offset: anchorOffsetPx === 0 ? 0 : -anchorOffsetPx,
             })
             armTopAnchorScrollEndWait()

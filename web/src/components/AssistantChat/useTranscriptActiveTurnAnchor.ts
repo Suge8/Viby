@@ -67,13 +67,21 @@ export function useTranscriptActiveTurnAnchor(options: UseTranscriptActiveTurnAn
     const [state, setState] = useState<ActiveTurnAnchorState>({ mode: 'none' })
 
     useEffect(() => {
-        const conversationId = resolveActiveTurnConversationId(options.rows, options.activeTurnLocalId)
-        if (!options.activeTurnLocalId || !conversationId || anchoredLocalIdRef.current === options.activeTurnLocalId) {
+        const targetLocalId = options.activeTurnLocalId
+        const conversationId = resolveActiveTurnConversationId(options.rows, targetLocalId)
+        if (!targetLocalId || !conversationId || anchoredLocalIdRef.current === targetLocalId) {
             return
         }
 
-        anchoredLocalIdRef.current = options.activeTurnLocalId
-        const targetLocalId = options.activeTurnLocalId
+        const activeTurnIndex = options.rows.findIndex(
+            (row) => row.row.type === 'user' && row.row.block.localId === targetLocalId
+        )
+        anchoredLocalIdRef.current = targetLocalId
+        if (activeTurnIndex <= 0) {
+            setState({ mode: 'bottom-override', localId: targetLocalId })
+            return
+        }
+
         const viewportRef = options.viewportRef
         const revealConversationAtTopAnchor = options.revealConversationAtTopAnchor
         let frame: number | null = null
