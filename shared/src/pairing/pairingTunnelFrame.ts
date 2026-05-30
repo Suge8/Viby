@@ -38,6 +38,7 @@ export type PairingTunnelTelemetry = z.infer<typeof PairingTunnelTelemetrySchema
 const PairingTunnelFrameBaseSchema = z.object({
     id: z.string().min(1),
     seq: z.number().int().nonnegative(),
+    connectionId: z.string().min(1).optional(),
 })
 
 export const PairingTunnelMessageFrameSchema = PairingTunnelFrameBaseSchema.extend({

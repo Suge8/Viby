@@ -40,6 +40,7 @@ export type PairingTunnelRouteEvent =
           sampledAt?: number | null
       }
     | { type: 'relay-lost' }
+    | { type: 'foreground-check' }
     | { type: 'direct-probe-started' }
     | {
           type: 'direct-candidate-selected'

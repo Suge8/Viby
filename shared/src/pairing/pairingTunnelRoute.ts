@@ -45,6 +45,8 @@ export function reducePairingTunnelRoute(
             )
         case 'relay-lost':
             return handleRelayLost(state)
+        case 'foreground-check':
+            return state.phase === 'ready' ? clearActiveRoute(state, { missedAcks: 0 }) : state
         case 'direct-probe-started':
             return {
                 ...state,
@@ -141,14 +143,21 @@ function handleRelayLost(state: PairingTunnelRouteState): PairingTunnelRouteStat
         return { ...state, relayAvailable: false }
     }
 
+    return clearActiveRoute(state, { relayAvailable: false })
+}
+
+function clearActiveRoute(
+    state: PairingTunnelRouteState,
+    overrides: Partial<PairingTunnelRouteState> = {}
+): PairingTunnelRouteState {
     return {
         ...state,
         phase: 'reconnecting',
         activeRoute: null,
         activeTransport: null,
-        relayAvailable: false,
         roundTripTimeMs: null,
         roundTripSampledAt: null,
+        ...overrides,
     }
 }
 

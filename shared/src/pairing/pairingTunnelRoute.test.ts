@@ -49,6 +49,25 @@ describe('pairingTunnelRoute', () => {
         })
     })
 
+    it('invalidates ready route on foreground until a fresh ack arrives', () => {
+        const checking = applyEvents([{ type: 'relay-ready', roundTripTimeMs: 90 }, { type: 'foreground-check' }])
+
+        expect(checking).toMatchObject({
+            phase: 'reconnecting',
+            activeRoute: null,
+            activeTransport: null,
+            relayAvailable: true,
+            roundTripTimeMs: null,
+        })
+
+        const ready = reducePairingTunnelRoute(checking, {
+            type: 'heartbeat-ack',
+            route: 'relay',
+            roundTripTimeMs: 70,
+        })
+        expect(ready).toMatchObject({ phase: 'ready', activeRoute: 'relay', roundTripTimeMs: 70 })
+    })
+
     it('keeps relay active while direct probe is still gathering proof', () => {
         const state = applyEvents([
             { type: 'relay-ready' },

@@ -1,5 +1,62 @@
 import { z } from 'zod'
+import {
+    PairingDeviceProofSchema,
+    PairingDeviceReconnectChallengeRequestSchema,
+    PairingDeviceReconnectRequestSchema,
+    PairingPwaHandoffClaimRequestSchema,
+    PairingPwaHandoffTicketRequestSchema,
+    PairingPwaHandoffTicketResponseSchema,
+    PairingReconnectChallengeRequestSchema,
+    PairingReconnectRequestSchema,
+} from './pairingAuthSchema'
+import { PairingCreateRequestSchema, PairingIceServerSchema } from './pairingCommonSchema'
+import type {
+    AuthorizedDeviceRecord,
+    PairingParticipantRecord,
+    PairingParticipantSnapshot,
+    PairingRemoteConnectionSnapshot,
+} from './pairingIdentitySchema'
+import {
+    AuthorizedDeviceRecordSchema,
+    AuthorizedDeviceSnapshotSchema,
+    PairingMetadataSchema,
+    PairingParticipantRecordSchema,
+    PairingParticipantSnapshotSchema,
+    PairingRemoteConnectionSnapshotSchema,
+} from './pairingIdentitySchema'
 import { PairingTunnelDirectBlockedReasonSchema } from './pairingTunnelFrame'
+
+export type {
+    PairingDeviceProof,
+    PairingDeviceReconnectChallengeRequest,
+    PairingDeviceReconnectRequest,
+    PairingPwaHandoffClaimRequest,
+    PairingPwaHandoffTicketRequest,
+    PairingPwaHandoffTicketResponse,
+    PairingReconnectChallengeRequest,
+    PairingReconnectRequest,
+} from './pairingAuthSchema'
+export {
+    PairingDeviceProofSchema,
+    PairingDeviceReconnectChallengeRequestSchema,
+    PairingDeviceReconnectRequestSchema,
+    PairingPwaHandoffClaimRequestSchema,
+    PairingPwaHandoffTicketRequestSchema,
+    PairingPwaHandoffTicketResponseSchema,
+    PairingReconnectChallengeRequestSchema,
+    PairingReconnectRequestSchema,
+} from './pairingAuthSchema'
+export type { PairingCreateRequest, PairingErrorPayload, PairingIceServer } from './pairingCommonSchema'
+export { PairingCreateRequestSchema, PairingErrorPayloadSchema, PairingIceServerSchema } from './pairingCommonSchema'
+export type {
+    AuthorizedDeviceRecord,
+    AuthorizedDeviceSnapshot,
+    PairingMetadata,
+    PairingParticipantRecord,
+    PairingParticipantSnapshot,
+    PairingRemoteConnectionSnapshot,
+} from './pairingIdentitySchema'
+export { PairingRemoteConnectionSnapshotSchema } from './pairingIdentitySchema'
 
 export const PairingRoleSchema = z.enum(['host', 'guest'])
 export type PairingRole = z.infer<typeof PairingRoleSchema>
@@ -9,26 +66,6 @@ export type PairingSessionState = z.infer<typeof PairingSessionStateSchema>
 
 export const PairingApprovalStatusSchema = z.literal('approved').nullable()
 export type PairingApprovalStatus = z.infer<typeof PairingApprovalStatusSchema>
-
-export const PairingMetadataSchema = z.record(z.string(), z.unknown())
-export type PairingMetadata = z.infer<typeof PairingMetadataSchema>
-
-export const PairingParticipantFieldsSchema = z.object({
-    tokenHint: z.string().min(1).optional(),
-    label: z.string().min(1).max(120).optional(),
-    publicKey: z.string().min(1).optional(),
-    connectedAt: z.number().int().nonnegative().optional(),
-    lastSeenAt: z.number().int().nonnegative().optional(),
-    metadata: PairingMetadataSchema.optional(),
-})
-
-export const PairingParticipantSnapshotSchema = PairingParticipantFieldsSchema
-export type PairingParticipantSnapshot = z.infer<typeof PairingParticipantSnapshotSchema>
-
-export const PairingParticipantRecordSchema = PairingParticipantFieldsSchema.extend({
-    tokenHash: z.string().min(1),
-})
-export type PairingParticipantRecord = z.infer<typeof PairingParticipantRecordSchema>
 
 export const PairingSessionFieldsSchema = z.object({
     id: z.string().min(1),
@@ -46,30 +83,16 @@ export const PairingSessionFieldsSchema = z.object({
 
 export const PairingSessionSnapshotSchema = PairingSessionFieldsSchema.extend({
     host: PairingParticipantSnapshotSchema,
+    authorizedDevice: AuthorizedDeviceSnapshotSchema.nullable(),
     guest: PairingParticipantSnapshotSchema.nullable(),
 })
 export type PairingSessionSnapshot = z.infer<typeof PairingSessionSnapshotSchema>
 
 export const PairingSessionRecordSchema = PairingSessionFieldsSchema.extend({
     host: PairingParticipantRecordSchema,
-    guest: PairingParticipantRecordSchema.nullable(),
+    authorizedDevice: AuthorizedDeviceRecordSchema.nullable(),
 })
 export type PairingSessionRecord = z.infer<typeof PairingSessionRecordSchema>
-
-export const PairingIceServerSchema = z.object({
-    urls: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]),
-    username: z.string().min(1).optional(),
-    credential: z.string().min(1).optional(),
-    credentialType: z.literal('password').optional(),
-})
-export type PairingIceServer = z.infer<typeof PairingIceServerSchema>
-
-export const PairingCreateRequestSchema = z.object({
-    label: z.string().min(1).max(120).optional(),
-    metadata: PairingMetadataSchema.optional(),
-    sessionTtlSeconds: z.number().int().positive().optional(),
-})
-export type PairingCreateRequest = z.infer<typeof PairingCreateRequestSchema>
 
 /**
  * Single-step pairing auth: a guest device submits the 6-digit code shown on
@@ -80,16 +103,10 @@ export type PairingCreateRequest = z.infer<typeof PairingCreateRequestSchema>
 export const PairingVerifyCodeRequestSchema = z.object({
     code: z.string().regex(/^\d{6}$/),
     label: z.string().min(1).max(120).optional(),
-    publicKey: z.string().min(1).optional(),
+    publicKey: z.string().min(1),
     metadata: PairingMetadataSchema.optional(),
 })
 export type PairingVerifyCodeRequest = z.infer<typeof PairingVerifyCodeRequestSchema>
-
-export const PairingErrorPayloadSchema = z.object({
-    code: z.string().min(1),
-    message: z.string().min(1),
-})
-export type PairingErrorPayload = z.infer<typeof PairingErrorPayloadSchema>
 
 export const PairingCreateResponseSchema = z.object({
     pairing: PairingSessionSnapshotSchema,
@@ -139,55 +156,6 @@ export const PairingLanVerifyCodeResponseSchema = z.object({
 })
 export type PairingLanVerifyCodeResponse = z.infer<typeof PairingLanVerifyCodeResponseSchema>
 
-export const PairingDeviceProofSchema = z.object({
-    publicKey: z.string().min(1),
-    challengeNonce: z.string().min(1),
-    signedAt: z.number().int().positive(),
-    signature: z.string().min(1),
-})
-export type PairingDeviceProof = z.infer<typeof PairingDeviceProofSchema>
-
-export const PairingReconnectRequestSchema = z.object({
-    token: z.string().min(1),
-    challengeNonce: z.string().min(1).optional(),
-    deviceProof: PairingDeviceProofSchema.optional(),
-})
-export type PairingReconnectRequest = z.infer<typeof PairingReconnectRequestSchema>
-
-export const PairingReconnectChallengeRequestSchema = z.object({
-    token: z.string().min(1),
-})
-export type PairingReconnectChallengeRequest = z.infer<typeof PairingReconnectChallengeRequestSchema>
-
-export const PairingDeviceReconnectChallengeRequestSchema = z.object({
-    publicKey: z.string().min(1),
-})
-export type PairingDeviceReconnectChallengeRequest = z.infer<typeof PairingDeviceReconnectChallengeRequestSchema>
-
-export const PairingDeviceReconnectRequestSchema = z.object({
-    deviceProof: PairingDeviceProofSchema,
-})
-export type PairingDeviceReconnectRequest = z.infer<typeof PairingDeviceReconnectRequestSchema>
-
-export const PairingPwaHandoffTicketRequestSchema = z.object({
-    token: z.string().min(1),
-    deviceProof: PairingDeviceProofSchema,
-})
-export type PairingPwaHandoffTicketRequest = z.infer<typeof PairingPwaHandoffTicketRequestSchema>
-
-export const PairingPwaHandoffTicketResponseSchema = z.object({
-    handoffTicket: z.string().min(1),
-    expiresAt: z.number().int().positive(),
-})
-export type PairingPwaHandoffTicketResponse = z.infer<typeof PairingPwaHandoffTicketResponseSchema>
-
-export const PairingPwaHandoffClaimRequestSchema = z.object({
-    handoffTicket: z.string().min(1),
-    label: z.string().optional(),
-    publicKey: z.string().min(1),
-})
-export type PairingPwaHandoffClaimRequest = z.infer<typeof PairingPwaHandoffClaimRequestSchema>
-
 export const PairingReconnectChallengeSchema = z.object({
     nonce: z.string().min(1),
     issuedAt: z.number().int().positive(),
@@ -218,6 +186,7 @@ export type PairingDeleteResponse = z.infer<typeof PairingDeleteResponseSchema>
 
 export const PairingStatusResponseSchema = z.object({
     pairing: PairingSessionSnapshotSchema,
+    remoteConnections: z.array(PairingRemoteConnectionSnapshotSchema),
 })
 export type PairingStatusResponse = z.infer<typeof PairingStatusResponseSchema>
 
@@ -229,6 +198,7 @@ export type PairingStatusResponse = z.infer<typeof PairingStatusResponseSchema>
 export const PairingHostEventSchema = z.object({
     type: z.literal('pairing.updated'),
     pairing: PairingSessionSnapshotSchema,
+    remoteConnections: z.array(PairingRemoteConnectionSnapshotSchema),
 })
 export type PairingHostEvent = z.infer<typeof PairingHostEventSchema>
 
@@ -272,7 +242,8 @@ export function toPairingSessionSnapshot(session: PairingSessionRecord): Pairing
         approvalStatus: session.approvalStatus,
         metadata: session.metadata,
         host: toPairingParticipantSnapshot(session.host),
-        guest: session.guest ? toPairingParticipantSnapshot(session.guest) : null,
+        authorizedDevice: session.authorizedDevice,
+        guest: session.authorizedDevice ? toGuestSnapshot(session.authorizedDevice) : null,
     }
 }
 
@@ -291,4 +262,37 @@ export function toPairingSessionSnapshotForRole(
 export function toPairingParticipantSnapshot(participant: PairingParticipantRecord): PairingParticipantSnapshot {
     const { tokenHash: _tokenHash, ...publicParticipant } = participant
     return publicParticipant
+}
+
+export type PairingRemoteConnectionLike = {
+    channel?: 'tunnel'
+    connectedAt?: number
+    connectionId?: string
+    createdAt: number
+    deviceId: string
+    id: string
+    lastSeenAt: number
+}
+
+export function toPairingRemoteConnectionSnapshot(
+    connection: PairingRemoteConnectionLike
+): PairingRemoteConnectionSnapshot {
+    return {
+        id: connection.id,
+        connectionId: connection.connectionId ?? connection.id,
+        deviceId: connection.deviceId,
+        channel: connection.channel ?? 'tunnel',
+        connectedAt: connection.connectedAt,
+        createdAt: connection.createdAt,
+        lastSeenAt: connection.lastSeenAt,
+    }
+}
+
+function toGuestSnapshot(device: AuthorizedDeviceRecord): PairingParticipantSnapshot {
+    return {
+        label: device.label,
+        publicKey: device.publicKey,
+        lastSeenAt: device.lastSeenAt,
+        metadata: device.metadata,
+    }
 }

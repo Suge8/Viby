@@ -87,11 +87,12 @@ export async function createPairingTunnelCipher(): Promise<PairingTunnelCipher> 
 }
 
 export function createPairingTunnelKeyFrame(input: {
+    connectionId?: string
     id: string
     publicKey: string
     seq: number
 }): PairingTunnelKeyFrame {
-    return { kind: 'key', id: input.id, seq: input.seq, publicKey: input.publicKey }
+    return { kind: 'key', connectionId: input.connectionId, id: input.id, seq: input.seq, publicKey: input.publicKey }
 }
 
 function getSubtle(): SubtleCrypto {
