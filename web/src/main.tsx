@@ -1,3 +1,5 @@
+import './tailwind.css'
+import './styles/design-system.css'
 import './index.css'
 import { createRoot, type Root } from 'react-dom/client'
 import { AppRootFailureSurface } from '@/components/AppRootErrorBoundary'

@@ -1,0 +1,6 @@
+@import "tailwindcss" source(none);
+@source ".";
+@source not "./**/*.test.*";
+@source not "./**/*.test-support.*";
+@source "../index.html";
+@config "../tailwind.config.ts";

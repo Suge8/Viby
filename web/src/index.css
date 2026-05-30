@@ -1,7 +1,3 @@
-@import "tailwindcss";
-@import "./styles/design-system.css";
-@config "../tailwind.config.ts";
-
 :root {
     --app-font-scale: 0.9;
     --app-overlay-edge-offset: 0.75rem;
