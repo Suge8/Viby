@@ -6,6 +6,9 @@ interface RedisClientCommands {
     get(key: string): Promise<string | null>
     set(key: string, value: string, options?: { EX: number }): Promise<unknown>
     del(key: string): Promise<unknown>
+    expire?(key: string, seconds: number): Promise<unknown>
+    hGetAll?(key: string): Promise<Record<string, string>>
+    hSet?(key: string, field: string, value: string): Promise<unknown>
     sendCommand<T>(args: readonly string[]): Promise<T>
 }
 
@@ -54,23 +57,47 @@ export class RedisClientPairingAdapter implements RedisPairingAdapter {
         await this.client.del(key)
     }
 
+    async expire(key: string, ttlSeconds: number): Promise<void> {
+        if ('expire' in this.client && this.client.expire) await this.client.expire(key, ttlSeconds)
+        else await this.client.sendCommand(['EXPIRE', key, String(ttlSeconds)])
+    }
+
+    async hgetall(key: string): Promise<Record<string, string>> {
+        if ('hGetAll' in this.client && this.client.hGetAll) return await this.client.hGetAll(key)
+        const values = await this.client.sendCommand<string[]>(['HGETALL', key])
+        const entries = Array.from({ length: values.length / 2 }, (_, index) => [
+            values[index * 2] ?? '',
+            values[index * 2 + 1] ?? '',
+        ])
+        return Object.fromEntries(entries)
+    }
+
+    async hset(key: string, field: string, value: string): Promise<void> {
+        if ('hSet' in this.client && this.client.hSet) await this.client.hSet(key, field, value)
+        else await this.client.sendCommand(['HSET', key, field, value])
+    }
+
     async compareAndSet(
         key: string,
         expected: string | null,
         next: string | null,
         options?: { ttlSeconds?: number }
     ): Promise<boolean> {
-        const result = await this.client.sendCommand<number>([
-            'EVAL',
+        const result = await this.eval<number>(
             COMPARE_AND_SET_SCRIPT,
-            '1',
-            key,
-            expected === null ? 'null' : 'value',
-            expected ?? '',
-            next === null ? 'null' : 'value',
-            next ?? '',
-            String(options?.ttlSeconds ?? 0),
-        ])
+            [key],
+            [
+                expected === null ? 'null' : 'value',
+                expected ?? '',
+                next === null ? 'null' : 'value',
+                next ?? '',
+                String(options?.ttlSeconds ?? 0),
+            ]
+        )
         return result === 1
+    }
+
+    async eval<T>(script: string, keys: readonly string[], args: readonly string[]): Promise<T> {
+        return await this.client.sendCommand<T>(['EVAL', script, String(keys.length), ...keys, ...args])
     }
 }

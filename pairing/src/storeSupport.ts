@@ -2,6 +2,7 @@ import type { PairingParticipantRecord, PairingRole, PairingSessionRecord } from
 import type { PairingHandoffTicketRecord, PairingReconnectChallengeRecord } from './storeTypes'
 
 export interface PairingTokenIndex {
+    connectionId?: string
     pairingId: string
     role: PairingRole
 }
@@ -31,6 +32,14 @@ export function handoffTicketIndexKey(pairingId: string): string {
     return `pairing:handoff-index:${pairingId}`
 }
 
+export function guestConnectionTokenIndexKey(pairingId: string): string {
+    return `pairing:guest-token-index:${pairingId}`
+}
+
+export function remoteConnectionIndexKey(pairingId: string): string {
+    return `pairing:remote-connections:${pairingId}`
+}
+
 export function encodeTokenIndex(index: PairingTokenIndex): string {
     return JSON.stringify(index)
 }
@@ -46,7 +55,11 @@ export function decodeTokenIndex(raw: string): PairingTokenIndex | null {
             return null
         }
 
-        return { pairingId: parsed.pairingId, role: parsed.role }
+        return {
+            pairingId: parsed.pairingId,
+            role: parsed.role,
+            connectionId: typeof parsed.connectionId === 'string' ? parsed.connectionId : undefined,
+        }
     } catch {
         return null
     }
@@ -95,17 +108,25 @@ export function encodeHandoffTicket(ticket: PairingHandoffTicketRecord): string 
     return JSON.stringify(ticket)
 }
 
-export function encodeHandoffTicketIndex(tokenHashes: readonly string[]): string {
-    return JSON.stringify([...new Set(tokenHashes)])
+export function encodeStringIndex(values: readonly string[]): string {
+    return JSON.stringify([...new Set(values)])
 }
 
-export function decodeHandoffTicketIndex(raw: string): string[] {
+export function decodeStringIndex(raw: string): string[] {
     try {
         const parsed = JSON.parse(raw) as unknown
         return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === 'string') : []
     } catch {
         return []
     }
+}
+
+export function encodeHandoffTicketIndex(tokenHashes: readonly string[]): string {
+    return encodeStringIndex(tokenHashes)
+}
+
+export function decodeHandoffTicketIndex(raw: string): string[] {
+    return decodeStringIndex(raw)
 }
 
 export function decodeHandoffTicket(raw: string): PairingHandoffTicketRecord | null {
@@ -133,9 +154,6 @@ export function deriveState(session: PairingSessionRecord): PairingSessionRecord
 
 export function clearTokenIndexes(session: PairingSessionRecord, tokenIndex: Map<string, PairingTokenIndex>): void {
     tokenIndex.delete(session.host.tokenHash)
-    if (session.guest) {
-        tokenIndex.delete(session.guest.tokenHash)
-    }
 }
 
 export function expireIfNeeded(
@@ -152,7 +170,7 @@ export function expireIfNeeded(
             shortCode: session.shortCode,
             approvalStatus: session.approvalStatus,
             host: { ...session.host, connectedAt: undefined },
-            guest: session.guest ? { ...session.guest, connectedAt: undefined } : null,
+            authorizedDevice: session.authorizedDevice,
         }
     }
 
@@ -171,14 +189,7 @@ export function updateParticipant(
         }
     }
 
-    if (!session.guest) {
-        return session
-    }
-
-    return {
-        ...session,
-        guest: { ...session.guest, ...patch },
-    }
+    return session
 }
 
 export function updateState(session: PairingSessionRecord): PairingSessionRecord {

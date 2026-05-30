@@ -1,9 +1,4 @@
-import {
-    type PairingParticipantRecord,
-    type PairingRole,
-    type PairingSessionRecord,
-    PairingSessionRecordSchema,
-} from '@viby/protocol/pairing'
+import { type PairingRole, type PairingSessionRecord, PairingSessionRecordSchema } from '@viby/protocol/pairing'
 import {
     cloneHandoffTicket,
     cloneReconnectChallenge,
@@ -15,7 +10,13 @@ import {
     reconnectChallengeKey,
     updateState,
 } from './storeSupport'
-import type { PairingHandoffTicketRecord, PairingReconnectChallengeRecord, PairingStore } from './storeTypes'
+import type {
+    PairingHandoffTicketRecord,
+    PairingReconnectChallengeRecord,
+    PairingRemoteConnectionDraft,
+    PairingRemoteConnectionRecord,
+    PairingStore,
+} from './storeTypes'
 
 const RECONNECT_CHALLENGE_ROLES: readonly PairingRole[] = ['host', 'guest']
 
@@ -24,6 +25,7 @@ export class MemoryPairingStore implements PairingStore {
     private readonly tokenIndex = new Map<string, PairingTokenIndex>()
     private readonly reconnectChallenges = new Map<string, PairingReconnectChallengeRecord>()
     private readonly handoffTickets = new Map<string, PairingHandoffTicketRecord>()
+    private readonly remoteConnections = new Map<string, Map<string, PairingRemoteConnectionRecord>>()
 
     constructor(private readonly now: () => number = Date.now) {}
 
@@ -43,6 +45,20 @@ export class MemoryPairingStore implements PairingStore {
         }
     }
 
+    private clearRemoteConnectionTokens(pairingId: string): void {
+        const connections = this.remoteConnections.get(pairingId)
+        if (!connections) return
+        for (const connection of connections.values()) this.tokenIndex.delete(connection.tokenHash)
+        this.remoteConnections.delete(pairingId)
+    }
+
+    private clearSessionSideKeys(pairingId: string, session: PairingSessionRecord): void {
+        this.tokenIndex.delete(session.host.tokenHash)
+        this.clearRemoteConnectionTokens(pairingId)
+        this.clearReconnectChallenges(pairingId)
+        this.clearHandoffTickets(pairingId)
+    }
+
     async createSession(session: PairingSessionRecord): Promise<PairingSessionRecord> {
         const stored = cloneSession(PairingSessionRecordSchema.parse(session))
         this.sessions.set(stored.id, stored)
@@ -58,10 +74,7 @@ export class MemoryPairingStore implements PairingStore {
 
         const normalized = expireIfNeeded(session, this.now(), this.tokenIndex)
         if (normalized !== session) {
-            if (normalized.state === 'expired') {
-                this.clearReconnectChallenges(pairingId)
-                this.clearHandoffTickets(pairingId)
-            }
+            if (normalized.state === 'expired') this.clearSessionSideKeys(pairingId, session)
             this.sessions.set(pairingId, normalized)
         }
 
@@ -88,26 +101,32 @@ export class MemoryPairingStore implements PairingStore {
     async claimAndApprove(
         pairingId: string,
         providedCode: string,
-        guest: PairingParticipantRecord,
+        device: PairingSessionRecord['authorizedDevice'],
+        connection: PairingRemoteConnectionDraft,
         at: number
     ): Promise<PairingSessionRecord | null> {
         const session = this.sessions.get(pairingId)
-        if (!session) return null
+        if (!session || !device) return null
 
         const normalized = expireIfNeeded(session, this.now(), this.tokenIndex)
         if (normalized !== session) this.sessions.set(pairingId, normalized)
-        if (!isActiveState(normalized.state) || normalized.guest) return null
+        if (!isActiveState(normalized.state) || normalized.authorizedDevice) return null
         if (normalized.shortCode === null || normalized.shortCode !== providedCode) return null
 
         const next = updateState({
             ...normalized,
             updatedAt: at,
             approvalStatus: 'approved',
-            guest: { ...guest },
+            authorizedDevice: { ...device },
         })
 
         this.sessions.set(pairingId, next)
-        this.tokenIndex.set(guest.tokenHash, { pairingId, role: 'guest' })
+        this.tokenIndex.set(connection.participant.tokenHash, {
+            connectionId: connection.connectionId,
+            pairingId,
+            role: 'guest',
+        })
+        this.saveRemoteConnection(pairingId, device.id, connection, at)
         return cloneSession(next)
     }
 
@@ -128,44 +147,85 @@ export class MemoryPairingStore implements PairingStore {
         return cloneSession(renewed)
     }
 
-    async bindGuestDeviceKey(pairingId: string, publicKey: string, at: number): Promise<PairingSessionRecord | null> {
-        const session = this.sessions.get(pairingId)
-        if (!session) return null
-
-        const normalized = expireIfNeeded(session, this.now(), this.tokenIndex)
-        const guest = normalized.guest
-        if (!isActiveState(normalized.state) || !guest) {
-            this.sessions.set(pairingId, normalized)
-            return null
-        }
-        if (guest.publicKey) {
-            return guest.publicKey === publicKey ? cloneSession(normalized) : null
-        }
-
-        const next = updateState({ ...normalized, updatedAt: at, guest: { ...guest, publicKey } })
-        this.sessions.set(pairingId, next)
-        return cloneSession(next)
-    }
-
-    async rotateGuestToken(
+    async addRemoteConnection(
         pairingId: string,
-        guest: PairingParticipantRecord,
+        connection: PairingRemoteConnectionDraft,
         at: number
     ): Promise<PairingSessionRecord | null> {
         const session = this.sessions.get(pairingId)
         if (!session) return null
 
         const normalized = expireIfNeeded(session, this.now(), this.tokenIndex)
-        if (!isActiveState(normalized.state) || !normalized.guest) {
+        const device = normalized.authorizedDevice
+        if (!isActiveState(normalized.state) || !device || normalized.approvalStatus !== 'approved') {
             this.sessions.set(pairingId, normalized)
             return null
         }
 
-        const next = updateState({ ...normalized, updatedAt: at, guest: { ...guest } })
-        this.tokenIndex.delete(normalized.guest.tokenHash)
-        this.tokenIndex.set(guest.tokenHash, { pairingId, role: 'guest' })
+        const next = updateState({
+            ...normalized,
+            updatedAt: at,
+            authorizedDevice: { ...device, lastSeenAt: at },
+        })
+        this.tokenIndex.set(connection.participant.tokenHash, {
+            connectionId: connection.connectionId,
+            pairingId,
+            role: 'guest',
+        })
+        this.saveRemoteConnection(pairingId, device.id, connection, at)
         this.sessions.set(pairingId, next)
         return cloneSession(next)
+    }
+
+    async getRemoteConnections(pairingId: string): Promise<PairingRemoteConnectionRecord[]> {
+        return [...(this.remoteConnections.get(pairingId)?.values() ?? [])].map((connection) => ({ ...connection }))
+    }
+
+    async markRemoteConnectionConnected(pairingId: string, connectionId: string, at: number): Promise<void> {
+        this.updateRemoteConnection(pairingId, connectionId, (connection) => ({
+            ...connection,
+            connectedAt: at,
+            lastSeenAt: at,
+        }))
+    }
+
+    async markRemoteConnectionDisconnected(pairingId: string, connectionId: string, at: number): Promise<void> {
+        this.updateRemoteConnection(pairingId, connectionId, (connection) => ({
+            ...connection,
+            connectedAt: undefined,
+            lastSeenAt: at,
+        }))
+    }
+
+    private saveRemoteConnection(
+        pairingId: string,
+        deviceId: string,
+        connection: PairingRemoteConnectionDraft,
+        at: number
+    ): void {
+        const connections = this.remoteConnections.get(pairingId) ?? new Map<string, PairingRemoteConnectionRecord>()
+        connections.set(connection.connectionId, {
+            id: connection.connectionId,
+            connectionId: connection.connectionId,
+            pairingId,
+            deviceId,
+            tokenHash: connection.participant.tokenHash,
+            channel: 'tunnel',
+            createdAt: at,
+            lastSeenAt: at,
+        })
+        this.remoteConnections.set(pairingId, connections)
+    }
+
+    private updateRemoteConnection(
+        pairingId: string,
+        connectionId: string,
+        update: (connection: PairingRemoteConnectionRecord) => PairingRemoteConnectionRecord
+    ): void {
+        const connections = this.remoteConnections.get(pairingId)
+        const connection = connections?.get(connectionId)
+        if (!connections || !connection) return
+        connections.set(connectionId, update(connection))
     }
 
     async issueReconnectChallenge(
@@ -219,15 +279,10 @@ export class MemoryPairingStore implements PairingStore {
             approvalStatus: session.approvalStatus,
             shortCode: session.shortCode,
             host: { ...session.host, connectedAt: undefined },
-            guest: session.guest ? { ...session.guest, connectedAt: undefined } : null,
+            authorizedDevice: session.authorizedDevice,
         }
 
-        this.tokenIndex.delete(session.host.tokenHash)
-        if (session.guest) {
-            this.tokenIndex.delete(session.guest.tokenHash)
-        }
-        this.clearReconnectChallenges(pairingId)
-        this.clearHandoffTickets(pairingId)
+        this.clearSessionSideKeys(pairingId, session)
         this.sessions.set(pairingId, next)
         return cloneSession(next)
     }

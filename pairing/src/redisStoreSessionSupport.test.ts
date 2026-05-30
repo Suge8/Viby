@@ -46,7 +46,7 @@ function createSession(now: number) {
         shortCode: null,
         approvalStatus: null,
         host: createParticipantRecord({ token: 'host-token', label: 'Host' }),
-        guest: null,
+        authorizedDevice: null,
     })
 }
 

@@ -1,4 +1,9 @@
-import type { PairingParticipantRecord, PairingRole, PairingSessionRecord } from '@viby/protocol/pairing'
+import type {
+    AuthorizedDeviceRecord,
+    PairingParticipantRecord,
+    PairingRole,
+    PairingSessionRecord,
+} from '@viby/protocol/pairing'
 
 export interface RedisPairingAdapter {
     ping(): Promise<void>
@@ -11,6 +16,10 @@ export interface RedisPairingAdapter {
         next: string | null,
         options?: { ttlSeconds?: number }
     ): Promise<boolean>
+    eval?<T>(script: string, keys: readonly string[], args: readonly string[]): Promise<T>
+    expire?(key: string, ttlSeconds: number): Promise<void>
+    hgetall?(key: string): Promise<Record<string, string>>
+    hset?(key: string, field: string, value: string): Promise<void>
 }
 
 export interface PairingReconnectChallengeRecord {
@@ -24,11 +33,30 @@ export interface PairingHandoffTicketRecord {
     tokenHash: string
 }
 
+export interface PairingRemoteConnectionDraft {
+    connectionId: string
+    participant: PairingParticipantRecord
+}
+
+export interface PairingRemoteConnectionRecord {
+    channel: 'tunnel'
+    connectedAt?: number
+    connectionId: string
+    createdAt: number
+    deviceId: string
+    id: string
+    lastSeenAt: number
+    pairingId: string
+    tokenHash: string
+}
+
 export interface PairingStore {
     healthCheck(): Promise<void>
     createSession(session: PairingSessionRecord): Promise<PairingSessionRecord>
     getSession(pairingId: string): Promise<PairingSessionRecord | null>
-    getSessionByTokenHash(tokenHash: string): Promise<{ session: PairingSessionRecord; role: PairingRole } | null>
+    getSessionByTokenHash(
+        tokenHash: string
+    ): Promise<{ connectionId?: string; session: PairingSessionRecord; role: PairingRole } | null>
     /**
      * Atomic verify-code + claim + approve: the only path that promotes a
      * guest to "approved". Returns the updated record on success; returns
@@ -40,16 +68,19 @@ export interface PairingStore {
     claimAndApprove(
         pairingId: string,
         providedCode: string,
-        guest: PairingParticipantRecord,
+        device: AuthorizedDeviceRecord,
+        connection: PairingRemoteConnectionDraft,
         at: number
     ): Promise<PairingSessionRecord | null>
     renewSession(pairingId: string, expiresAt: number, at: number): Promise<PairingSessionRecord | null>
-    bindGuestDeviceKey(pairingId: string, publicKey: string, at: number): Promise<PairingSessionRecord | null>
-    rotateGuestToken(
+    addRemoteConnection(
         pairingId: string,
-        guest: PairingParticipantRecord,
+        connection: PairingRemoteConnectionDraft,
         at: number
     ): Promise<PairingSessionRecord | null>
+    getRemoteConnections(pairingId: string): Promise<PairingRemoteConnectionRecord[]>
+    markRemoteConnectionConnected(pairingId: string, connectionId: string, at: number): Promise<void>
+    markRemoteConnectionDisconnected(pairingId: string, connectionId: string, at: number): Promise<void>
     issueReconnectChallenge(
         pairingId: string,
         role: PairingRole,

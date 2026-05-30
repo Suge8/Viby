@@ -1,5 +1,5 @@
 import type { PairingSessionRecord } from '@viby/protocol/pairing'
-import { setTokenIndex } from './redisStoreIndexSupport'
+import { loadRemoteConnectionIndex, setTokenIndex } from './redisStoreIndexSupport'
 import { isActiveState } from './storeSupport'
 import type { RedisPairingAdapter } from './storeTypes'
 
@@ -30,10 +30,11 @@ export async function renewRedisPairingSession(options: {
         role: 'host',
         ttlSeconds,
     })
-    if (session.guest) {
+    for (const connection of await loadRemoteConnectionIndex(options.adapter, options.pairingId)) {
         await setTokenIndex({
             adapter: options.adapter,
-            tokenHash: session.guest.tokenHash,
+            connectionId: connection.connectionId,
+            tokenHash: connection.tokenHash,
             pairingId: options.pairingId,
             role: 'guest',
             ttlSeconds,

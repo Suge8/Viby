@@ -49,7 +49,6 @@ class FakeRedisAdapter implements RedisPairingAdapter {
 
 function createSession(now: number) {
     const host = createParticipantRecord({ token: 'host-token', label: 'Host' })
-    const guest = createParticipantRecord({ token: 'guest-token', label: 'Guest' })
     return PairingSessionRecordSchema.parse({
         id: 'pairing-index-support',
         state: 'active',
@@ -59,7 +58,7 @@ function createSession(now: number) {
         shortCode: '123456',
         approvalStatus: 'approved',
         host,
-        guest,
+        authorizedDevice: null,
     })
 }
 
@@ -205,7 +204,7 @@ describe('redisStoreIndexSupport', () => {
         expect(adapter.values.get(handoffTicketIndexKey('pairing-1'))).toBeUndefined()
     })
 
-    it('clears both host and guest token indexes for a session', async () => {
+    it('clears the host token index for a session', async () => {
         const adapter = new FakeRedisAdapter()
         const session = createSession(1_000)
 
@@ -216,16 +215,8 @@ describe('redisStoreIndexSupport', () => {
             role: 'host',
             ttlSeconds: 1,
         })
-        await setTokenIndex({
-            adapter,
-            tokenHash: session.guest!.tokenHash,
-            pairingId: session.id,
-            role: 'guest',
-            ttlSeconds: 1,
-        })
 
         await clearTokenIndexes(adapter, session)
         expect(adapter.values.get(tokenIndexKey(session.host.tokenHash))).toBeUndefined()
-        expect(adapter.values.get(tokenIndexKey(session.guest!.tokenHash))).toBeUndefined()
     })
 })

@@ -5,23 +5,33 @@ import {
     decodeHandoffTicket,
     decodeHandoffTicketIndex,
     decodeReconnectChallenge,
+    decodeStringIndex,
     decodeTokenIndex,
     encodeHandoffTicket,
     encodeHandoffTicketIndex,
     encodeReconnectChallenge,
+    encodeStringIndex,
     encodeTokenIndex,
+    guestConnectionTokenIndexKey,
     handoffTicketIndexKey,
     handoffTicketKey,
     type PairingTokenIndex,
     reconnectChallengeKey,
+    remoteConnectionIndexKey,
     tokenIndexKey,
 } from './storeSupport'
-import type { PairingHandoffTicketRecord, PairingReconnectChallengeRecord, RedisPairingAdapter } from './storeTypes'
+import type {
+    PairingHandoffTicketRecord,
+    PairingReconnectChallengeRecord,
+    PairingRemoteConnectionRecord,
+    RedisPairingAdapter,
+} from './storeTypes'
 
 const RECONNECT_CHALLENGE_ROLES: readonly PairingRole[] = ['host', 'guest']
 
 export async function createTokenIndex(options: {
     adapter: RedisPairingAdapter
+    connectionId?: string
     tokenHash: string
     pairingId: string
     role: PairingRole
@@ -30,13 +40,14 @@ export async function createTokenIndex(options: {
     return await options.adapter.compareAndSet(
         tokenIndexKey(options.tokenHash),
         null,
-        encodeTokenIndex({ pairingId: options.pairingId, role: options.role }),
+        encodeTokenIndex({ connectionId: options.connectionId, pairingId: options.pairingId, role: options.role }),
         { ttlSeconds: options.ttlSeconds }
     )
 }
 
 export async function setTokenIndex(options: {
     adapter: RedisPairingAdapter
+    connectionId?: string
     tokenHash: string
     pairingId: string
     role: PairingRole
@@ -44,7 +55,7 @@ export async function setTokenIndex(options: {
 }): Promise<void> {
     await options.adapter.set(
         tokenIndexKey(options.tokenHash),
-        encodeTokenIndex({ pairingId: options.pairingId, role: options.role }),
+        encodeTokenIndex({ connectionId: options.connectionId, pairingId: options.pairingId, role: options.role }),
         {
             ttlSeconds: options.ttlSeconds,
         }
@@ -70,13 +81,91 @@ export async function loadTokenIndex(
 
 export async function clearTokenIndexes(adapter: RedisPairingAdapter, session: PairingSessionRecord): Promise<void> {
     await adapter.del(tokenIndexKey(session.host.tokenHash))
-    if (session.guest) {
-        await adapter.del(tokenIndexKey(session.guest.tokenHash))
+}
+
+export async function saveRemoteConnectionIndex(options: {
+    adapter: RedisPairingAdapter
+    connection: PairingRemoteConnectionRecord
+    ttlSeconds: number
+}): Promise<void> {
+    const indexKey = remoteConnectionIndexKey(options.connection.pairingId)
+    await requireRedisHash(options.adapter).hset(indexKey, options.connection.id, JSON.stringify(options.connection))
+    await requireRedisHash(options.adapter).expire(indexKey, options.ttlSeconds)
+}
+
+export async function loadRemoteConnectionIndex(
+    adapter: RedisPairingAdapter,
+    pairingId: string
+): Promise<PairingRemoteConnectionRecord[]> {
+    return Object.values(await requireRedisHash(adapter).hgetall(remoteConnectionIndexKey(pairingId)))
+        .map(decodeRemoteConnectionRecord)
+        .filter((connection): connection is PairingRemoteConnectionRecord => connection !== null)
+}
+
+export async function updateRemoteConnectionIndex(options: {
+    adapter: RedisPairingAdapter
+    pairingId: string
+    ttlSeconds: number
+    update: (connection: PairingRemoteConnectionRecord) => PairingRemoteConnectionRecord
+    where: (connection: PairingRemoteConnectionRecord) => boolean
+}): Promise<void> {
+    const indexKey = remoteConnectionIndexKey(options.pairingId)
+    for (const connection of await loadRemoteConnectionIndex(options.adapter, options.pairingId)) {
+        if (!options.where(connection)) continue
+        await requireRedisHash(options.adapter).hset(
+            indexKey,
+            connection.id,
+            JSON.stringify(options.update(connection))
+        )
     }
+    await requireRedisHash(options.adapter).expire(indexKey, options.ttlSeconds)
+}
+
+export async function clearGuestConnectionTokenIndexes(adapter: RedisPairingAdapter, pairingId: string): Promise<void> {
+    for (const connection of await loadRemoteConnectionIndex(adapter, pairingId)) {
+        await adapter.del(tokenIndexKey(connection.tokenHash))
+    }
+    const legacyTokenHashes = decodeStringIndex((await adapter.get(guestConnectionTokenIndexKey(pairingId))) ?? '[]')
+    for (const tokenHash of legacyTokenHashes) await adapter.del(tokenIndexKey(tokenHash))
+    await adapter.del(remoteConnectionIndexKey(pairingId))
+    await adapter.del(guestConnectionTokenIndexKey(pairingId))
+}
+
+function requireRedisHash(
+    adapter: RedisPairingAdapter
+): Required<Pick<RedisPairingAdapter, 'expire' | 'hgetall' | 'hset'>> {
+    if (!adapter.expire || !adapter.hgetall || !adapter.hset) throw new Error('redis hash commands unavailable')
+    return {
+        expire: adapter.expire.bind(adapter),
+        hgetall: adapter.hgetall.bind(adapter),
+        hset: adapter.hset.bind(adapter),
+    }
+}
+
+function decodeRemoteConnectionRecord(raw: string): PairingRemoteConnectionRecord | null {
+    try {
+        const parsed = JSON.parse(raw) as unknown
+        return isRemoteConnectionRecord(parsed) ? parsed : null
+    } catch {
+        return null
+    }
+}
+
+function isRemoteConnectionRecord(value: unknown): value is PairingRemoteConnectionRecord {
+    if (typeof value !== 'object' || value === null) return false
+    const record = value as Partial<PairingRemoteConnectionRecord>
+    return (
+        typeof record.id === 'string' &&
+        typeof record.pairingId === 'string' &&
+        typeof record.tokenHash === 'string' &&
+        typeof record.createdAt === 'number' &&
+        typeof record.lastSeenAt === 'number'
+    )
 }
 
 export async function clearSessionSideKeys(adapter: RedisPairingAdapter, session: PairingSessionRecord): Promise<void> {
     await clearTokenIndexes(adapter, session)
+    await clearGuestConnectionTokenIndexes(adapter, session.id)
     await clearReconnectChallenges(adapter, session.id)
     await clearHandoffTicket(adapter, session.id)
 }

@@ -1,5 +1,4 @@
-import type { PairingHostEvent, PairingSessionRecord } from '@viby/protocol/pairing'
-import { toPairingSessionSnapshot } from '@viby/protocol/pairing'
+import type { PairingHostEvent } from '@viby/protocol/pairing'
 
 type PairingEventListener = (event: PairingHostEvent) => void
 
@@ -27,13 +26,9 @@ export class PairingSessionEventBus {
         }
     }
 
-    emitUpdate(session: PairingSessionRecord): void {
-        const bucket = this.listeners.get(session.id)
+    emit(event: PairingHostEvent): void {
+        const bucket = this.listeners.get(event.pairing.id)
         if (!bucket || bucket.size === 0) return
-        const event: PairingHostEvent = {
-            type: 'pairing.updated',
-            pairing: toPairingSessionSnapshot(session),
-        }
         for (const listener of bucket) listener(event)
     }
 

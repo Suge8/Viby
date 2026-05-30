@@ -22,6 +22,7 @@ export type PairingMetricName =
     | 'rate_limited'
     | 'pwa_manifest_personalized'
     | 'pwa_cookie_recover_success'
+    | 'stale_connection_drops'
 
 type TelemetryAggregate = {
     totalReports: number

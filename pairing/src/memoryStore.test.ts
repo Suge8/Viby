@@ -3,6 +3,21 @@ import { PairingSessionRecordSchema } from '@viby/protocol/pairing'
 import { createParticipantRecord } from './httpSupport'
 import { MemoryPairingStore } from './memoryStore'
 
+function createAuthorizedDevice(guest: ReturnType<typeof createParticipantRecord>, at: number) {
+    return {
+        id: guest.publicKey ?? guest.tokenHash,
+        publicKey: guest.publicKey ?? guest.tokenHash,
+        label: guest.label,
+        metadata: guest.metadata,
+        authorizedAt: at,
+        lastSeenAt: at,
+    }
+}
+
+function createConnection(participant: ReturnType<typeof createParticipantRecord>) {
+    return { connectionId: participant.tokenHash, participant }
+}
+
 function createSessionRecord(now: number, shortCode: string = '123456') {
     const host = createParticipantRecord({
         token: 'host-secret',
@@ -18,7 +33,7 @@ function createSessionRecord(now: number, shortCode: string = '123456') {
         shortCode,
         approvalStatus: null,
         host,
-        guest: null,
+        authorizedDevice: null,
     })
 }
 
@@ -44,10 +59,16 @@ describe('MemoryPairingStore', () => {
         const guest = createParticipantRecord({ token: 'guest-secret', label: 'Phone' })
 
         await store.createSession(session)
-        const approved = await store.claimAndApprove(session.id, '654321', guest, 1_100)
+        const approved = await store.claimAndApprove(
+            session.id,
+            '654321',
+            createAuthorizedDevice(guest, 1_100),
+            createConnection(guest),
+            1_100
+        )
 
         expect(approved?.approvalStatus).toBe('approved')
-        expect(approved?.guest?.tokenHash).toBe(guest.tokenHash)
+        expect(approved?.authorizedDevice?.id).toBe(guest.tokenHash)
         await expect(store.getSessionByTokenHash(guest.tokenHash)).resolves.toMatchObject({ role: 'guest' })
     })
 
@@ -57,7 +78,15 @@ describe('MemoryPairingStore', () => {
         const guest = createParticipantRecord({ token: 'guest-secret', label: 'Phone' })
 
         await store.createSession(session)
-        await expect(store.claimAndApprove(session.id, '000000', guest, 1_100)).resolves.toBeNull()
+        await expect(
+            store.claimAndApprove(
+                session.id,
+                '000000',
+                createAuthorizedDevice(guest, 1_100),
+                createConnection(guest),
+                1_100
+            )
+        ).resolves.toBeNull()
         await expect(store.getSessionByTokenHash(guest.tokenHash)).resolves.toBeNull()
     })
 
@@ -68,8 +97,46 @@ describe('MemoryPairingStore', () => {
         const second = createParticipantRecord({ token: 'guest-2', label: 'B' })
 
         await store.createSession(session)
-        await store.claimAndApprove(session.id, '111111', first, 1_100)
-        await expect(store.claimAndApprove(session.id, '111111', second, 1_200)).resolves.toBeNull()
+        await store.claimAndApprove(
+            session.id,
+            '111111',
+            createAuthorizedDevice(first, 1_100),
+            createConnection(first),
+            1_100
+        )
+        await expect(
+            store.claimAndApprove(
+                session.id,
+                '111111',
+                createAuthorizedDevice(second, 1_200),
+                createConnection(second),
+                1_200
+            )
+        ).resolves.toBeNull()
+    })
+
+    it('removes every guest connection token index after deletion', async () => {
+        const store = new MemoryPairingStore(() => 1_000)
+        const session = createSessionRecord(1_000, '222222')
+        const guest = createParticipantRecord({ token: 'guest-secret', label: 'Phone' })
+        const pwaGuest = createParticipantRecord({ token: 'pwa-secret', label: 'PWA' })
+
+        await store.createSession(session)
+        await store.claimAndApprove(
+            session.id,
+            '222222',
+            createAuthorizedDevice(guest, 1_100),
+            createConnection(guest),
+            1_100
+        )
+        await store.addRemoteConnection(session.id, createConnection(pwaGuest), 1_200)
+        await expect(store.getSessionByTokenHash(pwaGuest.tokenHash)).resolves.toMatchObject({ role: 'guest' })
+
+        await store.deleteSession(session.id, 1_500)
+
+        await expect(store.getSessionByTokenHash(session.host.tokenHash)).resolves.toBeNull()
+        await expect(store.getSessionByTokenHash(guest.tokenHash)).resolves.toBeNull()
+        await expect(store.getSessionByTokenHash(pwaGuest.tokenHash)).resolves.toBeNull()
     })
 
     it('removes both host and guest token indexes after deletion', async () => {
@@ -78,8 +145,14 @@ describe('MemoryPairingStore', () => {
         const guest = createParticipantRecord({ token: 'guest-secret', label: 'Phone' })
 
         await store.createSession(session)
-        const claimed = await store.claimAndApprove(session.id, '222222', guest, 1_100)
-        expect(claimed?.guest?.tokenHash).toBe(guest.tokenHash)
+        const claimed = await store.claimAndApprove(
+            session.id,
+            '222222',
+            createAuthorizedDevice(guest, 1_100),
+            createConnection(guest),
+            1_100
+        )
+        expect(claimed?.authorizedDevice?.id).toBe(guest.tokenHash)
 
         await store.deleteSession(session.id, 1_500)
 
@@ -96,38 +169,6 @@ describe('MemoryPairingStore', () => {
             expiresAt: 10_000,
             updatedAt: 1_500,
         })
-    })
-
-    it('binds a missing guest device key without overwriting an existing key', async () => {
-        const store = new MemoryPairingStore(() => 1_000)
-        const session = createSessionRecord(1_000, '333333')
-        const guest = createParticipantRecord({ token: 'guest-secret', label: 'Phone' })
-
-        await store.createSession(session)
-        await store.claimAndApprove(session.id, '333333', guest, 1_100)
-
-        const bound = await store.bindGuestDeviceKey(session.id, 'public-key-1', 1_500)
-        const rejected = await store.bindGuestDeviceKey(session.id, 'public-key-2', 1_600)
-
-        expect(bound?.guest?.publicKey).toBe('public-key-1')
-        expect(bound?.updatedAt).toBe(1_500)
-        expect(rejected).toBeNull()
-        await expect(store.getSessionByTokenHash(guest.tokenHash)).resolves.toMatchObject({ role: 'guest' })
-    })
-
-    it('rotates guest tokens for device-key recovery', async () => {
-        const store = new MemoryPairingStore(() => 1_000)
-        const session = createSessionRecord(1_000, '444444')
-        const guest = createParticipantRecord({ token: 'guest-old', label: 'Phone' })
-        const nextGuest = createParticipantRecord({ token: 'guest-new', label: 'Phone' })
-
-        await store.createSession(session)
-        await store.claimAndApprove(session.id, '444444', guest, 1_100)
-        const rotated = await store.rotateGuestToken(session.id, nextGuest, 1_500)
-
-        expect(rotated?.guest?.tokenHash).toBe(nextGuest.tokenHash)
-        await expect(store.getSessionByTokenHash(guest.tokenHash)).resolves.toBeNull()
-        await expect(store.getSessionByTokenHash(nextGuest.tokenHash)).resolves.toMatchObject({ role: 'guest' })
     })
 
     it('issues independent one-time PWA handoff tickets and consumes each once', async () => {
@@ -156,6 +197,54 @@ describe('MemoryPairingStore', () => {
 
         await expect(store.consumeReconnectChallenge(session.id, 'guest', 'nonce-1', 1_500)).resolves.toBe(true)
         await expect(store.consumeReconnectChallenge(session.id, 'guest', 'nonce-1', 1_500)).resolves.toBe(false)
+    })
+
+    it('tracks remote connection liveness separately from authorization', async () => {
+        const store = new MemoryPairingStore(() => 1_000)
+        const session = createSessionRecord(1_000, '555555')
+        const guest = createParticipantRecord({ token: 'guest-secret', label: 'Phone' })
+        const pwaGuest = createParticipantRecord({ token: 'pwa-secret', label: 'PWA' })
+
+        await store.createSession(session)
+        await store.claimAndApprove(
+            session.id,
+            '555555',
+            createAuthorizedDevice(guest, 1_100),
+            createConnection(guest),
+            1_100
+        )
+        await store.addRemoteConnection(session.id, createConnection(pwaGuest), 1_200)
+        await store.markRemoteConnectionConnected(session.id, pwaGuest.tokenHash, 1_300)
+        await expect(store.getRemoteConnections(session.id)).resolves.toContainEqual(
+            expect.objectContaining({ id: pwaGuest.tokenHash, connectedAt: 1_300, lastSeenAt: 1_300 })
+        )
+
+        await store.markRemoteConnectionDisconnected(session.id, pwaGuest.tokenHash, 1_400)
+        await expect(store.getRemoteConnections(session.id)).resolves.toContainEqual(
+            expect.objectContaining({ id: pwaGuest.tokenHash, connectedAt: undefined, lastSeenAt: 1_400 })
+        )
+    })
+
+    it('clears guest connection token indexes when a session expires', async () => {
+        let now = 1_000
+        const store = new MemoryPairingStore(() => now)
+        const session = createSessionRecord(now, '555555')
+        const guest = createParticipantRecord({ token: 'guest-secret', label: 'Phone' })
+        const pwaGuest = createParticipantRecord({ token: 'pwa-secret', label: 'PWA' })
+
+        await store.createSession(session)
+        await store.claimAndApprove(
+            session.id,
+            '555555',
+            createAuthorizedDevice(guest, 1_100),
+            createConnection(guest),
+            1_100
+        )
+        await store.addRemoteConnection(session.id, createConnection(pwaGuest), 1_200)
+        now = session.expiresAt + 1
+
+        await expect(store.getSession(session.id)).resolves.toMatchObject({ state: 'expired' })
+        await expect(store.getSessionByTokenHash(pwaGuest.tokenHash)).resolves.toBeNull()
     })
 
     it('clears transient reconnect and handoff records when a session expires', async () => {
