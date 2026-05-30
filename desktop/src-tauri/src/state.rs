@@ -77,6 +77,19 @@ pub struct PairingParticipantSnapshot {
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
+pub struct PairingRemoteConnectionSnapshot {
+    pub id: String,
+    pub label: Option<String>,
+    pub public_key: Option<String>,
+    pub connected_at: Option<u64>,
+    pub created_at: u64,
+    pub last_seen_at: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct PairingSessionSnapshot {
     pub id: String,
     pub state: String,
@@ -87,6 +100,8 @@ pub struct PairingSessionSnapshot {
     pub approval_status: Option<String>,
     pub host: PairingParticipantSnapshot,
     pub guest: Option<PairingParticipantSnapshot>,
+    #[serde(default)]
+    pub remote_connections: Vec<PairingRemoteConnectionSnapshot>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]

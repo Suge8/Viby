@@ -6,6 +6,7 @@ const PAIRING_INVITE_RENEW_LEAD_MS = 30_000
 
 export type HubAction = 'start' | 'stop' | null
 export type HubSwitchTone = 'off' | 'busy' | 'on' | 'stopping'
+export type PairingInviteSource = 'broker' | 'lan'
 
 export interface HubSwitchModel {
     tone: HubSwitchTone
@@ -66,4 +67,13 @@ export function getPairingInviteRenewDelay(pairing: DesktopPairingSession | null
     return isExpiredUnclaimedPairing(pairing, now)
         ? 0
         : Math.max(0, pairing.pairing.expiresAt - now - PAIRING_INVITE_RENEW_LEAD_MS)
+}
+
+export function shouldDismissPairingInvite(input: {
+    source: PairingInviteSource
+    approved: boolean
+    bridgePhase: PairingBridgeState['phase'] | null
+}): boolean {
+    if (!input.approved) return false
+    return input.source === 'lan' || input.bridgePhase === 'ready'
 }

@@ -23,8 +23,17 @@ import {
 import { startPairingEventStream } from './pairingEventStream'
 
 const SOCKET_OPEN = 1
+const DEFAULT_CONNECTION_ID = 'default'
+const RELAY_PEER_IDLE_TIMEOUT_MS = PAIRING_PEER_HEARTBEAT_ACK_TIMEOUT_MS
 
 type RelaySocket = WebSocket
+
+type RelayPeer = {
+    cipher: PairingTunnelCipher
+    eventStreamAbort: AbortController | null
+    pendingHeartbeat: { id: string; sentAt: number } | null
+    peerPublicKey: string | null
+}
 
 export interface PairingRelayBridgeHandle {
     dispose(): void
@@ -44,30 +53,20 @@ export function startPairingRelayBridge(options: {
     let disposed = false
     let ready = false
     let socket: RelaySocket | null = null
-    let cipher: PairingTunnelCipher | null = null
-    let peerPublicKey: string | null = null
     let seq = 0
     let reconnectAttempt = 0
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null
-    let eventStreamAbort: AbortController | null = null
     let heartbeatTimer: ReturnType<typeof setInterval> | null = null
-    let pendingHeartbeat: { id: string; sentAt: number } | null = null
+    const peers = new Map<string, RelayPeer>()
 
     connect()
-    return {
-        dispose,
-        isReady: () => ready,
-    }
+    return { dispose, isReady: () => ready }
 
     function connect(): void {
         if (disposed || options.isDisposed()) return
         const nextSocket = new WebSocket(options.tunnelUrl)
         socket = nextSocket
-        nextSocket.onopen = () =>
-            void handleOpen(nextSocket).catch((error) => {
-                reportRelayError(error)
-                nextSocket.close()
-            })
+        nextSocket.onopen = () => void handleOpen(nextSocket).catch((error) => closeAfterError(nextSocket, error))
         nextSocket.onmessage = (event) => void handleFrame(nextSocket, event.data).catch(reportRelayError)
         nextSocket.onclose = () => handleClose(nextSocket)
         nextSocket.onerror = () => nextSocket.close()
@@ -79,16 +78,17 @@ export function startPairingRelayBridge(options: {
         stopSecureSession()
         socket?.close()
         socket = null
-        cipher = null
-        peerPublicKey = null
+        peers.clear()
     }
 
     async function handleOpen(activeSocket: RelaySocket): Promise<void> {
         if (socket !== activeSocket) return
         ready = false
-        cipher = await createPairingTunnelCipher()
-        peerPublicKey = null
-        sendLocalKey(activeSocket)
+        stopSecureSession()
+        peers.clear()
+        const peer = await createPeer()
+        peers.set(DEFAULT_CONNECTION_ID, peer)
+        sendLocalKey(activeSocket, DEFAULT_CONNECTION_ID)
         reconnectAttempt = 0
     }
 
@@ -99,51 +99,45 @@ export function startPairingRelayBridge(options: {
             options.onClosed()
         }
         stopSecureSession()
-        cipher = null
-        peerPublicKey = null
+        peers.clear()
         if (!disposed && !options.isDisposed()) scheduleReconnect()
     }
 
     async function handleFrame(activeSocket: RelaySocket, data: unknown): Promise<void> {
         if (typeof data !== 'string' || socket !== activeSocket) return
         const frame = PairingTunnelFrameSchema.parse(JSON.parse(data) as unknown)
+        const connectionId = frame.connectionId ?? DEFAULT_CONNECTION_ID
         if (frame.kind === 'key') {
-            const activeCipher = requireCipher()
-            const peerChanged = peerPublicKey !== null && peerPublicKey !== frame.publicKey
-            const shouldReply = peerPublicKey !== frame.publicKey
-            peerPublicKey = frame.publicKey
-            await activeCipher.receivePeerKey(frame.publicKey)
-            if (shouldReply && activeSocket.readyState === SOCKET_OPEN) sendLocalKey(activeSocket)
-            if (ready && peerChanged) {
-                restartSecureSessionForPeerReplacement()
-                return
-            }
-            handleSecureOpen()
+            if (connectionId !== DEFAULT_CONNECTION_ID) removePeer(DEFAULT_CONNECTION_ID)
+            const peer = await getPeer(connectionId)
+            const peerChanged = peer.peerPublicKey !== null && peer.peerPublicKey !== frame.publicKey
+            const shouldReply = peer.peerPublicKey !== frame.publicKey
+            peer.peerPublicKey = frame.publicKey
+            await peer.cipher.receivePeerKey(frame.publicKey)
+            if (shouldReply && activeSocket.readyState === SOCKET_OPEN) sendLocalKey(activeSocket, connectionId)
+            if (ready && peerChanged) options.onPeerReplaced?.()
+            handleSecureOpen(connectionId)
             return
         }
         if (frame.kind !== 'sealed') return
-        const plainFrame = await requireCipher().open(frame)
-        if (plainFrame.kind === 'binary') {
-            // The web composer ships upload chunks through the sealed tunnel
-            // when the WebRTC datachannel never opens. Rebuild the same
-            // magic-headered ArrayBuffer the datachannel path emits so the
-            // existing `PairingBinaryUploadManager` keeps owning chunk
-            // assembly; the relay is just an alternative transport.
-            await handleRelayBinaryChunk(activeSocket, plainFrame)
-            return
-        }
+        const plainFrame = await requirePeer(connectionId).cipher.open(frame)
+        if (plainFrame.kind === 'binary') return await handleRelayBinaryChunk(activeSocket, connectionId, plainFrame)
         if (plainFrame.kind !== 'message') return
         await handlePairingPeerPayload({
             data: JSON.stringify(plainFrame.payload),
             getClient: options.getClient,
             onActive: options.onActive,
-            onHeartbeat: markHeartbeatAck,
+            onHeartbeat: (heartbeat) => markHeartbeatAck(connectionId, heartbeat),
             onSendError: reportRelayError,
-            sink: createRelaySink(activeSocket),
+            sink: createRelaySink(activeSocket, connectionId),
         })
     }
 
-    async function handleRelayBinaryChunk(activeSocket: RelaySocket, frame: PairingTunnelBinaryFrame): Promise<void> {
+    async function handleRelayBinaryChunk(
+        activeSocket: RelaySocket,
+        connectionId: string,
+        frame: PairingTunnelBinaryFrame
+    ): Promise<void> {
         const bytes = fromPairingTunnelBase64Url(frame.bytesBase64)
         const magicFrame = createPairingUploadChunkFrame({
             chunk: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
@@ -151,60 +145,72 @@ export function startPairingRelayBridge(options: {
             final: frame.chunkIndex === frame.chunkCount - 1,
             transferId: frame.transferId,
         })
-        try {
-            await handlePairingPeerPayload({
-                data: magicFrame,
-                getClient: options.getClient,
-                onActive: options.onActive,
-                onSendError: reportRelayError,
-                sink: createRelaySink(activeSocket),
-            })
-        } catch (error) {
-            reportRelayError(error)
+        await handlePairingPeerPayload({
+            data: magicFrame,
+            getClient: options.getClient,
+            onActive: options.onActive,
+            onSendError: reportRelayError,
+            sink: createRelaySink(activeSocket, connectionId),
+        })
+    }
+
+    function handleSecureOpen(connectionId: string): void {
+        if (!ready) {
+            ready = true
+            options.onOpen()
+            startHeartbeat()
         }
-    }
-
-    function handleSecureOpen(): void {
-        if (ready) return
-        ready = true
-        options.onOpen()
-        startSecureSession()
-    }
-
-    function restartSecureSessionForPeerReplacement(): void {
-        stopSecureSession()
-        options.onPeerReplaced?.()
-        startSecureSession()
-    }
-
-    function startSecureSession(): void {
-        startRelayEventStream()
-        startHeartbeat()
+        startRelayEventStream(connectionId)
     }
 
     function stopSecureSession(): void {
-        stopEventStream()
+        stopEventStreams()
         stopHeartbeat()
     }
 
-    function requireCipher(): PairingTunnelCipher {
-        if (!cipher) throw new Error('relay tunnel cipher is not ready')
-        return cipher
+    async function createPeer(): Promise<RelayPeer> {
+        return {
+            cipher: await createPairingTunnelCipher(),
+            eventStreamAbort: null,
+            pendingHeartbeat: null,
+            peerPublicKey: null,
+        }
     }
 
-    function sendLocalKey(activeSocket: RelaySocket): void {
+    function removePeer(connectionId: string): void {
+        const peer = peers.get(connectionId)
+        peer?.eventStreamAbort?.abort()
+        peers.delete(connectionId)
+    }
+
+    async function getPeer(connectionId: string): Promise<RelayPeer> {
+        const existing = peers.get(connectionId)
+        if (existing) return existing
+        const created = await createPeer()
+        peers.set(connectionId, created)
+        return created
+    }
+
+    function requirePeer(connectionId: string): RelayPeer {
+        const peer = peers.get(connectionId)
+        if (!peer) throw new Error('relay tunnel cipher is not ready')
+        return peer
+    }
+
+    function sendLocalKey(activeSocket: RelaySocket, connectionId: string): void {
         activeSocket.send(
             JSON.stringify(
                 createPairingTunnelKeyFrame({
                     id: `desktop-key-${Date.now()}`,
                     seq: seq++,
-                    publicKey: requireCipher().publicKey,
+                    connectionId: connectionId === DEFAULT_CONNECTION_ID ? undefined : connectionId,
+                    publicKey: requirePeer(connectionId).cipher.publicKey,
                 })
             )
         )
     }
 
-    async function sendSealedFrame(activeSocket: RelaySocket, data: string): Promise<void> {
+    async function sendSealedFrame(activeSocket: RelaySocket, connectionId: string, data: string): Promise<void> {
         if (activeSocket.readyState !== SOCKET_OPEN) return
         const plainFrame: PairingTunnelPlainFrame = {
             kind: 'message',
@@ -212,74 +218,100 @@ export function startPairingRelayBridge(options: {
             seq: seq++,
             payload: PairingPeerMessageSchema.parse(JSON.parse(data) as unknown),
         }
-        activeSocket.send(JSON.stringify(await requireCipher().seal(plainFrame)))
+        const sealed = await requirePeer(connectionId).cipher.seal(plainFrame)
+        activeSocket.send(
+            JSON.stringify({
+                ...sealed,
+                connectionId: connectionId === DEFAULT_CONNECTION_ID ? undefined : connectionId,
+            })
+        )
     }
 
-    function createRelaySink(activeSocket: RelaySocket): PairingPeerTextSink {
+    function createRelaySink(activeSocket: RelaySocket, connectionId: string): PairingPeerTextSink {
         return {
             get readyState() {
                 return activeSocket.readyState
             },
-            send: (data) => sendFrame(activeSocket, data),
+            send: (data) => void sendSealedFrame(activeSocket, connectionId, data).catch(reportRelayError),
         }
     }
 
-    function sendFrame(activeSocket: RelaySocket, data: string): void {
-        void sendSealedFrame(activeSocket, data).catch(reportRelayError)
-    }
-
-    function startRelayEventStream(): void {
+    function startRelayEventStream(connectionId: string): void {
         const activeSocket = socket
-        if (!activeSocket || !canSendPairingPeerText(createRelaySink(activeSocket))) return
-        stopEventStream()
+        const peer = peers.get(connectionId)
+        if (
+            !activeSocket ||
+            !peer?.peerPublicKey ||
+            !canSendPairingPeerText(createRelaySink(activeSocket, connectionId))
+        )
+            return
+        peer.eventStreamAbort?.abort()
         const abortController = new AbortController()
-        eventStreamAbort = abortController
+        peer.eventStreamAbort = abortController
         void startPairingEventStream(
             options.getClient(),
-            createRelaySink(activeSocket),
+            createRelaySink(activeSocket, connectionId),
             abortController,
             reportRelayError
         ).catch(reportRelayError)
     }
 
-    function stopEventStream(): void {
-        eventStreamAbort?.abort()
-        eventStreamAbort = null
+    function stopEventStreams(): void {
+        for (const peer of peers.values()) {
+            peer.eventStreamAbort?.abort()
+            peer.eventStreamAbort = null
+        }
     }
 
     function startHeartbeat(): void {
         stopHeartbeat()
-        sendHeartbeat()
-        heartbeatTimer = setInterval(sendHeartbeat, PAIRING_PEER_HEARTBEAT_INTERVAL_MS)
+        sendHeartbeats()
+        heartbeatTimer = setInterval(sendHeartbeats, PAIRING_PEER_HEARTBEAT_INTERVAL_MS)
         if (typeof heartbeatTimer === 'object' && 'unref' in heartbeatTimer) heartbeatTimer.unref()
     }
 
     function stopHeartbeat(): void {
         if (heartbeatTimer) clearInterval(heartbeatTimer)
         heartbeatTimer = null
-        pendingHeartbeat = null
+        for (const peer of peers.values()) peer.pendingHeartbeat = null
     }
 
-    function sendHeartbeat(): void {
+    function sendHeartbeats(): void {
         const activeSocket = socket
         const now = Date.now()
         if (!ready || !activeSocket || activeSocket.readyState !== SOCKET_OPEN) return
-        if (pendingHeartbeat && now - pendingHeartbeat.sentAt < PAIRING_PEER_HEARTBEAT_ACK_TIMEOUT_MS) return
-        const heartbeat: PairingPeerHeartbeat = {
-            kind: 'heartbeat',
-            id: `desktop-relay-${now}-${seq}`,
-            protocolVersion: PROTOCOL_VERSION,
-            sentAt: now,
+        for (const [connectionId, peer] of peers) {
+            if (!peer.peerPublicKey) continue
+            if (peer.pendingHeartbeat && now - peer.pendingHeartbeat.sentAt >= RELAY_PEER_IDLE_TIMEOUT_MS) {
+                removePeer(connectionId)
+                continue
+            }
+            if (peer.pendingHeartbeat) continue
+            const heartbeat: PairingPeerHeartbeat = {
+                kind: 'heartbeat',
+                id: `desktop-relay-${now}-${seq}`,
+                protocolVersion: PROTOCOL_VERSION,
+                sentAt: now,
+            }
+            peer.pendingHeartbeat = { id: heartbeat.id ?? '', sentAt: now }
+            void sendSealedFrame(activeSocket, connectionId, JSON.stringify(heartbeat)).catch(reportRelayError)
         }
-        pendingHeartbeat = { id: heartbeat.id ?? '', sentAt: now }
-        sendFrame(activeSocket, JSON.stringify(heartbeat))
+        if (ready && !hasSecurePeers()) {
+            ready = false
+            options.onClosed()
+        }
     }
 
-    function markHeartbeatAck(heartbeat: PairingPeerHeartbeat) {
-        if (!heartbeat.ack || !heartbeat.id || heartbeat.id !== pendingHeartbeat?.id) return undefined
+    function hasSecurePeers(): boolean {
+        return [...peers.values()].some((peer) => peer.peerPublicKey)
+    }
+
+    function markHeartbeatAck(connectionId: string, heartbeat: PairingPeerHeartbeat) {
+        const peer = peers.get(connectionId)
+        if (!peer || !heartbeat.ack || !heartbeat.id || heartbeat.id !== peer.pendingHeartbeat?.id) return undefined
         const sampledAt = Date.now()
-        const roundTripTimeMs = sampledAt - pendingHeartbeat.sentAt
-        pendingHeartbeat = null
+        const roundTripTimeMs = sampledAt - peer.pendingHeartbeat.sentAt
+        peer.pendingHeartbeat = null
         return { roundTripTimeMs, sampledAt }
     }
 
@@ -292,6 +324,11 @@ export function startPairingRelayBridge(options: {
     function clearReconnectTimer(): void {
         if (reconnectTimer) clearTimeout(reconnectTimer)
         reconnectTimer = null
+    }
+
+    function closeAfterError(activeSocket: RelaySocket, error: unknown): void {
+        reportRelayError(error)
+        activeSocket.close()
     }
 
     function reportRelayError(error: unknown): void {

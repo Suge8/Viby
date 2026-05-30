@@ -1,6 +1,9 @@
 import type { DeviceAuthDevice } from '@/lib/deviceAuthSummary'
-import type { DeviceLinkSnapshotMap } from '@/lib/deviceLinkBadge'
-import type { DesktopPairingSession } from '@/types'
+import type { DesktopPairingSession, PairingRemoteConnectionSnapshot } from '@/types'
+
+export type PresentedDevice = DeviceAuthDevice & {
+    remoteConnections?: PairingRemoteConnectionSnapshot[]
+}
 
 type KnownDevicePlatform = Exclude<DeviceAuthDevice['platform'], null>
 
@@ -16,7 +19,12 @@ function normalizePlatform(value: unknown): KnownDevicePlatform {
         : 'unknown'
 }
 
-function pairingDevice(session: DesktopPairingSession): DeviceAuthDevice {
+function hasOnlineRemoteConnection(remoteConnections: readonly PairingRemoteConnectionSnapshot[] | undefined): boolean {
+    return remoteConnections?.some((connection) => connection.connectedAt !== undefined) ?? false
+}
+
+function presentPairingDevice(session: DesktopPairingSession): PresentedDevice {
+    const remoteConnections = session.pairing.remoteConnections
     const guest = session.pairing.guest
     return {
         id: pairingDeviceId(session.pairing.id),
@@ -26,36 +34,33 @@ function pairingDevice(session: DesktopPairingSession): DeviceAuthDevice {
         createdAt: session.pairing.createdAt,
         lastSeenAt: guest?.lastSeenAt ?? session.pairing.updatedAt,
         revokedAt: null,
-        active: false,
+        active: hasOnlineRemoteConnection(remoteConnections),
+        remoteConnections,
     }
 }
 
 export function buildDevicePresentation(
     devices: DeviceAuthDevice[],
-    pairings: readonly DesktopPairingSession[],
-    bridges: ReadonlyMap<string, { phase: 'connecting' | 'ready' | 'fatal' }>
-): DeviceAuthDevice[] {
-    const rows = new Map(devices.map((device) => [device.id, device]))
+    pairings: readonly DesktopPairingSession[]
+): PresentedDevice[] {
+    const rows = new Map<string, PresentedDevice>(devices.map((device) => [device.id, device]))
     for (const session of pairings) {
-        // A pairing only surfaces as a device row once the bridge sees a
-        // real guest heartbeat ack OR the broker confirmed approval through
-        // SSE. Either signal proves a guest verified the code; without
-        // either the invite has no associated device to display.
-        const paired =
-            session.pairing.approvalStatus === 'approved' || bridges.get(session.pairing.id)?.phase === 'ready'
+        // A pairing surfaces as a device row only after the broker owner
+        // reports at least one remote window for that guest device.
+        const paired = (session.pairing.remoteConnections?.length ?? 0) > 0
         if (!paired) continue
         const id = pairingDeviceId(session.pairing.id)
-        rows.set(id, pairingDevice(session))
+        rows.set(id, presentPairingDevice(session))
     }
     return [...rows.values()]
 }
 
-function isDeviceConnected(device: DeviceAuthDevice, links: DeviceLinkSnapshotMap): boolean {
+function isDeviceConnected(device: PresentedDevice): boolean {
     if (device.revokedAt !== null) return false
     if (device.channel !== 'scan') return device.active
-    return links.get(device.id)?.phase === 'ready'
+    return hasOnlineRemoteConnection(device.remoteConnections)
 }
 
-export function getConnectedDevices(devices: DeviceAuthDevice[], links: DeviceLinkSnapshotMap): DeviceAuthDevice[] {
-    return devices.filter((device) => isDeviceConnected(device, links))
+export function getConnectedDevices(devices: PresentedDevice[]): PresentedDevice[] {
+    return devices.filter(isDeviceConnected)
 }

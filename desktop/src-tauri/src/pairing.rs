@@ -10,7 +10,10 @@ pub use crate::pairing_storage::{
     clear_pairing_sessions, read_pairing_sessions, remove_pairing_session,
 };
 use crate::pairing_storage::{persist_pairing_session, persist_pairing_session_if_changed};
-use crate::state::{DesktopPairingSession, HubRuntimePhase, HubSnapshot, PairingSessionSnapshot};
+use crate::state::{
+    DesktopPairingSession, HubRuntimePhase, HubSnapshot, PairingRemoteConnectionSnapshot,
+    PairingSessionSnapshot,
+};
 use crate::supervisor::refresh_snapshot;
 
 const PAIRING_REQUEST_TIMEOUT_SECONDS: u64 = 5;
@@ -25,6 +28,8 @@ struct HubAuthResponse {
 #[serde(rename_all = "camelCase")]
 struct PairingEnvelope {
     pairing: PairingSessionSnapshot,
+    #[serde(default)]
+    remote_connections: Vec<PairingRemoteConnectionSnapshot>,
 }
 
 fn ensure_ready_hub_snapshot(app: &AppHandle) -> Result<HubSnapshot, String> {
@@ -130,7 +135,10 @@ pub fn refresh_pairing_session(
         serde_json::from_str::<PairingEnvelope>(&body).map_err(|error| error.to_string())?;
     let previous = pairing.clone();
     let next = DesktopPairingSession {
-        pairing: refreshed.pairing,
+        pairing: PairingSessionSnapshot {
+            remote_connections: refreshed.remote_connections,
+            ..refreshed.pairing
+        },
         ..pairing
     };
     persist_pairing_session_if_changed(&previous, &next)?;

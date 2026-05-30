@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import type { DesktopPairingSession } from '@/types'
-import { buildHubSwitchModel, getPairingInviteRenewDelay } from './desktopShellModel'
+import { buildHubSwitchModel, getPairingInviteRenewDelay, shouldDismissPairingInvite } from './desktopShellModel'
 
 const pairingFixture: DesktopPairingSession = {
     pairing: {
@@ -44,6 +44,13 @@ describe('desktopShellModel', () => {
             label: '关闭中',
             disabled: true,
         })
+    })
+
+    it('dismisses broker invites only after approval and a ready bridge', () => {
+        expect(shouldDismissPairingInvite({ source: 'broker', approved: false, bridgePhase: 'ready' })).toBe(false)
+        expect(shouldDismissPairingInvite({ source: 'broker', approved: true, bridgePhase: 'connecting' })).toBe(false)
+        expect(shouldDismissPairingInvite({ source: 'broker', approved: true, bridgePhase: 'ready' })).toBe(true)
+        expect(shouldDismissPairingInvite({ source: 'lan', approved: true, bridgePhase: null })).toBe(true)
     })
 
     it('renews only unclaimed QR invites shortly before ticket expiry', () => {

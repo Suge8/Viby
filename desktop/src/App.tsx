@@ -1,4 +1,4 @@
-import { type JSX, useEffect, useRef, useState } from 'react'
+import { type JSX, useEffect, useMemo, useRef, useState } from 'react'
 import { ConnectionPage } from '@/components/ConnectionPage'
 import { DesktopAgentsPageBridge } from '@/components/DesktopAgentsPageBridge'
 import { DesktopPairingModal } from '@/components/DesktopPairingModal'
@@ -16,7 +16,7 @@ import { useDesktopUpdates } from '@/hooks/useDesktopUpdates'
 import { useDeviceAuthSummary } from '@/hooks/useDeviceAuthSummary'
 import { useHubController } from '@/hooks/useHubController'
 import { usePairingBridges } from '@/hooks/usePairingBridges'
-import { usePairingHostEvents } from '@/hooks/usePairingHostEvents'
+import { type PairingHostEventTarget, usePairingHostEvents } from '@/hooks/usePairingHostEvents'
 import { DESKTOP_COPY } from '@/lib/desktopCopy'
 import {
     getSystemLanguage,
@@ -30,13 +30,23 @@ import {
     writeLanguagePreference,
     writeThemePreference,
 } from '@/lib/desktopPreferences'
-import { buildHubSwitchModel, COPY_FEEDBACK_DURATION_MS, PAIRING_SUCCESS_DISMISS_MS } from '@/lib/desktopShellModel'
+import {
+    buildHubSwitchModel,
+    COPY_FEEDBACK_DURATION_MS,
+    PAIRING_SUCCESS_DISMISS_MS,
+    shouldDismissPairingInvite,
+} from '@/lib/desktopShellModel'
 import { buildDeviceLinkSnapshots } from '@/lib/deviceLinkBadge'
 import { buildDevicePresentation, getConnectedDevices } from '@/lib/deviceListPresentation'
 import { buildEntryPreviewModel } from '@/lib/entryMode'
 import { deriveHubViewState } from '@/lib/hubSnapshot'
 
 const IDLE_BRIDGE_STATE_PHASE = 'connecting' as const
+
+function toPairingHostEventTarget(pairingId: string, eventsUrl: string | undefined): PairingHostEventTarget[] {
+    return eventsUrl ? [{ pairingId, eventsUrl }] : []
+}
+
 export function App(): JSX.Element {
     const hub = useHubController()
     const pairings = useDesktopPairings()
@@ -78,9 +88,6 @@ export function App(): JSX.Element {
         status,
         enabled: hub.publicAccessEnabled,
     })
-    // `bridges` is a fresh Map per render but Map identity is fine to thread
-    // through to the popover; the snapshot projection is cheap enough not to
-    // need memoisation here.
     const deviceLinks = buildDeviceLinkSnapshots(bridges)
     const deviceSummary = useDeviceAuthSummary(status, viewState.ready, {
         pairingDeviceIds: pairings.pairingDeviceIds,
@@ -109,21 +116,26 @@ export function App(): JSX.Element {
     const themeMode = resolveThemePreference(themePreference, systemTheme)
     const language = resolveLanguagePreference(languagePreference, systemLanguage)
     const copy = DESKTOP_COPY[language]
-    const devices = buildDevicePresentation(deviceSummary.devices, pairings.pairings, bridges)
-    const activeDeviceCount = getConnectedDevices(devices, deviceLinks).length
+    const devices = buildDevicePresentation(deviceSummary.devices, pairings.pairings)
+    const activeDeviceCount = getConnectedDevices(devices).length
     const lanDraft = lanPairings.draft
     const lanInviteAvailable = Boolean(entryPreview.openUrl)
     const inviteAvailable = hub.publicAccessEnabled || lanInviteAvailable
-    // The active modal binds to whichever source the user opened it with so
-    // closing one source and immediately opening the other does not flash:
-    // closing fires async `cancelDraft` on the prior source, but the new
-    // modal binds to a different `kind` (broker vs lan) and stays stable.
     const activeInvite =
         inviteSource === 'lan' && lanDraft
             ? { kind: 'lan' as const, session: lanDraft }
             : inviteSource === 'broker' && draftPairing
               ? { kind: 'broker' as const, session: draftPairing }
               : null
+    const brokerEventTargets = useMemo<PairingHostEventTarget[]>(
+        () => pairings.pairings.flatMap((session) => toPairingHostEventTarget(session.pairing.id, session.eventsUrl)),
+        [pairings.pairings]
+    )
+    const lanEventTargets = useMemo<PairingHostEventTarget[]>(
+        () =>
+            inviteSource === 'lan' && lanDraft ? toPairingHostEventTarget(lanDraft.pairing.id, lanDraft.eventsUrl) : [],
+        [inviteSource, lanDraft]
+    )
     const deviceActionVisible = inviteAvailable
     const deviceActionLabel = copy.deviceTitle
     const notice = hub.actionError || pairings.actionError || lanPairings.actionError || hub.snapshot?.lastError || null
@@ -142,12 +154,13 @@ export function App(): JSX.Element {
     }, [activeInvite])
 
     usePairingHostEvents({
-        pairingId: activeInvite?.session.pairing.id ?? null,
-        eventsUrl: activeInvite?.session.eventsUrl ?? null,
-        onSnapshot: (snapshot) => {
-            if (activeInvite?.kind === 'broker') pairings.applySnapshot(snapshot)
-            else if (activeInvite?.kind === 'lan') lanPairings.applySnapshot(snapshot)
-        },
+        targets: brokerEventTargets,
+        onSnapshot: pairings.applySnapshot,
+    })
+
+    usePairingHostEvents({
+        targets: lanEventTargets,
+        onSnapshot: lanPairings.applySnapshot,
     })
 
     useEffect(() => {
@@ -161,8 +174,12 @@ export function App(): JSX.Element {
 
     useEffect(() => {
         if (!pairingDialogOpen || !activeInvite) return
-        const paired = activeInvite.session.pairing.approvalStatus === 'approved' || draftBridge.phase === 'ready'
-        if (!paired) return
+        const shouldDismiss = shouldDismissPairingInvite({
+            source: activeInvite.kind,
+            approved: activeInvite.session.pairing.approvalStatus === 'approved',
+            bridgePhase: activeInvite.kind === 'broker' ? draftBridge.phase : null,
+        })
+        if (!shouldDismiss) return
         const timeoutId = window.setTimeout(() => setPairingDialogOpen(false), PAIRING_SUCCESS_DISMISS_MS)
         return () => window.clearTimeout(timeoutId)
     }, [activeInvite, draftBridge.phase, pairingDialogOpen])
@@ -185,22 +202,14 @@ export function App(): JSX.Element {
         writeLanguagePreference(globalThis.localStorage, preference)
     }
 
-    /**
-     * Open the invite modal explicitly bound to a source. QR / public /
-     * LAN entry buttons each pass their own source so closing one modal
-     * and immediately opening another never collapses onto the
-     * just-cancelled draft.
-     */
     const openInviteModal = async (params: { withQr: boolean; source: 'broker' | 'lan' }): Promise<void> => {
         if (!viewState.ready) return
         setShowInviteQr(params.withQr)
         setInviteSource(params.source)
         if (params.source === 'broker') {
-            const existing = draftPairing ?? pairings.pairings.find((p) => p.pairing.approvalStatus !== 'approved')
-            if (existing) {
-                setPairingDraftId(existing.pairing.id)
-                setPairingDialogOpen(true)
-                return
+            const pendingDraftId = draftPairing?.pairing.approvalStatus === null ? draftPairing.pairing.id : null
+            if (pendingDraftId) {
+                await pairings.cancelDraft(pendingDraftId)
             }
             const created = await pairings.createPairing()
             if (!created) return
@@ -210,9 +219,8 @@ export function App(): JSX.Element {
         }
         const lanBaseUrl = entryPreview.openUrl
         if (!lanBaseUrl) return
-        if (lanDraft) {
-            setPairingDialogOpen(true)
-            return
+        if (lanDraft?.pairing.approvalStatus !== 'approved') {
+            await lanPairings.cancelDraft()
         }
         const created = await lanPairings.createDraft(lanBaseUrl)
         if (created) setPairingDialogOpen(true)
@@ -241,12 +249,8 @@ export function App(): JSX.Element {
     }
 
     const handleRevokeDevice = async (deviceId: string): Promise<void> => {
-        if (deviceId.startsWith('pairing:')) {
-            const pairingId = deviceId.slice('pairing:'.length)
-            if (pairings.pairingIds.has(pairingId)) {
-                await pairings.deletePairing(pairingId)
-            }
-        }
+        const pairingId = deviceId.startsWith('pairing:') ? deviceId.slice('pairing:'.length) : null
+        if (pairingId && pairings.pairingIds.has(pairingId)) await pairings.deletePairing(pairingId)
         await deviceSummary.revokeDevice(deviceId)
         showToast('已取消配对', COPY_FEEDBACK_DURATION_MS, 'success')
     }

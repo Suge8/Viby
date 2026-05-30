@@ -1,28 +1,41 @@
 import { describePairingDirectBlockedReason, type PairingDeviceLinkStatus } from '@viby/protocol/pairing'
 import { type JSX, useCallback, useEffect, useRef, useState } from 'react'
-import type { DeviceAuthDevice } from '@/lib/deviceAuthSummary'
 import { formatDevicePlatform, formatDeviceTitle } from '@/lib/deviceDisplay'
 import { buildDeviceLinkStatus, type DeviceLinkSnapshotMap } from '@/lib/deviceLinkBadge'
-import { getConnectedDevices } from '@/lib/deviceListPresentation'
+import { getConnectedDevices, type PresentedDevice } from '@/lib/deviceListPresentation'
 
 const DEVICE_POPOVER_CLOSE_DELAY_MS = 160
 
-function buildDeviceHeadline(device: DeviceAuthDevice, linkStatus: PairingDeviceLinkStatus): string {
-    const title = formatDeviceTitle({ name: device.name, platform: device.platform, channel: device.channel })
-    return `${title} / ${linkStatus.title}`
+function buildDeviceHeadline(device: PresentedDevice): string {
+    return formatDeviceTitle({ name: device.name, platform: device.platform, channel: device.channel })
 }
 
 function buildDeviceLinkDetail(
-    device: DeviceAuthDevice,
+    device: PresentedDevice,
     links: DeviceLinkSnapshotMap,
     status: PairingDeviceLinkStatus
 ): string {
+    const connectionCount = device.remoteConnections?.length ?? 0
+    if (connectionCount > 0) return `${connectionCount} 个窗口 · ${status.title}`
     const reason = describePairingDirectBlockedReason(links.get(device.id)?.stats?.directBlockedReason)
     return reason ? `${status.title} · ${reason}` : status.title
 }
 
+function RemoteConnectionList(props: { device: PresentedDevice }): JSX.Element | null {
+    if (!props.device.remoteConnections?.length) return null
+    return (
+        <div className="desktop-device-connections">
+            {props.device.remoteConnections.map((connection, index) => (
+                <span key={connection.id}>
+                    窗口 {index + 1}: {connection.connectedAt === undefined ? '离线' : '在线'}
+                </span>
+            ))}
+        </div>
+    )
+}
+
 function DeviceRow(props: {
-    device: DeviceAuthDevice
+    device: PresentedDevice
     links: DeviceLinkSnapshotMap
     onRevokeDevice(deviceId: string): void
     revoking: boolean
@@ -38,8 +51,9 @@ function DeviceRow(props: {
                 {icon}
             </span>
             <div>
-                <strong>{buildDeviceHeadline(device, linkStatus)}</strong>
+                <strong>{buildDeviceHeadline(device)}</strong>
                 <small>{linkDetail}</small>
+                <RemoteConnectionList device={device} />
             </div>
             <button type="button" disabled={props.revoking} onClick={() => props.onRevokeDevice(device.id)}>
                 {props.revoking ? '取消中…' : '取消配对'}
@@ -49,12 +63,12 @@ function DeviceRow(props: {
 }
 
 function DeviceListPopover(props: {
-    devices: DeviceAuthDevice[]
+    devices: PresentedDevice[]
     links: DeviceLinkSnapshotMap
     revokingId: string | null
     onRevokeDevice(deviceId: string): void
 }): JSX.Element {
-    const activeDevices = getConnectedDevices(props.devices, props.links)
+    const activeDevices = getConnectedDevices(props.devices)
     return (
         <div className="desktop-device-popover" role="listbox" aria-live="polite">
             {activeDevices.length === 0 ? <span className="desktop-device-popover-empty">暂无在线设备</span> : null}
@@ -118,7 +132,7 @@ function useDevicePopover(): {
 
 export function DeviceCount(props: {
     count: number
-    devices: DeviceAuthDevice[]
+    devices: PresentedDevice[]
     links: DeviceLinkSnapshotMap
     onRevokeDevice(deviceId: string): void | Promise<void>
 }): JSX.Element {
@@ -159,7 +173,7 @@ export function DeviceCount(props: {
                 onClick={popover.toggle}
             >
                 <strong>{props.count}</strong>
-                <span>台设备已连接</span>
+                <span>台设备在线</span>
             </button>
             <DeviceListPopover
                 devices={props.devices}

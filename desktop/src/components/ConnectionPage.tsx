@@ -7,8 +7,8 @@ import { DeviceIcon, DoorIcon, LinkIcon, PowerIcon, PublicAccessIcon, QrIcon } f
 import { LottiePlayer } from '@/components/LottiePlayer'
 import { OverlayTransition, PageTransition, StaggerGroup, StaggerItem } from '@/components/motion'
 import type { DesktopCopy } from '@/lib/desktopCopy'
-import type { DeviceAuthDevice } from '@/lib/deviceAuthSummary'
 import type { DeviceLinkSnapshotMap } from '@/lib/deviceLinkBadge'
+import type { PresentedDevice } from '@/lib/deviceListPresentation'
 import type { EntryPreviewModel } from '@/lib/entryMode'
 import type { HubViewState } from '@/lib/hubSnapshot'
 
@@ -23,7 +23,7 @@ type ConnectionPageProps = {
     copy: DesktopCopy
     accessEntries: AccessEntryRow[]
     activeDeviceCount: number
-    devices: DeviceAuthDevice[]
+    devices: PresentedDevice[]
     deviceLinks: DeviceLinkSnapshotMap
     publicAccessEnabled: boolean
     publicAccessDisabled: boolean

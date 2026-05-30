@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'bun:test'
 import type { DeviceAuthDevice } from '@/lib/deviceAuthSummary'
-import type { DeviceLinkSnapshotMap } from '@/lib/deviceLinkBadge'
 import type { DesktopPairingSession } from '@/types'
 import { buildDevicePresentation, getConnectedDevices } from './deviceListPresentation'
 
@@ -18,9 +17,7 @@ function device(overrides: Partial<DeviceAuthDevice>): DeviceAuthDevice {
     }
 }
 
-const noLinks: DeviceLinkSnapshotMap = new Map()
-
-function pairingSession(pairingId: string, approvalStatus: DesktopPairingSession['pairing']['approvalStatus']) {
+function pairingSession(pairingId: string, connectionCount = 1) {
     return {
         pairing: {
             id: pairingId,
@@ -29,9 +26,15 @@ function pairingSession(pairingId: string, approvalStatus: DesktopPairingSession
             updatedAt: 2,
             expiresAt: 9_999,
             shortCode: null,
-            approvalStatus,
+            approvalStatus: 'approved',
             host: {},
             guest: { label: 'iPhone', lastSeenAt: 3, metadata: { platform: 'ios' } },
+            remoteConnections: Array.from({ length: connectionCount }, (_, index) => ({
+                id: `${pairingId}-${index}`,
+                connectedAt: index === 0 ? 4 : undefined,
+                createdAt: 3,
+                lastSeenAt: 4,
+            })),
         },
         hostToken: `host-${pairingId}`,
         pairingUrl: `https://example.test/p/${pairingId}`,
@@ -46,36 +49,23 @@ describe('deviceListPresentation', () => {
         const connected = device({ id: 'connected', channel: 'link', active: true })
         const recentOffline = device({ id: 'recent-offline', channel: 'link', lastSeenAt: Date.now() })
         const revokedOnline = device({ id: 'revoked-online', channel: 'link', active: true, revokedAt: Date.now() })
-        expect(getConnectedDevices([connected, recentOffline, revokedOnline], noLinks)).toEqual([connected])
+        expect(getConnectedDevices([connected, recentOffline, revokedOnline])).toEqual([connected])
     })
 
-    it('counts scan devices only when their bridge is ready', () => {
-        const ready = device({ id: 'pairing:ready', channel: 'scan', active: false })
+    it('counts scan devices from broker remote connection state first', () => {
+        const ready = {
+            ...device({ id: 'pairing:ready', channel: 'scan', active: false }),
+            remoteConnections: [{ id: 'tab', connectedAt: 1, createdAt: 1, lastSeenAt: 1 }],
+        }
         const connecting = device({ id: 'pairing:connecting', channel: 'scan', active: true })
-        const links: DeviceLinkSnapshotMap = new Map([
-            ['pairing:ready', { deviceId: 'pairing:ready', phase: 'ready', stats: null }],
-            ['pairing:connecting', { deviceId: 'pairing:connecting', phase: 'connecting', stats: null }],
-        ])
-        expect(getConnectedDevices([ready, connecting], links)).toEqual([ready])
+        expect(getConnectedDevices([ready, connecting])).toEqual([ready])
     })
 
-    it('projects paired scan pairings before Hub device rows arrive', () => {
-        // A pairing surfaces as a device row once EITHER the broker pushed
-        // approval through SSE OR the local bridge witnessed a real guest
-        // heartbeat ack. Both signals confirm a guest verified the code.
-        const bridges = new Map([['heartbeat', { phase: 'ready' as const }]])
-        const links: DeviceLinkSnapshotMap = new Map([
-            ['pairing:ready', { deviceId: 'pairing:ready', phase: 'ready', stats: null }],
-            ['pairing:heartbeat', { deviceId: 'pairing:heartbeat', phase: 'ready', stats: null }],
-        ])
-        const devices = buildDevicePresentation(
-            [],
-            [pairingSession('ready', 'approved'), pairingSession('heartbeat', null), pairingSession('pending', null)],
-            bridges
-        )
+    it('projects scan pairings from broker remote connection contract', () => {
+        const devices = buildDevicePresentation([], [pairingSession('ready'), pairingSession('pending', 0)])
 
-        expect(devices.map((row) => row.id)).toEqual(['pairing:ready', 'pairing:heartbeat'])
-        expect(getConnectedDevices(devices, links).map((row) => row.id)).toEqual(['pairing:ready', 'pairing:heartbeat'])
+        expect(devices.map((row) => row.id)).toEqual(['pairing:ready'])
+        expect(getConnectedDevices(devices).map((row) => row.id)).toEqual(['pairing:ready'])
     })
 
     it('keeps browser and installed PWA handoff under the same scan device row', () => {
@@ -85,14 +75,17 @@ describe('deviceListPresentation', () => {
             platform: 'unknown',
             channel: 'scan',
         })
-        const links: DeviceLinkSnapshotMap = new Map([
-            ['pairing:phone', { deviceId: 'pairing:phone', phase: 'ready', stats: null }],
-        ])
-        const devices = buildDevicePresentation([staleBrowserRow], [pairingSession('phone', 'approved')], new Map())
+        const devices = buildDevicePresentation([staleBrowserRow], [pairingSession('phone', 2)])
 
         expect(devices).toEqual([
-            expect.objectContaining({ id: 'pairing:phone', name: 'iPhone', platform: 'ios', channel: 'scan' }),
+            expect.objectContaining({
+                id: 'pairing:phone',
+                name: 'iPhone',
+                platform: 'ios',
+                channel: 'scan',
+                remoteConnections: expect.arrayContaining([expect.objectContaining({ id: 'phone-0' })]),
+            }),
         ])
-        expect(getConnectedDevices(devices, links).map((row) => row.id)).toEqual(['pairing:phone'])
+        expect(getConnectedDevices(devices).map((row) => row.id)).toEqual(['pairing:phone'])
     })
 })

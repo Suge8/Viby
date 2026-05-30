@@ -38,6 +38,16 @@ export interface PairingParticipantSnapshot {
     metadata?: Record<string, unknown>
 }
 
+export interface PairingRemoteConnectionSnapshot {
+    id: string
+    label?: string
+    publicKey?: string
+    connectedAt?: number
+    createdAt: number
+    lastSeenAt: number
+    metadata?: Record<string, unknown>
+}
+
 export interface PairingSessionSnapshot {
     id: string
     state: string
@@ -51,6 +61,10 @@ export interface PairingSessionSnapshot {
     guest?: PairingParticipantSnapshot | null
 }
 
+export type DesktopPairingSnapshot = PairingSessionSnapshot & {
+    remoteConnections: PairingRemoteConnectionSnapshot[]
+}
+
 export interface PairingIceServer {
     urls: string | string[]
     username?: string
@@ -59,7 +73,7 @@ export interface PairingIceServer {
 }
 
 export interface DesktopPairingSession {
-    pairing: PairingSessionSnapshot
+    pairing: DesktopPairingSnapshot
     hostToken: string
     pairingUrl: string
     wsUrl: string

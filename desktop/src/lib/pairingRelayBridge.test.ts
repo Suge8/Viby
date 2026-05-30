@@ -218,6 +218,52 @@ describe('pairingRelayBridge', () => {
         expect(Array.from(frameBytes.subarray(PAIRING_BINARY_UPLOAD_FRAME_HEADER_BYTES))).toEqual(Array.from(payload))
     })
 
+    it('serves two relay guest connections without rekeying either peer', async () => {
+        const onOpen = mock()
+        const onPeerReplaced = mock()
+        startPairingRelayBridge({
+            tunnelUrl: 'wss://pair.example/tunnel',
+            getClient: () => client() as never,
+            isDisposed: () => false,
+            onOpen,
+            onActive: mock(),
+            onClosed: mock(),
+            onPeerReplaced,
+            reportAsyncError: mock(),
+        })
+        const socket = FakeWebSocket.instances[0]
+        const firstCipher = await pairSocket(socket, 'first')
+        const secondCipher = await pairSocket(socket, 'second')
+        await waitForCondition(() => onOpen.mock.calls.length > 0)
+
+        socket.emitMessage(
+            JSON.stringify({
+                ...(await firstCipher.seal({
+                    kind: 'message',
+                    id: 'first-heartbeat',
+                    seq: 1,
+                    payload: { kind: 'heartbeat' },
+                })),
+                connectionId: 'first',
+            })
+        )
+        socket.emitMessage(
+            JSON.stringify({
+                ...(await secondCipher.seal({
+                    kind: 'message',
+                    id: 'second-heartbeat',
+                    seq: 1,
+                    payload: { kind: 'heartbeat' },
+                })),
+                connectionId: 'second',
+            })
+        )
+
+        await waitForCondition(async () => Boolean(await findSentPayload(socket, firstCipher, isHeartbeatAck)))
+        await waitForCondition(async () => Boolean(await findSentPayload(socket, secondCipher, isHeartbeatAck)))
+        expect(onPeerReplaced).not.toHaveBeenCalled()
+    })
+
     it('rekeys when a PWA replaces the guest relay peer', async () => {
         const onOpen = mock()
         const onPeerReplaced = mock()
@@ -265,16 +311,25 @@ describe('pairingRelayBridge', () => {
     })
 })
 
-async function pairSocket(socket: FakeWebSocket): Promise<PairingTunnelCipher> {
-    socket.open()
-    await waitForSent(socket, 1)
-    const localKey = JSON.parse(socket.sent[0] ?? '{}') as { publicKey: string }
+async function pairSocket(socket: FakeWebSocket, connectionId?: string): Promise<PairingTunnelCipher> {
+    const sentCount = socket.sent.length
+    if (socket.readyState !== FakeWebSocket.OPEN) socket.open()
+    await waitForSent(socket, Math.max(1, sentCount))
+    const localKey =
+        (connectionId ? findLastSentKey(socket, connectionId) : findLastSentKey(socket)) ??
+        (JSON.parse(socket.sent[0] ?? '{}') as { publicKey: string })
     const peerCipher = await createPairingTunnelCipher()
     await peerCipher.receivePeerKey(localKey.publicKey)
     socket.emitMessage(
-        JSON.stringify(createPairingTunnelKeyFrame({ id: 'peer-key', seq: 0, publicKey: peerCipher.publicKey }))
+        JSON.stringify(
+            createPairingTunnelKeyFrame({ id: 'peer-key', seq: 0, connectionId, publicKey: peerCipher.publicKey })
+        )
     )
-    await Promise.resolve()
+    await waitForCondition(() =>
+        Boolean(connectionId ? findLastSentKey(socket, connectionId) : findLastSentKey(socket))
+    )
+    const replyKey = connectionId ? findLastSentKey(socket, connectionId) : findLastSentKey(socket)
+    if (replyKey) await peerCipher.receivePeerKey(replyKey.publicKey)
     return peerCipher
 }
 
@@ -327,10 +382,13 @@ function countSent(socket: FakeWebSocket, kind: string): number {
     return socket.sent.filter((payload) => JSON.parse(payload).kind === kind).length
 }
 
-function findLastSentKey(socket: FakeWebSocket): { publicKey: string } | null {
+function findLastSentKey(socket: FakeWebSocket, connectionId?: string): { publicKey: string } | null {
     for (const payload of socket.sent.toReversed()) {
-        const frame = JSON.parse(payload) as { kind?: unknown; publicKey?: unknown }
-        if (frame.kind === 'key' && typeof frame.publicKey === 'string') return { publicKey: frame.publicKey }
+        const frame = JSON.parse(payload) as { connectionId?: unknown; kind?: unknown; publicKey?: unknown }
+        const connectionMatches = connectionId ? frame.connectionId === connectionId : true
+        if (connectionMatches && frame.kind === 'key' && typeof frame.publicKey === 'string') {
+            return { publicKey: frame.publicKey }
+        }
     }
     return null
 }

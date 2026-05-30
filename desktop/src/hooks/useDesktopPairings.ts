@@ -15,7 +15,7 @@ import {
     isStalePairingDeletionError,
     isStalePairingRefreshError,
 } from '@/lib/hubControllerSupport'
-import type { DesktopPairingSession, PairingSessionSnapshot } from '@/types'
+import type { DesktopPairingSession, DesktopPairingSnapshot, PairingSessionSnapshot } from '@/types'
 
 /**
  * Multi-pairing host state.
@@ -38,7 +38,7 @@ export interface DesktopPairingsApi {
     busy: boolean
     createPairing(): Promise<DesktopPairingSession | null>
     refreshPairing(pairingId: string): Promise<void>
-    applySnapshot(snapshot: PairingSessionSnapshot): void
+    applySnapshot(snapshot: PairingSessionSnapshot & Partial<DesktopPairingSnapshot>): void
     deletePairing(pairingId: string): Promise<void>
     deleteAll(): Promise<void>
     cancelDraft(pairingId: string): Promise<void>
@@ -46,6 +46,13 @@ export interface DesktopPairingsApi {
 
 function indexByPairingId(sessions: readonly DesktopPairingSession[]): Map<string, DesktopPairingSession> {
     return new Map(sessions.map((session) => [session.pairing.id, session]))
+}
+
+function toDesktopPairingSnapshot(
+    snapshot: PairingSessionSnapshot & Partial<DesktopPairingSnapshot>,
+    fallback: DesktopPairingSnapshot
+): DesktopPairingSnapshot {
+    return { ...snapshot, remoteConnections: snapshot.remoteConnections ?? fallback.remoteConnections }
 }
 
 function toSortedArray(sessions: Map<string, DesktopPairingSession>): DesktopPairingSession[] {
@@ -85,11 +92,11 @@ export function useDesktopPairings(): DesktopPairingsApi {
     )
 
     const applySnapshot = useCallback(
-        (snapshot: PairingSessionSnapshot): void => {
+        (snapshot: PairingSessionSnapshot & Partial<DesktopPairingSnapshot>): void => {
             const existing = sessionsRef.current.get(snapshot.id)
             if (!existing) return
             const next = new Map(sessionsRef.current)
-            next.set(snapshot.id, { ...existing, pairing: snapshot })
+            next.set(snapshot.id, { ...existing, pairing: toDesktopPairingSnapshot(snapshot, existing.pairing) })
             replaceSessions(next)
         },
         [replaceSessions]
