@@ -201,7 +201,7 @@ describe('session model lifecycle repair', () => {
         expect(cache.refreshSession(stored.id)?.metadata?.lifecycleState).toBe('open')
     })
 
-    it('repairs historical active history durable lifecycle when the cache boots', () => {
+    it('marks historical active history durable lifecycle inactive when the cache boots', () => {
         const store = new Store(':memory:')
         const stored = store.sessions.getOrCreateSession({
             tag: 'session-startup-active-history-repair',
@@ -220,7 +220,7 @@ describe('session model lifecycle repair', () => {
         const repaired = store.sessions.getSession(stored.id)
 
         expect(repaired?.active).toBe(false)
-        expect(readLifecycleState(repaired?.metadata)).toBe('open')
-        expect(cache.refreshSession(stored.id)?.active).toBe(false)
+        expect(readLifecycleState(repaired?.metadata)).toBe('closed')
+        expect(cache.refreshSession(stored.id)).toMatchObject({ active: false, metadata: { lifecycleState: 'closed' } })
     })
 })

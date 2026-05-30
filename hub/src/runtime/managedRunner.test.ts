@@ -131,19 +131,22 @@ describe('createManagedRunnerController', () => {
         })
     })
 
-    it('restarts a reused runner when pid polling finds the process is gone', async () => {
-        vi.useFakeTimers()
-
+    it('restarts a reused runner when its watched machine process is gone', async () => {
         let machine: Machine | null = createMachine(321)
         let processAlive = true
-        const subscribe = vi.fn(() => vi.fn())
+        const machineEventListenerRef: {
+            current: ((event: { type: string; machineId: string }) => void) | null
+        } = { current: null }
+        const subscribe = vi.fn((listener) => {
+            machineEventListenerRef.current = listener as typeof machineEventListenerRef.current
+            return vi.fn()
+        })
         const recoverManagedRunner = vi.fn(async (options: Parameters<typeof recoverManagedRunnerImpl>[0]) => {
             if (options.mode === 'startup') {
                 await options.startRunner()
                 await options.onRecovered('startup')
             }
         })
-
         const controller = createController({
             getSyncEngine: () =>
                 ({
@@ -154,14 +157,19 @@ describe('createManagedRunnerController', () => {
             recoverManagedRunner,
         })
 
-        await controller.startStartupRecovery()
-        expect(recoverManagedRunner).toHaveBeenCalledTimes(1)
+        try {
+            await controller.startStartupRecovery()
+            expect(recoverManagedRunner).toHaveBeenCalledTimes(1)
 
-        processAlive = false
-        vi.advanceTimersByTime(1_000)
-        await Promise.resolve()
+            processAlive = false
+            if (!machineEventListenerRef.current) throw new Error('reused runner watch listener not bound')
+            machineEventListenerRef.current({ type: 'machine-updated', machineId: 'machine-1' })
+            await Promise.resolve()
 
-        expect(recoverManagedRunner).toHaveBeenCalledTimes(2)
-        machine = null
+            expect(recoverManagedRunner).toHaveBeenCalledTimes(2)
+            machine = null
+        } finally {
+            await controller.stop()
+        }
     })
 })
