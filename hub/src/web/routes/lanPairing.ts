@@ -5,7 +5,6 @@ import {
     PairingLanCreateResponseSchema,
     PairingLanVerifyCodeResponseSchema,
     PairingStatusResponseSchema,
-    PairingVerifyCodeRequestSchema,
     toPairingSessionSnapshot,
 } from '@viby/protocol/pairing'
 import type { Context, Hono } from 'hono'
@@ -20,7 +19,11 @@ import { createJsonBodyValidator } from './sessionRouteSupport'
 
 const SSE_KEEPALIVE_INTERVAL_MS = 25_000
 
-const LanVerifyCodeBodySchema = PairingVerifyCodeRequestSchema.extend({
+const LanVerifyCodeBodySchema = z.object({
+    code: z.string().regex(/^\d{6}$/),
+    label: PairingCreateRequestSchema.shape.label,
+    publicKey: z.string().min(1).optional(),
+    metadata: PairingCreateRequestSchema.shape.metadata,
     deviceName: z.string().trim().min(1).max(80).optional(),
     platform: DevicePlatformSchema.optional(),
 })
