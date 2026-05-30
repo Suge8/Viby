@@ -1,13 +1,11 @@
 import { PairingBrokerSignalMessageSchema, type PairingByeReason } from '@viby/protocol/pairing'
-import { buildPairingConnectionKey, PairingConnectionIndex } from './wsConnectionIndex'
+import { PairingConnectionIndex } from './wsConnectionIndex'
 import { createPairingDisconnectGrace } from './wsDisconnectGrace'
-import {
-    flushPendingSocketMessages,
-    PairingPendingSocketMessages,
-    sendOrBufferSocketMessage,
-} from './wsPendingMessages'
+import { forwardPairingSocketMessage, getAllPairingSockets } from './wsMultiplex'
+import { flushPendingSocketMessages, PairingPendingSocketMessages } from './wsPendingMessages'
 import { snapshotPairingSocketHub } from './wsSnapshot'
-import { createEmptyState, oppositeRole, parseSocketMessage, readRawText, sendBye } from './wsSupport'
+import { attachPairingSocket, detachPairingSocket } from './wsSocketSlots'
+import { createEmptyState, parseSocketMessage, readRawText, sendBye } from './wsSupport'
 import type {
     ConnectionState,
     PairingConnection,
@@ -18,24 +16,23 @@ import type {
 
 export type { PairingConnection, PairingSocketHubOptions, PairingSocketLike } from './wsTypes'
 
-const SOCKET_OPEN = 1
-
 export class PairingSocketHub {
     private readonly connections = new Map<string, ConnectionState>()
     private readonly connectionIndex = new PairingConnectionIndex()
     private readonly disconnectGrace
     private readonly messageSchema
     private readonly pendingMessages
-
     constructor(private readonly options: PairingSocketHubOptions) {
         this.messageSchema = options.messageSchema ?? PairingBrokerSignalMessageSchema
         this.pendingMessages = new PairingPendingSocketMessages(options.maxBufferedMessagesPerRole)
         this.disconnectGrace = createPairingDisconnectGrace({
             disconnectGraceMs: options.disconnectGraceMs,
-            onExpire: (connection) => this.collectEmptySession(connection.pairingId),
+            onExpire: (connection) => {
+                this.options.metrics?.increment('stale_connection_drops')
+                this.collectEmptySession(connection.pairingId)
+            },
         })
     }
-
     async attach(pairingId: string, tokenHash: string, socket: PairingSocketLike): Promise<PairingConnection | null> {
         const identity = await this.options.store.getSessionByTokenHash(tokenHash)
         if (!identity || identity.session.id !== pairingId) {
@@ -47,24 +44,26 @@ export class PairingSocketHub {
             socket.close(1000, 'pairing_unavailable')
             return null
         }
-
         const state = this.getConnectionState(pairingId)
-        this.disconnectGrace.cancel(state, identity.role)
-        const existing = state.sockets.get(identity.role)
-        if (existing && existing !== socket) {
-            this.connectionIndex.deleteSocket(existing)
-            existing.close(1012, 'replaced')
-        }
-
-        const connection = {
-            connectionKey: buildPairingConnectionKey(pairingId, identity.role, tokenHash),
+        const connection = attachPairingSocket({
+            identity,
             pairingId,
-            role: identity.role,
-            tokenHash,
             socket,
-        }
-        state.sockets.set(identity.role, socket)
+            state,
+            tokenHash,
+            hubOptions: this.options,
+            deleteIndexedSocket: (socket) => this.connectionIndex.deleteSocket(socket),
+        })
+        this.disconnectGrace.cancel(state, connection.connectionKey)
         this.connectionIndex.set(socket, connection)
+        if (identity.role === 'guest' && this.options.trackRemoteConnectionLiveness !== false) {
+            await this.options.store.markRemoteConnectionConnected(
+                pairingId,
+                connection.connectionId,
+                this.options.now?.() ?? Date.now()
+            )
+            await this.options.onRemoteConnectionsChanged?.(pairingId)
+        }
         flushPendingSocketMessages({
             bufferMessages: this.options.bufferMessages,
             pairingId,
@@ -74,7 +73,6 @@ export class PairingSocketHub {
         })
         return connection
     }
-
     async handleMessage(
         socket: PairingSocketLike,
         rawData: string | ArrayBuffer | SharedArrayBuffer | Blob
@@ -90,59 +88,59 @@ export class PairingSocketHub {
             socket.close(1003, 'invalid-message')
             return
         }
-        const targetRole = oppositeRole(connection.role)
-        sendOrBufferSocketMessage({
-            bufferMessages: this.options.bufferMessages,
+        forwardPairingSocketMessage({
             connection,
+            hubOptions: this.options,
             pendingMessages: this.pendingMessages,
             rawText,
-            shouldBufferMessage: this.options.shouldBufferMessage,
-            target: this.connections.get(connection.pairingId)?.sockets.get(targetRole),
-            targetRole,
+            state: this.connections.get(connection.pairingId),
         })
     }
-
     async detach(socket: PairingSocketLike): Promise<void> {
         const connection = this.connectionIndex.resolve(socket)
         if (!connection) return
         this.connectionIndex.deleteSocket(socket)
-        const state = this.connections.get(connection.pairingId)
-        if (!state || state.sockets.get(connection.role) !== connection.socket) return
-        state.sockets.delete(connection.role)
+        const state = detachPairingSocket({
+            connection,
+            hubOptions: this.options,
+            state: this.connections.get(connection.pairingId),
+        })
+        if (!state) return
+        if (connection.role === 'guest' && this.options.trackRemoteConnectionLiveness !== false) {
+            await this.options.store.markRemoteConnectionDisconnected(
+                connection.pairingId,
+                connection.connectionId,
+                this.options.now?.() ?? Date.now()
+            )
+            await this.options.onRemoteConnectionsChanged?.(connection.pairingId)
+        }
         this.disconnectGrace.schedule(state, connection)
     }
-
-    notifyPeerReplaced(pairingId: string, replacedRole: 'host' | 'guest'): void {
-        const target = this.connections.get(pairingId)?.sockets.get(oppositeRole(replacedRole))
-        if (target?.readyState === SOCKET_OPEN) target.send(JSON.stringify({ type: 'peer-replaced' }))
-    }
-
     async notifyBye(pairingId: string, reason: PairingByeReason): Promise<void> {
         const state = this.connections.get(pairingId)
         if (!state) return
-        this.connectionIndex.deleteSession(pairingId, state.sockets.values())
-        for (const socket of state.sockets.values()) {
+        const sockets = getAllPairingSockets(state)
+        this.connectionIndex.deleteSession(pairingId, sockets)
+        for (const socket of sockets) {
             sendBye(socket, reason)
             socket.close(1000, reason)
         }
         this.disconnectGrace.clearAll(state)
         state.sockets.clear()
+        state.guestSockets.clear()
         this.connections.delete(pairingId)
         this.pendingMessages.deleteSession(pairingId)
     }
-
     snapshot(): PairingSocketHubSnapshot {
-        return snapshotPairingSocketHub(this.connections.values(), this.connections.size)
+        return snapshotPairingSocketHub(this.connections.entries(), this.connections.size)
     }
-
     private collectEmptySession(pairingId: string): void {
         const state = this.connections.get(pairingId)
-        if (state && state.sockets.size === 0 && state.disconnectTimers.size === 0) {
+        if (state && getAllPairingSockets(state).length === 0 && state.disconnectTimers.size === 0) {
             this.connections.delete(pairingId)
             this.pendingMessages.deleteSession(pairingId)
         }
     }
-
     private getConnectionState(pairingId: string): ConnectionState {
         const existing = this.connections.get(pairingId)
         if (existing) return existing

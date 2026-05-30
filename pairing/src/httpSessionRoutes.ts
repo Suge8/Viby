@@ -12,6 +12,7 @@ import {
 import type { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { generatePairingSecret, hashPairingSecret } from './crypto'
+import { buildPairingHostEventFromStore, toRemoteConnectionSnapshots } from './hostEventPayload'
 import {
     enforcePairingRateLimit,
     getClientAddress,
@@ -25,6 +26,7 @@ import {
     createIceServers,
     createPairingSessionRecord,
     createParticipantRecord,
+    createRemoteConnectionDraft,
     getNow,
 } from './httpSupport'
 import type { PairingHttpOptions } from './httpTypes'
@@ -62,6 +64,7 @@ export function registerPairingSessionRoutes(
         return c.json(
             PairingStatusResponseSchema.parse({
                 pairing: toPairingSessionSnapshotForRole(session, identity.role),
+                remoteConnections: toRemoteConnectionSnapshots(await options.store.getRemoteConnections(pairingId)),
             })
         )
     })
@@ -111,7 +114,7 @@ export function registerPairingSessionRoutes(
         if (session.state === 'deleted' || session.state === 'expired') {
             return rejectPairingRequest(c, options, 'verify_rejected', 410, 'Pairing session no longer active')
         }
-        if (session.guest || session.approvalStatus === 'approved') {
+        if (session.authorizedDevice || session.approvalStatus === 'approved') {
             return rejectPairingRequest(c, options, 'verify_rejected', 409, 'Pairing session already claimed')
         }
         if (session.shortCode === null || session.shortCode !== body.code) {
@@ -119,18 +122,31 @@ export function registerPairingSessionRoutes(
         }
 
         const guestToken = generatePairingSecret()
-        const guest = createParticipantRecord({
+        const guestConnection = createRemoteConnectionDraft({
             token: guestToken,
             label: body.label,
             publicKey: body.publicKey,
             metadata: body.metadata,
         })
-        const approved = await options.store.claimAndApprove(pairingId, body.code, guest, now)
+        const approved = await options.store.claimAndApprove(
+            pairingId,
+            body.code,
+            {
+                id: body.publicKey,
+                publicKey: body.publicKey,
+                label: body.label,
+                metadata: body.metadata,
+                authorizedAt: now,
+                lastSeenAt: now,
+            },
+            guestConnection,
+            now
+        )
         if (!approved) {
             return rejectPairingRequest(c, options, 'verify_rejected', 409, 'Pairing session could not be claimed')
         }
 
-        options.eventBus.emitUpdate(approved)
+        options.eventBus.emit(await buildPairingHostEventFromStore(options.store, approved))
 
         const urls = buildPairingUrls(options.publicUrl, approved.id, guestToken)
         const response = PairingGuestAuthResponseSchema.parse({
@@ -171,7 +187,7 @@ export function registerPairingSessionRoutes(
         }
 
         await options.socketHub.notifyBye(pairingId, 'user_revoked')
-        options.eventBus.emitUpdate(deleted)
+        options.eventBus.emit(await buildPairingHostEventFromStore(options.store, deleted))
         logPairingAudit(options, 'delete', { ip: getClientAddress(c), pairingId, role: identity.role })
 
         return c.json(PairingDeleteResponseSchema.parse({ deleted: true, pairing: toPairingSessionSnapshot(deleted) }))
@@ -213,7 +229,7 @@ export function registerPairingSessionRoutes(
             // the right state even when verify happened during reconnect.
             const initial = await options.store.getSession(pairingId)
             if (initial) {
-                pending.push({ type: 'pairing.updated', pairing: toPairingSessionSnapshot(initial) })
+                pending.push(await buildPairingHostEventFromStore(options.store, initial))
             }
 
             stream.onAbort(() => {

@@ -365,12 +365,12 @@ describe('pairing http routes', () => {
             `wss://pair.example.com/pairings/${created.pairing.id}/tunnel?token=${deviceRecovered.guestToken}`
         )
 
-        const staleTokenResponse = await app.request(`/pairings/${created.pairing.id}/reconnect-challenge`, {
+        const browserStillValidResponse = await app.request(`/pairings/${created.pairing.id}/reconnect-challenge`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ token: claimed.guestToken }),
         })
-        expect(staleTokenResponse.status).toBe(403)
+        expect(browserStillValidResponse.status).toBe(200)
 
         const deleteResponse = await app.request(`/pairings/${created.pairing.id}`, {
             method: 'DELETE',
@@ -452,6 +452,7 @@ describe('pairing http routes', () => {
         })
         expect(handoffClaimResponse.status).toBe(200)
         const handoffClaimed = await handoffClaimResponse.json()
+        expect(handoffClaimed.pairing.authorizedDevice.publicKey).toBe(browserIdentity.publicKey)
         expect(handoffClaimed.guestToken).toBeTruthy()
         expect(handoffClaimed.guestToken).not.toBe(claimed.guestToken)
         expect(handoffClaimed.wsUrl).toBe(
@@ -464,66 +465,17 @@ describe('pairing http routes', () => {
         const reusedHandoffResponse = await app.request(`/pairings/${created.pairing.id}/pwa-handoff-claim`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ handoffTicket: handoff.handoffTicket, publicKey: pwaIdentity.publicKey }),
+            body: JSON.stringify({ handoffTicket: handoff.handoffTicket, publicKey: browserIdentity.publicKey }),
         })
         expect(reusedHandoffResponse.status).toBe(403)
         expect(await reusedHandoffResponse.json()).toMatchObject({ code: 'pairing_invalid_handoff_ticket' })
 
-        const staleTokenResponse = await app.request(`/pairings/${created.pairing.id}/reconnect-challenge`, {
+        const browserStillValidResponse = await app.request(`/pairings/${created.pairing.id}/reconnect-challenge`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ token: claimed.guestToken }),
         })
-        expect(staleTokenResponse.status).toBe(403)
-    })
-
-    it('binds legacy token-only browser pairings before PWA handoff', async () => {
-        const app = createTestApp()
-        const createResponse = await app.request('/pairings', {
-            method: 'POST',
-            headers: { authorization: 'Bearer create-secret', 'content-type': 'application/json' },
-            body: JSON.stringify({ label: 'Desk Host' }),
-        })
-        const created = await createResponse.json()
-        const browserIdentity = await createReconnectDeviceIdentity()
-        const verifyResponse = await app.request(`/pairings/${created.pairing.id}/verify-code`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ code: created.pairing.shortCode, label: 'Phone Browser' }),
-        })
-        const claimed = await verifyResponse.json()
-        const challengeResponse = await app.request(`/pairings/${created.pairing.id}/reconnect-challenge`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ token: claimed.guestToken }),
-        })
-        const challenge = await challengeResponse.json()
-        const deviceProof = await createReconnectDeviceProof(
-            created.pairing.id,
-            browserIdentity,
-            challenge.challenge.nonce
-        )
-        const handoffTicketResponse = await app.request(`/pairings/${created.pairing.id}/pwa-handoff-ticket`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ token: claimed.guestToken, deviceProof }),
-        })
-        expect(handoffTicketResponse.status).toBe(200)
-
-        const statusResponse = await app.request(`/pairings/${created.pairing.id}`, {
-            headers: { authorization: `Bearer ${created.hostToken}` },
-        })
-        const status = await statusResponse.json()
-        expect(status.pairing.guest.publicKey).toBe(browserIdentity.publicKey)
-
-        const handoff = await handoffTicketResponse.json()
-        const pwaIdentity = await createReconnectDeviceIdentity()
-        const handoffClaimResponse = await app.request(`/pairings/${created.pairing.id}/pwa-handoff-claim`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ handoffTicket: handoff.handoffTicket, publicKey: pwaIdentity.publicKey }),
-        })
-        expect(handoffClaimResponse.status).toBe(200)
+        expect(browserStillValidResponse.status).toBe(200)
     })
 
     it('returns only STUN ICE servers with every broker-issued ICE response', async () => {
@@ -541,19 +493,35 @@ describe('pairing http routes', () => {
         const created = await createResponse.json()
         expect(created.iceServers).toEqual([{ urls: 'stun:stun.example.com:3478' }])
 
+        const deviceIdentity = await createReconnectDeviceIdentity()
         const verifyResponse = await app.request(`/pairings/${created.pairing.id}/verify-code`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ code: created.pairing.shortCode, label: 'Phone Guest' }),
+            body: JSON.stringify({
+                code: created.pairing.shortCode,
+                label: 'Phone Guest',
+                publicKey: deviceIdentity.publicKey,
+            }),
         })
         expect(verifyResponse.status).toBe(200)
         const claimed = await verifyResponse.json()
         expect(claimed.iceServers).toEqual(created.iceServers)
 
-        const reconnectResponse = await app.request(`/pairings/${created.pairing.id}/reconnect`, {
+        const challengeResponse = await app.request(`/pairings/${created.pairing.id}/reconnect-challenge`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ token: claimed.guestToken }),
+        })
+        const challenge = await challengeResponse.json()
+        const deviceProof = await createReconnectDeviceProof(
+            created.pairing.id,
+            deviceIdentity,
+            challenge.challenge.nonce
+        )
+        const reconnectResponse = await app.request(`/pairings/${created.pairing.id}/reconnect`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ token: claimed.guestToken, challengeNonce: challenge.challenge.nonce, deviceProof }),
         })
         expect(reconnectResponse.status).toBe(200)
         const reconnected = await reconnectResponse.json()
@@ -717,6 +685,7 @@ describe('pairing http routes', () => {
                 id: created.pairing.id,
                 approvalStatus: null,
             },
+            remoteConnections: [],
         })
     })
 
@@ -747,7 +716,11 @@ describe('pairing http routes', () => {
                 'content-type': 'application/json',
                 'x-forwarded-for': '203.0.113.10',
             },
-            body: JSON.stringify({ code: created.pairing.shortCode, label: 'Phone Guest' }),
+            body: JSON.stringify({
+                code: created.pairing.shortCode,
+                label: 'Phone Guest',
+                publicKey: 'browser-public-key',
+            }),
         })
         expect(firstVerify.status).toBe(200)
 
@@ -757,7 +730,7 @@ describe('pairing http routes', () => {
                 'content-type': 'application/json',
                 'x-forwarded-for': '203.0.113.10',
             },
-            body: JSON.stringify({ code: '000000', label: 'Retry Guest' }),
+            body: JSON.stringify({ code: '000000', label: 'Retry Guest', publicKey: 'retry-public-key' }),
         })
         expect(secondVerify.status).toBe(429)
         expect(secondVerify.headers.get('retry-after')).toBeTruthy()
@@ -899,7 +872,11 @@ describe('pairing http routes', () => {
         const verifyResponse = await app.request(`/pairings/${created.pairing.id}/verify-code`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ code: created.pairing.shortCode, label: 'Phone Guest' }),
+            body: JSON.stringify({
+                code: created.pairing.shortCode,
+                label: 'Phone Guest',
+                publicKey: 'browser-public-key',
+            }),
         })
         const claimed = await verifyResponse.json()
 
@@ -956,7 +933,7 @@ describe('pairing http routes', () => {
         const verifyResponse = await app.request(`/pairings/${created.pairing.id}/verify-code`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ code: created.pairing.shortCode, label: 'Phone' }),
+            body: JSON.stringify({ code: created.pairing.shortCode, label: 'Phone', publicKey: 'browser-public-key' }),
         })
         const claimed = await verifyResponse.json()
 
@@ -1010,10 +987,12 @@ describe('pairing http routes', () => {
         await app.request(`/pairings/${created.pairing.id}/verify-code`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ code: created.pairing.shortCode, label: 'Phone' }),
+            body: JSON.stringify({ code: created.pairing.shortCode, label: 'Phone', publicKey: 'browser-public-key' }),
         })
         const afterVerify = await readUntil((chunk) => chunk.includes('"approvalStatus":"approved"'))
         expect(afterVerify).toContain('"approvalStatus":"approved"')
+        expect(afterVerify).toContain('"remoteConnections"')
+        expect(afterVerify).toContain('"lastSeenAt"')
 
         await reader.cancel()
     })
@@ -1029,7 +1008,7 @@ describe('pairing http routes', () => {
         const verifyResponse = await app.request(`/pairings/${created.pairing.id}/verify-code`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ code: created.pairing.shortCode, label: 'Phone' }),
+            body: JSON.stringify({ code: created.pairing.shortCode, label: 'Phone', publicKey: 'browser-public-key' }),
         })
         const claimed = await verifyResponse.json()
 

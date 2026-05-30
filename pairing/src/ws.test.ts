@@ -1,6 +1,22 @@
 import { describe, expect, it, mock } from 'bun:test'
 import { type PairingRtcSignal, PairingSessionRecordSchema } from '@viby/protocol/pairing'
 import { createParticipantRecord } from './httpSupport'
+
+function createAuthorizedDevice(guest: ReturnType<typeof createParticipantRecord>, at: number) {
+    return {
+        id: guest.publicKey ?? guest.tokenHash,
+        publicKey: guest.publicKey ?? guest.tokenHash,
+        label: guest.label,
+        metadata: guest.metadata,
+        authorizedAt: at,
+        lastSeenAt: at,
+    }
+}
+
+function createConnection(participant: ReturnType<typeof createParticipantRecord>) {
+    return { connectionId: participant.tokenHash, participant }
+}
+
 import { MemoryPairingStore } from './memoryStore'
 import { PairingSocketHub } from './ws'
 import type { PairingSocketLike } from './wsTypes'
@@ -16,7 +32,7 @@ function createSessionRecord(now: number) {
         shortCode: '123456',
         approvalStatus: null,
         host,
-        guest: null,
+        authorizedDevice: null,
     })
 }
 
@@ -44,7 +60,7 @@ async function createClaimedStore(now: number) {
     const session = createSessionRecord(now)
     const guest = createParticipantRecord({ token: 'guest-secret', label: 'Phone' })
     await store.createSession(session)
-    await store.claimAndApprove(session.id, '123456', guest, now)
+    await store.claimAndApprove(session.id, '123456', createAuthorizedDevice(guest, now), createConnection(guest), now)
     return { store, session, guest }
 }
 
@@ -74,20 +90,6 @@ describe('PairingSocketHub', () => {
 
         expect(firstHostSocket.closeCalls).toContainEqual({ code: 1012, reason: 'replaced' })
         expect(secondHostSocket.closeCalls).toHaveLength(0)
-    })
-
-    it('tells the opposite role to rebuild WebRTC when a guest token is rotated', async () => {
-        const now = 1_000
-        const { store, session, guest } = await createClaimedStore(now)
-        const hub = new PairingSocketHub({ store, now: () => now })
-        const hostSocket = createSocket()
-        const guestSocket = createSocket()
-
-        await hub.attach(session.id, session.host.tokenHash, hostSocket)
-        await hub.attach(session.id, guest.tokenHash, guestSocket)
-        hub.notifyPeerReplaced(session.id, 'guest')
-
-        expect(hostSocket.sent).toContainEqual({ type: 'peer-replaced' })
     })
 
     it('does not rebuild WebRTC for a same-token signaling socket refresh', async () => {
@@ -130,7 +132,9 @@ describe('PairingSocketHub', () => {
         await hub.detach(firstHostSocket)
         await hub.handleMessage(secondHostSocket, JSON.stringify({ type: 'candidate', candidate: { candidate: 'x' } }))
 
+        expect(firstHostSocket.data).toEqual({})
         expect(secondHostSocket.closeCalls).toHaveLength(0)
+        expect(hub.snapshot().activeSockets).toBe(1)
     })
 
     it('accepts message and close callbacks with a websocket wrapper identity', async () => {
@@ -149,7 +153,10 @@ describe('PairingSocketHub', () => {
         await hub.detach(cloneSocketView(hostOpenSocket))
         await new Promise((resolve) => setTimeout(resolve, 5))
 
-        expect(hostOpenSocket.closeCalls).toHaveLength(0)
+        await hub.handleMessage(hostOpenSocket, JSON.stringify({ type: 'candidate', candidate: { candidate: 'x' } }))
+
+        expect(hostOpenSocket.data).toEqual({})
+        expect(hostOpenSocket.closeCalls).toEqual([{ code: 1008, reason: 'not-attached' }])
         expect(hub.snapshot().activeSessions).toBe(0)
     })
 
@@ -164,22 +171,34 @@ describe('PairingSocketHub', () => {
         expect(hub.snapshot()).toEqual({
             activeSessions: 1,
             activeSockets: 1,
-            pairedSessions: 0,
+            activeRemoteConnections: 0,
+            disconnectGraceByRole: { guest: 0, host: 0 },
             disconnectGraceTimers: 0,
+            maxRemoteConnectionsPerPairing: 0,
+            pairedSessions: 0,
+            pairingsWithRemoteConnections: 0,
         })
         await hub.attach(session.id, guest.tokenHash, guestSocket)
         expect(hub.snapshot()).toEqual({
             activeSessions: 1,
             activeSockets: 2,
-            pairedSessions: 1,
+            activeRemoteConnections: 1,
+            disconnectGraceByRole: { guest: 0, host: 0 },
             disconnectGraceTimers: 0,
+            maxRemoteConnectionsPerPairing: 1,
+            pairedSessions: 1,
+            pairingsWithRemoteConnections: 1,
         })
         await hub.detach(guestSocket)
         expect(hub.snapshot()).toEqual({
             activeSessions: 1,
             activeSockets: 1,
-            pairedSessions: 0,
+            activeRemoteConnections: 0,
+            disconnectGraceByRole: { guest: 1, host: 0 },
             disconnectGraceTimers: 1,
+            maxRemoteConnectionsPerPairing: 0,
+            pairedSessions: 0,
+            pairingsWithRemoteConnections: 0,
         })
     })
 

@@ -18,11 +18,20 @@ export class PairingConnectionIndex {
     }
 
     deleteSocket(socket: PairingSocketLike): void {
+        const connection = this.socketIndex.get(socket)
         this.socketIndex.delete(socket)
+        this.clearSocketData(socket)
+        if (connection && connection.socket !== socket) {
+            this.socketIndex.delete(connection.socket)
+            this.clearSocketData(connection.socket)
+        }
     }
 
     deleteSession(pairingId: string, sockets: Iterable<PairingSocketLike>): void {
-        for (const socket of sockets) this.socketIndex.delete(socket)
+        for (const socket of sockets) {
+            this.socketIndex.delete(socket)
+            this.clearSocketData(socket)
+        }
         for (const [connectionKey, connection] of this.connectionIndex) {
             if (connection.pairingId === pairingId) this.connectionIndex.delete(connectionKey)
         }
@@ -32,19 +41,19 @@ export class PairingConnectionIndex {
         const indexed = this.socketIndex.get(socket)
         if (indexed) return indexed
 
-        const connectionKey = this.readSocketConnectionKey(socket)
-        if (!connectionKey) return null
+        const data = typeof socket.data === 'object' && socket.data ? (socket.data as PairingSocketData) : null
+        if (!data?.connectionKey) return null
 
-        const connection = this.connectionIndex.get(connectionKey)
+        const connection = this.connectionIndex.get(data.connectionKey)
         if (!connection) return null
 
         this.socketIndex.set(socket, connection)
         return connection
     }
 
-    private readSocketConnectionKey(socket: PairingSocketLike): string | null {
-        const socketData = typeof socket.data === 'object' && socket.data ? (socket.data as PairingSocketData) : null
-        return socketData?.connectionKey ?? null
+    private clearSocketData(socket: PairingSocketLike): void {
+        if (typeof socket.data !== 'object' || !socket.data) return
+        delete (socket.data as PairingSocketData).connectionKey
     }
 
     private writeSocketData(socket: PairingSocketLike, connectionKey: string): void {

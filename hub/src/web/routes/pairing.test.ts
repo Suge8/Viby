@@ -29,6 +29,7 @@ describe('pairing routes', () => {
                     shortCode: '123456',
                     approvalStatus: null,
                     host: {},
+                    authorizedDevice: null,
                     guest: null,
                 },
                 hostToken: 'host-token',

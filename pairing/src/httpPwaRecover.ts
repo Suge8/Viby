@@ -58,7 +58,7 @@ export function createPairingCookieRecoverHandler(options: PairingHttpOptions): 
             session.state === 'deleted' ||
             session.state === 'expired' ||
             session.approvalStatus !== 'approved' ||
-            !session.guest?.publicKey
+            !session.authorizedDevice?.publicKey
         if (unusable) return respondFailure(c, 'pairing_unavailable', { clearCookie: true })
 
         const handoffTicket = generatePairingSecret()

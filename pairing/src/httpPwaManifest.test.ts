@@ -73,22 +73,31 @@ async function seedApprovedPairing(store: MemoryPairingStore, pairingId: string)
             label: 'host',
             metadata: { source: 'desktop' },
         },
-        guest: null,
+        authorizedDevice: null,
         createdAt: FIXED_NOW,
         updatedAt: FIXED_NOW,
         expiresAt: FIXED_NOW + 3600 * 1000,
     })
+    const guest = {
+        tokenHash: 'guest-hash',
+        label: 'guest',
+        metadata: { platform: 'ios' },
+        publicKey: 'guest-public-key',
+        connectedAt: FIXED_NOW,
+        lastSeenAt: FIXED_NOW,
+    }
     await store.claimAndApprove(
         pairingId,
         '123456',
         {
-            tokenHash: 'guest-hash',
-            label: 'guest',
-            metadata: { platform: 'ios' },
-            publicKey: 'guest-public-key',
-            connectedAt: FIXED_NOW,
+            id: guest.publicKey,
+            publicKey: guest.publicKey,
+            label: guest.label,
+            metadata: guest.metadata,
+            authorizedAt: FIXED_NOW,
             lastSeenAt: FIXED_NOW,
         },
+        { connectionId: guest.tokenHash, participant: guest },
         FIXED_NOW
     )
 }
@@ -183,7 +192,7 @@ describe('GET /manifest.webmanifest', () => {
             approvalStatus: null,
             shortCode: '654321',
             host: { tokenHash: 'host-hash', label: 'host', metadata: { source: 'desktop' } },
-            guest: null,
+            authorizedDevice: null,
             createdAt: FIXED_NOW,
             updatedAt: FIXED_NOW,
             expiresAt: FIXED_NOW + 3600 * 1000,

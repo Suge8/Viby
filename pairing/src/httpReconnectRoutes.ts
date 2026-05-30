@@ -20,7 +20,7 @@ import {
     rejectPairingCode,
     requirePairingIdentity,
 } from './httpRouteSupport'
-import { buildPairingUrls, createIceServers, createParticipantRecord, getNow } from './httpSupport'
+import { buildPairingUrls, createIceServers, createRemoteConnectionDraft, getNow } from './httpSupport'
 import type { PairingHttpOptions } from './httpTypes'
 import { createJsonBodyValidator } from './httpValidation'
 
@@ -81,7 +81,7 @@ export function registerPairingReconnectRoutes(app: Hono, options: PairingHttpOp
             if (!session || session.state === 'deleted' || session.state === 'expired') {
                 return rejectPairingCode(c, options, 'challenge_rejected', 410, 'pairing_unavailable')
             }
-            if (session.approvalStatus !== 'approved' || session.guest?.publicKey !== body.publicKey) {
+            if (session.approvalStatus !== 'approved' || session.authorizedDevice?.publicKey !== body.publicKey) {
                 return rejectPairingCode(c, options, 'challenge_rejected', 403, 'pairing_invalid_device_proof')
             }
 
@@ -111,7 +111,10 @@ export function registerPairingReconnectRoutes(app: Hono, options: PairingHttpOp
             if (!session || session.state === 'deleted' || session.state === 'expired') {
                 return rejectPairingCode(c, options, 'reconnect_rejected', 410, 'pairing_unavailable')
             }
-            if (session.approvalStatus !== 'approved' || session.guest?.publicKey !== body.deviceProof.publicKey) {
+            if (
+                session.approvalStatus !== 'approved' ||
+                session.authorizedDevice?.publicKey !== body.deviceProof.publicKey
+            ) {
                 return rejectPairingCode(c, options, 'reconnect_rejected', 403, 'pairing_invalid_device_proof')
             }
 
@@ -119,7 +122,7 @@ export function registerPairingReconnectRoutes(app: Hono, options: PairingHttpOp
                 pairingId,
                 role: 'guest',
                 proof: body.deviceProof,
-                expectedPublicKey: session.guest.publicKey,
+                expectedPublicKey: session.authorizedDevice.publicKey,
                 now,
                 store: options.store,
             })
@@ -136,26 +139,24 @@ export function registerPairingReconnectRoutes(app: Hono, options: PairingHttpOp
                 now + options.sessionTtlSeconds * 1000,
                 now
             )
-            const guest = renewedSession?.guest
-            if (!guest) {
+            const device = renewedSession?.authorizedDevice
+            if (!device) {
                 return rejectPairingCode(c, options, 'reconnect_rejected', 410, 'pairing_unavailable')
             }
 
-            const recovered = await options.store.rotateGuestToken(
+            const recovered = await options.store.addRemoteConnection(
                 pairingId,
-                createParticipantRecord({
+                createRemoteConnectionDraft({
                     token: guestToken,
-                    label: guest.label,
-                    publicKey: guest.publicKey,
-                    metadata: guest.metadata,
+                    label: device.label,
+                    publicKey: device.publicKey,
+                    metadata: device.metadata,
                 }),
                 now
             )
             if (!recovered) {
                 return rejectPairingCode(c, options, 'reconnect_rejected', 410, 'pairing_unavailable')
             }
-            options.socketHub.notifyPeerReplaced(pairingId, 'guest')
-
             logPairingAudit(options, 'device_reconnect', { ip: getClientAddress(c), pairingId })
             const urls = buildPairingUrls(options.publicUrl, pairingId, guestToken)
             return c.json(
@@ -192,7 +193,7 @@ export function registerPairingReconnectRoutes(app: Hono, options: PairingHttpOp
             }
 
             if (identity.role === 'guest') {
-                const expectedPublicKey = identity.session.guest?.publicKey ?? body.deviceProof?.publicKey
+                const expectedPublicKey = identity.session.authorizedDevice?.publicKey ?? body.deviceProof?.publicKey
                 if (expectedPublicKey) {
                     const proofFailure = await verifyStoredPairingDeviceProof({
                         pairingId,
@@ -214,18 +215,6 @@ export function registerPairingReconnectRoutes(app: Hono, options: PairingHttpOp
                             403,
                             'pairing_reconnect_challenge_expired'
                         )
-                    }
-                    if (!identity.session.guest?.publicKey) {
-                        const bound = await options.store.bindGuestDeviceKey(pairingId, expectedPublicKey, now)
-                        if (!bound) {
-                            return rejectPairingCode(
-                                c,
-                                options,
-                                'reconnect_rejected',
-                                403,
-                                'pairing_invalid_device_proof'
-                            )
-                        }
                     }
                 }
             }

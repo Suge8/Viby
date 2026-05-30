@@ -19,6 +19,7 @@ import {
     PairingSessionRecordSchema,
 } from './httpTypes'
 import { buildIceServers } from './iceServers'
+import type { PairingRemoteConnectionDraft } from './storeTypes'
 
 export function getBearerToken(value: string | null | undefined): string | null {
     if (!value) {
@@ -45,6 +46,18 @@ export function createParticipantRecord(input: {
         label: input.label,
         publicKey: input.publicKey,
         metadata: input.metadata,
+    }
+}
+
+export function createRemoteConnectionDraft(input: {
+    token: string
+    label?: string
+    publicKey?: string
+    metadata?: Record<string, unknown>
+}): PairingRemoteConnectionDraft {
+    return {
+        connectionId: generatePairingSecret(18),
+        participant: createParticipantRecord(input),
     }
 }
 
@@ -100,7 +113,7 @@ export function createPairingSessionRecord(
             label: input.label,
             metadata: input.metadata,
         }),
-        guest: null,
+        authorizedDevice: null,
     })
 
     return { session, hostToken }

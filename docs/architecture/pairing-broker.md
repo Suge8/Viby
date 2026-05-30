@@ -29,9 +29,7 @@ Broker 不维护 connected/ready/peer-left 业务状态。WebSocket 在线只是
 - `candidate`
 - `bye`
 
-Broker 可向 host 发送内部控制帧：
-
-- `peer-replaced`：guest token 被 PWA handoff 或设备重连旋转，host 必须丢弃旧 WebRTC peer 并为新 guest 重建 direct 探测。同 token 的 signaling socket 刷新不会触发；客户端伪造该帧会被 broker 拒绝。
+Broker 不接受客户端控制帧；`peer-replaced` 这类旧 guest-token 旋转控制主路径已删除。PWA handoff / reconnect 只新增 `RemoteConnection`，host 通过 tunnel peer key / heartbeat 事件重建需要的 direct 探测。
 
 `/pairings/:id/tunnel` 只允许 broker 可见的 `PairingTunnelRelayFrame`：
 
@@ -59,7 +57,7 @@ Route reducer 带事件驱动滞后：第一次 direct 只需少量 ACK 即可�
 
 Relay active 时也要主动争取 direct：relay open、relay heartbeat ACK、foreground pulse 都会在当前不是 `direct-webrtc` 且没有 direct probe 运行时触发一次 ICE restart。Relay heartbeat ACK 是 active relay RTT 的事实源，避免 UI 长期停在“测速中”。Direct 首个 ACK 后如果 reducer 仍缺少 ACK 证明，移动端立即发下一次 probe ACK，不等 15s steady keepalive；WebKit/Safari stats 透明度差时也能快速升级。Peer heartbeat 带 `id/sentAt/ack`，两端只把 `ack=true` 当作 RTT 样本，普通 heartbeat 只回 ACK，避免双向保活互相误判。这里不是第二套路由控制器；heartbeat 是 NAT keepalive + 观测，route 决策仍只进 reducer。
 
-PWA handoff 会旋转 guest token 并替换 guest socket；这代表 WebRTC peer identity 已变，不能复用浏览器 tab 留下的 direct 状态。Broker 在 guest token rotation 后通知 host `peer-replaced`；如果 signaling 控制帧丢失，desktop relay bridge 也会在已 ready 的 relay tunnel 收到新 peer key 时触发同一重建。desktop bridge 同事务 demote direct、关闭旧 DataChannel/RTCPeerConnection、创建新 peer 并重新发起 direct probe；relay 继续保持可用，直到新 direct 通过 heartbeat ACK 后再升级。
+PWA handoff / device reconnect 不替换授权设备，只新增远端连接 token；旧 tab 与新 PWA 可同时存在。Desktop bridge 在已 ready 的 relay tunnel 收到新 peer key 时触发 direct 重建，同事务 demote direct、关闭旧 DataChannel/RTCPeerConnection、创建新 peer 并重新发起 direct probe；relay 继续保持可用，直到新 direct 通过 heartbeat ACK 后再升级。
 
 Desktop host bridge 也消费同一 reducer：`RTCPeerConnection` 不存在或 direct signaling 失败时，Desktop 仍然通过 relay tunnel 进入 ready，不再把 WebRTC 当成可用性的前提。WebRTC selected candidate 非 relay 时才显示“点对点直连”；selected candidate 是 relay 时显示“安全中转”，内部仍保持 `activeTransport='relay-wss'`。
 
@@ -124,11 +122,18 @@ UI 不根据 broker socket 片段状态切全屏 boot。已进入 workspace 的 
 - `/tunnel` relay 只转发 `key` / `sealed`，broker 不看业务 payload。当前是防被动转发层读取的密文 relay；长期身份认证仍由 pairing token、device proof 和 Hub 授权链负责。
 - relay candidate 只作为 direct 探测失败原因；业务中转 owner 仍是 sealed WSS relay。
 
-## 设备 presence 与 “已配对” 信号
+## 设备授权与在线状态
 
-Scan 设备是否出现在 device popover / 在线计数，以 host bridge phase 为唯一事实源：
+Pairing broker 只保三类 owner：
 
-- `phase === 'ready'` 仅在 broker tunnel 上收到真实的 heartbeat ACK（即 guest 已 verify-code 並在线发出 frame）才 fire；ws onopen 只算 `connecting`。
-- 桌面 `usePairingBridges` 在 invite 创建即启动 bridge，不再等 `approvalStatus === 'approved'`。broker WS 端本身不 gate approval，只验 token hash，可以让 host 提前掊着压后、guest 一扫码 就转发。
-- Modal “已配对”动效 + device row 出现：只要 `approvalStatus==='approved'`（SSE推送）或 bridge phase 进 `ready`（本地事实）任一件到位即触发。两个信号补位，避免 SSE 不可靠时 UI 永远不动。
+- `PairingInvite`：一次性邀请、二维码、短码生命周期；当前存储形态是 `PairingSessionRecord` 的 invite 字段（id/state/shortCode/expiresAt/host）。
+- `AuthorizedDevice`：授权设备身份，持有 `id/publicKey/label/metadata/authorizedAt/lastSeenAt`；verify-code 唯一写入，PWA handoff / reconnect 不替换它。
+- `RemoteConnection`：实时连接实例，持有 `connectionId/tokenHash/deviceId/channel/connectedAt/lastSeenAt`；浏览器刷新、PWA handoff、device reconnect 只新增连接 token；当前在线事实来自 sealed tunnel，`channel='tunnel'`。
+
+公开合同：
+
+- `PairingSessionRecord.guest` 已退出存储 owner；对外 snapshot 里的 `guest` 只是由 `authorizedDevice` 派生的 UI 快照。
+- `GET /pairings/:id` 返回 `{ pairing, remoteConnections }`。
+- host SSE `pairing.updated` 返回 `{ type, pairing, remoteConnections }`，verify-code、PWA handoff、guest socket attach/detach 都推进同一合同。
+- `approvalStatus === 'approved'` 只表示授权完成；在线状态只看 `remoteConnections.connectedAt`。
 - SSE 指名不开 `proxy_buffering`：broker `/pairings/:id/events` 头 `X-Accel-Buffering: no` + `Cache-Control: no-cache, no-transform`。反代层需 honor 该提示。

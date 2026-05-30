@@ -5,6 +5,7 @@ import { createPairingApp, type PairingHttpOptions } from './http'
 import { createPairingManifestCookieSigner } from './manifestCookie'
 import { PairingMetrics } from './metrics'
 import { PairingRateLimiter } from './rateLimit'
+import { createRemoteConnectionChangePublisher } from './remoteConnectionEventPublisher'
 import { PairingSessionEventBus } from './sessionEventBus'
 import { createConfiguredPairingStore, type PairingStore } from './store'
 import { PairingSocketHub } from './ws'
@@ -39,12 +40,18 @@ export async function createPairingRuntime(options: CreatePairingRuntimeOptions)
     const storeLease = options.store
         ? { store: options.store, dispose: async () => {} }
         : await createConfiguredPairingStore({ redisUrl: options.redisUrl, now: options.now })
+    const eventBus = new PairingSessionEventBus()
+    const metrics = new PairingMetrics(options.now?.() ?? Date.now())
+    const emitRemoteConnectionUpdate = createRemoteConnectionChangePublisher(eventBus, storeLease.store)
     const socketHub = new PairingSocketHub({
         store: storeLease.store,
         now: options.now,
         logger: options.logger ?? console,
         disconnectGraceMs: options.disconnectGraceMs,
         bufferMessages: true,
+        trackRemoteConnectionLiveness: false,
+        onRemoteConnectionsChanged: emitRemoteConnectionUpdate,
+        metrics,
     })
     const tunnelHub = new PairingSocketHub({
         store: storeLease.store,
@@ -53,13 +60,14 @@ export async function createPairingRuntime(options: CreatePairingRuntimeOptions)
         disconnectGraceMs: options.disconnectGraceMs,
         bufferMessages: true,
         maxBufferedMessagesPerRole: 4,
+        multiplexGuests: true,
         messageSchema: PairingBrokerTunnelMessageSchema,
         shouldBufferMessage: shouldBufferPairingTunnelMessage,
+        onRemoteConnectionsChanged: emitRemoteConnectionUpdate,
+        metrics,
     })
     const { upgradeWebSocket, websocket } = createBunWebSocket()
     const rateLimiter = new PairingRateLimiter()
-    const metrics = new PairingMetrics(options.now?.() ?? Date.now())
-    const eventBus = new PairingSessionEventBus()
     const manifestCookieSigner = createPairingManifestCookieSigner({
         secret: encodeManifestCookieSecret(options.manifestCookieSecret),
     })

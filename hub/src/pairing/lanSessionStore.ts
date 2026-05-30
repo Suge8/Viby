@@ -63,7 +63,7 @@ export class LanPairingSessionStore {
             approvalStatus: null,
             metadata: input.metadata,
             host: { tokenHash: `lan-host:${id}`, label: input.label, tokenHint: undefined, metadata: input.metadata },
-            guest: null,
+            authorizedDevice: null,
         }
         this.sessions.set(id, session)
         this.ownerOfSession.set(id, input.ownerId)
@@ -95,20 +95,21 @@ export class LanPairingSessionStore {
         if (!session) return { status: 'not_found' }
         const live = this.expireIfNeeded(session)
         if (live.state === 'deleted' || live.state === 'expired') return { status: 'expired' }
-        if (live.guest || live.approvalStatus === 'approved') return { status: 'already_approved' }
+        if (live.authorizedDevice || live.approvalStatus === 'approved') return { status: 'already_approved' }
         if (live.shortCode === null || live.shortCode !== input.code) return { status: 'wrong_code' }
 
         const updatedAt = this.now()
+        const publicKey = input.publicKey ?? `lan-device:${randomUUID()}`
         const approved: PairingSessionRecord = {
             ...live,
             updatedAt,
             approvalStatus: 'approved',
-            guest: {
-                tokenHash: `lan-guest:${live.id}:${randomUUID()}`,
+            authorizedDevice: {
+                id: publicKey,
+                publicKey,
                 label: input.label,
-                publicKey: input.publicKey,
                 metadata: input.metadata,
-                connectedAt: updatedAt,
+                authorizedAt: updatedAt,
                 lastSeenAt: updatedAt,
             },
         }
@@ -146,7 +147,11 @@ export class LanPairingSessionStore {
     private emit(session: PairingSessionRecord): void {
         const bucket = this.listenerBuckets.get(session.id)
         if (!bucket || bucket.listeners.size === 0) return
-        const event: PairingHostEvent = { type: 'pairing.updated', pairing: toPairingSessionSnapshot(session) }
+        const event: PairingHostEvent = {
+            type: 'pairing.updated',
+            pairing: toPairingSessionSnapshot(session),
+            remoteConnections: [],
+        }
         for (const listener of bucket.listeners) listener(event)
     }
 }

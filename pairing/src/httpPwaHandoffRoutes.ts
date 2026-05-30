@@ -9,7 +9,7 @@ import type { Hono } from 'hono'
 import { generatePairingSecret, hashPairingSecret } from './crypto'
 import { verifyStoredPairingDeviceProof } from './httpDeviceProofSupport'
 import { enforcePairingRateLimit, getClientAddress, logPairingAudit, rejectPairingCode } from './httpRouteSupport'
-import { buildPairingUrls, createIceServers, createParticipantRecord, getNow } from './httpSupport'
+import { buildPairingUrls, createIceServers, createRemoteConnectionDraft, getNow } from './httpSupport'
 import type { PairingHttpOptions } from './httpTypes'
 import type { createJsonBodyValidator } from './httpValidation'
 import { buildPairingManifestCookieHeader } from './manifestCookie'
@@ -40,12 +40,12 @@ export function registerPairingPwaHandoffRoutes(
         if (identity.session.state === 'deleted' || identity.session.state === 'expired') {
             return rejectPairingCode(c, options, 'reconnect_rejected', 410, 'pairing_unavailable')
         }
-        const guest = identity.session.guest
-        if (identity.session.approvalStatus !== 'approved' || !guest) {
+        const device = identity.session.authorizedDevice
+        if (identity.session.approvalStatus !== 'approved' || !device) {
             return rejectPairingCode(c, options, 'reconnect_rejected', 403, 'pairing_invalid_device_proof')
         }
 
-        const expectedPublicKey = guest.publicKey ?? body.deviceProof.publicKey
+        const expectedPublicKey = device.publicKey
         const proofFailure = await verifyStoredPairingDeviceProof({
             pairingId,
             role: 'guest',
@@ -60,13 +60,6 @@ export function registerPairingPwaHandoffRoutes(
         if (proofFailure === 'challenge-expired') {
             return rejectPairingCode(c, options, 'reconnect_rejected', 403, 'pairing_reconnect_challenge_expired')
         }
-        if (!guest.publicKey) {
-            const bound = await options.store.bindGuestDeviceKey(pairingId, body.deviceProof.publicKey, now)
-            if (!bound) {
-                return rejectPairingCode(c, options, 'reconnect_rejected', 403, 'pairing_invalid_device_proof')
-            }
-        }
-
         const handoffTicket = generatePairingSecret()
         const expiresAt = now + options.handoffTicketTtlSeconds * 1000
         await options.store.issueHandoffTicket(pairingId, {
@@ -101,7 +94,7 @@ export function registerPairingPwaHandoffRoutes(
         if (!session || session.state === 'deleted' || session.state === 'expired') {
             return rejectPairingCode(c, options, 'handoff_claim_rejected', 410, 'pairing_unavailable')
         }
-        if (session.approvalStatus !== 'approved' || !session.guest) {
+        if (session.approvalStatus !== 'approved' || !session.authorizedDevice) {
             return rejectPairingCode(c, options, 'handoff_claim_rejected', 403, 'pairing_invalid_handoff_ticket')
         }
 
@@ -112,26 +105,24 @@ export function registerPairingPwaHandoffRoutes(
 
         const guestToken = generatePairingSecret()
         const renewed = await options.store.renewSession(pairingId, now + options.sessionTtlSeconds * 1000, now)
-        const guest = renewed?.guest
-        if (!guest) {
+        const device = renewed?.authorizedDevice
+        if (!device) {
             return rejectPairingCode(c, options, 'handoff_claim_rejected', 410, 'pairing_unavailable')
         }
 
-        const recovered = await options.store.rotateGuestToken(
+        const recovered = await options.store.addRemoteConnection(
             pairingId,
-            createParticipantRecord({
+            createRemoteConnectionDraft({
                 token: guestToken,
-                label: body.label ?? guest.label,
+                label: body.label ?? device.label,
                 publicKey: body.publicKey,
-                metadata: guest.metadata,
+                metadata: device.metadata,
             }),
             now
         )
         if (!recovered) {
             return rejectPairingCode(c, options, 'handoff_claim_rejected', 410, 'pairing_unavailable')
         }
-        options.socketHub.notifyPeerReplaced(pairingId, 'guest')
-
         logPairingAudit(options, 'pwa_handoff_claim', { ip: getClientAddress(c), pairingId })
         const urls = buildPairingUrls(options.publicUrl, pairingId, guestToken)
         return c.json(

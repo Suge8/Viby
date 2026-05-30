@@ -8,7 +8,7 @@ describe('LanPairingSessionStore', () => {
 
         expect(session.shortCode).toMatch(/^\d{6}$/)
         expect(session.approvalStatus).toBeNull()
-        expect(session.guest).toBeNull()
+        expect(session.authorizedDevice).toBeNull()
         expect(store.isOwnedBy(session.id, 7)).toBe(true)
         expect(store.isOwnedBy(session.id, 8)).toBe(false)
     })
@@ -25,7 +25,7 @@ describe('LanPairingSessionStore', () => {
 
         expect(result.status).toBe('ok')
         expect(result.session?.approvalStatus).toBe('approved')
-        expect(result.session?.guest?.publicKey).toBe('spki-key')
+        expect(result.session?.authorizedDevice?.publicKey).toBe('spki-key')
     })
 
     it('rejects verify when the code does not match the issued shortCode', () => {

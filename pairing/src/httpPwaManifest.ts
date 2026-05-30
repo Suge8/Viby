@@ -114,7 +114,7 @@ export function createPairingManifestHandler(options: PairingHttpOptions): (c: C
             session.state === 'deleted' ||
             session.state === 'expired' ||
             session.approvalStatus !== 'approved' ||
-            !session.guest?.publicKey
+            !session.authorizedDevice?.publicKey
         if (unusable) {
             if (shouldClearCookieOnFailure(c)) {
                 c.header('set-cookie', buildPairingManifestCookieClearHeader(), { append: true })

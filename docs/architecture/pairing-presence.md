@@ -16,11 +16,11 @@
 `device.active` 分两类：
 
 - `local` / `link`：Hub `DevicePresenceTracker`，由 Socket.IO web namespace 连接维护。
-- `scan`：desktop `usePairingBridges` 的 bridge phase；只有 `phase='ready'` 算在线。
+- `scan`：broker / Hub pairing owner 暴露的 `remoteConnections`；同一 `pairing:<id>` 下多 tab / PWA / 窗口聚合为一台设备。
 
 Hub 只保存 scan 设备元数据，不再维护 scan 在线状态。`pairing:<id>` 即使出现在 Hub presence 里也会被忽略。
 
-Desktop 设备列表投影以 persisted approved pairings 作为 scan 设备事实源：`pairing:<id>` row 总是由当前 pairing snapshot 覆盖，Hub rows 只补 link/local 和历史非 scan 元数据。这样浏览器 tab 安装成 PWA 后，即使 standalone storage 变成新分区，也仍然落在同一个 `pairing:<id>` 逻辑设备；扫码设备 bridge 已 ready、但 Hub 轮询尚未返回 scan row 时，连接页也能实时显示正确在线数。
+Desktop 设备列表投影以 persisted pairings + `remoteConnections` 作为 scan 设备事实源：`pairing:<id>` row 总是由当前 pairing snapshot 覆盖，Hub rows 只补 link/local 和历史非 scan 元数据。这样浏览器 tab 安装成 PWA 后，即使 standalone storage 变成新分区，也仍然落在同一个 `pairing:<id>` 逻辑设备；多个窗口只增加展开层连接数，不增加主层设备数。
 
 ## 数据契约
 
@@ -45,7 +45,7 @@ function isActiveDevice(device, activeIds): boolean {
 ### Desktop `getConnectedDevices`
 
 ```ts
-scan device active ⇔ deviceLinks.get(device.id)?.phase === 'ready'
+scan device active ⇔ remoteConnections.some(connection.connectedAt !== undefined)
 link/local active ⇔ device.active && revokedAt === null
 ```
 
@@ -66,14 +66,15 @@ Device popover 合并两份事实：
 
 - Hub `device_auth_devices`：设备列表、名称、平台、link/local active。
 - Desktop persisted pairings：scan row 的 canonical 元数据与逻辑设备 id。
-- `usePairingBridges().deviceLinks`：scan 设备在线与链路质量；route 状态事件驱动更新，RTT 只显示带 `sampledAt` 且未过期的观测样本。
+- Broker / Hub pairing `remoteConnections`：scan 设备当前在线窗口、窗口数、每个窗口在线/离线状态。
+- `usePairingBridges().deviceLinks`：链路质量；route 状态事件驱动更新，RTT 只显示带 `sampledAt` 且未过期的观测样本。
 
 展示规则：
 
 - `ready` + direct/relay stats → “点对点直连/安全中转 + 延迟”；RTT 样本过期时保留 transport，隐藏旧延迟数字。
 - `connecting` → “正在握手”
 - `fatal` → “连接中断”
-- 没有 bridge ready 的 scan row → 不计入在线数量
+- 没有 online remote connection 的 scan row → 不计入在线数量
 
 ## 取消配对端到端
 
