@@ -6,10 +6,10 @@ Broker 只解决“公网配对 + relay/tunnel + WebRTC signaling”。业务事
 
 ## 角色
 
-- `desktop`：发起 pairing、展示二维码/配对码、持久化 host pairing、运行 host bridge。
+- `desktop`：发起 pairing、展示二维码/配对码、持久化 host pairing、运行 host bridge；启动时必须先刷新持久化 broker pairing，确认 host token / session stale 后在本地清理，避免无效历史绑定继续占用 relay / signaling 连接。
 - `hub`：本机事实源；session、message、machine、device auth 都由 Hub owner 写入。
 - `web/PWA`：扫码/恢复后作为 guest，先走 relay tunnel，可用后并发尝试 direct。
-- `pairing broker`：ticket、token、challenge、handoff、ICE server 配置、WebSocket signal forward、opaque tunnel frame forward。
+- `pairing broker`：verify-code、token、challenge、PWA handoff、ICE server 配置、WebSocket signal forward、opaque tunnel frame forward。
 
 ## Broker 状态
 
@@ -73,6 +73,8 @@ Desktop host bridge 也消费同一 reducer：`RTCPeerConnection` 不存在或 d
 
 Peer RPC / sync / terminal 文本帧走 `shared/src/pairing/pairingPeerTextFrame.ts` 单一 owner：DataChannel 按 RFC 8831 建议把编码后 frame 控制在 16KiB 内（当前 11KiB 原始 payload → base64 JSON frame），发送端通过 `bufferedAmountLowThreshold` 做背压，并用 urgent / interactive / bulk 优先级队列让 heartbeat / 错误 / 小交互不被大响应长期压住；接收端重组后再进原 RPC parser，且只保留有限个未完成 chunk message，超额丢最旧半包，防异常 peer 用半包撑内存。WSS relay 仍可直接承载 sealed text frame。远程列表 payload 只发卡片所需 presentation 字段并裁剪超长 path / summary；远程 `session.open` / `session.resume` 请求带 `includeLatestWindow: false` 时只返回 session head，首屏/历史消息统一走 `session.messages` / `session.load-after`，WebRTC 和 WSS 使用同一 Peer RPC 合同；`session.messages` 从 protocol v2 起是远程消息窗口必需能力，旧 peer 在 heartbeat compatibility 阶段直接提示更新，不等业务 RPC timeout。未带 `includeLatestWindow` 的旧 Web 仍收到完整 `SessionViewSnapshot`。Web 侧记录每次 Peer RPC 的 method / route / bytes / chunks / duration / timeout，右下角徽章保留链路 RTT，同时用 locale 文案显示最近一次业务 RPC 诊断，避免把 heartbeat RTT 误当成打开会话耗时。
 
+会话 lifecycle 控制不是传输健康探针。`session.close` / `session.archive` / `session.abort` / `session.unarchive` 属于幂等控制 RPC：active route 是 direct 时先走 direct，direct send/response 失败后用新 request id 通过 WSS relay 重试一次；`session.send` 不重试，避免重复消息。Hub 收到 `close/archive` 后先提交 durable lifecycle，把卡片移出运行区，再用短超时请求 runner teardown；teardown 失败不得把已提交 lifecycle 回滚成 running/open，迟到 keepalive 也被 history lifecycle 拦下。
+
 Binary upload 同时走两条 route，由 `web/src/remote/remotePairingBinaryUpload.ts` 选发：优先 datachannel 发 `createPairingUploadChunkFrame` magic 帧；channel 不可用时走 sealed relay 发 `PairingTunnelBinaryFrame`，desktop relay bridge 重建同一 magic 帧然后复用 `PairingBinaryUploadManager.accept`。上传不再要求 P2P 升级成功，relay-only 路径也能成包。
 
 这里不内嵌 NetBird / WireGuard，也不把 Go QUIC / WebTransport 当当前 direct P2P 主路径：手机端仍是 Web/PWA，浏览器不暴露通用 UDP/WireGuard socket；WebTransport 是浏览器到 HTTP/3 server 的 client-server transport，不是 browser-to-desktop P2P socket。当前最佳路径就是 sealed WSS relay 先可用、WebRTC P2P direct 成功后升级。
@@ -86,9 +88,9 @@ Tunnel v2 的链路测试分三层，不把本地模拟当公网结论：
 - `harness:pairing-netem`：本机 broker + 两个 Docker endpoint，用 `tc netem` 注入延迟、抖动、丢包、短暂 100% blackhole 和 degraded cellular 恢复；用于稳定复现 relay / sealed frame / handover 回归。
 - `harness:pairing-prod-relay`：两个 Docker endpoint 都连 `https://pair.viby.run`，验证生产 TLS、反代、broker、sealed relay 和公网 RTT。
 - `harness:pairing-prod-local-direct-webrtc`：两份本机 Chromium 通过生产 `/ws` signaling 建 WebRTC DataChannel；这是生产 broker 信令 smoke，不代表真实 NAT。
-- `harness:pairing-remote-nat-direct-webrtc`：本机 Chromium host + 远端 SSH runner 上的 aiortc guest 通过生产 broker 信令，要求 DataChannel ACK 成功且本机浏览器 selected ICE candidate 不是 relay；这是当前自动化里最接近真实公网 P2P 的门。
+- `harness:pairing-remote-nat-direct-webrtc`：本机 Chromium host + 远端 SSH runner 上的 aiortc guest 通过生产 broker 信令，要求 DataChannel ACK 成功且本机浏览器 selected ICE candidate 不是 relay；这是排查真实公网 P2P 的诊断线，不作为默认产品可用性门。
 
-真手机蜂窝/Wi-Fi handover 仍需要真机矩阵；自动化只能覆盖可重复的网络损伤和跨公网 direct。端到端测量页建议优先复用服务器 + 桌面浏览器 responder，避免改动主业务代码。
+`harness:verify:tunnel` 会自动租用 Docker runtime；Docker 不可用且本机有 Colima 时会自动启动 Colima，并只在本次 harness 启动了 Colima 时负责关闭它。真手机蜂窝/Wi-Fi handover 仍需要真机矩阵；自动化只能覆盖可重复的网络损伤和跨公网 direct。端到端测量页建议优先复用服务器 + 桌面浏览器 responder，避免改动主业务代码。
 
 调研依据：
 
@@ -108,16 +110,16 @@ Peer 只有 `connectionState='closed'` 时才重建；网络切换、息屏、br
 3. Signaling socket 断线 → 永久指数退避 + jitter；peer 保留。
 4. ICE `disconnected/failed` → `restartIce()`；DataChannel/PeerConnection identity 保留。
 5. Hub 重启 → bridge 不销毁；RPC 读取最新 Hub client，不可用时返回 `hub_paused`。
-6. Broker 明确 `bye pairing_unavailable` / token invalid / expired → 退出到重新扫码。
+6. Broker 明确 `bye pairing_unavailable` / token invalid / expired → 退出到重新扫码。终态判定由 `shared/src/pairing/pairingCloseCode.ts` 的 `classifyFatalPairingClose()` 单一拥有：desktop relay bridge、web relay socket、direct `/ws` transport 共用同一规则（`1008 invalid_token` / `1012 replaced` / 任一 `PairingByeReason`），命中即终态、停止重连，desktop 侧并丢弃被拒配对，避免失效 host token 反复重连饿死新扫码。
 
 UI 不根据 broker socket 片段状态切全屏 boot。已进入 workspace 的 guest 只显示 compact reconnect notice。
 
 ## 安全模型
 
-- QR 中只有一次性 ticket，不含长期 Hub token。
-- 首次 claim 后 ticket 作废，guest token 绑定 pairing。
+- QR 中只有 `pairingId`，不含一次性 ticket 或长期 Hub token。
+- 首次 verify-code 成功后，guest token 绑定 pairing。
 - Reconnect 走 challenge + device proof；设备私钥不可导出，保存在浏览器安全存储/IDB。
-- PWA handoff ticket 一次性、短 TTL、启动后 scrub URL fragment。
+- PWA handoff ticket 一次性、短 TTL、启动后 scrub launch query。
 - PWA manifest 恢复 cookie 只用于启动入口识别，生产必须用稳定 `PAIRING_MANIFEST_COOKIE_SECRET` 签名；broker 重启不能让已安装入口因随机进程 secret 失效。
 - `/tunnel` relay 只转发 `key` / `sealed`，broker 不看业务 payload。当前是防被动转发层读取的密文 relay；长期身份认证仍由 pairing token、device proof 和 Hub 授权链负责。
 - relay candidate 只作为 direct 探测失败原因；业务中转 owner 仍是 sealed WSS relay。

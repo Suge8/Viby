@@ -27,6 +27,7 @@ export class PairingSocketHub {
         this.pendingMessages = new PairingPendingSocketMessages(options.maxBufferedMessagesPerRole)
         this.disconnectGrace = createPairingDisconnectGrace({
             disconnectGraceMs: options.disconnectGraceMs,
+            scheduleTimeout: options.scheduleTimeout,
             onExpire: (connection) => {
                 this.options.metrics?.increment('stale_connection_drops')
                 this.collectEmptySession(connection.pairingId)
@@ -56,6 +57,7 @@ export class PairingSocketHub {
         })
         this.disconnectGrace.cancel(state, connection.connectionKey)
         this.connectionIndex.set(socket, connection)
+        this.trace(pairingId, 'ws.open', { role: identity.role, connectionId: connection.connectionId })
         if (identity.role === 'guest' && this.options.trackRemoteConnectionLiveness !== false) {
             await this.options.store.markRemoteConnectionConnected(
                 pairingId,
@@ -85,6 +87,10 @@ export class PairingSocketHub {
         const rawText = await readRawText(rawData)
         if (!rawText) return
         if (!parseSocketMessage(rawText, this.messageSchema)) {
+            this.trace(connection.pairingId, 'tunnel.frame-drop', {
+                role: connection.role,
+                reason: 'invalid-message',
+            })
             socket.close(1003, 'invalid-message')
             return
         }
@@ -106,6 +112,7 @@ export class PairingSocketHub {
             state: this.connections.get(connection.pairingId),
         })
         if (!state) return
+        this.trace(connection.pairingId, 'ws.close', { role: connection.role, connectionId: connection.connectionId })
         if (connection.role === 'guest' && this.options.trackRemoteConnectionLiveness !== false) {
             await this.options.store.markRemoteConnectionDisconnected(
                 connection.pairingId,
@@ -121,6 +128,7 @@ export class PairingSocketHub {
         if (!state) return
         const sockets = getAllPairingSockets(state)
         this.connectionIndex.deleteSession(pairingId, sockets)
+        this.trace(pairingId, 'fatal', { reason })
         for (const socket of sockets) {
             sendBye(socket, reason)
             socket.close(1000, reason)
@@ -147,5 +155,12 @@ export class PairingSocketHub {
         const created = createEmptyState()
         this.connections.set(pairingId, created)
         return created
+    }
+    private trace(
+        pairingId: string,
+        event: Parameters<NonNullable<PairingSocketHubOptions['onTrace']>>[0]['event'],
+        payloadMeta?: Parameters<NonNullable<PairingSocketHubOptions['onTrace']>>[0]['payloadMeta']
+    ): void {
+        this.options.onTrace?.({ pairingId, event, payloadMeta })
     }
 }

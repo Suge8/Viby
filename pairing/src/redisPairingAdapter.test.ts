@@ -56,10 +56,10 @@ describe('RedisClientPairingAdapter', () => {
         await expect(adapter.compareAndSet('session', null, 'duplicate')).resolves.toBe(false)
         expect(client.values.get('session')).toBe('created')
 
-        await expect(adapter.compareAndSet('session', 'created', 'claimed')).resolves.toBe(true)
-        expect(client.values.get('session')).toBe('claimed')
+        await expect(adapter.compareAndSet('session', 'created', 'approved')).resolves.toBe(true)
+        expect(client.values.get('session')).toBe('approved')
 
-        await expect(adapter.compareAndSet('session', 'claimed', null)).resolves.toBe(true)
+        await expect(adapter.compareAndSet('session', 'approved', null)).resolves.toBe(true)
         expect(client.values.has('session')).toBe(false)
     })
 })

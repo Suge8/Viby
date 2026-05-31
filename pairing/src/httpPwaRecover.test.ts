@@ -71,7 +71,7 @@ async function seedApprovedPairing(store: MemoryPairingStore, pairingId: string)
         connectedAt: FIXED_NOW,
         lastSeenAt: FIXED_NOW,
     }
-    await store.claimAndApprove(
+    await store.verifyCodeAndApprove(
         pairingId,
         '123456',
         {
@@ -125,17 +125,17 @@ describe('GET /pairings/cookie-recover', () => {
         expect(payload.code).toBe('pairing_cookie_missing')
     })
 
-    it('returns `pairing_cookie_invalid` and clears the cookie when the signature does not match so a tampered cookie cannot get retried indefinitely', async () => {
+    it('returns `pairing_cookie_invalid` without clearing a newer manifest cookie that may be racing in', async () => {
         const response = await app.request('/pairings/cookie-recover', {
             headers: { cookie: 'viby_pair_manifest=pairing-1.999999999999.invalidmac' },
         })
         expect(response.status).toBe(401)
         const payload = (await response.json()) as Record<string, unknown>
         expect(payload.code).toBe('pairing_cookie_invalid')
-        expect(response.headers.get('set-cookie')).toContain('Max-Age=0')
+        expect(response.headers.get('set-cookie')).toBeNull()
     })
 
-    it('returns `pairing_unavailable` and clears the cookie when the bound pairing was torn down so a deleted pairing cannot keep issuing tickets', async () => {
+    it('returns `pairing_unavailable` without clearing a newer manifest cookie that may be racing in', async () => {
         await seedApprovedPairing(store, 'pairing-1')
         await store.deleteSession('pairing-1', FIXED_NOW)
         const cookie = manifestCookieSigner.sign('pairing-1', FIXED_NOW + 1800 * 1000)
@@ -146,6 +146,6 @@ describe('GET /pairings/cookie-recover', () => {
         expect(response.status).toBe(410)
         const payload = (await response.json()) as Record<string, unknown>
         expect(payload.code).toBe('pairing_unavailable')
-        expect(response.headers.get('set-cookie')).toContain('Max-Age=0')
+        expect(response.headers.get('set-cookie')).toBeNull()
     })
 })

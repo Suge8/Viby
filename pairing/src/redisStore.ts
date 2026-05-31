@@ -98,7 +98,7 @@ export class RedisPairingStore implements PairingStore {
         return { connectionId: index.connectionId, session, role: index.role }
     }
 
-    async claimAndApprove(
+    async verifyCodeAndApprove(
         pairingId: string,
         providedCode: string,
         device: PairingSessionRecord['authorizedDevice'],

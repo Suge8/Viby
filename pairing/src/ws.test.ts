@@ -60,7 +60,13 @@ async function createClaimedStore(now: number) {
     const session = createSessionRecord(now)
     const guest = createParticipantRecord({ token: 'guest-secret', label: 'Phone' })
     await store.createSession(session)
-    await store.claimAndApprove(session.id, '123456', createAuthorizedDevice(guest, now), createConnection(guest), now)
+    await store.verifyCodeAndApprove(
+        session.id,
+        '123456',
+        createAuthorizedDevice(guest, now),
+        createConnection(guest),
+        now
+    )
     return { store, session, guest }
 }
 
@@ -109,13 +115,45 @@ describe('PairingSocketHub', () => {
 
     it('rejects client-forged peer replacement control messages', async () => {
         const { store, session } = await createClaimedStore(1_000)
-        const hub = new PairingSocketHub({ store })
+        const traces: unknown[] = []
+        const hub = new PairingSocketHub({ store, onTrace: (event) => traces.push(event) })
         const hostSocket = createSocket()
 
         await hub.attach(session.id, session.host.tokenHash, hostSocket)
         await hub.handleMessage(hostSocket, JSON.stringify({ type: 'peer-replaced' }))
 
         expect(hostSocket.closeCalls).toContainEqual({ code: 1003, reason: 'invalid-message' })
+        expect(traces).toContainEqual({
+            pairingId: session.id,
+            event: 'tunnel.frame-drop',
+            payloadMeta: { role: 'host', reason: 'invalid-message' },
+        })
+    })
+
+    it('emits pairing-scoped broker trace events for attach and detach', async () => {
+        const now = 1_000
+        const store = new MemoryPairingStore(() => now)
+        const session = createSessionRecord(now)
+        await store.createSession(session)
+        const traces: unknown[] = []
+        const hub = new PairingSocketHub({ store, now: () => now, onTrace: (event) => traces.push(event) })
+        const hostSocket = createSocket()
+
+        await hub.attach(session.id, session.host.tokenHash, hostSocket)
+        await hub.detach(hostSocket)
+
+        expect(traces).toEqual([
+            {
+                pairingId: session.id,
+                event: 'ws.open',
+                payloadMeta: { role: 'host', connectionId: session.host.tokenHash },
+            },
+            {
+                pairingId: session.id,
+                event: 'ws.close',
+                payloadMeta: { role: 'host', connectionId: session.host.tokenHash },
+            },
+        ])
     })
 
     it('ignores stale callbacks from sockets replaced by the same role', async () => {
@@ -200,6 +238,38 @@ describe('PairingSocketHub', () => {
             pairedSessions: 0,
             pairingsWithRemoteConnections: 0,
         })
+    })
+
+    it('schedules and cancels disconnect grace through the injected scheduler', async () => {
+        const now = 1_000
+        const store = new MemoryPairingStore(() => now)
+        const session = createSessionRecord(now)
+        await store.createSession(session)
+        const scheduled: Array<{ callback: () => void; cancelled: boolean; delayMs: number }> = []
+        const hub = new PairingSocketHub({
+            store,
+            now: () => now,
+            disconnectGraceMs: 20,
+            scheduleTimeout: (callback, delayMs) => {
+                const entry = { callback, cancelled: false, delayMs }
+                scheduled.push(entry)
+                return () => {
+                    entry.cancelled = true
+                }
+            },
+        })
+        const hostSocket = createSocket()
+        await hub.attach(session.id, session.host.tokenHash, hostSocket)
+        await hub.detach(hostSocket)
+
+        expect(scheduled).toMatchObject([{ delayMs: 20, cancelled: false }])
+        expect(hub.snapshot().disconnectGraceTimers).toBe(1)
+
+        const nextHostSocket = createSocket()
+        await hub.attach(session.id, session.host.tokenHash, nextHostSocket)
+
+        expect(scheduled[0].cancelled).toBe(true)
+        expect(hub.snapshot().disconnectGraceTimers).toBe(0)
     })
 
     it('forwards raw V2 signals only when the opposite role is online', async () => {

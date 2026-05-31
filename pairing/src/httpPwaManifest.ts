@@ -3,7 +3,7 @@ import type { Context } from 'hono'
 import { generatePairingSecret, hashPairingSecret } from './crypto'
 import { getNow } from './httpSupport'
 import type { PairingHttpOptions } from './httpTypes'
-import { buildPairingManifestCookieClearHeader, readPairingManifestCookieValue } from './manifestCookie'
+import { readPairingManifestCookieValue } from './manifestCookie'
 import { readPairingManifestTemplate } from './webAppAssets'
 
 const DEFAULT_START_URL = '/sessions?remote=1'
@@ -73,10 +73,6 @@ function requestHasPairingHint(c: Context): boolean {
     )
 }
 
-function shouldClearCookieOnFailure(c: Context): boolean {
-    return Boolean(readPairingManifestCookieValue(c.req.header('cookie')))
-}
-
 /**
  * Serves `/manifest.webmanifest` with a personalized `start_url` whenever the
  * request URL carries a pairing id, either as a query string injected by the
@@ -99,9 +95,6 @@ export function createPairingManifestHandler(options: PairingHttpOptions): (c: C
         const hasPairingHint = requestHasPairingHint(c)
         const pairingId = resolvePairingIdFromRequest(c, options, now)
         if (!pairingId) {
-            if (shouldClearCookieOnFailure(c)) {
-                c.header('set-cookie', buildPairingManifestCookieClearHeader(), { append: true })
-            }
             return respondManifest(c, buildManifestBody(template, DEFAULT_START_URL), {
                 cacheableFallback: !hasPairingHint,
                 personalized: false,
@@ -116,9 +109,6 @@ export function createPairingManifestHandler(options: PairingHttpOptions): (c: C
             session.approvalStatus !== 'approved' ||
             !session.authorizedDevice?.publicKey
         if (unusable) {
-            if (shouldClearCookieOnFailure(c)) {
-                c.header('set-cookie', buildPairingManifestCookieClearHeader(), { append: true })
-            }
             return respondManifest(c, buildManifestBody(template, DEFAULT_START_URL), {
                 cacheableFallback: false,
                 personalized: false,

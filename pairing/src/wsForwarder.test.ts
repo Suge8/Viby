@@ -57,7 +57,13 @@ async function setup(now = 1_000) {
     })
     const store = new MemoryPairingStore(() => now)
     await store.createSession(session)
-    await store.claimAndApprove(session.id, '123456', createAuthorizedDevice(guest, now), createConnection(guest), now)
+    await store.verifyCodeAndApprove(
+        session.id,
+        '123456',
+        createAuthorizedDevice(guest, now),
+        createConnection(guest),
+        now
+    )
     return { store, session, guest }
 }
 

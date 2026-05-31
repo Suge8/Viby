@@ -85,8 +85,8 @@ export function authorizeCreateRequest(
  * Generate a fresh pairing session record. The 6-digit `shortCode` is the
  * sole auth credential the host displays; it is created up-front so the host
  * can render it immediately on the create response without polling. There is
- * no separate claim ticket. Devices that open the invite URL and submit
- * the matching code becomes the approved guest in a single atomic step.
+ * no separate QR ticket. Devices that open the invite URL and submit the
+ * matching code become the approved guest in a single atomic step.
  */
 export function createPairingSessionRecord(
     input: PairingCreateRequest,

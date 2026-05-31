@@ -7,7 +7,7 @@ export function createEmptyState(): ConnectionState {
         sockets: new Map<PairingRole, PairingSocketLike>(),
         guestSockets: new Map<string, PairingSocketLike>(),
         disconnectTimerRoles: new Map(),
-        disconnectTimers: new Map<string, ReturnType<typeof setTimeout>>(),
+        disconnectTimers: new Map<string, () => void>(),
     }
 }
 export function oppositeRole(role: PairingRole): PairingRole {

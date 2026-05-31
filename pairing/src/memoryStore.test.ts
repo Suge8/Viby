@@ -59,7 +59,7 @@ describe('MemoryPairingStore', () => {
         const guest = createParticipantRecord({ token: 'guest-secret', label: 'Phone' })
 
         await store.createSession(session)
-        const approved = await store.claimAndApprove(
+        const approved = await store.verifyCodeAndApprove(
             session.id,
             '654321',
             createAuthorizedDevice(guest, 1_100),
@@ -79,7 +79,7 @@ describe('MemoryPairingStore', () => {
 
         await store.createSession(session)
         await expect(
-            store.claimAndApprove(
+            store.verifyCodeAndApprove(
                 session.id,
                 '000000',
                 createAuthorizedDevice(guest, 1_100),
@@ -90,14 +90,14 @@ describe('MemoryPairingStore', () => {
         await expect(store.getSessionByTokenHash(guest.tokenHash)).resolves.toBeNull()
     })
 
-    it('rejects a second claim once the session is already approved', async () => {
+    it('rejects a second verify-code approval once the session is already approved', async () => {
         const store = new MemoryPairingStore(() => 1_000)
         const session = createSessionRecord(1_000, '111111')
         const first = createParticipantRecord({ token: 'guest-1', label: 'A' })
         const second = createParticipantRecord({ token: 'guest-2', label: 'B' })
 
         await store.createSession(session)
-        await store.claimAndApprove(
+        await store.verifyCodeAndApprove(
             session.id,
             '111111',
             createAuthorizedDevice(first, 1_100),
@@ -105,7 +105,7 @@ describe('MemoryPairingStore', () => {
             1_100
         )
         await expect(
-            store.claimAndApprove(
+            store.verifyCodeAndApprove(
                 session.id,
                 '111111',
                 createAuthorizedDevice(second, 1_200),
@@ -122,7 +122,7 @@ describe('MemoryPairingStore', () => {
         const pwaGuest = createParticipantRecord({ token: 'pwa-secret', label: 'PWA' })
 
         await store.createSession(session)
-        await store.claimAndApprove(
+        await store.verifyCodeAndApprove(
             session.id,
             '222222',
             createAuthorizedDevice(guest, 1_100),
@@ -145,14 +145,14 @@ describe('MemoryPairingStore', () => {
         const guest = createParticipantRecord({ token: 'guest-secret', label: 'Phone' })
 
         await store.createSession(session)
-        const claimed = await store.claimAndApprove(
+        const verified = await store.verifyCodeAndApprove(
             session.id,
             '222222',
             createAuthorizedDevice(guest, 1_100),
             createConnection(guest),
             1_100
         )
-        expect(claimed?.authorizedDevice?.id).toBe(guest.tokenHash)
+        expect(verified?.authorizedDevice?.id).toBe(guest.tokenHash)
 
         await store.deleteSession(session.id, 1_500)
 
@@ -206,7 +206,7 @@ describe('MemoryPairingStore', () => {
         const pwaGuest = createParticipantRecord({ token: 'pwa-secret', label: 'PWA' })
 
         await store.createSession(session)
-        await store.claimAndApprove(
+        await store.verifyCodeAndApprove(
             session.id,
             '555555',
             createAuthorizedDevice(guest, 1_100),
@@ -233,7 +233,7 @@ describe('MemoryPairingStore', () => {
         const pwaGuest = createParticipantRecord({ token: 'pwa-secret', label: 'PWA' })
 
         await store.createSession(session)
-        await store.claimAndApprove(
+        await store.verifyCodeAndApprove(
             session.id,
             '555555',
             createAuthorizedDevice(guest, 1_100),

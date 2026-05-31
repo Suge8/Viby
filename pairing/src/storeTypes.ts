@@ -58,14 +58,14 @@ export interface PairingStore {
         tokenHash: string
     ): Promise<{ connectionId?: string; session: PairingSessionRecord; role: PairingRole } | null>
     /**
-     * Atomic verify-code + claim + approve: the only path that promotes a
-     * guest to "approved". Returns the updated record on success; returns
-     * null when the session is missing, inactive, the provided code does not
-     * match the stored `shortCode`, or another guest already claimed the
-     * session in a race. The caller must rate-limit and pre-screen
-     * not-found / expired states to choose the correct user-facing error.
+     * Atomic verify-code + approval: the only path that promotes a guest to
+     * "approved". Returns the updated record on success; returns null when
+     * the session is missing, inactive, the provided code does not match the
+     * stored `shortCode`, or another guest already approved the session in a
+     * race. The caller must rate-limit and pre-screen not-found / expired
+     * states to choose the correct user-facing error.
      */
-    claimAndApprove(
+    verifyCodeAndApprove(
         pairingId: string,
         providedCode: string,
         device: AuthorizedDeviceRecord,

@@ -189,7 +189,7 @@ describe('RedisPairingStore', () => {
         adapter.failNextEval(sessionKey(session.id), 5)
 
         await expect(
-            store.claimAndApprove(
+            store.verifyCodeAndApprove(
                 session.id,
                 '123456',
                 createAuthorizedDevice(guest, now + 1),
@@ -201,7 +201,7 @@ describe('RedisPairingStore', () => {
         await expect(store.getSession(session.id)).resolves.toMatchObject({ approvalStatus: null })
     })
 
-    it('claims sessions using the exact stored payload instead of schema-reordered JSON', async () => {
+    it('approves sessions using the exact stored payload instead of schema-reordered JSON', async () => {
         const now = 1_000
         const adapter = new FakeRedisAdapter()
         const { session } = createSessionRecord(now)
@@ -221,7 +221,7 @@ describe('RedisPairingStore', () => {
         })
         adapter.values.set(sessionKey(session.id), raw)
 
-        const claimed = await store.claimAndApprove(
+        const verified = await store.verifyCodeAndApprove(
             session.id,
             '123456',
             createAuthorizedDevice(guest, now + 1),
@@ -229,7 +229,7 @@ describe('RedisPairingStore', () => {
             now + 1
         )
 
-        expect(claimed?.authorizedDevice?.id).toBe(guest.tokenHash)
+        expect(verified?.authorizedDevice?.id).toBe(guest.tokenHash)
         expect(adapter.evalCalls.at(-1)?.args[0]).toBe(raw)
     })
 
@@ -241,14 +241,14 @@ describe('RedisPairingStore', () => {
         const guest = createParticipantRecord({ token: 'guest-secret', label: 'Phone' })
 
         await store.createSession(session)
-        const claimed = await store.claimAndApprove(
+        const verified = await store.verifyCodeAndApprove(
             session.id,
             '123456',
             createAuthorizedDevice(guest, now + 1),
             createConnection(guest),
             now + 1
         )
-        expect(claimed?.authorizedDevice?.id).toBe(guest.tokenHash)
+        expect(verified?.authorizedDevice?.id).toBe(guest.tokenHash)
         await store.issueReconnectChallenge(session.id, 'host', {
             nonce: 'host-expire',
             issuedAt: now,
@@ -284,7 +284,7 @@ describe('RedisPairingStore', () => {
         const guest = createParticipantRecord({ token: 'guest-secret', label: 'Phone' })
 
         await store.createSession(session)
-        await store.claimAndApprove(
+        await store.verifyCodeAndApprove(
             session.id,
             '123456',
             createAuthorizedDevice(guest, now + 1),

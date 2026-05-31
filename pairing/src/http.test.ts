@@ -280,12 +280,12 @@ describe('pairing http routes', () => {
             }),
         })
         expect(verifyResponse.status).toBe(200)
-        const claimed = await verifyResponse.json()
-        expect(claimed.guestToken).toBeTruthy()
-        expect(claimed.wsUrl).toContain(`/pairings/${created.pairing.id}/ws?token=`)
-        expect(claimed.tunnelUrl).toContain(`/pairings/${created.pairing.id}/tunnel?token=`)
-        expect(claimed.pairing.approvalStatus).toBe('approved')
-        expect(claimed.pairing.shortCode).toBe(created.pairing.shortCode)
+        const verified = await verifyResponse.json()
+        expect(verified.guestToken).toBeTruthy()
+        expect(verified.wsUrl).toContain(`/pairings/${created.pairing.id}/ws?token=`)
+        expect(verified.tunnelUrl).toContain(`/pairings/${created.pairing.id}/tunnel?token=`)
+        expect(verified.pairing.approvalStatus).toBe('approved')
+        expect(verified.pairing.shortCode).toBe(created.pairing.shortCode)
 
         const replayResponse = await app.request(`/pairings/${created.pairing.id}/verify-code`, {
             method: 'POST',
@@ -301,7 +301,7 @@ describe('pairing http routes', () => {
         const challengeResponse = await app.request(`/pairings/${created.pairing.id}/reconnect-challenge`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ token: claimed.guestToken }),
+            body: JSON.stringify({ token: verified.guestToken }),
         })
         expect(challengeResponse.status).toBe(200)
         const challenge = await challengeResponse.json()
@@ -316,7 +316,7 @@ describe('pairing http routes', () => {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({
-                token: claimed.guestToken,
+                token: verified.guestToken,
                 challengeNonce: challenge.challenge.nonce,
                 deviceProof,
             }),
@@ -327,10 +327,10 @@ describe('pairing http routes', () => {
         expect(reconnected.pairing.approvalStatus).toBe('approved')
         expect(reconnected.pairing.expiresAt).toBeGreaterThan(created.pairing.expiresAt)
         expect(reconnected.wsUrl).toBe(
-            `wss://pair.example.com/pairings/${created.pairing.id}/ws?token=${claimed.guestToken}`
+            `wss://pair.example.com/pairings/${created.pairing.id}/ws?token=${verified.guestToken}`
         )
         expect(reconnected.tunnelUrl).toBe(
-            `wss://pair.example.com/pairings/${created.pairing.id}/tunnel?token=${claimed.guestToken}`
+            `wss://pair.example.com/pairings/${created.pairing.id}/tunnel?token=${verified.guestToken}`
         )
 
         const deviceChallengeResponse = await app.request(
@@ -357,7 +357,7 @@ describe('pairing http routes', () => {
         expect(deviceReconnectResponse.status).toBe(200)
         const deviceRecovered = await deviceReconnectResponse.json()
         expect(deviceRecovered.guestToken).toBeTruthy()
-        expect(deviceRecovered.guestToken).not.toBe(claimed.guestToken)
+        expect(deviceRecovered.guestToken).not.toBe(verified.guestToken)
         expect(deviceRecovered.wsUrl).toBe(
             `wss://pair.example.com/pairings/${created.pairing.id}/ws?token=${deviceRecovered.guestToken}`
         )
@@ -368,7 +368,7 @@ describe('pairing http routes', () => {
         const browserStillValidResponse = await app.request(`/pairings/${created.pairing.id}/reconnect-challenge`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ token: claimed.guestToken }),
+            body: JSON.stringify({ token: verified.guestToken }),
         })
         expect(browserStillValidResponse.status).toBe(200)
 
@@ -400,12 +400,12 @@ describe('pairing http routes', () => {
                 publicKey: browserIdentity.publicKey,
             }),
         })
-        const claimed = await verifyResponse.json()
+        const verified = await verifyResponse.json()
 
         const challengeResponse = await app.request(`/pairings/${created.pairing.id}/reconnect-challenge`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ token: claimed.guestToken }),
+            body: JSON.stringify({ token: verified.guestToken }),
         })
         const challenge = await challengeResponse.json()
         const deviceProof = await createReconnectDeviceProof(
@@ -416,7 +416,7 @@ describe('pairing http routes', () => {
         const handoffTicketResponse = await app.request(`/pairings/${created.pairing.id}/pwa-handoff-ticket`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ token: claimed.guestToken, deviceProof }),
+            body: JSON.stringify({ token: verified.guestToken, deviceProof }),
         })
         expect(handoffTicketResponse.status).toBe(200)
         const handoff = await handoffTicketResponse.json()
@@ -425,7 +425,7 @@ describe('pairing http routes', () => {
         const secondChallengeResponse = await app.request(`/pairings/${created.pairing.id}/reconnect-challenge`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ token: claimed.guestToken }),
+            body: JSON.stringify({ token: verified.guestToken }),
         })
         const secondChallenge = await secondChallengeResponse.json()
         const secondProof = await createReconnectDeviceProof(
@@ -436,7 +436,7 @@ describe('pairing http routes', () => {
         const newerHandoffResponse = await app.request(`/pairings/${created.pairing.id}/pwa-handoff-ticket`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ token: claimed.guestToken, deviceProof: secondProof }),
+            body: JSON.stringify({ token: verified.guestToken, deviceProof: secondProof }),
         })
         expect(newerHandoffResponse.status).toBe(200)
 
@@ -454,7 +454,7 @@ describe('pairing http routes', () => {
         const handoffClaimed = await handoffClaimResponse.json()
         expect(handoffClaimed.pairing.authorizedDevice.publicKey).toBe(browserIdentity.publicKey)
         expect(handoffClaimed.guestToken).toBeTruthy()
-        expect(handoffClaimed.guestToken).not.toBe(claimed.guestToken)
+        expect(handoffClaimed.guestToken).not.toBe(verified.guestToken)
         expect(handoffClaimed.wsUrl).toBe(
             `wss://pair.example.com/pairings/${created.pairing.id}/ws?token=${handoffClaimed.guestToken}`
         )
@@ -473,7 +473,7 @@ describe('pairing http routes', () => {
         const browserStillValidResponse = await app.request(`/pairings/${created.pairing.id}/reconnect-challenge`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ token: claimed.guestToken }),
+            body: JSON.stringify({ token: verified.guestToken }),
         })
         expect(browserStillValidResponse.status).toBe(200)
     })
@@ -504,13 +504,13 @@ describe('pairing http routes', () => {
             }),
         })
         expect(verifyResponse.status).toBe(200)
-        const claimed = await verifyResponse.json()
-        expect(claimed.iceServers).toEqual(created.iceServers)
+        const verified = await verifyResponse.json()
+        expect(verified.iceServers).toEqual(created.iceServers)
 
         const challengeResponse = await app.request(`/pairings/${created.pairing.id}/reconnect-challenge`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ token: claimed.guestToken }),
+            body: JSON.stringify({ token: verified.guestToken }),
         })
         const challenge = await challengeResponse.json()
         const deviceProof = await createReconnectDeviceProof(
@@ -521,7 +521,11 @@ describe('pairing http routes', () => {
         const reconnectResponse = await app.request(`/pairings/${created.pairing.id}/reconnect`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ token: claimed.guestToken, challengeNonce: challenge.challenge.nonce, deviceProof }),
+            body: JSON.stringify({
+                token: verified.guestToken,
+                challengeNonce: challenge.challenge.nonce,
+                deviceProof,
+            }),
         })
         expect(reconnectResponse.status).toBe(200)
         const reconnected = await reconnectResponse.json()
@@ -550,11 +554,11 @@ describe('pairing http routes', () => {
                 publicKey: deviceIdentity.publicKey,
             }),
         })
-        const claimed = await verifyResponse.json()
+        const verified = await verifyResponse.json()
         const reconnectResponse = await app.request(`/pairings/${created.pairing.id}/reconnect`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ token: claimed.guestToken }),
+            body: JSON.stringify({ token: verified.guestToken }),
         })
 
         expect(reconnectResponse.status).toBe(403)
@@ -587,12 +591,12 @@ describe('pairing http routes', () => {
                 publicKey: deviceIdentity.publicKey,
             }),
         })
-        const claimed = await verifyResponse.json()
+        const verified = await verifyResponse.json()
         const reconnectResponse = await app.request(`/pairings/${created.pairing.id}/reconnect`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({
-                token: claimed.guestToken,
+                token: verified.guestToken,
                 challengeNonce: 'missing-challenge',
                 deviceProof,
             }),
@@ -689,7 +693,7 @@ describe('pairing http routes', () => {
         })
     })
 
-    it('rate limits repeated claim attempts from the same client address', async () => {
+    it('rate limits repeated verify-code attempts from the same client address', async () => {
         const app = createTestApp({
             rateLimiter: new PairingRateLimiter(),
             rateLimitRules: {
@@ -878,12 +882,12 @@ describe('pairing http routes', () => {
                 publicKey: 'browser-public-key',
             }),
         })
-        const claimed = await verifyResponse.json()
+        const verified = await verifyResponse.json()
 
         const telemetryResponse = await app.request(`/pairings/${created.pairing.id}/telemetry`, {
             method: 'POST',
             headers: {
-                authorization: `Bearer ${claimed.guestToken}`,
+                authorization: `Bearer ${verified.guestToken}`,
                 'content-type': 'application/json',
             },
             body: JSON.stringify({
@@ -935,11 +939,11 @@ describe('pairing http routes', () => {
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ code: created.pairing.shortCode, label: 'Phone', publicKey: 'browser-public-key' }),
         })
-        const claimed = await verifyResponse.json()
+        const verified = await verifyResponse.json()
 
         const guestDelete = await app.request(`/pairings/${created.pairing.id}`, {
             method: 'DELETE',
-            headers: { authorization: `Bearer ${claimed.guestToken}` },
+            headers: { authorization: `Bearer ${verified.guestToken}` },
         })
         expect(guestDelete.status).toBe(403)
 
@@ -1010,10 +1014,10 @@ describe('pairing http routes', () => {
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ code: created.pairing.shortCode, label: 'Phone', publicKey: 'browser-public-key' }),
         })
-        const claimed = await verifyResponse.json()
+        const verified = await verifyResponse.json()
 
         const guestEvents = await app.request(`/pairings/${created.pairing.id}/events`, {
-            headers: { authorization: `Bearer ${claimed.guestToken}` },
+            headers: { authorization: `Bearer ${verified.guestToken}` },
         })
         expect(guestEvents.status).toBe(403)
     })

@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { generatePairingSecret, hashPairingSecret } from './crypto'
 import { getNow } from './httpSupport'
 import type { PairingHttpOptions } from './httpTypes'
-import { buildPairingManifestCookieClearHeader, readPairingManifestCookieValue } from './manifestCookie'
+import { readPairingManifestCookieValue } from './manifestCookie'
 
 export const PairingCookieRecoverResponseSchema = z.object({
     pairingId: z.string().min(1),
@@ -20,10 +20,7 @@ const PAIRING_COOKIE_RECOVER_ERRORS = {
 
 type PairingCookieRecoverFailure = keyof typeof PAIRING_COOKIE_RECOVER_ERRORS
 
-function respondFailure(c: Context, failure: PairingCookieRecoverFailure, options: { clearCookie: boolean }): Response {
-    if (options.clearCookie) {
-        c.header('set-cookie', buildPairingManifestCookieClearHeader(), { append: true })
-    }
+function respondFailure(c: Context, failure: PairingCookieRecoverFailure): Response {
     c.header('cache-control', 'no-store')
     const detail = PAIRING_COOKIE_RECOVER_ERRORS[failure]
     return c.json({ ok: false, code: detail.code }, detail.status)
@@ -34,8 +31,8 @@ function respondFailure(c: Context, failure: PairingCookieRecoverFailure, option
  * fallback (`/sessions?remote=1`), the React app calls this endpoint to ask
  * the broker to identify the workspace using the signed manifest cookie. If
  * the cookie is valid for an approved pairing, the broker issues a one-shot
- * handoff ticket inline and the PWA navigates to `/p/<id>#handoff=<ticket>`
- * to complete the standard claim flow, all without user input.
+ * handoff ticket inline and the PWA navigates to `/p/<id>?handoff=<ticket>`
+ * to complete the PWA handoff claim flow, all without user input.
  *
  * iOS Chrome and Safari each have their own opinions about whether a PWA
  * standalone window shares cookies with the parent browser. This handler is
@@ -46,11 +43,11 @@ function respondFailure(c: Context, failure: PairingCookieRecoverFailure, option
 export function createPairingCookieRecoverHandler(options: PairingHttpOptions): (c: Context) => Promise<Response> {
     return async (c: Context) => {
         const cookieValue = readPairingManifestCookieValue(c.req.header('cookie'))
-        if (!cookieValue) return respondFailure(c, 'no_cookie', { clearCookie: false })
+        if (!cookieValue) return respondFailure(c, 'no_cookie')
 
         const now = getNow(options.now)
         const pairingId = options.manifestCookieSigner.verify(cookieValue, now)
-        if (!pairingId) return respondFailure(c, 'invalid_cookie', { clearCookie: true })
+        if (!pairingId) return respondFailure(c, 'invalid_cookie')
 
         const session = await options.store.getSession(pairingId)
         const unusable =
@@ -59,7 +56,7 @@ export function createPairingCookieRecoverHandler(options: PairingHttpOptions): 
             session.state === 'expired' ||
             session.approvalStatus !== 'approved' ||
             !session.authorizedDevice?.publicKey
-        if (unusable) return respondFailure(c, 'pairing_unavailable', { clearCookie: true })
+        if (unusable) return respondFailure(c, 'pairing_unavailable')
 
         const handoffTicket = generatePairingSecret()
         const expiresAt = now + options.handoffTicketTtlSeconds * 1000

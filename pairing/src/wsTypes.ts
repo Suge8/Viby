@@ -1,4 +1,4 @@
-import type { PairingRole } from '@viby/protocol/pairing'
+import type { PairingRole, SessionTraceEventName, SessionTracePrimitive } from '@viby/protocol/pairing'
 import type { PairingMetrics } from './metrics'
 import type { PairingStore } from './store'
 export interface PairingSocketLike {
@@ -18,6 +18,7 @@ export interface PairingConnection {
 export interface PairingSocketHubOptions {
     store: PairingStore
     now?: () => number
+    scheduleTimeout?: (callback: () => void, delayMs: number) => () => void
     bufferMessages?: boolean
     disconnectGraceMs?: number
     logger?: Pick<Console, 'debug' | 'error' | 'log' | 'warn'>
@@ -28,6 +29,11 @@ export interface PairingSocketHubOptions {
     multiplexGuests?: boolean
     trackRemoteConnectionLiveness?: boolean
     onRemoteConnectionsChanged?: (pairingId: string) => Promise<void> | void
+    onTrace?: (event: {
+        event: SessionTraceEventName
+        pairingId: string
+        payloadMeta?: Record<string, SessionTracePrimitive>
+    }) => void
 }
 export interface PairingSocketHubSnapshot {
     activeSessions: number
@@ -43,5 +49,5 @@ export interface ConnectionState {
     sockets: Map<PairingRole, PairingSocketLike>
     guestSockets: Map<string, PairingSocketLike>
     disconnectTimerRoles: Map<string, PairingRole>
-    disconnectTimers: Map<string, ReturnType<typeof setTimeout>>
+    disconnectTimers: Map<string, () => void>
 }

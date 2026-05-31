@@ -86,7 +86,7 @@ async function seedApprovedPairing(store: MemoryPairingStore, pairingId: string)
         connectedAt: FIXED_NOW,
         lastSeenAt: FIXED_NOW,
     }
-    await store.claimAndApprove(
+    await store.verifyCodeAndApprove(
         pairingId,
         '123456',
         {
@@ -141,7 +141,7 @@ describe('GET /manifest.webmanifest', () => {
         expect(response.headers.get('cache-control')).toBe('no-store')
     })
 
-    it('clears the cookie and falls back when the bound pairing has already been torn down so a deleted pairing cannot keep issuing tickets', async () => {
+    it('falls back without clearing a newer manifest cookie that may be racing in', async () => {
         await seedApprovedPairing(store, 'pairing-1')
         await store.deleteSession('pairing-1', FIXED_NOW)
         const cookie = manifestCookieSigner.sign('pairing-1', FIXED_NOW + 1800 * 1000)
@@ -153,10 +153,10 @@ describe('GET /manifest.webmanifest', () => {
         const manifest = (await response.json()) as Record<string, unknown>
         expect(manifest.start_url).toBe('/sessions?remote=1')
         expect(response.headers.get('cache-control')).toBe('no-store')
-        expect(response.headers.get('set-cookie')).toContain('Max-Age=0')
+        expect(response.headers.get('set-cookie')).toBeNull()
     })
 
-    it('clears the cookie when the signature fails so a tampered or stale cookie cannot keep producing fallback responses with a stuck binding', async () => {
+    it('ignores an invalid cookie without clearing a newer manifest cookie that may be racing in', async () => {
         const response = await app.request('/manifest.webmanifest', {
             headers: { cookie: 'viby_pair_manifest=pairing-1.1.notavalidmac' },
         })
@@ -164,7 +164,7 @@ describe('GET /manifest.webmanifest', () => {
         const manifest = (await response.json()) as Record<string, unknown>
         expect(manifest.start_url).toBe('/sessions?remote=1')
         expect(response.headers.get('cache-control')).toBe('no-store')
-        expect(response.headers.get('set-cookie')).toContain('Max-Age=0')
+        expect(response.headers.get('set-cookie')).toBeNull()
     })
 
     it('honours the path-based pairing query so iOS Chrome standalone PWAs whose manifest fetch strips cookies still receive a personalized handoff', async () => {

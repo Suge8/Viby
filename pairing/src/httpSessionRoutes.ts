@@ -115,7 +115,7 @@ export function registerPairingSessionRoutes(
             return rejectPairingRequest(c, options, 'verify_rejected', 410, 'Pairing session no longer active')
         }
         if (session.authorizedDevice || session.approvalStatus === 'approved') {
-            return rejectPairingRequest(c, options, 'verify_rejected', 409, 'Pairing session already claimed')
+            return rejectPairingRequest(c, options, 'verify_rejected', 409, 'Pairing session already approved')
         }
         if (session.shortCode === null || session.shortCode !== body.code) {
             return rejectPairingRequest(c, options, 'verify_rejected', 403, '数字不对，请看电脑上的 6 位数字')
@@ -128,7 +128,7 @@ export function registerPairingSessionRoutes(
             publicKey: body.publicKey,
             metadata: body.metadata,
         })
-        const approved = await options.store.claimAndApprove(
+        const approved = await options.store.verifyCodeAndApprove(
             pairingId,
             body.code,
             {
@@ -143,7 +143,7 @@ export function registerPairingSessionRoutes(
             now
         )
         if (!approved) {
-            return rejectPairingRequest(c, options, 'verify_rejected', 409, 'Pairing session could not be claimed')
+            return rejectPairingRequest(c, options, 'verify_rejected', 409, 'Pairing session could not be approved')
         }
 
         options.eventBus.emit(await buildPairingHostEventFromStore(options.store, approved))
