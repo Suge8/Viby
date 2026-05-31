@@ -51,11 +51,11 @@ describe('createPairingBrokerClient', () => {
         const client = createPairingBrokerClient({
             brokerUrl: 'https://pair.example.com',
             fetchImpl: (async () =>
-                new Response(JSON.stringify({ error: 'ticket exhausted' }), {
+                new Response(JSON.stringify({ error: 'create exhausted' }), {
                     status: 409,
                 })) as unknown as typeof fetch,
         })
 
-        await expect(client.createPairing(pairingInput)).rejects.toThrow('ticket exhausted')
+        await expect(client.createPairing(pairingInput)).rejects.toThrow('create exhausted')
     })
 })

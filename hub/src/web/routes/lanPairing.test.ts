@@ -93,7 +93,7 @@ describe('LAN pairing routes', () => {
         expect(stored?.channel).toBe('link')
     })
 
-    it('rejects a wrong code with 403 invalid_pairing_code and leaves the session unclaimed', async () => {
+    it('rejects a wrong code with 403 invalid_pairing_code and leaves the session unapproved', async () => {
         const { app, sessions } = buildApp()
         const hostToken = await signHostToken()
         const invite = (await createInvite(app, hostToken)) as { pairing: { id: string } }

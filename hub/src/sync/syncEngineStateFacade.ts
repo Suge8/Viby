@@ -152,9 +152,9 @@ export class SyncEngineStateFacade {
         this.machineCache.handleMachineAlive(payload)
     }
 
-    expireInactive(): void {
-        this.sessionCache.expireInactive()
-        this.machineCache.expireInactive()
+    expireInactive(now: number = Date.now()): void {
+        this.sessionCache.expireInactive(now)
+        this.machineCache.expireInactive(now)
     }
 
     reloadAll(): void {

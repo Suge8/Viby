@@ -124,8 +124,8 @@ export abstract class SyncEngineReadApi {
         return this.syncServices.stateFacade.getOrCreateMachine(id, metadata, runnerState)
     }
 
-    protected expireInactive(): void {
-        this.syncServices.stateFacade.expireInactive()
+    protected expireInactive(now?: number): void {
+        this.syncServices.stateFacade.expireInactive(now)
     }
 
     protected reloadAll(): void {

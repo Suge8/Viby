@@ -10,16 +10,31 @@ export * from './syncEngineExports'
 
 const INACTIVITY_SWEEP_INTERVAL_MS = 5_000
 
+type ScheduleInterval = (callback: () => void, intervalMs: number) => () => void
+
+export interface SyncEngineOptions {
+    now?: () => number
+    scheduleInterval?: ScheduleInterval
+}
+
 export class SyncEngine extends SyncEngineSessionApi {
     private readonly syncServicesContainer: SyncEngineServices
     readonly sessionCache: SyncEngineServices['sessionCache']
     readonly rpcGateway: SyncEngineServices['rpcGateway']
     readonly messageService: SyncEngineServices['messageService']
     readonly sessionLifecycleService: SyncEngineServices['sessionLifecycleService']
-    private inactivityTimer: NodeJS.Timeout | null = null
+    private cancelInactivityTimer: (() => void) | null = null
 
-    constructor(store: Store, io: Server, rpcRegistry: RpcRegistry, broadcaster: SyncEventBroadcaster) {
+    constructor(
+        store: Store,
+        io: Server,
+        rpcRegistry: RpcRegistry,
+        broadcaster: SyncEventBroadcaster,
+        options: SyncEngineOptions = {}
+    ) {
         super()
+        const now = options.now ?? Date.now
+        const scheduleInterval = options.scheduleInterval ?? defaultScheduleInterval
         const services = createSyncEngineServices({
             store,
             io,
@@ -60,7 +75,7 @@ export class SyncEngine extends SyncEngineSessionApi {
             }
         })
         this.reloadAll()
-        this.inactivityTimer = setInterval(() => this.expireInactive(), INACTIVITY_SWEEP_INTERVAL_MS)
+        this.cancelInactivityTimer = scheduleInterval(() => this.expireInactive(now()), INACTIVITY_SWEEP_INTERVAL_MS)
     }
 
     protected get syncServices(): SyncEngineServices {
@@ -68,11 +83,17 @@ export class SyncEngine extends SyncEngineSessionApi {
     }
 
     stop(): void {
-        if (!this.inactivityTimer) {
+        if (!this.cancelInactivityTimer) {
             return
         }
 
-        clearInterval(this.inactivityTimer)
-        this.inactivityTimer = null
+        this.cancelInactivityTimer()
+        this.cancelInactivityTimer = null
     }
+}
+
+function defaultScheduleInterval(callback: () => void, intervalMs: number): () => void {
+    const timer = setInterval(callback, intervalMs)
+    if (typeof timer === 'object' && 'unref' in timer) timer.unref()
+    return () => clearInterval(timer)
 }

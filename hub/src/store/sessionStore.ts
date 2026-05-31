@@ -19,6 +19,7 @@ import {
     setSessionCodexServiceTier,
     setSessionCollaborationMode,
     setSessionInactive,
+    setSessionInactiveIfActiveAt,
     setSessionModel,
     setSessionModelReasoningEffort,
     setSessionPermissionMode,
@@ -67,6 +68,10 @@ export class SessionStore {
 
     setSessionInactive(id: string): boolean {
         return setSessionInactive(this.db, id)
+    }
+
+    setSessionInactiveIfActiveAt(id: string, activeAt: number): boolean {
+        return setSessionInactiveIfActiveAt(this.db, id, activeAt)
     }
 
     setSessionModel(id: string, model: string | null, options?: { touchUpdatedAt?: boolean }): boolean {

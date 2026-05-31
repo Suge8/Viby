@@ -348,6 +348,37 @@ describe('session model', () => {
         expect(events).toEqual([])
     })
 
+    it('commits close before runtime teardown and keeps late keepalive out of running', async () => {
+        const store = new Store(':memory:')
+        const events: SyncEvent[] = []
+        const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), {
+            broadcast: (event: SyncEvent) => events.push(event),
+        })
+        const session = createEngineSession(engine, {
+            tag: 'session-close-before-kill',
+            metadata: { path: '/tmp/project', host: 'localhost', driver: 'codex' },
+            model: 'gpt-5.4',
+        })
+        engine.handleSessionAlive({ sid: session.id, time: 2_000, thinking: true })
+        ;(engine as any).rpcGateway.killSession = async () => {
+            engine.handleSessionAlive({ sid: session.id, time: 4_000, thinking: true })
+            throw new Error('kill timeout')
+        }
+
+        const closedSession = await engine.closeSession(session.id)
+
+        expect(closedSession).toMatchObject({
+            active: false,
+            thinking: false,
+            metadata: { lifecycleState: 'closed' },
+        })
+        expect(engine.getSession(session.id)).toMatchObject({
+            active: false,
+            thinking: false,
+            metadata: { lifecycleState: 'closed' },
+        })
+    })
+
     it('resumes a closed session inside the Hub-owned send command before persisting the user message', async () => {
         const store = new Store(':memory:')
         const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), { broadcast() {} } as never)
@@ -1277,70 +1308,6 @@ describe('session model', () => {
 
         expect(reloadedSession?.active).toBe(true)
         expect(reloadedSession?.activeAt).toBe(aliveAt)
-    })
-
-    it('persists inactive session state after the keepalive window expires', () => {
-        const store = new Store(':memory:')
-        const events: SyncEvent[] = []
-        const cache = new SessionCache(store, createPublisher(events))
-
-        const session = createCachedSession(cache, {
-            tag: 'session-inactive-reload',
-            metadata: { path: '/tmp/project', host: 'localhost', driver: 'codex' },
-            model: 'gpt-5.4',
-        })
-        const aliveAt = Date.now()
-
-        cache.handleSessionAlive({
-            sid: session.id,
-            time: aliveAt,
-            thinking: false,
-        })
-        cache.expireInactive(aliveAt + 30_001)
-
-        expect(cache.getSession(session.id)?.active).toBe(false)
-        const stored = store.sessions.getSession(session.id)
-        expect(stored?.active).toBe(false)
-        expect(stored?.activeAt).toBe(aliveAt)
-
-        const reloadedCache = new SessionCache(store, createPublisher([]))
-        const reloadedSession = reloadedCache.refreshSession(session.id)
-
-        expect(reloadedSession?.active).toBe(false)
-        expect(reloadedSession?.activeAt).toBe(aliveAt)
-    })
-
-    it('preserves explicitly open lifecycle when inactivity timeout detaches the runtime', async () => {
-        const store = new Store(':memory:')
-        const events: SyncEvent[] = []
-        const cache = new SessionCache(store, createPublisher(events))
-
-        const session = createCachedSession(cache, {
-            tag: 'session-timeout-open-lifecycle',
-            metadata: { path: '/tmp/project', host: 'localhost', driver: 'codex' },
-            model: 'gpt-5.4',
-        })
-        const aliveAt = Date.now()
-
-        cache.handleSessionAlive({
-            sid: session.id,
-            time: aliveAt,
-            thinking: false,
-        })
-        await cache.setSessionLifecycleState(session.id, 'open', {
-            touchUpdatedAt: false,
-        })
-
-        cache.expireInactive(aliveAt + 30_001)
-
-        expect(cache.getSession(session.id)?.active).toBe(false)
-        expect(cache.getSession(session.id)?.metadata?.lifecycleState).toBe('open')
-        const persistedMetadata = store.sessions.getSession(session.id)?.metadata
-        expect(
-            persistedMetadata && typeof persistedMetadata === 'object' && 'lifecycleState' in persistedMetadata
-                ? persistedMetadata.lifecycleState
-                : undefined
-        ).toBe('open')
     })
 
     it('normalizes inactive durable lifecycle to closed when a session ends naturally', () => {

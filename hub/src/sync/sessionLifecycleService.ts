@@ -76,10 +76,11 @@ export class SessionLifecycleService {
             return session
         }
 
-        await this.stopSessionIfActive(sessionId, session.active)
-        return await this.sessionCache.transitionSessionLifecycle(sessionId, 'closed', {
+        const closedSession = await this.sessionCache.transitionSessionLifecycle(sessionId, 'closed', {
             markInactive: session.active,
         })
+        await this.stopSessionIfActive(sessionId, session.active)
+        return closedSession
     }
 
     async archiveSession(
@@ -95,12 +96,13 @@ export class SessionLifecycleService {
             return session
         }
 
-        await this.stopSessionIfActive(sessionId, session.active)
-        return await this.sessionCache.transitionSessionLifecycle(sessionId, 'archived', {
+        const archivedSession = await this.sessionCache.transitionSessionLifecycle(sessionId, 'archived', {
             markInactive: session.active,
             archivedBy: options?.archivedBy ?? ARCHIVED_BY_WEB,
             archiveReason: options?.archiveReason ?? ARCHIVED_BY_USER_REASON,
         })
+        await this.stopSessionIfActive(sessionId, session.active)
+        return archivedSession
     }
 
     async unarchiveSession(sessionId: string): Promise<Session> {
@@ -292,8 +294,11 @@ export class SessionLifecycleService {
     }
 
     private async stopSessionIfActive(sessionId: string, active: boolean): Promise<void> {
-        if (active) {
+        if (!active) return
+        try {
             await this.rpcGateway.killSession(sessionId)
+        } catch {
+            // Durable lifecycle already moved the session out of the running set.
         }
     }
 

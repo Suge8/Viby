@@ -98,6 +98,7 @@ export async function waitForResumedSessionContractState(options: {
     timeoutMs: number
 }): Promise<ResumeContractState> {
     let hasBecomeActive = false
+    let hasSeenMismatchedToken = false
 
     const resolveState = (): ResumeContractState | null => {
         const session = options.getSession(options.sessionId)
@@ -109,7 +110,7 @@ export async function waitForResumedSessionContractState(options: {
                 return 'ready'
             }
             if (resumedToken && resumedToken !== options.resumeToken) {
-                return 'token_mismatch'
+                hasSeenMismatchedToken = true
             }
         } else if (hasBecomeActive) {
             return 'inactive_after_spawn'
@@ -126,7 +127,7 @@ export async function waitForResumedSessionContractState(options: {
     return await waitForSpawnSupportSessionState(options.sessionCache, options.sessionId, {
         timeoutMs: options.timeoutMs,
         resolveValue: () => resolveState(),
-        onTimeout: () => 'timeout',
+        onTimeout: () => (hasSeenMismatchedToken ? 'token_mismatch' : 'timeout'),
     })
 }
 

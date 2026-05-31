@@ -132,7 +132,7 @@ export class SessionPresenceService {
                 continue
             }
 
-            this.deactivateSession(session.id, session)
+            this.deactivateSession(session.id, session, { expectedActiveAt: session.activeAt })
         }
     }
 
@@ -150,23 +150,38 @@ export class SessionPresenceService {
         this.lastPersistedActiveAtBySessionId.set(sessionId, Math.max(lastPersistedActiveAt, activeAt))
     }
 
-    private persistSessionInactiveState(sessionId: string): void {
-        this.store.sessions.setSessionInactive(sessionId)
+    private persistSessionInactiveState(sessionId: string, expectedActiveAt?: number): boolean {
+        const persisted =
+            expectedActiveAt === undefined
+                ? this.store.sessions.setSessionInactive(sessionId)
+                : this.store.sessions.setSessionInactiveIfActiveAt(sessionId, expectedActiveAt)
         this.lastPersistedActiveAtBySessionId.delete(sessionId)
+        return persisted
     }
 
     private deactivateSession(
         sessionId: string,
         session: Session,
-        options: Readonly<{ transitionAt?: number }> = {}
+        options: Readonly<{ expectedActiveAt?: number; transitionAt?: number }> = {}
     ): void {
+        if (
+            options.expectedActiveAt !== undefined &&
+            (!session.active || session.activeAt !== options.expectedActiveAt)
+        ) {
+            return
+        }
+
+        const persistedInactive = this.persistSessionInactiveState(sessionId, options.expectedActiveAt)
+        if (options.expectedActiveAt !== undefined && !persistedInactive) {
+            return
+        }
+
         session.active = false
         session.thinking = false
         if (options.transitionAt !== undefined) {
             session.thinkingAt = options.transitionAt
         }
 
-        this.persistSessionInactiveState(sessionId)
         const lifecyclePatch = this.normalizeInactiveLifecycle(sessionId)
         this.emitSessionUpdate(session.id, buildInactivePresencePatch(lifecyclePatch))
     }

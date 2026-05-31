@@ -108,7 +108,7 @@ export function createLanPairingPublicRoutes(options: LanPairingRoutesOptions): 
             return c.json({ error: 'Pairing session expired', code: 'pairing_expired' }, 410)
         }
         if (verification.status === 'already_approved') {
-            return c.json({ error: 'Pairing session already claimed', code: 'pairing_already_claimed' }, 409)
+            return c.json({ error: 'Pairing session already approved', code: 'pairing_already_approved' }, 409)
         }
         if (verification.status === 'wrong_code') {
             return c.json({ error: '数字不对，请看电脑上的 6 位数字', code: 'invalid_pairing_code' }, 403)

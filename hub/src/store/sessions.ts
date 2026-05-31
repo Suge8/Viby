@@ -15,6 +15,7 @@ export {
     setSessionCodexServiceTier,
     setSessionCollaborationMode,
     setSessionInactive,
+    setSessionInactiveIfActiveAt,
     setSessionModel,
     setSessionModelReasoningEffort,
     setSessionPermissionMode,

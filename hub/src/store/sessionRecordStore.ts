@@ -245,6 +245,24 @@ export function setSessionInactive(db: Database, id: string): boolean {
     }
 }
 
+export function setSessionInactiveIfActiveAt(db: Database, id: string, activeAt: number): boolean {
+    try {
+        const result = db
+            .query(`
+            UPDATE sessions
+            SET active = 0
+            WHERE id = @id
+              AND active != 0
+              AND active_at = @active_at
+        `)
+            .run({ id, active_at: activeAt })
+
+        return result.changes === 1
+    } catch {
+        return false
+    }
+}
+
 function updateSessionField(db: Database, query: string, params: Record<string, string | number | null>): boolean {
     try {
         const result = db.query(query).run(params)
