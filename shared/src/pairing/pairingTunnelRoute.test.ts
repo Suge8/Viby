@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'bun:test'
+import { resolvePairingTunnelDirectCandidateType } from './pairingTunnelCandidate'
 import {
     createPairingTunnelRouteState,
     type PairingTunnelRouteState,
     readPairingTunnelTelemetry,
     reducePairingTunnelRoute,
-    resolvePairingTunnelDirectCandidateType,
     shouldReprobePairingDirect,
     shouldRequestPairingDirectProbeAck,
 } from './pairingTunnelRoute'
@@ -49,23 +49,17 @@ describe('pairingTunnelRoute', () => {
         })
     })
 
-    it('invalidates ready route on foreground until a fresh ack arrives', () => {
+    it('keeps the ready route during foreground liveness probes', () => {
         const checking = applyEvents([{ type: 'relay-ready', roundTripTimeMs: 90 }, { type: 'foreground-check' }])
 
         expect(checking).toMatchObject({
-            phase: 'reconnecting',
-            activeRoute: null,
-            activeTransport: null,
+            phase: 'ready',
+            activeRoute: 'relay',
+            activeTransport: 'relay-wss',
             relayAvailable: true,
-            roundTripTimeMs: null,
+            roundTripTimeMs: 90,
+            missedAcks: 0,
         })
-
-        const ready = reducePairingTunnelRoute(checking, {
-            type: 'heartbeat-ack',
-            route: 'relay',
-            roundTripTimeMs: 70,
-        })
-        expect(ready).toMatchObject({ phase: 'ready', activeRoute: 'relay', roundTripTimeMs: 70 })
     })
 
     it('keeps relay active while direct probe is still gathering proof', () => {
@@ -176,6 +170,40 @@ describe('pairingTunnelRoute', () => {
             directProbeFailures: 1,
         })
         expect(shouldReprobePairingDirect(state)).toBe(true)
+    })
+
+    it('ignores stale direct acks from a superseded probe generation', () => {
+        let state = applyEvents([
+            { type: 'relay-ready', roundTripTimeMs: 80 },
+            { type: 'direct-probe-started' },
+            { type: 'direct-candidate-selected', candidateType: 'srflx', routeGeneration: 1 },
+            { type: 'heartbeat-ack', route: 'direct', routeGeneration: 1 },
+            { type: 'heartbeat-missed', route: 'direct', routeGeneration: 1 },
+            { type: 'direct-probe-started' },
+            { type: 'direct-candidate-selected', candidateType: 'host', routeGeneration: 2 },
+        ])
+
+        state = reducePairingTunnelRoute(state, { type: 'heartbeat-ack', route: 'direct', routeGeneration: 1 })
+        state = reducePairingTunnelRoute(state, { type: 'heartbeat-ack', route: 'direct', routeGeneration: 1 })
+
+        expect(state).toMatchObject({
+            activeRoute: 'relay',
+            directAckCount: 0,
+            directCandidateType: 'host',
+            directProbe: 'probing',
+            routeGeneration: 2,
+        })
+
+        state = reducePairingTunnelRoute(state, { type: 'heartbeat-ack', route: 'direct', routeGeneration: 2 })
+        state = reducePairingTunnelRoute(state, { type: 'heartbeat-ack', route: 'direct', routeGeneration: 2 })
+        state = reducePairingTunnelRoute(state, { type: 'heartbeat-ack', route: 'direct', routeGeneration: 2 })
+
+        expect(state).toMatchObject({
+            activeRoute: 'direct',
+            activeTransport: 'direct-webrtc',
+            directProbe: 'usable',
+            routeGeneration: 2,
+        })
     })
 
     it('falls back to relay when direct fails', () => {

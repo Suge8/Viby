@@ -11,17 +11,15 @@ type RemotePeerSessionSenderOptions = {
     channel: RTCDataChannel | null
     directTextSender: PairingPeerTextSender | null
     relay: RemotePairingRelaySocket
+    route?: 'direct' | 'relay'
 }
 
 export function createRemotePeerSessionSender(options: RemotePeerSessionSenderOptions): RemotePeerMessageSender | null {
     const { channel, directChannelReady, directTextSender, relay, routeState } = options
     if (routeState.phase !== 'ready') return null
-    if (
-        routeState.activeRoute === 'direct' &&
-        directChannelReady &&
-        channel?.readyState === 'open' &&
-        directTextSender
-    ) {
+
+    const route = options.route ?? routeState.activeRoute
+    if (route === 'direct' && directChannelReady && channel?.readyState === 'open' && directTextSender) {
         return {
             readyState: channel.readyState,
             route: 'direct',
@@ -29,7 +27,8 @@ export function createRemotePeerSessionSender(options: RemotePeerSessionSenderOp
                 directTextSender.send(data, { chunkBytes: REMOTE_DIRECT_TEXT_CHUNK_BYTES, priority }),
         }
     }
-    if (routeState.activeRoute !== 'relay' || relay.readyState !== 'open') return null
+
+    if (route !== 'relay' || relay.readyState !== 'open') return null
     return {
         readyState: relay.readyState,
         route: 'relay',

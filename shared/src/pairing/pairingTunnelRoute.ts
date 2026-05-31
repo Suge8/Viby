@@ -8,7 +8,6 @@ import type {
 import {
     createPairingTunnelRouteState,
     DEFAULT_PAIRING_TUNNEL_ROUTE_OPTIONS,
-    type PairingTunnelObservedTransport,
     type PairingTunnelRelayTransport,
     type PairingTunnelRouteEvent,
     type PairingTunnelRouteOptions,
@@ -46,10 +45,11 @@ export function reducePairingTunnelRoute(
         case 'relay-lost':
             return handleRelayLost(state)
         case 'foreground-check':
-            return state.phase === 'ready' ? clearActiveRoute(state, { missedAcks: 0 }) : state
+            return state.phase === 'ready' ? { ...state, missedAcks: 0 } : state
         case 'direct-probe-started':
             return {
                 ...state,
+                routeGeneration: event.routeGeneration ?? state.routeGeneration + 1,
                 directProbe: 'probing',
                 directCandidateType: null,
                 directProbeRoundTripTimeMs: null,
@@ -58,6 +58,7 @@ export function reducePairingTunnelRoute(
                 directBlockedReason: 'missing-ack',
             }
         case 'direct-candidate-selected':
+            if (isStaleDirectGeneration(state, event.routeGeneration)) return state
             return handleDirectCandidate(
                 state,
                 event.candidateType,
@@ -66,6 +67,7 @@ export function reducePairingTunnelRoute(
                 options
             )
         case 'direct-failed':
+            if (isStaleDirectGeneration(state, event.routeGeneration)) return state
             return demoteDirect({
                 ...state,
                 directProbe: 'failed',
@@ -73,12 +75,18 @@ export function reducePairingTunnelRoute(
                 directBlockedReason: normalizeDirectFailureReason(event.reason),
             })
         case 'heartbeat-ack':
+            if (event.route === 'direct' && isStaleDirectGeneration(state, event.routeGeneration)) return state
             return handleHeartbeatAck(state, event.route, normalizeRtt(event.roundTripTimeMs), event.sampledAt, options)
         case 'heartbeat-missed':
+            if (event.route === 'direct' && isStaleDirectGeneration(state, event.routeGeneration)) return state
             return handleHeartbeatMissed(state, event.route, options)
         case 'fatal':
             return { ...state, phase: 'fatal', fatalReason: event.reason }
     }
+}
+
+function isStaleDirectGeneration(state: PairingTunnelRouteState, routeGeneration: number | undefined): boolean {
+    return routeGeneration !== undefined && routeGeneration !== state.routeGeneration
 }
 
 export function readPairingTunnelTelemetry(state: PairingTunnelRouteState): PairingTunnelTelemetry {
@@ -336,20 +344,4 @@ function promoteRoute(
 
 function normalizeRtt(value: number | null | undefined): number | null {
     return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.round(value)) : null
-}
-
-export function resolvePairingTunnelDirectCandidateType(input: {
-    localCandidateType?: string | null
-    remoteCandidateType?: string | null
-    transport: PairingTunnelObservedTransport
-}): PairingTunnelCandidateType | null {
-    if (input.transport === 'relay') return 'relay'
-    if (input.transport !== 'direct') return null
-    return (
-        normalizeCandidateType(input.localCandidateType) ?? normalizeCandidateType(input.remoteCandidateType) ?? 'srflx'
-    )
-}
-
-function normalizeCandidateType(value: string | null | undefined): PairingTunnelCandidateType | null {
-    return value === 'host' || value === 'srflx' || value === 'prflx' || value === 'relay' ? value : null
 }

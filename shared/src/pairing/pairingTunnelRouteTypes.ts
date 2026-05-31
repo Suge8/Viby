@@ -26,6 +26,7 @@ export interface PairingTunnelRouteState {
     missedAcks: number
     routeSwitches: number
     routeRevision: number
+    routeGeneration: number
     directProbeFailures: number
     directAckCount: number
     directBlockedReason: PairingTunnelDirectBlockedReason | null
@@ -41,16 +42,23 @@ export type PairingTunnelRouteEvent =
       }
     | { type: 'relay-lost' }
     | { type: 'foreground-check' }
-    | { type: 'direct-probe-started' }
+    | { type: 'direct-probe-started'; routeGeneration?: number }
     | {
           type: 'direct-candidate-selected'
           candidateType: PairingTunnelCandidateType
           roundTripTimeMs?: number | null
           sampledAt?: number | null
+          routeGeneration?: number
       }
-    | { type: 'direct-failed'; reason?: string }
-    | { type: 'heartbeat-ack'; route: PairingTunnelRoute; roundTripTimeMs?: number | null; sampledAt?: number | null }
-    | { type: 'heartbeat-missed'; route: PairingTunnelRoute }
+    | { type: 'direct-failed'; reason?: string; routeGeneration?: number }
+    | {
+          type: 'heartbeat-ack'
+          route: PairingTunnelRoute
+          roundTripTimeMs?: number | null
+          sampledAt?: number | null
+          routeGeneration?: number
+      }
+    | { type: 'heartbeat-missed'; route: PairingTunnelRoute; routeGeneration?: number }
     | { type: 'fatal'; reason: string }
 
 export interface PairingTunnelRouteOptions {
@@ -82,6 +90,7 @@ export function createPairingTunnelRouteState(): PairingTunnelRouteState {
         missedAcks: 0,
         routeSwitches: 0,
         routeRevision: 0,
+        routeGeneration: 0,
         directProbeFailures: 0,
         directAckCount: 0,
         directBlockedReason: null,

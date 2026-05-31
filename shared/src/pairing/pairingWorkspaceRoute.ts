@@ -1,5 +1,6 @@
 export const PAIRING_WORKSPACE_INTENT_PARAM = 'remote'
 export const PAIRING_WORKSPACE_INTENT_VALUE = '1'
+export const PAIRING_WORKSPACE_PAIRING_PARAM = 'pairing'
 export const PAIRING_PWA_HANDOFF_PARAM = 'handoff'
 export const PAIRING_PWA_MANIFEST_PAIRING_PARAM = 'pairing'
 export const PAIRING_NAKED_WORKSPACE_REDIRECT_URL = 'https://viby.run'
@@ -13,7 +14,20 @@ export function hasPairingWorkspaceIntent(pathname: string, search: string): boo
     return readSearchParamCaseInsensitive(search, PAIRING_WORKSPACE_INTENT_PARAM) === PAIRING_WORKSPACE_INTENT_VALUE
 }
 
+export function readPairingWorkspacePairingId(pathname: string, search: string): string | null {
+    if (!isPairingWorkspacePath(pathname)) return null
+    return readSearchParamCaseInsensitive(search, PAIRING_WORKSPACE_PAIRING_PARAM)
+}
+
+export function withPairingWorkspaceIdentity(href: string, pairingId: string): string {
+    return withPairingWorkspaceParams(href, { pairingId })
+}
+
 export function withPairingWorkspaceIntent(href: string): string {
+    return withPairingWorkspaceParams(href, {})
+}
+
+function withPairingWorkspaceParams(href: string, options: { pairingId?: string }): string {
     const hashStart = href.indexOf('#')
     const head = hashStart === -1 ? href : href.slice(0, hashStart)
     const hash = hashStart === -1 ? '' : href.slice(hashStart)
@@ -22,7 +36,9 @@ export function withPairingWorkspaceIntent(href: string): string {
     if (!isPairingWorkspacePath(pathname)) return href
     const params = new URLSearchParams(queryStart === -1 ? '' : head.slice(queryStart + 1))
     deleteSearchParamCaseInsensitive(params, PAIRING_WORKSPACE_INTENT_PARAM)
+    deleteSearchParamCaseInsensitive(params, PAIRING_WORKSPACE_PAIRING_PARAM)
     params.set(PAIRING_WORKSPACE_INTENT_PARAM, PAIRING_WORKSPACE_INTENT_VALUE)
+    if (options.pairingId) params.set(PAIRING_WORKSPACE_PAIRING_PARAM, options.pairingId)
     return `${pathname}?${params.toString()}${hash}`
 }
 

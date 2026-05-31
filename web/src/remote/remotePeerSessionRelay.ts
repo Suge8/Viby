@@ -1,5 +1,12 @@
 import { createRemoteRelayHeartbeat, type RemoteRelayHeartbeat } from './remotePairingRelayHeartbeat'
-import { createRemotePairingRelaySocket, type RemotePairingRelaySocket } from './remotePairingRelaySocket'
+import {
+    createRemotePairingRelaySocket,
+    type RemotePairingRelaySocket,
+    type RemotePairingRelayWebSocket,
+} from './remotePairingRelaySocket'
+
+type ScheduleInterval = (callback: () => void, intervalMs: number) => () => void
+type ScheduleTimeout = (callback: () => void, delayMs: number) => () => void
 
 export function createRemotePeerSessionRelay(options: {
     onClose(): void
@@ -8,9 +15,22 @@ export function createRemotePeerSessionRelay(options: {
     onOpen(): void
     onHeartbeatTimeout(): void
     tunnelUrl: string
+    // Injectable clock seams (default to the browser's wall clock / timers) so
+    // the suspended-socket recovery path is deterministically testable.
+    now?: () => number
+    randomJitter?: () => number
+    scheduleInterval?: ScheduleInterval
+    scheduleTimeout?: ScheduleTimeout
+    socketFactory?: (url: string) => RemotePairingRelayWebSocket
 }): { heartbeat: RemoteRelayHeartbeat; relay: RemotePairingRelaySocket } {
     let relay!: RemotePairingRelaySocket
-    const heartbeat = createRemoteRelayHeartbeat({ getRelay: () => relay, onTimeout: options.onHeartbeatTimeout })
+    const heartbeat = createRemoteRelayHeartbeat({
+        getRelay: () => relay,
+        onTimeout: options.onHeartbeatTimeout,
+        now: options.now,
+        scheduleInterval: options.scheduleInterval,
+        scheduleTimeout: options.scheduleTimeout,
+    })
     relay = createRemotePairingRelaySocket({
         tunnelUrl: options.tunnelUrl,
         onOpen: () => {
@@ -23,6 +43,9 @@ export function createRemotePeerSessionRelay(options: {
         },
         onFatal: options.onFatal,
         onMessage: options.onMessage,
+        randomJitter: options.randomJitter,
+        scheduleTimeout: options.scheduleTimeout,
+        socketFactory: options.socketFactory,
     })
     return { heartbeat, relay }
 }

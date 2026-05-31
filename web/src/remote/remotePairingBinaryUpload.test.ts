@@ -36,6 +36,7 @@ function createRelay(
         binary,
         dispose: vi.fn(),
         notifyForeground: vi.fn(),
+        reconnect: vi.fn(),
         send: vi.fn(),
         sendBinaryChunk: async (chunk: RemotePairingRelayBinaryChunk) => {
             binary.push(chunk)

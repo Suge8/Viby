@@ -3,6 +3,8 @@ import {
     hasPairingWorkspaceIntent,
     PAIRING_PWA_HANDOFF_PARAM,
     PAIRING_PWA_MANIFEST_PAIRING_PARAM,
+    readPairingWorkspacePairingId,
+    withPairingWorkspaceIdentity,
     withPairingWorkspaceIntent,
 } from './pairingWorkspaceRoute'
 
@@ -21,6 +23,14 @@ describe('pairingWorkspaceRoute', () => {
             '/sessions/session-1?section=history&remote=1#top'
         )
         expect(withPairingWorkspaceIntent('/sessions/session-1?Remote=1#top')).toBe('/sessions/session-1?remote=1#top')
+    })
+
+    it('adds the public pairing identity without treating it as a secret', () => {
+        expect(withPairingWorkspaceIdentity('/sessions/session-1?section=history#top', 'pairing-1')).toBe(
+            '/sessions/session-1?section=history&remote=1&pairing=pairing-1#top'
+        )
+        expect(readPairingWorkspacePairingId('/sessions', '?remote=1&pairing=pairing-1')).toBe('pairing-1')
+        expect(readPairingWorkspacePairingId('/p/pairing-1', '?remote=1&pairing=pairing-1')).toBeNull()
     })
 
     it('does not tag non-workspace links', () => {

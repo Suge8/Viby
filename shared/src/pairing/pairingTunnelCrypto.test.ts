@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { createPairingTunnelCipher } from './pairingTunnelCrypto'
+import { createPairingTunnelCipher, parsePairingTunnelPlainFrame } from './pairingTunnelCrypto'
 
 describe('pairing tunnel crypto', () => {
     it('seals relay frames so only the peer cipher can read payloads', async () => {
@@ -81,5 +81,10 @@ describe('pairing tunnel crypto', () => {
             sentAt: 10,
             receivedAt: 25,
         })
+    })
+
+    it('rejects malformed decrypted plain frames at the tunnel boundary', () => {
+        expect(parsePairingTunnelPlainFrame({ kind: 'binary', id: 'bad', seq: 1, chunkCount: 0 })).toBeNull()
+        expect(parsePairingTunnelPlainFrame({ kind: 'unknown', id: 'bad', seq: 1 })).toBeNull()
     })
 })

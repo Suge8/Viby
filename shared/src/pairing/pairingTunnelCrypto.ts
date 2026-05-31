@@ -81,9 +81,27 @@ export async function createPairingTunnelCipher(): Promise<PairingTunnelCipher> 
                 sealedKey,
                 fromBase64Url(frame.ciphertext)
             )
-            return PairingTunnelPlainFrameSchema.parse(JSON.parse(decoder.decode(plaintext)) as unknown)
+            const parsed = parsePairingTunnelPlainFrame(parseJson(decoder.decode(plaintext)))
+            if (!parsed) throw new Error('invalid pairing tunnel plain frame')
+            return parsed
         },
     }
+}
+
+export async function tryOpenPairingTunnelPlainFrame(
+    cipher: PairingTunnelCipher,
+    frame: PairingTunnelSealedFrame
+): Promise<PairingTunnelPlainFrame | null> {
+    try {
+        return await cipher.open(frame)
+    } catch {
+        return null
+    }
+}
+
+export function parsePairingTunnelPlainFrame(value: unknown): PairingTunnelPlainFrame | null {
+    const parsed = PairingTunnelPlainFrameSchema.safeParse(value)
+    return parsed.success ? parsed.data : null
 }
 
 export function createPairingTunnelKeyFrame(input: {
@@ -109,6 +127,14 @@ function randomBytes(size: number): Uint8Array<ArrayBuffer> {
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
     return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+}
+
+function parseJson(text: string): unknown {
+    try {
+        return JSON.parse(text) as unknown
+    } catch {
+        return null
+    }
 }
 
 export function toPairingTunnelBase64Url(bytes: Uint8Array): string {
