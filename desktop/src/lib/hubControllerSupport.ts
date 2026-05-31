@@ -72,4 +72,4 @@ export function isStalePairingRefreshError(error: unknown): boolean {
     return hasKnownPairingError(error, STALE_PAIRING_REFRESH_MESSAGES)
 }
 
-export { isExpiredUnclaimedPairing } from './desktopShellModel'
+export { isExpiredUnapprovedPairing } from './desktopShellModel'

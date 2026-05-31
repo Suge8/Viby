@@ -11,7 +11,7 @@ import {
 import {
     DESKTOP_PREVIEW_MESSAGE,
     describeDesktopError,
-    isExpiredUnclaimedPairing,
+    isExpiredUnapprovedPairing,
     isStalePairingDeletionError,
     isStalePairingRefreshError,
 } from '@/lib/hubControllerSupport'
@@ -40,6 +40,13 @@ export interface DesktopPairingsApi {
     refreshPairing(pairingId: string): Promise<void>
     applySnapshot(snapshot: PairingSessionSnapshot & Partial<DesktopPairingSnapshot>): void
     deletePairing(pairingId: string): Promise<void>
+    /**
+     * Drop a pairing the broker has permanently rejected. Unlike `deletePairing`
+     * this skips the broker DELETE call (the session is already gone there) and
+     * only prunes the local row so the dead credential stops being handed to a
+     * bridge.
+     */
+    dropRejectedPairing(pairingId: string): Promise<void>
     deleteAll(): Promise<void>
     cancelDraft(pairingId: string): Promise<void>
 }
@@ -57,6 +64,40 @@ function toDesktopPairingSnapshot(
 
 function toSortedArray(sessions: Map<string, DesktopPairingSession>): DesktopPairingSession[] {
     return [...sessions.values()].sort((a, b) => a.pairing.createdAt - b.pairing.createdAt)
+}
+
+export async function resolveStoredDesktopPairings(options: {
+    removePairing: (pairingId: string) => Promise<void>
+    refreshPairing: (pairing: DesktopPairingSession) => Promise<DesktopPairingSession>
+    sessions: readonly DesktopPairingSession[]
+}): Promise<{ firstError: unknown | null; sessions: DesktopPairingSession[] }> {
+    const resolved: DesktopPairingSession[] = []
+    let firstError: unknown | null = null
+
+    const checks = await Promise.all(
+        options.sessions.map(async (session) => {
+            if (isExpiredUnapprovedPairing(session)) {
+                await options.removePairing(session.pairing.id).catch(() => undefined)
+                return { error: null, session: null }
+            }
+            try {
+                return { error: null, session: await options.refreshPairing(session) }
+            } catch (error) {
+                if (isStalePairingRefreshError(error)) {
+                    await options.removePairing(session.pairing.id).catch(() => undefined)
+                    return { error: null, session: null }
+                }
+                return { error, session }
+            }
+        })
+    )
+
+    for (const check of checks) {
+        if (check.error) firstError ??= check.error
+        if (check.session) resolved.push(check.session)
+    }
+
+    return { firstError, sessions: resolved }
 }
 
 export function useDesktopPairings(): DesktopPairingsApi {
@@ -110,16 +151,14 @@ export function useDesktopPairings(): DesktopPairingsApi {
             try {
                 const stored = await getPairingSessions()
                 if (stopped) return
-                const filtered: DesktopPairingSession[] = []
-                for (const session of stored) {
-                    if (isExpiredUnclaimedPairing(session)) {
-                        await removePairingSession(session.pairing.id).catch(() => undefined)
-                        continue
-                    }
-                    filtered.push(session)
-                }
+                const resolved = await resolveStoredDesktopPairings({
+                    sessions: stored,
+                    refreshPairing: refreshPairingSession,
+                    removePairing: removePairingSession,
+                })
                 if (stopped) return
-                replaceSessions(indexByPairingId(filtered))
+                replaceSessions(indexByPairingId(resolved.sessions))
+                if (resolved.firstError) setActionError(describeDesktopError(resolved.firstError, '读取设备绑定失败。'))
             } catch (error) {
                 if (!stopped) setActionError(describeDesktopError(error, '读取设备绑定失败。'))
             } finally {
@@ -159,7 +198,7 @@ export function useDesktopPairings(): DesktopPairingsApi {
             if (!target) return
             try {
                 const next = await refreshPairingSession(target)
-                if (isExpiredUnclaimedPairing(next)) {
+                if (isExpiredUnapprovedPairing(next)) {
                     removePairing(pairingId)
                     await removePairingSession(pairingId).catch(() => undefined)
                     return
@@ -201,6 +240,16 @@ export function useDesktopPairings(): DesktopPairingsApi {
             } finally {
                 setBusy(false)
             }
+        },
+        [removePairing, tauriRuntimeAvailable]
+    )
+
+    const dropRejectedPairing = useCallback(
+        async (pairingId: string): Promise<void> => {
+            if (!sessionsRef.current.has(pairingId)) return
+            removePairing(pairingId)
+            if (!tauriRuntimeAvailable) return
+            await removePairingSession(pairingId).catch(() => undefined)
         },
         [removePairing, tauriRuntimeAvailable]
     )
@@ -254,6 +303,7 @@ export function useDesktopPairings(): DesktopPairingsApi {
         refreshPairing,
         applySnapshot,
         deletePairing,
+        dropRejectedPairing,
         deleteAll,
         cancelDraft,
     }

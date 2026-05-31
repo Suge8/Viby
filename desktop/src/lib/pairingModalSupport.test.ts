@@ -50,6 +50,13 @@ describe('pairingModalSupport', () => {
         })
     })
 
+    it('shows connected when the bridge proves a live guest before SSE approval arrives', () => {
+        expect(buildDesktopPairingPresentation(basePairing, 'ready')).toMatchObject({
+            stage: 'bound',
+            codeValue: '已连接',
+        })
+    })
+
     it('keeps transport recovery out of the add-device modal', () => {
         expect(
             buildDesktopPairingPresentation({
@@ -66,7 +73,7 @@ describe('pairingModalSupport', () => {
         })
     })
 
-    it('keeps the invite URL stable across claim, even after a device connects', () => {
+    it('keeps the invite URL stable across approval, even after a device connects', () => {
         expect(buildDesktopPairingQrUrl(basePairing)).toBe('https://pair.example.com/p/pairing-1')
         expect(
             buildDesktopPairingQrUrl({

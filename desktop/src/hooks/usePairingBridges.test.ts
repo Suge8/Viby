@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { buildPairingBridgeLifecycleKey } from '@/hooks/usePairingBridges'
+import { buildPairingBridgeLifecycleKey, mergePairingSnapshotsIntoBridgeStates } from '@/hooks/usePairingBridges'
 import { buildDeviceLinkSnapshots } from '@/lib/deviceLinkBadge'
 import type { DesktopPairingSession, PairingBridgeState } from '@/types'
 
@@ -83,6 +83,22 @@ describe('usePairingBridges support — bridge map invariants', () => {
         const both = buildPairingBridgeLifecycleKey({ enabled: true, pairings: [approved, invite] })
         expect(both).not.toBe(single)
         expect(both).toContain('invite')
+    })
+
+    it('merges latest pairing snapshots into an existing bridge without changing its lifecycle key', () => {
+        const invite = makeSession('invite', null)
+        const approved = makeSession('invite', 'approved')
+        const staleBridge = new Map<string, PairingBridgeState>([['invite', makeBridgeState('invite', 'ready')]])
+        staleBridge.get('invite')!.pairing = invite.pairing
+
+        const merged = mergePairingSnapshotsIntoBridgeStates(staleBridge, [approved])
+
+        expect(merged).not.toBe(staleBridge)
+        expect(merged.get('invite')?.phase).toBe('ready')
+        expect(merged.get('invite')?.pairing.approvalStatus).toBe('approved')
+        expect(buildPairingBridgeLifecycleKey({ enabled: true, pairings: [invite] })).toBe(
+            buildPairingBridgeLifecycleKey({ enabled: true, pairings: [approved] })
+        )
     })
 
     it('bridge lifecycle key changes with the active invite set and disables wholesale when public access is off', () => {

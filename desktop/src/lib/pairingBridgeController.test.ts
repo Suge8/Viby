@@ -365,7 +365,7 @@ describe('startPairingBridge', () => {
 
     it('stays connecting after the relay socket opens until the guest heartbeat acks', async () => {
         // `phase: 'ready'` now requires a real round-trip heartbeat ack so
-        // the desktop UI cannot claim a phantom connection just because
+        // the desktop UI cannot present a phantom connection just because
         // the broker accepted the host tunnel socket. Pairing only goes
         // ready when the guest actually attached and bounced a frame back.
         globalThis.RTCPeerConnection = undefined as unknown as typeof RTCPeerConnection

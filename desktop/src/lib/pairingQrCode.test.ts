@@ -3,7 +3,7 @@ import { buildPairingQrCodeModel } from './pairingQrCode'
 
 describe('pairingQrCode', () => {
     it('builds a synchronous svg path model', () => {
-        const model = buildPairingQrCodeModel('https://pair.example.com/p/pairing-1#ticket=secret')
+        const model = buildPairingQrCodeModel('https://pair.example.com/p/pairing-1')
 
         expect(model.viewBox).toMatch(/^-2 -2 \d+ \d+$/)
         expect(model.path.startsWith('M')).toBe(true)

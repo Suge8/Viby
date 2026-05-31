@@ -11,6 +11,7 @@ import { useAgentAvailability } from '@/hooks/useAgentAvailability'
 import { useAgentConfig } from '@/hooks/useAgentConfig'
 import { useDesktopLanPairings } from '@/hooks/useDesktopLanPairings'
 import { useDesktopPairings } from '@/hooks/useDesktopPairings'
+import { useDesktopShellPreferences } from '@/hooks/useDesktopShellPreferences'
 import { useDesktopToast } from '@/hooks/useDesktopToast'
 import { useDesktopUpdates } from '@/hooks/useDesktopUpdates'
 import { useDeviceAuthSummary } from '@/hooks/useDeviceAuthSummary'
@@ -18,24 +19,7 @@ import { useHubController } from '@/hooks/useHubController'
 import { usePairingBridges } from '@/hooks/usePairingBridges'
 import { type PairingHostEventTarget, usePairingHostEvents } from '@/hooks/usePairingHostEvents'
 import { DESKTOP_COPY } from '@/lib/desktopCopy'
-import {
-    getSystemLanguage,
-    getSystemTheme,
-    type LanguagePreference,
-    readLanguagePreference,
-    readThemePreference,
-    resolveLanguagePreference,
-    resolveThemePreference,
-    type ThemePreference,
-    writeLanguagePreference,
-    writeThemePreference,
-} from '@/lib/desktopPreferences'
-import {
-    buildHubSwitchModel,
-    COPY_FEEDBACK_DURATION_MS,
-    PAIRING_SUCCESS_DISMISS_MS,
-    shouldDismissPairingInvite,
-} from '@/lib/desktopShellModel'
+import * as shell from '@/lib/desktopShellModel'
 import { buildDeviceLinkSnapshots } from '@/lib/deviceLinkBadge'
 import { buildDevicePresentation, getConnectedDevices } from '@/lib/deviceListPresentation'
 import { buildEntryPreviewModel } from '@/lib/entryMode'
@@ -52,17 +36,12 @@ export function App(): JSX.Element {
     const pairings = useDesktopPairings()
     const lanPairings = useDesktopLanPairings()
     const [activePage, setActivePage] = useState<DesktopPage>('connection')
-    const [themePreference, setThemePreferenceState] = useState<ThemePreference>(() =>
-        readThemePreference(globalThis.localStorage)
-    )
-    const [languagePreference, setLanguagePreferenceState] = useState<LanguagePreference>(() =>
-        readLanguagePreference(globalThis.localStorage)
-    )
-    const [systemTheme, setSystemTheme] = useState(() => getSystemTheme(globalThis.matchMedia?.bind(globalThis)))
-    const [systemLanguage] = useState(() => getSystemLanguage(globalThis.navigator?.language))
+    const { language, languagePreference, setLanguagePreference, setThemePreference, themeMode, themePreference } =
+        useDesktopShellPreferences()
     const [pairingDraftId, setPairingDraftId] = useState<string | null>(null)
     const [inviteSource, setInviteSource] = useState<'broker' | 'lan' | null>(null)
     const [pairingDialogOpen, setPairingDialogOpen] = useState(false)
+    const [completedInviteId, setCompletedInviteId] = useState<string | null>(null)
     const [showInviteQr, setShowInviteQr] = useState(true)
     const { message: toastMessage, tone: toastTone, showToast } = useDesktopToast()
     const updates = useDesktopUpdates()
@@ -86,7 +65,11 @@ export function App(): JSX.Element {
     const bridges = usePairingBridges({
         pairings: pairings.pairings,
         status,
-        enabled: hub.publicAccessEnabled,
+        // Hold bridge startup until stored pairings are validated, so a stale
+        // host token can never churn the broker and starve a fresh scan.
+        enabled: hub.publicAccessEnabled && pairings.resolved,
+        onBridgeReady: pairings.refreshPairing,
+        onBridgeRejected: (pairingId) => void pairings.dropRejectedPairing(pairingId),
     })
     const deviceLinks = buildDeviceLinkSnapshots(bridges)
     const deviceSummary = useDeviceAuthSummary(status, viewState.ready, {
@@ -105,16 +88,13 @@ export function App(): JSX.Element {
               stats: null,
           })
         : { phase: IDLE_BRIDGE_STATE_PHASE, message: null, pairing: null, stats: null }
-
     const entryPreview = buildEntryPreviewModel(connectionSnapshot)
-    const switchModel = buildHubSwitchModel({
+    const switchModel = shell.buildHubSwitchModel({
         action: hub.hubAction,
         busy: hub.hubBusy,
         running: viewState.running,
         ready: viewState.ready,
     })
-    const themeMode = resolveThemePreference(themePreference, systemTheme)
-    const language = resolveLanguagePreference(languagePreference, systemLanguage)
     const copy = DESKTOP_COPY[language]
     const devices = buildDevicePresentation(deviceSummary.devices, pairings.pairings)
     const activeDeviceCount = getConnectedDevices(devices).length
@@ -127,6 +107,10 @@ export function App(): JSX.Element {
             : inviteSource === 'broker' && draftPairing
               ? { kind: 'broker' as const, session: draftPairing }
               : null
+    const modalBridge =
+        completedInviteId && completedInviteId === activeInvite?.session.pairing.id
+            ? { ...draftBridge, phase: 'ready' as const }
+            : draftBridge
     const brokerEventTargets = useMemo<PairingHostEventTarget[]>(
         () => pairings.pairings.flatMap((session) => toPairingHostEventTarget(session.pairing.id, session.eventsUrl)),
         [pairings.pairings]
@@ -142,15 +126,9 @@ export function App(): JSX.Element {
     const busy = hub.busy || hub.publicAccessBusy || pairings.busy || lanPairings.busy
 
     useEffect(() => {
-        const query = globalThis.matchMedia?.('(prefers-color-scheme: dark)')
-        if (!query) return
-        const handleChange = (event: MediaQueryListEvent): void => setSystemTheme(event.matches ? 'dark' : 'light')
-        query.addEventListener('change', handleChange)
-        return () => query.removeEventListener('change', handleChange)
-    }, [])
-
-    useEffect(() => {
-        if (!activeInvite) setPairingDialogOpen(false)
+        if (activeInvite) return
+        setPairingDialogOpen(false)
+        setCompletedInviteId(null)
     }, [activeInvite])
 
     usePairingHostEvents({
@@ -173,16 +151,25 @@ export function App(): JSX.Element {
     }, [showToast, updates.message, updates.phase])
 
     useEffect(() => {
-        if (!pairingDialogOpen || !activeInvite) return
-        const shouldDismiss = shouldDismissPairingInvite({
+        if (!pairingDialogOpen || !activeInvite || completedInviteId) return
+        const shouldDismiss = shell.shouldDismissPairingInvite({
             source: activeInvite.kind,
             approved: activeInvite.session.pairing.approvalStatus === 'approved',
             bridgePhase: activeInvite.kind === 'broker' ? draftBridge.phase : null,
         })
-        if (!shouldDismiss) return
-        const timeoutId = window.setTimeout(() => setPairingDialogOpen(false), PAIRING_SUCCESS_DISMISS_MS)
+        if (shouldDismiss) setCompletedInviteId(activeInvite.session.pairing.id)
+    }, [activeInvite, completedInviteId, draftBridge.phase, pairingDialogOpen])
+
+    useEffect(() => {
+        if (!pairingDialogOpen || !completedInviteId) return
+        const timeoutId = window.setTimeout(() => {
+            setPairingDialogOpen(false)
+            setPairingDraftId(null)
+            setInviteSource(null)
+            setCompletedInviteId(null)
+        }, shell.PAIRING_SUCCESS_DISMISS_MS)
         return () => window.clearTimeout(timeoutId)
-    }, [activeInvite, draftBridge.phase, pairingDialogOpen])
+    }, [completedInviteId, pairingDialogOpen])
 
     const handleHubSwitch = (): void => {
         if (viewState.ready) {
@@ -192,19 +179,10 @@ export function App(): JSX.Element {
         if (!viewState.running) void hub.start()
     }
 
-    const setThemePreference = (preference: ThemePreference): void => {
-        setThemePreferenceState(preference)
-        writeThemePreference(globalThis.localStorage, preference)
-    }
-
-    const setLanguagePreference = (preference: LanguagePreference): void => {
-        setLanguagePreferenceState(preference)
-        writeLanguagePreference(globalThis.localStorage, preference)
-    }
-
     const openInviteModal = async (params: { withQr: boolean; source: 'broker' | 'lan' }): Promise<void> => {
         if (!viewState.ready) return
         setShowInviteQr(params.withQr)
+        setCompletedInviteId(null)
         setInviteSource(params.source)
         if (params.source === 'broker') {
             const pendingDraftId = draftPairing?.pairing.approvalStatus === null ? draftPairing.pairing.id : null
@@ -234,9 +212,11 @@ export function App(): JSX.Element {
     const handleDialogClose = (): void => {
         const closingSource = inviteSource
         setPairingDialogOpen(false)
+        setCompletedInviteId(null)
         setInviteSource(null)
         if (closingSource === 'lan') {
-            if (lanDraft?.pairing.approvalStatus !== 'approved') void lanPairings.cancelDraft()
+            const successLocked = completedInviteId === lanDraft?.pairing.id
+            if (!successLocked && lanDraft?.pairing.approvalStatus !== 'approved') void lanPairings.cancelDraft()
             return
         }
         const draftId = pairingDraftId
@@ -244,7 +224,12 @@ export function App(): JSX.Element {
         if (!draftId) return
         const candidate = pairings.pairings.find((session) => session.pairing.id === draftId)
         if (!candidate) return
-        if (candidate.pairing.approvalStatus === 'approved') return
+        const shouldCancel = shell.shouldCancelPairingInviteOnClose({
+            approved: candidate.pairing.approvalStatus === 'approved',
+            bridgePhase: bridges.get(draftId)?.phase ?? null,
+            successLocked: completedInviteId === draftId,
+        })
+        if (!shouldCancel) return
         void pairings.cancelDraft(draftId)
     }
 
@@ -252,29 +237,28 @@ export function App(): JSX.Element {
         const pairingId = deviceId.startsWith('pairing:') ? deviceId.slice('pairing:'.length) : null
         if (pairingId && pairings.pairingIds.has(pairingId)) await pairings.deletePairing(pairingId)
         await deviceSummary.revokeDevice(deviceId)
-        showToast('已取消配对', COPY_FEEDBACK_DURATION_MS, 'success')
+        showToast('已取消配对', shell.COPY_FEEDBACK_DURATION_MS, 'success')
     }
 
     const handleCopyInviteLink = async (url: string): Promise<void> => {
         const copied = await hub.copyValue(url, '当前没有可复制的邀请链接。')
-        if (copied) showToast('已复制', COPY_FEEDBACK_DURATION_MS, 'success')
+        if (copied) showToast('已复制', shell.COPY_FEEDBACK_DURATION_MS, 'success')
     }
 
     const handleCopyPairingCode = async (code: string): Promise<void> => {
         const copied = await hub.copyValue(code, '当前没有可复制的配对码。')
-        if (copied) showToast('配对码已复制', COPY_FEEDBACK_DURATION_MS, 'success')
+        if (copied) showToast('配对码已复制', shell.COPY_FEEDBACK_DURATION_MS, 'success')
     }
 
     const pairingBrokerHost = connectionStatus?.pairingBrokerUrl
         ? new URL(connectionStatus.pairingBrokerUrl).hostname
         : null
-    const accessEntries: { label: string; value: string; source: 'broker' | 'lan' }[] = []
-    if (hub.publicAccessEnabled && connectionViewState.ready && pairingBrokerHost) {
-        accessEntries.push({ label: copy.publicEntryLabel, value: pairingBrokerHost, source: 'broker' })
-    }
-    for (const entry of entryPreview.entries) {
-        accessEntries.push({ label: entry.label, value: entry.value, source: 'lan' })
-    }
+    const accessEntries = shell.buildAccessEntries({
+        brokerHost: pairingBrokerHost,
+        brokerReady: hub.publicAccessEnabled && connectionViewState.ready,
+        lanEntries: entryPreview.entries,
+        publicEntryLabel: copy.publicEntryLabel,
+    })
 
     return (
         <DesktopMotionProvider>
@@ -340,7 +324,7 @@ export function App(): JSX.Element {
                     copy={copy}
                     open={pairingDialogOpen}
                     pairing={activeInvite?.session ?? null}
-                    pairingBridge={draftBridge}
+                    pairingBridge={modalBridge}
                     showQr={showInviteQr}
                     onClose={handleDialogClose}
                     onCopyCode={(code) => void handleCopyPairingCode(code)}

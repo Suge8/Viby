@@ -146,7 +146,7 @@ describe('buildDeviceLinkStatus', () => {
         })
     })
 
-    it('reports lifecycle states from the bridge for the bound device', () => {
+    it('reports lifecycle states only before the scan device is online', () => {
         const handshaking = buildDeviceLinkSnapshot(bridgeState({ phase: 'connecting' }))
         expect(buildDeviceLinkStatus(pairingDevice({ active: false }), handshaking)).toMatchObject({
             phase: 'handshaking',
@@ -154,10 +154,15 @@ describe('buildDeviceLinkStatus', () => {
         })
 
         const failed = buildDeviceLinkSnapshot(bridgeState({ phase: 'fatal' }))
-        expect(buildDeviceLinkStatus(pairingDevice(), failed)).toMatchObject({
+        expect(buildDeviceLinkStatus(pairingDevice({ active: false }), failed)).toMatchObject({
             phase: 'failed',
             title: '连接中断',
             tone: 'danger',
+        })
+        expect(buildDeviceLinkStatus(pairingDevice(), failed)).toMatchObject({
+            phase: 'public',
+            title: '公网',
+            tone: 'success',
         })
     })
 
@@ -166,7 +171,7 @@ describe('buildDeviceLinkStatus', () => {
         expect(buildDeviceLinkStatus(pairingDevice(), snapshot)).toEqual({
             phase: 'public',
             title: '公网',
-            tone: 'neutral',
+            tone: 'success',
             latencyMs: null,
         })
     })

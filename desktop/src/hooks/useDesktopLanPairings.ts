@@ -13,7 +13,7 @@ export interface DesktopLanPairingsApi {
 
 /**
  * LAN pairing draft host state. Unlike broker pairings (long-lived,
- * persisted, multi-device) LAN invites are short-lived single-shot tickets,
+ * persisted, multi-device) LAN invites are short-lived one-shot drafts,
  * so we only keep one live draft at a time and never persist across restart.
  */
 export function useDesktopLanPairings(): DesktopLanPairingsApi {

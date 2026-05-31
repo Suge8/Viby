@@ -1,4 +1,5 @@
-import type { PairingSessionSnapshot } from '@/types'
+import { isPairingInviteAccepted } from '@/lib/desktopShellModel'
+import type { PairingBridgeState, PairingSessionSnapshot } from '@/types'
 
 export type DesktopPairingStage = 'invite' | 'bound'
 
@@ -43,16 +44,14 @@ export function shouldOfferPairingCodeCopy(stage: DesktopPairingStage): boolean 
 
 export function buildDesktopPairingPresentation(
     pairing: PairingPresentationInput,
-    bridgePhase?: 'connecting' | 'ready' | 'fatal'
+    bridgePhase?: PairingBridgeState['phase']
 ): DesktopPairingPresentation {
     const snapshot = pairing.pairing
     const qrUrl = buildDesktopPairingQrUrl(pairing)
-    // `paired` is true when EITHER the broker pushed approval through SSE
-    // (fast path) OR the local bridge actually received a guest heartbeat
-    // ack (robust path that does not depend on SSE delivery). Together they
-    // cover every transport while never producing a phantom "connected"
-    // state before a guest joins.
-    const paired = snapshot.approvalStatus === 'approved' || bridgePhase === 'ready'
+    const paired = isPairingInviteAccepted({
+        approved: snapshot.approvalStatus === 'approved',
+        bridgePhase: bridgePhase ?? null,
+    })
     if (paired) return { codeValue: '已连接', codeHint: '', qrUrl, stage: 'bound' }
 
     return {

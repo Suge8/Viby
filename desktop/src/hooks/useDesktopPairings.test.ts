@@ -8,15 +8,20 @@ import { describe, expect, it } from 'bun:test'
  */
 
 import type { DesktopPairingSession } from '@/types'
+import { resolveStoredDesktopPairings } from './useDesktopPairings'
 
-function makeSession(id: string, approval: 'approved' | 'pending' | null = 'approved'): DesktopPairingSession {
+function makeSession(
+    id: string,
+    approval: 'approved' | 'pending' | null = 'approved',
+    expiresAt = 4_102_444_800_000
+): DesktopPairingSession {
     return {
         pairing: {
             id,
             state: approval === 'approved' ? 'active' : 'waiting',
             createdAt: 1,
             updatedAt: 2,
-            expiresAt: 9_999,
+            expiresAt,
             shortCode: '123456',
             approvalStatus: approval,
             host: {},
@@ -69,5 +74,44 @@ describe('useDesktopPairings — invariants', () => {
         expect(ids.has('a')).toBe(true)
         expect(ids.has('b')).toBe(true)
         expect(ids.has('c')).toBe(false)
+    })
+
+    it('drops stale stored pairings before live bridge startup', async () => {
+        const valid = makeSession('valid')
+        const stale = makeSession('stale')
+        const expiredDraft = makeSession('expired-draft', null, 1)
+        const removed: string[] = []
+
+        const resolved = await resolveStoredDesktopPairings({
+            sessions: [valid, stale, expiredDraft],
+            removePairing: async (pairingId) => {
+                removed.push(pairingId)
+            },
+            refreshPairing: async (pairing) => {
+                if (pairing.pairing.id === 'stale') throw new Error('Invalid pairing token')
+                return { ...pairing, pairing: { ...pairing.pairing, updatedAt: 7 } }
+            },
+        })
+
+        expect(resolved.firstError).toBeNull()
+        expect(resolved.sessions.map((session) => session.pairing.id)).toEqual(['valid'])
+        expect(resolved.sessions[0]?.pairing.updatedAt).toBe(7)
+        expect(removed.toSorted()).toEqual(['expired-draft', 'stale'])
+    })
+
+    it('keeps stored pairings on transient refresh failure', async () => {
+        const offline = makeSession('offline')
+        const resolved = await resolveStoredDesktopPairings({
+            sessions: [offline],
+            removePairing: async () => {
+                throw new Error('should not remove')
+            },
+            refreshPairing: async () => {
+                throw new Error('network timeout')
+            },
+        })
+
+        expect(resolved.sessions).toEqual([offline])
+        expect(resolved.firstError).toBeInstanceOf(Error)
     })
 })

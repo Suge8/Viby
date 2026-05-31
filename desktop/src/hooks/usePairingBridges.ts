@@ -39,15 +39,38 @@ export function buildPairingBridgeLifecycleKey(options: {
     return options.enabled ? buildPairingsKey(options.pairings) : 'disabled'
 }
 
+export function mergePairingSnapshotsIntoBridgeStates(
+    states: Map<string, PairingBridgeState>,
+    pairings: readonly DesktopPairingSession[]
+): Map<string, PairingBridgeState> {
+    const snapshots = new Map(pairings.map((session) => [session.pairing.id, session.pairing]))
+    let changed = false
+    const next = new Map<string, PairingBridgeState>()
+    for (const [pairingId, state] of states) {
+        const pairing = snapshots.get(pairingId)
+        const merged = pairing && state.pairing !== pairing ? { ...state, pairing } : state
+        changed ||= merged !== state
+        next.set(pairingId, merged)
+    }
+    return changed ? next : states
+}
+
 export function usePairingBridges(options: {
     pairings: readonly DesktopPairingSession[]
     status: HubRuntimeStatus | undefined
     enabled: boolean
+    onBridgeReady?: (pairingId: string) => void
+    onBridgeRejected?: (pairingId: string, reason: string) => void
 }): Map<string, PairingBridgeState> {
     const [states, setStates] = useState<Map<string, PairingBridgeState>>(() => new Map())
     const activeRef = useRef<Map<string, () => void>>(new Map())
+    const readyNotifiedRef = useRef<Set<string>>(new Set())
     const statusRef = useRef<HubRuntimeStatus | undefined>(options.status)
+    const onBridgeReadyRef = useRef(options.onBridgeReady)
+    const onBridgeRejectedRef = useRef(options.onBridgeRejected)
     statusRef.current = options.status
+    onBridgeReadyRef.current = options.onBridgeReady
+    onBridgeRejectedRef.current = options.onBridgeRejected
 
     const pairingsKey = buildPairingBridgeLifecycleKey(options)
     const enabled = options.enabled
@@ -94,16 +117,27 @@ export function usePairingBridges(options: {
                 pairing,
                 getStatus: () => getReadyStatus(statusRef.current),
                 onStateChange: (state) => {
+                    if (state.phase === 'ready' && !readyNotifiedRef.current.has(pairingId)) {
+                        readyNotifiedRef.current.add(pairingId)
+                        onBridgeReadyRef.current?.(pairingId)
+                    } else if (state.phase !== 'ready') {
+                        readyNotifiedRef.current.delete(pairingId)
+                    }
                     setStates((prev) => {
                         const next = new Map(prev)
                         next.set(pairingId, state)
                         return next
                     })
                 },
+                onRejected: (reason) => onBridgeRejectedRef.current?.(pairingId, reason),
             })
             live.set(pairingId, cleanup)
         }
     }, [enabled, pairingsKey])
+
+    useEffect(() => {
+        setStates((prev) => mergePairingSnapshotsIntoBridgeStates(prev, pairings))
+    }, [pairings])
 
     useEffect(() => {
         return () => {

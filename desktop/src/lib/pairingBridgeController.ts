@@ -1,6 +1,7 @@
 import {
     createPairingTransport,
     createPairingTunnelRouteState,
+    createSessionTraceRecorder,
     PAIRING_STATS_POLL_INTERVAL_MS,
     type PairingTransportHandle,
     type PairingTransportState,
@@ -27,6 +28,12 @@ import { startPairingBridgeStats } from './pairingBridgeStats'
 import { startPairingBridgeTelemetry } from './pairingBridgeTelemetry'
 import { type PairingRelayBridgeHandle, startPairingRelayBridge } from './pairingRelayBridge'
 
+declare global {
+    interface Window {
+        __vibyExportHostSessionTrace?: () => string
+    }
+}
+
 function toIceServers(servers: PairingIceServer[]): RTCIceServer[] {
     return servers.map((server) => ({ urls: server.urls, username: server.username, credential: server.credential }))
 }
@@ -35,6 +42,12 @@ export function startPairingBridge(options: {
     pairing: DesktopPairingSession
     getStatus: () => HubRuntimeStatus | null
     onStateChange: (state: PairingBridgeState) => void
+    /**
+     * The broker permanently rejected this pairing's host credential. The owner
+     * must drop the stored pairing so a stale token cannot churn the broker
+     * origin and starve a freshly scanned pairing.
+     */
+    onRejected?: (reason: string) => void
 }): () => void {
     if (typeof WebSocket === 'undefined') {
         options.onStateChange({
@@ -47,17 +60,20 @@ export function startPairingBridge(options: {
     }
 
     let disposed = false
+    let rejected = false
     let channel: RTCDataChannel | null = null
     let latestStats: PairingBridgeStats | null = null
     let fatalMessage: string | null = null
     let telemetryWarning: string | null = null
     let routeState = createPairingTunnelRouteState()
     let directState: PairingTransportState | null = null
+    const trace = createSessionTraceRecorder({ pairingId: options.pairing.pairing.id, peerRole: 'desktop' })
     const client = createDeferredHubClient(options.getStatus)
     let transport: PairingTransportHandle | null = null
     let relay: PairingRelayBridgeHandle | null = null
     let unsubscribeTransport = () => {}
     const directSupported = typeof RTCPeerConnection !== 'undefined'
+    installTraceExporter()
     if (directSupported) startDirectTransport()
     relay = startPairingRelayBridge({
         tunnelUrl: options.pairing.tunnelUrl,
@@ -77,6 +93,7 @@ export function startPairingBridge(options: {
             maybeReprobeDirect()
         },
         onClosed: () => commitRoute({ type: 'relay-lost' }),
+        onFatal: handleRejected,
         onPeerReplaced: rebuildDirectTransport,
         reportAsyncError,
     })
@@ -89,7 +106,7 @@ export function startPairingBridge(options: {
               setStats: (nextStats) => {
                   latestStats = nextStats
               },
-              reportError: reportAsyncError,
+              reportError: reportDirectStatsError,
           })
         : null
     const statsSampleTimer = stats
@@ -123,6 +140,17 @@ export function startPairingBridge(options: {
         if (disposed || isHubPausedError(error)) return
         fatalMessage = `${message}${error instanceof Error ? error.message : String(error)}`
         emitBridgeState()
+    }
+
+    function handleRejected(reason: string): void {
+        if (disposed || rejected) return
+        rejected = true
+        trace.emit({ event: 'fatal', payloadMeta: { source: 'relay', reason } })
+        // The credential is permanently dead. Surface a terminal state and let
+        // the owner drop the stored pairing; do not keep a bridge alive on it.
+        fatalMessage = `配对已失效（${reason}），请重新扫码。`
+        emitBridgeState()
+        options.onRejected?.(reason)
     }
 
     function startDirectTransport(): void {
@@ -177,6 +205,7 @@ export function startPairingBridge(options: {
                 commitRoute({
                     type: 'heartbeat-ack',
                     route: 'direct',
+                    routeGeneration: routeState.routeGeneration,
                     roundTripTimeMs: latestStats?.currentRoundTripTimeMs,
                     sampledAt: latestStats?.sampledAt,
                 })
@@ -186,7 +215,11 @@ export function startPairingBridge(options: {
             },
             onChannelClosed: () => {
                 if (channel !== nextChannel) return
-                commitRoute({ type: 'direct-failed', reason: 'closed' })
+                commitRoute({
+                    type: 'direct-failed',
+                    reason: 'closed',
+                    routeGeneration: routeState.routeGeneration,
+                })
                 maybeReprobeDirect(true)
                 emitBridgeState()
             },
@@ -203,7 +236,26 @@ export function startPairingBridge(options: {
     function commitRoute(event: PairingTunnelRouteEvent): void {
         const previous = routeState
         routeState = reducePairingTunnelRoute(routeState, event)
-        if (routeState !== previous) emitBridgeState()
+        if (routeState !== previous) {
+            const reason = readRouteEventReason(event) ?? routeState.directBlockedReason
+            trace.emit({
+                event: 'route.transition',
+                routeTransition: {
+                    fromPhase: previous.phase,
+                    fromRoute: previous.activeRoute,
+                    toPhase: routeState.phase,
+                    toRoute: routeState.activeRoute,
+                    reason: reason ?? null,
+                    routeRevision: routeState.routeRevision,
+                },
+                payloadMeta: {
+                    reducerEvent: event.type,
+                    directBlockedReason: routeState.directBlockedReason,
+                    routeGeneration: routeState.routeGeneration,
+                },
+            })
+            emitBridgeState()
+        }
     }
 
     function commitDirectCandidateFromStats(stats: PairingBridgeStats): void {
@@ -211,7 +263,9 @@ export function startPairingBridge(options: {
             routeState.directProbe === 'probing' || routeState.activeRoute === 'direct'
                 ? readDesktopTunnelDirectCandidateEvent(stats)
                 : null
-        if (event) commitRoute(event)
+        if (event?.type === 'direct-candidate-selected') {
+            commitRoute({ ...event, routeGeneration: routeState.routeGeneration })
+        }
     }
 
     async function sampleDirectStats(): Promise<void> {
@@ -220,12 +274,17 @@ export function startPairingBridge(options: {
         emitBridgeState()
     }
 
-    function reportDirectProbeError(error: unknown): void {
-        reportAsyncError('配对直连探测失败：', error)
+    function reportDirectProbeError(_error: unknown): void {
+        commitRoute({ type: 'direct-failed', reason: 'ice-failed', routeGeneration: routeState.routeGeneration })
+    }
+
+    function reportDirectStatsError(_message: string, _error: unknown): void {
+        commitRoute({ type: 'direct-failed', reason: 'ice-failed', routeGeneration: routeState.routeGeneration })
     }
 
     function reportTelemetryError(message: string, error: unknown): void {
         telemetryWarning = `${message}${error instanceof Error ? error.message : String(error)}`
+        trace.emit({ event: 'rpc.failure', payloadMeta: { source: 'telemetry', message: telemetryWarning } })
         emitBridgeState()
     }
 
@@ -259,4 +318,16 @@ export function startPairingBridge(options: {
             telemetryWarning && state.phase === 'ready' ? { ...state, message: telemetryWarning } : state
         )
     }
+
+    function installTraceExporter(): void {
+        if (typeof window === 'undefined') return
+        window.__vibyExportHostSessionTrace = () => JSON.stringify(trace.export(), null, 2)
+    }
+}
+
+function readRouteEventReason(event: PairingTunnelRouteEvent): string | null {
+    if (event.type === 'direct-failed') return event.reason ?? null
+    if (event.type === 'heartbeat-missed') return 'heartbeat-missed'
+    if (event.type === 'relay-lost') return 'relay-lost'
+    return null
 }
