@@ -8,6 +8,8 @@ export function resolveSessionActivation(options: {
     recentActivitySessionIds: ReadonlySet<string>
     firstRecentActivityCandidateResolved: boolean
     firstRecentActivitySessionIds: Set<string>
+    firstRecentActivityObservedAtMs: number | null
+    recentActivitySettleMs: number
     loggedAmbiguousRecentActivity: boolean
     pendingEventsByFile: Map<string, PendingEvents>
     sessionStartWindowMs: number
@@ -15,6 +17,7 @@ export function resolveSessionActivation(options: {
     onSessionMatchFailed?: (message: string) => void
     setMatchFailed: () => void
     setLoggedAmbiguousRecentActivity: () => void
+    setFirstRecentActivityObservedAtMs: (value: number) => void
     setActiveSessionId: (sessionId: string) => void
 }): {
     firstRecentActivityCandidateResolved: boolean
@@ -38,14 +41,8 @@ export function resolveSessionActivation(options: {
         }
     }
 
-    const nextResolved =
-        options.firstRecentActivityCandidateResolved || options.recentActivitySessionIds.size === 0
-            ? options.firstRecentActivityCandidateResolved
-            : captureFirstRecentActivityCandidate(
-                  options.recentActivitySessionIds,
-                  options.firstRecentActivitySessionIds
-              )
-    if (options.firstRecentActivitySessionIds.size === 1) {
+    const nextResolved = resolveFirstRecentActivityCandidate(options)
+    if (nextResolved && options.firstRecentActivitySessionIds.size === 1) {
         const [sessionId] = options.firstRecentActivitySessionIds
         if (sessionId) {
             logger.debug(
@@ -125,9 +122,36 @@ export function activateCodexSession(options: {
 function captureFirstRecentActivityCandidate(
     recentActivitySessionIds: ReadonlySet<string>,
     firstRecentActivitySessionIds: Set<string>
-): boolean {
+): void {
     for (const sessionId of recentActivitySessionIds) {
         firstRecentActivitySessionIds.add(sessionId)
     }
-    return true
+}
+
+function resolveFirstRecentActivityCandidate(options: {
+    recentActivitySessionIds: ReadonlySet<string>
+    firstRecentActivityCandidateResolved: boolean
+    firstRecentActivitySessionIds: Set<string>
+    firstRecentActivityObservedAtMs: number | null
+    recentActivitySettleMs: number
+    setFirstRecentActivityObservedAtMs: (value: number) => void
+}): boolean {
+    if (options.firstRecentActivityCandidateResolved) {
+        return true
+    }
+
+    const now = Date.now()
+    if (options.recentActivitySessionIds.size > 0) {
+        captureFirstRecentActivityCandidate(options.recentActivitySessionIds, options.firstRecentActivitySessionIds)
+        if (options.firstRecentActivityObservedAtMs === null) {
+            options.setFirstRecentActivityObservedAtMs(now)
+            return false
+        }
+    }
+
+    if (options.firstRecentActivityObservedAtMs === null) {
+        return false
+    }
+
+    return now - options.firstRecentActivityObservedAtMs >= options.recentActivitySettleMs
 }

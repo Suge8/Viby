@@ -22,6 +22,7 @@ import {
     ACTIVE_SESSION_FALLBACK_SCAN_INTERVAL_MS,
     type CodexSessionScannerOptions,
     DEFAULT_SESSION_START_WINDOW_MS,
+    RECENT_ACTIVITY_MATCH_SETTLE_MS,
     SESSION_DISCOVERY_SCAN_INTERVAL_MS,
 } from './codexSessionScannerTypes'
 
@@ -50,6 +51,7 @@ export class CodexSessionScannerImpl extends BaseSessionScanner<CodexSessionEven
     private readonly recentActivitySessionIds = new Set<string>()
     private firstRecentActivityCandidateResolved = false
     private readonly firstRecentActivitySessionIds = new Set<string>()
+    private firstRecentActivityObservedAtMs: number | null = null
     private loggedAmbiguousRecentActivity = false
 
     constructor(opts: CodexSessionScannerOptions, targetCwd: string | null) {
@@ -226,6 +228,8 @@ export class CodexSessionScannerImpl extends BaseSessionScanner<CodexSessionEven
             recentActivitySessionIds: this.recentActivitySessionIds,
             firstRecentActivityCandidateResolved: this.firstRecentActivityCandidateResolved,
             firstRecentActivitySessionIds: this.firstRecentActivitySessionIds,
+            firstRecentActivityObservedAtMs: this.firstRecentActivityObservedAtMs,
+            recentActivitySettleMs: RECENT_ACTIVITY_MATCH_SETTLE_MS,
             loggedAmbiguousRecentActivity: this.loggedAmbiguousRecentActivity,
             pendingEventsByFile: this.pendingEventsByFile,
             sessionStartWindowMs: this.sessionStartWindowMs,
@@ -236,6 +240,9 @@ export class CodexSessionScannerImpl extends BaseSessionScanner<CodexSessionEven
             },
             setLoggedAmbiguousRecentActivity: () => {
                 this.loggedAmbiguousRecentActivity = true
+            },
+            setFirstRecentActivityObservedAtMs: (value) => {
+                this.firstRecentActivityObservedAtMs = value
             },
             setActiveSessionId: (sessionId) => {
                 this.setActiveSessionId(sessionId)
