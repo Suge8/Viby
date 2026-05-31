@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveChromeExecutablePath } from './browserSmokeRuntime'
+import { buildPairingSmokeVerifyCodeRequest, REMOTE_NAT_DIRECT_WEBRTC_SMOKE_PUBLIC_KEY } from './pairingSmokeContracts'
 
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 const repoRoot = dirname(dirname(scriptDir))
@@ -145,10 +146,16 @@ async function main(): Promise<void> {
             body: JSON.stringify({ label: 'Remote Direct Host' }),
         })
         if (!created.pairing.shortCode) throw new Error('create response missing shortCode')
-        const claimed = await requestJson<{ wsUrl: string }>(`/pairings/${created.pairing.id}/verify-code`, {
+        const verified = await requestJson<{ wsUrl: string }>(`/pairings/${created.pairing.id}/verify-code`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ code: created.pairing.shortCode, label: 'Remote Direct Guest' }),
+            body: JSON.stringify(
+                buildPairingSmokeVerifyCodeRequest({
+                    code: created.pairing.shortCode,
+                    label: 'Remote Direct Guest',
+                    publicKey: REMOTE_NAT_DIRECT_WEBRTC_SMOKE_PUBLIC_KEY,
+                })
+            ),
         })
 
         const commonEnv = {
@@ -159,7 +166,7 @@ async function main(): Promise<void> {
         }
         const remoteCommand = [
             `ROLE=guest`,
-            `WS_URL=${quote(claimed.wsUrl)}`,
+            `WS_URL=${quote(verified.wsUrl)}`,
             `ICE_SERVERS_JSON=${quote(commonEnv.ICE_SERVERS_JSON)}`,
             `PING_COUNT=${quote(commonEnv.PING_COUNT)}`,
             'docker run --rm --network=host',

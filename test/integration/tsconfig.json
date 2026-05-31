@@ -1,0 +1,14 @@
+{
+    "extends": "../../tsconfig.base.json",
+    "compilerOptions": {
+        "baseUrl": "../..",
+        "lib": ["ES2022", "DOM", "DOM.Iterable"],
+        "noEmit": true,
+        "paths": {
+            "bun:test": ["node_modules/.bun/bun-types@1.3.11/node_modules/bun-types/test.d.ts"],
+            "@viby/protocol": ["shared/src/index.ts"],
+            "@viby/protocol/*": ["shared/src/*"]
+        }
+    },
+    "include": ["pairing/**/*.ts"]
+}

@@ -259,11 +259,11 @@ async function runHost() {
         headers: { authorization: `Bearer ${createToken}`, 'content-type': 'application/json' },
         body: JSON.stringify({ label: 'Docker Netem Host' }),
     })
-    const ticket = new URL(created.pairingUrl).hash.slice(1).split('ticket=')[1]
-    if (!ticket || !created.tunnelUrl) throw new Error('create response missing ticket or tunnelUrl')
+    if (!created.pairing?.shortCode || !created.tunnelUrl)
+        throw new Error('create response missing shortCode or tunnelUrl')
     writeJson(sessionPath, {
         pairingId: created.pairing.id,
-        ticket,
+        shortCode: created.pairing.shortCode,
         hostIp: ipAddress(),
     })
 
@@ -289,13 +289,17 @@ async function runHost() {
 
 async function runGuest() {
     const session = await waitForFile(sessionPath, 'session')
-    const claimed = await requestJson(`/pairings/${session.pairingId}/claim`, {
+    const verified = await requestJson(`/pairings/${session.pairingId}/verify-code`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ ticket: session.ticket, label: 'Docker Netem Guest' }),
+        body: JSON.stringify({
+            code: session.shortCode,
+            label: 'Docker Netem Guest',
+            publicKey: 'docker-netem-guest-public-key',
+        }),
     })
-    if (!claimed.tunnelUrl) throw new Error('claim response missing tunnelUrl')
-    let tunnel = await openSecureTunnel(claimed.tunnelUrl)
+    if (!verified.tunnelUrl) throw new Error('verify-code response missing tunnelUrl')
+    let tunnel = await openSecureTunnel(verified.tunnelUrl)
     await waitForFile(hostReadyPath, 'host ready')
     const samples = []
     const timeline = []
@@ -304,7 +308,7 @@ async function runGuest() {
         if (reopenGuestTunnel && seq === Math.floor(pingCount / 3)) {
             tunnel.close()
             await sleep(150)
-            tunnel = await openSecureTunnel(claimed.tunnelUrl)
+            tunnel = await openSecureTunnel(verified.tunnelUrl)
             timeline.push({ atMs: Date.now(), label: 'guest-tunnel-replaced' })
         }
         if (runNetemHandover && seq === Math.floor(pingCount / 2)) await runHandoverProfile(timeline)

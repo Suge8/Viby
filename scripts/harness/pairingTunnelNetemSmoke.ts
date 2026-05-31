@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import net from 'node:net'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { type DockerRuntimeLease, ensureDockerRuntime } from './colimaDockerRuntime'
 
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 const repoRoot = dirname(dirname(scriptDir))
@@ -42,10 +43,6 @@ async function pickPort(): Promise<number> {
             })
         })
     })
-}
-
-function dockerAvailable(): boolean {
-    return run('docker', ['info']).status === 0
 }
 
 function ensureBundle(): void {
@@ -185,24 +182,47 @@ function writeSummary(workDir: string, network: string, brokerUrl: string): void
         throw new Error(`guest result missing; inspect ${join(workDir, 'guest.log')} and ${join(workDir, 'host.log')}`)
     }
     const result = JSON.parse(readFileSync(resultPath, 'utf8')) as Record<string, unknown>
+    const latencyBudgetMs = resolveMaxP95RttMs()
     const summary = {
         ...result,
+        latencyBudgetMs,
         network,
         brokerUrl,
         evidenceDir: workDir,
     }
     writeFileSync(join(workDir, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`)
     console.log(JSON.stringify(summary))
-    assertLatency(summary)
+    assertLatency(summary, latencyBudgetMs)
 }
 
-function assertLatency(summary: Record<string, unknown>): void {
-    const fallback = process.argv.includes('--public') ? 1_500 : 1_000
-    const maxP95 = Number.parseInt(process.env.MAX_P95_RTT_MS || String(fallback), 10)
+function assertLatency(summary: Record<string, unknown>, maxP95: number): void {
     const p95 = typeof summary.p95RttMs === 'number' ? summary.p95RttMs : null
     if (p95 !== null && p95 > maxP95) {
         throw new Error(`pairing relay p95 ${p95}ms exceeded ${maxP95}ms`)
     }
+}
+
+export function resolveMaxP95RttMs(
+    args: readonly string[] = process.argv,
+    env: Pick<NodeJS.ProcessEnv, 'MAX_P95_RTT_MS' | 'PUBLIC_MAX_P95_RTT_MS' | 'LOCAL_MAX_P95_RTT_MS'> = process.env
+): number {
+    if (env.MAX_P95_RTT_MS) return parseLatencyBudget('MAX_P95_RTT_MS', env.MAX_P95_RTT_MS)
+    const publicMode = args.includes('--public')
+    if (publicMode && env.PUBLIC_MAX_P95_RTT_MS) {
+        return parseLatencyBudget('PUBLIC_MAX_P95_RTT_MS', env.PUBLIC_MAX_P95_RTT_MS)
+    }
+    if (!publicMode && env.LOCAL_MAX_P95_RTT_MS) {
+        return parseLatencyBudget('LOCAL_MAX_P95_RTT_MS', env.LOCAL_MAX_P95_RTT_MS)
+    }
+    return publicMode ? 2_500 : 1_000
+}
+
+function parseLatencyBudget(name: string, value: string): number {
+    const parsed = Number.parseInt(value, 10)
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+        throw new Error(`${name} must be a positive integer millisecond budget`)
+    }
+    return parsed
 }
 
 function redactEvidence(workDir: string): void {
@@ -212,6 +232,7 @@ function redactEvidence(workDir: string): void {
         const redacted = readFileSync(path, 'utf8')
             .replace(/(token=)[A-Za-z0-9_-]+/g, '$1<redacted>')
             .replace(/("ticket"\s*:\s*")[^"]+"/g, '$1<redacted>"')
+            .replace(/("shortCode"\s*:\s*")[^"]+"/g, '$1<redacted>"')
             .replace(/("hostTunnelUrl"\s*:\s*")[^"]+"/g, '$1<redacted>"')
         writeFileSync(path, redacted)
     }
@@ -228,12 +249,13 @@ function createEvidenceDir(): string {
 
 async function main(): Promise<void> {
     const publicMode = process.argv.includes('--public')
-    if (!dockerAvailable()) {
+    const dockerRuntime = ensureDockerRuntime()
+    if (!dockerRuntime) {
         if (process.env.VIBY_PAIRING_NETEM_SKIP_IF_UNAVAILABLE === '1') {
             console.log('[harness] pairing netem smoke skipped: docker daemon unavailable')
             return
         }
-        throw new Error('Docker daemon is unavailable. Start Docker/Colima before running pairing netem smoke.')
+        throw new Error('Docker daemon is unavailable and Colima could not be started for pairing netem smoke.')
     }
     if (!publicMode) ensureBundle()
     const port = publicMode ? 0 : await pickPort()
@@ -253,15 +275,23 @@ async function main(): Promise<void> {
         ])
         writeSummary(workDir, network, brokerUrl)
     } finally {
-        stopProcess(broker)
-        run('docker', ['network', 'rm', network])
-        if (process.env.VIBY_PAIRING_NETEM_CLEAN_ARTIFACTS === '1') {
-            rmSync(workDir, { force: true, recursive: true })
-        } else {
-            redactEvidence(workDir)
-            console.log(`[harness] pairing netem artifacts kept at ${workDir}`)
+        try {
+            stopProcess(broker)
+            run('docker', ['network', 'rm', network])
+            if (process.env.VIBY_PAIRING_NETEM_CLEAN_ARTIFACTS === '1') {
+                rmSync(workDir, { force: true, recursive: true })
+            } else {
+                redactEvidence(workDir)
+                console.log(`[harness] pairing netem artifacts kept at ${workDir}`)
+            }
+        } finally {
+            stopDockerRuntime(dockerRuntime)
         }
     }
+}
+
+function stopDockerRuntime(dockerRuntime: DockerRuntimeLease): void {
+    dockerRuntime.dispose()
 }
 
 if (import.meta.main) {

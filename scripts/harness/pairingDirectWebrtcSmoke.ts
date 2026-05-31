@@ -4,6 +4,7 @@ import net from 'node:net'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { type DirectSmokeResult, runBrowserPair } from './pairingDirectWebrtcPeer'
+import { buildPairingSmokeVerifyCodeRequest, DIRECT_WEBRTC_SMOKE_PUBLIC_KEY } from './pairingSmokeContracts'
 
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 const repoRoot = dirname(dirname(scriptDir))
@@ -147,13 +148,19 @@ async function main(): Promise<void> {
             body: JSON.stringify({ label: 'Direct WebRTC Host' }),
         })
         if (!created.pairing.shortCode) throw new Error('create response missing shortCode')
-        const claimed = await requestJson<{ guestToken: string; wsUrl: string }>(
+        const verified = await requestJson<{ guestToken: string; wsUrl: string }>(
             brokerUrl,
             `/pairings/${created.pairing.id}/verify-code`,
             {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({ code: created.pairing.shortCode, label: 'Direct WebRTC Guest' }),
+                body: JSON.stringify(
+                    buildPairingSmokeVerifyCodeRequest({
+                        code: created.pairing.shortCode,
+                        label: 'Direct WebRTC Guest',
+                        publicKey: DIRECT_WEBRTC_SMOKE_PUBLIC_KEY,
+                    })
+                ),
             }
         )
         const pingCount = 12
@@ -161,7 +168,7 @@ async function main(): Promise<void> {
             brokerUrl,
             createToken,
             hostWsUrl: created.wsUrl,
-            guestWsUrl: claimed.wsUrl,
+            guestWsUrl: verified.wsUrl,
             iceServers: created.iceServers,
             pingCount,
         })

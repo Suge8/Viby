@@ -95,6 +95,50 @@ fi
 
 command -v curl >/dev/null 2>&1 || fail "curl is required"
 
+health_attempts="\${PAIRING_HEALTH_CHECK_ATTEMPTS:-10}"
+health_delay_seconds="\${PAIRING_HEALTH_CHECK_DELAY_SECONDS:-1}"
+
+pause_before_retry() {
+  local attempt="$1"
+  if [[ "$attempt" -lt "$health_attempts" ]]; then
+    sleep "$health_delay_seconds"
+  fi
+}
+
+wait_for_ready() {
+  local label="$1"
+  local url="$2"
+  local timeout_seconds="$3"
+  local attempt
+
+  for ((attempt = 1; attempt <= health_attempts; attempt++)); do
+    if curl -fsS --max-time "$timeout_seconds" "$url" >/dev/null 2>&1; then
+      return 0
+    fi
+    pause_before_retry "$attempt"
+  done
+
+  fail "$label"
+}
+
+wait_for_metrics() {
+  local url="$1"
+  local attempt
+  local metrics_payload
+
+  for ((attempt = 1; attempt <= health_attempts; attempt++)); do
+    metrics_payload="$(
+      curl -fsS --max-time 3 -H "authorization: Bearer $PAIRING_CREATE_TOKEN" "$url" 2>/dev/null || true
+    )"
+    if [[ "$metrics_payload" == *'"uptimeMs"'* ]]; then
+      return 0
+    fi
+    pause_before_retry "$attempt"
+  done
+
+  fail "metrics endpoint is unavailable"
+}
+
 local_host="\${PAIRING_HOST:-127.0.0.1}"
 if [[ "$local_host" == "0.0.0.0" || "$local_host" == "::" ]]; then
   local_host="127.0.0.1"
@@ -102,18 +146,17 @@ fi
 local_port="\${PAIRING_PORT:-8787}"
 local_base="http://$local_host:$local_port"
 
-curl -fsS --max-time 3 "$local_base/ready" >/dev/null || fail "local readiness endpoint is unavailable"
+wait_for_ready "local readiness endpoint is unavailable" "$local_base/ready" 3
 checks+=(local-ready)
 
 if [[ -n "\${PAIRING_PUBLIC_URL:-}" ]]; then
   public_base="\${PAIRING_PUBLIC_URL%/}"
-  curl -fsS --max-time 5 "$public_base/ready" >/dev/null || fail "public readiness endpoint is unavailable"
+  wait_for_ready "public readiness endpoint is unavailable" "$public_base/ready" 5
   checks+=(public-ready)
 fi
 
 if [[ -n "\${PAIRING_CREATE_TOKEN:-}" ]]; then
-  curl -fsS --max-time 3 -H "authorization: Bearer $PAIRING_CREATE_TOKEN" "$local_base/metrics" \
-    | grep -q '"uptimeMs"' || fail "metrics endpoint is unavailable"
+  wait_for_metrics "$local_base/metrics"
   checks+=(metrics)
 fi
 
@@ -174,6 +217,10 @@ rsync -a --delete-after --exclude pairing.env --exclude logs --exclude assets "$
 find ${defaultInstallDir}/assets -type f -mtime +30 -delete
 rm -rf "$tmp"
 \`\`\`
+
+\`viby-pairing-health-check.sh\` 会对 local ready、public ready、metrics 做短重试，覆盖服务刚重启还没
+bind 端口的窗口。默认 \`PAIRING_HEALTH_CHECK_ATTEMPTS=10\`、\`PAIRING_HEALTH_CHECK_DELAY_SECONDS=1\`，
+需要更慢的机器时可以在执行 health check 前临时覆盖。
 
 ## 第 1 步：安装系统依赖
 
