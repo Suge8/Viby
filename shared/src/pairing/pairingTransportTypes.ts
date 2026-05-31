@@ -12,7 +12,7 @@ export type RTCDataChannel = { readyState?: string }
 export interface PairingSocket {
     readyState: number
     onopen: (() => void) | null
-    onclose: (() => void) | null
+    onclose: ((event?: { code: number; reason: string }) => void) | null
     onerror: (() => void) | null
     onmessage: ((event: { data: string }) => void) | null
     send(data: string): void

@@ -53,11 +53,13 @@ export function recordRemotePairingDiagnostic(
 export function recordRemotePairingRouteDiagnostic(input: {
     event: string
     phase: string
+    reason?: string | null
     route: string | null
 }): void {
     recordRemotePairingDiagnostic('route', {
         event: input.event,
         phase: input.phase,
+        reason: input.reason ?? 'none',
         route: input.route ?? 'none',
     })
 }

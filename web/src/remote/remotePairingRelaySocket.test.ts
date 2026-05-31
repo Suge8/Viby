@@ -100,6 +100,54 @@ describe('remotePairingRelaySocket', () => {
         expect(onMessage).toHaveBeenCalledWith(JSON.stringify({ kind: 'heartbeat' }))
     })
 
+    it('drops malformed sealed relay frames without closing the tunnel', async () => {
+        const onClose = vi.fn()
+        const onMessage = vi.fn()
+        const relay = createRemotePairingRelaySocket({
+            tunnelUrl: 'wss://pair.example/tunnel',
+            onOpen: vi.fn(),
+            onClose,
+            onFatal: vi.fn(),
+            onMessage,
+        })
+        const socket = FakeWebSocket.instances[0]
+        const peerCipher = await pairSocket(socket)
+        await waitForCondition(() => relay.readyState === 'open')
+        const sealed = await peerCipher.seal({
+            kind: 'message',
+            id: 'frame-1',
+            seq: 0,
+            payload: { kind: 'heartbeat' },
+        })
+
+        socket.emitMessage(JSON.stringify({ ...sealed, ciphertext: `${sealed.ciphertext}x` }))
+        await Promise.resolve()
+
+        expect(relay.readyState).toBe('open')
+        expect(onClose).not.toHaveBeenCalled()
+        expect(onMessage).not.toHaveBeenCalled()
+    })
+
+    it('drops malformed relay JSON without closing the tunnel', async () => {
+        const onClose = vi.fn()
+        const relay = createRemotePairingRelaySocket({
+            tunnelUrl: 'wss://pair.example/tunnel',
+            onOpen: vi.fn(),
+            onClose,
+            onFatal: vi.fn(),
+            onMessage: vi.fn(),
+        })
+        const socket = FakeWebSocket.instances[0]
+        await pairSocket(socket)
+        await waitForCondition(() => relay.readyState === 'open')
+
+        socket.emitMessage('{')
+        await Promise.resolve()
+
+        expect(relay.readyState).toBe('open')
+        expect(onClose).not.toHaveBeenCalled()
+    })
+
     it('turns broker auth close into a fatal session signal', () => {
         const onFatal = vi.fn()
         createRemotePairingRelaySocket({
@@ -127,6 +175,61 @@ describe('remotePairingRelaySocket', () => {
 
         expect(onFatal).toHaveBeenCalledWith('replaced')
         expect(FakeWebSocket.instances).toHaveLength(1)
+    })
+
+    it('latches fatal so a later foreground pulse / reconnect cannot reopen the dead credential', () => {
+        const relay = createRemotePairingRelaySocket({
+            tunnelUrl: 'wss://pair.example/tunnel',
+            onOpen: vi.fn(),
+            onClose: vi.fn(),
+            onFatal: vi.fn(),
+            onMessage: vi.fn(),
+        })
+        // Broker permanently rejects the host token.
+        FakeWebSocket.instances[0].onclose?.({ code: 1008, reason: 'invalid_token' })
+        expect(FakeWebSocket.instances).toHaveLength(1)
+
+        // iOS resume burst + an explicit reconnect must NOT revive a dead token
+        // (mirrors the desktop bridge `fatal` latch; otherwise the rejected
+        // credential reconnect-storms the broker and starves a fresh scan).
+        relay.notifyForeground()
+        relay.reconnect()
+
+        expect(FakeWebSocket.instances).toHaveLength(1)
+        expect(relay.readyState).toBe('closed')
+    })
+
+    it('uses injected socket factory, scheduler, and jitter for deterministic reconnects', () => {
+        const scheduled: Array<{ delayMs: number; callback: () => void; cancelled: boolean }> = []
+        const sockets: FakeWebSocket[] = []
+        createRemotePairingRelaySocket({
+            tunnelUrl: 'wss://pair.example/tunnel',
+            onOpen: vi.fn(),
+            onClose: vi.fn(),
+            onFatal: vi.fn(),
+            onMessage: vi.fn(),
+            randomJitter: () => 0,
+            scheduleTimeout: (callback, delayMs) => {
+                const entry = { callback, delayMs, cancelled: false }
+                scheduled.push(entry)
+                return () => {
+                    entry.cancelled = true
+                }
+            },
+            socketFactory: (url) => {
+                const socket = new FakeWebSocket(url)
+                sockets.push(socket)
+                return socket
+            },
+        })
+
+        expect(sockets).toHaveLength(1)
+        sockets[0].onclose?.({ code: 1000, reason: '' })
+        expect(scheduled).toMatchObject([{ delayMs: 510, cancelled: false }])
+
+        scheduled[0].callback()
+        expect(sockets).toHaveLength(2)
+        expect(sockets[1].url).toBe('wss://pair.example/tunnel')
     })
 
     it('rekeys when the peer role is replaced behind the same relay tunnel', async () => {

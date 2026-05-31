@@ -41,6 +41,12 @@ export class RemotePeerConnectError extends Error {
     }
 }
 
+export function createRemoteRelayFatalError(reason: string): RemotePeerConnectError {
+    return reason === 'replaced'
+        ? new RemotePeerConnectError('replaced', 'remotePairing.error.connectionReplaced')
+        : new RemotePeerConnectError('closed', 'remotePairing.error.scanAgain')
+}
+
 export class RemotePairingCodedError extends Error {
     constructor(
         readonly code: RemotePairingErrorKey,

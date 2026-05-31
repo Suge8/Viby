@@ -15,7 +15,7 @@ class FakeWebSocket {
     static readonly OPEN = 1
     static instances: FakeWebSocket[] = []
     readonly sent: string[] = []
-    onclose: (() => void) | null = null
+    onclose: ((event?: { code: number; reason: string }) => void) | null = null
     onerror: (() => void) | null = null
     onmessage: ((event: { data: unknown }) => void) | null = null
     onopen: (() => void) | null = null
@@ -112,6 +112,37 @@ describe('pairingRelayBridge', () => {
         await expect(findSentPayload(socket, peerCipher, isHeartbeatAck)).resolves.toMatchObject({ ack: true })
     })
 
+    it('drops malformed relay frames without tearing down the bridge', async () => {
+        const onOpen = mock()
+        const onClosed = mock()
+        const reportAsyncError = mock()
+        startPairingRelayBridge({
+            tunnelUrl: 'wss://pair.example/tunnel',
+            getClient: () => client() as never,
+            isDisposed: () => false,
+            onOpen,
+            onActive: mock(),
+            onClosed,
+            reportAsyncError,
+        })
+        const socket = FakeWebSocket.instances[0]
+        const peerCipher = await pairSocket(socket)
+        await waitForCondition(() => onOpen.mock.calls.length > 0)
+        const sealed = await peerCipher.seal({
+            kind: 'message',
+            id: 'frame-1',
+            seq: 0,
+            payload: { kind: 'heartbeat' },
+        })
+
+        socket.emitMessage('{')
+        socket.emitMessage(JSON.stringify({ ...sealed, ciphertext: `${sealed.ciphertext}x` }))
+        await Promise.resolve()
+
+        expect(onClosed).not.toHaveBeenCalled()
+        expect(reportAsyncError).not.toHaveBeenCalled()
+    })
+
     it('ignores stale relay socket frames after reconnect starts', async () => {
         const onOpen = mock()
         startPairingRelayBridge({
@@ -140,6 +171,41 @@ describe('pairingRelayBridge', () => {
 
         expect(staleSocket.sent).toHaveLength(staleSentCount)
         expect(onOpen).not.toHaveBeenCalled()
+    })
+
+    it('uses injected socket factory, scheduler, and jitter for deterministic reconnects', () => {
+        const scheduled: Array<{ delayMs: number; callback: () => void; cancelled: boolean }> = []
+        const sockets: FakeWebSocket[] = []
+        startPairingRelayBridge({
+            tunnelUrl: 'wss://pair.example/tunnel',
+            getClient: () => client() as never,
+            isDisposed: () => false,
+            onOpen: mock(),
+            onActive: mock(),
+            onClosed: mock(),
+            reportAsyncError: mock(),
+            randomJitter: () => 0,
+            scheduleTimeout: (callback, delayMs) => {
+                const entry = { callback, delayMs, cancelled: false }
+                scheduled.push(entry)
+                return () => {
+                    entry.cancelled = true
+                }
+            },
+            socketFactory: (url) => {
+                const socket = new FakeWebSocket(url)
+                sockets.push(socket)
+                return socket
+            },
+        })
+
+        expect(sockets).toHaveLength(1)
+        sockets[0].close()
+        expect(scheduled).toMatchObject([{ delayMs: 510, cancelled: false }])
+
+        scheduled[0].callback()
+        expect(sockets).toHaveLength(2)
+        expect(sockets[1].url).toBe('wss://pair.example/tunnel')
     })
 
     it('reports relay RTT from desktop-origin heartbeat acknowledgements', async () => {

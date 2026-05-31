@@ -7,7 +7,7 @@ type SocketPair = { left: MockSocket; right: MockSocket }
 class MockSocket implements PairingSocket {
     readyState = 0
     onopen: (() => void) | null = null
-    onclose: (() => void) | null = null
+    onclose: ((event?: { code: number; reason: string }) => void) | null = null
     onerror: (() => void) | null = null
     onmessage: ((event: { data: string }) => void) | null = null
     sent: string[] = []
@@ -24,11 +24,11 @@ class MockSocket implements PairingSocket {
         this.peer?.onmessage?.({ data })
     }
 
-    close() {
+    close(code?: number, reason = '') {
         if (this.readyState === 3) return
         this.readyState = 3
         this.closeCount += 1
-        this.onclose?.()
+        this.onclose?.(code === undefined ? undefined : { code, reason })
     }
 }
 
@@ -260,6 +260,32 @@ describe('pairingTransport', () => {
         transport.dispose()
     })
 
+    it('drops malformed signaling frames without tearing down the transport', async () => {
+        const socket = new MockSocket(),
+            peer = new MockPeer(),
+            observed: unknown[] = []
+        const transport = createPairingTransport({
+            pairingId: 'p',
+            polite: true,
+            iceServers: [],
+            getWsUrl: async () => 'u',
+            createDataChannel: false,
+            onChannel: () => {},
+            onSignalReceived: (raw) => observed.push(raw),
+            socketFactory: () => socket,
+            peerFactory: () => peer,
+        })
+        await openWhenBound(socket)
+        socket.onmessage?.({ data: '{' })
+        socket.onmessage?.({ data: JSON.stringify({ type: 'future-frame', value: true }) })
+        await Promise.resolve()
+        expect(observed).toEqual([{ type: 'future-frame', value: true }])
+        expect(peer.remoteDescription).toBeNull()
+        expect(socket.closeCount).toBe(0)
+        expect(transport.getSnapshot().kind).toBe('connecting')
+        transport.dispose()
+    })
+
     it('handles foreground restart and noop cases', async () => {
         const socket = new MockSocket(),
             peer = new MockPeer()
@@ -408,6 +434,36 @@ describe('pairingTransport', () => {
         await waitFor(() => expect(transport.getSnapshot()).toEqual({ kind: 'fatal', reason: 'pairing_unavailable' }))
         expect(peer.closeCount).toBe(1)
         expect(states).toHaveLength(1)
+    })
+
+    it('treats terminal broker close codes as fatal instead of reconnecting', async () => {
+        const sockets = [new MockSocket(), new MockSocket()],
+            peer = new MockPeer()
+        let socketCalls = 0
+        const transport = createPairingTransport({
+            pairingId: 'p',
+            polite: true,
+            iceServers: [],
+            getWsUrl: async () => 'u',
+            createDataChannel: false,
+            onChannel: () => {},
+            socketFactory: () => sockets[socketCalls++],
+            peerFactory: () => peer,
+            randomJitter: () => 0,
+        })
+        await openWhenBound(sockets[0])
+
+        sockets[0].close(1008, 'invalid_token')
+
+        await waitFor(() => expect(transport.getSnapshot()).toEqual({ kind: 'fatal', reason: 'invalid_token' }))
+        expect(peer.closeCount).toBe(1)
+        expect(socketCalls).toBe(1)
+
+        transport.notifyForeground()
+        await Promise.resolve()
+
+        expect(socketCalls).toBe(1)
+        expect(sockets[1].onopen).toBeNull()
     })
 
     it('retries getWsUrl failures without fatal and bounds jitter', async () => {

@@ -13,21 +13,34 @@ export interface RemoteRelayHeartbeat {
     stop(): void
 }
 
+type ScheduleInterval = (callback: () => void, intervalMs: number) => () => void
+type ScheduleTimeout = (callback: () => void, delayMs: number) => () => void
+
 export function createRemoteRelayHeartbeat(options: {
     getRelay: () => RemotePairingRelaySocket
+    now?: () => number
     onTimeout?: () => void
+    scheduleInterval?: ScheduleInterval
+    scheduleTimeout?: ScheduleTimeout
 }): RemoteRelayHeartbeat {
-    let intervalId: number | null = null
-    let timeoutId: number | null = null
+    const now = options.now ?? Date.now
+    const scheduleInterval = options.scheduleInterval ?? defaultScheduleInterval
+    const scheduleTimeout = options.scheduleTimeout ?? defaultScheduleTimeout
+    let cancelInterval: (() => void) | null = null
+    let cancelTimeout: (() => void) | null = null
     let sentAt: number | null = null
 
     function send(): void {
-        const now = Date.now()
-        if (sentAt !== null && now - sentAt < PAIRING_PEER_HEARTBEAT_ACK_TIMEOUT_MS) return
+        const currentTime = now()
+        if (sentAt !== null) {
+            if (currentTime - sentAt < PAIRING_PEER_HEARTBEAT_ACK_TIMEOUT_MS) return
+            expirePendingAck()
+            return
+        }
         const relay = options.getRelay()
         if (relay.readyState !== 'open') return
         const heartbeat: PairingPeerHeartbeat = { kind: 'heartbeat', protocolVersion: PROTOCOL_VERSION }
-        sentAt = now
+        sentAt = currentTime
         try {
             relay.send(JSON.stringify(heartbeat))
             scheduleAckDeadline()
@@ -39,22 +52,25 @@ export function createRemoteRelayHeartbeat(options: {
 
     function scheduleAckDeadline(): void {
         clearAckDeadline()
-        timeoutId = window.setTimeout(() => {
-            timeoutId = null
-            sentAt = null
-            options.onTimeout?.()
-        }, PAIRING_PEER_HEARTBEAT_ACK_TIMEOUT_MS)
+        cancelTimeout = scheduleTimeout(expirePendingAck, PAIRING_PEER_HEARTBEAT_ACK_TIMEOUT_MS)
     }
 
     function clearAckDeadline(): void {
-        if (timeoutId !== null) window.clearTimeout(timeoutId)
-        timeoutId = null
+        cancelTimeout?.()
+        cancelTimeout = null
+    }
+
+    function expirePendingAck(): void {
+        clearAckDeadline()
+        if (sentAt === null) return
+        sentAt = null
+        options.onTimeout?.()
     }
 
     return {
         markAck() {
             if (sentAt === null) return null
-            const rtt = Date.now() - sentAt
+            const rtt = now() - sentAt
             sentAt = null
             clearAckDeadline()
             return rtt
@@ -63,13 +79,23 @@ export function createRemoteRelayHeartbeat(options: {
         start() {
             this.stop()
             send()
-            intervalId = window.setInterval(send, PAIRING_PEER_HEARTBEAT_INTERVAL_MS)
+            cancelInterval = scheduleInterval(send, PAIRING_PEER_HEARTBEAT_INTERVAL_MS)
         },
         stop() {
-            if (intervalId !== null) window.clearInterval(intervalId)
-            intervalId = null
+            cancelInterval?.()
+            cancelInterval = null
             sentAt = null
             clearAckDeadline()
         },
     }
+}
+
+function defaultScheduleTimeout(callback: () => void, delayMs: number): () => void {
+    const timer = window.setTimeout(callback, delayMs)
+    return () => window.clearTimeout(timer)
+}
+
+function defaultScheduleInterval(callback: () => void, intervalMs: number): () => void {
+    const timer = window.setInterval(callback, intervalMs)
+    return () => window.clearInterval(timer)
 }

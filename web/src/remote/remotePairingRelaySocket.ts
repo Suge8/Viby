@@ -1,4 +1,5 @@
 import {
+    classifyFatalPairingClose,
     computePairingReconnectDelay,
     createPairingTunnelCipher,
     createPairingTunnelKeyFrame,
@@ -7,6 +8,7 @@ import {
     PairingTunnelFrameSchema,
     type PairingTunnelPlainFrame,
     toPairingTunnelBase64Url,
+    tryOpenPairingTunnelPlainFrame,
 } from '@viby/protocol/pairing'
 
 export interface RemotePairingRelayBinaryChunk {
@@ -20,6 +22,7 @@ export interface RemotePairingRelaySocket {
     readonly readyState: 'closed' | 'open'
     dispose(): void
     notifyForeground(): void
+    reconnect(): void
     send(data: string): void
     /**
      * Ship one upload chunk through the sealed tunnel. Mirrors the
@@ -31,20 +34,41 @@ export interface RemotePairingRelaySocket {
     sendBinaryChunk(chunk: RemotePairingRelayBinaryChunk): Promise<void>
 }
 
+export interface RemotePairingRelayWebSocket {
+    readyState: number
+    onclose: ((event: { code: number; reason: string }) => void) | null
+    onerror: (() => void) | null
+    onmessage: ((event: { data: unknown }) => void) | null
+    onopen: (() => void) | null
+    close(): void
+    send(data: string): void
+}
+
+type ScheduleTimeout = (callback: () => void, delayMs: number) => () => void
+
+const SOCKET_OPEN = 1
+
 export function createRemotePairingRelaySocket(options: {
     onClose: () => void
     onFatal: (reason: string) => void
     onMessage: (data: string) => void
     onOpen: () => void
+    randomJitter?: () => number
+    scheduleTimeout?: ScheduleTimeout
+    socketFactory?: (url: string) => RemotePairingRelayWebSocket
     tunnelUrl: string
 }): RemotePairingRelaySocket {
     let disposed = false
-    let socket: WebSocket | null = null
+    let fatal = false
+    let socket: RemotePairingRelayWebSocket | null = null
     let cipher: PairingTunnelCipher | null = null
     let peerPublicKey: string | null = null
     let seq = 0
     let reconnectAttempt = 0
-    let reconnectTimer: number | null = null
+    let cancelReconnect: (() => void) | null = null
+    const createSocket =
+        options.socketFactory ?? ((url: string) => new WebSocket(url) as unknown as RemotePairingRelayWebSocket)
+    const scheduleTimeout = options.scheduleTimeout ?? defaultScheduleTimeout
     const pendingMessages: string[] = []
     let readyState: RemotePairingRelaySocket['readyState'] = 'closed'
 
@@ -52,6 +76,7 @@ export function createRemotePairingRelaySocket(options: {
     return {
         dispose,
         notifyForeground,
+        reconnect,
         send,
         sendBinaryChunk,
         get readyState() {
@@ -60,12 +85,13 @@ export function createRemotePairingRelaySocket(options: {
     }
 
     function connect(): void {
-        if (disposed || socket?.readyState === WebSocket.OPEN) return
-        socket = new WebSocket(options.tunnelUrl)
-        socket.onopen = () => void handleOpen(socket).catch(closeSocket)
-        socket.onmessage = (event) => void handleFrame(event.data).catch(closeSocket)
-        socket.onclose = (event) => handleClose(event.code, event.reason)
-        socket.onerror = () => socket?.close()
+        if (disposed || fatal || socket?.readyState === SOCKET_OPEN) return
+        const nextSocket = createSocket(options.tunnelUrl)
+        socket = nextSocket
+        nextSocket.onopen = () => void handleOpen(nextSocket).catch(closeSocket)
+        nextSocket.onmessage = (event) => void handleFrame(event.data).catch(closeSocket)
+        nextSocket.onclose = (event) => handleClose(event.code, event.reason)
+        nextSocket.onerror = () => nextSocket.close()
     }
 
     function dispose(): void {
@@ -82,8 +108,17 @@ export function createRemotePairingRelaySocket(options: {
         if (readyState === 'closed') connect()
     }
 
+    function reconnect(): void {
+        clearReconnectTimer()
+        if (!socket) {
+            connect()
+            return
+        }
+        socket.close()
+    }
+
     function send(data: string): void {
-        if (socket?.readyState !== WebSocket.OPEN) throw new Error('relay tunnel is closed')
+        if (socket?.readyState !== SOCKET_OPEN) throw new Error('relay tunnel is closed')
         if (readyState !== 'open') {
             pendingMessages.push(data)
             return
@@ -91,7 +126,7 @@ export function createRemotePairingRelaySocket(options: {
         void sendMessage(socket, data).catch(closeSocket)
     }
 
-    async function sendMessage(activeSocket: WebSocket, data: string): Promise<void> {
+    async function sendMessage(activeSocket: RemotePairingRelayWebSocket, data: string): Promise<void> {
         const plainFrame: PairingTunnelPlainFrame = {
             kind: 'message',
             id: `web-relay-${Date.now()}-${seq}`,
@@ -102,7 +137,7 @@ export function createRemotePairingRelaySocket(options: {
     }
 
     async function sendBinaryChunk(chunk: RemotePairingRelayBinaryChunk): Promise<void> {
-        if (socket?.readyState !== WebSocket.OPEN || readyState !== 'open') {
+        if (socket?.readyState !== SOCKET_OPEN || readyState !== 'open') {
             throw new Error('relay tunnel is closed')
         }
         const plainFrame: PairingTunnelPlainFrame = {
@@ -117,7 +152,7 @@ export function createRemotePairingRelaySocket(options: {
         socket.send(JSON.stringify(await requireCipher().seal(plainFrame)))
     }
 
-    async function handleOpen(activeSocket: WebSocket | null): Promise<void> {
+    async function handleOpen(activeSocket: RemotePairingRelayWebSocket | null): Promise<void> {
         if (!activeSocket) return
         readyState = 'closed'
         cipher = await createPairingTunnelCipher()
@@ -134,8 +169,17 @@ export function createRemotePairingRelaySocket(options: {
         cipher = null
         peerPublicKey = null
         if (disposed) return
-        if (code === 1008 || (code === 1012 && reason === 'replaced')) {
-            options.onFatal(reason || 'invalid_token')
+        // The broker permanently rejects an invalid token / deleted / expired
+        // pairing; reconnecting on those codes storms the broker and starves a
+        // fresh scan. Terminal closes are owned by the shared classifier so the
+        // desktop bridge and direct `/ws` transport agree on the same rule.
+        // Latch `fatal` so a later foreground pulse / reconnect cannot reopen a
+        // socket on the dead credential (mirrors the desktop bridge).
+        const fatalReason = classifyFatalPairingClose({ code, reason })
+        if (fatalReason) {
+            fatal = true
+            clearReconnectTimer()
+            options.onFatal(fatalReason)
             return
         }
         scheduleReconnect()
@@ -150,12 +194,13 @@ export function createRemotePairingRelaySocket(options: {
             const shouldReply = peerPublicKey !== frame.data.publicKey
             peerPublicKey = frame.data.publicKey
             await activeCipher.receivePeerKey(frame.data.publicKey)
-            if (shouldReply && socket?.readyState === WebSocket.OPEN) sendLocalKey(socket)
+            if (shouldReply && socket?.readyState === SOCKET_OPEN) sendLocalKey(socket)
             handleSecureOpen()
             return
         }
         if (frame.data.kind !== 'sealed') return
-        const plainFrame = await requireCipher().open(frame.data)
+        const plainFrame = await tryOpenPairingTunnelPlainFrame(requireCipher(), frame.data)
+        if (!plainFrame) return
         if (plainFrame.kind !== 'message') return
         options.onMessage(JSON.stringify(plainFrame.payload))
     }
@@ -164,7 +209,7 @@ export function createRemotePairingRelaySocket(options: {
         if (readyState === 'open') return
         readyState = 'open'
         options.onOpen()
-        while (socket?.readyState === WebSocket.OPEN && pendingMessages.length > 0) {
+        while (socket?.readyState === SOCKET_OPEN && pendingMessages.length > 0) {
             const message = pendingMessages.shift()
             if (message) void sendMessage(socket, message).catch(closeSocket)
         }
@@ -175,7 +220,7 @@ export function createRemotePairingRelaySocket(options: {
         return cipher
     }
 
-    function sendLocalKey(activeSocket: WebSocket): void {
+    function sendLocalKey(activeSocket: RemotePairingRelayWebSocket): void {
         activeSocket.send(
             JSON.stringify(
                 createPairingTunnelKeyFrame({
@@ -194,13 +239,18 @@ export function createRemotePairingRelaySocket(options: {
     function scheduleReconnect(): void {
         clearReconnectTimer()
         reconnectAttempt += 1
-        reconnectTimer = window.setTimeout(connect, computePairingReconnectDelay(reconnectAttempt))
+        cancelReconnect = scheduleTimeout(connect, computePairingReconnectDelay(reconnectAttempt, options.randomJitter))
     }
 
     function clearReconnectTimer(): void {
-        if (reconnectTimer !== null) window.clearTimeout(reconnectTimer)
-        reconnectTimer = null
+        cancelReconnect?.()
+        cancelReconnect = null
     }
+}
+
+function defaultScheduleTimeout(callback: () => void, delayMs: number): () => void {
+    const timer = window.setTimeout(callback, delayMs)
+    return () => window.clearTimeout(timer)
 }
 
 function parseJson(data: string): unknown {

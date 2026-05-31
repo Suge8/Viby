@@ -10,6 +10,7 @@ function createRelay(): RemotePairingRelaySocket & { sent: string[] } {
         sent,
         dispose: vi.fn(),
         notifyForeground: vi.fn(),
+        reconnect: vi.fn(),
         send(data: string) {
             sent.push(data)
         },
@@ -56,6 +57,22 @@ describe('remotePairingRelayHeartbeat', () => {
 
         expect(onTimeout).toHaveBeenCalledTimes(1)
         expect(heartbeat.markAck()).toBeNull()
+
+        heartbeat.stop()
+    })
+
+    it('expires a stale pending heartbeat during foreground recovery even if timers were suspended', () => {
+        vi.setSystemTime(0)
+        const relay = createRelay()
+        const onTimeout = vi.fn()
+        const heartbeat = createRemoteRelayHeartbeat({ getRelay: () => relay, onTimeout })
+
+        heartbeat.start()
+        vi.setSystemTime(PAIRING_PEER_HEARTBEAT_ACK_TIMEOUT_MS + 1)
+        heartbeat.notifyForeground()
+
+        expect(relay.sent).toHaveLength(1)
+        expect(onTimeout).toHaveBeenCalledTimes(1)
 
         heartbeat.stop()
     })

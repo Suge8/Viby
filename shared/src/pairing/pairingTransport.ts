@@ -1,3 +1,4 @@
+import { classifyFatalPairingClose, type PairingSocketCloseInfo } from './pairingCloseCode'
 import { type PairingByeReason, type PairingRtcSignal, PairingTransportSignalSchema } from './pairingSignal'
 import {
     computePairingReconnectDelay,
@@ -107,18 +108,24 @@ export function createPairingTransport(options: PairingTransportOptions): Pairin
     async function connectLoop() {
         let attempt = 0
         while (!disposed) {
+            let closeInfo: PairingSocketCloseInfo | undefined
             try {
                 const url = await options.getWsUrl()
                 if (disposed) return
                 const nextSocket = (options.socketFactory ?? createDefaultSocket)(url)
                 socket = nextSocket
-                await bindSocket(nextSocket, () => {
+                closeInfo = await bindSocket(nextSocket, () => {
                     flushPendingSignals(nextSocket)
                     attempt = 0
                     if (!isPeerReady()) commitState({ kind: 'connecting', attempt: 0 })
                 })
             } catch (_) {}
             if (disposed) return
+            // The broker permanently rejects a stale/invalid host token (1008) or
+            // a deleted/expired pairing without sending a `bye` frame first; the
+            // signaling socket must go terminal instead of reconnect-storming.
+            const fatalReason = classifyFatalPairingClose(closeInfo)
+            if (fatalReason) return close(fatalReason as PairingByeReason)
             if (ICE_RESTART_STATES.has(peer.iceConnectionState)) maybeRestartIce()
             attempt += 1
             if (!isPeerReady()) commitState({ kind: 'connecting', attempt })
@@ -126,27 +133,30 @@ export function createPairingTransport(options: PairingTransportOptions): Pairin
         }
     }
     function bindSocket(nextSocket: PairingSocket, onOpen: () => void) {
-        return new Promise<void>((resolve) => {
+        return new Promise<PairingSocketCloseInfo | undefined>((resolve) => {
             nextSocket.onopen = onOpen
             nextSocket.onerror = () => {}
-            nextSocket.onclose = resolve
-            nextSocket.onmessage = (event) => void receive(event.data)
+            nextSocket.onclose = (event) => resolve(event)
+            nextSocket.onmessage = (event) => receive(event.data).catch(ignoreReceiveError)
         })
     }
     async function receive(data: string) {
-        const raw = JSON.parse(data) as unknown
+        const raw = parseJson(data)
+        if (raw === null) return
         options.onSignalReceived?.(raw)
-        const signal = PairingTransportSignalSchema.parse(raw)
-        if (signal.type === 'bye') return close(signal.reason)
-        if (signal.type === 'peer-replaced') {
+        const signal = PairingTransportSignalSchema.safeParse(raw)
+        if (!signal.success) return
+        if (signal.data.type === 'bye') return close(signal.data.reason)
+        if (signal.data.type === 'peer-replaced') {
             options.onPeerReplaced?.()
             return
         }
-        await negotiation.onSignal(signal)
+        await negotiation.onSignal(signal.data)
     }
     function requestIceRestart() {
         maybeRestartIce()
     }
+    function ignoreReceiveError(): void {}
     function notifyForeground() {
         if (socket?.readyState !== SOCKET_OPEN) return wakeSleep?.()
         if (ICE_RESTART_STATES.has(peer.iceConnectionState)) maybeRestartIce()
@@ -221,6 +231,14 @@ export function createPairingTransport(options: PairingTransportOptions): Pairin
         // restartIce() there makes WebKit emit an empty SDP, which max-bundle
         // rejects with “session description has no BUNDLE group”.
         return options.createDataChannel || Boolean(peer.localDescription?.sdp || peer.remoteDescription?.sdp)
+    }
+}
+
+function parseJson(data: string): unknown | null {
+    try {
+        return JSON.parse(data) as unknown
+    } catch {
+        return null
     }
 }
 
