@@ -192,7 +192,7 @@ describe('RemotePairingController', () => {
 
         renderController()
 
-        await waitFor(() => expect(routerHistory.replace).toHaveBeenCalledWith('/sessions?remote=1'))
+        await waitFor(() => expect(routerHistory.replace).toHaveBeenCalledWith('/sessions?remote=1&pairing=pairing-1'))
         expect(await screen.findByTestId('ready-shell')).toHaveAttribute('data-pathname', '/sessions')
         expect(screen.queryByTestId('status')).not.toBeInTheDocument()
         expect(persistentNotice.mock.calls.some(([notice]) => Boolean(notice))).toBe(false)

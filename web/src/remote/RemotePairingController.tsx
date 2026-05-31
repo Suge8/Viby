@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useLocation, useRouter } from '@tanstack/react-router'
-import { hasPairingWorkspaceIntent, withPairingWorkspaceIntent } from '@viby/protocol'
+import { hasPairingWorkspaceIntent, withPairingWorkspaceIdentity } from '@viby/protocol'
 import type { PairingTransportState } from '@viby/protocol/pairing'
 import { type JSX, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFinalizeBootShell } from '@/hooks/useFinalizeBootShell'
@@ -139,11 +139,13 @@ export function RemotePairingController(props: { pairingId: string }): JSX.Eleme
     useEffect(() => {
         if (state.kind !== 'running') return
         if (!pathname.startsWith('/sessions')) {
-            router.history.replace(withPairingWorkspaceIntent('/sessions'))
+            router.history.replace(withPairingWorkspaceIdentity('/sessions', props.pairingId))
             return
         }
         if (!hasPairingWorkspaceIntent(pathname, locationUrl.search)) {
-            router.history.replace(withPairingWorkspaceIntent(`${pathname}${locationUrl.search}${locationUrl.hash}`))
+            router.history.replace(
+                withPairingWorkspaceIdentity(`${pathname}${locationUrl.search}${locationUrl.hash}`, props.pairingId)
+            )
         }
     }, [locationUrl.hash, locationUrl.search, pathname, router, state.kind])
 

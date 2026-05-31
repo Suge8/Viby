@@ -42,6 +42,10 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 
 vi.mock('@tanstack/react-query', () => ({
+    onlineManager: {
+        isOnline: () => true,
+        setOnline: () => undefined,
+    },
     useQueryClient: () => useQueryClientMock(),
 }))
 
@@ -92,6 +96,7 @@ vi.mock('@/lib/app-context', () => ({
 vi.mock('@/lib/notice-center', () => ({
     NoticeProvider: (props: { children: React.ReactNode }) => <>{props.children}</>,
     useNoticeCenter: () => ({ addToast: addToastMock }),
+    usePersistentNotice: () => undefined,
 }))
 
 vi.mock('@/components/FloatingNoticeViewport', () => ({
@@ -157,8 +162,11 @@ describe('App', () => {
             },
         })
         useQueryClientMock.mockReturnValue({
+            cancelQueries: vi.fn(() => Promise.resolve()),
             clear: vi.fn(),
             invalidateQueries: vi.fn(() => Promise.resolve()),
+            resetQueries: vi.fn(() => Promise.resolve()),
+            resumePausedMutations: vi.fn(() => Promise.resolve()),
         })
         useServerUrlMock.mockReturnValue({
             serverUrl: null,

@@ -53,6 +53,7 @@ async function resumeRemotePairing(pairingId: string, handoffTicket: string | nu
             if (!auth) throw error
         }
     }
+    auth ??= await claimCookieHandoff(pairingId)
     if (auth && handoffTicket) {
         scrubPairingLaunchSecretFromUrl()
     }

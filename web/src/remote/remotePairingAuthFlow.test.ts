@@ -70,6 +70,22 @@ describe('remotePairingAuthFlow', () => {
         expect(httpMock.scrubPairingLaunchSecretFromUrl).toHaveBeenCalledTimes(1)
     })
 
+    it('recovers workspace refresh from the manifest cookie even without a handoff URL param', async () => {
+        const recoveredAuth = buildAuth('guest-token-cookie')
+        httpMock.reconnectRemotePairing.mockResolvedValue(null)
+        httpMock.claimRemotePwaHandoff.mockResolvedValueOnce(recoveredAuth)
+        cookieRecoverMock.recoverRemotePairingFromCookie.mockResolvedValue({
+            ok: true,
+            value: { pairingId: 'pairing-1', handoffTicket: 'fresh-cookie-ticket', expiresAt: 2_000 },
+        })
+
+        await expect(resolveRemotePairingAuth('pairing-1')).resolves.toEqual({
+            auth: recoveredAuth,
+            token: 'guest-token-cookie',
+        })
+        expect(httpMock.claimRemotePwaHandoff).toHaveBeenCalledWith('pairing-1', 'fresh-cookie-ticket')
+    })
+
     it('recovers a stale launch handoff from the manifest cookie before showing rescan', async () => {
         const recoveredAuth = buildAuth('guest-token-cookie')
         httpMock.getPairingHandoffTicketFromLocation.mockReturnValue('stale-handoff-ticket')

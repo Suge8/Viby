@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useLocation, useRouter } from '@tanstack/react-router'
-import { hasPairingWorkspaceIntent } from '@viby/protocol'
+import { hasPairingWorkspaceIntent, readPairingWorkspacePairingId } from '@viby/protocol'
 import { type ComponentProps, type JSX, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
     AppReadyShell,
@@ -48,7 +48,9 @@ export function AppController(): JSX.Element | null {
     const locationHref = useLocation({ select: (location) => location.href })
     const router = useRouter()
     const locationSearch = new URL(locationHref, 'https://viby.local').search
-    const [remotePairingId, setRemotePairingId] = useState(() => readRemotePairingPathId(pathname))
+    const [remotePairingId, setRemotePairingId] = useState(
+        () => readRemotePairingPathId(pathname) ?? readPairingWorkspacePairingId(pathname, locationSearch)
+    )
     const hasRemoteWorkspaceIntent = hasPairingWorkspaceIntent(pathname, locationSearch)
     const fallbackRemotePairingId = hasRemoteWorkspaceIntent ? readStoredRemotePairingId() : null
 
@@ -58,11 +60,12 @@ export function AppController(): JSX.Element | null {
     useViewportInteractionGuards()
 
     useEffect(() => {
-        const nextPairingId = readRemotePairingPathId(pathname)
+        const nextPairingId =
+            readRemotePairingPathId(pathname) ?? readPairingWorkspacePairingId(pathname, locationSearch)
         if (nextPairingId) {
             setRemotePairingId(nextPairingId)
         }
-    }, [pathname])
+    }, [locationSearch, pathname])
 
     const handleRemotePwaRecovered = useCallback((pairingId: string) => {
         setRemotePairingId(pairingId)
@@ -140,7 +143,7 @@ export function AppController(): JSX.Element | null {
     if (hasRemoteWorkspaceIntent) {
         // Workspace shell launched without any storage state. This is the
         // cold-start path for PWAs whose standalone partition is isolated
-        // from the browser tab that performed the original claim. The
+        // from the browser tab that performed the original verify-code. The
         // bootstrap controller asks the broker to recover the pairing via
         // the signed manifest cookie before falling back to a re-scan
         // prompt, so the common case becomes a one-round-trip auto-recovery.

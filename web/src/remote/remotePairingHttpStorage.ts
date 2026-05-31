@@ -1,4 +1,4 @@
-import { hasPairingWorkspaceIntent, PAIRING_PWA_HANDOFF_PARAM } from '@viby/protocol'
+import { hasPairingWorkspaceIntent, PAIRING_PWA_HANDOFF_PARAM, readPairingWorkspacePairingId } from '@viby/protocol'
 import {
     readBrowserStorageItem,
     readBrowserStorageItemOrThrow,
@@ -10,6 +10,7 @@ import { getPairingGuestTokenStorageKey, LOCAL_STORAGE_KEYS } from '@/lib/storag
 export function readRemotePairingId(pathname: string, search = ''): string | null {
     return (
         readRemotePairingPathId(pathname) ??
+        readPairingWorkspacePairingId(pathname, search) ??
         (hasPairingWorkspaceIntent(pathname, search) ? readStoredRemotePairingId() : null)
     )
 }

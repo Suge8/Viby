@@ -1,5 +1,5 @@
 import { useLocation, useRouter } from '@tanstack/react-router'
-import { isPairingWorkspacePath, withPairingWorkspaceIntent } from '@viby/protocol'
+import { isPairingWorkspacePath, withPairingWorkspaceIdentity, withPairingWorkspaceIntent } from '@viby/protocol'
 import { type JSX, useEffect, useRef, useState } from 'react'
 import { useFinalizeBootShell } from '@/hooks/useFinalizeBootShell'
 import type { RemoteConnectingPhase } from '@/lib/remoteConnectingPhase'
@@ -54,10 +54,14 @@ export function RemotePwaBootstrap(props: RemotePwaBootstrapProps): JSX.Element 
         attemptedRef.current = true
         let disposed = false
 
-        function replaceRecoveredRoute(): void {
-            const href = resolveRecoveredPairingHref(locationHref)
-            if (href === withPairingWorkspaceIntent('/sessions')) {
+        function replaceRecoveredRoute(pairingId: string): void {
+            if (!pairingId) {
                 history.replace(withPairingWorkspaceIntent('/sessions'))
+                return
+            }
+            const href = withPairingWorkspaceIdentity(resolveRecoveredPairingHref(locationHref), pairingId)
+            if (href === withPairingWorkspaceIdentity('/sessions', pairingId)) {
+                history.replace(withPairingWorkspaceIdentity('/sessions', pairingId))
                 return
             }
             history.replace(href)
@@ -70,7 +74,7 @@ export function RemotePwaBootstrap(props: RemotePwaBootstrapProps): JSX.Element 
             rememberRemotePairingId(auth.pairing.id)
             setState({ kind: 'attempting', phase: 'loading-workspace' })
             onRecovered(auth.pairing.id)
-            replaceRecoveredRoute()
+            replaceRecoveredRoute(auth.pairing.id)
             return true
         }
 
@@ -96,7 +100,7 @@ export function RemotePwaBootstrap(props: RemotePwaBootstrapProps): JSX.Element 
                 rememberRemotePairingId(result.value.pairingId)
                 setState({ kind: 'attempting', phase: 'loading-workspace' })
                 onRecovered(result.value.pairingId)
-                replaceRecoveredRoute()
+                replaceRecoveredRoute(result.value.pairingId)
             } catch (error) {
                 reportWebRuntimeError('Failed to consume PWA handoff ticket during bootstrap.', error)
                 if (!disposed) setState({ kind: 'failed', failure: { kind: 'invalid' } })

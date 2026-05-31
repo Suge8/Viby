@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { RemotePwaBootstrap, resolveRecoveredPairingHref } from './RemotePwaBootstrap'
 
-const route = vi.hoisted(() => ({ href: '/sessions?remote=1' }))
+const route = vi.hoisted(() => ({ href: '/sessions?remote=1&pairing=pairing-good' }))
 const routerHistory = vi.hoisted(() => ({ replace: vi.fn() }))
 const cookieRecover = vi.hoisted(() => vi.fn())
 const cachedRecover = vi.hoisted(() => vi.fn())
@@ -48,7 +48,7 @@ describe('resolveRecoveredPairingHref', () => {
 
 describe('RemotePwaBootstrap', () => {
     beforeEach(() => {
-        route.href = '/sessions?remote=1'
+        route.href = '/sessions?remote=1&pairing=pairing-cookie'
         vi.clearAllMocks()
     })
 
@@ -59,7 +59,9 @@ describe('RemotePwaBootstrap', () => {
 
         render(<RemotePwaBootstrap fallbackPairingId="pairing-stale" onRecovered={onRecovered} />)
 
-        await waitFor(() => expect(routerHistory.replace).toHaveBeenCalledWith('/sessions?remote=1'))
+        await waitFor(() =>
+            expect(routerHistory.replace).toHaveBeenCalledWith('/sessions?remote=1&pairing=pairing-good')
+        )
         expect(cachedRecover).toHaveBeenCalledWith('pairing-stale')
         expect(http.rememberRemotePairingId).toHaveBeenCalledWith('pairing-good')
         expect(onRecovered).toHaveBeenCalledWith('pairing-good')
@@ -67,7 +69,7 @@ describe('RemotePwaBootstrap', () => {
     })
 
     it('preserves the direct session route after broker cookie handoff', async () => {
-        route.href = '/sessions/session-1?remote=1#tail'
+        route.href = '/sessions/session-1?remote=1&pairing=pairing-cookie#tail'
         cookieRecover.mockResolvedValue({
             ok: true,
             value: { pairingId: 'pairing-cookie', handoffTicket: 'handoff-1', expiresAt: 1 },
@@ -76,7 +78,11 @@ describe('RemotePwaBootstrap', () => {
 
         render(<RemotePwaBootstrap fallbackPairingId={null} onRecovered={vi.fn()} />)
 
-        await waitFor(() => expect(routerHistory.replace).toHaveBeenCalledWith('/sessions/session-1?remote=1#tail'))
+        await waitFor(() =>
+            expect(routerHistory.replace).toHaveBeenCalledWith(
+                '/sessions/session-1?remote=1&pairing=pairing-cookie#tail'
+            )
+        )
     })
 
     it('uses the broker cookie handoff before cached-device recovery', async () => {
@@ -89,7 +95,9 @@ describe('RemotePwaBootstrap', () => {
 
         render(<RemotePwaBootstrap fallbackPairingId="pairing-stale" onRecovered={onRecovered} />)
 
-        await waitFor(() => expect(routerHistory.replace).toHaveBeenCalledWith('/sessions?remote=1'))
+        await waitFor(() =>
+            expect(routerHistory.replace).toHaveBeenCalledWith('/sessions?remote=1&pairing=pairing-cookie')
+        )
         expect(cachedRecover).not.toHaveBeenCalled()
         expect(http.claimRemotePwaHandoff).toHaveBeenCalledWith('pairing-cookie', 'handoff-1')
         expect(onRecovered).toHaveBeenCalledWith('pairing-cookie')

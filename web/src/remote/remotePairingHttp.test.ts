@@ -262,7 +262,7 @@ describe('remotePairingHttp', () => {
         expect(readBrowserStorageItem('local', getPairingGuestTokenStorageKey('pairing-1'))).toBe('guest-token-1')
     })
 
-    it('returns null when the device has not claimed the pairing yet', async () => {
+    it('returns null when the device has not completed verify-code yet', async () => {
         expect(await reconnectRemotePairing('pairing-1')).toBeNull()
     })
 

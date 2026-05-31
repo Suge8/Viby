@@ -14,13 +14,13 @@ import {
     PairingReconnectResponseSchema,
 } from '@viby/protocol'
 import { DEVICE_PLATFORM_DISPLAY_LABELS, resolveClientPlatform } from '@/lib/clientPlatform'
-import { loadClaimDeviceIdentity } from '@/remote/remotePairingClaimIdentity'
 import {
     createReconnectDeviceProof,
     loadCachedPairingDeviceIdentity,
     loadPairingDeviceIdentity,
 } from '@/remote/remotePairingDevice'
 import { requestRemotePairingPersistentStorage } from '@/remote/remotePairingStoragePersistence'
+import { loadVerifyCodeDeviceIdentity } from '@/remote/remotePairingVerifyCodeIdentity'
 import type { RemotePairingErrorKey } from './remotePairingErrors'
 import {
     clearStoredGuestToken as clearStoredGuestTokenStorage,
@@ -179,7 +179,7 @@ async function readJsonPayload(response: Response): Promise<unknown> {
  * (broker) and hub device-token install (LAN).
  */
 export async function verifyRemotePairingCode(pairingId: string, code: string): Promise<PairingRemoteVerifyResult> {
-    const identity = await loadClaimDeviceIdentity(pairingId)
+    const identity = await loadVerifyCodeDeviceIdentity(pairingId)
     const platform = resolveClientPlatform()
     const body = {
         code,
