@@ -5,7 +5,7 @@ import { buildWebBuildMetadata, WEB_BUILD_METADATA_FILE_NAME } from '@viby/proto
 
 const require = createRequire(import.meta.url)
 const DIST_DIR = resolve(import.meta.dir, '..', 'dist')
-const appVersion = require('../../cli/package.json').version as string
+const appVersion = require('../../app-core/package.json').version as string
 const buildId = process.env.VIBY_APP_BUILD_ID || appVersion
 
 const metadata = buildWebBuildMetadata({ appVersion, buildId })

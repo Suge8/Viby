@@ -11,7 +11,7 @@ import { DEFAULT_VIBY_LISTEN_HOST, DEFAULT_VIBY_LISTEN_PORT } from '../shared/sr
 const require = createRequire(import.meta.url)
 const base = process.env.VITE_BASE_URL || '/'
 const sharedSrcDir = resolve(__dirname, '../shared/src')
-const appVersion = require('../cli/package.json').version as string
+const appVersion = require('../app-core/package.json').version as string
 const appBuildId = process.env.VIBY_APP_BUILD_ID || appVersion
 
 function normalizeProxyHost(host: string): string {

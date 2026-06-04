@@ -51,6 +51,12 @@ const CHUNK_BUDGETS = [
         maxGzipBytes: 130 * 1024,
     },
     {
+        label: 'chat-route-runtime',
+        pattern: /^chat-.*\.js$/,
+        maxRawBytes: 320 * 1024,
+        maxGzipBytes: 95 * 1024,
+    },
+    {
         label: 'session-chat-workspace',
         pattern: /^SessionChatWorkspace-.*\.js$/,
         maxRawBytes: 170 * 1024,
