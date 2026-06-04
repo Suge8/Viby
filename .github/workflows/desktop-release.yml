@@ -116,11 +116,11 @@ jobs:
         shell: bash
         run: bun install --frozen-lockfile
 
-      - name: Build sidecar
+      - name: Build AppCore
         shell: bash
         run: |
-          bun run build:single-exe
-          bun run --cwd desktop prepare:sidecar
+          bun run build:app-core
+          bun run --cwd desktop prepare:app-core
 
       - name: Build and upload desktop release
         uses: tauri-apps/tauri-action@v0
@@ -136,7 +136,7 @@ jobs:
           releaseBody: |
             Desktop release for Viby.
 
-            CLI continues to be distributed through npm: `npm install -g @singyy/viby`.
+            Viby ships as one Desktop App. No npm or CLI install path is published.
           releaseDraft: true
           prerelease: false
           includeUpdaterJson: true
