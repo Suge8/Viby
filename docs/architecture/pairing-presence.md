@@ -86,16 +86,3 @@ Device popover 合并两份事实：
         └─► clearPairing                                 ─► bridge dispose
 ```
 
-## 迁移策略
-
-`SCHEMA_VERSION` 19 → 20：
-
-1. 删除 `revoked_at IS NOT NULL` 的历史 tombstone。
-2. 删除历史 `channel='scan'` 行；后续 scan 元数据由当前 pairing bind 路径重建。
-
-## 已删除旧路径
-
-- `desktop/src/lib/pairingPresenceSync.ts`
-- `LocalHubPairingClient.reportPairingPresence()`
-- `PairingPresenceSink`
-- `POST /api/device-auth/pairing-presence`

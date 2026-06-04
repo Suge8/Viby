@@ -79,18 +79,18 @@ Binary upload 同时走两条 route，由 `web/src/remote/remotePairingBinaryUpl
 
 这里不内嵌 NetBird / WireGuard，也不把 Go QUIC / WebTransport 当当前 direct P2P 主路径：手机端仍是 Web/PWA，浏览器不暴露通用 UDP/WireGuard socket；WebTransport 是浏览器到 HTTP/3 server 的 client-server transport，不是 browser-to-desktop P2P socket。当前最佳路径就是 sealed WSS relay 先可用、WebRTC P2P direct 成功后升级。
 
-Native desktop UDP/QUIC host 已从当前移动 Web 产品路径裁掉：只替换桌面一端不能让手机浏览器绕开 WebRTC，反而会复制一套 transport/bridge owner。只有当手机端变成 native app，或真实 harness 证明桌面 WebView WebRTC 是主要失败源时，才重新引入 native direct adapter；即便引入，也必须继续消费同一条 route reducer。
+Native desktop UDP/QUIC host 已从当前移动 Web 产品路径裁掉：只替换桌面一端不能让手机浏览器绕开 WebRTC，反而会复制一套 transport/bridge owner。只有当手机端变成 native app，或真实 smoke 证明桌面 WebView WebRTC 是主要失败源时，才重新引入 native direct adapter；即便引入，也必须继续消费同一条 route reducer。
 
 ## 网络验收矩阵
 
 Tunnel v2 的链路测试分三层，不把本地模拟当公网结论：
 
-- `harness:pairing-netem`：本机 broker + 两个 Docker endpoint，用 `tc netem` 注入延迟、抖动、丢包、短暂 100% blackhole 和 degraded cellular 恢复；用于稳定复现 relay / sealed frame / handover 回归。
-- `harness:pairing-prod-relay`：两个 Docker endpoint 都连 `https://pair.viby.run`，验证生产 TLS、反代、broker、sealed relay 和公网 RTT。
-- `harness:pairing-prod-local-direct-webrtc`：两份本机 Chromium 通过生产 `/ws` signaling 建 WebRTC DataChannel；这是生产 broker 信令 smoke，不代表真实 NAT。
-- `harness:pairing-remote-nat-direct-webrtc`：本机 Chromium host + 远端 SSH runner 上的 aiortc guest 通过生产 broker 信令，要求 DataChannel ACK 成功且本机浏览器 selected ICE candidate 不是 relay；这是排查真实公网 P2P 的诊断线，不作为默认产品可用性门。
+- `smoke:pairing-netem`：本机 broker + 两个 Docker endpoint，用 `tc netem` 注入延迟、抖动、丢包、短暂 100% blackhole 和 degraded cellular 恢复；用于稳定复现 relay / sealed frame / handover 回归。
+- `smoke:pairing-prod-relay`：两个 Docker endpoint 都连 `https://pair.viby.run`，验证生产 TLS、反代、broker、sealed relay 和公网 RTT。
+- `smoke:pairing-prod-local-direct-webrtc`：两份本机 Chromium 通过生产 `/ws` signaling 建 WebRTC DataChannel；这是生产 broker 信令 smoke，不代表真实 NAT。
+- `smoke:pairing-remote-nat-direct-webrtc`：本机 Chromium host + 远端 SSH runner 上的 aiortc guest 通过生产 broker 信令，要求 DataChannel ACK 成功且本机浏览器 selected ICE candidate 不是 relay；这是排查真实公网 P2P 的诊断线，不作为默认产品可用性门。
 
-`harness:verify:tunnel` 会自动租用 Docker runtime；Docker 不可用且本机有 Colima 时会自动启动 Colima，并只在本次 harness 启动了 Colima 时负责关闭它。真手机蜂窝/Wi-Fi handover 仍需要真机矩阵；自动化只能覆盖可重复的网络损伤和跨公网 direct。端到端测量页建议优先复用服务器 + 桌面浏览器 responder，避免改动主业务代码。
+`smoke:*` 会按需租用 Docker runtime；Docker 不可用且本机有 Colima 时会自动启动 Colima，并只在本次 smoke 启动了 Colima 时负责关闭它。真手机蜂窝/Wi-Fi handover 仍需要真机矩阵；自动化只能覆盖可重复的网络损伤和跨公网 direct。端到端测量页建议优先复用服务器 + 桌面浏览器 responder，避免改动主业务代码。
 
 调研依据：
 
