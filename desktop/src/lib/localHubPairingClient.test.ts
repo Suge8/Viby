@@ -165,10 +165,7 @@ describe('LocalHubPairingClient', () => {
                 return jsonResponse({ ok: true, path: '/home/user/.codex/config.toml' })
             }
             if (url.endsWith('/api/runtime/spawn')) {
-                return jsonResponse({ type: 'success', sessionId: 'session-1' })
-            }
-            if (url.endsWith('/api/sessions/session-1/view')) {
-                return jsonResponse({ session: { id: 'session-1' }, latestWindow: { messages: [] } })
+                return jsonResponse({ type: 'success', session: { id: 'session-1' } })
             }
             return jsonResponse({})
         }

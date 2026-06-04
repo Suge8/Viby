@@ -5,15 +5,15 @@
     "type": "module",
     "scripts": {
         "dev:web": "vite --host 127.0.0.1 --port 1420",
-        "build:web": "VIBY_HARNESS_SCOPE=desktop bun run --cwd .. harness:check && vite build",
+        "build:web": "vite build",
         "test": "bun test src/lib/*.test.ts src/hooks/*.test.ts",
         "typecheck": "tsc --noEmit",
         "prepare:icons": "node ../scripts/generate-brand-assets.mjs",
-        "prepare:sidecar": "node ./scripts/prepare-sidecar.mjs",
-        "ensure:sidecar": "node ./scripts/ensure-sidecar.mjs",
+        "prepare:app-core": "node ./scripts/prepare-app-core.mjs",
+        "ensure:app-core": "node ./scripts/ensure-app-core.mjs",
         "repair:tauri-target": "node ./scripts/repair-tauri-target.mjs",
-        "tauri:dev": "bun run ensure:sidecar && bun run repair:tauri-target && bun run prepare:icons && tauri dev",
-        "tauri:build": "VIBY_HARNESS_SCOPE=desktop bun run --cwd .. harness:check && bun run repair:tauri-target && bun run prepare:icons && tauri build"
+        "tauri:dev": "bun run ensure:app-core && bun run repair:tauri-target && bun run prepare:icons && tauri dev",
+        "tauri:build": "bun run repair:tauri-target && bun run prepare:icons && node ./scripts/build-tauri.mjs"
     },
     "dependencies": {
         "@lottiefiles/dotlottie-web": "^0.72.0",

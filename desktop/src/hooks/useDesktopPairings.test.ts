@@ -8,7 +8,7 @@ import { describe, expect, it } from 'bun:test'
  */
 
 import type { DesktopPairingSession } from '@/types'
-import { resolveStoredDesktopPairings } from './useDesktopPairings'
+import { clearRemoteConnectionPresence, resolveStoredDesktopPairings } from './useDesktopPairings'
 
 function makeSession(
     id: string,
@@ -26,6 +26,7 @@ function makeSession(
             approvalStatus: approval,
             host: {},
             guest: null,
+            remoteConnections: [],
         },
         hostToken: `host-${id}`,
         pairingUrl: `https://example.test/p/${id}`,
@@ -99,8 +100,16 @@ describe('useDesktopPairings — invariants', () => {
         expect(removed.toSorted()).toEqual(['expired-draft', 'stale'])
     })
 
-    it('keeps stored pairings on transient refresh failure', async () => {
+    it('does not create a new pairing object when presence is already offline', () => {
         const offline = makeSession('offline')
+        offline.pairing.remoteConnections = [{ id: 'old-window', createdAt: 1, lastSeenAt: 9 }]
+
+        expect(clearRemoteConnectionPresence(offline)).toBe(offline)
+    })
+
+    it('keeps stored pairings on transient refresh failure but clears stale online presence', async () => {
+        const offline = makeSession('offline')
+        offline.pairing.remoteConnections = [{ id: 'old-window', connectedAt: 9, createdAt: 1, lastSeenAt: 9 }]
         const resolved = await resolveStoredDesktopPairings({
             sessions: [offline],
             removePairing: async () => {
@@ -111,7 +120,9 @@ describe('useDesktopPairings — invariants', () => {
             },
         })
 
-        expect(resolved.sessions).toEqual([offline])
+        expect(resolved.sessions[0]?.pairing.remoteConnections).toEqual([
+            { id: 'old-window', createdAt: 1, lastSeenAt: 9 },
+        ])
         expect(resolved.firstError).toBeInstanceOf(Error)
     })
 })

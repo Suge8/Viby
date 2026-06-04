@@ -26,9 +26,7 @@ function RemoteConnectionList(props: { device: PresentedDevice }): JSX.Element |
     return (
         <div className="desktop-device-connections">
             {props.device.remoteConnections.map((connection, index) => (
-                <span key={connection.id}>
-                    窗口 {index + 1}: {connection.connectedAt === undefined ? '离线' : '在线'}
-                </span>
+                <span key={connection.id}>窗口 {index + 1}: 在线</span>
             ))}
         </div>
     )

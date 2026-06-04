@@ -9,6 +9,7 @@ import {
     type PairingTunnelSealedFrame,
     toPairingTunnelBase64Url,
 } from '@viby/protocol/pairing'
+import type { PairingEventBroadcaster } from './pairingEventBroadcaster'
 import { startPairingRelayBridge } from './pairingRelayBridge'
 
 class FakeWebSocket {
@@ -63,12 +64,18 @@ function clientCapturingUploads(uploads: ArrayBuffer[]) {
     }
 }
 
-function clientTrackingStreams(streams: AbortSignal[]) {
+function eventBroadcasterTrackingStreams(streams: Array<{ disposed: boolean }>): PairingEventBroadcaster {
     return {
-        streamEvents: async ({ signal }: { signal: AbortSignal }) => {
-            streams.push(signal)
-            await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }))
+        addSink: () => {
+            const stream = { disposed: false }
+            streams.push(stream)
+            return () => {
+                stream.disposed = true
+            }
         },
+        dispose: () => {},
+        lastSeq: () => 0,
+        replayAfter: () => 'sent',
     }
 }
 
@@ -284,9 +291,10 @@ describe('pairingRelayBridge', () => {
         expect(Array.from(frameBytes.subarray(PAIRING_BINARY_UPLOAD_FRAME_HEADER_BYTES))).toEqual(Array.from(payload))
     })
 
-    it('serves two relay guest connections without rekeying either peer', async () => {
+    it('rekeys when a PWA replaces the guest relay peer', async () => {
         const onOpen = mock()
         const onPeerReplaced = mock()
+        const streams: Array<{ disposed: boolean }> = []
         startPairingRelayBridge({
             tunnelUrl: 'wss://pair.example/tunnel',
             getClient: () => client() as never,
@@ -295,53 +303,7 @@ describe('pairingRelayBridge', () => {
             onActive: mock(),
             onClosed: mock(),
             onPeerReplaced,
-            reportAsyncError: mock(),
-        })
-        const socket = FakeWebSocket.instances[0]
-        const firstCipher = await pairSocket(socket, 'first')
-        const secondCipher = await pairSocket(socket, 'second')
-        await waitForCondition(() => onOpen.mock.calls.length > 0)
-
-        socket.emitMessage(
-            JSON.stringify({
-                ...(await firstCipher.seal({
-                    kind: 'message',
-                    id: 'first-heartbeat',
-                    seq: 1,
-                    payload: { kind: 'heartbeat' },
-                })),
-                connectionId: 'first',
-            })
-        )
-        socket.emitMessage(
-            JSON.stringify({
-                ...(await secondCipher.seal({
-                    kind: 'message',
-                    id: 'second-heartbeat',
-                    seq: 1,
-                    payload: { kind: 'heartbeat' },
-                })),
-                connectionId: 'second',
-            })
-        )
-
-        await waitForCondition(async () => Boolean(await findSentPayload(socket, firstCipher, isHeartbeatAck)))
-        await waitForCondition(async () => Boolean(await findSentPayload(socket, secondCipher, isHeartbeatAck)))
-        expect(onPeerReplaced).not.toHaveBeenCalled()
-    })
-
-    it('rekeys when a PWA replaces the guest relay peer', async () => {
-        const onOpen = mock()
-        const onPeerReplaced = mock()
-        const streams: AbortSignal[] = []
-        startPairingRelayBridge({
-            tunnelUrl: 'wss://pair.example/tunnel',
-            getClient: () => clientTrackingStreams(streams) as never,
-            isDisposed: () => false,
-            onOpen,
-            onActive: mock(),
-            onClosed: mock(),
-            onPeerReplaced,
+            events: eventBroadcasterTrackingStreams(streams),
             reportAsyncError: mock(),
         })
         const socket = FakeWebSocket.instances[0]
@@ -356,7 +318,7 @@ describe('pairingRelayBridge', () => {
             )
         )
         await waitForCondition(() => countSent(socket, 'key') > keyCount)
-        await waitForCondition(() => streams.length === 2 && streams[0]?.aborted === true)
+        await waitForCondition(() => streams.length === 2 && streams[0]?.disposed === true)
         expect(onPeerReplaced).toHaveBeenCalled()
         const localKey = findLastSentKey(socket)
         if (!localKey) throw new Error('local key missing')

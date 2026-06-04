@@ -69,7 +69,7 @@ describe('serializePairingTerminalEvent', () => {
                     type: 'error',
                     sessionId: 'session-1',
                     terminalId: 'terminal-1',
-                    message: 'CLI disconnected.',
+                    message: 'Runtime disconnected.',
                 })
             )
         ).toMatchObject({
@@ -77,7 +77,7 @@ describe('serializePairingTerminalEvent', () => {
                 type: 'error',
                 sessionId: 'session-1',
                 terminalId: 'terminal-1',
-                message: 'CLI disconnected.',
+                message: 'Runtime disconnected.',
             },
         })
     })

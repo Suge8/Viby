@@ -19,12 +19,14 @@ function normalizePlatform(value: unknown): KnownDevicePlatform {
         : 'unknown'
 }
 
-function hasOnlineRemoteConnection(remoteConnections: readonly PairingRemoteConnectionSnapshot[] | undefined): boolean {
-    return remoteConnections?.some((connection) => connection.connectedAt !== undefined) ?? false
+function onlineRemoteConnections(
+    remoteConnections: readonly PairingRemoteConnectionSnapshot[] | undefined
+): PairingRemoteConnectionSnapshot[] {
+    return remoteConnections?.filter((connection) => connection.connectedAt !== undefined) ?? []
 }
 
 function presentPairingDevice(session: DesktopPairingSession): PresentedDevice {
-    const remoteConnections = session.pairing.remoteConnections
+    const remoteConnections = onlineRemoteConnections(session.pairing.remoteConnections)
     const guest = session.pairing.guest
     return {
         id: pairingDeviceId(session.pairing.id),
@@ -34,20 +36,20 @@ function presentPairingDevice(session: DesktopPairingSession): PresentedDevice {
         createdAt: session.pairing.createdAt,
         lastSeenAt: guest?.lastSeenAt ?? session.pairing.updatedAt,
         revokedAt: null,
-        active: hasOnlineRemoteConnection(remoteConnections),
+        active: remoteConnections.length > 0,
         remoteConnections,
     }
 }
 
 export function buildDevicePresentation(
-    devices: DeviceAuthDevice[],
+    _devices: DeviceAuthDevice[],
     pairings: readonly DesktopPairingSession[]
 ): PresentedDevice[] {
-    const rows = new Map<string, PresentedDevice>(devices.map((device) => [device.id, device]))
+    const rows = new Map<string, PresentedDevice>()
     for (const session of pairings) {
         // A pairing surfaces as a device row only after the broker owner
         // reports at least one remote window for that guest device.
-        const paired = (session.pairing.remoteConnections?.length ?? 0) > 0
+        const paired = onlineRemoteConnections(session.pairing.remoteConnections).length > 0
         if (!paired) continue
         const id = pairingDeviceId(session.pairing.id)
         rows.set(id, presentPairingDevice(session))
@@ -58,7 +60,7 @@ export function buildDevicePresentation(
 function isDeviceConnected(device: PresentedDevice): boolean {
     if (device.revokedAt !== null) return false
     if (device.channel !== 'scan') return device.active
-    return hasOnlineRemoteConnection(device.remoteConnections)
+    return (device.remoteConnections?.length ?? 0) > 0
 }
 
 export function getConnectedDevices(devices: PresentedDevice[]): PresentedDevice[] {

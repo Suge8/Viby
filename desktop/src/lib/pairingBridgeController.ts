@@ -7,7 +7,6 @@ import {
     type PairingTransportState,
     type PairingTunnelRouteEvent,
     type PairingTunnelRouteState,
-    reducePairingTunnelRoute,
 } from '@viby/protocol/pairing'
 import type {
     DesktopPairingSession,
@@ -17,16 +16,16 @@ import type {
     PairingIceServer,
 } from '@/types'
 import { reprobeDesktopDirect } from './desktopDirectReprobe'
-import {
-    buildDesktopTunnelBridgeState,
-    readDesktopTunnelDirectCandidateEvent,
-    readDesktopTunnelRouteStats,
-} from './desktopTunnelRoute'
+import { readDesktopTunnelDirectCandidateEvent, readDesktopTunnelRouteStats } from './desktopTunnelRoute'
 import { createDeferredHubClient } from './localHubPairingDeferredClient'
-import { attachPairingDataChannel, HubPausedError, isHubPausedError } from './pairingBridgeControllerSupport'
+import { HubPausedError, isHubPausedError } from './pairingBridgeControllerSupport'
+import { attachPairingBridgeDataChannel } from './pairingBridgeDataChannel'
+import { commitPairingBridgeRoute } from './pairingBridgeRouteCommit'
+import { emitPairingBridgeState } from './pairingBridgeStateEmitter'
 import { startPairingBridgeStats } from './pairingBridgeStats'
 import { startPairingBridgeTelemetry } from './pairingBridgeTelemetry'
-import { type PairingRelayBridgeHandle, startPairingRelayBridge } from './pairingRelayBridge'
+import { createPairingEventBroadcaster } from './pairingEventBroadcaster'
+import { startPairingRelayBridge } from './pairingRelayBridge'
 
 declare global {
     interface Window {
@@ -69,9 +68,14 @@ export function startPairingBridge(options: {
     let directState: PairingTransportState | null = null
     const trace = createSessionTraceRecorder({ pairingId: options.pairing.pairing.id, peerRole: 'desktop' })
     const client = createDeferredHubClient(options.getStatus)
+    const eventBroadcaster = createPairingEventBroadcaster({
+        getClient: () => client,
+        reportError: reportEventReplayError,
+    })
     let transport: PairingTransportHandle | null = null
-    let relay: PairingRelayBridgeHandle | null = null
+    let relay: ReturnType<typeof startPairingRelayBridge> | null = null
     let unsubscribeTransport = () => {}
+    let disposeDirectEventSink: (() => void) | null = null
     const directSupported = typeof RTCPeerConnection !== 'undefined'
     installTraceExporter()
     if (directSupported) startDirectTransport()
@@ -95,6 +99,7 @@ export function startPairingBridge(options: {
         onClosed: () => commitRoute({ type: 'relay-lost' }),
         onFatal: handleRejected,
         onPeerReplaced: rebuildDirectTransport,
+        events: eventBroadcaster,
         reportAsyncError,
     })
     const stats = transport
@@ -125,6 +130,7 @@ export function startPairingBridge(options: {
         if (statsSampleTimer) clearInterval(statsSampleTimer)
         unsubscribeTransport()
         relay?.dispose()
+        eventBroadcaster.dispose()
         telemetry.dispose()
         stats?.dispose()
         transport?.dispose()
@@ -140,6 +146,10 @@ export function startPairingBridge(options: {
         if (disposed || isHubPausedError(error)) return
         fatalMessage = `${message}${error instanceof Error ? error.message : String(error)}`
         emitBridgeState()
+    }
+
+    function reportEventReplayError(error: unknown): void {
+        reportAsyncError('配对事件流发送失败：', error)
     }
 
     function handleRejected(reason: string): void {
@@ -192,40 +202,30 @@ export function startPairingBridge(options: {
         channel = nextChannel
         commitRoute({ type: 'direct-probe-started' })
         emitBridgeState()
-        attachPairingDataChannel({
+        attachPairingBridgeDataChannel({
             channel: nextChannel,
+            commitDirectCandidateFromStats,
+            commitRoute,
+            emitBridgeState,
             getClient: () => client,
+            getLatestStats: () => latestStats,
+            getRouteGeneration: () => routeState.routeGeneration,
+            isCurrentChannel: () => channel === nextChannel,
             isDisposed: () => disposed,
-            onChannelOpen: () => {
-                if (channel !== nextChannel) return
-                emitBridgeState()
-            },
-            onChannelActive: () => {
-                if (channel !== nextChannel) return
-                commitRoute({
-                    type: 'heartbeat-ack',
-                    route: 'direct',
-                    routeGeneration: routeState.routeGeneration,
-                    roundTripTimeMs: latestStats?.currentRoundTripTimeMs,
-                    sampledAt: latestStats?.sampledAt,
-                })
-                if (latestStats) commitDirectCandidateFromStats(latestStats)
-                void sampleDirectStats().catch(reportDirectProbeError)
-                emitBridgeState()
-            },
-            onChannelClosed: () => {
-                if (channel !== nextChannel) return
-                commitRoute({
-                    type: 'direct-failed',
-                    reason: 'closed',
-                    routeGeneration: routeState.routeGeneration,
-                })
-                maybeReprobeDirect(true)
-                emitBridgeState()
-            },
-            startEventStream: async () => {},
-            stopEventStream: () => {},
+            maybeReprobeDirect,
+            replayEventsAfter: (seq, sink) => eventBroadcaster.replayAfter(seq, sink, reportEventReplayError),
             reportAsyncError,
+            reportDirectProbeError,
+            sampleDirectStats,
+            startEventStream: (sink) => {
+                disposeDirectEventSink?.()
+                disposeDirectEventSink = eventBroadcaster.addSink('direct', sink, reportEventReplayError)
+                eventBroadcaster.replayAfter(0, sink, reportEventReplayError)
+            },
+            stopEventStream: () => {
+                disposeDirectEventSink?.()
+                disposeDirectEventSink = null
+            },
         })
     }
 
@@ -234,28 +234,10 @@ export function startPairingBridge(options: {
     }
 
     function commitRoute(event: PairingTunnelRouteEvent): void {
-        const previous = routeState
-        routeState = reducePairingTunnelRoute(routeState, event)
-        if (routeState !== previous) {
-            const reason = readRouteEventReason(event) ?? routeState.directBlockedReason
-            trace.emit({
-                event: 'route.transition',
-                routeTransition: {
-                    fromPhase: previous.phase,
-                    fromRoute: previous.activeRoute,
-                    toPhase: routeState.phase,
-                    toRoute: routeState.activeRoute,
-                    reason: reason ?? null,
-                    routeRevision: routeState.routeRevision,
-                },
-                payloadMeta: {
-                    reducerEvent: event.type,
-                    directBlockedReason: routeState.directBlockedReason,
-                    routeGeneration: routeState.routeGeneration,
-                },
-            })
-            emitBridgeState()
-        }
+        const nextRouteState = commitPairingBridgeRoute({ event, routeState, trace })
+        if (nextRouteState === routeState) return
+        routeState = nextRouteState
+        emitBridgeState()
     }
 
     function commitDirectCandidateFromStats(stats: PairingBridgeStats): void {
@@ -298,36 +280,20 @@ export function startPairingBridge(options: {
     }
 
     function emitBridgeState(): void {
-        if (disposed) return
-        if (fatalMessage) {
-            options.onStateChange({
-                phase: 'fatal',
-                message: fatalMessage,
-                pairing: options.pairing.pairing,
-                stats: null,
-            })
-            return
-        }
-        const state = buildDesktopTunnelBridgeState({
-            base: options.pairing,
+        emitPairingBridgeState({
             directState,
+            disposed,
+            fatalMessage,
+            latestStats,
+            onStateChange: options.onStateChange,
+            pairing: options.pairing,
             routeState,
-            stats: readDesktopTunnelRouteStats(routeState, latestStats),
+            telemetryWarning,
         })
-        options.onStateChange(
-            telemetryWarning && state.phase === 'ready' ? { ...state, message: telemetryWarning } : state
-        )
     }
 
     function installTraceExporter(): void {
         if (typeof window === 'undefined') return
         window.__vibyExportHostSessionTrace = () => JSON.stringify(trace.export(), null, 2)
     }
-}
-
-function readRouteEventReason(event: PairingTunnelRouteEvent): string | null {
-    if (event.type === 'direct-failed') return event.reason ?? null
-    if (event.type === 'heartbeat-missed') return 'heartbeat-missed'
-    if (event.type === 'relay-lost') return 'relay-lost'
-    return null
 }

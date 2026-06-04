@@ -1,4 +1,4 @@
-import { createPairingPeerTextAssembler } from '@viby/protocol/pairing'
+import { createPairingPeerTextAssembler, type PairingPeerHeartbeat } from '@viby/protocol/pairing'
 import type { LocalHubPairingClient } from './localHubPairingClient'
 import {
     createDataChannelTextSink,
@@ -23,6 +23,7 @@ export function attachPairingDataChannel(options: {
     onChannelOpen: () => void
     onChannelActive: () => void
     onChannelClosed: () => void
+    onHeartbeat?: (heartbeat: PairingPeerHeartbeat, sink: PairingPeerTextSink) => void
     startEventStream: (sink: PairingPeerTextSink) => Promise<void>
     stopEventStream: () => void
     reportAsyncError: (message: string, error: unknown) => void
@@ -54,6 +55,7 @@ export function attachPairingDataChannel(options: {
             data: event.data,
             getClient,
             onActive: onChannelActive,
+            onHeartbeat: (heartbeat) => options.onHeartbeat?.(heartbeat, sink),
             textAssembler,
             onSendError: (error) => reportAsyncError('配对发送失败：', error),
             sink,

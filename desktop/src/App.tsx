@@ -34,6 +34,7 @@ function toPairingHostEventTarget(pairingId: string, eventsUrl: string | undefin
 export function App(): JSX.Element {
     const hub = useHubController()
     const pairings = useDesktopPairings()
+    const refreshAllPairings = pairings.refreshAll
     const lanPairings = useDesktopLanPairings()
     const [activePage, setActivePage] = useState<DesktopPage>('connection')
     const { language, languagePreference, setLanguagePreference, setThemePreference, themeMode, themePreference } =
@@ -133,9 +134,9 @@ export function App(): JSX.Element {
 
     usePairingHostEvents({
         targets: brokerEventTargets,
+        onInactive: pairings.clearPresence,
         onSnapshot: pairings.applySnapshot,
     })
-
     usePairingHostEvents({
         targets: lanEventTargets,
         onSnapshot: lanPairings.applySnapshot,
@@ -144,7 +145,22 @@ export function App(): JSX.Element {
     useEffect(() => {
         if (notice) showToast(notice)
     }, [notice, showToast])
-
+    useEffect(() => {
+        let refreshing = false
+        const refreshPairings = (): void => {
+            if (refreshing || document.visibilityState === 'hidden') return
+            refreshing = true
+            void refreshAllPairings().finally(() => {
+                refreshing = false
+            })
+        }
+        window.addEventListener('focus', refreshPairings)
+        document.addEventListener('visibilitychange', refreshPairings)
+        return () => {
+            window.removeEventListener('focus', refreshPairings)
+            document.removeEventListener('visibilitychange', refreshPairings)
+        }
+    }, [refreshAllPairings])
     useEffect(() => {
         if (updates.phase !== 'available' || !updates.message) return
         showToast(updates.message)

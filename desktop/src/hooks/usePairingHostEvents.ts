@@ -26,6 +26,7 @@ interface PairingEventPayload {
 interface HostEventsOptions {
     targets: readonly PairingHostEventTarget[]
     onSnapshot: (snapshot: PairingHostEventSnapshot) => void
+    onInactive?: (pairingId: string) => void
 }
 
 function toHostEventSnapshot(payload: PairingEventPayload): PairingHostEventSnapshot | null {
@@ -36,12 +37,17 @@ function toHostEventSnapshot(payload: PairingEventPayload): PairingHostEventSnap
 
 async function attachPairingHostEventTarget(options: {
     disposed: () => boolean
+    onInactive?: (pairingId: string) => void
     onSnapshot: (snapshot: PairingHostEventSnapshot) => void
     target: PairingHostEventTarget
     unlistenFns: UnlistenFn[]
 }): Promise<void> {
     const unlistenFn = await listen<PairingEventPayload>(`pairing-events:${options.target.pairingId}`, (event) => {
-        if (options.disposed() || event.payload.kind !== 'update') return
+        if (options.disposed()) return
+        if (event.payload.kind !== 'update') {
+            options.onInactive?.(event.payload.pairingId)
+            return
+        }
         const snapshot = toHostEventSnapshot(event.payload)
         if (snapshot) options.onSnapshot(snapshot)
     })
@@ -54,21 +60,33 @@ async function attachPairingHostEventTarget(options: {
     if (options.disposed()) await unsubscribePairingEvents(options.target.pairingId).catch(() => undefined)
 }
 
+function toTargetKey(targets: readonly PairingHostEventTarget[]): string {
+    return targets.map((target) => `${target.pairingId}\u0000${target.eventsUrl}`).join('\u0001')
+}
+
 export function usePairingHostEvents(options: HostEventsOptions): void {
     const callbackRef = useRef(options.onSnapshot)
+    const inactiveRef = useRef(options.onInactive)
+    const targetsRef = useRef(options.targets)
     callbackRef.current = options.onSnapshot
+    inactiveRef.current = options.onInactive
+    targetsRef.current = options.targets
+    const targetKey = toTargetKey(options.targets)
 
     useEffect(() => {
-        if (!isTauriRuntimeAvailable() || options.targets.length === 0) return
+        const targets = targetsRef.current
+        if (!isTauriRuntimeAvailable() || targets.length === 0) return
         const unlistenFns: UnlistenFn[] = []
         let disposed = false
         const isDisposed = (): boolean => disposed
         const onSnapshot = (snapshot: PairingHostEventSnapshot): void => callbackRef.current(snapshot)
+        const onInactive = (pairingId: string): void => inactiveRef.current?.(pairingId)
 
         void Promise.all(
-            options.targets.map((target) =>
+            targets.map((target) =>
                 attachPairingHostEventTarget({
                     disposed: isDisposed,
+                    onInactive,
                     onSnapshot,
                     target,
                     unlistenFns,
@@ -79,7 +97,7 @@ export function usePairingHostEvents(options: HostEventsOptions): void {
         return () => {
             disposed = true
             for (const unlistenFn of unlistenFns) unlistenFn()
-            for (const { pairingId } of options.targets) void unsubscribePairingEvents(pairingId).catch(() => undefined)
+            for (const { pairingId } of targets) void unsubscribePairingEvents(pairingId).catch(() => undefined)
         }
-    }, [options.targets])
+    }, [targetKey])
 }

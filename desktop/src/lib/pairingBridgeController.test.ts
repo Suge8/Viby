@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { createPairingTunnelCipher, createPairingTunnelKeyFrame } from '@viby/protocol/pairing'
 import type { DesktopPairingSession, HubRuntimeStatus, PairingBridgeState } from '@/types'
 import { startPairingBridge } from './pairingBridgeController'
+import { DIRECT_PROBE_TIMEOUT_MS } from './pairingBridgeDataChannel'
 
 type Listener = (event?: { data: unknown }) => void
 
@@ -314,6 +315,41 @@ describe('startPairingBridge', () => {
         await Promise.resolve()
         expect(states.at(-1)?.phase).toBe('ready')
         cleanup()
+    })
+
+    it('fails a stale direct probe so relay readiness can reprobe direct after mobile resume', async () => {
+        const originalSetTimeout = globalThis.setTimeout
+        const originalClearTimeout = globalThis.clearTimeout
+        let probeTimeout: (() => void) | null = null
+        globalThis.setTimeout = ((callback: TimerHandler, timeout?: number) => {
+            if (timeout === DIRECT_PROBE_TIMEOUT_MS && typeof callback === 'function') {
+                probeTimeout = () => callback()
+                return 12 as unknown as ReturnType<typeof setTimeout>
+            }
+            return originalSetTimeout(callback, timeout)
+        }) as typeof setTimeout
+        globalThis.clearTimeout = ((id: ReturnType<typeof setTimeout>) => {
+            if ((id as unknown as number) !== 12) originalClearTimeout(id)
+        }) as typeof clearTimeout
+
+        try {
+            const cleanup = startPairingBridge({
+                pairing: pairingSession(),
+                getStatus: hubReady,
+                onStateChange: () => {},
+            })
+            await Promise.resolve()
+            expect(probeTimeout).not.toBeNull()
+
+            probeTimeout?.()
+            await pairRelaySocket(requireRelaySocket())
+            await waitForCondition(() => peer.restartCount > 0)
+
+            cleanup()
+        } finally {
+            globalThis.setTimeout = originalSetTimeout
+            globalThis.clearTimeout = originalClearTimeout
+        }
     })
 
     it('reprobes direct when relay becomes active after direct fallback', async () => {

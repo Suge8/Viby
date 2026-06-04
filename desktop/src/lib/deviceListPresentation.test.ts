@@ -45,11 +45,11 @@ function pairingSession(pairingId: string, connectionCount = 1) {
 }
 
 describe('deviceListPresentation', () => {
-    it('counts link/local devices from hub active state', () => {
+    it('keeps Hub auth rows out of the remote device count', () => {
         const connected = device({ id: 'connected', channel: 'link', active: true })
-        const recentOffline = device({ id: 'recent-offline', channel: 'link', lastSeenAt: Date.now() })
-        const revokedOnline = device({ id: 'revoked-online', channel: 'link', active: true, revokedAt: Date.now() })
-        expect(getConnectedDevices([connected, recentOffline, revokedOnline])).toEqual([connected])
+        const local = device({ id: 'local', channel: 'local', active: true })
+
+        expect(buildDevicePresentation([connected, local], [])).toEqual([])
     })
 
     it('counts scan devices from broker remote connection state first', () => {
@@ -61,11 +61,28 @@ describe('deviceListPresentation', () => {
         expect(getConnectedDevices([ready, connecting])).toEqual([ready])
     })
 
-    it('projects scan pairings from broker remote connection contract', () => {
+    it('projects only online scan pairings from broker remote connection contract', () => {
         const devices = buildDevicePresentation([], [pairingSession('ready'), pairingSession('pending', 0)])
 
         expect(devices.map((row) => row.id)).toEqual(['pairing:ready'])
+        expect(devices[0]?.remoteConnections).toEqual([expect.objectContaining({ id: 'ready-0' })])
         expect(getConnectedDevices(devices).map((row) => row.id)).toEqual(['pairing:ready'])
+    })
+
+    it('hides pairings whose broker windows are all offline', () => {
+        const offline = pairingSession('offline', 1)
+        offline.pairing.remoteConnections = offline.pairing.remoteConnections?.map((connection) => ({
+            ...connection,
+            connectedAt: undefined,
+        }))
+
+        expect(buildDevicePresentation([], [offline])).toEqual([])
+    })
+
+    it('ignores stale Hub scan rows even when the local row still says active', () => {
+        const staleScan = device({ id: 'pairing:stale', channel: 'scan', active: true })
+
+        expect(buildDevicePresentation([staleScan], [])).toEqual([])
     })
 
     it('keeps browser and installed PWA handoff under the same scan device row', () => {

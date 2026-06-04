@@ -247,18 +247,10 @@ export class LocalHubPairingClient extends LocalHubPairingClientCore {
         return await importRuntimeLocalSession(this.request, input)
     }
     async spawnSession(input: PairingPeerSpawnSessionParams): Promise<PairingPeerSpawnSessionResult> {
-        const response = await this.requestJson<PairingPeerSpawnSessionResult | { type: 'success'; sessionId: string }>(
-            '/api/runtime/spawn',
-            {
-                method: 'POST',
-                body: JSON.stringify(input),
-            }
-        )
-        if ('session' in response || response.type === 'error') {
-            return response
-        }
-        const view = await this.openSession(response.sessionId)
-        return { type: 'success', session: view.session }
+        return await this.requestJson<PairingPeerSpawnSessionResult>('/api/runtime/spawn', {
+            method: 'POST',
+            body: JSON.stringify(input),
+        })
     }
     async getGitStatus(sessionId: string): Promise<GitCommandResponse> {
         return await getGitStatus(this.request, sessionId)

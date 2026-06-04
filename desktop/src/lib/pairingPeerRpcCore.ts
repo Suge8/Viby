@@ -60,12 +60,13 @@ import {
 export function serializePairingPeerMessage(message: PairingPeerMessage | PairingPeerResponse): string {
     return JSON.stringify(PairingPeerMessageSchema.parse(message))
 }
-export function serializePairingSyncEvent(event: SyncEvent): string {
+export function serializePairingSyncEvent(event: SyncEvent, seq?: number): string {
     return JSON.stringify(
         PairingPeerMessageSchema.parse({
             kind: 'event',
             event: 'sync-event',
             payload: event,
+            seq,
         })
     )
 }

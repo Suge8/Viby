@@ -38,7 +38,9 @@ export interface DesktopPairingsApi {
     busy: boolean
     createPairing(): Promise<DesktopPairingSession | null>
     refreshPairing(pairingId: string): Promise<void>
+    refreshAll(): Promise<void>
     applySnapshot(snapshot: PairingSessionSnapshot & Partial<DesktopPairingSnapshot>): void
+    clearPresence(pairingId: string): void
     deletePairing(pairingId: string): Promise<void>
     /**
      * Drop a pairing the broker has permanently rejected. Unlike `deletePairing`
@@ -66,6 +68,17 @@ function toSortedArray(sessions: Map<string, DesktopPairingSession>): DesktopPai
     return [...sessions.values()].sort((a, b) => a.pairing.createdAt - b.pairing.createdAt)
 }
 
+export function clearRemoteConnectionPresence(session: DesktopPairingSession): DesktopPairingSession {
+    let changed = false
+    const remoteConnections = (session.pairing.remoteConnections ?? []).map((connection) => {
+        if (connection.connectedAt === undefined) return connection
+        changed = true
+        const { connectedAt: _connectedAt, ...rest } = connection
+        return rest
+    })
+    return changed ? { ...session, pairing: { ...session.pairing, remoteConnections } } : session
+}
+
 export async function resolveStoredDesktopPairings(options: {
     removePairing: (pairingId: string) => Promise<void>
     refreshPairing: (pairing: DesktopPairingSession) => Promise<DesktopPairingSession>
@@ -87,7 +100,7 @@ export async function resolveStoredDesktopPairings(options: {
                     await options.removePairing(session.pairing.id).catch(() => undefined)
                     return { error: null, session: null }
                 }
-                return { error, session }
+                return { error, session: clearRemoteConnectionPresence(session) }
             }
         })
     )
@@ -138,6 +151,19 @@ export function useDesktopPairings(): DesktopPairingsApi {
             if (!existing) return
             const next = new Map(sessionsRef.current)
             next.set(snapshot.id, { ...existing, pairing: toDesktopPairingSnapshot(snapshot, existing.pairing) })
+            replaceSessions(next)
+        },
+        [replaceSessions]
+    )
+
+    const clearPresence = useCallback(
+        (pairingId: string): void => {
+            const existing = sessionsRef.current.get(pairingId)
+            if (!existing) return
+            const cleared = clearRemoteConnectionPresence(existing)
+            if (cleared === existing) return
+            const next = new Map(sessionsRef.current)
+            next.set(pairingId, cleared)
             replaceSessions(next)
         },
         [replaceSessions]
@@ -215,6 +241,10 @@ export function useDesktopPairings(): DesktopPairingsApi {
         },
         [removePairing, tauriRuntimeAvailable, upsertPairing]
     )
+
+    const refreshAll = useCallback(async (): Promise<void> => {
+        await Promise.all([...sessionsRef.current.keys()].map((pairingId) => refreshPairing(pairingId)))
+    }, [refreshPairing])
 
     const deletePairing = useCallback(
         async (pairingId: string): Promise<void> => {
@@ -301,7 +331,9 @@ export function useDesktopPairings(): DesktopPairingsApi {
         busy,
         createPairing,
         refreshPairing,
+        refreshAll,
         applySnapshot,
+        clearPresence,
         deletePairing,
         dropRejectedPairing,
         deleteAll,

@@ -21,7 +21,7 @@ export type RelaySocket = {
 /** One relay peer's sealed-tunnel cipher + liveness bookkeeping. */
 export type RelayPeer = {
     cipher: PairingTunnelCipher
-    eventStreamAbort: AbortController | null
+    eventStreamDispose: (() => void) | null
     pendingHeartbeat: { id: string; sentAt: number } | null
     peerPublicKey: string | null
 }
@@ -29,7 +29,7 @@ export type RelayPeer = {
 export async function createRelayPeer(): Promise<RelayPeer> {
     return {
         cipher: await createPairingTunnelCipher(),
-        eventStreamAbort: null,
+        eventStreamDispose: null,
         pendingHeartbeat: null,
         peerPublicKey: null,
     }

@@ -1,7 +1,7 @@
 import type { PairingTunnelDirectBlockedReason, PairingTunnelTransport } from '@viby/protocol/pairing'
 
 export type HubRuntimePhase = 'starting' | 'ready' | 'stopped' | 'error'
-export type HubLaunchSource = 'desktop' | 'cli'
+export type HubLaunchSource = 'desktop' | 'runtime'
 
 export interface HubStartupConfig {
     listenHost: string
