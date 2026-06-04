@@ -40,7 +40,7 @@ Broker 不接受客户端控制帧；`peer-replaced` 这类旧 guest-token 旋�
 
 `/ws` 为 attach 竞态保留每个目标角色最多 128 条内存中的早到 signal，晚到 peer 接上即 flush；这只覆盖 offer/candidate 时序，不是 durable history。`/tunnel` 不缓存业务 frame，不补发历史消息。因为 tunnel 不缓存，端点收到对端 `key` 后会重发本端 `key`，修复 host 先打开、guest 后 attach 时的 key 丢失竞态。
 
-Pairing 不使用 Socket.IO：`/ws` 和 `/tunnel` 都是 broker 的原生 WebSocket upgrade。Socket.IO 只属于 Hub realtime / terminal / CLI namespace，不参与 pairing WSS relay。
+Pairing 不使用 Socket.IO：`/ws` 和 `/tunnel` 都是 broker 的原生 WebSocket upgrade。Socket.IO 只属于 Hub realtime / terminal / runtime namespace，不参与 pairing WSS relay。
 
 ## 传输层设计
 
