@@ -28,11 +28,15 @@ pub fn request_app_exit(app: &AppHandle) -> Result<(), String> {
     attempt_quit(app)
 }
 
+fn should_intercept_exit(quitting: bool) -> bool {
+    !quitting
+}
+
 pub fn handle_run_event(app: &AppHandle, event: &RunEvent) {
     match event {
         RunEvent::ExitRequested { api, .. } => {
             let state = app.state::<DesktopState>();
-            if state.quitting.load(Ordering::SeqCst) {
+            if !should_intercept_exit(state.quitting.load(Ordering::SeqCst)) {
                 return;
             }
             api.prevent_exit();
@@ -48,5 +52,16 @@ pub fn handle_run_event(app: &AppHandle, event: &RunEvent) {
             }
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_intercept_exit;
+
+    #[test]
+    fn exit_is_intercepted_until_quit_is_in_progress() {
+        assert!(should_intercept_exit(false));
+        assert!(!should_intercept_exit(true));
     }
 }

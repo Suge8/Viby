@@ -11,6 +11,9 @@ use crate::state::{
     HubLaunchSource, HubRuntimePhase, HubRuntimeStatus, ManagedHubState, DEFAULT_VIBY_LISTEN_HOST,
 };
 
+#[path = "lifecycle_smoke_tests.rs"]
+mod lifecycle_smoke_tests;
+
 fn parse_startup_config(raw: &str) -> Result<crate::state::HubStartupConfig, String> {
     let parsed = toml::from_str::<toml::Table>(raw).map_err(|error| error.to_string())?;
     let mut config = default_startup_config();
@@ -75,7 +78,7 @@ fn make_status(pid: u32, launch_source: Option<&str>) -> HubRuntimeStatus {
         pid,
         launch_source: launch_source.map(|value| match value {
             "desktop" => HubLaunchSource::Desktop,
-            _ => HubLaunchSource::Cli,
+            _ => HubLaunchSource::Runtime,
         }),
         listen_host: DEFAULT_VIBY_LISTEN_HOST.to_string(),
         listen_port: 3006,

@@ -33,7 +33,7 @@ pub enum HubRuntimePhase {
 #[serde(rename_all = "camelCase")]
 pub enum HubLaunchSource {
     Desktop,
-    Cli,
+    Runtime,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]

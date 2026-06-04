@@ -11,9 +11,10 @@ use crate::state::{HubStartupConfig, DEFAULT_VIBY_LISTEN_HOST};
 const BUN_EXECUTABLE: &str = "bun";
 const SHARED_VIBY_HOME_DIR: &str = ".viby";
 const HUB_RUNTIME_STATUS_FILE: &str = "hub.runtime-status.json";
-const HUB_DESKTOP_LOG_FILE: &str = "desktop-hub.log";
+const APP_CORE_DESKTOP_LOG_FILE: &str = "desktop-app-core.log";
 const SETTINGS_FILE_NAME: &str = "settings.toml";
 const DEV_REPO_RELATIVE_ROOT_DEPTH: usize = 1;
+const APP_CORE_BOOTSTRAP_SCRIPT: &str = "src/appCoreBootstrap.ts";
 #[cfg(target_os = "windows")]
 const WINDOWS_CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
@@ -48,7 +49,7 @@ pub fn settings_file_path() -> Result<PathBuf, String> {
 
 pub fn desktop_log_file_path() -> Result<PathBuf, String> {
     let viby_home_dir = resolve_shared_viby_home_dir()?;
-    Ok(viby_home_dir.join("logs").join(HUB_DESKTOP_LOG_FILE))
+    Ok(viby_home_dir.join("logs").join(APP_CORE_DESKTOP_LOG_FILE))
 }
 
 fn resolve_home_dir() -> Result<PathBuf, String> {
@@ -88,8 +89,8 @@ fn current_target_triple() -> &'static str {
     "x86_64-unknown-linux-gnu"
 }
 
-fn sidecar_binary_name() -> String {
-    let base_name = format!("binaries/viby-sidecar-{}", current_target_triple());
+fn app_core_binary_name() -> String {
+    let base_name = format!("binaries/viby-app-core-{}", current_target_triple());
     if cfg!(target_os = "windows") {
         return format!("{base_name}.exe");
     }
@@ -141,59 +142,67 @@ fn configure_hub_runtime_environment(command: &mut Command, startup_config: &Hub
     command.env_remove("VIBY_PUBLIC_ACCESS_ENABLED");
 }
 
-fn append_hub_args(command: &mut Command) {
-    command.arg("hub");
-}
-
-fn create_dev_cli_command() -> Result<Command, String> {
+fn create_dev_app_core_command() -> Result<Command, String> {
     let repo_root = repo_root_dir()?;
-    let cli_dir = repo_root.join("cli");
+    let app_core_dir = repo_root.join("app-core");
     let mut command = Command::new(BUN_EXECUTABLE);
-    command.current_dir(cli_dir);
-    command.arg("--watch").arg("src/index.ts");
+    command.current_dir(app_core_dir);
+    command.arg("--watch").arg(APP_CORE_BOOTSTRAP_SCRIPT);
     configure_shared_home_environment(&mut command)?;
     Ok(command)
 }
 
-fn create_packaged_cli_command(app: &AppHandle) -> Result<Command, String> {
-    let sidecar_path = resolve_packaged_sidecar_path(app)?;
-    let mut command = Command::new(sidecar_path);
+fn create_packaged_app_core_command(app: &AppHandle) -> Result<Command, String> {
+    let app_core_path = resolve_packaged_app_core_path(app)?;
+    let mut command = Command::new(app_core_path);
     configure_shared_home_environment(&mut command)?;
     Ok(command)
 }
 
-fn spawn_dev_hub(startup_config: &HubStartupConfig) -> Result<Child, String> {
-    let mut command = create_dev_cli_command()?;
-    append_hub_args(&mut command);
+fn spawn_dev_app_core(startup_config: &HubStartupConfig) -> Result<Child, String> {
+    let mut command = create_dev_app_core_command()?;
     configure_hub_runtime_environment(&mut command, startup_config);
     configure_spawn_command(&mut command)?;
-    command.spawn().map_err(|error| error.to_string())
+    command.spawn().map_err(|error| {
+        format!(
+            "Failed to spawn dev AppCore via `{}` in {:?}: {error}",
+            command.get_program().to_string_lossy(),
+            command.get_current_dir()
+        )
+    })
 }
 
-fn spawn_packaged_hub(app: &AppHandle, startup_config: &HubStartupConfig) -> Result<Child, String> {
-    let mut command = create_packaged_cli_command(app)?;
-    append_hub_args(&mut command);
+fn spawn_packaged_app_core(
+    app: &AppHandle,
+    startup_config: &HubStartupConfig,
+) -> Result<Child, String> {
+    let mut command = create_packaged_app_core_command(app)?;
     configure_hub_runtime_environment(&mut command, startup_config);
     configure_spawn_command(&mut command)?;
-    command.spawn().map_err(|error| error.to_string())
+    command.spawn().map_err(|error| {
+        format!(
+            "Failed to spawn packaged AppCore via `{}`: {error}",
+            command.get_program().to_string_lossy()
+        )
+    })
 }
 
-pub fn spawn_hub_process(
+pub fn spawn_app_core_process(
     app: &AppHandle,
     startup_config: &HubStartupConfig,
 ) -> Result<Child, String> {
     if cfg!(debug_assertions) {
-        return spawn_dev_hub(startup_config);
+        return spawn_dev_app_core(startup_config);
     }
 
-    spawn_packaged_hub(app, startup_config)
+    spawn_packaged_app_core(app, startup_config)
 }
 
-fn resolve_packaged_sidecar_path(app: &AppHandle) -> Result<PathBuf, String> {
-    let sidecar_file_name = packaged_sidecar_file_name();
+fn resolve_packaged_app_core_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let app_core_file_name = packaged_app_core_file_name();
     let current_exe = std::env::current_exe().map_err(|error| error.to_string())?;
     if let Some(executable_dir) = current_exe.parent() {
-        let sibling_path = executable_dir.join(&sidecar_file_name);
+        let sibling_path = executable_dir.join(app_core_file_name);
         if sibling_path.exists() {
             return Ok(sibling_path);
         }
@@ -203,24 +212,24 @@ fn resolve_packaged_sidecar_path(app: &AppHandle) -> Result<PathBuf, String> {
         .path()
         .resource_dir()
         .map_err(|error| error.to_string())?;
-    let resource_path = resource_dir.join(sidecar_binary_name());
+    let resource_path = resource_dir.join(app_core_binary_name());
     if resource_path.exists() {
         return Ok(resource_path);
     }
 
     Err(format!(
-        "Bundled sidecar not found. Tried {:?} and {:?}.",
-        current_exe.parent().map(|dir| dir.join(&sidecar_file_name)),
+        "Bundled AppCore not found. Tried {:?} and {:?}.",
+        current_exe.parent().map(|dir| dir.join(app_core_file_name)),
         Some(resource_path)
     ))
 }
 
-fn packaged_sidecar_file_name() -> &'static str {
+fn packaged_app_core_file_name() -> &'static str {
     if cfg!(target_os = "windows") {
-        return "viby-sidecar.exe";
+        return "viby-app-core.exe";
     }
 
-    "viby-sidecar"
+    "viby-app-core"
 }
 
 fn chrono_like_timestamp() -> String {
@@ -231,5 +240,26 @@ fn chrono_like_timestamp() -> String {
             duration.subsec_millis()
         ),
         Err(_) => "unix:0.000".to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dev_app_core_command_runs_app_core_bootstrap_not_bare_hub() {
+        let command = create_dev_app_core_command().expect("dev AppCore command should build");
+        let args: Vec<_> = command
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+
+        assert_eq!(command.get_program().to_string_lossy(), BUN_EXECUTABLE);
+        assert_eq!(
+            command.get_current_dir(),
+            Some(repo_root_dir().unwrap().join("app-core").as_path())
+        );
+        assert_eq!(args, ["--watch", APP_CORE_BOOTSTRAP_SCRIPT]);
     }
 }

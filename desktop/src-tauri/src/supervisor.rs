@@ -8,7 +8,8 @@ use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::launch::{
-    resolve_shared_viby_home_dir, runtime_status_file_path, settings_file_path, spawn_hub_process,
+    resolve_shared_viby_home_dir, runtime_status_file_path, settings_file_path,
+    spawn_app_core_process,
 };
 use crate::settings;
 use crate::snapshot::{build_snapshot, stop_managed_hub};
@@ -74,8 +75,8 @@ fn wait_for_managed_child_exit(mut child: Child) -> std::io::Result<ExitStatus> 
 fn describe_child_exit(result: &std::io::Result<ExitStatus>) -> Option<String> {
     match result {
         Ok(status) if status.success() => None,
-        Ok(status) => Some(format!("Hub process exited: {status}")),
-        Err(error) => Some(format!("Failed to wait for Hub process: {error}")),
+        Ok(status) => Some(format!("AppCore process exited: {status}")),
+        Err(error) => Some(format!("Failed to wait for AppCore process: {error}")),
     }
 }
 
@@ -155,7 +156,7 @@ pub fn start_hub(app: &AppHandle) -> Result<HubSnapshot, String> {
         }
 
         if process.managed_pid.is_none() {
-            let child = match spawn_hub_process(app, &existing_snapshot.startup_config) {
+            let child = match spawn_app_core_process(app, &existing_snapshot.startup_config) {
                 Ok(child) => child,
                 Err(error) => {
                     process.last_error = Some(error.clone());
@@ -226,7 +227,7 @@ pub fn set_public_access_enabled(app: &AppHandle, enabled: bool) -> Result<HubSn
         if before.running && !hub_supports_public_access_hot_reload(&before) {
             stop_managed_hub(process, before.status.as_ref())?;
             let next = build_snapshot(process)?;
-            let child = match spawn_hub_process(app, &next.startup_config) {
+            let child = match spawn_app_core_process(app, &next.startup_config) {
                 Ok(child) => child,
                 Err(error) => {
                     process.last_error = Some(error.clone());

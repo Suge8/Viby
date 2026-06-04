@@ -48,15 +48,30 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+fn should_hide_on_close(quitting: bool) -> bool {
+    !quitting
+}
+
 pub fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
     if let WindowEvent::CloseRequested { api, .. } = event {
         let state = window.state::<DesktopState>();
-        if state.quitting.load(Ordering::SeqCst) {
+        if !should_hide_on_close(state.quitting.load(Ordering::SeqCst)) {
             return;
         }
         api.prevent_close();
         #[cfg(target_os = "macos")]
         let _ = window.app_handle().hide();
         let _ = window.hide();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_hide_on_close;
+
+    #[test]
+    fn close_hides_window_unless_quitting() {
+        assert!(should_hide_on_close(false));
+        assert!(!should_hide_on_close(true));
     }
 }

@@ -27,6 +27,10 @@ pub fn run() {
             tray::create_tray(app.handle())?;
             supervisor::start_snapshot_supervisor(app.handle().clone())
                 .map_err(|error| -> Box<dyn std::error::Error> { error.into() })?;
+            if std::env::var_os("VIBY_DESKTOP_SMOKE_AUTOSTART").is_some() {
+                supervisor::start_hub(app.handle())
+                    .map_err(|error| -> Box<dyn std::error::Error> { error.into() })?;
+            }
             Ok(())
         })
         .on_window_event(|window, event| {

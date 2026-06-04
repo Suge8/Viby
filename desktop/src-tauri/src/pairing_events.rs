@@ -60,6 +60,24 @@ fn build_topic(pairing_id: &str) -> String {
     format!("pairing-events:{pairing_id}")
 }
 
+fn redact_url_tokens(message: &str) -> String {
+    let mut output = String::with_capacity(message.len());
+    let mut rest = message;
+    while let Some(index) = rest.find("token=") {
+        output.push_str(&rest[..index + 6]);
+        output.push_str("<redacted>");
+        rest = &rest[index + 6..];
+        let end = rest
+            .find(|character: char| {
+                character == '&' || character == ')' || character.is_whitespace()
+            })
+            .unwrap_or(rest.len());
+        rest = &rest[end..];
+    }
+    output.push_str(rest);
+    output
+}
+
 fn parse_event_block(block: &str) -> (Option<String>, Option<String>) {
     let mut event_name: Option<String> = None;
     let mut data_lines: Vec<&str> = Vec::new();
@@ -131,13 +149,14 @@ pub fn spawn_pairing_event_stream(
         let response = match request.send().await {
             Ok(value) => value,
             Err(error) => {
-                eprintln!("[pairing-events] connect failed pairing={pairing_for_task}: {error}");
+                let message = redact_url_tokens(&error.to_string());
+                eprintln!("[pairing-events] connect failed pairing={pairing_for_task}: {message}");
                 emit_event(
                     &app,
                     &pairing_for_task,
                     PairingEventKind::Failure,
                     None,
-                    Some(format!("SSE connect failed: {error}")),
+                    Some(format!("SSE connect failed: {message}")),
                 );
                 return;
             }
@@ -191,12 +210,13 @@ pub fn spawn_pairing_event_stream(
                             }
                         }
                         Some(Err(error)) => {
+                            let message = redact_url_tokens(&error.to_string());
                             emit_event(
                                 &app,
                                 &pairing_for_task,
                                 PairingEventKind::Failure,
                                 None,
-                                Some(format!("SSE stream error: {error}")),
+                                Some(format!("SSE stream error: {message}")),
                             );
                             break
                         }
@@ -206,4 +226,19 @@ pub fn spawn_pairing_event_stream(
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::redact_url_tokens;
+
+    #[test]
+    fn redacts_pairing_event_url_tokens() {
+        let message = "error sending request for url (https://pair.viby.run/pairings/id/events?token=secret-1&x=1)";
+
+        assert_eq!(
+            redact_url_tokens(message),
+            "error sending request for url (https://pair.viby.run/pairings/id/events?token=<redacted>&x=1)"
+        );
+    }
 }

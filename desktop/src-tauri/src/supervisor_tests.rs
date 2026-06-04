@@ -72,7 +72,7 @@ fn failed_child_exit_has_error_message() {
 
     assert_eq!(
         describe_child_exit(&Ok(status)),
-        Some(format!("Hub process exited: {status}"))
+        Some(format!("AppCore process exited: {status}"))
     );
 }
 
