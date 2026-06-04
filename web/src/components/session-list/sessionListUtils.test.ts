@@ -23,7 +23,7 @@ describe('sessionListUtils', () => {
         const session = createTestSessionListSummary({
             id: 'session-search',
             metadata: {
-                path: '/Users/sugeh/Project/Viby',
+                path: '/workspace/viby',
                 driver: 'claude',
                 summary: { text: 'Investigate queued lifecycle', updatedAt: 1 },
             },
