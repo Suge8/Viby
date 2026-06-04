@@ -15,9 +15,9 @@ describe('createHubRuntimeHost', () => {
     const reload = vi.fn()
     const stop = vi.fn()
     const write = vi.fn(async () => ({}))
-    const startStartupRecovery = vi.fn(async () => {})
-    const onRuntimeReload = vi.fn()
-    const stopManagedRunner = vi.fn(async () => null)
+    const startRuntime = vi.fn(async () => {})
+    const reloadRuntime = vi.fn()
+    const stopRuntime = vi.fn(async () => null)
 
     beforeEach(() => {
         replaceRuntime.mockClear()
@@ -27,9 +27,9 @@ describe('createHubRuntimeHost', () => {
         reload.mockClear()
         stop.mockClear()
         write.mockClear()
-        startStartupRecovery.mockClear()
-        onRuntimeReload.mockClear()
-        stopManagedRunner.mockClear()
+        startRuntime.mockClear()
+        reloadRuntime.mockClear()
+        stopRuntime.mockClear()
     })
 
     it('reloads runtime core and web fetch together', async () => {
@@ -44,10 +44,10 @@ describe('createHubRuntimeHost', () => {
             createWebFetch,
             webServer: { reload, stop } as never,
             runtimeStatus: { filePath: '/tmp/status.json', write } as never,
-            managedRunner: {
-                startStartupRecovery,
-                onRuntimeReload,
-                stop: stopManagedRunner,
+            runtimeController: {
+                start: startRuntime,
+                reload: reloadRuntime,
+                stop: stopRuntime,
             },
             preferredBrowserUrl: 'https://hub.example.test',
             portFallbackMessage: null,
@@ -59,10 +59,10 @@ describe('createHubRuntimeHost', () => {
         expect(createWebFetch).toHaveBeenCalledTimes(1)
         expect(replaceRuntime).toHaveBeenCalledTimes(1)
         expect(reload).toHaveBeenCalledTimes(1)
-        expect(onRuntimeReload).toHaveBeenCalledTimes(1)
+        expect(reloadRuntime).toHaveBeenCalledTimes(1)
     })
 
-    it('starts runtime before runner recovery', async () => {
+    it('starts runtime before local runtime controller', async () => {
         const host = createHubRuntimeHost({
             runtimeAccessor: {
                 getRuntime: () => null,
@@ -74,10 +74,10 @@ describe('createHubRuntimeHost', () => {
             createWebFetch,
             webServer: { reload, stop } as never,
             runtimeStatus: { filePath: '/tmp/status.json', write } as never,
-            managedRunner: {
-                startStartupRecovery,
-                onRuntimeReload,
-                stop: stopManagedRunner,
+            runtimeController: {
+                start: startRuntime,
+                reload: reloadRuntime,
+                stop: stopRuntime,
             },
             preferredBrowserUrl: 'https://hub.example.test',
             portFallbackMessage: null,
@@ -90,7 +90,7 @@ describe('createHubRuntimeHost', () => {
             preferredBrowserUrl: 'https://hub.example.test',
             message: '本地中枢已启动，正在连接这台机器。',
         })
-        expect(startStartupRecovery).toHaveBeenCalledTimes(1)
+        expect(startRuntime).toHaveBeenCalledTimes(1)
     })
 
     it('disposes runtime and stops web server on shutdown', async () => {
@@ -105,10 +105,10 @@ describe('createHubRuntimeHost', () => {
             createWebFetch,
             webServer: { reload, stop } as never,
             runtimeStatus: { filePath: '/tmp/status.json', write } as never,
-            managedRunner: {
-                startStartupRecovery,
-                onRuntimeReload,
-                stop: stopManagedRunner,
+            runtimeController: {
+                start: startRuntime,
+                reload: reloadRuntime,
+                stop: stopRuntime,
             },
             preferredBrowserUrl: 'https://hub.example.test',
             portFallbackMessage: null,
@@ -116,7 +116,7 @@ describe('createHubRuntimeHost', () => {
 
         await expect(host.shutdown()).resolves.toBe(0)
 
-        expect(stopManagedRunner).toHaveBeenCalledTimes(1)
+        expect(stopRuntime).toHaveBeenCalledTimes(1)
         expect(disposeRuntime).toHaveBeenCalledTimes(1)
         expect(stop).toHaveBeenCalledTimes(1)
     })

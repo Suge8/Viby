@@ -5,7 +5,6 @@ import { buildConnectingMessage } from '../hubHelpers'
 import type { HubRuntimeStatusUpdate, HubRuntimeStatusWriter } from '../runtimeStatus'
 import type { HubRuntimeAccessor } from './accessor'
 import type { HubRuntimeCore } from './core'
-import type { ManagedRunnerController } from './managedRunner'
 
 type RuntimeWebFetch = (req: Request, server: BunServer<WebSocketData>) => Response | Promise<Response>
 
@@ -22,13 +21,19 @@ export type HubRuntimeHost = {
     shutdown(options?: RuntimeShutdownOptions): Promise<number>
 }
 
+export type LocalRuntimeController = {
+    reload(runtimeCore: HubRuntimeCore | null): void
+    start(): Promise<void>
+    stop(): Promise<string | null>
+}
+
 type CreateHubRuntimeHostOptions = {
     runtimeAccessor: HubRuntimeAccessor
     createRuntimeCore: () => HubRuntimeCore
     createWebFetch: () => Promise<RuntimeWebFetch>
     webServer: BunServer<WebSocketData>
     runtimeStatus: HubRuntimeStatusWriter
-    managedRunner: ManagedRunnerController
+    runtimeController: LocalRuntimeController
     preferredBrowserUrl: string
     portFallbackMessage: string | null
 }
@@ -48,7 +53,7 @@ export function createHubRuntimeHost(options: CreateHubRuntimeHostOptions): HubR
 
         options.runtimeAccessor.replaceRuntime(nextRuntime)
         options.webServer.reload({ fetch: nextFetch })
-        options.managedRunner.onRuntimeReload()
+        options.runtimeController.reload(nextRuntime)
     }
 
     async function start(): Promise<void> {
@@ -60,7 +65,7 @@ export function createHubRuntimeHost(options: CreateHubRuntimeHostOptions): HubR
             message: buildStartingStatusMessage(options.portFallbackMessage, buildConnectingMessage()),
         })
 
-        await options.managedRunner.startStartupRecovery()
+        await options.runtimeController.start()
     }
 
     async function shutdown(shutdownOptions: RuntimeShutdownOptions = {}): Promise<number> {
@@ -72,12 +77,12 @@ export function createHubRuntimeHost(options: CreateHubRuntimeHostOptions): HubR
             message: shutdownOptions.statusMessage ?? 'Hub stopped.',
         })
 
-        const runnerStopError = await options.managedRunner.stop()
+        const runtimeStopError = await options.runtimeController.stop()
 
         options.runtimeAccessor.disposeRuntime()
         options.webServer.stop()
 
-        if (runnerStopError) {
+        if (runtimeStopError) {
             return 1
         }
 

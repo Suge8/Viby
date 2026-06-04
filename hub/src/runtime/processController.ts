@@ -13,7 +13,12 @@ import { Store } from '../store'
 import { createWebServerFetch, type StartWebServerOptions, startWebServer } from '../web/server'
 import { createHubRuntimeAccessor } from './accessor'
 import { createHubRuntimeCore } from './core'
-import { createManagedRunnerController } from './managedRunner'
+import { DirectRuntimeRegistry } from './directRuntimeRegistry'
+import {
+    createUnavailableLocalRuntimeController,
+    type HubProcessControllerOptions,
+    type LocalRuntimeControllerFactory,
+} from './localRuntimeController'
 import {
     buildProcessWebServerOptions,
     buildReadyStatusMessage as buildReadyStatusMessageBase,
@@ -24,31 +29,27 @@ import {
 import { createPublicAccessRuntime, type PublicAccessRuntime } from './publicAccessRuntime'
 import { reportHubRuntimeError } from './runtimeDiagnostics'
 import { createHubRuntimeHost, type HubRuntimeHost } from './runtimeHost'
-
 export type HubShutdownOptions = {
     exitCode?: number
     logMessage?: string
     statusMessage?: string
     statusPhase?: 'stopped' | 'error'
 }
-
 export type HubProcessController = {
     start(): Promise<void>
     reloadRuntime(): Promise<void>
     shutdown(options?: HubShutdownOptions): Promise<number>
 }
-
-export function createHubProcessController(): HubProcessController {
-    const launchSource = process.env.VIBY_LAUNCH_SOURCE === 'desktop' ? 'desktop' : 'cli'
+export function createHubProcessController(options: HubProcessControllerOptions = {}): HubProcessController {
+    const launchSource = process.env.VIBY_LAUNCH_SOURCE === 'desktop' ? 'desktop' : 'runtime'
     const runtimeAccessor = createHubRuntimeAccessor()
-
+    const directRuntimeRegistry = new DirectRuntimeRegistry()
     let config: Awaited<ReturnType<typeof createConfiguration>> | null = null
     let runtimeListenPort = 0
     let runtimePublicUrl = ''
     let localHubUrl = ''
     let portFallbackMessage: string | null = null
     let corsOrigins: string[] = []
-
     let store: Store | null = null
     let jwtSecret: Uint8Array | null = null
     let vapidPublicKey: string | null = null
@@ -59,9 +60,7 @@ export function createHubProcessController(): HubProcessController {
     let runtimeHost: HubRuntimeHost | null = null
     let publicAccessRuntime: PublicAccessRuntime | null = null
     let shutdownPromise: Promise<number> | null = null
-    let shuttingDown = false
     let started = false
-
     const getConfig = (): NonNullable<typeof config> =>
         requireInitialized(config, 'Hub configuration is not initialized.')
     const getStore = (): Store => requireInitialized(store, 'Hub store is not initialized.')
@@ -71,11 +70,9 @@ export function createHubProcessController(): HubProcessController {
     const getPushService = (): PushService => requireInitialized(pushService, 'Hub push service is not initialized.')
     const getSocketServer = (): NonNullable<typeof socketServer> =>
         requireInitialized(socketServer, 'Hub socket server is not initialized.')
-
     function buildStartingStatusMessage(message: string): string {
         return buildStartingStatusMessageBase(message, portFallbackMessage)
     }
-
     function buildReadyStatusMessage(overrides?: ReadonlyArray<string | null>): string {
         return buildReadyStatusMessageBase(portFallbackMessage, overrides)
     }
@@ -120,7 +117,7 @@ export function createHubProcessController(): HubProcessController {
             return
         }
 
-        console.log('viby hub starting...')
+        console.log('Viby AppCore starting...')
         config = await createConfiguration()
         runtimeListenPort = config.listenPort
         runtimePublicUrl = config.publicUrl
@@ -154,27 +151,7 @@ export function createHubProcessController(): HubProcessController {
                 const activeEngine = runtimeAccessor.getSyncEngine()
                 return activeEngine?.getSession(sessionId) ?? store!.sessions.getSession(sessionId)
             },
-            onWebappEvent: (event) => {
-                runtimeAccessor.getSyncEngine()?.handleRealtimeEvent(event)
-            },
-            onSessionAlive: (payload) => {
-                runtimeAccessor.getSyncEngine()?.handleSessionAlive(payload)
-            },
-            onSessionEnd: (payload) => {
-                const activeEngine = runtimeAccessor.getSyncEngine()
-                if (shuttingDown) {
-                    activeEngine?.handleSessionRuntimeStopping(payload.sid, 'shutdown')
-                }
-                activeEngine?.handleSessionEnd(payload)
-            },
-            onSessionRuntimeState: (payload) => {
-                if (payload.state === 'stopping') {
-                    runtimeAccessor.getSyncEngine()?.handleSessionRuntimeStopping(payload.sid, payload.reason)
-                }
-            },
-            onMachineAlive: (payload) => {
-                runtimeAccessor.getSyncEngine()?.handleMachineAlive(payload)
-            },
+            directRuntimeRegistry,
         })
 
         try {
@@ -234,9 +211,9 @@ export function createHubProcessController(): HubProcessController {
         const currentSocketServer = getSocketServer()
         return createHubRuntimeCore({
             store: getStore(),
-            io: currentSocketServer.io,
-            rpcRegistry: currentSocketServer.rpcRegistry,
             webRealtimeManager: currentSocketServer.webRealtimeManager,
+            sessionStreamManager: currentSocketServer.sessionStreamManager,
+            directRuntimeRegistry,
             notificationChannels: [
                 new PushNotificationChannel(getPushService(), currentSocketServer.webRealtimeManager),
             ],
@@ -248,18 +225,22 @@ export function createHubProcessController(): HubProcessController {
             throw new Error('Hub runtime host is not initialized.')
         }
 
-        const runtimeStatus = activeRuntimeStatus
-        const managedRunner = createManagedRunnerController({
+        const createRuntimeController: LocalRuntimeControllerFactory =
+            options.createLocalRuntimeController ?? (() => createUnavailableLocalRuntimeController())
+        const runtimeController = createRuntimeController({
             dataDir: getConfig().dataDir,
+            hubOwnerToken: getConfig().hubOwnerToken,
             localHubUrl,
             preferredBrowserUrl: runtimePublicUrl,
-            getSyncEngine: () => runtimeAccessor.getSyncEngine(),
-            isShuttingDown: () => shuttingDown,
-            writeRuntimeStatus: async (update) => {
-                await runtimeStatus.write(update)
-            },
+            writeRuntimeStatus: activeRuntimeStatus.write,
             buildReadyStatusMessage,
             buildStartingStatusMessage,
+            directRuntimeRegistry,
+            requestShutdown: () => {
+                shutdown({ logMessage: '\nShutting down after runtime request...' }).catch((error) => {
+                    reportHubRuntimeError('Runtime-requested shutdown failed.', error)
+                })
+            },
         })
 
         return createHubRuntimeHost({
@@ -268,7 +249,7 @@ export function createHubProcessController(): HubProcessController {
             createWebFetch: () => createWebServerFetch(buildWebServerOptions()),
             webServer,
             runtimeStatus: activeRuntimeStatus,
-            managedRunner,
+            runtimeController,
             preferredBrowserUrl: runtimePublicUrl,
             portFallbackMessage,
         })
@@ -319,7 +300,7 @@ export function createHubProcessController(): HubProcessController {
 
         started = true
         console.log('')
-        console.log('viby hub is ready!')
+        console.log('Viby AppCore is ready!')
     }
 
     async function shutdown(options: HubShutdownOptions = {}): Promise<number> {
@@ -327,7 +308,6 @@ export function createHubProcessController(): HubProcessController {
             return await shutdownPromise
         }
 
-        shuttingDown = true
         shutdownPromise = (async () => {
             const exitCode = runtimeHost ? await runtimeHost.shutdown(options) : await shutdownProcessOnly(options)
 

@@ -77,7 +77,7 @@ export function logHubStartupConfiguration(config: {
         console.log('='.repeat(70))
         console.log('')
         console.log(`  Saved to: ${config.settingsFile}`)
-        console.log('  Use `viby auth login` only for headless CLI access.')
+        console.log('  Managed by Viby Desktop AppCore.')
         console.log('')
         console.log('='.repeat(70))
         console.log('')

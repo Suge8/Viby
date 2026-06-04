@@ -3,10 +3,11 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { HUB_RUNTIME_STATUS_FILE, type HubRuntimeStatus } from '@viby/protocol/runtimeStatus'
 import { startDesktopParentPipeShutdown } from './desktopParentPipeShutdown'
+import type { HubProcessControllerOptions } from './localRuntimeController'
 import { createHubProcessController } from './processController'
 import { reportHubRuntimeError, reportHubRuntimeInfo } from './runtimeDiagnostics'
 
-export interface RunHubProcessOptions {
+export interface RunHubProcessOptions extends HubProcessControllerOptions {
     onReady?(status: HubRuntimeStatus): Promise<void> | void
 }
 
@@ -26,7 +27,7 @@ async function readRuntimeStatus(): Promise<HubRuntimeStatus | null> {
 }
 
 export async function runHubProcess(options: RunHubProcessOptions = {}): Promise<void> {
-    const controller = createHubProcessController()
+    const controller = createHubProcessController(options)
     let shutdownRequested = false
 
     async function shutdownAndExit(): Promise<void> {

@@ -35,6 +35,6 @@ export function createHubRuntimeAccessor(): HubRuntimeAccessor {
         getRuntime,
         getSyncEngine,
         replaceRuntime,
-        disposeRuntime
+        disposeRuntime,
     }
 }
