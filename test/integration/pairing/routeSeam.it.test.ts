@@ -5,8 +5,8 @@ import {
     reducePairingTunnelRoute,
 } from '../../../shared/src/pairing'
 import { readRemotePairingDirectCandidateEvent } from '../../../web/src/remote/remotePairingRouteStats'
-import { FakeRtcPeer } from './harness/fakeRtcPeer'
-import { emptyStatsFixture, relaySelectedStatsFixture, webkitDirectStatsFixture } from './harness/webkitStatsFixtures'
+import { FakeRtcPeer } from './support/fakeRtcPeer'
+import { emptyStatsFixture, relaySelectedStatsFixture, webkitDirectStatsFixture } from './support/webkitStatsFixtures'
 
 function createTransport(peer: FakeRtcPeer): PairingTransportHandle {
     return {

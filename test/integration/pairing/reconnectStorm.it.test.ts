@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 import { startPairingRelayBridge } from '../../../desktop/src/lib/pairingRelayBridge'
 import { createRemotePairingRelaySocket } from '../../../web/src/remote/remotePairingRelaySocket'
-import { createVirtualClock } from './harness/virtualClock'
+import { createVirtualClock } from './support/virtualClock'
 
 class StormSocket {
     static readonly OPEN = 1

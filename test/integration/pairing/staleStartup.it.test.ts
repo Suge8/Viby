@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'bun:test'
 import { startPairingRelayBridge } from '../../../desktop/src/lib/pairingRelayBridge'
 import type { RelaySocket } from '../../../desktop/src/lib/pairingRelayBridgeRuntime'
-import { bootBrokerTunnel } from './harness/bootBrokerTunnel'
-import { DUPLEX_OPEN } from './harness/inMemoryDuplex'
-import { createVirtualClock } from './harness/virtualClock'
+import { bootBrokerTunnel } from './support/bootBrokerTunnel'
+import { DUPLEX_OPEN } from './support/inMemoryDuplex'
+import { createVirtualClock } from './support/virtualClock'
 
 /**
  * D11 — real persisted desktop state pollution.

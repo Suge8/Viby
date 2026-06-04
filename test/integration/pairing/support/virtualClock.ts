@@ -6,7 +6,7 @@
  * reconnection storms) runs without wall-clock time and replays identically.
  *
  * It is the single dependency the DI seams (relay socket, relay bridge, broker
- * grace, hub sweep) are wired to — see docs/architecture/pairing-integration-harness.md.
+ * grace, hub sweep) are wired to — see docs/architecture/pairing-integration-tests.md.
  */
 
 interface ScheduledTimer {
