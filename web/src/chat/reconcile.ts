@@ -4,7 +4,7 @@ import type {
     AgentReasoningBlock,
     AgentTextBlock,
     ChatBlock,
-    CliOutputBlock,
+    CommandOutputBlock,
     ToolCallBlock,
     ToolPermission,
     UserTextBlock,
@@ -130,7 +130,7 @@ function areAgentReasoningBlocksEqual(left: AgentReasoningBlock, right: AgentRea
     )
 }
 
-function areCliOutputBlocksEqual(left: CliOutputBlock, right: CliOutputBlock): boolean {
+function areCommandOutputBlocksEqual(left: CommandOutputBlock, right: CommandOutputBlock): boolean {
     return (
         left.text === right.text &&
         left.localId === right.localId &&
@@ -209,9 +209,9 @@ function reconcileBlock(block: ChatBlock, prevById: ChatBlocksById): ChatBlock {
         return areAgentTextBlocksEqual(prevBlock, block) ? prevBlock : block
     }
 
-    if (block.kind === 'cli-output') {
-        const prevBlock = prev as CliOutputBlock
-        return areCliOutputBlocksEqual(prevBlock, block) ? prevBlock : block
+    if (block.kind === 'command-output') {
+        const prevBlock = prev as CommandOutputBlock
+        return areCommandOutputBlocksEqual(prevBlock, block) ? prevBlock : block
     }
 
     if (block.kind === 'agent-reasoning') {

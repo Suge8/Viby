@@ -15,7 +15,7 @@ function getSentFrom(meta: unknown): TranscriptSentFrom | null {
 
     const sentFrom = (meta as Record<string, unknown>).sentFrom
     switch (sentFrom) {
-        case 'cli':
+        case 'runtime':
         case 'webapp':
         case 'user':
             return sentFrom
@@ -151,10 +151,10 @@ function pushBlockRows(options: {
                 conversationId: options.conversationId,
                 depth: options.depth + 1,
             })
-        } else if (block.kind === 'cli-output') {
+        } else if (block.kind === 'command-output') {
             options.rows.push({
                 id: rowId,
-                type: 'cli-output',
+                type: 'command-output',
                 block,
                 conversationId: options.conversationId,
                 depth: options.depth,
@@ -205,7 +205,7 @@ function areTranscriptRowsEquivalent(previous: TranscriptRow, next: TranscriptRo
         case 'user':
         case 'assistant-text':
         case 'tool':
-        case 'cli-output':
+        case 'command-output':
         case 'event':
             return (previous as typeof next).block === next.block
         case 'assistant-reasoning':

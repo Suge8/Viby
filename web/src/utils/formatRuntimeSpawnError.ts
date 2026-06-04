@@ -1,7 +1,7 @@
 import type { LocalRuntime } from '../types/api'
 
-export function formatRunnerSpawnError(runtime: LocalRuntime | null): string | null {
-    const lastSpawnError = runtime?.runnerState?.lastSpawnError
+export function formatRuntimeSpawnError(runtime: LocalRuntime | null): string | null {
+    const lastSpawnError = runtime?.runtimeState?.lastSpawnError
     if (!lastSpawnError?.message) {
         return null
     }

@@ -4,7 +4,7 @@ import type {
     AgentReasoningBlock,
     AgentTextBlock,
     ChatBlock,
-    CliOutputBlock,
+    CommandOutputBlock,
     ToolCallBlock,
     UserTextBlock,
 } from '@/chat/types'
@@ -13,7 +13,7 @@ import type { AssistantReplyingPhase } from '@/components/AssistantChat/assistan
 export const THINKING_ROW_ID = 'thinking'
 export const THINKING_ROW_CONVERSATION_ID = 'thinking'
 
-export type TranscriptSentFrom = 'cli' | 'webapp' | 'user'
+export type TranscriptSentFrom = 'runtime' | 'webapp' | 'user'
 
 type TranscriptRowBase = {
     id: string
@@ -45,9 +45,9 @@ export type TranscriptToolRow = TranscriptRowBase & {
     block: ToolCallBlock
 }
 
-export type TranscriptCliOutputRow = TranscriptRowBase & {
-    type: 'cli-output'
-    block: CliOutputBlock
+export type TranscriptCommandOutputRow = TranscriptRowBase & {
+    type: 'command-output'
+    block: CommandOutputBlock
 }
 
 export type TranscriptEventRow = TranscriptRowBase & {
@@ -65,7 +65,7 @@ export type TranscriptRow =
     | TranscriptAssistantTextRow
     | TranscriptReasoningRow
     | TranscriptToolRow
-    | TranscriptCliOutputRow
+    | TranscriptCommandOutputRow
     | TranscriptEventRow
     | TranscriptAssistantThinkingRow
 
@@ -95,7 +95,7 @@ export function getTranscriptRowId(block: ChatBlock): string {
             return `reasoning:${block.id}`
         case 'agent-event':
             return `event:${block.id}`
-        case 'cli-output':
+        case 'command-output':
             return `cli:${block.id}`
         case 'tool-call':
             return `tool:${block.id}`

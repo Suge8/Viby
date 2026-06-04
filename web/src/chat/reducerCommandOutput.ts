@@ -1,4 +1,4 @@
-import type { ChatBlock, CliOutputBlock } from '@/chat/types'
+import type { ChatBlock, CommandOutputBlock } from '@/chat/types'
 
 const CLI_TAG_REGEX = /<(?:local-command-[a-z-]+|command-(?:name|message|args))>/i
 const CLI_COMMAND_NAME_REGEX = /<command-name>/i
@@ -10,7 +10,7 @@ function getMetaSentFrom(meta: unknown): string | null {
     return typeof sentFrom === 'string' ? sentFrom : null
 }
 
-function hasCliOutputTags(text: string): boolean {
+function hasCommandOutputTags(text: string): boolean {
     return CLI_TAG_REGEX.test(text)
 }
 
@@ -22,20 +22,20 @@ function hasLocalCommandStdoutTag(text: string): boolean {
     return CLI_COMMAND_STDOUT_REGEX.test(text)
 }
 
-export function isCliOutputText(text: string, meta: unknown): boolean {
-    return getMetaSentFrom(meta) === 'cli' && hasCliOutputTags(text)
+export function isCommandOutputText(text: string, meta: unknown): boolean {
+    return getMetaSentFrom(meta) === 'runtime' && hasCommandOutputTags(text)
 }
 
-export function createCliOutputBlock(props: {
+export function createCommandOutputBlock(props: {
     id: string
     localId: string | null
     createdAt: number
     text: string
-    source: CliOutputBlock['source']
+    source: CommandOutputBlock['source']
     meta?: unknown
-}): CliOutputBlock {
+}): CommandOutputBlock {
     return {
-        kind: 'cli-output',
+        kind: 'command-output',
         id: props.id,
         localId: props.localId,
         createdAt: props.createdAt,
@@ -45,11 +45,11 @@ export function createCliOutputBlock(props: {
     }
 }
 
-export function mergeCliOutputBlocks(blocks: ChatBlock[]): ChatBlock[] {
+export function mergeCommandOutputBlocks(blocks: ChatBlock[]): ChatBlock[] {
     const merged: ChatBlock[] = []
 
     for (const block of blocks) {
-        if (block.kind !== 'cli-output') {
+        if (block.kind !== 'command-output') {
             merged.push(block)
             continue
         }
@@ -57,7 +57,7 @@ export function mergeCliOutputBlocks(blocks: ChatBlock[]): ChatBlock[] {
         const prev = merged[merged.length - 1]
         if (
             prev &&
-            prev.kind === 'cli-output' &&
+            prev.kind === 'command-output' &&
             prev.source === block.source &&
             hasCommandNameTag(prev.text) &&
             !hasLocalCommandStdoutTag(prev.text) &&

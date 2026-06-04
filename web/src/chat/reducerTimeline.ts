@@ -1,4 +1,4 @@
-import { createCliOutputBlock, isCliOutputText, mergeCliOutputBlocks } from '@/chat/reducerCliOutput'
+import { createCommandOutputBlock, isCommandOutputText, mergeCommandOutputBlocks } from '@/chat/reducerCommandOutput'
 import { parseMessageAsEvent } from '@/chat/reducerEvents'
 import { ensureToolBlock, type PermissionEntry } from '@/chat/reducerTools'
 import { resolveTextRenderMode } from '@/chat/textRenderMode'
@@ -46,9 +46,9 @@ export function reduceTimeline(
         }
 
         if (msg.role === 'user') {
-            if (isCliOutputText(msg.content.text, msg.meta)) {
+            if (isCommandOutputText(msg.content.text, msg.meta)) {
                 blocks.push(
-                    createCliOutputBlock({
+                    createCommandOutputBlock({
                         id: msg.id,
                         localId: msg.localId,
                         createdAt: msg.createdAt,
@@ -93,9 +93,9 @@ export function reduceTimeline(
                     if (taskPromptText && c.text.trim() === taskPromptText) {
                         continue
                     }
-                    if (isCliOutputText(c.text, msg.meta)) {
+                    if (isCommandOutputText(c.text, msg.meta)) {
                         blocks.push(
-                            createCliOutputBlock({
+                            createCommandOutputBlock({
                                 id: `${msg.id}:${idx}`,
                                 localId: msg.localId,
                                 createdAt: msg.createdAt,
@@ -210,5 +210,5 @@ export function reduceTimeline(
         }
     }
 
-    return { blocks: mergeCliOutputBlocks(blocks), toolBlocksById, hasReadyEvent }
+    return { blocks: mergeCommandOutputBlocks(blocks), toolBlocksById, hasReadyEvent }
 }

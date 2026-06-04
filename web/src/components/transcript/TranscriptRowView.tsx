@@ -2,7 +2,7 @@ import { type CSSProperties, memo } from 'react'
 import type { TranscriptRow } from '@/chat/transcriptTypes'
 import { AssistantReplyingIndicator } from '@/components/AssistantChat/AssistantReplyingIndicator'
 import { useVibyChatContext, type VibyChatContextValue } from '@/components/AssistantChat/context'
-import { CliOutputMessageContent } from '@/components/AssistantChat/messages/CliOutputMessageContent'
+import { CommandOutputMessageContent } from '@/components/AssistantChat/messages/CommandOutputMessageContent'
 import { MessageAttachments } from '@/components/AssistantChat/messages/MessageAttachments'
 import { MessageStatusIndicator } from '@/components/AssistantChat/messages/MessageStatusIndicator'
 import { MessageSurface } from '@/components/AssistantChat/messages/MessageSurface'
@@ -75,13 +75,13 @@ function renderRowContent(row: TranscriptRow, ctx: VibyChatContextValue): React.
         )
     }
 
-    if (row.type === 'cli-output') {
+    if (row.type === 'command-output') {
         const cardClass = row.block.source === 'user' ? 'ds-message-card-right' : 'ds-message-card'
         return (
             <DepthInset depth={row.depth}>
                 <div className="px-1 min-w-0 max-w-full overflow-x-hidden">
                     <div className={cardClass}>
-                        <CliOutputMessageContent text={row.block.text} />
+                        <CommandOutputMessageContent text={row.block.text} />
                     </div>
                 </div>
             </DepthInset>

@@ -20,7 +20,7 @@ const LABELS: Record<string, string> = {
 }
 const COMMAND_NAME_REGEX = /<command-name>([\s\S]*?)<\/command-name>/i
 
-export function hasCliOutputTags(text: string): boolean {
+export function hasCommandOutputTags(text: string): boolean {
     return CLI_TAG_CHECK_REGEX.test(text)
 }
 
@@ -37,7 +37,7 @@ function formatLabel(tag: string, t?: (key: string) => string): string {
     return normalized.replace(/-/g, ' ')
 }
 
-function buildCliOutput(text: string, t?: (key: string) => string): string {
+function buildCommandOutput(text: string, t?: (key: string) => string): string {
     const matches = Array.from(text.matchAll(new RegExp(CLI_TAG_REGEX_SOURCE, 'gi')))
     if (matches.length === 0) {
         return normalizeCliText(text)
@@ -89,9 +89,9 @@ function extractCommandName(text: string): string | null {
     return firstLine && firstLine.length > 0 ? firstLine : null
 }
 
-export function CliOutputBlock(props: { text: string }) {
+export function CommandOutputBlock(props: { text: string }) {
     const { t } = useTranslation()
-    const content = useMemo(() => buildCliOutput(props.text, t), [props.text, t])
+    const content = useMemo(() => buildCommandOutput(props.text, t), [props.text, t])
     const commandName = useMemo(() => extractCommandName(props.text), [props.text])
 
     return (

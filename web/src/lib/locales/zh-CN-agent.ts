@@ -1,6 +1,6 @@
 export default {
     'agents.config.title': 'Agent 配置',
-    'agents.config.subtitle': '为每个 Agent 调整 CLI 默认行为，保存会自动备份上一版。',
+    'agents.config.subtitle': '为每个 Agent 调整 Agent 默认行为，保存会自动备份上一版。',
     'agents.config.exists': '已就绪',
     'agents.config.newFile': '尚未创建',
     'agents.config.systemDefault': '系统默认',
@@ -19,7 +19,7 @@ export default {
     'agents.config.saveHint': '保存会自动备份上一版，可随时恢复。',
     'agents.config.advisoryShort': '未验证',
     'agents.config.versionOutdatedTitle': '版本较旧，仍可保存',
-    'agents.config.versionMissingTitle': 'CLI 未安装，仍可保存',
+    'agents.config.versionMissingTitle': 'Agent 二进制未安装，仍可保存',
     'agents.config.versionNotInstalled': '未安装',
     'agents.config.restorePrevious': '恢复上一版',
     'agents.config.restoreEmpty': '暂无备份',

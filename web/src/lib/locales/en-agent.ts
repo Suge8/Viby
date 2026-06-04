@@ -1,6 +1,6 @@
 export default {
     'agents.config.title': 'Agent Config',
-    'agents.config.subtitle': 'Tune CLI defaults for each agent. Saving snapshots the previous file.',
+    'agents.config.subtitle': 'Tune agent defaults for each agent. Saving snapshots the previous file.',
     'agents.config.exists': 'Ready',
     'agents.config.newFile': 'Not created yet',
     'agents.config.systemDefault': 'System default',
@@ -18,8 +18,8 @@ export default {
     'agents.config.parseFailed': 'Config parse issue',
     'agents.config.saveHint': 'Saving snapshots the previous file; restore anytime.',
     'agents.config.advisoryShort': 'Unverified',
-    'agents.config.versionOutdatedTitle': 'Older CLI — saving still works',
-    'agents.config.versionMissingTitle': 'CLI not installed — saving still works',
+    'agents.config.versionOutdatedTitle': 'Older agent binary — saving still works',
+    'agents.config.versionMissingTitle': 'Agent binary not installed — saving still works',
     'agents.config.versionNotInstalled': 'Not installed',
     'agents.config.restorePrevious': 'Restore previous',
     'agents.config.restoreEmpty': 'No backup yet',
