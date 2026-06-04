@@ -83,34 +83,6 @@ describe('ApiClient runtime methods', () => {
         })
     })
 
-    it('normalizes legacy spawn success responses by fetching the authoritative session snapshot', async () => {
-        const session = createSession()
-        vi.stubGlobal(
-            'fetch',
-            vi.fn(async (input: RequestInfo | URL) => {
-                const url = String(input)
-                if (url.includes('/api/runtime/spawn')) {
-                    return jsonResponse({ type: 'success', sessionId: session.id })
-                }
-                if (url.includes(`/api/sessions/${session.id}`)) {
-                    return jsonResponse({ session })
-                }
-                throw new Error(`Unexpected fetch: ${url}`)
-            })
-        )
-
-        const api = new ApiClient('token')
-        await expect(
-            api.spawnSession({
-                directory: '/tmp/project',
-                agent: 'codex',
-            })
-        ).resolves.toEqual({
-            type: 'success',
-            session,
-        })
-    })
-
     it('uploads attachment files as multipart form data without forcing a JSON content type', async () => {
         const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
             const url = String(input)

@@ -25,7 +25,7 @@ import type {
     Session,
     SpawnResponse,
 } from '@/types/api'
-import type { ApiClientFetchSessionSnapshot, ApiClientRequest } from './client'
+import type { ApiClientRequest } from './client'
 
 type RecoverLocalDriver = LocalSessionExportRequest['driver']
 
@@ -41,11 +41,6 @@ type SpawnSuccessResponse = {
 
 const SPAWN_SESSION_REQUEST_TIMEOUT_MS = 25_000
 
-type SpawnLegacySuccessResponse = {
-    type: 'success'
-    sessionId: string
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null
 }
@@ -60,10 +55,6 @@ function isSpawnErrorResponse(value: unknown): value is SpawnErrorResponse {
 
 function isSpawnSuccessResponse(value: unknown): value is SpawnSuccessResponse {
     return isRecord(value) && value.type === 'success' && isSession(value.session)
-}
-
-function isSpawnLegacySuccessResponse(value: unknown): value is SpawnLegacySuccessResponse {
-    return isRecord(value) && value.type === 'success' && typeof value.sessionId === 'string'
 }
 
 export async function getRuntime(request: ApiClientRequest): Promise<RuntimeResponse> {
@@ -220,7 +211,6 @@ export async function importRuntimeLocalSession(
 
 export async function spawnSession(
     request: ApiClientRequest,
-    fetchSessionSnapshot: ApiClientFetchSessionSnapshot,
     input: {
         directory: string
         agent?: AgentFlavor
@@ -246,7 +236,7 @@ export async function spawnSession(
             worktreeName: input.worktreeName,
             collaborationMode: input.collaborationMode,
         }),
-        // Keep Web's budget slightly above the runner's session-start webhook wait.
+        // Keep Web's budget slightly above the AppCore child runtime.session-started wait.
         timeoutMs: SPAWN_SESSION_REQUEST_TIMEOUT_MS,
     })
 
@@ -256,12 +246,5 @@ export async function spawnSession(
     if (isSpawnSuccessResponse(response)) {
         return response
     }
-    if (isSpawnLegacySuccessResponse(response)) {
-        return {
-            type: 'success',
-            session: await fetchSessionSnapshot(response.sessionId),
-        }
-    }
-
     throw new Error('Invalid spawn session response')
 }

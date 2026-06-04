@@ -11,7 +11,7 @@ import type {
     RuntimeCapabilityRequest,
     SaveAgentConfigRequest,
 } from '@/types/api'
-import type { ApiClientFetchSessionSnapshot, ApiClientRequest } from './client'
+import type { ApiClientRequest } from './client'
 import {
     browseRuntimeDirectory,
     checkRuntimePathsExists,
@@ -28,10 +28,7 @@ import {
     spawnSession,
 } from './clientRuntime'
 
-export function createApiClientRuntimeMethods(
-    request: ApiClientRequest,
-    fetchSessionSnapshot: ApiClientFetchSessionSnapshot
-) {
+export function createApiClientRuntimeMethods(request: ApiClientRequest) {
     return {
         async getRuntime() {
             return await getRuntime(request)
@@ -84,7 +81,7 @@ export function createApiClientRuntimeMethods(
             worktreeName?: string
             collaborationMode?: CodexCollaborationMode
         }) {
-            return await spawnSession(request, fetchSessionSnapshot, input)
+            return await spawnSession(request, input)
         },
     }
 }

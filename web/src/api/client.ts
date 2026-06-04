@@ -147,7 +147,7 @@ export class ApiClient {
             }),
             createApiClientPushMethods(request),
             createApiClientWorkspaceMethods(request),
-            createApiClientRuntimeMethods(request, fetchSessionSnapshot),
+            createApiClientRuntimeMethods(request),
             createApiClientAutocompleteMethods(request)
         )
     }
