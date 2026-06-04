@@ -2,7 +2,7 @@ export type TerminalRegistryEntry = {
     terminalId: string
     sessionId: string
     socketId: string
-    cliSocketId: string
+    runtimeTargetId: string
     idleTimer: ReturnType<typeof setTimeout> | null
 }
 
@@ -15,7 +15,7 @@ export class TerminalRegistry {
     private readonly terminals = new Map<string, TerminalRegistryEntry>()
     private readonly terminalsBySocket = new Map<string, Set<string>>()
     private readonly terminalsBySession = new Map<string, Set<string>>()
-    private readonly terminalsByCliSocket = new Map<string, Set<string>>()
+    private readonly terminalsByRuntimeTarget = new Map<string, Set<string>>()
     private readonly idleTimeoutMs: number
     private readonly onIdle?: (entry: TerminalRegistryEntry) => void
 
@@ -28,7 +28,7 @@ export class TerminalRegistry {
         terminalId: string,
         sessionId: string,
         socketId: string,
-        cliSocketId: string
+        runtimeTargetId: string
     ): TerminalRegistryEntry | null {
         const existing = this.terminals.get(terminalId)
         if (existing) {
@@ -45,14 +45,14 @@ export class TerminalRegistry {
             terminalId,
             sessionId,
             socketId,
-            cliSocketId,
+            runtimeTargetId,
             idleTimer: null,
         }
 
         this.terminals.set(terminalId, entry)
         this.addToIndex(this.terminalsBySocket, socketId, terminalId)
         this.addToIndex(this.terminalsBySession, sessionId, terminalId)
-        this.addToIndex(this.terminalsByCliSocket, cliSocketId, terminalId)
+        this.addToIndex(this.terminalsByRuntimeTarget, runtimeTargetId, terminalId)
         this.scheduleIdle(entry)
 
         return entry
@@ -79,7 +79,7 @@ export class TerminalRegistry {
         this.terminals.delete(terminalId)
         this.removeFromIndex(this.terminalsBySocket, entry.socketId, terminalId)
         this.removeFromIndex(this.terminalsBySession, entry.sessionId, terminalId)
-        this.removeFromIndex(this.terminalsByCliSocket, entry.cliSocketId, terminalId)
+        this.removeFromIndex(this.terminalsByRuntimeTarget, entry.runtimeTargetId, terminalId)
         if (entry.idleTimer) {
             clearTimeout(entry.idleTimer)
         }
@@ -89,16 +89,6 @@ export class TerminalRegistry {
 
     removeBySocket(socketId: string): TerminalRegistryEntry[] {
         const ids = this.terminalsBySocket.get(socketId)
-        if (!ids || ids.size === 0) {
-            return []
-        }
-        return Array.from(ids)
-            .map((terminalId) => this.remove(terminalId))
-            .filter(Boolean) as TerminalRegistryEntry[]
-    }
-
-    removeByCliSocket(socketId: string): TerminalRegistryEntry[] {
-        const ids = this.terminalsByCliSocket.get(socketId)
         if (!ids || ids.size === 0) {
             return []
         }

@@ -1,6 +1,8 @@
 import { TerminalOpenPayloadSchema } from '@viby/protocol'
+import type { ProviderAdapterInput } from '@viby/protocol/providerAdapterProtocol'
 import { z } from 'zod'
-import type { SocketServer, SocketWithData } from '../socketTypes'
+import type { DirectRuntimeRegistry } from '../../runtime/directRuntimeRegistry'
+import type { SocketWithData } from '../socketTypes'
 import type { TerminalRegistry, TerminalRegistryEntry } from '../terminalRegistry'
 
 const terminalCreateSchema = TerminalOpenPayloadSchema
@@ -20,17 +22,18 @@ const terminalCloseSchema = z.object({
     terminalId: z.string().min(1),
 })
 
+type TerminalInputEvent = Extract<ProviderAdapterInput, { type: 'runtime.terminal-input' }>['event']
+
 export type TerminalHandlersDeps = {
-    io: SocketServer
     getSession: (sessionId: string) => { active: boolean } | null
     terminalRegistry: TerminalRegistry
+    directRuntimeRegistry?: DirectRuntimeRegistry
     maxTerminalsPerSocket: number
     maxTerminalsPerSession: number
 }
 
 export function registerTerminalHandlers(socket: SocketWithData, deps: TerminalHandlersDeps): void {
-    const { io, getSession, terminalRegistry, maxTerminalsPerSocket, maxTerminalsPerSession } = deps
-    const cliNamespace = io.of('/cli')
+    const { getSession, terminalRegistry, directRuntimeRegistry, maxTerminalsPerSocket, maxTerminalsPerSession } = deps
 
     const emitTerminalError = (terminalId: string, message: string) => {
         socket.emit('terminal:error', { terminalId, message })
@@ -44,42 +47,29 @@ export function registerTerminalHandlers(socket: SocketWithData, deps: TerminalH
         return entry
     }
 
-    const resolveCliSocket = (entry: TerminalRegistryEntry, reportError: boolean): SocketWithData | null => {
-        const cliSocket = cliNamespace.sockets.get(entry.cliSocketId)
-        if (!cliSocket) {
-            terminalRegistry.remove(entry.terminalId)
-            if (reportError) {
-                emitTerminalError(entry.terminalId, 'CLI disconnected.')
-            }
-            return null
+    const sendTerminalInput = (entry: TerminalRegistryEntry, event: TerminalInputEvent, reportError: boolean): void => {
+        const directTarget = directRuntimeRegistry?.getSessionTarget(entry.sessionId)
+        if (directTarget?.id === entry.runtimeTargetId) {
+            directTarget.send({ type: 'runtime.terminal-input', event: event as never })
+            return
         }
-        return cliSocket
+        terminalRegistry.remove(entry.terminalId)
+        if (reportError) emitTerminalError(entry.terminalId, 'Runtime disconnected.')
     }
 
     const emitCloseToCli = (entry: TerminalRegistryEntry): void => {
-        const cliSocket = cliNamespace.sockets.get(entry.cliSocketId)
-        if (!cliSocket) {
-            return
-        }
-        cliSocket.emit('terminal:close', {
-            sessionId: entry.sessionId,
-            terminalId: entry.terminalId,
-        })
+        sendTerminalInput(entry, { type: 'close', sessionId: entry.sessionId, terminalId: entry.terminalId }, false)
     }
 
-    const pickCliSocketId = (sessionId: string): string | null => {
-        const room = cliNamespace.adapter.rooms.get(`session:${sessionId}`)
-        if (!room || room.size === 0) {
-            return null
-        }
-        for (const socketId of room) {
-            const cliSocket = cliNamespace.sockets.get(socketId)
-            if (cliSocket) {
-                return cliSocket.id
-            }
-        }
-        return null
+    const pickRuntimeTargetId = (sessionId: string): string | null => {
+        return directRuntimeRegistry?.getSessionTarget(sessionId)?.id ?? null
     }
+
+    const unsubscribeDirectTerminal = directRuntimeRegistry?.subscribeTerminal((event) => {
+        const entry = terminalRegistry.get(event.terminalId)
+        if (!entry || entry.socketId !== socket.id || entry.runtimeTargetId !== event.targetId) return
+        socket.emit(`terminal:${event.type}`, event)
+    })
 
     socket.on('terminal:create', (data: unknown) => {
         const parsed = terminalCreateSchema.safeParse(data)
@@ -107,31 +97,19 @@ export function registerTerminalHandlers(socket: SocketWithData, deps: TerminalH
             return
         }
 
-        const cliSocketId = pickCliSocketId(sessionId)
-        if (!cliSocketId) {
-            emitTerminalError(terminalId, 'CLI is not connected for this session.')
+        const runtimeTargetId = pickRuntimeTargetId(sessionId)
+        if (!runtimeTargetId) {
+            emitTerminalError(terminalId, 'Runtime is not connected for this session.')
             return
         }
 
-        const entry = terminalRegistry.register(terminalId, sessionId, socket.id, cliSocketId)
+        const entry = terminalRegistry.register(terminalId, sessionId, socket.id, runtimeTargetId)
         if (!entry) {
             emitTerminalError(terminalId, 'Terminal ID is already in use.')
             return
         }
 
-        const cliSocket = cliNamespace.sockets.get(cliSocketId)
-        if (!cliSocket) {
-            terminalRegistry.remove(terminalId)
-            emitTerminalError(terminalId, 'CLI is not connected for this session.')
-            return
-        }
-
-        cliSocket.emit('terminal:open', {
-            sessionId,
-            terminalId,
-            cols,
-            rows,
-        })
+        sendTerminalInput(entry, { type: 'open', sessionId, terminalId, cols, rows }, true)
         terminalRegistry.markActivity(terminalId)
     })
 
@@ -147,15 +125,7 @@ export function registerTerminalHandlers(socket: SocketWithData, deps: TerminalH
             return
         }
 
-        const cliSocket = resolveCliSocket(entry, true)
-        if (!cliSocket) {
-            return
-        }
-        cliSocket.emit('terminal:write', {
-            sessionId: entry.sessionId,
-            terminalId,
-            data: payload,
-        })
+        sendTerminalInput(entry, { type: 'write', sessionId: entry.sessionId, terminalId, data: payload }, true)
         terminalRegistry.markActivity(terminalId)
     })
 
@@ -171,16 +141,7 @@ export function registerTerminalHandlers(socket: SocketWithData, deps: TerminalH
             return
         }
 
-        const cliSocket = resolveCliSocket(entry, true)
-        if (!cliSocket) {
-            return
-        }
-        cliSocket.emit('terminal:resize', {
-            sessionId: entry.sessionId,
-            terminalId,
-            cols,
-            rows,
-        })
+        sendTerminalInput(entry, { type: 'resize', sessionId: entry.sessionId, terminalId, cols, rows }, true)
         terminalRegistry.markActivity(terminalId)
     })
 
@@ -201,6 +162,7 @@ export function registerTerminalHandlers(socket: SocketWithData, deps: TerminalH
     })
 
     socket.on('disconnect', () => {
+        unsubscribeDirectTerminal?.()
         const removed = terminalRegistry.removeBySocket(socket.id)
         for (const entry of removed) {
             emitCloseToCli(entry)

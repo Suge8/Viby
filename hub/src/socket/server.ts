@@ -1,21 +1,16 @@
 import { Server as Engine } from '@socket.io/bun-engine'
-import type { SessionRuntimeStatePayload } from '@viby/protocol'
 import { jwtVerify } from 'jose'
 import { type DefaultEventsMap, Server } from 'socket.io'
 import { z } from 'zod'
 import { configuration } from '../configuration'
 import { isLoopbackOrigin } from '../hubHelpers'
+import type { DirectRuntimeRegistry } from '../runtime/directRuntimeRegistry'
 import type { Store } from '../store'
 import { SessionStreamManager } from '../sync/sessionStreamManager'
-import type { SyncEvent } from '../sync/syncEngine'
-import { parseAccessToken } from '../utils/accessToken'
-import { constantTimeEquals } from '../utils/crypto'
 import { DevicePresenceTracker } from './devicePresence'
-import { registerCliHandlers } from './handlers/cli'
 import { registerTerminalHandlers } from './handlers/terminal'
 import { registerWebHandlers } from './handlers/web'
-import { RpcRegistry } from './rpcRegistry'
-import type { CliSocketWithData, SocketData, SocketServer } from './socketTypes'
+import type { SocketData, SocketServer } from './socketTypes'
 import { TerminalRegistry } from './terminalRegistry'
 import { WebRealtimeManager } from './webRealtimeManager'
 
@@ -47,11 +42,7 @@ export type SocketServerDeps = {
     jwtSecret: Uint8Array
     corsOrigins?: string[]
     getSession?: (sessionId: string) => { active: boolean } | null
-    onWebappEvent?: (event: SyncEvent) => void
-    onSessionAlive?: (payload: { sid: string; time: number; thinking?: boolean; mode?: 'local' | 'remote' }) => void
-    onSessionEnd?: (payload: { sid: string; time: number }) => void
-    onSessionRuntimeState?: (payload: SessionRuntimeStatePayload) => void
-    onMachineAlive?: (payload: { machineId: string; time: number }) => void
+    directRuntimeRegistry?: DirectRuntimeRegistry
 }
 
 function resolveRequestHost(headers: Headers): string | null {
@@ -111,8 +102,8 @@ export function isAllowedSocketOrigin(options: {
 export function createSocketServer(deps: SocketServerDeps): {
     io: SocketServer
     engine: Engine
-    rpcRegistry: RpcRegistry
     webRealtimeManager: WebRealtimeManager
+    sessionStreamManager: SessionStreamManager
     devicePresence: DevicePresenceTracker
 } {
     const corsOrigins = deps.corsOrigins ?? configuration.corsOrigins
@@ -154,12 +145,10 @@ export function createSocketServer(deps: SocketServerDeps): {
     })
     io.bind(engine)
 
-    const rpcRegistry = new RpcRegistry()
     const idleTimeoutMs = resolveEnvNumber('VIBY_TERMINAL_IDLE_TIMEOUT_MS', DEFAULT_IDLE_TIMEOUT_MS)
     const maxTerminals = resolveEnvNumber('VIBY_TERMINAL_MAX_TERMINALS', DEFAULT_MAX_TERMINALS)
     const maxTerminalsPerSocket = maxTerminals
     const maxTerminalsPerSession = maxTerminals
-    const cliNs = io.of('/cli')
     const terminalNs = io.of('/terminal')
     const webNs = io.of('/web')
     const sessionStreamManager = new SessionStreamManager()
@@ -172,37 +161,15 @@ export function createSocketServer(deps: SocketServerDeps): {
                 terminalId: entry.terminalId,
                 message: 'Terminal closed due to inactivity.',
             })
-            const cliSocket = cliNs.sockets.get(entry.cliSocketId)
-            cliSocket?.emit('terminal:close', {
-                sessionId: entry.sessionId,
-                terminalId: entry.terminalId,
-            })
+            const runtimeTarget = deps.directRuntimeRegistry?.getSessionTarget(entry.sessionId)
+            if (runtimeTarget?.id === entry.runtimeTargetId) {
+                runtimeTarget.send({
+                    type: 'runtime.terminal-input',
+                    event: { type: 'close', sessionId: entry.sessionId, terminalId: entry.terminalId },
+                })
+            }
         },
     })
-
-    cliNs.use((socket, next) => {
-        const auth = socket.handshake.auth as Record<string, unknown> | undefined
-        const token = typeof auth?.token === 'string' ? auth.token : null
-        const parsedToken = token ? parseAccessToken(token) : null
-        if (!parsedToken || !constantTimeEquals(parsedToken, configuration.hubOwnerToken)) {
-            return next(new Error('Invalid token'))
-        }
-        next()
-    })
-    cliNs.on('connection', (socket) =>
-        registerCliHandlers(socket as CliSocketWithData, {
-            io,
-            store: deps.store,
-            rpcRegistry,
-            terminalRegistry,
-            sessionStreamManager,
-            onSessionAlive: deps.onSessionAlive,
-            onSessionEnd: deps.onSessionEnd,
-            onSessionRuntimeState: deps.onSessionRuntimeState,
-            onMachineAlive: deps.onMachineAlive,
-            onWebappEvent: deps.onWebappEvent,
-        })
-    )
 
     const authenticateJwtSocket = async (
         socket: Parameters<typeof terminalNs.use>[0] extends (socket: infer T, next: infer _N) => unknown ? T : never,
@@ -232,11 +199,11 @@ export function createSocketServer(deps: SocketServerDeps): {
     terminalNs.use(authenticateJwtSocket)
     terminalNs.on('connection', (socket) =>
         registerTerminalHandlers(socket, {
-            io,
             getSession: (sessionId) => {
                 return deps.getSession?.(sessionId) ?? deps.store.sessions.getSession(sessionId)
             },
             terminalRegistry,
+            directRuntimeRegistry: deps.directRuntimeRegistry,
             maxTerminalsPerSocket,
             maxTerminalsPerSession,
         })
@@ -252,5 +219,5 @@ export function createSocketServer(deps: SocketServerDeps): {
         })
     })
 
-    return { io, engine, rpcRegistry, webRealtimeManager, devicePresence }
+    return { io, engine, webRealtimeManager, sessionStreamManager, devicePresence }
 }
