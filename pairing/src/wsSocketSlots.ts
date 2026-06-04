@@ -1,6 +1,6 @@
 import { buildPairingConnectionKey } from './wsConnectionIndex'
 import { deletePairingSocket, getPairingSocket, setPairingSocket } from './wsMultiplex'
-import type { ConnectionState, PairingConnection, PairingSocketHubOptions, PairingSocketLike } from './wsTypes'
+import type { ConnectionState, PairingConnection, PairingSocketLike } from './wsTypes'
 
 export function attachPairingSocket(options: {
     identity: { connectionId?: string; role: PairingConnection['role'] }
@@ -8,16 +8,10 @@ export function attachPairingSocket(options: {
     socket: PairingSocketLike
     state: ConnectionState
     tokenHash: string
-    hubOptions: PairingSocketHubOptions
     deleteIndexedSocket: (socket: PairingSocketLike) => void
 }): PairingConnection {
     const connectionId = options.identity.connectionId ?? options.tokenHash
-    const existing = getPairingSocket({
-        state: options.state,
-        role: options.identity.role,
-        tokenHash: connectionId,
-        multiplexGuests: options.hubOptions.multiplexGuests,
-    })
+    const existing = getPairingSocket(options.state, options.identity.role)
     if (existing && existing !== options.socket) {
         options.deleteIndexedSocket(existing)
         existing.close(1012, 'replaced')
@@ -30,33 +24,16 @@ export function attachPairingSocket(options: {
         tokenHash: options.tokenHash,
         socket: options.socket,
     }
-    setPairingSocket({
-        state: options.state,
-        role: options.identity.role,
-        tokenHash: connectionId,
-        socket: options.socket,
-        multiplexGuests: options.hubOptions.multiplexGuests,
-    })
+    setPairingSocket(options.state, connection)
     return connection
 }
 
 export function detachPairingSocket(options: {
     connection: PairingConnection
-    hubOptions: PairingSocketHubOptions
     state: ConnectionState | undefined
 }): ConnectionState | null {
-    const { connection, hubOptions, state } = options
-    if (
-        !state ||
-        getPairingSocket({
-            state,
-            role: connection.role,
-            tokenHash: connection.connectionId,
-            multiplexGuests: hubOptions.multiplexGuests,
-        }) !== connection.socket
-    ) {
-        return null
-    }
-    deletePairingSocket(state, connection, hubOptions.multiplexGuests)
+    const { connection, state } = options
+    if (!state || getPairingSocket(state, connection.role) !== connection.socket) return null
+    deletePairingSocket(state, connection)
     return state
 }

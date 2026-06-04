@@ -26,7 +26,6 @@ export interface PairingSocketHubOptions {
     messageSchema?: { parse(value: unknown): unknown }
     shouldBufferMessage?: (rawText: string) => boolean
     metrics?: PairingMetrics
-    multiplexGuests?: boolean
     trackRemoteConnectionLiveness?: boolean
     onRemoteConnectionsChanged?: (pairingId: string) => Promise<void> | void
     onTrace?: (event: {
@@ -47,7 +46,6 @@ export interface PairingSocketHubSnapshot {
 }
 export interface ConnectionState {
     sockets: Map<PairingRole, PairingSocketLike>
-    guestSockets: Map<string, PairingSocketLike>
     disconnectTimerRoles: Map<string, PairingRole>
     disconnectTimers: Map<string, () => void>
 }

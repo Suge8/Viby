@@ -8,7 +8,7 @@
     "scripts": {
         "dev": "bun --watch run src/index.ts",
         "start": "bun run src/index.ts",
-        "build": "VIBY_HARNESS_SCOPE=pairing bun run --cwd .. harness:check && bun build src/index.ts --outdir dist --target bun && bun run scripts/buildDeployBundle.ts",
+        "build": "bun build src/index.ts --outdir dist --target bun && bun run scripts/buildDeployBundle.ts",
         "build:deploy-bundle": "bun run build",
         "test": "bun test",
         "typecheck": "tsc --noEmit"

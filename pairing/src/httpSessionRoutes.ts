@@ -31,6 +31,7 @@ import {
 } from './httpSupport'
 import type { PairingHttpOptions } from './httpTypes'
 import { createJsonBodyValidator } from './httpValidation'
+import { buildPairingManifestCookieHeaderForPairing } from './manifestCookie'
 
 type PairingSessionRouteValidators = {
     createPairingBodyValidator: ReturnType<typeof createJsonBodyValidator<PairingCreateRequest>>
@@ -64,7 +65,10 @@ export function registerPairingSessionRoutes(
         return c.json(
             PairingStatusResponseSchema.parse({
                 pairing: toPairingSessionSnapshotForRole(session, identity.role),
-                remoteConnections: toRemoteConnectionSnapshots(await options.store.getRemoteConnections(pairingId)),
+                remoteConnections: toRemoteConnectionSnapshots(
+                    await options.store.getRemoteConnections(pairingId),
+                    options.socketHub.getActiveRemoteConnectionIds(pairingId)
+                ),
             })
         )
     })
@@ -146,7 +150,11 @@ export function registerPairingSessionRoutes(
             return rejectPairingRequest(c, options, 'verify_rejected', 409, 'Pairing session could not be approved')
         }
 
-        options.eventBus.emit(await buildPairingHostEventFromStore(options.store, approved))
+        options.eventBus.emit(
+            await buildPairingHostEventFromStore(options.store, approved, (pairingId) =>
+                options.socketHub.getActiveRemoteConnectionIds(pairingId)
+            )
+        )
 
         const urls = buildPairingUrls(options.publicUrl, approved.id, guestToken)
         const response = PairingGuestAuthResponseSchema.parse({
@@ -156,6 +164,17 @@ export function registerPairingSessionRoutes(
             tunnelUrl: urls.tunnelUrl,
             iceServers: createIceServers(options),
         })
+
+        c.header(
+            'set-cookie',
+            buildPairingManifestCookieHeaderForPairing({
+                maxAgeSeconds: options.manifestCookieTtlSeconds,
+                nowMs: now,
+                pairingId,
+                signer: options.manifestCookieSigner,
+            }),
+            { append: true }
+        )
 
         logPairingAudit(options, 'verify', {
             ip: getClientAddress(c),
@@ -187,7 +206,11 @@ export function registerPairingSessionRoutes(
         }
 
         await options.socketHub.notifyBye(pairingId, 'user_revoked')
-        options.eventBus.emit(await buildPairingHostEventFromStore(options.store, deleted))
+        options.eventBus.emit(
+            await buildPairingHostEventFromStore(options.store, deleted, (pairingId) =>
+                options.socketHub.getActiveRemoteConnectionIds(pairingId)
+            )
+        )
         logPairingAudit(options, 'delete', { ip: getClientAddress(c), pairingId, role: identity.role })
 
         return c.json(PairingDeleteResponseSchema.parse({ deleted: true, pairing: toPairingSessionSnapshot(deleted) }))
@@ -229,7 +252,11 @@ export function registerPairingSessionRoutes(
             // the right state even when verify happened during reconnect.
             const initial = await options.store.getSession(pairingId)
             if (initial) {
-                pending.push(await buildPairingHostEventFromStore(options.store, initial))
+                pending.push(
+                    await buildPairingHostEventFromStore(options.store, initial, (pairingId) =>
+                        options.socketHub.getActiveRemoteConnectionIds(pairingId)
+                    )
+                )
             }
 
             stream.onAbort(() => {

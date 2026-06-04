@@ -12,7 +12,7 @@ import { enforcePairingRateLimit, getClientAddress, logPairingAudit, rejectPairi
 import { buildPairingUrls, createIceServers, createRemoteConnectionDraft, getNow } from './httpSupport'
 import type { PairingHttpOptions } from './httpTypes'
 import type { createJsonBodyValidator } from './httpValidation'
-import { buildPairingManifestCookieHeader } from './manifestCookie'
+import { buildPairingManifestCookieHeaderForPairing } from './manifestCookie'
 
 type PairingPwaHandoffRouteValidators = {
     handoffClaimBodyValidator: ReturnType<typeof createJsonBodyValidator<PairingPwaHandoffClaimRequest>>
@@ -72,11 +72,16 @@ export function registerPairingPwaHandoffRoutes(
         // start_url to that fetch is an HttpOnly cookie set during this
         // authenticated round-trip; the manifest endpoint reads it later to
         // issue a fresh handoff ticket without any client-side coordination.
-        const cookieExpiresAtMs = now + options.manifestCookieTtlSeconds * 1000
-        const cookieValue = options.manifestCookieSigner.sign(pairingId, cookieExpiresAtMs)
-        c.header('set-cookie', buildPairingManifestCookieHeader(cookieValue, options.manifestCookieTtlSeconds), {
-            append: true,
-        })
+        c.header(
+            'set-cookie',
+            buildPairingManifestCookieHeaderForPairing({
+                maxAgeSeconds: options.manifestCookieTtlSeconds,
+                nowMs: now,
+                pairingId,
+                signer: options.manifestCookieSigner,
+            }),
+            { append: true }
+        )
         logPairingAudit(options, 'pwa_handoff_ticket', { ip: getClientAddress(c), pairingId })
         return c.json(PairingPwaHandoffTicketResponseSchema.parse({ handoffTicket, expiresAt }))
     })

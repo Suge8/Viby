@@ -113,6 +113,25 @@ describe('PairingSocketHub', () => {
         expect(hostSocket.sent).not.toContainEqual({ type: 'peer-replaced' })
     })
 
+    it('notifies the host when a new guest connection replaces the direct signaling peer', async () => {
+        const now = 1_000
+        const { store, session, guest } = await createClaimedStore(now)
+        const pwaGuest = createParticipantRecord({ token: 'pwa-secret', label: 'Phone PWA' })
+        const hub = new PairingSocketHub({ store, now: () => now })
+        const hostSocket = createSocket()
+        const browserSocket = createSocket()
+        const pwaSocket = createSocket()
+
+        await hub.attach(session.id, session.host.tokenHash, hostSocket)
+        await hub.attach(session.id, guest.tokenHash, browserSocket)
+        expect(hostSocket.sent).not.toContainEqual({ type: 'peer-replaced' })
+
+        await store.addRemoteConnection(session.id, createConnection(pwaGuest), now)
+        await hub.attach(session.id, pwaGuest.tokenHash, pwaSocket)
+
+        expect(hostSocket.sent).toContainEqual({ type: 'peer-replaced' })
+    })
+
     it('rejects client-forged peer replacement control messages', async () => {
         const { store, session } = await createClaimedStore(1_000)
         const traces: unknown[] = []

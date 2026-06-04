@@ -73,6 +73,16 @@ export function buildPairingManifestCookieHeader(value: string, maxAgeSeconds: n
     return `${PAIRING_MANIFEST_COOKIE_NAME}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAgeSeconds}`
 }
 
+export function buildPairingManifestCookieHeaderForPairing(options: {
+    maxAgeSeconds: number
+    nowMs: number
+    pairingId: string
+    signer: PairingManifestCookieSigner
+}): string {
+    const expiresAtMs = options.nowMs + options.maxAgeSeconds * 1000
+    return buildPairingManifestCookieHeader(options.signer.sign(options.pairingId, expiresAtMs), options.maxAgeSeconds)
+}
+
 export function buildPairingManifestCookieClearHeader(): string {
     return `${PAIRING_MANIFEST_COOKIE_NAME}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`
 }

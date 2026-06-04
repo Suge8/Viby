@@ -15,7 +15,7 @@ export function snapshotPairingSocketHub(
         pairingsWithRemoteConnections: 0,
     }
     for (const [, state] of states) {
-        const guestSocketCount = state.guestSockets.size || (state.sockets.has('guest') ? 1 : 0)
+        const guestSocketCount = state.sockets.has('guest') ? 1 : 0
         snapshot.activeSockets += (state.sockets.has('host') ? 1 : 0) + guestSocketCount
         snapshot.activeRemoteConnections += guestSocketCount
         snapshot.disconnectGraceTimers += state.disconnectTimers.size

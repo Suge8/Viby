@@ -5,7 +5,6 @@ type PairingSocketMessageSchema = { parse(value: unknown): unknown }
 export function createEmptyState(): ConnectionState {
     return {
         sockets: new Map<PairingRole, PairingSocketLike>(),
-        guestSockets: new Map<string, PairingSocketLike>(),
         disconnectTimerRoles: new Map(),
         disconnectTimers: new Map<string, () => void>(),
     }

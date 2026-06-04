@@ -9,6 +9,10 @@ import { readPairingManifestTemplate } from './webAppAssets'
 const DEFAULT_START_URL = '/sessions?remote=1'
 const PAIRING_ID_PATTERN = /^[A-Za-z0-9_-]+$/
 
+function buildPairingStartUrl(pairingId: string): string {
+    return `/p/${encodeURIComponent(pairingId)}`
+}
+
 function buildPersonalizedStartUrl(pairingId: string, handoffTicket: string): string {
     // The handoff secret travels in the URL query (not the fragment) because
     // iOS WebKit standalone PWAs silently strip the URL fragment from the
@@ -102,16 +106,15 @@ export function createPairingManifestHandler(options: PairingHttpOptions): (c: C
         }
 
         const session = await options.store.getSession(pairingId)
-        const unusable =
-            !session ||
-            session.state === 'deleted' ||
-            session.state === 'expired' ||
-            session.approvalStatus !== 'approved' ||
-            !session.authorizedDevice?.publicKey
-        if (unusable) {
+        if (!session || session.state === 'deleted' || session.state === 'expired') {
             return respondManifest(c, buildManifestBody(template, DEFAULT_START_URL), {
                 cacheableFallback: false,
                 personalized: false,
+            })
+        }
+        if (session.approvalStatus !== 'approved' || !session.authorizedDevice?.publicKey) {
+            return respondManifest(c, buildManifestBody(template, buildPairingStartUrl(pairingId)), {
+                personalized: true,
             })
         }
 

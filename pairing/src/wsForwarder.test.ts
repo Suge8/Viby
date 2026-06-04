@@ -104,61 +104,46 @@ describe('PairingSocketHub forwarder', () => {
             store,
             now: () => 1_500,
             messageSchema: PairingBrokerTunnelMessageSchema,
-            multiplexGuests: true,
         })
         const guestSocket = socket()
 
         await hub.attach(session.id, guest.tokenHash, guestSocket)
+        expect([...hub.getActiveRemoteConnectionIds(session.id)]).toEqual([guest.tokenHash])
         await expect(store.getRemoteConnections(session.id)).resolves.toContainEqual(
             expect.objectContaining({ id: guest.tokenHash, connectedAt: 1_500 })
         )
         await hub.detach(guestSocket)
+        expect([...hub.getActiveRemoteConnectionIds(session.id)]).toEqual([])
         await expect(store.getRemoteConnections(session.id)).resolves.toContainEqual(
             expect.objectContaining({ id: guest.tokenHash, connectedAt: undefined })
         )
     })
 
-    it('multiplexes tunnel frames across independent guest connections', async () => {
+    it('replaces the previous guest tunnel when another guest connection opens', async () => {
         const { store, session, guest } = await setup()
         const secondGuest = createParticipantRecord({ token: 'guest-two-secret' })
-        await store.addRemoteConnection(session.id, createConnection(secondGuest), session.updatedAt + 1)
-        const hub = new PairingSocketHub({
-            store,
-            messageSchema: PairingBrokerTunnelMessageSchema,
-            multiplexGuests: true,
-        })
+        const hub = new PairingSocketHub({ store, messageSchema: PairingBrokerTunnelMessageSchema })
         const hostSocket = socket(),
             firstGuestSocket = socket(),
             secondGuestSocket = socket()
-        const guestFrame: PairingTunnelRelayFrame = { kind: 'key', id: 'guest-key', seq: 0, publicKey: 'guest-key-1' }
-        const hostFrame: PairingTunnelRelayFrame = {
-            kind: 'sealed',
-            id: 'host-frame',
-            seq: 1,
-            connectionId: secondGuest.tokenHash,
-            nonce: 'nonce',
-            ciphertext: 'body',
-        }
 
         await hub.attach(session.id, session.host.tokenHash, hostSocket)
         await hub.attach(session.id, guest.tokenHash, firstGuestSocket)
+        await store.addRemoteConnection(session.id, createConnection(secondGuest), session.updatedAt + 1)
         await hub.attach(session.id, secondGuest.tokenHash, secondGuestSocket)
-        await hub.handleMessage(firstGuestSocket, JSON.stringify(guestFrame))
-        await hub.handleMessage(hostSocket, JSON.stringify(hostFrame))
 
-        expect(hostSocket.sent).toEqual([{ ...guestFrame, connectionId: guest.tokenHash }])
-        expect(firstGuestSocket.closed).toHaveLength(0)
-        expect(secondGuestSocket.sent).toEqual([hostFrame])
+        expect(hostSocket.sent).toEqual([{ type: 'peer-replaced' }])
+        expect(firstGuestSocket.closed).toContainEqual({ code: 1012, reason: 'replaced' })
+        expect(secondGuestSocket.closed).toHaveLength(0)
     })
 
-    it('buffers multiplexed guest key frames for a late host', async () => {
+    it('buffers guest key frames for a late host', async () => {
         const { store, session, guest } = await setup()
         const hub = new PairingSocketHub({
             store,
             bufferMessages: true,
             maxBufferedMessagesPerRole: 4,
             messageSchema: PairingBrokerTunnelMessageSchema,
-            multiplexGuests: true,
             shouldBufferMessage: shouldBufferPairingTunnelMessage,
         })
         const guestSocket = socket(),
@@ -169,17 +154,16 @@ describe('PairingSocketHub forwarder', () => {
         await hub.handleMessage(guestSocket, JSON.stringify(keyFrame))
         await hub.attach(session.id, session.host.tokenHash, hostSocket)
 
-        expect(hostSocket.sent).toEqual([{ ...keyFrame, connectionId: guest.tokenHash }])
+        expect(hostSocket.sent).toEqual([keyFrame])
     })
 
-    it('buffers multiplexed host key frames for a late guest', async () => {
+    it('buffers host key frames for a late guest', async () => {
         const { store, session, guest } = await setup()
         const hub = new PairingSocketHub({
             store,
             bufferMessages: true,
             maxBufferedMessagesPerRole: 4,
             messageSchema: PairingBrokerTunnelMessageSchema,
-            multiplexGuests: true,
             shouldBufferMessage: shouldBufferPairingTunnelMessage,
         })
         const hostSocket = socket(),

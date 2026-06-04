@@ -62,7 +62,7 @@ function buildTestApp() {
     return { app, store, manifestCookieSigner }
 }
 
-async function seedApprovedPairing(store: MemoryPairingStore, pairingId: string): Promise<void> {
+async function seedPendingPairing(store: MemoryPairingStore, pairingId: string): Promise<void> {
     await store.createSession({
         id: pairingId,
         state: 'waiting',
@@ -78,6 +78,10 @@ async function seedApprovedPairing(store: MemoryPairingStore, pairingId: string)
         updatedAt: FIXED_NOW,
         expiresAt: FIXED_NOW + 3600 * 1000,
     })
+}
+
+async function seedApprovedPairing(store: MemoryPairingStore, pairingId: string): Promise<void> {
+    await seedPendingPairing(store, pairingId)
     const guest = {
         tokenHash: 'guest-hash',
         label: 'guest',
@@ -167,6 +171,24 @@ describe('GET /manifest.webmanifest', () => {
         expect(response.headers.get('set-cookie')).toBeNull()
     })
 
+    it('sets a manifest cookie on verify so iOS add-to-home bare manifest fetches still receive a handoff', async () => {
+        await seedPendingPairing(store, 'pairing-verify')
+        const verifyResponse = await app.request('/pairings/pairing-verify/verify-code', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ code: '123456', label: 'Phone Browser', publicKey: 'browser-public-key' }),
+        })
+        expect(verifyResponse.status).toBe(200)
+        const cookie = verifyResponse.headers.get('set-cookie')?.split(';')[0]
+        expect(cookie).toStartWith('viby_pair_manifest=')
+
+        const manifestResponse = await app.request('/manifest.webmanifest', { headers: { cookie: cookie ?? '' } })
+        expect(manifestResponse.status).toBe(200)
+        const manifest = (await manifestResponse.json()) as Record<string, unknown>
+        expect(String(manifest.start_url)).toStartWith('/p/pairing-verify?handoff=')
+        expect(manifestResponse.headers.get('cache-control')).toBe('no-store')
+    })
+
     it('honours the path-based pairing query so iOS Chrome standalone PWAs whose manifest fetch strips cookies still receive a personalized handoff', async () => {
         await seedApprovedPairing(store, 'pairing-1')
 
@@ -185,7 +207,7 @@ describe('GET /manifest.webmanifest', () => {
         expect(response.headers.get('cache-control')).toBe('no-store')
     })
 
-    it('falls back when the path-based pairing id points at a session that has not been approved so unfinished pairings cannot issue tickets', async () => {
+    it('uses the stable invite URL before approval so iOS cannot install the generic workspace fallback', async () => {
         await store.createSession({
             id: 'pairing-pending',
             state: 'waiting',
@@ -201,7 +223,7 @@ describe('GET /manifest.webmanifest', () => {
         const response = await app.request('/manifest.webmanifest?pairing=pairing-pending')
         expect(response.status).toBe(200)
         const manifest = (await response.json()) as Record<string, unknown>
-        expect(manifest.start_url).toBe('/sessions?remote=1')
+        expect(manifest.start_url).toBe('/p/pairing-pending')
         expect(response.headers.get('cache-control')).toBe('no-store')
     })
 })

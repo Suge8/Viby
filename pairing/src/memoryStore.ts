@@ -167,6 +167,7 @@ export class MemoryPairingStore implements PairingStore {
             updatedAt: at,
             authorizedDevice: { ...device, lastSeenAt: at },
         })
+        this.clearRemoteConnectionTokens(pairingId)
         this.tokenIndex.set(connection.participant.tokenHash, {
             connectionId: connection.connectionId,
             pairingId,

@@ -46,18 +46,24 @@ export class PairingSocketHub {
             return null
         }
         const state = this.getConnectionState(pairingId)
+        const previousGuestConnection =
+            identity.role === 'guest' ? this.connectionIndex.resolve(state.sockets.get('guest') ?? socket) : null
         const connection = attachPairingSocket({
             identity,
             pairingId,
             socket,
             state,
             tokenHash,
-            hubOptions: this.options,
             deleteIndexedSocket: (socket) => this.connectionIndex.deleteSocket(socket),
         })
+        const peerReplaced =
+            identity.role === 'guest' &&
+            previousGuestConnection !== null &&
+            previousGuestConnection.connectionId !== connection.connectionId
         this.disconnectGrace.cancel(state, connection.connectionKey)
         this.connectionIndex.set(socket, connection)
         this.trace(pairingId, 'ws.open', { role: identity.role, connectionId: connection.connectionId })
+        if (peerReplaced) state.sockets.get('host')?.send(JSON.stringify({ type: 'peer-replaced' }))
         if (identity.role === 'guest' && this.options.trackRemoteConnectionLiveness !== false) {
             await this.options.store.markRemoteConnectionConnected(
                 pairingId,
@@ -95,10 +101,11 @@ export class PairingSocketHub {
             return
         }
         forwardPairingSocketMessage({
+            bufferMessages: this.options.bufferMessages,
             connection,
-            hubOptions: this.options,
             pendingMessages: this.pendingMessages,
             rawText,
+            shouldBufferMessage: this.options.shouldBufferMessage,
             state: this.connections.get(connection.pairingId),
         })
     }
@@ -108,7 +115,6 @@ export class PairingSocketHub {
         this.connectionIndex.deleteSocket(socket)
         const state = detachPairingSocket({
             connection,
-            hubOptions: this.options,
             state: this.connections.get(connection.pairingId),
         })
         if (!state) return
@@ -135,9 +141,13 @@ export class PairingSocketHub {
         }
         this.disconnectGrace.clearAll(state)
         state.sockets.clear()
-        state.guestSockets.clear()
         this.connections.delete(pairingId)
         this.pendingMessages.deleteSession(pairingId)
+    }
+    getActiveRemoteConnectionIds(pairingId: string): ReadonlySet<string> {
+        const guestSocket = this.connections.get(pairingId)?.sockets.get('guest')
+        const connection = guestSocket ? this.connectionIndex.resolve(guestSocket) : null
+        return connection?.role === 'guest' ? new Set([connection.connectionId]) : new Set()
     }
     snapshot(): PairingSocketHubSnapshot {
         return snapshotPairingSocketHub(this.connections.entries(), this.connections.size)

@@ -1,5 +1,6 @@
 import { type PairingRole, type PairingSessionRecord, PairingSessionRecordSchema } from '@viby/protocol/pairing'
 import {
+    clearGuestConnectionTokenIndexes,
     clearSessionSideKeys,
     consumeHandoffTicket,
     consumeReconnectChallenge,
@@ -141,6 +142,7 @@ export class RedisPairingStore implements PairingStore {
         connection: PairingRemoteConnectionDraft,
         at: number
     ): Promise<PairingSessionRecord | null> {
+        await clearGuestConnectionTokenIndexes(this.adapter, pairingId)
         return await updateSessionWithRemoteConnection({
             adapter: this.adapter,
             now: this.now,

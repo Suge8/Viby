@@ -6,14 +6,14 @@ import { join } from 'node:path'
 import { PROTOCOL_VERSION, WEB_BUILD_METADATA_FILE_NAME } from '@viby/protocol'
 import { PairingBrokerTunnelMessageSchema } from '@viby/protocol/pairing'
 import { createBunWebSocket } from 'hono/bun'
-import { buildPairingDeviceProofPayload } from './crypto'
+import { buildPairingDeviceProofPayload, hashPairingSecret } from './crypto'
 import { createPairingApp } from './http'
 import { createPairingManifestCookieSigner } from './manifestCookie'
 import { PairingMetrics } from './metrics'
 import { PairingRateLimiter } from './rateLimit'
 import { PairingSessionEventBus } from './sessionEventBus'
 import { MemoryPairingStore } from './store'
-import { PairingSocketHub } from './ws'
+import { PairingSocketHub, type PairingSocketLike } from './ws'
 
 const subtle = webcrypto.subtle
 const tempRoots: string[] = []
@@ -23,6 +23,14 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
 }
 
 type RateLimitRuleConfig = { bucket: string; limit: number; windowMs: number }
+
+function socket(): PairingSocketLike {
+    return {
+        readyState: 1,
+        send() {},
+        close() {},
+    }
+}
 
 function createTestApp(overrides?: {
     now?: () => number
@@ -38,12 +46,17 @@ function createTestApp(overrides?: {
     manifestCookieSigner?: ReturnType<typeof createPairingManifestCookieSigner>
     manifestCookieTtlSeconds?: number
     logger?: Pick<Console, 'debug' | 'error' | 'info' | 'log' | 'warn'>
+    store?: MemoryPairingStore
+    socketHub?: PairingSocketHub
+    tunnelHub?: PairingSocketHub
+    eventBus?: PairingSessionEventBus
 }) {
     const now = overrides?.now ?? (() => 1_700_000_000_000)
-    const store = new MemoryPairingStore(now)
-    const socketHub = new PairingSocketHub({ store, now })
-    const tunnelHub = new PairingSocketHub({ store, now, messageSchema: PairingBrokerTunnelMessageSchema })
-    const eventBus = new PairingSessionEventBus()
+    const store = overrides?.store ?? new MemoryPairingStore(now)
+    const socketHub = overrides?.socketHub ?? new PairingSocketHub({ store, now })
+    const tunnelHub =
+        overrides?.tunnelHub ?? new PairingSocketHub({ store, now, messageSchema: PairingBrokerTunnelMessageSchema })
+    const eventBus = overrides?.eventBus ?? new PairingSessionEventBus()
     const { upgradeWebSocket } = createBunWebSocket()
 
     return createPairingApp({
@@ -365,12 +378,13 @@ describe('pairing http routes', () => {
             `wss://pair.example.com/pairings/${created.pairing.id}/tunnel?token=${deviceRecovered.guestToken}`
         )
 
-        const browserStillValidResponse = await app.request(`/pairings/${created.pairing.id}/reconnect-challenge`, {
+        const staleBrowserTokenResponse = await app.request(`/pairings/${created.pairing.id}/reconnect-challenge`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ token: verified.guestToken }),
         })
-        expect(browserStillValidResponse.status).toBe(200)
+        expect(staleBrowserTokenResponse.status).toBe(403)
+        expect(await staleBrowserTokenResponse.json()).toMatchObject({ code: 'pairing_invalid_token' })
 
         const deleteResponse = await app.request(`/pairings/${created.pairing.id}`, {
             method: 'DELETE',
@@ -470,12 +484,13 @@ describe('pairing http routes', () => {
         expect(reusedHandoffResponse.status).toBe(403)
         expect(await reusedHandoffResponse.json()).toMatchObject({ code: 'pairing_invalid_handoff_ticket' })
 
-        const browserStillValidResponse = await app.request(`/pairings/${created.pairing.id}/reconnect-challenge`, {
+        const staleBrowserTokenResponse = await app.request(`/pairings/${created.pairing.id}/reconnect-challenge`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ token: verified.guestToken }),
         })
-        expect(browserStillValidResponse.status).toBe(200)
+        expect(staleBrowserTokenResponse.status).toBe(403)
+        expect(await staleBrowserTokenResponse.json()).toMatchObject({ code: 'pairing_invalid_token' })
     })
 
     it('returns only STUN ICE servers with every broker-issued ICE response', async () => {
@@ -691,6 +706,75 @@ describe('pairing http routes', () => {
             },
             remoteConnections: [],
         })
+    })
+
+    it('keeps guest presence online when only the relay tunnel drops', async () => {
+        const now = () => 1_700_000_000_000
+        const store = new MemoryPairingStore(now)
+        const socketHub = new PairingSocketHub({ store, now })
+        const tunnelHub = new PairingSocketHub({
+            store,
+            now,
+            messageSchema: PairingBrokerTunnelMessageSchema,
+            trackRemoteConnectionLiveness: false,
+        })
+        const app = createTestApp({ socketHub, store, tunnelHub, now })
+        const createResponse = await app.request('/pairings', {
+            method: 'POST',
+            headers: { authorization: 'Bearer create-secret', 'content-type': 'application/json' },
+            body: JSON.stringify({ label: 'Desk Host' }),
+        })
+        const created = await createResponse.json()
+        const verifyResponse = await app.request(`/pairings/${created.pairing.id}/verify-code`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ code: created.pairing.shortCode, label: 'Phone Guest', publicKey: 'phone-key' }),
+        })
+        const verified = await verifyResponse.json()
+        const guestSocket = socket()
+        const relaySocket = socket()
+
+        const guestTokenHash = hashPairingSecret(verified.guestToken)
+        await socketHub.attach(created.pairing.id, guestTokenHash, guestSocket)
+        await tunnelHub.attach(created.pairing.id, guestTokenHash, relaySocket)
+        await tunnelHub.detach(relaySocket)
+        const statusResponse = await app.request(`/pairings/${created.pairing.id}`, {
+            headers: { authorization: `Bearer ${created.hostToken}` },
+        })
+
+        expect(statusResponse.status).toBe(200)
+        const status = await statusResponse.json()
+        expect(status.remoteConnections[0]).toMatchObject({ connectedAt: now() })
+    })
+
+    it('does not expose persisted remote connection liveness after broker restart', async () => {
+        const now = () => 1_700_000_000_000
+        const store = new MemoryPairingStore(now)
+        const app = createTestApp({ store, now })
+        const createResponse = await app.request('/pairings', {
+            method: 'POST',
+            headers: { authorization: 'Bearer create-secret', 'content-type': 'application/json' },
+            body: JSON.stringify({ label: 'Desk Host' }),
+        })
+        const created = await createResponse.json()
+        const verifyResponse = await app.request(`/pairings/${created.pairing.id}/verify-code`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ code: created.pairing.shortCode, label: 'Phone Guest', publicKey: 'phone-key' }),
+        })
+        expect(verifyResponse.status).toBe(200)
+        const [connection] = await store.getRemoteConnections(created.pairing.id)
+        await store.markRemoteConnectionConnected(created.pairing.id, connection.connectionId, now())
+
+        const restartedApp = createTestApp({ store, now })
+        const statusResponse = await restartedApp.request(`/pairings/${created.pairing.id}`, {
+            headers: { authorization: `Bearer ${created.hostToken}` },
+        })
+
+        expect(statusResponse.status).toBe(200)
+        const status = await statusResponse.json()
+        expect(status.remoteConnections[0]).toMatchObject({ id: connection.id })
+        expect(status.remoteConnections[0]).not.toHaveProperty('connectedAt')
     })
 
     it('rate limits repeated verify-code attempts from the same client address', async () => {
