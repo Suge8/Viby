@@ -72,6 +72,28 @@ describe('MemoryPairingStore', () => {
         await expect(store.getSessionByTokenHash(guest.tokenHash)).resolves.toMatchObject({ role: 'guest' })
     })
 
+    it('returns the persisted connection id so socket liveness can match the stored record', async () => {
+        const store = new MemoryPairingStore(() => 1_000)
+        const session = createSessionRecord(1_000, '424242')
+        const guest = createParticipantRecord({ token: 'guest-secret', label: 'Phone' })
+
+        await store.createSession(session)
+        await store.verifyCodeAndApprove(
+            session.id,
+            '424242',
+            createAuthorizedDevice(guest, 1_100),
+            { connectionId: 'conn-not-token', participant: guest },
+            1_100
+        )
+
+        await expect(store.getSessionByTokenHash(guest.tokenHash)).resolves.toMatchObject({
+            role: 'guest',
+            connectionId: 'conn-not-token',
+        })
+        const [connection] = await store.getRemoteConnections(session.id)
+        expect(connection.connectionId).toBe('conn-not-token')
+    })
+
     it('rejects a verify-code with the wrong digits and does not write the guest', async () => {
         const store = new MemoryPairingStore(() => 1_000)
         const session = createSessionRecord(1_000, '654321')

@@ -83,7 +83,7 @@ export class MemoryPairingStore implements PairingStore {
 
     async getSessionByTokenHash(
         tokenHash: string
-    ): Promise<{ session: PairingSessionRecord; role: PairingRole } | null> {
+    ): Promise<{ connectionId?: string; session: PairingSessionRecord; role: PairingRole } | null> {
         const index = this.tokenIndex.get(tokenHash)
         if (!index) {
             return null
@@ -95,7 +95,7 @@ export class MemoryPairingStore implements PairingStore {
             return null
         }
 
-        return { session, role: index.role }
+        return { connectionId: index.connectionId, session, role: index.role }
     }
 
     async verifyCodeAndApprove(

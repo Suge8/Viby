@@ -41,7 +41,7 @@ function respondManifest(
     // Any pairing-bound manifest response must not be cached: the same URL
     // can become approved moments later, and stale fallback start_url values
     // strand installed PWAs on the rescan screen.
-    // Contract harness pins the owner expression: options.personalized ? 'no-store'
+    // Contract gate pins the owner expression: options.personalized ? 'no-store'
     const cacheControl = options.personalized
         ? 'no-store'
         : options.cacheableFallback
