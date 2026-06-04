@@ -78,7 +78,7 @@ function buildImportedMetadata(
     const baseMetadata: Metadata = {
         path: request.path,
         host: machine.metadata?.host ?? 'local-runtime',
-        version: machine.metadata?.vibyCliVersion,
+        version: machine.metadata?.appCoreVersion,
         os: machine.metadata?.platform,
         machineId: machine.id,
         name: title,

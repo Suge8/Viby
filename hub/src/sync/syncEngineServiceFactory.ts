@@ -1,7 +1,7 @@
 import type { Session, SyncEvent } from '@viby/protocol/types'
-import type { Server } from 'socket.io'
+import type { DirectRuntimeRegistry } from '../runtime/directRuntimeRegistry'
+import { RuntimeEventIngestor } from '../runtime/RuntimeEventIngestor'
 import { RuntimeCapabilityCache } from '../runtime/runtimeCapabilityCache'
-import type { RpcRegistry } from '../socket/rpcRegistry'
 import type { Store } from '../store'
 import { EventPublisher, type SyncEventBroadcaster } from './eventPublisher'
 import { LocalSessionRecoveryService } from './localSessionRecoveryService'
@@ -15,6 +15,7 @@ import { SessionInteractionService, type SessionSendMessageErrorCode } from './s
 import { SessionLifecycleService } from './sessionLifecycleService'
 import { SessionRpcFacade } from './sessionRpcFacade'
 import { SessionRuntimeStateService } from './sessionRuntimeStateService'
+import type { SessionStreamManager } from './sessionStreamManager'
 import { SyncEngineStateFacade } from './syncEngineStateFacade'
 
 type SyncEngineResumeResult = Awaited<ReturnType<SessionLifecycleService['resumeSession']>>
@@ -22,9 +23,9 @@ type SyncEngineSpawnResult = Awaited<ReturnType<SessionRpcFacade['spawnSession']
 
 export type SyncEngineServiceFactoryOptions = {
     store: Store
-    io: Server
-    rpcRegistry: RpcRegistry
     broadcaster: SyncEventBroadcaster
+    sessionStreamManager: SessionStreamManager
+    directRuntimeRegistry: DirectRuntimeRegistry
     getSession: (sessionId: string) => ReturnType<SessionCache['getSession']>
     getMessagesAfter: (
         sessionId: string,
@@ -51,12 +52,12 @@ export function createSyncEngineServices(options: SyncEngineServiceFactoryOption
     const eventPublisher = new EventPublisher(options.broadcaster)
     const sessionCache = new SessionCache(options.store, eventPublisher)
     const machineCache = new MachineCache(options.store, eventPublisher)
-    const messageService = new MessageService(options.store, options.io, eventPublisher)
+    const messageService = new MessageService(options.store, eventPublisher)
     const sessionHandoffService = new SessionHandoffService({
         getSession: options.getSession,
         getMessagesAfter: options.getMessagesAfter,
     })
-    const rpcGateway = new RpcGateway(options.io, options.rpcRegistry)
+    const rpcGateway = new RpcGateway(options.directRuntimeRegistry)
     const sessionRpcFacade = new SessionRpcFacade(rpcGateway, (sessionId, config) =>
         sessionCache.applySessionConfig(sessionId, config)
     )
@@ -71,6 +72,15 @@ export function createSyncEngineServices(options: SyncEngineServiceFactoryOption
     )
     const localSessionRecoveryService = new LocalSessionRecoveryService(options.store, sessionCache, sessionRpcFacade)
     const sessionRuntimeStateService = new SessionRuntimeStateService()
+    const runtimeEventIngestor = new RuntimeEventIngestor({
+        store: options.store,
+        eventPublisher,
+        messageService,
+        sessionCache,
+        sessionStreamManager: options.sessionStreamManager,
+        markRuntimeStopping: (sessionId, reason) => sessionRuntimeStateService.markStopping(sessionId, reason),
+        getRuntimeStoppingReason: (sessionId) => sessionRuntimeStateService.getStoppingReason(sessionId),
+    })
     const sessionInteractionService = new SessionInteractionService({
         getSession: options.getSession,
         hasMessages: (sessionId) => messageService.hasMessages(sessionId),
@@ -113,6 +123,7 @@ export function createSyncEngineServices(options: SyncEngineServiceFactoryOption
         sessionCache,
         sessionHandoffService,
         sessionInteractionService,
+        runtimeEventIngestor,
         sessionLifecycleService,
         sessionRpcFacade,
         sessionRuntimeStateService,

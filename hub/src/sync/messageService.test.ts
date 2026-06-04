@@ -1,31 +1,10 @@
 import { describe, expect, it, mock } from 'bun:test'
-import type { Server } from 'socket.io'
 import { Store } from '../store'
 import { EventPublisher } from './eventPublisher'
 import { MessageService } from './messageService'
 
 function createStoredSession(store: Store, input: Parameters<Store['sessions']['getOrCreateSession']>[0]) {
     return store.sessions.getOrCreateSession(input)
-}
-
-function createIoStub() {
-    const emit = mock((_event: string, _payload: unknown) => {})
-    const io = {
-        of() {
-            return {
-                to() {
-                    return {
-                        emit,
-                    }
-                },
-            }
-        },
-    } as unknown as Server
-
-    return {
-        io,
-        emit,
-    }
 }
 
 function createPublisherHarness() {
@@ -50,9 +29,8 @@ describe('message service', () => {
             model: 'gpt-5.4',
         })
         const originalUpdatedAt = session.updatedAt
-        const { io } = createIoStub()
         const { publisher } = createPublisherHarness()
-        const service = new MessageService(store, io, publisher)
+        const service = new MessageService(store, publisher)
 
         now = 2_000
 
@@ -78,9 +56,8 @@ describe('message service', () => {
             agentState: null,
             model: 'sonnet',
         })
-        const { io } = createIoStub()
         const { publisher } = createPublisherHarness()
-        const service = new MessageService(store, io, publisher)
+        const service = new MessageService(store, publisher)
 
         await service.appendUserMessage(session.id, {
             text: 'Manager says verify this change',
@@ -113,9 +90,8 @@ describe('message service', () => {
             model: 'gpt-5.4',
         })
         const originalUpdatedAt = session.updatedAt
-        const { io, emit } = createIoStub()
         const { publisher, broadcast } = createPublisherHarness()
-        const service = new MessageService(store, io, publisher)
+        const service = new MessageService(store, publisher)
 
         now = 2_000
 
@@ -129,8 +105,7 @@ describe('message service', () => {
             Date.now = originalDateNow
         }
 
-        const storedMessage = store.messages.getMessages(session.id, 1)[0]
-        expect(storedMessage?.content).toEqual({
+        const expectedContent = {
             role: 'agent',
             content: {
                 type: 'event',
@@ -140,48 +115,14 @@ describe('message service', () => {
                     targetDriver: 'claude',
                 },
             },
-        })
-
-        const updatedSession = store.sessions.getSession(session.id)
-        expect(updatedSession?.updatedAt).toBe(originalUpdatedAt)
-        expect(emit).toHaveBeenCalledTimes(1)
-        expect(emit.mock.calls[0]?.[0]).toBe('update')
-        expect(emit.mock.calls[0]?.[1]).toMatchObject({
-            body: {
-                t: 'new-message',
-                sid: session.id,
-                message: {
-                    content: {
-                        role: 'agent',
-                        content: {
-                            type: 'event',
-                            data: {
-                                type: 'driver-switched',
-                                previousDriver: 'codex',
-                                targetDriver: 'claude',
-                            },
-                        },
-                    },
-                },
-            },
-        })
+        }
+        expect(store.messages.getMessages(session.id, 1)[0]?.content).toEqual(expectedContent)
+        expect(store.sessions.getSession(session.id)?.updatedAt).toBe(originalUpdatedAt)
         expect(broadcast).toHaveBeenCalledTimes(1)
         expect(broadcast.mock.calls[0]?.[0]).toMatchObject({
             type: 'message-received',
             sessionId: session.id,
-            message: {
-                content: {
-                    role: 'agent',
-                    content: {
-                        type: 'event',
-                        data: {
-                            type: 'driver-switched',
-                            previousDriver: 'codex',
-                            targetDriver: 'claude',
-                        },
-                    },
-                },
-            },
+            message: { content: expectedContent },
         })
     })
 })

@@ -166,7 +166,15 @@ export class SyncEngineStateFacade {
         return this.sessionCache.getOrCreateSession(options)
     }
 
-    getOrCreateMachine(id: string, metadata: unknown, runnerState: unknown): Machine {
-        return this.machineCache.getOrCreateMachine(id, metadata, runnerState)
+    getOrCreateMachine(id: string, metadata: unknown, runtimeState: unknown): Machine {
+        return this.machineCache.getOrCreateMachine(id, metadata, runtimeState)
+    }
+
+    updateMachineMetadata(id: string, metadata: unknown): Machine {
+        return this.machineCache.updateMachineMetadata(id, metadata)
+    }
+
+    updateMachineRuntimeState(id: string, runtimeState: unknown): Machine {
+        return this.machineCache.updateMachineRuntimeState(id, runtimeState)
     }
 }

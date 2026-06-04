@@ -9,7 +9,7 @@ function createPublisher(events: SyncEvent[]): EventPublisher {
     return {
         emit: (event: SyncEvent) => {
             events.push(event)
-        }
+        },
     } as unknown as EventPublisher
 }
 
@@ -22,7 +22,7 @@ describe('alive incremental events', () => {
         const session = cache.getOrCreateSession({
             tag: 'session-alive-test',
             metadata: { path: '/tmp/project', host: 'localhost' },
-            agentState: { requests: {}, completedRequests: {} }
+            agentState: { requests: {}, completedRequests: {} },
         })
 
         events.length = 0
@@ -44,7 +44,7 @@ describe('alive incremental events', () => {
 
         const machine = cache.getOrCreateMachine(
             'machine-alive-test',
-            { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+            { host: 'localhost', platform: 'linux', appCoreVersion: '0.1.0' },
             null
         )
 

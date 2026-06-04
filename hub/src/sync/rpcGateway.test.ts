@@ -1,25 +1,22 @@
 import { describe, expect, it } from 'bun:test'
-import { RpcRegistry } from '../socket/rpcRegistry'
+import { DirectRuntimeRegistry, type DirectRuntimeTarget } from '../runtime/directRuntimeRegistry'
 import { RpcGateway } from './rpcGateway'
 
-function createGateway(response: unknown, method: string): RpcGateway {
-    const rpcRegistry = new RpcRegistry()
-    const socket = {
-        id: 'socket-1',
-        timeout: () => ({
-            emitWithAck: async () => JSON.stringify(response),
-        }),
+class FakeDirectTarget implements DirectRuntimeTarget {
+    readonly id = 'target-1'
+    constructor(private readonly response: unknown) {}
+    async callRpc(): Promise<unknown> {
+        return JSON.stringify(this.response)
     }
-    rpcRegistry.register(socket as never, method)
+    send(): boolean {
+        return false
+    }
+}
 
-    return new RpcGateway(
-        {
-            of: () => ({
-                sockets: new Map([[socket.id, socket]]),
-            }),
-        } as never,
-        rpcRegistry
-    )
+function createGateway(response: unknown, method: string): RpcGateway {
+    const directRuntimeRegistry = new DirectRuntimeRegistry()
+    directRuntimeRegistry.registerRpc(method, new FakeDirectTarget(response))
+    return new RpcGateway(directRuntimeRegistry)
 }
 
 function version() {
@@ -34,7 +31,7 @@ function version() {
 
 describe('RpcGateway browseMachineDirectory', () => {
     it('downgrades missing browse-directory handlers into a non-500 unsupported response', async () => {
-        const gateway = new RpcGateway({ of: () => ({ sockets: new Map() }) } as never, new RpcRegistry())
+        const gateway = new RpcGateway(new DirectRuntimeRegistry())
 
         await expect(gateway.browseMachineDirectory('machine-1')).resolves.toEqual({
             success: false,
@@ -46,13 +43,7 @@ describe('RpcGateway browseMachineDirectory', () => {
 
     it('normalizes path-exists payloads to explicit booleans', async () => {
         const gateway = createGateway(
-            {
-                exists: {
-                    '/tmp/alpha': true,
-                    '/tmp/beta': false,
-                    '/tmp/gamma': 'truthy',
-                },
-            },
+            { exists: { '/tmp/alpha': true, '/tmp/beta': false, '/tmp/gamma': 'truthy' } },
             'machine-1:path-exists'
         )
 
@@ -78,24 +69,11 @@ describe('RpcGateway browseMachineDirectory', () => {
     })
 
     it('surfaces spawn errors from machine RPC payloads', async () => {
-        const gateway = createGateway(
-            {
-                type: 'error',
-                errorMessage: 'spawn denied',
-            },
-            'machine-1:spawn-viby-session'
-        )
+        const gateway = createGateway({ type: 'error', errorMessage: 'spawn denied' }, 'machine-1:spawn-viby-session')
 
         await expect(
-            gateway.spawnSession({
-                machineId: 'machine-1',
-                directory: '/workspace',
-                agent: 'claude',
-            })
-        ).resolves.toEqual({
-            type: 'error',
-            message: 'spawn denied',
-        })
+            gateway.spawnSession({ machineId: 'machine-1', directory: '/workspace', agent: 'claude' })
+        ).resolves.toEqual({ type: 'error', message: 'spawn denied' })
     })
 
     it('validates agent config RPC payloads through shared schemas', async () => {

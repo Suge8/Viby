@@ -1,6 +1,4 @@
 import type { Session, SyncEvent } from '@viby/protocol/types'
-import type { Server } from 'socket.io'
-import { RpcRegistry } from '../socket/rpcRegistry'
 import { Store } from '../store'
 import type { EventPublisher } from './eventPublisher'
 import { SessionCache } from './sessionCache'
@@ -12,20 +10,6 @@ export function createPublisher(events: SyncEvent[]): EventPublisher {
             events.push(event)
         },
     } as unknown as EventPublisher
-}
-
-export function createIoStub(): Server {
-    return {
-        of() {
-            return {
-                to() {
-                    return {
-                        emit() {},
-                    }
-                },
-            }
-        },
-    } as unknown as Server
 }
 
 type CacheSessionInput = Omit<Parameters<SessionCache['getOrCreateSession']>[0], 'agentState'> & {
@@ -51,4 +35,4 @@ export function createEngineSession(engine: SyncEngine, input: EngineSessionInpu
     })
 }
 
-export { RpcRegistry, SessionCache, Store, SyncEngine }
+export { SessionCache, Store, SyncEngine }

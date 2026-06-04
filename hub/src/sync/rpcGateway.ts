@@ -22,27 +22,14 @@ import type {
     SessionDriver,
     SessionHandoffSnapshot,
 } from '@viby/protocol/types'
-import type { Server } from 'socket.io'
-import type { RpcRegistry } from '../socket/rpcRegistry'
-import { parseLocalSessionCatalogResponse, parseLocalSessionExportResponse } from './rpcGatewayLocalSessionSupport'
-import {
-    isMissingRpcHandler,
-    parseAgentAvailabilityResponse,
-    parseAgentConfigFileState,
-    parseAgentConfigResponse,
-    parseMachineDirectoryResponse,
-    parseOpenAgentConfigResponse,
-    parsePathExistsResponse,
-    parseResolveAgentLaunchConfigResponse,
-    parseRestoreAgentConfigResponse,
-    parseSpawnSessionResult,
-} from './rpcGatewaySupport'
+import type { DirectRuntimeRegistry } from '../runtime/directRuntimeRegistry'
+import { DirectRpcCaller } from './directRpcCaller'
+import { MachineRpcGateway } from './rpcGatewayMachine'
 import type {
     RpcCommandResponse,
     RpcDeleteUploadResponse,
     RpcListDirectoryResponse,
     RpcMachineDirectoryResponse,
-    RpcPathExistsResponse,
     RpcReadFileResponse,
     RpcUploadFileResponse,
 } from './rpcGatewayTypes'
@@ -58,10 +45,13 @@ export type {
 } from './rpcGatewayTypes'
 
 export class RpcGateway {
-    constructor(
-        private readonly io: Server,
-        private readonly rpcRegistry: RpcRegistry
-    ) {}
+    private readonly rpc: DirectRpcCaller
+    private readonly machine: MachineRpcGateway
+
+    constructor(directRuntimeRegistry: DirectRuntimeRegistry) {
+        this.rpc = new DirectRpcCaller(directRuntimeRegistry)
+        this.machine = new MachineRpcGateway(this.rpc)
+    }
 
     async approvePermission(
         sessionId: string,
@@ -86,11 +76,7 @@ export class RpcGateway {
         requestId: string,
         decision?: 'approved' | 'approved_for_session' | 'denied' | 'abort'
     ): Promise<void> {
-        await this.sessionRpc(sessionId, 'permission', {
-            id: requestId,
-            approved: false,
-            decision,
-        })
+        await this.sessionRpc(sessionId, 'permission', { id: requestId, approved: false, decision })
     }
 
     async abortSession(sessionId: string): Promise<void> {
@@ -127,36 +113,13 @@ export class RpcGateway {
         worktreeName?: string
         resumeSessionId?: string
         collaborationMode?: CodexCollaborationMode
-        driverSwitch?: {
-            targetDriver: SessionDriver
-            handoffSnapshot: SessionHandoffSnapshot
-        }
+        driverSwitch?: { targetDriver: SessionDriver; handoffSnapshot: SessionHandoffSnapshot }
     }): Promise<{ type: 'success'; sessionId: string } | { type: 'error'; message: string }> {
-        try {
-            const result = await this.machineRpc(options.machineId, 'spawn-viby-session', {
-                type: 'spawn-in-directory',
-                sessionId: options.sessionId,
-                directory: options.directory,
-                agent: options.agent ?? 'claude',
-                model: options.model,
-                modelReasoningEffort: options.modelReasoningEffort,
-                codexServiceTier: options.codexServiceTier ?? undefined,
-                permissionMode: options.permissionMode,
-                sessionType: options.sessionType,
-                worktreeName: options.worktreeName,
-                resumeSessionId: options.resumeSessionId,
-                collaborationMode: options.collaborationMode,
-                driverSwitch: options.driverSwitch,
-            })
-            return parseSpawnSessionResult(result)
-        } catch (error) {
-            return { type: 'error', message: error instanceof Error ? error.message : String(error) }
-        }
+        return await this.machine.spawnSession(options)
     }
 
     async checkPathsExist(machineId: string, paths: string[]): Promise<Record<string, boolean>> {
-        const result = (await this.machineRpc(machineId, 'path-exists', { paths })) as RpcPathExistsResponse | unknown
-        return parsePathExistsResponse(result)
+        return await this.machine.checkPathsExist(machineId, paths)
     }
 
     async browseMachineDirectory(
@@ -164,89 +127,66 @@ export class RpcGateway {
         path?: string,
         options?: { workspaceRoot?: string }
     ): Promise<RpcMachineDirectoryResponse> {
-        let result: MachineDirectoryResponse | unknown
-        try {
-            result = (await this.machineRpc(machineId, 'browse-directory', {
-                path,
-                workspaceRoot: options?.workspaceRoot,
-            })) as MachineDirectoryResponse | unknown
-        } catch (error) {
-            if (isMissingRpcHandler(error, machineId, 'browse-directory')) {
-                return {
-                    success: false,
-                    entries: [],
-                    roots: [],
-                    error: 'Machine directory browsing is unavailable until the target Viby process reconnects with the latest capabilities.',
-                }
-            }
-            throw error
-        }
-        return parseMachineDirectoryResponse(result)
+        return await this.machine.browseDirectory(machineId, path, options)
     }
 
     async resolveAgentLaunchConfig(
         machineId: string,
         request: ResolveAgentLaunchConfigRequest
     ): Promise<ResolveAgentLaunchConfigResponse> {
-        const result = (await this.machineRpc(machineId, 'resolve-agent-launch-config', request)) as
-            | ResolveAgentLaunchConfigResponse
-            | unknown
-        return parseResolveAgentLaunchConfigResponse(result)
+        return await this.machine.resolveAgentLaunchConfig(machineId, request)
     }
 
     async listAgentAvailability(
         machineId: string,
         request: ListAgentAvailabilityRequest
     ): Promise<AgentAvailabilityResponse> {
-        const result = (await this.machineRpc(machineId, 'list-agent-availability', request)) as
-            | AgentAvailabilityResponse
-            | unknown
-        return parseAgentAvailabilityResponse(result)
+        return await this.machine.listAgentAvailability(machineId, request)
     }
 
     async loadAgentConfigFiles(machineId: string): Promise<AgentConfigResponse> {
-        const result = (await this.machineRpc(machineId, 'load-agent-config-files', {})) as
-            | AgentConfigResponse
-            | unknown
-        return parseAgentConfigResponse(result)
+        return await this.machine.loadAgentConfigFiles(machineId)
     }
 
     async saveAgentConfigFile(machineId: string, request: SaveAgentConfigRequest): Promise<AgentConfigFileState> {
-        const result = (await this.machineRpc(machineId, 'save-agent-config-file', request)) as
-            | AgentConfigFileState
-            | unknown
-        return parseAgentConfigFileState(result)
+        return await this.machine.saveAgentConfigFile(machineId, request)
     }
 
     async restoreAgentConfigFile(machineId: string, request: RestoreAgentConfigRequest): Promise<AgentConfigFileState> {
-        const result = (await this.machineRpc(machineId, 'restore-agent-config-file', request)) as
-            | AgentConfigFileState
-            | unknown
-        return parseRestoreAgentConfigResponse(result)
+        return await this.machine.restoreAgentConfigFile(machineId, request)
     }
 
     async openAgentConfigFile(machineId: string, request: OpenAgentConfigRequest): Promise<OpenAgentConfigResponse> {
-        const result = (await this.machineRpc(machineId, 'open-agent-config-file', request)) as
-            | OpenAgentConfigResponse
-            | unknown
-        return parseOpenAgentConfigResponse(result)
+        return await this.machine.openAgentConfigFile(machineId, request)
     }
 
     async listLocalSessions(machineId: string, request: LocalSessionCatalogRequest): Promise<LocalSessionCatalog> {
-        const response = (await this.machineRpc(machineId, 'list-local-sessions', request)) as
-            | LocalSessionCatalog
-            | unknown
-        return parseLocalSessionCatalogResponse(response)
+        return await this.machine.listLocalSessions(machineId, request)
     }
 
     async exportLocalSession(
         machineId: string,
         request: LocalSessionExportRequest
     ): Promise<LocalSessionExportSnapshot> {
-        const response = (await this.machineRpc(machineId, 'export-local-session', request)) as
-            | LocalSessionExportSnapshot
-            | unknown
-        return parseLocalSessionExportResponse(response)
+        return await this.machine.exportLocalSession(machineId, request)
+    }
+
+    async uploadMachineFile(
+        machineId: string,
+        sessionId: string,
+        filename: string,
+        content: string,
+        mimeType: string
+    ): Promise<RpcUploadFileResponse> {
+        return await this.machine.uploadFile(machineId, sessionId, filename, content, mimeType)
+    }
+
+    async deleteMachineUploadFile(
+        machineId: string,
+        sessionId: string,
+        path: string
+    ): Promise<RpcDeleteUploadResponse> {
+        return await this.machine.deleteUploadFile(machineId, sessionId, path)
     }
 
     async getGitStatus(sessionId: string, cwd?: string): Promise<RpcCommandResponse> {
@@ -275,32 +215,10 @@ export class RpcGateway {
         return (await this.sessionRpc(sessionId, 'listDirectory', { path })) as RpcListDirectoryResponse
     }
 
-    async uploadMachineFile(
-        machineId: string,
-        sessionId: string,
-        filename: string,
-        content: string,
-        mimeType: string
-    ): Promise<RpcUploadFileResponse> {
-        return (await this.machineRpc(machineId, 'uploadFile', {
-            sessionId,
-            filename,
-            content,
-            mimeType,
-        })) as RpcUploadFileResponse
-    }
-
-    async deleteMachineUploadFile(
-        machineId: string,
-        sessionId: string,
-        path: string
-    ): Promise<RpcDeleteUploadResponse> {
-        return (await this.machineRpc(machineId, 'deleteUpload', { sessionId, path })) as RpcDeleteUploadResponse
-    }
-
     async runRipgrep(sessionId: string, args: string[], cwd?: string): Promise<RpcCommandResponse> {
         return (await this.sessionRpc(sessionId, 'ripgrep', { args, cwd })) as RpcCommandResponse
     }
+
     async listCommandCapabilities(
         sessionId: string,
         agent: string,
@@ -311,38 +229,8 @@ export class RpcGateway {
             revision,
         })) as import('@viby/protocol/types').CommandCapabilitiesResponse
     }
+
     private async sessionRpc(sessionId: string, method: string, params: unknown, timeoutMs?: number): Promise<unknown> {
-        return await this.rpcCall(`${sessionId}:${method}`, params, timeoutMs)
-    }
-
-    private async machineRpc(machineId: string, method: string, params: unknown): Promise<unknown> {
-        return await this.rpcCall(`${machineId}:${method}`, params)
-    }
-
-    private async rpcCall(method: string, params: unknown, timeoutMs = 30_000): Promise<unknown> {
-        const socketId = this.rpcRegistry.getSocketIdForMethod(method)
-        if (!socketId) {
-            throw new Error(`RPC handler not registered: ${method}`)
-        }
-
-        const socket = this.io.of('/cli').sockets.get(socketId)
-        if (!socket) {
-            throw new Error(`RPC socket disconnected: ${method}`)
-        }
-
-        const response = (await socket.timeout(timeoutMs).emitWithAck('rpc-request', {
-            method,
-            params: JSON.stringify(params),
-        })) as unknown
-
-        if (typeof response !== 'string') {
-            return response
-        }
-
-        try {
-            return JSON.parse(response) as unknown
-        } catch {
-            return response
-        }
+        return await this.rpc.session(sessionId, method, params, timeoutMs)
     }
 }

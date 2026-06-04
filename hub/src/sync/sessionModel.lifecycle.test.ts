@@ -4,9 +4,7 @@ import type { SyncEvent } from '@viby/protocol/types'
 import {
     createCachedSession,
     createEngineSession,
-    createIoStub,
     createPublisher,
-    RpcRegistry,
     SessionCache,
     Store,
     SyncEngine,
@@ -14,7 +12,7 @@ import {
 
 function createEngine(): { engine: SyncEngine; store: Store } {
     const store = new Store(':memory:')
-    return { store, engine: new SyncEngine(store, createIoStub(), new RpcRegistry(), { broadcast() {} } as never) }
+    return { store, engine: new SyncEngine(store, { broadcast() {} } as never) }
 }
 
 function readLifecycleState(value: unknown): string | undefined {

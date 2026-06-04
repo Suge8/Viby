@@ -9,12 +9,12 @@ const machineCapabilitySchema = z.enum(MACHINE_CAPABILITIES)
 const machineMetadataSchema = z.object({
     host: z.string().optional(),
     platform: z.string().optional(),
-    vibyCliVersion: z.string().optional(),
+    appCoreVersion: z.string().optional(),
     displayName: z.string().optional(),
     capabilities: z.array(machineCapabilitySchema).optional(),
     homeDir: z.string().optional(),
     vibyHomeDir: z.string().optional(),
-    vibyLibDir: z.string().optional()
+    appCoreLibDir: z.string().optional(),
 })
 
 export interface Machine {
@@ -27,16 +27,16 @@ export interface Machine {
     metadata: {
         host: string
         platform: string
-        vibyCliVersion: string
+        appCoreVersion: string
         displayName?: string
         capabilities?: string[]
         homeDir?: string
         vibyHomeDir?: string
-        vibyLibDir?: string
+        appCoreLibDir?: string
     } | null
     metadataVersion: number
-    runnerState: unknown | null
-    runnerStateVersion: number
+    runtimeState: unknown | null
+    runtimeStateVersion: number
 }
 
 export class MachineCache {
@@ -46,8 +46,7 @@ export class MachineCache {
     constructor(
         private readonly store: Store,
         private readonly publisher: EventPublisher
-    ) {
-    }
+    ) {}
 
     getMachines(): Machine[] {
         return Array.from(this.machines.values())
@@ -61,9 +60,32 @@ export class MachineCache {
         return this.getMachines().filter((machine) => machine.active)
     }
 
-    getOrCreateMachine(id: string, metadata: unknown, runnerState: unknown): Machine {
-        const stored = this.store.machines.getOrCreateMachine(id, metadata, runnerState)
-        return this.refreshMachine(stored.id) ?? (() => { throw new Error('Failed to load machine') })()
+    getOrCreateMachine(id: string, metadata: unknown, runtimeState: unknown): Machine {
+        const stored = this.store.machines.getOrCreateMachine(id, metadata, runtimeState)
+        return this.requireRefreshedMachine(stored.id)
+    }
+
+    updateMachineMetadata(id: string, metadata: unknown): Machine {
+        const current = this.machines.get(id) ?? this.refreshMachine(id)
+        if (!current) throw new Error('Machine not found')
+        this.store.machines.updateMachineMetadata(id, metadata, current.metadataVersion)
+        return this.requireRefreshedMachine(id)
+    }
+
+    updateMachineRuntimeState(id: string, runtimeState: unknown): Machine {
+        const current = this.machines.get(id) ?? this.refreshMachine(id)
+        if (!current) throw new Error('Machine not found')
+        this.store.machines.updateMachineRuntimeState(id, runtimeState, current.runtimeStateVersion)
+        return this.requireRefreshedMachine(id)
+    }
+
+    private requireRefreshedMachine(id: string): Machine {
+        return (
+            this.refreshMachine(id) ??
+            (() => {
+                throw new Error('Failed to load machine')
+            })()
+        )
     }
 
     refreshMachine(machineId: string): Machine | null {
@@ -84,13 +106,13 @@ export class MachineCache {
             const data = parsed.data
             const host = typeof data.host === 'string' ? data.host : 'unknown'
             const platform = typeof data.platform === 'string' ? data.platform : 'unknown'
-            const vibyCliVersion = typeof data.vibyCliVersion === 'string' ? data.vibyCliVersion : 'unknown'
+            const appCoreVersion = typeof data.appCoreVersion === 'string' ? data.appCoreVersion : 'unknown'
             const displayName = typeof data.displayName === 'string' ? data.displayName : undefined
             const capabilities = Array.isArray(data.capabilities) ? data.capabilities : undefined
             const homeDir = typeof data.homeDir === 'string' ? data.homeDir : undefined
             const vibyHomeDir = typeof data.vibyHomeDir === 'string' ? data.vibyHomeDir : undefined
-            const vibyLibDir = typeof data.vibyLibDir === 'string' ? data.vibyLibDir : undefined
-            return { host, platform, vibyCliVersion, displayName, capabilities, homeDir, vibyHomeDir, vibyLibDir }
+            const appCoreLibDir = typeof data.appCoreLibDir === 'string' ? data.appCoreLibDir : undefined
+            return { host, platform, appCoreVersion, displayName, capabilities, homeDir, vibyHomeDir, appCoreLibDir }
         })()
 
         const storedActiveAt = stored.activeAt ?? stored.createdAt
@@ -103,11 +125,11 @@ export class MachineCache {
             createdAt: stored.createdAt,
             updatedAt: stored.updatedAt,
             active: useStoredActivity ? stored.active : (existing?.active ?? stored.active),
-            activeAt: useStoredActivity ? storedActiveAt : (existingActiveAt || storedActiveAt),
+            activeAt: useStoredActivity ? storedActiveAt : existingActiveAt || storedActiveAt,
             metadata,
             metadataVersion: stored.metadataVersion,
-            runnerState: stored.runnerState,
-            runnerStateVersion: stored.runnerStateVersion
+            runtimeState: stored.runtimeState,
+            runtimeStateVersion: stored.runtimeStateVersion,
         }
 
         this.machines.set(machineId, machine)
@@ -135,7 +157,7 @@ export class MachineCache {
 
         const now = Date.now()
         const lastBroadcastAt = this.lastBroadcastAtByMachineId.get(machine.id) ?? 0
-        const shouldBroadcast = (!wasActive && machine.active) || (now - lastBroadcastAt > 10_000)
+        const shouldBroadcast = (!wasActive && machine.active) || now - lastBroadcastAt > 10_000
         if (shouldBroadcast) {
             this.lastBroadcastAtByMachineId.set(machine.id, now)
             this.publisher.emit({ type: 'machine-updated', machineId: machine.id, data: machine })

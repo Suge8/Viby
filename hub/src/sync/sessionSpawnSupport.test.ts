@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'bun:test'
 import { getSessionLifecycleState } from '@viby/protocol'
-import { createEngineSession, createIoStub, RpcRegistry, Store, SyncEngine } from './sessionModel.support.test'
+import { createEngineSession, Store, SyncEngine } from './sessionModel.support.test'
 
 describe('session spawn support', () => {
     it('waits for the authoritative active signal before failing a fresh inactive send start', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), { broadcast() {} } as never)
+        const engine = new SyncEngine(store, { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {
@@ -22,7 +22,7 @@ describe('session spawn support', () => {
             await (engine as any).sessionCache.setSessionLifecycleState(session.id, 'closed')
             engine.getOrCreateMachine(
                 'machine-1',
-                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+                { host: 'localhost', platform: 'linux', appCoreVersion: '0.1.0' },
                 null
             )
             engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })

@@ -1,27 +1,10 @@
 import { describe, expect, it } from 'bun:test'
-import type { Server } from 'socket.io'
-import { RpcRegistry } from '../socket/rpcRegistry'
 import { Store } from '../store'
 import { SyncEngine } from './syncEngine'
 
-function createIoStub(): Server {
-    return {
-        of() {
-            return {
-                sockets: new Map(),
-                to() {
-                    return {
-                        emit() {},
-                    }
-                },
-            }
-        },
-    } as unknown as Server
-}
-
 function createEngine(): { engine: SyncEngine; store: Store } {
     const store = new Store(':memory:')
-    const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), { broadcast() {} } as never)
+    const engine = new SyncEngine(store, { broadcast() {} } as never)
 
     return { engine, store }
 }

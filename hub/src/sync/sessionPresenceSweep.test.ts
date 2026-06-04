@@ -3,9 +3,7 @@ import type { SyncEvent } from '@viby/protocol/types'
 import {
     createCachedSession,
     createEngineSession,
-    createIoStub,
     createPublisher,
-    RpcRegistry,
     SessionCache,
     Store,
     SyncEngine,
@@ -63,7 +61,7 @@ describe('session presence sweep', () => {
         const store = new Store(':memory:')
         let now = 10_000
         const scheduled: Array<{ callback: () => void; cancelled: boolean; intervalMs: number }> = []
-        const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), { broadcast() {} } as never, {
+        const engine = new SyncEngine(store, { broadcast() {} } as never, {
             now: () => now,
             scheduleInterval: (callback, intervalMs) => {
                 const entry = { callback, cancelled: false, intervalMs }

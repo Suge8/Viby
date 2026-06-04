@@ -4,9 +4,7 @@ import type { SyncEvent } from '@viby/protocol/types'
 import {
     createCachedSession,
     createEngineSession,
-    createIoStub,
     createPublisher,
-    RpcRegistry,
     SessionCache,
     Store,
     SyncEngine,
@@ -112,18 +110,18 @@ describe('session model', () => {
         expect(toSessionSummary(piSession).resumeAvailable).toBe(true)
     })
 
-    it('projects runner-managed continuity resume sessions as resumable without durable provider tokens', () => {
+    it('projects app-core-managed continuity resume sessions as resumable without durable provider tokens', () => {
         const store = new Store(':memory:')
         const events: SyncEvent[] = []
         const cache = new SessionCache(store, createPublisher(events))
 
         const session = createCachedSession(cache, {
-            tag: 'session-runner-continuity-resume',
+            tag: 'session-app-core-continuity-resume',
             metadata: {
                 path: '/tmp/project',
                 host: 'localhost',
                 driver: 'gemini',
-                startedBy: 'runner',
+                startedBy: 'app-core',
                 lifecycleState: 'closed',
             },
             model: 'gemini-2.5-pro',
@@ -351,7 +349,7 @@ describe('session model', () => {
     it('commits close before runtime teardown and keeps late keepalive out of running', async () => {
         const store = new Store(':memory:')
         const events: SyncEvent[] = []
-        const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), {
+        const engine = new SyncEngine(store, {
             broadcast: (event: SyncEvent) => events.push(event),
         })
         const session = createEngineSession(engine, {
@@ -381,7 +379,7 @@ describe('session model', () => {
 
     it('resumes a closed session inside the Hub-owned send command before persisting the user message', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), { broadcast() {} } as never)
+        const engine = new SyncEngine(store, { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {
@@ -437,7 +435,7 @@ describe('session model', () => {
 
     it('auto-unarchives archived sessions inside the Hub-owned send command before resuming them', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), { broadcast() {} } as never)
+        const engine = new SyncEngine(store, { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {
@@ -504,7 +502,7 @@ describe('session model', () => {
 
     it('fresh-starts empty inactive sessions on the explicit send chain instead of requiring resume reattachment', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), { broadcast() {} } as never)
+        const engine = new SyncEngine(store, { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {
@@ -524,7 +522,7 @@ describe('session model', () => {
             await (engine as any).sessionCache.setSessionLifecycleState(session.id, 'archived')
             engine.getOrCreateMachine(
                 'machine-1',
-                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+                { host: 'localhost', platform: 'linux', appCoreVersion: '0.1.0' },
                 null
             )
             engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
@@ -581,7 +579,7 @@ describe('session model', () => {
 
     it('switches an idle session to a new driver on the same hub session id', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), { broadcast() {} } as never)
+        const engine = new SyncEngine(store, { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {
@@ -599,7 +597,7 @@ describe('session model', () => {
             })
             engine.getOrCreateMachine(
                 'machine-1',
-                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+                { host: 'localhost', platform: 'linux', appCoreVersion: '0.1.0' },
                 null
             )
             engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
@@ -682,7 +680,7 @@ describe('session model', () => {
 
     it('preserves model carryover for a codex to cursor switch while sanitizing unsupported config', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), { broadcast() {} } as never)
+        const engine = new SyncEngine(store, { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {
@@ -700,7 +698,7 @@ describe('session model', () => {
             })
             engine.getOrCreateMachine(
                 'machine-1',
-                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+                { host: 'localhost', platform: 'linux', appCoreVersion: '0.1.0' },
                 null
             )
             engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
@@ -777,7 +775,7 @@ describe('session model', () => {
 
     it('sanitizes durable config during a codex to copilot switch while preserving compatible models', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), { broadcast() {} } as never)
+        const engine = new SyncEngine(store, { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {
@@ -795,7 +793,7 @@ describe('session model', () => {
             })
             engine.getOrCreateMachine(
                 'machine-1',
-                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+                { host: 'localhost', platform: 'linux', appCoreVersion: '0.1.0' },
                 null
             )
             engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
@@ -856,7 +854,7 @@ describe('session model', () => {
 
     it('rejects driver switching for thinking sessions before shutdown starts', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), { broadcast() {} } as never)
+        const engine = new SyncEngine(store, { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {
@@ -906,7 +904,7 @@ describe('session model', () => {
 
     it('rejects same-driver switching before shutdown starts', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), { broadcast() {} } as never)
+        const engine = new SyncEngine(store, { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {
@@ -959,7 +957,7 @@ describe('session model', () => {
 
     it('surfaces driver-switch marker append failures instead of reporting a clean switch', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), { broadcast() {} } as never)
+        const engine = new SyncEngine(store, { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {
@@ -974,7 +972,7 @@ describe('session model', () => {
             })
             engine.getOrCreateMachine(
                 'machine-1',
-                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+                { host: 'localhost', platform: 'linux', appCoreVersion: '0.1.0' },
                 null
             )
             engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
@@ -1022,7 +1020,7 @@ describe('session model', () => {
 
     it('keeps the previous driver when driver-switch spawn fails', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), { broadcast() {} } as never)
+        const engine = new SyncEngine(store, { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {
@@ -1040,7 +1038,7 @@ describe('session model', () => {
             })
             engine.getOrCreateMachine(
                 'machine-1',
-                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+                { host: 'localhost', platform: 'linux', appCoreVersion: '0.1.0' },
                 null
             )
             engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
@@ -1312,7 +1310,7 @@ describe('session model', () => {
 
     it('normalizes inactive durable lifecycle to closed when a session ends naturally', () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), { broadcast() {} } as never)
+        const engine = new SyncEngine(store, { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {
@@ -1343,7 +1341,7 @@ describe('session model', () => {
 
     it('preserves explicitly open lifecycle when an aborted session later reports inactive', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), { broadcast() {} } as never)
+        const engine = new SyncEngine(store, { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {
@@ -1407,7 +1405,7 @@ describe('session model', () => {
 
     it('strips data-url attachment previews from durable user messages and legacy message reads', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(store, createIoStub(), new RpcRegistry(), { broadcast() {} } as never)
+        const engine = new SyncEngine(store, { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {

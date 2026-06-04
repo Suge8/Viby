@@ -1,9 +1,8 @@
-import { randomUUID } from 'node:crypto'
 import { isObject, type SessionDriver, sanitizeDurableAttachmentMetadataList } from '@viby/protocol'
 import type { AttachmentMetadata, DecryptedMessage, MessageMeta, SessionMessageActivity } from '@viby/protocol/types'
-import type { Server } from 'socket.io'
 import type { Store } from '../store'
 import { EventPublisher } from './eventPublisher'
+import { extractTodoWriteTodosFromMessageContent } from './todos'
 
 type DriverSwitchedEvent = {
     type: 'driver-switched'
@@ -30,7 +29,6 @@ function createDriverSwitchedMessageContent(event: DriverSwitchedEvent): {
 export class MessageService {
     constructor(
         private readonly store: Store,
-        private readonly io: Server,
         private readonly publisher: EventPublisher
     ) {}
 
@@ -145,6 +143,10 @@ export class MessageService {
         await this.appendMessage(sessionId, createDriverSwitchedMessageContent(event))
     }
 
+    async appendRuntimeMessage(sessionId: string, content: unknown, localId?: string): Promise<DecryptedMessage> {
+        return await this.appendMessage(sessionId, content, localId)
+    }
+
     async markMessagesInvoked(sessionId: string, localIds: string[], invokedAt: number = Date.now()): Promise<void> {
         if (localIds.length === 0) {
             return
@@ -165,20 +167,6 @@ export class MessageService {
             return []
         }
 
-        this.io
-            .of('/cli')
-            .to(`session:${sessionId}`)
-            .emit('update', {
-                id: randomUUID(),
-                seq: 0,
-                createdAt: Date.now(),
-                body: {
-                    t: 'cancel-messages' as const,
-                    sid: sessionId,
-                    localIds: canceledLocalIds,
-                },
-            })
-
         this.publisher.emit({
             type: 'messages-canceled',
             sessionId,
@@ -194,25 +182,10 @@ export class MessageService {
         options: { invokedAt?: number | null } = {}
     ): Promise<DecryptedMessage> {
         const msg = this.store.messages.addMessage(sessionId, content, localId, undefined, options.invokedAt)
-
-        const update = {
-            id: msg.id,
-            seq: msg.seq,
-            createdAt: msg.createdAt,
-            body: {
-                t: 'new-message' as const,
-                sid: sessionId,
-                message: {
-                    id: msg.id,
-                    seq: msg.seq,
-                    createdAt: msg.createdAt,
-                    localId: msg.localId,
-                    invokedAt: msg.invokedAt,
-                    content: msg.content,
-                },
-            },
+        const todos = extractTodoWriteTodosFromMessageContent(content)
+        if (todos && this.store.sessions.setSessionTodos(sessionId, todos, msg.createdAt)) {
+            this.publisher.emit({ type: 'session-updated', sessionId, data: { sid: sessionId } })
         }
-        this.io.of('/cli').to(`session:${sessionId}`).emit('update', update)
 
         const message = {
             id: msg.id,

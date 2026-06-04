@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'bun:test'
 import { getSessionResumeToken } from '@viby/protocol'
 import type { Session } from '@viby/protocol/types'
-import { createEngineSession, RpcRegistry, Store, SyncEngine } from './sessionModel.support.test'
+import { createEngineSession, Store, SyncEngine } from './sessionModel.support.test'
 
 describe('session model resume contracts', () => {
     it('uses the resolved driver and runtime handle when respawning a resumed session', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(store, {} as never, new RpcRegistry(), { broadcast() {} } as never)
+        const engine = new SyncEngine(store, { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {
@@ -24,7 +24,7 @@ describe('session model resume contracts', () => {
             })
             engine.getOrCreateMachine(
                 'machine-1',
-                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+                { host: 'localhost', platform: 'linux', appCoreVersion: '0.1.0' },
                 null
             )
             engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
@@ -65,7 +65,7 @@ describe('session model resume contracts', () => {
 
     it('returns resume_unavailable when the resolved driver has no runtime handle', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(store, {} as never, new RpcRegistry(), { broadcast() {} } as never)
+        const engine = new SyncEngine(store, { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {
@@ -81,7 +81,7 @@ describe('session model resume contracts', () => {
             })
             engine.getOrCreateMachine(
                 'machine-1',
-                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+                { host: 'localhost', platform: 'linux', appCoreVersion: '0.1.0' },
                 null
             )
             engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
@@ -98,19 +98,19 @@ describe('session model resume contracts', () => {
         }
     })
 
-    it('resumes runner-managed history through continuity handoff when no provider runtime handle exists', async () => {
+    it('resumes app-core-managed history through continuity handoff when no provider runtime handle exists', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(store, {} as never, new RpcRegistry(), { broadcast() {} } as never)
+        const engine = new SyncEngine(store, { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {
-                tag: 'session-runner-continuity-fallback',
+                tag: 'session-app-core-continuity-fallback',
                 metadata: {
                     path: '/tmp/project',
                     host: 'localhost',
                     machineId: 'machine-1',
                     driver: 'gemini',
-                    startedBy: 'runner',
+                    startedBy: 'app-core',
                     lifecycleState: 'closed',
                     lifecycleStateSince: Date.now(),
                 },
@@ -133,7 +133,7 @@ describe('session model resume contracts', () => {
             })
             engine.getOrCreateMachine(
                 'machine-1',
-                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+                { host: 'localhost', platform: 'linux', appCoreVersion: '0.1.0' },
                 null
             )
             engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
@@ -173,9 +173,9 @@ describe('session model resume contracts', () => {
         }
     })
 
-    it('resumes runner-managed Copilot history through continuity after legacy handles are normalized away', async () => {
+    it('resumes app-core-managed Copilot history through continuity after legacy handles are normalized away', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(store, {} as never, new RpcRegistry(), { broadcast() {} } as never)
+        const engine = new SyncEngine(store, { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {
@@ -185,7 +185,7 @@ describe('session model resume contracts', () => {
                     host: 'localhost',
                     machineId: 'machine-1',
                     driver: 'copilot',
-                    startedBy: 'runner',
+                    startedBy: 'app-core',
                     lifecycleState: 'closed',
                     lifecycleStateSince: Date.now(),
                 },
@@ -208,7 +208,7 @@ describe('session model resume contracts', () => {
             })
             engine.getOrCreateMachine(
                 'machine-1',
-                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+                { host: 'localhost', platform: 'linux', appCoreVersion: '0.1.0' },
                 null
             )
             engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
@@ -242,7 +242,7 @@ describe('session model resume contracts', () => {
 
     it('resumes pi sessions through transcript replay without requiring a provider runtime handle', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(store, {} as never, new RpcRegistry(), { broadcast() {} } as never)
+        const engine = new SyncEngine(store, { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {
@@ -259,7 +259,7 @@ describe('session model resume contracts', () => {
             })
             engine.getOrCreateMachine(
                 'machine-1',
-                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+                { host: 'localhost', platform: 'linux', appCoreVersion: '0.1.0' },
                 null
             )
             engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
@@ -297,7 +297,7 @@ describe('session model resume contracts', () => {
 
     it('resumes pi sessions with durable native handles through the provider-handle contract', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(store, {} as never, new RpcRegistry(), { broadcast() {} } as never)
+        const engine = new SyncEngine(store, { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {
@@ -317,7 +317,7 @@ describe('session model resume contracts', () => {
             })
             engine.getOrCreateMachine(
                 'machine-1',
-                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+                { host: 'localhost', platform: 'linux', appCoreVersion: '0.1.0' },
                 null
             )
             engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
@@ -341,7 +341,7 @@ describe('session model resume contracts', () => {
 
     it('keeps stale inactive running metadata in the open section after a failed provider-handle send resume', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(store, {} as never, new RpcRegistry(), { broadcast() {} } as never)
+        const engine = new SyncEngine(store, { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {
@@ -368,7 +368,7 @@ describe('session model resume contracts', () => {
             })
             engine.getOrCreateMachine(
                 'machine-1',
-                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+                { host: 'localhost', platform: 'linux', appCoreVersion: '0.1.0' },
                 null
             )
             engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
@@ -397,7 +397,7 @@ describe('session model resume contracts', () => {
 
     it('passes the stored model when respawning a resumed session', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(store, {} as never, new RpcRegistry(), { broadcast() {} } as never)
+        const engine = new SyncEngine(store, { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {
@@ -415,7 +415,7 @@ describe('session model resume contracts', () => {
             })
             engine.getOrCreateMachine(
                 'machine-1',
-                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+                { host: 'localhost', platform: 'linux', appCoreVersion: '0.1.0' },
                 null
             )
             engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
@@ -452,7 +452,7 @@ describe('session model resume contracts', () => {
 
     it('uses the resume permission override when provided', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(store, {} as never, new RpcRegistry(), { broadcast() {} } as never)
+        const engine = new SyncEngine(store, { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {
@@ -470,7 +470,7 @@ describe('session model resume contracts', () => {
             })
             engine.getOrCreateMachine(
                 'machine-1',
-                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+                { host: 'localhost', platform: 'linux', appCoreVersion: '0.1.0' },
                 null
             )
             engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
@@ -493,7 +493,7 @@ describe('session model resume contracts', () => {
 
     it('passes the stored reasoning effort when respawning a resumed session', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(store, {} as never, new RpcRegistry(), { broadcast() {} } as never)
+        const engine = new SyncEngine(store, { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {
@@ -512,7 +512,7 @@ describe('session model resume contracts', () => {
             })
             engine.getOrCreateMachine(
                 'machine-1',
-                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+                { host: 'localhost', platform: 'linux', appCoreVersion: '0.1.0' },
                 null
             )
             engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
@@ -545,7 +545,7 @@ describe('session model resume contracts', () => {
 
     it('passes stored permission and collaboration mode when respawning a resumed session', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(store, {} as never, new RpcRegistry(), { broadcast() {} } as never)
+        const engine = new SyncEngine(store, { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {
@@ -566,7 +566,7 @@ describe('session model resume contracts', () => {
             })
             engine.getOrCreateMachine(
                 'machine-1',
-                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+                { host: 'localhost', platform: 'linux', appCoreVersion: '0.1.0' },
                 null
             )
             engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
@@ -595,7 +595,7 @@ describe('session model resume contracts', () => {
 
     it('waits for the stored resume token before completing resume', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(store, {} as never, new RpcRegistry(), { broadcast() {} } as never)
+        const engine = new SyncEngine(store, { broadcast() {} } as never)
 
         try {
             const original = createEngineSession(engine, {
@@ -613,7 +613,7 @@ describe('session model resume contracts', () => {
             })
             engine.getOrCreateMachine(
                 'machine-1',
-                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+                { host: 'localhost', platform: 'linux', appCoreVersion: '0.1.0' },
                 null
             )
             engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
@@ -671,7 +671,7 @@ describe('session model resume contracts', () => {
 
     it('fails resume when the spawned session does not reattach the previous agent token', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(store, {} as never, new RpcRegistry(), { broadcast() {} } as never)
+        const engine = new SyncEngine(store, { broadcast() {} } as never)
 
         try {
             const original = createEngineSession(engine, {
@@ -689,7 +689,7 @@ describe('session model resume contracts', () => {
             })
             engine.getOrCreateMachine(
                 'machine-1',
-                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+                { host: 'localhost', platform: 'linux', appCoreVersion: '0.1.0' },
                 null
             )
             engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
@@ -732,7 +732,7 @@ describe('session model resume contracts', () => {
 
     it('cleans up spawned sessions when resume times out before reattachment', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(store, {} as never, new RpcRegistry(), { broadcast() {} } as never)
+        const engine = new SyncEngine(store, { broadcast() {} } as never)
 
         try {
             const original = createEngineSession(engine, {
@@ -750,7 +750,7 @@ describe('session model resume contracts', () => {
             })
             engine.getOrCreateMachine(
                 'machine-1',
-                { host: 'localhost', platform: 'linux', vibyCliVersion: '0.1.0' },
+                { host: 'localhost', platform: 'linux', appCoreVersion: '0.1.0' },
                 null
             )
             engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
@@ -789,7 +789,7 @@ describe('session model resume contracts', () => {
 
     it('blocks direct resume for archived sessions', async () => {
         const store = new Store(':memory:')
-        const engine = new SyncEngine(store, {} as never, new RpcRegistry(), { broadcast() {} } as never)
+        const engine = new SyncEngine(store, { broadcast() {} } as never)
 
         try {
             const session = createEngineSession(engine, {

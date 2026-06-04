@@ -120,8 +120,16 @@ export abstract class SyncEngineReadApi {
         return this.syncServices.stateFacade.getOrCreateSession(options)
     }
 
-    getOrCreateMachine(id: string, metadata: unknown, runnerState: unknown): Machine {
-        return this.syncServices.stateFacade.getOrCreateMachine(id, metadata, runnerState)
+    getOrCreateMachine(id: string, metadata: unknown, runtimeState: unknown): Machine {
+        return this.syncServices.stateFacade.getOrCreateMachine(id, metadata, runtimeState)
+    }
+
+    updateMachineMetadata(id: string, metadata: unknown): Machine {
+        return this.syncServices.stateFacade.updateMachineMetadata(id, metadata)
+    }
+
+    updateMachineRuntimeState(id: string, runtimeState: unknown): Machine {
+        return this.syncServices.stateFacade.updateMachineRuntimeState(id, runtimeState)
     }
 
     protected expireInactive(now?: number): void {

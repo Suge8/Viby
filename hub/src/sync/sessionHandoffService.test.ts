@@ -5,25 +5,9 @@ import {
     type Session,
     SessionHandoffContractError,
 } from '@viby/protocol'
-import type { Server } from 'socket.io'
-import type { RpcRegistry } from '../socket/rpcRegistry'
 import { Store } from '../store'
 import { SessionHandoffBuildError, SessionHandoffService } from './sessionHandoffService'
 import { SyncEngine } from './syncEngine'
-
-function createIoStub(): Server {
-    return {
-        of() {
-            return {
-                to() {
-                    return {
-                        emit() {},
-                    }
-                },
-            }
-        },
-    } as unknown as Server
-}
 
 function createSession(overrides: Partial<Session> = {}): Session {
     return {
@@ -54,7 +38,7 @@ function createSession(overrides: Partial<Session> = {}): Session {
 
 function createEngineHarness() {
     const store = new Store(':memory:')
-    const engine = new SyncEngine(store, createIoStub(), {} as RpcRegistry, { broadcast() {} })
+    const engine = new SyncEngine(store, { broadcast() {} })
 
     return { store, engine }
 }

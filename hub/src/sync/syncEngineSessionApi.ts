@@ -1,4 +1,5 @@
 import { resolveSessionDriver } from '@viby/protocol'
+import type { ProviderAdapterRuntimeEvent } from '@viby/protocol/providerAdapterProtocol'
 import type {
     AgentFlavor,
     ListAgentAvailabilityRequest,
@@ -151,6 +152,10 @@ export abstract class SyncEngineSessionApi extends SyncEngineReadApi {
         options: SyncEngineSpawnSessionOptions
     ): Promise<{ type: 'success'; sessionId: string } | { type: 'error'; message: string }> {
         return await this.syncServices.sessionRpcFacade.spawnSession(options)
+    }
+
+    async ingestRuntimeEvent(event: ProviderAdapterRuntimeEvent) {
+        return await this.syncServices.runtimeEventIngestor.ingest(event)
     }
 
     async resumeSession(

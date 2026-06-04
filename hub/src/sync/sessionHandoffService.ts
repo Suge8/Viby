@@ -1,10 +1,10 @@
 import {
     buildSessionHandoffSnapshot,
-    findNextRecoveryCursor,
-    SessionHandoffContractError,
-    SESSION_RECOVERY_PAGE_SIZE,
     type DecryptedMessage,
+    findNextRecoveryCursor,
+    SESSION_RECOVERY_PAGE_SIZE,
     type Session,
+    SessionHandoffContractError,
     type SessionHandoffSnapshot,
 } from '@viby/protocol'
 
@@ -14,10 +14,7 @@ export type SessionHandoffBuildErrorCode =
     | 'transcript_traversal_failed'
     | 'contract_build_failed'
 
-export type SessionHandoffBuildStage =
-    | 'session_lookup'
-    | 'transcript_traversal'
-    | 'contract_validation'
+export type SessionHandoffBuildStage = 'session_lookup' | 'transcript_traversal' | 'contract_validation'
 
 export class SessionHandoffBuildError extends Error {
     readonly code: SessionHandoffBuildErrorCode
@@ -45,10 +42,7 @@ export class SessionHandoffBuildError extends Error {
 
 type SessionHandoffServiceOptions = {
     getSession: (sessionId: string) => Session | undefined
-    getMessagesAfter: (
-        sessionId: string,
-        options: { afterSeq: number; limit: number }
-    ) => DecryptedMessage[]
+    getMessagesAfter: (sessionId: string, options: { afterSeq: number; limit: number }) => DecryptedMessage[]
 }
 
 const INITIAL_RECOVERY_CURSOR = 0

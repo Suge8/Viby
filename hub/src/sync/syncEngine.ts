@@ -1,7 +1,7 @@
-import type { Server } from 'socket.io'
-import type { RpcRegistry } from '../socket/rpcRegistry'
+import { DirectRuntimeRegistry } from '../runtime/directRuntimeRegistry'
 import type { Store } from '../store'
 import type { SyncEventBroadcaster } from './eventPublisher'
+import { SessionStreamManager } from './sessionStreamManager'
 import { SessionSendMessageError } from './syncEngineExports'
 import { createSyncEngineServices, type SyncEngineServices } from './syncEngineServiceFactory'
 import { SyncEngineSessionApi } from './syncEngineSessionApi'
@@ -27,19 +27,20 @@ export class SyncEngine extends SyncEngineSessionApi {
 
     constructor(
         store: Store,
-        io: Server,
-        rpcRegistry: RpcRegistry,
         broadcaster: SyncEventBroadcaster,
-        options: SyncEngineOptions = {}
+        options: SyncEngineOptions & {
+            directRuntimeRegistry?: DirectRuntimeRegistry
+            sessionStreamManager?: SessionStreamManager
+        } = {}
     ) {
         super()
         const now = options.now ?? Date.now
         const scheduleInterval = options.scheduleInterval ?? defaultScheduleInterval
         const services = createSyncEngineServices({
             store,
-            io,
-            rpcRegistry,
             broadcaster,
+            sessionStreamManager: options.sessionStreamManager ?? new SessionStreamManager(),
+            directRuntimeRegistry: options.directRuntimeRegistry ?? new DirectRuntimeRegistry(),
             getSession: (sessionId) => this.getSession(sessionId),
             getMessagesAfter: (sessionId, options) =>
                 this.syncServices.messageService.getMessagesAfter(sessionId, options),
