@@ -70,7 +70,7 @@ function normalizeDriverSwitchSendFailedEvent(message: ClientMessage): DriverSwi
     return {
         type: 'driver-switch-send-failed',
         code: code === 'empty_first_turn' || code === 'timeout' || code === 'unknown' ? code : undefined,
-        stage: stage === 'socket_update' || stage === 'callback_flush' ? stage : undefined,
+        stage: stage === 'runtime_update' || stage === 'callback_flush' ? stage : undefined,
     }
 }
 

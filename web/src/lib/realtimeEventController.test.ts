@@ -16,6 +16,26 @@ function createSessionRecord(overrides: Partial<Session> & Pick<Session, 'id'>):
 }
 
 describe('createRealtimeEventController', () => {
+    it('invalidates authoritative snapshots after remote replay drift', async () => {
+        const queryClient = new QueryClient()
+        const onEvent = vi.fn()
+        const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
+        const controller = createRealtimeEventController({ queryClient, onEvent })
+
+        controller.handleEvent({ type: 'snapshot-invalidated', reason: 'pairing-replay-miss', lastSeq: 7 })
+
+        await waitFor(() => expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: queryKeys.sessions }))
+        expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['session'] })
+        expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: queryKeys.runtime })
+        expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: queryKeys.runtimeCapability })
+        expect(onEvent).toHaveBeenCalledWith({
+            type: 'snapshot-invalidated',
+            reason: 'pairing-replay-miss',
+            lastSeq: 7,
+        })
+        controller.dispose()
+    })
+
     it('reports permission attention from lightweight pending request patches', () => {
         const queryClient = new QueryClient()
         const changes: unknown[] = []

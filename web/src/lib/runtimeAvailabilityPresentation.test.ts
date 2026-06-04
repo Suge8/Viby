@@ -17,7 +17,7 @@ function createRuntime(overrides?: Partial<LocalRuntime>): LocalRuntime {
         id: 'runtime-1',
         active: false,
         metadata: null,
-        runnerState: null,
+        runtimeState: null,
         ...overrides,
     }
 }
@@ -75,7 +75,7 @@ describe('runtimeAvailabilityPresentation', () => {
         expect(
             getRuntimeAvailabilityPresentation({
                 runtime: createRuntime({
-                    runnerState: {
+                    runtimeState: {
                         lastSpawnError: {
                             message: 'spawn failed',
                             at: Date.UTC(2026, 3, 9, 18, 0, 0),

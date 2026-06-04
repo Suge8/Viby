@@ -1,5 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query'
-import { queryKeys } from '@/lib/query-keys'
+import { queryKeys, SESSION_SCOPED_QUERY_PREFIXES } from '@/lib/query-keys'
 
 const INVALIDATION_BATCH_MS = 16
 
@@ -7,6 +7,7 @@ type PendingInvalidations = {
     sessions: boolean
     runtime: boolean
     runtimeCapability: boolean
+    snapshot: boolean
     sessionIds: Set<string>
     commandCapabilitySessionIds: Set<string>
 }
@@ -15,6 +16,7 @@ export type RealtimeInvalidationBatch = {
     queueSessions: () => void
     queueRuntime: () => void
     queueRuntimeCapability: () => void
+    queueSnapshot: () => void
     queueSession: (sessionId: string) => void
     queueCommandCapabilities: (sessionId: string) => void
     dispose: () => void
@@ -63,6 +65,7 @@ export function createRealtimeInvalidationBatch(options: {
         sessions: false,
         runtime: false,
         runtimeCapability: false,
+        snapshot: false,
         sessionIds: new Set<string>(),
         commandCapabilitySessionIds: new Set<string>(),
     }
@@ -71,6 +74,7 @@ export function createRealtimeInvalidationBatch(options: {
         pending.sessions = false
         pending.runtime = false
         pending.runtimeCapability = false
+        pending.snapshot = false
         pending.sessionIds.clear()
         pending.commandCapabilitySessionIds.clear()
     }
@@ -80,6 +84,7 @@ export function createRealtimeInvalidationBatch(options: {
             !pending.sessions &&
             !pending.runtime &&
             !pending.runtimeCapability &&
+            !pending.snapshot &&
             pending.sessionIds.size === 0 &&
             pending.commandCapabilitySessionIds.size === 0
         ) {
@@ -87,8 +92,13 @@ export function createRealtimeInvalidationBatch(options: {
         }
 
         const tasks: Array<Promise<unknown>> = []
-        if (pending.sessions) {
+        if (pending.sessions || pending.snapshot) {
             tasks.push(options.queryClient.invalidateQueries({ queryKey: queryKeys.sessions }))
+        }
+        if (pending.snapshot) {
+            for (const prefix of SESSION_SCOPED_QUERY_PREFIXES) {
+                tasks.push(options.queryClient.invalidateQueries({ queryKey: [prefix] }))
+            }
         }
         for (const sessionId of pending.sessionIds) {
             tasks.push(options.queryClient.invalidateQueries({ queryKey: queryKeys.session(sessionId) }))
@@ -131,6 +141,12 @@ export function createRealtimeInvalidationBatch(options: {
             schedule()
         },
         queueRuntimeCapability: () => {
+            pending.runtimeCapability = true
+            schedule()
+        },
+        queueSnapshot: () => {
+            pending.snapshot = true
+            pending.runtime = true
             pending.runtimeCapability = true
             schedule()
         },

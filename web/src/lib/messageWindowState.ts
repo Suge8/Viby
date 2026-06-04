@@ -1,5 +1,5 @@
 import { normalizeClientMessage } from '@/chat/normalize'
-import { isCliOutputText } from '@/chat/reducerCliOutput'
+import { isCommandOutputText } from '@/chat/reducerCommandOutput'
 import { isUserMessage, mergeMessages } from '@/lib/messages'
 import { countVisiblePendingMessages, syncPendingVisibilityCache } from '@/lib/messageWindowPendingVisibility'
 import { deriveSeqBounds } from '@/lib/messageWindowSnapshotSupport'
@@ -212,7 +212,7 @@ function isHistoryJumpTargetMessage(message: ClientMessage): boolean {
         return false
     }
 
-    return !isCliOutputText(normalized.content.text, normalized.meta)
+    return !isCommandOutputText(normalized.content.text, normalized.meta)
 }
 
 export function batchContainsHistoryJumpTarget(messages: readonly ClientMessage[]): boolean {

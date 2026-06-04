@@ -155,6 +155,11 @@ export function createRealtimeEventController(options: RealtimeEventControllerOp
             options.onToast?.(event)
             return
         }
+        if (event.type === 'snapshot-invalidated') {
+            invalidationBatch.queueSnapshot()
+            options.onEvent(event)
+            return
+        }
 
         const attentionSessionId = getEventSessionId(event)
         const attentionBefore = attentionSessionId

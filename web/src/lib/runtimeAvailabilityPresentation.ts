@@ -1,5 +1,5 @@
 import type { LocalRuntime } from '@/types/api'
-import { formatRunnerSpawnError } from '@/utils/formatRunnerSpawnError'
+import { formatRuntimeSpawnError } from '@/utils/formatRuntimeSpawnError'
 import type { I18nContextValue } from './use-translation'
 
 type TranslationFn = I18nContextValue['t']
@@ -56,7 +56,7 @@ export function getRuntimeAvailabilityPresentation(
         }
     }
 
-    const lastSpawnError = formatRunnerSpawnError(options.runtime)
+    const lastSpawnError = formatRuntimeSpawnError(options.runtime)
     if (!lastSpawnError) {
         return {
             kind: 'unavailable',
