@@ -1,0 +1,116 @@
+import { setSessionDriverRuntimeHandle } from '@viby/protocol'
+import { AgentSessionBase } from '@/agent/sessionBase'
+import { buildVibyMcpBridge, type VibyMcpBridge } from '@/codex/utils/buildVibyMcpBridge'
+import { ApiClient, type RuntimeSessionClient } from '@/lib'
+import { MessageQueue2 } from '@/utils/MessageQueue2'
+import type { OpencodeHookEvent, OpencodeMode, PermissionMode } from './types'
+import { createOpencodeBackend } from './utils/opencodeBackend'
+
+type OpencodeBackend = ReturnType<typeof createOpencodeBackend>
+
+export class OpencodeSession extends AgentSessionBase<OpencodeMode> {
+    readonly startedBy: 'app-core' | 'terminal'
+
+    private hookEventHandlers: Array<(event: OpencodeHookEvent) => void> = []
+    private remoteBridge: VibyMcpBridge | null = null
+    private remoteBackend: OpencodeBackend | null = null
+
+    constructor(opts: {
+        api: ApiClient
+        client: RuntimeSessionClient
+        path: string
+        logPath: string
+        sessionId: string | null
+        messageQueue: MessageQueue2<OpencodeMode>
+        startedBy: 'app-core' | 'terminal'
+        permissionMode?: PermissionMode
+    }) {
+        super({
+            api: opts.api,
+            client: opts.client,
+            path: opts.path,
+            logPath: opts.logPath,
+            sessionId: opts.sessionId,
+            messageQueue: opts.messageQueue,
+            sessionLabel: 'OpencodeSession',
+            sessionIdLabel: 'OpenCode',
+            startedBy: opts.startedBy,
+            applySessionIdToMetadata: (metadata, sessionId) => ({
+                ...metadata,
+                ...setSessionDriverRuntimeHandle(metadata, 'opencode', { sessionId }),
+            }),
+            permissionMode: opts.permissionMode,
+        })
+
+        this.startedBy = opts.startedBy
+        this.permissionMode = opts.permissionMode
+    }
+
+    addHookEventHandler(cb: (event: OpencodeHookEvent) => void): void {
+        this.hookEventHandlers.push(cb)
+    }
+
+    removeHookEventHandler(cb: (event: OpencodeHookEvent) => void): void {
+        const index = this.hookEventHandlers.indexOf(cb)
+        if (index !== -1) {
+            this.hookEventHandlers.splice(index, 1)
+        }
+    }
+
+    emitHookEvent(event: OpencodeHookEvent): void {
+        for (const handler of this.hookEventHandlers) {
+            handler(event)
+        }
+    }
+
+    setPermissionMode = (mode: PermissionMode): void => {
+        this.permissionMode = mode
+        this.notifyKeepAliveRuntimeChanged()
+    }
+
+    sendCodexMessage = (message: unknown): void => {
+        this.client.sendCodexMessage(message)
+    }
+
+    sendUserMessage = (text: string): void => {
+        this.client.sendUserMessage(text)
+    }
+
+    sendSessionEvent = (event: Parameters<RuntimeSessionClient['sendSessionEvent']>[0]): void => {
+        this.client.sendSessionEvent(event)
+    }
+
+    async ensureRemoteBridge(): Promise<VibyMcpBridge> {
+        if (!this.remoteBridge) {
+            this.remoteBridge = await buildVibyMcpBridge(this.client)
+        }
+        return this.remoteBridge
+    }
+
+    ensureRemoteBackend(): OpencodeBackend {
+        if (!this.remoteBackend) {
+            this.remoteBackend = createOpencodeBackend({
+                cwd: this.path,
+            })
+        }
+        return this.remoteBackend
+    }
+
+    getRemoteBackend(): OpencodeBackend | null {
+        return this.remoteBackend
+    }
+
+    disposeRemoteRuntime = async (): Promise<void> => {
+        if (this.remoteBackend) {
+            const backend = this.remoteBackend
+            this.remoteBackend = null
+            await backend.disconnect()
+        }
+
+        if (this.remoteBridge) {
+            const bridge = this.remoteBridge
+            this.remoteBridge = null
+            bridge.server?.stop()
+        }
+    }
+}
