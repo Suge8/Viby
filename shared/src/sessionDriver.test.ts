@@ -52,11 +52,11 @@ describe('sessionDriver', () => {
         expect(resolveSessionDriver({ driver: 'unknown' } as never)).toBeNull()
     })
 
-    it('treats runner-managed Viby sessions as continuity-resumable even without provider handles', () => {
+    it('treats app-core-managed Viby sessions as continuity-resumable even without provider handles', () => {
         expect(
             supportsSessionContinuityResume({
                 driver: 'codex',
-                startedBy: 'runner',
+                startedBy: 'app-core',
             } as never)
         ).toBe(true)
         expect(
@@ -68,7 +68,7 @@ describe('sessionDriver', () => {
         expect(
             supportsSessionContinuityResume({
                 driver: 'pi',
-                startedBy: 'runner',
+                startedBy: 'app-core',
             } as never)
         ).toBe(false)
     })

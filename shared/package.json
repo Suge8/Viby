@@ -17,6 +17,7 @@
         "./messages": "./src/messages.ts",
         "./networkScope": "./src/networkScope.ts",
         "./pairing": "./src/pairing/index.ts",
+        "./providerAdapterProtocol": "./src/providerAdapterProtocol.ts",
         "./runtimeCapability": "./src/runtimeCapability.ts",
         "./runtimeDefaults": "./src/runtimeDefaults.ts",
         "./modes": "./src/modes.ts",

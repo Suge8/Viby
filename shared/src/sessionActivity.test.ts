@@ -51,7 +51,7 @@ describe('sessionActivity', () => {
                 type: 'event',
                 data: {
                     type: 'driver-switch-send-failed',
-                    stage: 'socket_update',
+                    stage: 'runtime_update',
                     code: 'empty_first_turn',
                 },
             },

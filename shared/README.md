@@ -2,7 +2,7 @@
 
 `shared/` 是 Viby 的跨模块合同层。
 
-它只放协议、schema、读模型、纯函数和稳定导出，不承载 UI、Hub durable mutation 或 CLI runtime 细节。
+它只放协议、schema、读模型、纯函数和稳定导出，不承载 UI、Hub durable mutation 或 AppCore runtime 细节。
 
 ## 它负责什么
 
@@ -15,7 +15,7 @@
 - 不维护第二套业务 owner
 - 不写 Web 交互逻辑
 - 不写 Hub durable mutation
-- 不写 CLI provider runtime 细节
+- 不写 AppCore provider runtime 细节
 
 ## 继续阅读
 

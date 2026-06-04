@@ -217,13 +217,13 @@ describe('sessionLifecycle interactivity', () => {
         ).toBe(false)
     })
 
-    it('keeps runner-managed inactive sessions interactive through transcript continuity even without provider handles', () => {
+    it('keeps app-core-managed inactive sessions interactive through transcript continuity even without provider handles', () => {
         const state = resolveSessionInteractivity({
             active: false,
             metadata: {
                 driver: 'codex',
                 lifecycleState: 'closed',
-                startedBy: 'runner',
+                startedBy: 'app-core',
             },
         } as never)
 

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const MESSAGE_SENT_FROM = ['cli', 'webapp', 'user'] as const
+export const MESSAGE_SENT_FROM = ['runtime', 'webapp', 'user'] as const
 
 export const MessageSentFromSchema = z.enum(MESSAGE_SENT_FROM)
 

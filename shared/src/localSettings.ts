@@ -177,7 +177,7 @@ export function stringifyVibyLocalSettingsToml(settings: VibyLocalSettings): str
         '',
     ]
 
-    lines.push('# 🌐 CLI -> Hub API URL / CLI 连接 Hub 地址')
+    lines.push('# 🌐 AppCore -> Hub API URL / AppCore 连接 Hub 地址')
     lines.push(`api_url = ${formatTomlString(settings.apiUrl ?? DEFAULT_VIBY_LOCAL_API_URL)}`)
     lines.push('')
 

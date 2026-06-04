@@ -240,7 +240,7 @@ describe('toSessionSummary', () => {
         expect(summary.resumeAvailable).toBe(false)
     })
 
-    it('projects runner-managed continuity sessions as resumable without provider runtime handles', () => {
+    it('projects app-core-managed continuity sessions as resumable without provider runtime handles', () => {
         const summary = toSessionSummary({
             id: 'session-4',
             seq: 1,
@@ -252,7 +252,7 @@ describe('toSessionSummary', () => {
                 path: '/tmp/project',
                 host: 'machine',
                 driver: 'gemini',
-                startedBy: 'runner',
+                startedBy: 'app-core',
                 lifecycleState: 'closed',
             },
             metadataVersion: 1,

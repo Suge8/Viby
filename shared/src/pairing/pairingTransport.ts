@@ -1,11 +1,12 @@
 import { classifyFatalPairingClose, type PairingSocketCloseInfo } from './pairingCloseCode'
-import { type PairingByeReason, type PairingRtcSignal, PairingTransportSignalSchema } from './pairingSignal'
+import { type PairingRtcSignal, PairingTransportSignalSchema } from './pairingSignal'
 import {
     computePairingReconnectDelay,
     PAIRING_ICE_DISCONNECTED_RESTART_DELAY_MS,
     PAIRING_ICE_RESTART_MIN_INTERVAL_MS,
 } from './pairingTiming'
 import type {
+    PairingFatalReason,
     PairingPeer,
     PairingSocket,
     PairingTransportHandle,
@@ -16,6 +17,7 @@ import type {
 import { createPerfectNegotiation } from './perfectNegotiation'
 
 export type {
+    PairingFatalReason,
     PairingPeer,
     PairingSocket,
     PairingTransportHandle,
@@ -125,7 +127,7 @@ export function createPairingTransport(options: PairingTransportOptions): Pairin
             // a deleted/expired pairing without sending a `bye` frame first; the
             // signaling socket must go terminal instead of reconnect-storming.
             const fatalReason = classifyFatalPairingClose(closeInfo)
-            if (fatalReason) return close(fatalReason as PairingByeReason)
+            if (fatalReason) return close(fatalReason as PairingFatalReason)
             if (ICE_RESTART_STATES.has(peer.iceConnectionState)) maybeRestartIce()
             attempt += 1
             if (!isPeerReady()) commitState({ kind: 'connecting', attempt })
@@ -161,7 +163,7 @@ export function createPairingTransport(options: PairingTransportOptions): Pairin
         if (socket?.readyState !== SOCKET_OPEN) return wakeSleep?.()
         if (ICE_RESTART_STATES.has(peer.iceConnectionState)) maybeRestartIce()
     }
-    function close(reason: PairingByeReason | 'closed') {
+    function close(reason: PairingFatalReason) {
         if (disposed) return
         disposed = true
         wakeSleep?.()

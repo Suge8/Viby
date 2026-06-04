@@ -1,72 +1,28 @@
 import { z } from 'zod'
-import type { CodexCollaborationMode, CodexServiceTier, ModelReasoningEffort, PermissionMode } from './modes'
+import {
+    CODEX_COLLABORATION_MODES,
+    CODEX_SERVICE_TIERS,
+    type CodexCollaborationMode,
+    type CodexServiceTier,
+    MODEL_REASONING_EFFORTS,
+    type ModelReasoningEffort,
+    PERMISSION_MODES,
+    type PermissionMode,
+} from './modes'
+import type {
+    TerminalClosePayload,
+    TerminalErrorPayload,
+    TerminalExitPayload,
+    TerminalOpenPayload,
+    TerminalOutputPayload,
+    TerminalReadyPayload,
+    TerminalResizePayload,
+    TerminalWritePayload,
+} from './terminalPayloads'
+
+export * from './terminalPayloads'
 
 export type SocketErrorReason = 'not-found'
-
-export const TerminalOpenPayloadSchema = z.object({
-    sessionId: z.string().min(1),
-    terminalId: z.string().min(1),
-    cols: z.number().int().positive(),
-    rows: z.number().int().positive(),
-})
-
-export type TerminalOpenPayload = z.infer<typeof TerminalOpenPayloadSchema>
-
-export const TerminalWritePayloadSchema = z.object({
-    sessionId: z.string().min(1),
-    terminalId: z.string().min(1),
-    data: z.string(),
-})
-
-export type TerminalWritePayload = z.infer<typeof TerminalWritePayloadSchema>
-
-export const TerminalResizePayloadSchema = z.object({
-    sessionId: z.string().min(1),
-    terminalId: z.string().min(1),
-    cols: z.number().int().positive(),
-    rows: z.number().int().positive(),
-})
-
-export type TerminalResizePayload = z.infer<typeof TerminalResizePayloadSchema>
-
-export const TerminalClosePayloadSchema = z.object({
-    sessionId: z.string().min(1),
-    terminalId: z.string().min(1),
-})
-
-export type TerminalClosePayload = z.infer<typeof TerminalClosePayloadSchema>
-
-export const TerminalReadyPayloadSchema = z.object({
-    sessionId: z.string().min(1),
-    terminalId: z.string().min(1),
-})
-
-export type TerminalReadyPayload = z.infer<typeof TerminalReadyPayloadSchema>
-
-export const TerminalOutputPayloadSchema = z.object({
-    sessionId: z.string().min(1),
-    terminalId: z.string().min(1),
-    data: z.string(),
-})
-
-export type TerminalOutputPayload = z.infer<typeof TerminalOutputPayloadSchema>
-
-export const TerminalExitPayloadSchema = z.object({
-    sessionId: z.string().min(1),
-    terminalId: z.string().min(1),
-    code: z.number().int().nullable(),
-    signal: z.string().nullable(),
-})
-
-export type TerminalExitPayload = z.infer<typeof TerminalExitPayloadSchema>
-
-export const TerminalErrorPayloadSchema = z.object({
-    sessionId: z.string().min(1),
-    terminalId: z.string().min(1),
-    message: z.string(),
-})
-
-export type TerminalErrorPayload = z.infer<typeof TerminalErrorPayloadSchema>
 
 export const SessionStreamAppendPayloadSchema = z.object({
     sid: z.string().min(1),
@@ -128,6 +84,20 @@ export const UpdateCancelMessagesBodySchema = z.object({
 
 export type UpdateCancelMessagesBody = z.infer<typeof UpdateCancelMessagesBodySchema>
 
+export const SessionAlivePayloadSchema = z.object({
+    sid: z.string().min(1),
+    time: z.number(),
+    thinking: z.boolean(),
+    mode: z.enum(['local', 'remote']).optional(),
+    permissionMode: z.enum(PERMISSION_MODES).optional(),
+    model: z.string().nullable().optional(),
+    modelReasoningEffort: z.enum(MODEL_REASONING_EFFORTS).nullable().optional(),
+    codexServiceTier: z.enum(CODEX_SERVICE_TIERS).nullable().optional(),
+    collaborationMode: z.enum(CODEX_COLLABORATION_MODES).optional(),
+})
+
+export type SessionAlivePayload = z.infer<typeof SessionAlivePayloadSchema>
+
 export const SessionRuntimeStatePayloadSchema = z.object({
     sid: z.string().min(1),
     time: z.number(),
@@ -165,7 +135,7 @@ export const UpdateMachineBodySchema = z.object({
             value: z.unknown(),
         })
         .nullable(),
-    runnerState: z
+    runtimeState: z
         .object({
             version: z.number(),
             value: z.unknown().nullable(),
@@ -204,17 +174,7 @@ export interface ClientToServerEvents {
     'messages-consumed': (data: { sid: string; localIds: string[] }) => void
     'messages-canceled': (data: { sid: string; localIds: string[] }) => void
     'command-capabilities-invalidated': (data: { sid: string }) => void
-    'session-alive': (data: {
-        sid: string
-        time: number
-        thinking: boolean
-        mode?: 'local' | 'remote'
-        permissionMode?: PermissionMode
-        model?: string | null
-        modelReasoningEffort?: ModelReasoningEffort | null
-        codexServiceTier?: CodexServiceTier | null
-        collaborationMode?: CodexCollaborationMode
-    }) => void
+    'session-alive': (data: SessionAlivePayload) => void
     'session-end': (data: { sid: string; time: number }) => void
     'session-runtime-state': (data: SessionRuntimeStatePayload) => void
     'update-metadata': (
@@ -284,7 +244,7 @@ export interface ClientToServerEvents {
         ) => void
     ) => void
     'machine-update-state': (
-        data: { machineId: string; expectedVersion: number; runnerState: unknown | null },
+        data: { machineId: string; expectedVersion: number; runtimeState: unknown | null },
         cb: (
             answer:
                 | {
@@ -294,12 +254,12 @@ export interface ClientToServerEvents {
                 | {
                       result: 'version-mismatch'
                       version: number
-                      runnerState: unknown | null
+                      runtimeState: unknown | null
                   }
                 | {
                       result: 'success'
                       version: number
-                      runnerState: unknown | null
+                      runtimeState: unknown | null
                   }
         ) => void
     ) => void

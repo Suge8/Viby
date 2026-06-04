@@ -436,35 +436,41 @@ describe('pairingTransport', () => {
         expect(states).toHaveLength(1)
     })
 
-    it('treats terminal broker close codes as fatal instead of reconnecting', async () => {
-        const sockets = [new MockSocket(), new MockSocket()],
-            peer = new MockPeer()
-        let socketCalls = 0
-        const transport = createPairingTransport({
-            pairingId: 'p',
-            polite: true,
-            iceServers: [],
-            getWsUrl: async () => 'u',
-            createDataChannel: false,
-            onChannel: () => {},
-            socketFactory: () => sockets[socketCalls++],
-            peerFactory: () => peer,
-            randomJitter: () => 0,
+    for (const closeCase of [
+        { code: 1008, reason: 'invalid_token' },
+        { code: 1012, reason: 'replaced' },
+        { code: 1000, reason: 'pairing_unavailable' },
+    ] as const) {
+        it(`treats terminal broker close ${closeCase.code} ${closeCase.reason} as fatal instead of reconnecting`, async () => {
+            const sockets = [new MockSocket(), new MockSocket()],
+                peer = new MockPeer()
+            let socketCalls = 0
+            const transport = createPairingTransport({
+                pairingId: 'p',
+                polite: true,
+                iceServers: [],
+                getWsUrl: async () => 'u',
+                createDataChannel: false,
+                onChannel: () => {},
+                socketFactory: () => sockets[socketCalls++],
+                peerFactory: () => peer,
+                randomJitter: () => 0,
+            })
+            await openWhenBound(sockets[0])
+
+            sockets[0].close(closeCase.code, closeCase.reason)
+
+            await waitFor(() => expect(transport.getSnapshot()).toEqual({ kind: 'fatal', reason: closeCase.reason }))
+            expect(peer.closeCount).toBe(1)
+            expect(socketCalls).toBe(1)
+
+            transport.notifyForeground()
+            await Promise.resolve()
+
+            expect(socketCalls).toBe(1)
+            expect(sockets[1].onopen).toBeNull()
         })
-        await openWhenBound(sockets[0])
-
-        sockets[0].close(1008, 'invalid_token')
-
-        await waitFor(() => expect(transport.getSnapshot()).toEqual({ kind: 'fatal', reason: 'invalid_token' }))
-        expect(peer.closeCount).toBe(1)
-        expect(socketCalls).toBe(1)
-
-        transport.notifyForeground()
-        await Promise.resolve()
-
-        expect(socketCalls).toBe(1)
-        expect(sockets[1].onopen).toBeNull()
-    })
+    }
 
     it('retries getWsUrl failures without fatal and bounds jitter', async () => {
         let calls = 0

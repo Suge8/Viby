@@ -9,7 +9,7 @@ describe('sessionResume', () => {
                 runtimeHandles: {
                     codex: { sessionId: 'session-1' },
                 },
-                startedBy: 'runner',
+                startedBy: 'app-core',
             })
         ).toBe('provider-handle')
     })
@@ -18,7 +18,7 @@ describe('sessionResume', () => {
         expect(
             resolveSessionResumeStrategy({
                 driver: 'pi',
-                startedBy: 'runner',
+                startedBy: 'app-core',
             })
         ).toBe('transcript-replay')
     })
@@ -30,16 +30,16 @@ describe('sessionResume', () => {
                 runtimeHandles: {
                     pi: { sessionId: 'pi-session-1' },
                 },
-                startedBy: 'runner',
+                startedBy: 'app-core',
             })
         ).toBe('provider-handle')
     })
 
-    it('uses continuity handoff only for runner-managed supported drivers', () => {
+    it('uses continuity handoff only for app-core-managed supported drivers', () => {
         expect(
             resolveSessionResumeStrategy({
                 driver: 'claude',
-                startedBy: 'runner',
+                startedBy: 'app-core',
             })
         ).toBe('continuity-handoff')
 
@@ -53,7 +53,7 @@ describe('sessionResume', () => {
 
     it('returns none when metadata is absent or unsupported', () => {
         expect(resolveSessionResumeStrategy(null)).toBe('none')
-        expect(resolveSessionResumeStrategy({ driver: undefined, startedBy: 'runner' })).toBe('none')
+        expect(resolveSessionResumeStrategy({ driver: undefined, startedBy: 'app-core' })).toBe('none')
     })
 
     it('keeps authoritative resume hints aligned with the derived strategy owner', () => {

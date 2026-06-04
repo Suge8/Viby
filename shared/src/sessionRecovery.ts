@@ -13,16 +13,13 @@ export const SessionRecoveryPageSchema = z.object({
         afterSeq: z.number().int().min(0),
         nextAfterSeq: z.number().int().min(0),
         limit: z.number().int().min(1).max(SESSION_MAX_MESSAGE_PAGE_SIZE),
-        hasMore: z.boolean()
-    })
+        hasMore: z.boolean(),
+    }),
 })
 
 export type SessionRecoveryPage = z.infer<typeof SessionRecoveryPageSchema>
 
-export function findNextRecoveryCursor(
-    messages: ReadonlyArray<{ seq: number | null }>,
-    cursor: number
-): number {
+export function findNextRecoveryCursor(messages: ReadonlyArray<{ seq: number | null }>, cursor: number): number {
     let nextCursor = cursor
     for (const message of messages) {
         if (typeof message.seq === 'number' && message.seq > nextCursor) {

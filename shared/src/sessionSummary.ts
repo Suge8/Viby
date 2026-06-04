@@ -22,7 +22,7 @@ export type SessionSummaryMetadata = {
     driver?: SessionDriver | null
     runtimeHandles?: SessionDriverHandles
     lifecycleState?: SessionLifecycleState
-    startedBy?: 'runner' | 'terminal'
+    startedBy?: 'app-core' | 'terminal'
     worktree?: WorktreeMetadata
 }
 

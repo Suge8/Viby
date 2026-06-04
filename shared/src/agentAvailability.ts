@@ -80,9 +80,9 @@ export const AGENT_SUPPORT_LINKS = {
         learnMoreUrl: 'https://docs.anthropic.com/en/docs/claude-code',
     },
     codex: {
-        installUrl: 'https://developers.openai.com/codex/cli',
-        configureUrl: 'https://developers.openai.com/codex/cli',
-        learnMoreUrl: 'https://developers.openai.com/codex/cli',
+        installUrl: 'https://developers.openai.com/codex/runtime',
+        configureUrl: 'https://developers.openai.com/codex/runtime',
+        learnMoreUrl: 'https://developers.openai.com/codex/runtime',
     },
     gemini: {
         installUrl: 'https://github.com/google-gemini/gemini-cli',
@@ -90,14 +90,14 @@ export const AGENT_SUPPORT_LINKS = {
         learnMoreUrl: 'https://github.com/google-gemini/gemini-cli',
     },
     opencode: {
-        installUrl: 'https://dev.opencode.ai/docs/cli',
-        configureUrl: 'https://dev.opencode.ai/docs/cli',
-        learnMoreUrl: 'https://dev.opencode.ai/docs/cli',
+        installUrl: 'https://dev.opencode.ai/docs/runtime',
+        configureUrl: 'https://dev.opencode.ai/docs/runtime',
+        learnMoreUrl: 'https://dev.opencode.ai/docs/runtime',
     },
     cursor: {
         installUrl: 'https://cursor.com/downloads',
-        configureUrl: 'https://docs.cursor.com/en/cli/overview',
-        learnMoreUrl: 'https://docs.cursor.com/en/cli/overview',
+        configureUrl: 'https://docs.cursor.com/en/runtime/overview',
+        learnMoreUrl: 'https://docs.cursor.com/en/runtime/overview',
     },
     pi: {
         installUrl: 'https://www.npmjs.com/package/@mariozechner/pi-coding-agent',

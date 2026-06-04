@@ -136,7 +136,7 @@ export type {
 } from './sessionDriver'
 export type {
     AssistantErrorEvent,
-    CliSessionEventPayload,
+    RuntimeSessionEventPayload,
     SessionAgentEvent,
 } from './sessionEvents'
 export type {

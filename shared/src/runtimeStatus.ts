@@ -1,7 +1,7 @@
 export const HUB_RUNTIME_STATUS_FILE = 'hub.runtime-status.json'
 
 export type HubRuntimePhase = 'starting' | 'ready' | 'stopped' | 'error'
-export type HubLaunchSource = 'desktop' | 'cli'
+export type HubLaunchSource = 'desktop' | 'runtime'
 
 export interface HubRuntimeStatus {
     phase: HubRuntimePhase

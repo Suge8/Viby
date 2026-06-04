@@ -135,11 +135,11 @@ describe('pairing peer extended mobile capability schemas', () => {
                 type: 'error',
                 sessionId: 'session-1',
                 terminalId: 'terminal-1',
-                message: 'CLI disconnected.',
+                message: 'Runtime disconnected.',
             })
         ).toMatchObject({
             type: 'error',
-            message: 'CLI disconnected.',
+            message: 'Runtime disconnected.',
         })
     })
 

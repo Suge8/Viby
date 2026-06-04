@@ -1,10 +1,12 @@
 import type { PairingByeReason, PairingRtcCandidateSignal } from './pairingSignal'
 import type { RTCPeerConnection as NegotiationPeer } from './perfectNegotiation'
 
+export type PairingFatalReason = PairingByeReason | 'closed' | 'replaced'
+
 export type PairingTransportState =
     | { kind: 'connecting'; attempt: number }
     | { kind: 'ready' }
-    | { kind: 'fatal'; reason: PairingByeReason | 'closed' }
+    | { kind: 'fatal'; reason: PairingFatalReason }
 
 export type RTCIceServer = { urls: string | string[]; username?: string; credential?: string }
 export type RTCDataChannel = { readyState?: string }

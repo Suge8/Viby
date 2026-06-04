@@ -267,15 +267,19 @@ export const PairingPeerResponseSchema = z.discriminatedUnion('ok', [
 ])
 export type PairingPeerResponse = z.infer<typeof PairingPeerResponseSchema>
 
+const PairingPeerEventSeqSchema = z.number().int().positive().optional()
+
 export const PairingPeerSyncEventSchema = z.object({
     kind: z.literal('event'),
     event: z.literal('sync-event'),
     payload: SyncEventSchema,
+    seq: PairingPeerEventSeqSchema,
 })
 export const PairingPeerTerminalEventSchema = z.object({
     kind: z.literal('event'),
     event: z.literal('terminal-event'),
     payload: PairingPeerTerminalEventPayloadSchema,
+    seq: PairingPeerEventSeqSchema,
 })
 export const PairingPeerEventSchema = z.discriminatedUnion('event', [
     PairingPeerSyncEventSchema,
@@ -288,6 +292,7 @@ export const PairingPeerHeartbeatSchema = z.object({
     ack: z.boolean().optional(),
     id: z.string().min(1).optional(),
     sentAt: z.number().int().nonnegative().optional(),
+    lastSeenSeq: z.number().int().nonnegative().optional(),
     protocolVersion: z.preprocess(
         (value) => normalizeProtocolVersion(value) ?? undefined,
         z.number().int().positive().optional()

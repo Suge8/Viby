@@ -9,7 +9,7 @@ describe('runtimeCapability contract', () => {
         })
     })
 
-    it('keeps raw CLI reason out of launch config snapshot errors', () => {
+    it('keeps raw provider reason out of launch config snapshot errors', () => {
         const parsed = RuntimeCapabilityResponseSchema.parse({
             snapshot: {
                 machineId: 'machine-1',

@@ -29,7 +29,7 @@ export const PermissionModeChangedEventSchema = z.object({
 
 export const DriverSwitchSendFailedEventSchema = z.object({
     type: z.literal('driver-switch-send-failed'),
-    stage: z.enum(['socket_update', 'callback_flush']).optional(),
+    stage: z.enum(['runtime_update', 'callback_flush']).optional(),
     code: z.enum(['empty_first_turn', 'timeout', 'unknown']).optional(),
 })
 
@@ -77,7 +77,7 @@ export type SessionAgentEvent =
     | { type: 'compact'; trigger: string; preTokens: number }
     | ({ type: string } & Record<string, unknown>)
 
-export type CliSessionEventPayload =
+export type RuntimeSessionEventPayload =
     | MessageEvent
     | AssistantErrorEvent
     | PermissionModeChangedEvent

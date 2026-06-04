@@ -64,7 +64,7 @@ export function supportsSessionContinuityResume(metadata: SessionDriverMetadataS
         return false
     }
 
-    return metadata?.startedBy === 'runner'
+    return metadata?.startedBy === 'app-core'
 }
 
 export function setSessionDriverRuntimeHandle(

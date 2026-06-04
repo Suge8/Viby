@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DecryptedMessageSchema, TodoItemSchema } from './schemas'
+import { DecryptedMessageSchema, SyncEventSchema, TodoItemSchema } from './schemas'
 
 describe('TodoItemSchema', () => {
     it('accepts Claude TodoWrite items without optional Viby fields', () => {
@@ -16,6 +16,14 @@ describe('TodoItemSchema', () => {
             id: '',
             activeForm: 'Shipping it',
         })
+    })
+})
+
+describe('SyncEventSchema', () => {
+    it('accepts remote snapshot invalidation events', () => {
+        expect(
+            SyncEventSchema.parse({ type: 'snapshot-invalidated', reason: 'pairing-replay-miss', lastSeq: 12 })
+        ).toEqual({ type: 'snapshot-invalidated', reason: 'pairing-replay-miss', lastSeq: 12 })
     })
 })
 

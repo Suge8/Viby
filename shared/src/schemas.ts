@@ -17,17 +17,14 @@ import {
 } from './piModelSchema'
 import type { SessionActivityKind } from './sessionActivity'
 import { SESSION_LIFECYCLE_STATES } from './sessionLifecycle'
-import {
-    SESSION_METADATA_RUNNER_START_FLAG_KEY,
-    SESSION_METADATA_RUNTIME_HANDLE_MIGRATION_KEYS,
-} from './sessionMetadataConstants'
+import { SESSION_METADATA_RUNTIME_HANDLE_MIGRATION_KEYS } from './sessionMetadataConstants'
 
 export const PiReasoningEffortSchema = PiReasoningEffortSchemaBase
 export const PiModelCapabilitySchema = PiModelCapabilitySchemaBase
 export type PiModelCapability = PiModelCapabilityBase
 export const PiModelScopeSchema = PiModelScopeSchemaBase
 export type PiModelScope = PiModelScopeBase
-export { SESSION_METADATA_RUNNER_START_FLAG_KEY, SESSION_METADATA_RUNTIME_HANDLE_MIGRATION_KEYS }
+export { SESSION_METADATA_RUNTIME_HANDLE_MIGRATION_KEYS }
 
 export const PermissionModeSchema = z.enum(PERMISSION_MODES)
 export const CodexCollaborationModeSchema = z.enum(CODEX_COLLABORATION_MODES)
@@ -91,11 +88,10 @@ export const MetadataSchema = z.object({
     slashCommands: z.array(z.string()).optional(),
     homeDir: z.string().optional(),
     vibyHomeDir: z.string().optional(),
-    vibyLibDir: z.string().optional(),
+    appCoreLibDir: z.string().optional(),
     vibyToolsDir: z.string().optional(),
-    startedFromRunner: z.boolean().optional(), // LEGACY READ-ONLY: migrated to startedBy by Hub
     hostPid: z.number().optional(),
-    startedBy: z.enum(['runner', 'terminal']).optional(),
+    startedBy: z.enum(['app-core', 'terminal']).optional(),
     lifecycleState: SessionLifecycleStateSchema.optional(),
     lifecycleStateSince: z.number().optional(),
     archivedBy: z.string().optional(),
@@ -231,7 +227,14 @@ const MachineChangedSchema = z.object({
     machineId: z.string(),
 })
 
+const SnapshotInvalidatedSchema = z.object({
+    type: z.literal('snapshot-invalidated'),
+    reason: z.enum(['pairing-replay-miss', 'pairing-seq-drift']),
+    lastSeq: z.number().int().nonnegative(),
+})
+
 export const SyncEventSchema = z.discriminatedUnion('type', [
+    SnapshotInvalidatedSchema,
     SessionChangedSchema.extend({
         type: z.literal('session-added'),
         data: z.unknown().optional(),
