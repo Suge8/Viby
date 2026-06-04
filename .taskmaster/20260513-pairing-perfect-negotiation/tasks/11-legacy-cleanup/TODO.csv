@@ -1,6 +1,0 @@
-id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
-1,Read SPEC + design impl,DONE,Internal model of phase formed,echo design-ready,2026-05-12T20:15:00Z,0,SPEC read; cleanup/audit/doc/harness plan executed.
-2,Implement deliverables,DONE,Files created/updated per SPEC,echo files-ready,2026-05-12T20:15:00Z,0,Legacy signal schema removed; docs/harness added; broker deployed.
-3,Unit tests pass,DONE,All assertions per SPEC acceptance,see SPEC.md Validation Command,2026-05-12T20:15:00Z,0,All automated validation passed.
-4,Manual / real-device regression,BLOCKED,Listed RM rows pass,see SPEC.md Acceptance Criteria,,0,BLOCKED: no attached iPhone Safari/PWA real-device surface in this API session; matrix records not-run.
-5,Update PROGRESS + close row,TODO,SUBTASKS.csv row DONE; commit pushed,git log -1,,0,"Progress can close only after RM manual acceptance, unless owner accepts deferred RM."

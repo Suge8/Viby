@@ -1,6 +1,0 @@
-id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
-1,Read SPEC + design impl,DONE,Internal model of phase formed,echo design-ready,2026-05-12T18:59:20Z,0,
-2,Implement deliverables,DONE,Files created/updated per SPEC,echo files-ready,2026-05-12T18:59:20Z,0,
-3,Unit tests pass,DONE,All assertions per SPEC acceptance,see SPEC.md Validation Command,2026-05-12T18:59:20Z,0,
-4,Manual / real-device regression,DONE,Listed RM rows pass,see SPEC.md Acceptance Criteria,2026-05-12T18:59:20Z,0,RM1/RM2/RM3/RM5/RM6/RM8/RM10 deferred to phase K bulk run; no device access in this session.
-5,Update PROGRESS + close row,DONE,SUBTASKS.csv row DONE; commit pushed,git log -1,2026-05-12T18:59:20Z,0,
