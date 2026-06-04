@@ -4,11 +4,12 @@ import {
     claimRemotePwaHandoff,
     getGuestToken,
     getPairingHandoffTicketFromLocation,
+    RemotePairingHttpError,
     reconnectRemotePairing,
     recoverRemotePairingByDevice,
     scrubPairingLaunchSecretFromUrl,
 } from '@/remote/remotePairingHttp'
-import { createRemotePairingUserError } from './remotePairingErrors'
+import { createRemotePairingCodedError, createRemotePairingUserError } from './remotePairingErrors'
 import { isRecoverableRemotePairingError } from './remotePairingRecovery'
 
 export type RemotePairingAuthResult = {
@@ -32,32 +33,38 @@ async function claimCookieHandoff(pairingId: string): Promise<PairingRemoteAuth 
     return await claimRemotePwaHandoff(pairingId, recovered.value.handoffTicket)
 }
 
+function isReplacedControlPlane(error: unknown): boolean {
+    return error instanceof RemotePairingHttpError && error.serverCode === 'pairing_invalid_token'
+}
+
 async function resumeRemotePairing(pairingId: string, handoffTicket: string | null): Promise<PairingRemoteAuth | null> {
-    let auth: PairingRemoteAuth | null = null
+    if (handoffTicket) {
+        try {
+            const auth = await claimRemotePwaHandoff(pairingId, handoffTicket)
+            scrubPairingLaunchSecretFromUrl()
+            return auth
+        } catch (error) {
+            const auth = await claimCookieHandoff(pairingId)
+            if (auth) {
+                scrubPairingLaunchSecretFromUrl()
+                return auth
+            }
+            throw error
+        }
+    }
+
+    const handoffAuth = await claimCookieHandoff(pairingId)
+    if (handoffAuth) return handoffAuth
+
     try {
-        auth = await reconnectRemotePairing(pairingId)
+        const auth = await reconnectRemotePairing(pairingId)
+        if (auth) return auth
     } catch (error) {
+        if (isReplacedControlPlane(error)) throw createRemotePairingCodedError('remotePairing.error.connectionReplaced')
         if (isRecoverableRemotePairingError(error)) throw error
     }
 
-    try {
-        auth ??= await recoverRemotePairingByDevice(pairingId)
-    } catch (error) {
-        if (isRecoverableRemotePairingError(error) || !handoffTicket) throw error
-    }
-    if (!auth && handoffTicket) {
-        try {
-            auth = await claimRemotePwaHandoff(pairingId, handoffTicket)
-        } catch (error) {
-            auth = await claimCookieHandoff(pairingId)
-            if (!auth) throw error
-        }
-    }
-    auth ??= await claimCookieHandoff(pairingId)
-    if (auth && handoffTicket) {
-        scrubPairingLaunchSecretFromUrl()
-    }
-    return auth
+    return await recoverRemotePairingByDevice(pairingId)
 }
 
 export async function resolveRemotePairingAuth(pairingId: string): Promise<RemotePairingAuthResult | null> {

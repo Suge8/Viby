@@ -1,10 +1,16 @@
-import { type Dispatch, type SetStateAction, useEffect } from 'react'
+import { type Dispatch, type SetStateAction, useEffect, useRef } from 'react'
 import { clearRetainedReady, getRetainedReady } from '@/remote/RemotePairingPersistence'
 import type { RemotePairingReadyConnection } from '@/remote/RemotePairingReadyShell'
-import { isRemotePairingApproved, resolveRemotePairingAuth } from '@/remote/remotePairingAuthFlow'
+import {
+    isRemotePairingApproved,
+    type RemotePairingAuthResult,
+    resolveRemotePairingAuth,
+} from '@/remote/remotePairingAuthFlow'
 import { type PairingRemoteAuth, rememberRemotePairingId } from '@/remote/remotePairingHttp'
 import type { RemoteState } from './RemotePairingController'
 import { getRemotePairingErrorKeyOrFallback } from './remotePairingErrors'
+
+export type { RemotePairingAuthResult }
 
 export function clearRetainedReadySoon(pairingId: string): void {
     queueMicrotask(() => clearRetainedReady(pairingId).catch(() => undefined))
@@ -12,16 +18,27 @@ export function clearRetainedReadySoon(pairingId: string): void {
 
 export function useRemotePairingBoot(options: {
     bootAttempt: number
+    initialAuth?: RemotePairingAuthResult | null
     pairingId: string
     setState: Dispatch<SetStateAction<RemoteState>>
     startSession(auth: PairingRemoteAuth, token: string): Promise<RemotePairingReadyConnection>
 }): void {
-    const { bootAttempt, pairingId, setState, startSession } = options
+    const { bootAttempt, initialAuth, pairingId, setState, startSession } = options
+    const consumedInitialAuthRef = useRef<string | null>(null)
     useEffect(() => {
         let disposed = false
         rememberRemotePairingId(pairingId)
         async function boot(): Promise<void> {
             setState({ kind: 'hydrating', phase: 'authenticating' })
+            if (
+                initialAuth?.auth.pairing.id === pairingId &&
+                consumedInitialAuthRef.current !== initialAuth.token &&
+                isRemotePairingApproved(initialAuth.auth)
+            ) {
+                consumedInitialAuthRef.current = initialAuth.token
+                setState({ kind: 'hydrating', phase: 'opening-relay' })
+                return void (await startSession(initialAuth.auth, initialAuth.token))
+            }
             const retained = await readRetainedReady(pairingId)
             const resumed = await resolveRemotePairingAuth(pairingId)
             if (disposed) return
@@ -43,7 +60,7 @@ export function useRemotePairingBoot(options: {
         return () => {
             disposed = true
         }
-    }, [bootAttempt, pairingId, setState, startSession])
+    }, [bootAttempt, initialAuth, pairingId, setState, startSession])
 }
 
 async function readRetainedReady(pairingId: string): Promise<{ lastReadyAt: number } | null> {

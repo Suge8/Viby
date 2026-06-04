@@ -1,28 +1,28 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useLocation, useRouter } from '@tanstack/react-router'
-import { hasPairingWorkspaceIntent, withPairingWorkspaceIdentity } from '@viby/protocol'
 import type { PairingTransportState } from '@viby/protocol/pairing'
 import { type JSX, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFinalizeBootShell } from '@/hooks/useFinalizeBootShell'
 import { useNoticeCenter } from '@/lib/notice-center'
 import type { RemoteConnectingPhase } from '@/lib/remoteConnectingPhase'
-import { reportWebRuntimeError } from '@/lib/runtimeDiagnostics'
 import { useTranslation } from '@/lib/use-translation'
 import { RemotePairingControllerView } from '@/remote/RemotePairingControllerView'
-import { setRetainedReady } from '@/remote/RemotePairingPersistence'
 import type { RemotePairingReadyConnection } from '@/remote/RemotePairingReadyShell'
 import { RemotePeerSession } from '@/remote/RemotePeerSession'
-import { clearRetainedReadySoon, useRemotePairingBoot } from '@/remote/remotePairingBoot'
+import { clearRetainedReadySoon, type RemotePairingAuthResult, useRemotePairingBoot } from '@/remote/remotePairingBoot'
 import { RemotePeerConnectError } from '@/remote/remotePairingErrors'
 import { clearStoredGuestToken, type PairingRemoteAuth, verifyRemotePairingCode } from '@/remote/remotePairingHttp'
 import { installLanDeviceBinding } from '@/remote/remotePairingPostVerify'
-import { useRemotePairingPwaHandoffWarmup } from '@/remote/remotePairingPwaHandoffWarmup'
 import { resumeRemotePairingQueries } from '@/remote/remotePairingQueryOnlineState'
+import { persistRemotePairingReady } from '@/remote/remotePairingRetainedReady'
 import { recordRemotePairingDiagnostic } from './remotePairingDiagnostics'
 import { getRemotePairingErrorKeyOrFallback, type RemotePairingErrorKey } from './remotePairingErrors'
 import { useRemoteQueryOnlineBridge, useRemoteTransportSnapshot } from './remotePairingReactHooks'
 import { useRemoteReconnectNotice } from './remotePairingReconnectNotice'
 import { buildRemotePairingConnectionChrome } from './remotePairingViewModel'
+import { useRemotePairingPwaInstallStatus } from './useRemotePairingPwaInstallStatus'
+import { useRemotePairingTokenValidation } from './useRemotePairingTokenValidation'
+import { useRemotePairingWorkspaceRoute } from './useRemotePairingWorkspaceRoute'
 
 export type RemoteState =
     | { kind: 'hydrating'; phase: RemoteConnectingPhase }
@@ -32,13 +32,10 @@ export type RemoteState =
 
 const CONNECTING_SNAPSHOT = { kind: 'connecting', attempt: 0 } as const
 
-function persistRetainedReady(pairingId: string): void {
-    void setRetainedReady(pairingId, Date.now()).catch((error) => {
-        reportWebRuntimeError('Failed to persist remote pairing ready marker.', error)
-    })
-}
-
-export function RemotePairingController(props: { pairingId: string }): JSX.Element | null {
+export function RemotePairingController(props: {
+    initialAuth?: RemotePairingAuthResult | null
+    pairingId: string
+}): JSX.Element | null {
     const router = useRouter()
     const queryClient = useQueryClient()
     const pathname = useLocation({ select: (location) => location.pathname })
@@ -67,9 +64,7 @@ export function RemotePairingController(props: { pairingId: string }): JSX.Eleme
         reconnect: connectionChrome.reconnect,
         onStop: activeReady ? handleStopReconnect : undefined,
     })
-
     useFinalizeBootShell(true)
-
     useRemoteTransportSnapshot({
         activeReady,
         connectingSnapshot: CONNECTING_SNAPSHOT,
@@ -80,7 +75,6 @@ export function RemotePairingController(props: { pairingId: string }): JSX.Eleme
         queryClient,
         running: state.kind === 'running',
     })
-
     const closeReady = useCallback(() => {
         readyRef.current?.bridge.close()
         pendingBridgeRef.current?.close()
@@ -107,7 +101,7 @@ export function RemotePairingController(props: { pairingId: string }): JSX.Eleme
             }
             readyRef.current = ready
             pendingBridgeRef.current = null
-            persistRetainedReady(props.pairingId)
+            persistRemotePairingReady(props.pairingId)
             recordRemotePairingDiagnostic('controller', { state: 'running' })
             setState({ kind: 'running', ready })
             return ready
@@ -115,7 +109,13 @@ export function RemotePairingController(props: { pairingId: string }): JSX.Eleme
         [props.pairingId]
     )
 
-    useRemotePairingBoot({ bootAttempt, pairingId: props.pairingId, setState, startSession })
+    useRemotePairingBoot({
+        bootAttempt,
+        initialAuth: props.initialAuth,
+        pairingId: props.pairingId,
+        setState,
+        startSession,
+    })
 
     useEffect(() => {
         return () => {
@@ -136,18 +136,24 @@ export function RemotePairingController(props: { pairingId: string }): JSX.Eleme
         })
     }, [activeReady, closeReady, props.pairingId])
 
-    useEffect(() => {
-        if (state.kind !== 'running') return
-        if (!pathname.startsWith('/sessions')) {
-            router.history.replace(withPairingWorkspaceIdentity('/sessions', props.pairingId))
-            return
-        }
-        if (!hasPairingWorkspaceIntent(pathname, locationUrl.search)) {
-            router.history.replace(
-                withPairingWorkspaceIdentity(`${pathname}${locationUrl.search}${locationUrl.hash}`, props.pairingId)
-            )
-        }
-    }, [locationUrl.hash, locationUrl.search, pathname, router, state.kind])
+    const setConnectionReplaced = useCallback(() => {
+        setState({ kind: 'fatal', errorKey: 'remotePairing.error.connectionReplaced' })
+    }, [])
+    useRemotePairingTokenValidation({
+        activeReady,
+        closeReady,
+        pairingId: props.pairingId,
+        reconnect: connectionChrome.reconnect,
+        setConnectionReplaced,
+    })
+    useRemotePairingWorkspaceRoute({
+        hash: locationUrl.hash,
+        pairingId: props.pairingId,
+        pathname,
+        replace: router.history.replace,
+        running: state.kind === 'running',
+        search: locationUrl.search,
+    })
 
     const handleVerify = useCallback(
         async (code: string) => {
@@ -179,9 +185,11 @@ export function RemotePairingController(props: { pairingId: string }): JSX.Eleme
         setBootAttempt((attempt) => attempt + 1)
     }, [closeReady, props.pairingId])
 
-    const pwaHandoffStatus = useRemotePairingPwaHandoffWarmup({
-        pairingId: props.pairingId,
+    const pwaHandoffStatus = useRemotePairingPwaInstallStatus({
         active: state.kind === 'running',
+        closeReady,
+        pairingId: props.pairingId,
+        setConnectionReplaced,
     })
     return (
         <RemotePairingControllerView

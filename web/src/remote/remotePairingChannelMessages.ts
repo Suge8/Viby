@@ -10,6 +10,7 @@ export function handleRemotePeerChannelMessage(options: {
     pendingRequests: RemotePeerPendingRequests
     syncListeners: ReadonlySet<(event: SyncEvent) => void>
     terminalListeners: ReadonlySet<(event: PairingPeerTerminalEventPayload) => void>
+    acceptEventSeq?: (seq: number, force?: boolean) => boolean
     onHeartbeat?: (heartbeat: PairingPeerHeartbeat) => void
 }): void {
     if (typeof options.data !== 'string') return
@@ -25,10 +26,14 @@ export function handleRemotePeerChannelMessage(options: {
     }
     if (message.kind === 'event') {
         const parsed = PairingPeerEventSchema.parse(message)
+        if (parsed.event === 'sync-event' && parsed.payload.type === 'snapshot-invalidated') {
+            options.acceptEventSeq?.(parsed.payload.lastSeq, true)
+            for (const listener of options.syncListeners) listener(parsed.payload)
+            return
+        }
+        if (typeof parsed.seq === 'number' && options.acceptEventSeq?.(parsed.seq) === false) return
         if (parsed.event === 'sync-event') {
-            for (const listener of options.syncListeners) {
-                listener(parsed.payload)
-            }
+            for (const listener of options.syncListeners) listener(parsed.payload)
             return
         }
         for (const listener of options.terminalListeners) {

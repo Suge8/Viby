@@ -4,6 +4,9 @@ import type { PwaHandoffStatus } from './remotePairingPwaHandoffWarmup'
 
 const httpMock = vi.hoisted(() => ({
     createRemotePwaHandoff: vi.fn(),
+    isRemotePairingTokenRejected: vi.fn(
+        (error: unknown) => error instanceof Error && error.message === 'invalid-token'
+    ),
 }))
 
 vi.mock('@/remote/remotePairingHttp', () => httpMock)
@@ -14,7 +17,7 @@ vi.mock('@/lib/runtimeDiagnostics', () => ({
 
 import { useRemotePairingPwaHandoffWarmup } from './remotePairingPwaHandoffWarmup'
 
-function WarmupProbe(props: { pairingId: string; active: boolean }) {
+function WarmupProbe(props: { active: boolean; onCredentialRejected?: () => void; pairingId: string }) {
     const status = useRemotePairingPwaHandoffWarmup(props)
     return <span data-testid="status">{status}</span>
 }
@@ -105,6 +108,16 @@ describe('useRemotePairingPwaHandoffWarmup', () => {
 
         expect(httpMock.createRemotePwaHandoff).not.toHaveBeenCalled()
         expect(readStatus()).toBe('idle')
+    })
+
+    it('stops the stale browser control plane when the handoff credential was replaced', async () => {
+        const onCredentialRejected = vi.fn()
+        httpMock.createRemotePwaHandoff.mockRejectedValue(new Error('invalid-token'))
+
+        render(<WarmupProbe pairingId="pairing-1" active onCredentialRejected={onCredentialRejected} />)
+
+        await waitFor(() => expect(onCredentialRejected).toHaveBeenCalledTimes(1))
+        expect(readStatus()).toBe('preparing')
     })
 
     it('reports `failed` when the broker rejects so the install affordance never appears with a stale cookie', async () => {

@@ -73,6 +73,10 @@ export class RemotePairingHttpError extends Error {
  * still-valid token: wiping the token there used to bounce cellular hand-over
  * users to the rescan screen even though the broker session was alive.
  */
+export function isRemotePairingTokenRejected(error: unknown): boolean {
+    return error instanceof RemotePairingHttpError && error.serverCode === 'pairing_invalid_token'
+}
+
 export function isInvalidStoredPairingCredential(error: RemotePairingHttpError): boolean {
     if (error.status === 410) {
         return error.serverCode !== 'pairing_reconnect_challenge_expired'
@@ -276,6 +280,15 @@ export async function claimRemotePwaHandoff(
     storeGuestToken(pairingId, response.guestToken)
     await requestRemotePairingPersistentStorage()
     return response
+}
+
+export async function validateRemotePairingToken(pairingId: string, token: string): Promise<void> {
+    await postJson(
+        'reconnect',
+        `/pairings/${encodeURIComponent(pairingId)}/reconnect-challenge`,
+        { token },
+        (payload) => PairingReconnectChallengeResponseSchema.parse(payload)
+    )
 }
 
 export async function reconnectRemotePairing(pairingId: string): Promise<PairingReconnectResponse | null> {

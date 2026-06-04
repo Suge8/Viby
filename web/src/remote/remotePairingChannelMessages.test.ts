@@ -48,4 +48,52 @@ describe('handleRemotePeerChannelMessage', () => {
         expect(onHeartbeat).toHaveBeenCalledWith({ kind: 'heartbeat' })
         expect(pending.resolveResponse).not.toHaveBeenCalled()
     })
+
+    it('drops duplicate and old sync events through the seq guard', () => {
+        const pending = pendingRequests()
+        const syncListener = vi.fn()
+        const acceptEventSeq = vi.fn((seq: number) => seq > 2)
+
+        for (const seq of [2, 1, 3]) {
+            handleRemotePeerChannelMessage({
+                data: JSON.stringify({
+                    kind: 'event',
+                    event: 'sync-event',
+                    seq,
+                    payload: { type: 'machine-updated', machineId: `m${seq}` },
+                }),
+                pendingRequests: pending,
+                syncListeners: new Set([syncListener]),
+                terminalListeners: new Set(),
+                acceptEventSeq,
+            })
+        }
+
+        expect(syncListener).toHaveBeenCalledTimes(1)
+        expect(syncListener).toHaveBeenCalledWith({ type: 'machine-updated', machineId: 'm3' })
+    })
+
+    it('forces snapshot invalidation through duplicate seq guards', () => {
+        const pending = pendingRequests()
+        const syncListener = vi.fn()
+        const acceptEventSeq = vi.fn(() => true)
+        handleRemotePeerChannelMessage({
+            data: JSON.stringify({
+                kind: 'event',
+                event: 'sync-event',
+                payload: { type: 'snapshot-invalidated', reason: 'pairing-seq-drift', lastSeq: 3 },
+            }),
+            pendingRequests: pending,
+            syncListeners: new Set([syncListener]),
+            terminalListeners: new Set(),
+            acceptEventSeq,
+        })
+
+        expect(acceptEventSeq).toHaveBeenCalledWith(3, true)
+        expect(syncListener).toHaveBeenCalledWith({
+            type: 'snapshot-invalidated',
+            reason: 'pairing-seq-drift',
+            lastSeq: 3,
+        })
+    })
 })

@@ -68,7 +68,7 @@ function buildRemoteRuntimeResponse(): RuntimeResponse {
             metadata: {
                 host: 'desktop',
                 platform: globalThis.navigator?.platform || 'web',
-                vibyCliVersion: 'remote',
+                appCoreVersion: 'remote',
                 displayName: 'Viby Desktop',
                 capabilities: [MACHINE_BROWSE_DIRECTORY_CAPABILITY],
             },

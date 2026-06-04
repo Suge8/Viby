@@ -7,10 +7,12 @@ const cookieRecoverMock = vi.hoisted(() => ({
 const httpMock = vi.hoisted(() => ({
     RemotePairingHttpError: class RemotePairingHttpError extends Error {
         readonly status: number
+        readonly serverCode: string | null
 
-        constructor(status: number, message: string) {
+        constructor(status: number, message: string, serverCode: string | null = null) {
             super(message)
             this.status = status
+            this.serverCode = serverCode
         }
     },
     claimRemotePwaHandoff: vi.fn(),
@@ -67,6 +69,7 @@ describe('remotePairingAuthFlow', () => {
             token: 'guest-token-pwa',
         })
         expect(httpMock.claimRemotePwaHandoff).toHaveBeenCalledWith('pairing-1', 'handoff-ticket-1')
+        expect(httpMock.reconnectRemotePairing).not.toHaveBeenCalled()
         expect(httpMock.scrubPairingLaunchSecretFromUrl).toHaveBeenCalledTimes(1)
     })
 
@@ -84,6 +87,7 @@ describe('remotePairingAuthFlow', () => {
             token: 'guest-token-cookie',
         })
         expect(httpMock.claimRemotePwaHandoff).toHaveBeenCalledWith('pairing-1', 'fresh-cookie-ticket')
+        expect(httpMock.reconnectRemotePairing).not.toHaveBeenCalled()
     })
 
     it('recovers a stale launch handoff from the manifest cookie before showing rescan', async () => {
@@ -104,6 +108,17 @@ describe('remotePairingAuthFlow', () => {
         expect(httpMock.claimRemotePwaHandoff).toHaveBeenNthCalledWith(1, 'pairing-1', 'stale-handoff-ticket')
         expect(httpMock.claimRemotePwaHandoff).toHaveBeenNthCalledWith(2, 'pairing-1', 'fresh-cookie-ticket')
         expect(httpMock.scrubPairingLaunchSecretFromUrl).toHaveBeenCalledTimes(1)
+    })
+
+    it('treats invalidated browser tokens as a replaced control plane instead of recovering by device', async () => {
+        httpMock.reconnectRemotePairing.mockRejectedValue(
+            new httpMock.RemotePairingHttpError(403, 'remotePairing.error.scanAgain', 'pairing_invalid_token')
+        )
+
+        await expect(resolveRemotePairingAuth('pairing-1')).rejects.toMatchObject({
+            code: 'remotePairing.error.connectionReplaced',
+        })
+        expect(httpMock.recoverRemotePairingByDevice).not.toHaveBeenCalled()
     })
 
     it('reconnects with a stored guest token without falling through to handoff', async () => {

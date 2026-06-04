@@ -18,6 +18,7 @@ type ScheduleTimeout = (callback: () => void, delayMs: number) => () => void
 
 export function createRemoteRelayHeartbeat(options: {
     getRelay: () => RemotePairingRelaySocket
+    getLastSeenSeq?: () => number
     now?: () => number
     onTimeout?: () => void
     scheduleInterval?: ScheduleInterval
@@ -39,7 +40,11 @@ export function createRemoteRelayHeartbeat(options: {
         }
         const relay = options.getRelay()
         if (relay.readyState !== 'open') return
-        const heartbeat: PairingPeerHeartbeat = { kind: 'heartbeat', protocolVersion: PROTOCOL_VERSION }
+        const heartbeat: PairingPeerHeartbeat = {
+            kind: 'heartbeat',
+            protocolVersion: PROTOCOL_VERSION,
+            lastSeenSeq: options.getLastSeenSeq?.(),
+        }
         sentAt = currentTime
         try {
             relay.send(JSON.stringify(heartbeat))

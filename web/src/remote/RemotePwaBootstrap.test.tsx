@@ -8,6 +8,7 @@ const cookieRecover = vi.hoisted(() => vi.fn())
 const cachedRecover = vi.hoisted(() => vi.fn())
 const http = vi.hoisted(() => ({
     claimRemotePwaHandoff: vi.fn(),
+    getGuestToken: vi.fn((auth: { guestToken?: string }) => auth.guestToken ?? null),
     rememberRemotePairingId: vi.fn(),
 }))
 
@@ -46,6 +47,10 @@ describe('resolveRecoveredPairingHref', () => {
     })
 })
 
+function auth(pairingId: string, token = `${pairingId}-token`) {
+    return { guestToken: token, pairing: { id: pairingId, approvalStatus: 'approved' } }
+}
+
 describe('RemotePwaBootstrap', () => {
     beforeEach(() => {
         route.href = '/sessions?remote=1&pairing=pairing-cookie'
@@ -54,7 +59,7 @@ describe('RemotePwaBootstrap', () => {
 
     it('falls back from an invalid manifest cookie to server-verified cached device keys', async () => {
         cookieRecover.mockResolvedValue({ ok: false, failure: { kind: 'invalid' } })
-        cachedRecover.mockResolvedValue({ pairing: { id: 'pairing-good', approvalStatus: 'approved' } })
+        cachedRecover.mockResolvedValue(auth('pairing-good'))
         const onRecovered = vi.fn()
 
         render(<RemotePwaBootstrap fallbackPairingId="pairing-stale" onRecovered={onRecovered} />)
@@ -64,7 +69,7 @@ describe('RemotePwaBootstrap', () => {
         )
         expect(cachedRecover).toHaveBeenCalledWith('pairing-stale')
         expect(http.rememberRemotePairingId).toHaveBeenCalledWith('pairing-good')
-        expect(onRecovered).toHaveBeenCalledWith('pairing-good')
+        expect(onRecovered).toHaveBeenCalledWith({ auth: auth('pairing-good'), token: 'pairing-good-token' })
         expect(screen.queryByTestId('missing')).toBeNull()
     })
 
@@ -74,7 +79,7 @@ describe('RemotePwaBootstrap', () => {
             ok: true,
             value: { pairingId: 'pairing-cookie', handoffTicket: 'handoff-1', expiresAt: 1 },
         })
-        http.claimRemotePwaHandoff.mockResolvedValue({ pairing: { id: 'pairing-cookie', approvalStatus: 'approved' } })
+        http.claimRemotePwaHandoff.mockResolvedValue(auth('pairing-cookie'))
 
         render(<RemotePwaBootstrap fallbackPairingId={null} onRecovered={vi.fn()} />)
 
@@ -90,7 +95,7 @@ describe('RemotePwaBootstrap', () => {
             ok: true,
             value: { pairingId: 'pairing-cookie', handoffTicket: 'handoff-1', expiresAt: 1 },
         })
-        http.claimRemotePwaHandoff.mockResolvedValue({ pairing: { id: 'pairing-cookie', approvalStatus: 'approved' } })
+        http.claimRemotePwaHandoff.mockResolvedValue(auth('pairing-cookie'))
         const onRecovered = vi.fn()
 
         render(<RemotePwaBootstrap fallbackPairingId="pairing-stale" onRecovered={onRecovered} />)
@@ -100,21 +105,21 @@ describe('RemotePwaBootstrap', () => {
         )
         expect(cachedRecover).not.toHaveBeenCalled()
         expect(http.claimRemotePwaHandoff).toHaveBeenCalledWith('pairing-cookie', 'handoff-1')
-        expect(onRecovered).toHaveBeenCalledWith('pairing-cookie')
+        expect(onRecovered).toHaveBeenCalledWith({ auth: auth('pairing-cookie'), token: 'pairing-cookie-token' })
     })
 
     it('retries transient bootstrap recovery from the same owner', async () => {
         cookieRecover.mockResolvedValue({ ok: false, failure: { kind: 'transient' } })
-        cachedRecover.mockRejectedValueOnce(new Error('idb busy')).mockResolvedValueOnce({
-            pairing: { id: 'pairing-good', approvalStatus: 'approved' },
-        })
+        cachedRecover.mockRejectedValueOnce(new Error('idb busy')).mockResolvedValueOnce(auth('pairing-good'))
         const onRecovered = vi.fn()
 
         render(<RemotePwaBootstrap fallbackPairingId="pairing-stale" onRecovered={onRecovered} />)
 
         fireEvent.click(await screen.findByRole('button', { name: 'retry' }))
 
-        await waitFor(() => expect(onRecovered).toHaveBeenCalledWith('pairing-good'))
+        await waitFor(() =>
+            expect(onRecovered).toHaveBeenCalledWith({ auth: auth('pairing-good'), token: 'pairing-good-token' })
+        )
         expect(cachedRecover).toHaveBeenCalledTimes(2)
     })
 })

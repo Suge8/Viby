@@ -16,6 +16,27 @@ const queryOnline = vi.hoisted(() => ({
     resume: vi.fn(),
 }))
 const runtimeDiagnostics = vi.hoisted(() => ({ report: vi.fn() }))
+const RemotePairingHttpErrorMock = vi.hoisted(
+    () =>
+        class RemotePairingHttpError extends Error {
+            readonly serverCode: string | null
+            readonly status: number
+            constructor(
+                status: number,
+                code: string,
+                _serverError: string | null = null,
+                serverCode: string | null = null
+            ) {
+                super(code)
+                this.status = status
+                this.serverCode = serverCode
+            }
+        }
+)
+const pwaWarmup = vi.hoisted(() => ({
+    options: null as null | { onCredentialRejected?: () => void },
+}))
+const validateRemotePairingToken = vi.hoisted(() => vi.fn(async () => undefined))
 const session = vi.hoisted(() => ({
     onClose: null as null | ((error: Error) => void),
     transportListener: null as null | (() => void),
@@ -39,7 +60,12 @@ vi.mock('@/remote/remotePairingQueryOnlineState', () => ({
     pauseRemotePairingQueries: queryOnline.pause,
     resumeRemotePairingQueries: queryOnline.resume,
 }))
-vi.mock('@/remote/remotePairingPwaHandoffWarmup', () => ({ useRemotePairingPwaHandoffWarmup: () => 'ready' }))
+vi.mock('@/remote/remotePairingPwaHandoffWarmup', () => ({
+    useRemotePairingPwaHandoffWarmup: (options: { onCredentialRejected?: () => void }) => {
+        pwaWarmup.options = options
+        return 'ready'
+    },
+}))
 vi.mock('@/components/AppInstallPromptLayer', () => ({ AppInstallPromptLayer: () => <div data-testid="install" /> }))
 vi.mock('@/remote/RemotePairingScreens', () => ({
     RemotePairingCodeScreen: () => <div data-testid="code" />,
@@ -86,6 +112,8 @@ vi.mock('@/remote/remotePairingAuthFlow', () => ({
 vi.mock('@/remote/remotePairingHttp', () => ({
     clearStoredGuestToken: vi.fn(),
     rememberRemotePairingId: vi.fn(),
+    RemotePairingHttpError: RemotePairingHttpErrorMock,
+    validateRemotePairingToken,
     verifyRemotePairingCode: vi.fn(),
 }))
 vi.mock('@/remote/RemotePeerSession', () => ({
@@ -163,6 +191,9 @@ describe('RemotePairingController', () => {
         queryOnline.pause.mockClear()
         queryOnline.resume.mockClear()
         runtimeDiagnostics.report.mockClear()
+        pwaWarmup.options = null
+        validateRemotePairingToken.mockReset()
+        validateRemotePairingToken.mockResolvedValue(undefined)
         session.onClose = null
         session.transportListener = null
         session.snapshot = { kind: 'connecting', attempt: 0 }
@@ -298,6 +329,68 @@ describe('RemotePairingController', () => {
         act(() => session.onClose?.(new Error('remotePairing.error.closedRetrying')))
         await waitFor(() => expect(clearRetainedReady).toHaveBeenCalledWith('pairing-1'))
         expect(await screen.findByTestId('status')).toBeInTheDocument()
+    })
+
+    it('terminates a stale Safari reconnect when the broker says its token was replaced', async () => {
+        validateRemotePairingToken.mockRejectedValueOnce(
+            new RemotePairingHttpErrorMock(403, 'remotePairing.error.scanAgain', null, 'pairing_invalid_token')
+        )
+        session.snapshot = { kind: 'ready' }
+        renderController()
+        await screen.findByTestId('ready-shell')
+        act(() => {
+            session.snapshot = { kind: 'connecting', attempt: 3 }
+            session.transportListener?.()
+        })
+
+        await waitFor(() =>
+            expect(screen.getByTestId('status')).toHaveAttribute(
+                'data-message',
+                'remotePairing.error.connectionReplaced'
+            )
+        )
+        expect(validateRemotePairingToken).toHaveBeenCalledWith('pairing-1', 'token')
+        expect(session.close).toHaveBeenCalled()
+        expect(screen.queryByTestId('ready-shell')).not.toBeInTheDocument()
+    })
+
+    it('terminates a stale Safari tab when PWA handoff warmup proves its token was replaced', async () => {
+        session.snapshot = { kind: 'ready' }
+        renderController()
+        await screen.findByTestId('ready-shell')
+
+        act(() => pwaWarmup.options?.onCredentialRejected?.())
+
+        await waitFor(() =>
+            expect(screen.getByTestId('status')).toHaveAttribute(
+                'data-message',
+                'remotePairing.error.connectionReplaced'
+            )
+        )
+        expect(session.close).toHaveBeenCalled()
+        expect(screen.queryByTestId('ready-shell')).not.toBeInTheDocument()
+    })
+
+    it('replaces the reconnecting workspace with a terminal handoff screen', async () => {
+        session.snapshot = { kind: 'ready' }
+        renderController()
+        await screen.findByTestId('ready-shell')
+        act(() => {
+            session.snapshot = { kind: 'connecting', attempt: 3 }
+            session.transportListener?.()
+        })
+        await waitFor(() => expect(findLatestReconnectNoticeCall()).toHaveProperty('tone', 'danger'))
+
+        act(() => session.onClose?.(new Error('remotePairing.error.connectionReplaced')))
+
+        await waitFor(() =>
+            expect(screen.getByTestId('status')).toHaveAttribute(
+                'data-message',
+                'remotePairing.error.connectionReplaced'
+            )
+        )
+        expect(screen.queryByTestId('ready-shell')).not.toBeInTheDocument()
+        expect(persistentNotice.mock.calls.at(-1)?.[0]).toBeNull()
     })
 
     it('drops a half-open bridge when initial ready fails and retries from one owner', async () => {

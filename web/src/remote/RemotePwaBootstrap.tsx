@@ -6,9 +6,10 @@ import type { RemoteConnectingPhase } from '@/lib/remoteConnectingPhase'
 import { reportWebRuntimeError } from '@/lib/runtimeDiagnostics'
 import { useTranslation } from '@/lib/use-translation'
 import { RemotePairingMissingScreen, RemotePairingStatusScreen } from './RemotePairingScreens'
+import type { RemotePairingAuthResult } from './remotePairingAuthFlow'
 import { type PairingCookieRecoverFailure, recoverRemotePairingFromCookie } from './remotePairingCookieRecover'
 import { recoverAnyRemotePairingByDevice } from './remotePairingDeviceRecovery'
-import { claimRemotePwaHandoff, rememberRemotePairingId } from './remotePairingHttp'
+import { claimRemotePwaHandoff, getGuestToken, rememberRemotePairingId } from './remotePairingHttp'
 
 type BootstrapState =
     | { kind: 'attempting'; phase: RemoteConnectingPhase }
@@ -16,7 +17,7 @@ type BootstrapState =
 
 type RemotePwaBootstrapProps = {
     fallbackPairingId?: string | null
-    onRecovered(pairingId: string): void
+    onRecovered(result: RemotePairingAuthResult): void
 }
 
 export function resolveRecoveredPairingHref(locationHref: string): string {
@@ -67,14 +68,21 @@ export function RemotePwaBootstrap(props: RemotePwaBootstrapProps): JSX.Element 
             history.replace(href)
         }
 
+        function finishRecovery(auth: RemotePairingAuthResult['auth']): void {
+            const pairingId = auth.pairing.id
+            const token = getGuestToken(auth)
+            if (!token) throw new Error('Recovered remote pairing auth did not include a guest token.')
+            rememberRemotePairingId(pairingId)
+            setState({ kind: 'attempting', phase: 'loading-workspace' })
+            onRecovered({ auth, token })
+            replaceRecoveredRoute(pairingId)
+        }
+
         async function recoverFromCachedDevice(): Promise<boolean> {
             setState({ kind: 'attempting', phase: 'recovering-device' })
             const auth = await recoverAnyRemotePairingByDevice(fallbackPairingId ?? null)
             if (!auth) return false
-            rememberRemotePairingId(auth.pairing.id)
-            setState({ kind: 'attempting', phase: 'loading-workspace' })
-            onRecovered(auth.pairing.id)
-            replaceRecoveredRoute(auth.pairing.id)
+            finishRecovery(auth)
             return true
         }
 
@@ -95,12 +103,9 @@ export function RemotePwaBootstrap(props: RemotePwaBootstrapProps): JSX.Element 
             }
             try {
                 setState({ kind: 'attempting', phase: 'authenticating' })
-                await claimRemotePwaHandoff(result.value.pairingId, result.value.handoffTicket)
+                const auth = await claimRemotePwaHandoff(result.value.pairingId, result.value.handoffTicket)
                 if (disposed) return
-                rememberRemotePairingId(result.value.pairingId)
-                setState({ kind: 'attempting', phase: 'loading-workspace' })
-                onRecovered(result.value.pairingId)
-                replaceRecoveredRoute(result.value.pairingId)
+                finishRecovery(auth)
             } catch (error) {
                 reportWebRuntimeError('Failed to consume PWA handoff ticket during bootstrap.', error)
                 if (!disposed) setState({ kind: 'failed', failure: { kind: 'invalid' } })

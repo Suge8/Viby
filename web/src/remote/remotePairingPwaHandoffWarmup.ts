@@ -1,7 +1,7 @@
 import { PAIRING_PWA_MANIFEST_PAIRING_PARAM } from '@viby/protocol'
 import { useEffect, useRef, useState } from 'react'
 import { reportWebRuntimeError } from '@/lib/runtimeDiagnostics'
-import { createRemotePwaHandoff } from '@/remote/remotePairingHttp'
+import { createRemotePwaHandoff, isRemotePairingTokenRejected } from '@/remote/remotePairingHttp'
 
 // Refresh well before the broker-side cookie TTL (30 min) so the manifest
 // endpoint always recognises the workspace tab when the user opens the share
@@ -43,7 +43,11 @@ function bindPairingManifestLink(pairingId: string): () => void {
  * The status return value gates the install banner: until at least one
  * round-trip has succeeded, the install affordance stays unmounted.
  */
-export function useRemotePairingPwaHandoffWarmup(props: { pairingId: string; active: boolean }): PwaHandoffStatus {
+export function useRemotePairingPwaHandoffWarmup(props: {
+    active: boolean
+    onCredentialRejected?: () => void
+    pairingId: string
+}): PwaHandoffStatus {
     const inFlightRef = useRef<Promise<unknown> | null>(null)
     const generationRef = useRef(0)
     const [status, setStatus] = useState<PwaHandoffStatus>('idle')
@@ -79,6 +83,10 @@ export function useRemotePairingPwaHandoffWarmup(props: { pairingId: string; act
                 if (disposed || generation !== generationRef.current) return
                 setStatus(handoff ? 'ready' : 'failed')
             } catch (error) {
+                if (isRemotePairingTokenRejected(error)) {
+                    props.onCredentialRejected?.()
+                    return
+                }
                 reportWebRuntimeError('Failed to prepare PWA install handoff.', error)
                 if (initial) setStatus('failed')
             } finally {
@@ -96,7 +104,7 @@ export function useRemotePairingPwaHandoffWarmup(props: { pairingId: string; act
             window.clearInterval(intervalId)
             restoreManifestLink()
         }
-    }, [props.active, props.pairingId])
+    }, [props.active, props.onCredentialRejected, props.pairingId])
 
     return status
 }

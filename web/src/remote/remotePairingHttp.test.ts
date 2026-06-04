@@ -15,6 +15,7 @@ import {
     recoverRemotePairingByDevice,
     rememberRemotePairingId,
     scrubPairingLaunchSecretFromUrl,
+    validateRemotePairingToken,
     verifyRemotePairingCode,
 } from './remotePairingHttp'
 
@@ -181,6 +182,23 @@ describe('remotePairingHttp', () => {
 
         await expect(verifyRemotePairingCode('pairing-1', '789012')).rejects.toThrow('pairing_device_key_unavailable')
         expect(fetchMock).toHaveBeenCalledTimes(0)
+    })
+
+    it('validates the current remote token with only the lightweight challenge endpoint', async () => {
+        const fetchMock = installFetch([
+            jsonResponse({ role: 'guest', challenge: { nonce: 'nonce-1', issuedAt: 1, expiresAt: 2 } }),
+        ])
+
+        await validateRemotePairingToken('pairing-1', 'guest-token-1')
+
+        expect(fetchMock).toHaveBeenCalledTimes(1)
+        expect(fetchMock).toHaveBeenCalledWith(
+            '/pairings/pairing-1/reconnect-challenge',
+            expect.objectContaining({
+                method: 'POST',
+                body: JSON.stringify({ token: 'guest-token-1' }),
+            })
+        )
     })
 
     it('reconnects with a one-time challenge and signed device proof', async () => {

@@ -14,6 +14,7 @@ export function createRemotePeerSessionRelay(options: {
     onMessage(data: string): void
     onOpen(): void
     onHeartbeatTimeout(): void
+    getLastSeenSeq?: () => number
     tunnelUrl: string
     // Injectable clock seams (default to the browser's wall clock / timers) so
     // the suspended-socket recovery path is deterministically testable.
@@ -26,6 +27,7 @@ export function createRemotePeerSessionRelay(options: {
     let relay!: RemotePairingRelaySocket
     const heartbeat = createRemoteRelayHeartbeat({
         getRelay: () => relay,
+        getLastSeenSeq: options.getLastSeenSeq,
         onTimeout: options.onHeartbeatTimeout,
         now: options.now,
         scheduleInterval: options.scheduleInterval,

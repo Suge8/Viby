@@ -18,6 +18,7 @@ export interface RemoteDirectHeartbeat {
 
 export function createRemoteDirectHeartbeat(options: {
     getChannel: () => RTCDataChannel | null
+    getLastSeenSeq?: () => number
     onFailure: (reason: RemoteDirectHeartbeatFailureReason) => void
 }): RemoteDirectHeartbeat {
     let intervalId: number | null = null
@@ -45,7 +46,12 @@ export function createRemoteDirectHeartbeat(options: {
     function send(channel: RTCDataChannel): void {
         if (options.getChannel() !== channel || channel.readyState !== 'open') return
         const now = Date.now()
-        const heartbeat: PairingPeerHeartbeat = { kind: 'heartbeat', protocolVersion: PROTOCOL_VERSION, sentAt: now }
+        const heartbeat: PairingPeerHeartbeat = {
+            kind: 'heartbeat',
+            protocolVersion: PROTOCOL_VERSION,
+            sentAt: now,
+            lastSeenSeq: options.getLastSeenSeq?.(),
+        }
         try {
             channel.send(JSON.stringify(heartbeat))
             sentAt = now
