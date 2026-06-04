@@ -1,44 +1,34 @@
-# Viby Hub
+# Viby Hub / AppCore
 
-`hub/` 是 Viby 的控制面。
+`hub/` 是 Desktop AppCore 的控制面模块。
 
-它把本机运行中的代理服务成一个可远程访问的产品入口。
-
-## 用户能得到什么
-
-- 提供 Web / PWA 使用的 HTTP API
-- 提供 Socket.IO realtime
-- 保存会话、消息、本机 runtime 和团队数据
-- 承接 CLI / runner 上报的状态与消息
-- 提供远程创建会话、文件、终端和推送能力
-- 默认接入 `https://pair.viby.run` 公网扫码配对入口
+它提供本机 HTTP API、Socket.IO realtime、SQLite 持久化、同步链路、远程配对和会话生命周期。发布产品不暴露 `hub` 命令；Desktop 启动 AppCore，AppCore 直接加载本模块。
 
 ## 产品边界
 
-- `hub` 是控制面，不是 UI
-- `hub` 负责连接和数据，不负责前端交互呈现
+- Desktop 是唯一用户入口。
+- AppCore 托管 Hub 控制面。
+- Hub 负责连接、数据和同步，不负责前端交互呈现。
+- Provider runtime 仍处于迁移期，入口只允许 AppCore 内部调用。
 
-## 启动
-
-```bash
-viby hub
-```
-
-普通桌面用户不需要配置环境变量。Hub 会自动生成内部 owner token，公网配对默认走 `https://pair.viby.run`。
-
-私有 broker / headless 部署才需要覆盖：
+## 开发入口
 
 ```bash
-PAIRING_BROKER_URL=https://pair.example.com
-PAIRING_CREATE_TOKEN=replace-me
-viby hub
+bun run dev:desktop
 ```
 
-首次用环境变量启动后会写入 `settings.toml`；之后桌面端启动 Hub 时会直接复用同一份配置。
+Hub 单模块调试只用于开发：
+
+```bash
+cd hub
+bun run dev
+```
+
+普通用户不需要命令、不需要环境变量、不需要理解 Hub / daemon / 命令行。私有 broker 调试看 `../docs/development/runtime-environment.md`。
 
 ## 继续阅读
 
-- 仓库入口：`README.md`
+- 仓库入口：`../README.md`
 - 系统架构：`../docs/architecture/system-overview.md`
 - 实时恢复：`../docs/architecture/realtime-recovery.md`
 - Hub owner 约束：`../docs/development/hub-owners.md`

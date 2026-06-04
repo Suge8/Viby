@@ -68,7 +68,6 @@ describe('store schema migration', () => {
                 path: '/tmp/project',
                 host: 'localhost',
                 driver: 'cursor',
-                startedFromRunner: true,
                 codexSessionId: 'codex-thread-1',
                 cursorSessionId: 'cursor-thread-1',
             }),
@@ -102,7 +101,6 @@ describe('store schema migration', () => {
                     path: '/tmp/project',
                     host: 'localhost',
                     driver: 'cursor',
-                    startedBy: 'runner',
                     runtimeHandles: {
                         codex: { sessionId: 'codex-thread-1' },
                         cursor: { sessionId: 'cursor-thread-1' },
@@ -110,11 +108,9 @@ describe('store schema migration', () => {
                 },
             })
             const migratedMetadata = session?.metadata as {
-                startedFromRunner?: unknown
                 codexSessionId?: unknown
                 cursorSessionId?: unknown
             } | null
-            expect(migratedMetadata?.startedFromRunner).toBeUndefined()
             expect(migratedMetadata?.codexSessionId).toBeUndefined()
             expect(migratedMetadata?.cursorSessionId).toBeUndefined()
 
@@ -161,7 +157,7 @@ describe('store schema migration', () => {
                 latest_activity_at INTEGER, latest_activity_kind TEXT, latest_completed_reply_at INTEGER,
                 active INTEGER DEFAULT 0, active_at INTEGER, seq INTEGER DEFAULT 0
             );
-            CREATE TABLE machines (id TEXT PRIMARY KEY, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, metadata TEXT, metadata_version INTEGER DEFAULT 1, runner_state TEXT, runner_state_version INTEGER DEFAULT 1, active INTEGER DEFAULT 0, active_at INTEGER, seq INTEGER DEFAULT 0);
+            CREATE TABLE machines (id TEXT PRIMARY KEY, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, metadata TEXT, metadata_version INTEGER DEFAULT 1, runtime_state TEXT, runtime_state_version INTEGER DEFAULT 1, active INTEGER DEFAULT 0, active_at INTEGER, seq INTEGER DEFAULT 0);
             CREATE TABLE messages (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, content TEXT NOT NULL, created_at INTEGER NOT NULL, seq INTEGER NOT NULL, local_id TEXT, invoked_at INTEGER);
             CREATE TABLE push_subscriptions (id INTEGER PRIMARY KEY AUTOINCREMENT, endpoint TEXT NOT NULL, p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at INTEGER NOT NULL, UNIQUE(endpoint));
         `)

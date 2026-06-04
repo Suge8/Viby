@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from 'hono'
-import { z } from 'zod'
 import { jwtVerify } from 'jose'
+import { z } from 'zod'
 
 export type WebAppEnv = {
     Variables: {
@@ -9,7 +9,7 @@ export type WebAppEnv = {
 }
 
 const jwtPayloadSchema = z.object({
-    uid: z.number()
+    uid: z.number(),
 })
 
 export function createAuthMiddleware(jwtSecret: Uint8Array): MiddlewareHandler<WebAppEnv> {

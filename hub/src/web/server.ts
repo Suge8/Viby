@@ -15,7 +15,6 @@ import { type EmbeddedWebAsset, loadEmbeddedAssetMap } from './embeddedAssets'
 import { createAuthMiddleware, type WebAppEnv } from './middleware/auth'
 import { createPublicAccessDisabledResponse, isAllowedByPublicAccessPolicy } from './publicAccessPolicy'
 import { createAuthRoutes } from './routes/auth'
-import { createCliRoutes } from './routes/cli'
 import { createDeviceAuthRoutes } from './routes/deviceAuth'
 import { createGitRoutes } from './routes/git'
 import { createLanPairingHostRoutes, createLanPairingPublicRoutes } from './routes/lanPairing'
@@ -24,6 +23,7 @@ import { createPairingRoutes } from './routes/pairing'
 import { createPermissionsRoutes } from './routes/permissions'
 import { createPushRoutes } from './routes/push'
 import { createRuntimeRoutes } from './routes/runtime'
+import { createRuntimeInternalRoutes } from './routes/runtimeInternal'
 import { createSessionsRoutes } from './routes/sessions'
 import { registerWebAssetRoutes } from './staticWebAssets'
 
@@ -68,9 +68,9 @@ function createWebApp(options: {
     })
 
     app.use('/api/*', corsMiddleware)
-    app.use('/cli/*', corsMiddleware)
+    app.use('/runtime/*', corsMiddleware)
 
-    app.route('/cli', createCliRoutes(options.getSyncEngine))
+    app.route('/runtime', createRuntimeInternalRoutes(options.getSyncEngine))
 
     const lanPairingSessions = new LanPairingSessionStore()
     const lanPairingOptions = {

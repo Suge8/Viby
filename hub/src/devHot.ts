@@ -57,7 +57,7 @@ void main().catch(async (error) => {
         exitCode: 1,
         logMessage: '[dev-hot] shutting down after fatal error...',
         statusMessage: error instanceof Error ? error.message : String(error),
-        statusPhase: 'error'
+        statusPhase: 'error',
     })
     process.exit(exitCode)
 })

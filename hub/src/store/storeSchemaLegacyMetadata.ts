@@ -1,8 +1,5 @@
 import { AGENT_FLAVORS, resolveSessionDriver, setSessionDriverRuntimeHandle } from '@viby/protocol'
-import {
-    SESSION_METADATA_RUNNER_START_FLAG_KEY,
-    SESSION_METADATA_RUNTIME_HANDLE_MIGRATION_KEYS,
-} from '@viby/protocol/schemas'
+import { SESSION_METADATA_RUNTIME_HANDLE_MIGRATION_KEYS } from '@viby/protocol/schemas'
 import type { Metadata } from '@viby/protocol/types'
 
 export type SessionMetadataRecord = Record<string, unknown> &
@@ -13,11 +10,7 @@ export function isSessionMetadataRecord(value: unknown): value is SessionMetadat
 }
 
 export function normalizeLegacySessionMetadataContract(metadata: SessionMetadataRecord): SessionMetadataRecord {
-    const legacyMetadata = { ...metadata }
-    const runnerStartFlag = legacyMetadata[SESSION_METADATA_RUNNER_START_FLAG_KEY]
-    delete legacyMetadata[SESSION_METADATA_RUNNER_START_FLAG_KEY]
-
-    let nextMetadata: SessionMetadataRecord = legacyMetadata
+    let nextMetadata: SessionMetadataRecord = { ...metadata }
     const inferredDrivers: string[] = []
 
     for (const driver of AGENT_FLAVORS) {
@@ -37,13 +30,6 @@ export function normalizeLegacySessionMetadataContract(metadata: SessionMetadata
 
         inferredDrivers.push(driver)
         nextMetadata = setSessionDriverRuntimeHandle(nextMetadata, driver, { sessionId: legacySessionId })
-    }
-
-    if (nextMetadata.startedBy === undefined && runnerStartFlag === true) {
-        nextMetadata = {
-            ...nextMetadata,
-            startedBy: 'runner',
-        }
     }
 
     if (resolveSessionDriver(nextMetadata) === null && inferredDrivers.length === 1) {

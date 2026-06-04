@@ -5,7 +5,7 @@ import { configuration } from '../configuration'
 import { getOrCreateJsonFile } from './generators'
 
 const jwtSecretFileSchema = z.object({
-    secretBase64: z.string()
+    secretBase64: z.string(),
 })
 
 export async function getOrCreateJwtSecret(): Promise<Uint8Array> {
@@ -23,13 +23,13 @@ export async function getOrCreateJwtSecret(): Promise<Uint8Array> {
         },
         writeValue: (secretBytes) => {
             const payload = {
-                secretBase64: Buffer.from(secretBytes).toString('base64')
+                secretBase64: Buffer.from(secretBytes).toString('base64'),
             }
             return JSON.stringify(payload, null, 4)
         },
         generate: () => new Uint8Array(randomBytes(32)),
         fileMode: 0o600,
-        dirMode: 0o700
+        dirMode: 0o700,
     })
 
     return result.value

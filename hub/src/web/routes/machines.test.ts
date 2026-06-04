@@ -22,7 +22,7 @@ function localRuntime(active: boolean = true) {
             metadata: {
                 host: 'localhost',
                 platform: 'darwin',
-                vibyCliVersion: '0.1.0',
+                appCoreVersion: '0.1.0',
                 homeDir: homedir(),
                 vibyHomeDir: getLocalVibyHomeDir(),
             },

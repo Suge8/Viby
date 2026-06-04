@@ -5,7 +5,7 @@ import { configuration } from '../configuration'
 import { getOrCreateJsonFile } from './generators'
 
 const ownerIdFileSchema = z.object({
-    ownerId: z.number()
+    ownerId: z.number(),
 })
 
 function generateOwnerId(): number {
@@ -38,7 +38,7 @@ export async function getOrCreateOwnerId(): Promise<number> {
         writeValue: (ownerId) => JSON.stringify({ ownerId }, null, 4),
         generate: generateOwnerId,
         fileMode: 0o600,
-        dirMode: 0o700
+        dirMode: 0o700,
     })
 
     cachedOwnerId = result.value

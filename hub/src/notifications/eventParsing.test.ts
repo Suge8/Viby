@@ -17,10 +17,10 @@ describe('extractMessageEventType', () => {
                     content: {
                         id: 'event-1',
                         type: 'event',
-                        data: { type: 'ready' }
+                        data: { type: 'ready' },
                     },
-                }
-            }
+                },
+            },
         }
 
         expect(extractMessageEventType(event)).toBe('ready')
@@ -37,9 +37,9 @@ describe('extractMessageEventType', () => {
                 createdAt: 0,
                 content: {
                     type: 'event',
-                    data: { type: 'ready' }
-                }
-            }
+                    data: { type: 'ready' },
+                },
+            },
         }
 
         expect(extractMessageEventType(event)).toBe('ready')
@@ -58,10 +58,10 @@ describe('extractMessageEventType', () => {
                     role: 'agent',
                     content: {
                         type: 'text',
-                        text: 'hello'
-                    }
-                }
-            }
+                        text: 'hello',
+                    },
+                },
+            },
         }
 
         expect(extractMessageEventType(event)).toBeNull()
@@ -70,7 +70,7 @@ describe('extractMessageEventType', () => {
     it('returns null for non-message events', () => {
         const event: SyncEvent = {
             type: 'session-updated',
-            sessionId: 'session-1'
+            sessionId: 'session-1',
         }
 
         expect(extractMessageEventType(event)).toBeNull()

@@ -24,9 +24,9 @@ export async function getOrCreateVapidKeys(dataDir: string): Promise<VapidKeys> 
             const generated = generateVAPIDKeys()
             return {
                 publicKey: generated.publicKey,
-                privateKey: generated.privateKey
+                privateKey: generated.privateKey,
             }
-        }
+        },
     })
 
     return result.value

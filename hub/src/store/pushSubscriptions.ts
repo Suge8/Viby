@@ -16,7 +16,7 @@ function toStoredPushSubscription(row: DbPushSubscriptionRow): StoredPushSubscri
         endpoint: row.endpoint,
         p256dh: row.p256dh,
         auth: row.auth,
-        createdAt: row.created_at
+        createdAt: row.created_at,
     }
 }
 
@@ -40,7 +40,7 @@ export function addPushSubscription(
         endpoint: subscription.endpoint,
         p256dh: subscription.p256dh,
         auth: subscription.auth,
-        created_at: now
+        created_at: now,
     })
 }
 
@@ -49,8 +49,8 @@ export function removePushSubscription(db: Database, endpoint: string): void {
 }
 
 export function getPushSubscriptions(db: Database): StoredPushSubscription[] {
-    const rows = db.prepare(
-        'SELECT * FROM push_subscriptions ORDER BY created_at DESC'
-    ).all() as DbPushSubscriptionRow[]
+    const rows = db
+        .prepare('SELECT * FROM push_subscriptions ORDER BY created_at DESC')
+        .all() as DbPushSubscriptionRow[]
     return rows.map(toStoredPushSubscription)
 }

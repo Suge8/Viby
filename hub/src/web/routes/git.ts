@@ -6,15 +6,15 @@ import { requireSessionFromParam, requireSyncEngine } from './guards'
 
 const fileSearchSchema = z.object({
     query: z.string().optional(),
-    limit: z.coerce.number().int().min(1).max(500).optional()
+    limit: z.coerce.number().int().min(1).max(500).optional(),
 })
 
 const directorySchema = z.object({
-    path: z.string().optional()
+    path: z.string().optional(),
 })
 
 const filePathSchema = z.object({
-    path: z.string().min(1)
+    path: z.string().min(1),
 })
 
 function parseBooleanParam(value: string | undefined): boolean | undefined {
@@ -71,7 +71,9 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
         }
 
         const staged = parseBooleanParam(c.req.query('staged'))
-        const result = await runRpc(() => engine.getGitDiffNumstat(sessionResult.sessionId, { cwd: sessionPath, staged }))
+        const result = await runRpc(() =>
+            engine.getGitDiffNumstat(sessionResult.sessionId, { cwd: sessionPath, staged })
+        )
         return c.json(result)
     })
 
@@ -97,11 +99,13 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
         }
 
         const staged = parseBooleanParam(c.req.query('staged'))
-        const result = await runRpc(() => engine.getGitDiffFile(sessionResult.sessionId, {
-            cwd: sessionPath,
-            filePath: parsed.data.path,
-            staged
-        }))
+        const result = await runRpc(() =>
+            engine.getGitDiffFile(sessionResult.sessionId, {
+                cwd: sessionPath,
+                filePath: parsed.data.path,
+                staged,
+            })
+        )
         return c.json(result)
     })
 
@@ -177,7 +181,7 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
                     fileName,
                     filePath,
                     fullPath,
-                    fileType: 'file' as const
+                    fileType: 'file' as const,
                 }
             })
 

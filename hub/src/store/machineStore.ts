@@ -1,13 +1,12 @@
 import type { Database } from 'bun:sqlite'
-
-import type { StoredMachine, VersionedUpdateResult } from './types'
 import {
     getMachine,
     getMachines,
     getOrCreateMachine,
-    updateMachineRunnerState,
-    updateMachineMetadata
+    updateMachineMetadata,
+    updateMachineRuntimeState,
 } from './machines'
+import type { StoredMachine, VersionedUpdateResult } from './types'
 
 export class MachineStore {
     private readonly db: Database
@@ -16,8 +15,8 @@ export class MachineStore {
         this.db = db
     }
 
-    getOrCreateMachine(id: string, metadata: unknown, runnerState: unknown): StoredMachine {
-        return getOrCreateMachine(this.db, id, metadata, runnerState)
+    getOrCreateMachine(id: string, metadata: unknown, runtimeState: unknown): StoredMachine {
+        return getOrCreateMachine(this.db, id, metadata, runtimeState)
     }
 
     updateMachineMetadata(
@@ -28,12 +27,12 @@ export class MachineStore {
         return updateMachineMetadata(this.db, id, metadata, expectedVersion)
     }
 
-    updateMachineRunnerState(
+    updateMachineRuntimeState(
         id: string,
-        runnerState: unknown,
+        runtimeState: unknown,
         expectedVersion: number
     ): VersionedUpdateResult<unknown | null> {
-        return updateMachineRunnerState(this.db, id, runnerState, expectedVersion)
+        return updateMachineRuntimeState(this.db, id, runtimeState, expectedVersion)
     }
 
     getMachine(id: string): StoredMachine | null {

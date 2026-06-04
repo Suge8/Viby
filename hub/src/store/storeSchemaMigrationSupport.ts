@@ -1,8 +1,5 @@
 import type { Database } from 'bun:sqlite'
-import {
-    SESSION_METADATA_RUNNER_START_FLAG_KEY,
-    SESSION_METADATA_RUNTIME_HANDLE_MIGRATION_KEYS,
-} from '@viby/protocol/schemas'
+import { SESSION_METADATA_RUNTIME_HANDLE_MIGRATION_KEYS } from '@viby/protocol/schemas'
 
 import { safeJsonParse } from './json'
 import {
@@ -47,7 +44,7 @@ export class StoreSchemaMigrationSupport {
             WHERE metadata IS NOT NULL
               AND json_valid(metadata)
               AND (
-                    json_type(metadata, '$.${SESSION_METADATA_RUNNER_START_FLAG_KEY}') IS NOT NULL
+                    0
                  ${runtimeHandleFieldPredicates}
               )
         `)

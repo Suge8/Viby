@@ -1,7 +1,6 @@
 import type { Database } from 'bun:sqlite'
-
-import type { StoredPushSubscription } from './types'
 import { addPushSubscription, getPushSubscriptions, removePushSubscription } from './pushSubscriptions'
+import type { StoredPushSubscription } from './types'
 
 export class PushStore {
     private readonly db: Database

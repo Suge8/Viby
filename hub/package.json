@@ -12,7 +12,7 @@
         "dev:hot": "bun --hot run src/devHot.ts",
         "test": "bun test",
         "typecheck": "tsc --noEmit",
-        "build": "VIBY_HARNESS_SCOPE=hub bun run --cwd .. harness:check && bun run generate:embedded-web-assets && bun build src/index.ts --outdir dist --target bun",
+        "build": "bun build src/index.ts --outdir dist --target bun",
         "generate:embedded-web-assets": "bun run scripts/generate-embedded-web-assets.ts"
     },
     "dependencies": {

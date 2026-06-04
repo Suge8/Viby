@@ -76,8 +76,8 @@ export function createStoreSchema(db: Database): void {
             updated_at INTEGER NOT NULL,
             metadata TEXT,
             metadata_version INTEGER DEFAULT 1,
-            runner_state TEXT,
-            runner_state_version INTEGER DEFAULT 1,
+            runtime_state TEXT,
+            runtime_state_version INTEGER DEFAULT 1,
             active INTEGER DEFAULT 0,
             active_at INTEGER,
             seq INTEGER DEFAULT 0
