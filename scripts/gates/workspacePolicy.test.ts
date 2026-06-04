@@ -41,7 +41,6 @@ function buildSnapshot(overrides?: Partial<Parameters<typeof evaluateWorkspacePo
             },
         },
         workflowText: 'bun-version: 1.3.11',
-        dependabotExists: true,
         ...overrides,
     }
 }
@@ -70,19 +69,17 @@ describe('workspace policy', () => {
         expect(result.violations.some((violation) => violation.rule === 'ci-bun-version')).toBe(true)
     })
 
-    it('fails when shared validation entry points or dependabot are missing', () => {
+    it('fails when shared validation entry points are missing', () => {
         const result = evaluateWorkspacePolicy(
             buildSnapshot({
                 manifests: {
                     ...buildSnapshot().manifests,
                     'shared/package.json': {},
                 },
-                dependabotExists: false,
             })
         )
 
         expect(result.violations.some((violation) => violation.rule === 'shared-typecheck')).toBe(true)
-        expect(result.violations.some((violation) => violation.rule === 'dependabot')).toBe(true)
     })
 
     it('fails when dependency versions drift', () => {

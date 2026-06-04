@@ -13,7 +13,7 @@ web/dist-analyze/
 web/dist-analyze*/
 web/.tmp-bundle-analyze*/
 web/dist-profile/
-web/.artifacts/
+**/.artifacts/
 **/src-tauri/target/
 hub/src/web/embeddedAssets.generated.ts
 
@@ -96,18 +96,10 @@ tmp/
 .claude/
 .agents/
 .gsd.lock/
-.artifacts/
 .tmp/
 .tmp-*
 .omx/
 .cursor/
-.githooks/
-.github/.githooks/
-.github/copilot-instructions.md
-.github/dependabot.yml
-.github/instructions/
-.github/pull_request_template.md
-.github/workflows/harness.yml
 
 # Local transport experiments
 experiments/

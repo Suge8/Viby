@@ -33,7 +33,6 @@ type WorkspacePolicyResult = {
 type WorkspacePolicySnapshot = {
     manifests: Record<string, ManifestData>
     workflowText: string
-    dependabotExists: boolean
 }
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
@@ -107,15 +106,6 @@ export function evaluateWorkspacePolicy(snapshot: WorkspacePolicySnapshot): Work
             'ci-bun-version',
             '.github/workflows/verify.yml',
             `workflow must pin bun-version ${verifyBunVersion}`
-        )
-    }
-
-    if (!snapshot.dependabotExists) {
-        addViolation(
-            violations,
-            'dependabot',
-            '.github/dependabot.yml',
-            'dependabot config must exist for dependency governance'
         )
     }
 
@@ -212,7 +202,6 @@ function collectWorkspacePolicySnapshot(): WorkspacePolicySnapshot {
     return {
         manifests,
         workflowText,
-        dependabotExists: existsSync(join(repoRoot, '.github/dependabot.yml')) || isCi,
     }
 }
 

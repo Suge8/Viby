@@ -20,13 +20,13 @@ describe('script support', () => {
     it('extracts markdown path refs from links and backticks', () => {
         const markdown = `
 [Docs](docs/README.md)
-\`docs/internal/harness-activity-path.md\`
+\`docs/internal/agent-workflow.md\`
 \`http://example.com\`
         `
 
         expect(extractMarkdownPathRefs(markdown)).toEqual([
             'docs/README.md',
-            'docs/internal/harness-activity-path.md',
+            'docs/internal/agent-workflow.md',
             'http://example.com',
         ])
     })

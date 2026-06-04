@@ -16,7 +16,7 @@ describe('verify scope', () => {
             resolveModulesFromTouchedPaths([
                 'web/src/App.tsx',
                 'shared/src/schemas.ts',
-                'docs/internal/harness-standards.md',
+                'docs/internal/verification-standards.md',
             ])
         ).toEqual(['web', 'shared'])
     })

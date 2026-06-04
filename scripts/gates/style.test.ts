@@ -4,8 +4,8 @@ import { resolveStyleCheckFiles, shouldStyleCheckFile } from './style'
 describe('style check', () => {
     it('filters supported style-check file types', () => {
         expect(shouldStyleCheckFile('web/src/App.tsx')).toBe(true)
-        expect(shouldStyleCheckFile('docs/internal/harness-standards.md')).toBe(true)
-        expect(shouldStyleCheckFile('.cursor/rules/web-harness.mdc')).toBe(true)
+        expect(shouldStyleCheckFile('docs/internal/verification-standards.md')).toBe(true)
+        expect(shouldStyleCheckFile('docs/internal/browser-observability.md')).toBe(true)
         expect(shouldStyleCheckFile('app-core/src/runtime/embeddedAssets.bun.ts')).toBe(false)
         expect(shouldStyleCheckFile('web/dist/index.html')).toBe(false)
         expect(shouldStyleCheckFile('pairing/deploy-bundle/index.js')).toBe(false)
@@ -13,11 +13,11 @@ describe('style check', () => {
 
     it('resolves explicit files and skips unsupported entries', () => {
         const result = resolveStyleCheckFiles({
-            explicitFiles: ['scripts/gates/style.ts', 'docs/internal/harness-standards.md', 'web/dist/index.html'],
+            explicitFiles: ['scripts/gates/style.ts', 'docs/internal/verification-standards.md', 'web/dist/index.html'],
             touchedPaths: [],
         })
 
-        expect(result.checkedFiles).toEqual(['scripts/gates/style.ts', 'docs/internal/harness-standards.md'])
+        expect(result.checkedFiles).toEqual(['scripts/gates/style.ts', 'docs/internal/verification-standards.md'])
         expect(result.skippedFiles).toEqual(['web/dist/index.html'])
     })
 
@@ -26,7 +26,7 @@ describe('style check', () => {
             scopeSpec: 'web',
             touchedPaths: [
                 'web/src/App.tsx',
-                'docs/internal/harness-standards.md',
+                'docs/internal/verification-standards.md',
                 'scripts/gates/style.ts',
                 'app-core/src/index.ts',
             ],

@@ -25,39 +25,11 @@ type StructuredDocPolicy = {
 }
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
+const repoRootMarker = repoRoot.replaceAll('\\', '/')
 const docsArtifactDir = join(repoRoot, '.artifacts/audit/docs')
 const repoRootEntries = new Set(readdirSync(repoRoot))
 const isCi = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true'
-const docSourceDirs = ['docs']
-const docSourceFiles = [
-    'AGENTS.md',
-    'README.md',
-    'app-core/AGENTS.md',
-    'app-core/README.md',
-    'desktop/README.md',
-    'hub/README.md',
-    'pairing/AGENTS.md',
-    'pairing/README.md',
-    'shared/AGENTS.md',
-    'shared/README.md',
-    'web/AGENTS.md',
-    'web/README.md',
-    'hub/AGENTS.md',
-    'desktop/AGENTS.md',
-    '.github/copilot-instructions.md',
-    '.github/instructions/docs.instructions.md',
-    '.github/instructions/web.instructions.md',
-    '.github/instructions/runtime.instructions.md',
-    '.github/instructions/shared.instructions.md',
-    '.github/instructions/pairing.instructions.md',
-    '.cursor/rules/00-harness-always.mdc',
-    '.cursor/rules/docs-harness.mdc',
-    '.cursor/rules/web-harness.mdc',
-    '.cursor/rules/runtime-harness.mdc',
-    '.cursor/rules/shared-harness.mdc',
-    '.cursor/rules/pairing-harness.mdc',
-    'CLAUDE.md',
-]
+const docSourceDirs = ['.']
 const docsReadmeIndexRoots = [
     'docs/architecture',
     'docs/development',
@@ -67,137 +39,97 @@ const docsReadmeIndexRoots = [
 ]
 const docsReadmeIndexIgnore = new Set(['docs/internal/update.md'])
 const optionalLocalOnlyRefs = new Set(['docs/internal/update.md'])
+// README 是用户/产品入口；以下内部语义禁止泄露到 README，只能进 AGENTS.md / docs/。
+// owner 规则、边界、内部基础设施术语、产品定位内部框架、内部文档/AGENTS 指针、dev/ops 命令。
+const readmeForbiddenPhrases = [
+    'docs/internal/',
+    '.taskmaster/',
+    'AGENTS.md',
+    '../docs/',
+    'bun run',
+    '单一 owner',
+    'durable owner',
+    'authoritative owner',
+    'truth source',
+    'schema owner',
+    '事实源',
+    '第二套',
+    'daemon',
+    '普通用户',
+    'Socket.IO',
+    'SQLite',
+    'Service Worker',
+    '## 产品边界',
+    '## 工程边界',
+] as const
 const readmePolicies: readonly StructuredDocPolicy[] = [
     {
         path: 'README.md',
         maxLines: 120,
-        requiredRefs: [
-            'docs/README.md',
-            'web/README.md',
-            'hub/README.md',
-            'app-core/README.md',
-            'desktop/README.md',
-            'pairing/README.md',
-        ],
-        requiredPhrases: ['## 快速开始', '## 文档分层'],
-        forbiddenPhrases: [
-            'docs/internal/',
-            '.taskmaster/',
-            '单一 owner',
-            'durable owner',
-            'authoritative owner',
-            'truth source',
-            'schema owner',
-        ],
+        requiredRefs: [],
+        requiredPhrases: ['## 快速开始'],
+        forbiddenPhrases: readmeForbiddenPhrases,
     },
     {
         path: 'web/README.md',
         maxLines: 120,
-        requiredRefs: ['README.md', '../docs/development/web-boundaries.md'],
-        requiredPhrases: ['## 继续阅读'],
-        forbiddenPhrases: [
-            'docs/internal/',
-            '.taskmaster/',
-            '单一 owner',
-            'durable owner',
-            'authoritative owner',
-            'truth source',
-            'schema owner',
-        ],
+        requiredRefs: [],
+        requiredPhrases: [],
+        forbiddenPhrases: readmeForbiddenPhrases,
     },
     {
         path: 'hub/README.md',
         maxLines: 120,
-        requiredRefs: ['README.md', '../docs/development/hub-owners.md'],
-        requiredPhrases: ['## 继续阅读'],
-        forbiddenPhrases: [
-            'docs/internal/',
-            '.taskmaster/',
-            '单一 owner',
-            'durable owner',
-            'authoritative owner',
-            'truth source',
-            'schema owner',
-        ],
+        requiredRefs: [],
+        requiredPhrases: [],
+        forbiddenPhrases: readmeForbiddenPhrases,
     },
     {
         path: 'app-core/README.md',
         maxLines: 140,
-        requiredRefs: ['README.md', '../docs/development/app-core-runtime-boundaries.md'],
-        requiredPhrases: ['## 继续阅读'],
-        forbiddenPhrases: [
-            'docs/internal/',
-            '.taskmaster/',
-            '单一 owner',
-            'durable owner',
-            'authoritative owner',
-            'truth source',
-            'schema owner',
-        ],
+        requiredRefs: [],
+        requiredPhrases: [],
+        forbiddenPhrases: readmeForbiddenPhrases,
     },
     {
         path: 'desktop/README.md',
         maxLines: 100,
-        requiredRefs: ['README.md', 'AGENTS.md'],
-        requiredPhrases: ['## 继续阅读'],
-        forbiddenPhrases: [
-            'docs/internal/',
-            '.taskmaster/',
-            '单一 owner',
-            'durable owner',
-            'authoritative owner',
-            'truth source',
-            'schema owner',
-        ],
+        requiredRefs: [],
+        requiredPhrases: [],
+        forbiddenPhrases: readmeForbiddenPhrases,
     },
     {
         path: 'pairing/README.md',
         maxLines: 120,
-        requiredRefs: ['README.md', '../docs/development/pairing-deployment.md'],
-        requiredPhrases: ['## 继续阅读'],
-        forbiddenPhrases: [
-            'docs/internal/',
-            '.taskmaster/',
-            '单一 owner',
-            'durable owner',
-            'authoritative owner',
-            'truth source',
-            'schema owner',
-        ],
+        requiredRefs: [],
+        requiredPhrases: [],
+        forbiddenPhrases: readmeForbiddenPhrases,
     },
     {
         path: 'shared/README.md',
         maxLines: 80,
-        requiredRefs: ['README.md', '../docs/development/shared-contracts.md'],
-        requiredPhrases: ['## 继续阅读'],
-        forbiddenPhrases: ['docs/internal/', '.taskmaster/'],
+        requiredRefs: [],
+        requiredPhrases: [],
+        forbiddenPhrases: readmeForbiddenPhrases,
     },
 ]
 const agentsPolicies: readonly StructuredDocPolicy[] = [
     {
         path: 'AGENTS.md',
         maxLines: 140,
-        requiredRefs: ['docs/internal/harness-activity-path.md', 'docs/README.md'],
+        requiredRefs: ['docs/internal/agent-workflow.md', 'docs/README.md'],
         requiredPhrases: ['## 全仓硬规则', '## 文档索引'],
     },
     {
         path: 'web/AGENTS.md',
         maxLines: 120,
-        requiredRefs: [
-            'README.md',
-            '../docs/development/web-boundaries.md',
-            '../docs/internal/harness-activity-path.md',
-        ],
+        requiredRefs: ['README.md', '../docs/development/web-boundaries.md', '../docs/internal/agent-workflow.md'],
         requiredPhrases: ['## 本目录规则', '## 验证基线'],
     },
     {
         path: 'hub/AGENTS.md',
         maxLines: 120,
-        requiredRefs: [
-            'hub/README.md',
-            '../docs/development/hub-owners.md',
-            '../docs/internal/harness-activity-path.md',
-        ],
+        requiredRefs: ['hub/README.md', '../docs/development/hub-owners.md', '../docs/internal/agent-workflow.md'],
         requiredPhrases: ['## Hub 硬规则', '## 验证'],
     },
     {
@@ -206,14 +138,14 @@ const agentsPolicies: readonly StructuredDocPolicy[] = [
         requiredRefs: [
             'app-core/README.md',
             '../docs/development/app-core-runtime-boundaries.md',
-            '../docs/internal/harness-activity-path.md',
+            '../docs/internal/agent-workflow.md',
         ],
         requiredPhrases: ['## 硬规则', '## 验证基线'],
     },
     {
         path: 'desktop/AGENTS.md',
         maxLines: 90,
-        requiredRefs: ['desktop/README.md', '../docs/internal/harness-activity-path.md'],
+        requiredRefs: ['desktop/README.md', '../docs/internal/agent-workflow.md'],
         requiredPhrases: ['## 硬规则', '## 验证'],
     },
     {
@@ -221,8 +153,8 @@ const agentsPolicies: readonly StructuredDocPolicy[] = [
         maxLines: 100,
         requiredRefs: [
             'pairing/README.md',
-            '../docs/development/pairing-deployment.md',
-            '../docs/internal/harness-activity-path.md',
+            '../docs/deployment/pairing-broker.md',
+            '../docs/internal/agent-workflow.md',
         ],
         requiredPhrases: ['## Pairing 硬规则', '## 验证基线'],
     },
@@ -232,7 +164,7 @@ const agentsPolicies: readonly StructuredDocPolicy[] = [
         requiredRefs: [
             'shared/README.md',
             '../docs/development/shared-contracts.md',
-            '../docs/internal/harness-activity-path.md',
+            '../docs/internal/agent-workflow.md',
         ],
         requiredPhrases: ['## Shared 硬规则', '## 验证基线'],
     },
@@ -243,7 +175,13 @@ function walkMarkdownFiles(dir: string): string[] {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
         const fullPath = join(dir, entry.name)
         if (entry.isDirectory()) {
-            if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'dist') {
+            if (
+                entry.name === 'node_modules' ||
+                entry.name === '.git' ||
+                entry.name === 'dist' ||
+                entry.name === '.artifacts' ||
+                entry.name === 'deploy-bundle'
+            ) {
                 continue
             }
             results.push(...walkMarkdownFiles(fullPath))
@@ -264,7 +202,10 @@ function isLocalPathRef(value: string): boolean {
     const normalized = stripRefSuffix(value)
     if (
         !normalized ||
+        /\s/.test(normalized) ||
         normalized.startsWith('#') ||
+        normalized.startsWith('/') ||
+        normalized.startsWith('~/') ||
         normalized.includes('://') ||
         normalized.startsWith('mailto:') ||
         normalized.includes('<') ||
@@ -273,28 +214,23 @@ function isLocalPathRef(value: string): boolean {
     ) {
         return false
     }
+
     const firstSegment = normalized.split('/')[0] ?? ''
-    if (
-        normalized.startsWith('.') &&
-        !normalized.startsWith('./') &&
-        !normalized.startsWith('../') &&
-        !repoRootEntries.has(firstSegment)
-    ) {
+    const isCurrentDirectoryRef =
+        normalized === 'AGENTS.md' ||
+        normalized === 'README.md' ||
+        normalized.startsWith('./') ||
+        normalized.startsWith('../')
+    const isRepoRootRef = repoRootEntries.has(firstSegment)
+
+    if (!isCurrentDirectoryRef && !isRepoRootRef) {
         return false
     }
-    if (
-        !normalized.includes('/') &&
-        normalized !== 'AGENTS.md' &&
-        normalized !== 'README.md' &&
-        normalized !== 'CLAUDE.md'
-    ) {
-        return false
-    }
+
     return (
         normalized.endsWith('.md') ||
         normalized.endsWith('.mdc') ||
         normalized.endsWith('.json') ||
-        normalized.endsWith('/') ||
         normalized.endsWith('AGENTS.md') ||
         normalized.endsWith('README.md')
     )
@@ -325,7 +261,7 @@ function stripRefSuffix(ref: string): string {
 }
 
 function readDocSourceFiles(): string[] {
-    const files = new Set(docSourceFiles.filter((file) => !isCi || existsSync(join(repoRoot, file))))
+    const files = new Set<string>()
     for (const dir of docSourceDirs) {
         if (!existsSync(join(repoRoot, dir))) {
             continue
@@ -346,15 +282,7 @@ function toComparableRepoPath(resolved: string): string {
 }
 
 function isLocalOnlyDocPath(file: string): boolean {
-    return (
-        file === 'AGENTS.md' ||
-        file.endsWith('/AGENTS.md') ||
-        file === 'CLAUDE.md' ||
-        file.startsWith('docs/') ||
-        file.startsWith('.cursor/') ||
-        file.startsWith('.github/instructions/') ||
-        file === '.github/copilot-instructions.md'
-    )
+    return file === 'AGENTS.md' || file.endsWith('/AGENTS.md') || file.startsWith('docs/')
 }
 
 function checkStructuredDocPolicies(violations: DocViolation[], scopedPolicies?: ReadonlySet<string>): void {
@@ -447,6 +375,13 @@ export function auditDocs(options?: { scopeSpec?: string | null; touchedPaths?: 
         }
 
         const content = readFileSync(fullPath, 'utf8')
+        if (content.includes(repoRootMarker)) {
+            violations.push({
+                rule: 'absolute-repo-path',
+                file,
+                message: `replace absolute local path with repo-relative path: ${repoRootMarker}`,
+            })
+        }
         for (const ref of extractMarkdownPathRefs(content)) {
             if (!isLocalPathRef(ref)) {
                 continue
