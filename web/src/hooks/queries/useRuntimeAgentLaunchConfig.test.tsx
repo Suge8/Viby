@@ -102,7 +102,7 @@ describe('useRuntimeAgentLaunchConfig', () => {
         await waitFor(() => expect(api.getRuntimeCapabilities).toHaveBeenCalledTimes(2))
     })
 
-    it('maps runtime-owned config errors without raw CLI passthrough', async () => {
+    it('maps runtime-owned config errors without raw provider passthrough', async () => {
         const api = {
             getRuntimeCapabilities: vi.fn(async () => createCapability('pi', 'auth_missing')),
         }

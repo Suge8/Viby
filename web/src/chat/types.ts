@@ -139,8 +139,8 @@ export type AgentReasoningBlock = {
     meta?: unknown
 }
 
-export type CliOutputBlock = {
-    kind: 'cli-output'
+export type CommandOutputBlock = {
+    kind: 'command-output'
     id: string
     localId: string | null
     createdAt: number
@@ -171,6 +171,6 @@ export type ChatBlock =
     | UserTextBlock
     | AgentTextBlock
     | AgentReasoningBlock
-    | CliOutputBlock
+    | CommandOutputBlock
     | ToolCallBlock
     | AgentEventBlock

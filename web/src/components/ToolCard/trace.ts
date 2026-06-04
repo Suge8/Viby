@@ -54,7 +54,7 @@ function getBlockTraceItem(block: ChatBlock, depth: number): ToolTraceItem | nul
             depth,
         }
     }
-    if (block.kind === 'cli-output') {
+    if (block.kind === 'command-output') {
         return {
             id: block.id,
             label: 'Output',

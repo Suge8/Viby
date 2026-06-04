@@ -119,7 +119,7 @@ export type ClientMessage = ProtocolDecryptedMessage & {
     originalText?: string
 }
 
-export type RunnerState = {
+export type RuntimeState = {
     status?: string
     pid?: number
     httpPort?: number
@@ -141,11 +141,11 @@ export type LocalRuntime = {
     metadata: {
         host: string
         platform: string
-        vibyCliVersion: string
+        appCoreVersion: string
         displayName?: string
         capabilities?: MachineCapability[]
     } | null
-    runnerState?: RunnerState | null
+    runtimeState?: RuntimeState | null
 }
 
 export type RuntimeDirectoryEntry = MachineDirectoryEntry

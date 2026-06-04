@@ -182,14 +182,14 @@ describe('service worker push notifications', () => {
                 '/assets/VibyComposer-mno678.js',
                 '/assets/ComposerControlsOverlay-cde234.js',
                 '/assets/useActiveSuggestions-def345.js',
-                '/assets/CliOutputBlock-ghi678.js',
+                '/assets/CommandOutputBlock-ghi678.js',
                 '/assets/clientAutocomplete-bbb111.js',
                 '/assets/clientRuntime-ccc222.js',
                 '/assets/clientPush-ddd333.js',
                 '/assets/clientWorkspace-eee444.js',
                 '/assets/featureIcons-aaa111.js',
                 '/assets/modes-ggg777.js',
-                '/assets/reducerCliOutput-hhh888.js',
+                '/assets/reducerCommandOutput-hhh888.js',
                 '/assets/sessionQueryCache-iii999.js',
                 '/assets/TerminalView-jjj000.js',
                 '/assets/filesPageViews-kkk111.js',
@@ -232,14 +232,14 @@ describe('service worker push notifications', () => {
         expect(isNonCriticalPrecacheAssetUrl('/assets/VibyComposer-abc123.js')).toBe(true)
         expect(isNonCriticalPrecacheAssetUrl('/assets/ComposerControlsOverlay-abc123.js')).toBe(true)
         expect(isNonCriticalPrecacheAssetUrl('/assets/useActiveSuggestions-abc123.js')).toBe(true)
-        expect(isNonCriticalPrecacheAssetUrl('/assets/CliOutputBlock-abc123.js')).toBe(true)
+        expect(isNonCriticalPrecacheAssetUrl('/assets/CommandOutputBlock-abc123.js')).toBe(true)
         expect(isNonCriticalPrecacheAssetUrl('/assets/clientAutocomplete-abc123.js')).toBe(true)
         expect(isNonCriticalPrecacheAssetUrl('/assets/clientRuntime-abc123.js')).toBe(true)
         expect(isNonCriticalPrecacheAssetUrl('/assets/clientPush-abc123.js')).toBe(true)
         expect(isNonCriticalPrecacheAssetUrl('/assets/clientWorkspace-abc123.js')).toBe(true)
         expect(isNonCriticalPrecacheAssetUrl('/assets/featureIcons-abc123.js')).toBe(true)
         expect(isNonCriticalPrecacheAssetUrl('/assets/modes-abc123.js')).toBe(true)
-        expect(isNonCriticalPrecacheAssetUrl('/assets/reducerCliOutput-abc123.js')).toBe(true)
+        expect(isNonCriticalPrecacheAssetUrl('/assets/reducerCommandOutput-abc123.js')).toBe(true)
         expect(isNonCriticalPrecacheAssetUrl('/assets/sessionQueryCache-abc123.js')).toBe(true)
         expect(isNonCriticalPrecacheAssetUrl('/assets/TerminalView-abc123.js')).toBe(true)
         expect(isNonCriticalPrecacheAssetUrl('/assets/filesPageViews-abc123.js')).toBe(true)

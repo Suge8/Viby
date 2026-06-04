@@ -70,7 +70,7 @@ describe('AppFloatingNoticeLayer', () => {
                 id: 'runtime-1',
                 active: false,
                 metadata: null,
-                runnerState: {
+                runtimeState: {
                     lastSpawnError: {
                         message: 'spawn failed',
                         at: Date.UTC(2026, 3, 9, 18, 0, 0),
@@ -139,7 +139,7 @@ describe('AppFloatingNoticeLayer', () => {
                 id: 'runtime-1',
                 active: false,
                 metadata: null,
-                runnerState: {
+                runtimeState: {
                     lastSpawnError: {
                         message: 'spawn failed',
                         at: Date.UTC(2026, 3, 9, 18, 0, 0),

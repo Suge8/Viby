@@ -17,7 +17,7 @@ function isAssistantClusterRow(row: TranscriptRow): boolean {
         row.type === 'assistant-text' ||
         row.type === 'assistant-reasoning' ||
         row.type === 'tool' ||
-        row.type === 'cli-output' ||
+        row.type === 'command-output' ||
         row.type === 'assistant-thinking'
     )
 }

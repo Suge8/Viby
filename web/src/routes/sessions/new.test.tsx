@@ -215,7 +215,7 @@ describe('NewSessionRoute', () => {
 
     it('blocks the form when the local runtime is unavailable', () => {
         useRuntimeMock.mockReturnValue({
-            runtime: { id: 'runtime-1', active: false, metadata: null, runnerState: { lastSpawnError: null } },
+            runtime: { id: 'runtime-1', active: false, metadata: null, runtimeState: { lastSpawnError: null } },
             isLoading: false,
             error: null,
             refetch: refetchRuntimeMock,

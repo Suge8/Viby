@@ -7,7 +7,7 @@ export const INITIAL_TRANSCRIPT_FIRST_ITEM_INDEX = 100_000
 export const TRANSCRIPT_AT_BOTTOM_THRESHOLD_PX = 4
 // Generous reverse overscan keeps the rows just above the visible viewport mounted
 // so fast upward scrolls do not flash the unmeasured placeholder spacer before
-// virtuoso has a chance to mount + measure the real row. Tool / CLI / markdown
+// virtuoso has a chance to mount + measure the real row. Tool / runtime / markdown
 // rows can be much taller than the static estimates below, so we keep the reverse
 // overscan large enough that a single fast wheel/touch flick still hits cached
 // rows before reaching estimated placeholders.
@@ -195,7 +195,7 @@ function getTranscriptRowHeightEstimate(row: TranscriptRenderRow): number {
             return ASSISTANT_REASONING_ROW_HEIGHT_ESTIMATE_PX
         case 'tool':
             return TOOL_ROW_HEIGHT_ESTIMATE_PX
-        case 'cli-output':
+        case 'command-output':
             return CLI_OUTPUT_ROW_HEIGHT_ESTIMATE_PX
         case 'event':
             return EVENT_ROW_HEIGHT_ESTIMATE_PX

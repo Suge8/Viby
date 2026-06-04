@@ -182,7 +182,7 @@
     min-width: 10rem;
 }
 
-.ds-cli-output-fallback-body {
+.ds-command-output-fallback-body {
     max-height: 40vh;
 }
 

@@ -19,6 +19,7 @@ import { getAppViewportRoute, isUnauthorizedAuthError } from '@/lib/appShellPres
 import { requireHubUrlForLogin } from '@/lib/runtime-config'
 import { RemotePairingController } from '@/remote/RemotePairingController'
 import { RemotePwaBootstrap } from '@/remote/RemotePwaBootstrap'
+import type { RemotePairingAuthResult } from '@/remote/remotePairingAuthFlow'
 import { readRemotePairingPathId, readStoredRemotePairingId } from '@/remote/remotePairingHttp'
 
 const REQUIRE_SERVER_URL = requireHubUrlForLogin()
@@ -51,6 +52,7 @@ export function AppController(): JSX.Element | null {
     const [remotePairingId, setRemotePairingId] = useState(
         () => readRemotePairingPathId(pathname) ?? readPairingWorkspacePairingId(pathname, locationSearch)
     )
+    const [bootstrappedRemoteAuth, setBootstrappedRemoteAuth] = useState<RemotePairingAuthResult | null>(null)
     const hasRemoteWorkspaceIntent = hasPairingWorkspaceIntent(pathname, locationSearch)
     const fallbackRemotePairingId = hasRemoteWorkspaceIntent ? readStoredRemotePairingId() : null
 
@@ -67,8 +69,9 @@ export function AppController(): JSX.Element | null {
         }
     }, [locationSearch, pathname])
 
-    const handleRemotePwaRecovered = useCallback((pairingId: string) => {
-        setRemotePairingId(pairingId)
+    const handleRemotePwaRecovered = useCallback((result: RemotePairingAuthResult) => {
+        setBootstrappedRemoteAuth(result)
+        setRemotePairingId(result.auth.pairing.id)
     }, [])
 
     const queryClient = useQueryClient()
@@ -137,7 +140,14 @@ export function AppController(): JSX.Element | null {
     }, [readyAppSession, router])
 
     if (remotePairingId) {
-        return <RemotePairingController pairingId={remotePairingId} />
+        return (
+            <RemotePairingController
+                initialAuth={
+                    bootstrappedRemoteAuth?.auth.pairing.id === remotePairingId ? bootstrappedRemoteAuth : null
+                }
+                pairingId={remotePairingId}
+            />
+        )
     }
 
     if (hasRemoteWorkspaceIntent) {
