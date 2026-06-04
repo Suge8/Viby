@@ -59,11 +59,8 @@ docs/internal/update.md
 CLAUDE.md
 DESIGN.md
 
-# Generated npm bundle output (local)
-cli/npm/main/
-
-# Desktop sidecar build artifacts
-desktop/src-tauri/binaries/viby-sidecar-*
+# Desktop AppCore build artifacts
+desktop/src-tauri/binaries/viby-app-core-*
 
 # Desktop generated assets
 desktop/src-tauri/icons/

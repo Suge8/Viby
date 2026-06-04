@@ -1,25 +1,17 @@
 # Viby
 
-Viby 是一个本地优先的 AI 代理远程控制产品。
+Viby 是本地优先的 AI 代理远程控制桌面应用。
 
-你的 AI 继续跑在自己的电脑上；你只需要用 `Web / PWA / Desktop` 接力查看、发消息、审批、看文件和打开终端。
-
-当前产品已收口为 **Desktop 壳 + Web/PWA 唯一交互面**：CLI 继续负责 runtime 与本机桥接，但不再提供 Viby 自己的本地 TUI / local interactive mode。
-
-## 它解决什么问题
-
-- 让 `Claude Code`、`Codex`、`Pi` 跑在你的机器上，而不是迁到云端
-- 让你在手机、浏览器、桌面壳之间接力同一个会话
-- 把消息、权限、文件和终端能力收进一个可随身带走的远程入口
+你的 AI 继续跑在自己的电脑上；你只需要打开 Viby Desktop，就能从桌面、浏览器或手机 PWA 查看、发消息、审批、看文件和打开终端。
 
 ## 当前产品形态
 
-- `desktop/`：桌面主入口，托管 hub sidecar，提供常驻壳和托盘体验
-- `hub/`：本地控制面，负责设备连接、会话服务和数据落盘
-- `web/`：移动优先的 Web / PWA 远程控制界面
-- `cli/`：本机运行引擎，负责启动和承接各类代理
-- `pairing/`：公网配对服务，负责扫码连接和远程唤起
-- `shared/`：跨端共用的协议和基础能力
+- `desktop/`：唯一用户入口。窗口可关闭到后台；菜单栏退出会停止所有本地能力。
+- `hub/`：Desktop 内部 AppCore，负责本地控制面、设备连接、会话服务和数据落盘。
+- `web/`：移动优先的 Web / PWA 远程控制界面，由 AppCore 服务。
+- `pairing/`：公网配对服务，负责扫码连接和远程唤起。
+- `shared/`：跨端共用协议和基础能力。
+- `app-core/`：迁移中的内部 runtime 代码，不再是发布产品入口。
 
 ## 支持的代理
 
@@ -28,48 +20,39 @@ Viby 是一个本地优先的 AI 代理远程控制产品。
 
 ## 快速开始
 
-```bash
-# 临时运行
-npx @singyy/viby hub
+1. 安装并打开 Viby Desktop。
+2. 桌面 App 保持后台运行。
+3. 扫码连接手机 / PWA。
+4. 菜单栏点“退出”时，Viby 会停止 AppCore、远程连接和本机代理子进程。
 
-# 或全局安装
-npm install -g @singyy/viby
-viby hub
-```
-
-启动后：
-
-1. 打开终端输出的 Web 地址
-2. 桌面端或 Web 按提示输入电脑上的 6 位配对码
-3. 在 Web 里新建会话
-
-## 开发入口
-
-- 产品总览：`README.md`
-- Web / PWA：`web/README.md`
-- Hub：`hub/README.md`
-- CLI：`cli/README.md`
-- Pairing Broker：`pairing/README.md`
-- Desktop：`desktop/README.md`
-- 产品官网（viby.run）：`site/README.md`
-- 架构与边界：`docs/README.md`
+发布版不需要 npm、不需要命令行、不需要用户理解 Hub / daemon / 命令行。
 
 ## 本地开发
 
 ```bash
 bun install
-bun run dev      # 默认产品开发入口：Desktop + Web + Hub/CLI 源码 watch
+bun run dev      # Desktop + AppCore 源码开发入口
 bun run check    # 提交前快验证
 bun run build    # Web / Hub / Pairing 发布级构建
 ```
 
 专项命令看 `docs/development/local-development.md`。
 
+## 继续阅读
+
+- Web / PWA：`web/README.md`
+- Hub / AppCore：`hub/README.md`
+- AppCore runtime：`app-core/README.md`
+- Pairing Broker：`pairing/README.md`
+- Desktop：`desktop/README.md`
+- 产品官网：`site/README.md`
+- 架构与边界：`docs/README.md`
+
 ## 文档分层
 
-- README 只回答产品是什么、怎么跑、去哪里继续看
-- 复杂运行边界和恢复语义统一收口到 `docs/`
-- 模块内更细的开发规则继续看对应目录下的 `AGENTS.md`
+- README 只回答产品是什么、怎么跑、去哪里继续看。
+- 复杂运行边界和恢复语义统一收口到 `docs/`。
+- 模块内更细规则看对应目录下的 `AGENTS.md`。
 
 ## Credits
 
