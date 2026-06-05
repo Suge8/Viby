@@ -43,7 +43,6 @@ const optionalLocalOnlyRefs = new Set(['docs/internal/update.md'])
 // owner 规则、边界、内部基础设施术语、产品定位内部框架、内部文档/AGENTS 指针、dev/ops 命令。
 const readmeForbiddenPhrases = [
     'docs/internal/',
-    '.taskmaster/',
     'AGENTS.md',
     '../docs/',
     'bun run',

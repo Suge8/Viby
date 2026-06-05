@@ -12,7 +12,7 @@ README 只保留产品入口；复杂边界和运行约束统一收口到这里�
 - `docs/architecture/realtime-recovery.md`：realtime、reconnect、catch-up 和 streaming 语义
 - `docs/architecture/cross-device-resume-architecture.md`：跨端恢复、History/Hub resume 与本地 orphan recovery 分工、Hub/AppCore 单一控制方案
 - `docs/architecture/driver-resume-semantics.md`：7 个 driver 的 resume 语义、互通边界与 Viby continuity 结论
-- `docs/architecture/command-capability-convergence.md`：`/` 命令、native skills、Viby `$skill` 与会话类命令的能力分层
+- `docs/architecture/command-capability-convergence.md`：`/` 命令、native skill capability、`$` 过滤模式与会话类命令的能力分层
 - `docs/architecture/web-browser-storage-architecture.md`：Web 浏览器存储四层分层、AppCacheDB owner 与长期边界
 - `docs/architecture/pairing-broker.md`：扫码配对、remote DataChannel、broker 与 ICE 方案
 - `docs/architecture/pairing-integration-tests.md`：pairing 秒级集成测试、默认验证归属与高保真 smoke 分层

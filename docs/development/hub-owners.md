@@ -18,6 +18,7 @@
 - attachment upload HTTP transport 只认 multipart `FormData + File` 主路径；Hub route 负责唯一一次文件读取、大小校验与转 RPC payload，禁止继续兼容或恢复 base64 JSON 第二链路。
 - passive notice 必须先完成同一条 wake / resume owner，再写 durable notice
 - `SyncEngine` 必须继续保持薄 façade / orchestration owner；read API 与 session API 可以分层，但 send / resume / unarchive / attachment mutation 的自动恢复不得绕过 `SyncEngine` 主入口直连底层 service
+- Hub 会话动作入口只认 `hub/src/sync/sessionCommandService.ts`：`abort / close / archive / unarchive / resume / driver-switch` 的调用入口、错误状态与 route-facing status 归这里，route 只做 HTTP 适配
 - session driver / resume token 只认 `metadata.driver + runtimeHandles` 这一条 durable source of truth；legacy `metadata.flavor` 只允许在 store 写入时一次性归一
 - `resumeAvailable / resumeStrategy` 的 read-model 语义只认 shared resume owner；Hub summary/read-model 只物化结果，不并行维护第二套判定链
 - session activity summary 只认 `sessions.latest_activity_*` 物化列；列表、摘要与通知链路不得重新扫描 `messages` 计算第二套 activity

@@ -43,8 +43,6 @@ const browserStorageOwnerFiles = new Set([
     'web/src/lib/appRecovery.ts',
     'web/src/lib/browserStorage.ts',
     'web/src/lib/i18n-context.tsx',
-    'web/src/lib/recent-skill-usage.ts',
-    'web/src/lib/recent-skills.ts',
     'web/src/lib/runtimeAssetRecovery.ts',
 ])
 const useSyncExternalStoreOwnerFiles = new Set([

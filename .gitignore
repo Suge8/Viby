@@ -54,7 +54,6 @@ execplan/
 .viby-dev-remote.lock.json
 docs/
 docs/internal/update.md
-.taskmaster/
 CLAUDE.md
 DESIGN.md
 

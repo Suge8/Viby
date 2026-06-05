@@ -6,8 +6,6 @@
 - Hub owner 边界看 `../docs/development/hub-owners.md`。
 - 环境变量边界看 `../docs/development/runtime-environment.md`。
 - 系统架构与恢复语义看 `../docs/architecture/system-overview.md` 和 `../docs/architecture/realtime-recovery.md`。
-- 长任务活动路径先看 `../docs/internal/agent-workflow.md`。
-- 当前任务执行细节再看 `.taskmaster/`。
 
 ## Hub 硬规则
 
