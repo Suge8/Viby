@@ -4,6 +4,10 @@
 
 ## 必守边界
 
+> 一行一条规则（grep 友好：一条命中=完整规则）。下面按主题分组，便于人工导航。
+
+### 加载、路由与壳层
+
 - app 可见 loading owner 只认单一 surface：无内容冷启动时由 boot shell 承担；已有 retained content 时只显示顶部 compact runtime notice
 - Remote pairing UI 只认 `hydrating / first-pairing / running / fatal` 外层状态；retained-ready 存在时刷新/前台恢复必须保留 workspace shell + compact reconnect notice，禁止回全屏 boot；peer channel ready 后必须先释放 `running` workspace，retained-ready 持久化只是可恢复缓存，失败或卡住不得阻断交互。PWA / device recovery 不得接管或踢掉旧窗口；broker replacement 只服务同一 token 重复打开这类终止态，必须显示明确说明，禁止进入无限 reconnect。
 - `/p/<id>` 是 broker boot / handoff path，不是 Web workspace route；remote ready bridge 在该路径上必须立刻软跳 `/sessions?remote=1`，若 retained ready 已存在则直接用 `/sessions` pathname 渲染 `RemotePairingReadyShell`，禁止再露出 `not found` 或第二个 handoff loading。
@@ -18,6 +22,8 @@
 - 原生质感视觉 owner 只认 `web/src/styles/design-native-shell.css` 与 `design-system-tokens.css`；桌面 Web 的 ambient canvas / side pane / detail stage / glass surface 不得在 route 组件里各自硬编码第二套规则
 - route transition owner 只认 Web 自己的 `data-viby-navigation-transition`；禁止把 TanStack route commit 再交给浏览器原生 View Transition，否则 lazy/data suspend 会把交互卡死成第二条 owner
 - list -> detail / new / settings 这类 preloaded navigation 只允许在“来源 location 的同一次 visit 仍然未变”时 commit；用户哪怕后来又回到同一个 URL，旧 preload 也不得晚到抢回路由；preload 是增强，不得无限期阻塞显式点击，超过统一 UX deadline 必须先 commit，让目标 route 自己呈现 loading/error。
+### 会话进入、preload 与 ready
+
 - 显式 session 进入必须在 route commit 前等到 detail-ready preload 完成，至少覆盖 authoritative session view 与首屏 transcript critical renderer path（含 tool transcript views）；禁止先 commit 再在 detail 内暴露第二层 pending
 - session intent preload 只允许预热 chat route module chunk；markdown runtime、tool transcript views 与 authoritative session view 只允许进入 selected-session ready preload，禁止 intent/ready 共用一条重预热链
 - idle preload 只允许预热 `new / settings` 这类轻静态 route module；不得再后台预热 session detail data、latest messages 或 command capability snapshot
@@ -30,6 +36,8 @@
 - selected session runtime 的释放只认真实 route selection 变化 owner；`SessionsShell` unmount cleanup 不得回收当前选中会话，否则 Vite dev `StrictMode` 会把当前 detail runtime 误清掉并卡在 `加载消息…`
 - chat 首屏可见 transcript renderer 与 tool transcript views 必须并入 detail critical preload；禁止先 plain/raw fallback paint，再 effect / lazy 升级成真实富渲染
 - chat route 只负责 session entry、header 导航与 workspace 组装；message state / runtime options 只走同一份 workspace model，禁止 route 层先拍平再在 `SessionChat` / runtime surface 二次拼装第二套 chat 状态
+### 聊天头部、transcript 控件与 composer
+
 - session detail 顶部 header 必须保持 pointer-transparent floating overlay owner：不占 transcript 正常文档流、不再渲染整条底色/占位带，只有显式按钮控件区域可以接管 pointer；顶部辅助 surface 若存在，必须复用同一条 header clearance token 让位，禁止额外平行猜 top inset。顶部停靠只认 **header measured stage 底边 + `--chat-header-visual-clearance`** 单一 top-anchor owner；程序化 history jump / reveal 必须通过 viewport `scroll-padding-top` + row `scroll-margin-top` 对齐 fixed overlay，而手动滚到当前已加载窗口顶部时，唯一允许的“舒适顶线”实现是消费同一份 `--chat-header-anchor-space` 的 `react-virtuoso Header` spacer。显式 top-anchor transaction 一旦遇到真实 viewport scroll（wheel / touch / raw scroll event），必须立即让权给手势 owner，禁止像旧链路那样继续回拉 viewport。禁止再给 viewport / route 壳层补第二套 top padding、guard strip 或并行 top-gap JS patch；用户继续上滑时，内容仍必须可以进入透明 header 卡片后面
 - transcript side controls 只保留两条浮动 overlay owner：中间的底部 back-to-bottom CTA，与右侧贴 composer 顶的 outline trigger。两者垂直说 `top: calc(var(--chat-composer-stage-top) - var(--chat-side-control-size) - var(--chat-desktop-bottom-control-gap))`，back-to-bottom 水平说 `left: 50%`，outline trigger 右侧说 `right: var(--chat-stage-trailing-x)`（与 SessionHeader 右上 more 按钮 同一边距 owner）。旧的顶部 history control 不得重生为第二条浮动按钮；history 跳转走 outline item 的同一 top-anchor owner，“显示更早”只作为用户显式命令调用同一 load-older callback
 - route model 里的 send / resume / autocomplete / warning sync 应拆成 purpose-driven hooks；禁止恢复单个巨型 route model hook 把多条控制链揉回一个 owner
@@ -44,12 +52,16 @@
 - 移动端 keyboard / visual viewport 只认同一条 chat viewport layout owner；composer autocomplete / command overlay 只能消费同一份 `visibleViewportBottom` snapshot，并继续 portal 到 `document.body`，禁止在 overlay 内再启动第二套 `visualViewport` 监听或让浮层掉进输入法后面
 - composer keyboard submit 只认 `composerKeyboard.ts + useComposerInputController.ts + VibyComposer.tsx` 单一 owner：touch/coarse pointer 设备的 Enter 继续只负责换行并通过显式发送按钮提交，desktop Enter 发送、`Shift+Enter` 换行；IME composition 期间严禁误发送。所有自定义 Enter/Tab 键盘提交或建议选择链路都必须共用同一套 IME 守卫：优先看 composition state / `event.isComposing`，并保留 IME 229 fallback；当 slash / autocomplete 已有显式选中项时，Enter/Tab 必须优先提交选中项，desktop send 只在没有激活 suggestion selection 时生效；普通单行表单优先走浏览器原生 submit，不要在 `keydown` 抢跑第二条提交链
 - 移动端入口继续在 `index.html` 的 viewport meta 上启用 `interactive-widget=resizes-content`；键盘抬起后的布局收缩优先交给浏览器标准能力，不在 Web 再拼第二套兼容位移链
+### slash / autocomplete 与命令
+
 - slash / autocomplete 面板默认极简；仅允许前几项命令显示一行超短提示，其余维持 `trigger + badge` 主路径，禁止恢复大段说明卡片
 - 同一 surface 的文案只认当前 locale；禁止在 slash / autocomplete 里把中英文硬编码混排成第二套显示语义
 - slash / autocomplete 行项继续收口到单行主路径：`trigger + product hint + translated badge`；禁止再拆回两行说明或暴露未经产品化的 `Guarded / Action` 原始英文标签
 - slash / autocomplete 默认不自动选中第一项；只有显式方向键导航或点击后才进入选中态，禁止再引入“自动首选项”第二条交互控制链
 - 会话拓扑类命令的产品语义只放在行内描述；列表层不再额外挂 `Action / Protected / History / Session / Switch` 这类效果 badge
 - `ApiClient` 保持单一 public API，非首屏能力按需加载
+### 会话列表与生命周期
+
 - 用户层会话模型只认 `进行中 / 历史` 两类；禁止在列表、菜单或文案里继续并行维护 `closed / archived / recently closed` 第二套前台语义
 - `Stop generating / 暂停输出` 只允许中断当前 turn；前台分组继续只认 lifecycle owner，`open` 不得因为 `active=false` 就被 Web 自行打进 history
 - session list 顶部 `进行中 / 历史` tab 是唯一前台筛选 owner；两个 tab 必须常驻且可点击，空集合显示 `0 + 空态`，禁止按数据数量隐藏或禁用 tab；禁止退化成纯统计 pill 后再把两类会话并排混渲
@@ -59,6 +71,8 @@
 - session list 的 hover / focus / touch 预热意图只允许由 list item 发出 `intent source`，实际是否触发 preload 只认 `SessionsShell + sessionsShellSupport.ts` 调度 owner；禁止卡片组件自己再维护第二套 preload 判定/节流
 - 同一 selected session 发生 `running <-> history` 生命周期切换时，session list 不得替用户切 tab；当前 tab 为空时只展示空态，只有显式选 tab 或 selection 迁移才允许变更视口
 - desktop session list sidebar 只认单一滚动容器 owner；切换 `进行中 / 历史` 时只允许正文内容变化，不得因滚动条显隐再触发头部宽度或控件排布漂移；desktop 侧栏继续使用 `overflow-y:auto + scrollbar-gutter: stable both-edges` 收口，禁止再用 `direction: rtl` 这类布局 hack 挪滚动条位置，也不得暴露横向滚动条
+### transcript 渲染、滚动与虚拟列表
+
 - transcript 不再使用 `content-visibility:auto` 占位优化；当前 chat surface 与历史滚动/贴底/工具气泡组合下，这条路径会产出空白消息壳、错误高度与交互卡死
 - session chat 关键壳层（page / body / thread root / composer shell / header / local notice）不得使用 `contain: paint`、`backface-visibility: hidden` 这类合成层优化；Safari/WebKit 下它会把 transcript fixed controls、scroll repaint 与 hit-testing 打坏，出现白框、按钮失去 pointer、轻微上滑即卡死
 - 移动端 chat composer panel 必须固定贴到底边；网页 chat 不再额外保留 safe-area rail。禁止通过拉长 composer 可见卡片高度、增加 shell 底部 rail、pseudo-element filler strip 或外部 bottom gap 来“填满底边”。transcript 的底部语义只对齐 **compose measured stage 顶边上方的小视觉间距**；该间距只认 `--chat-composer-visual-clearance` 单一 owner，存在 local notice 时则对齐 notice + compose 整体 shell 顶边再加同一条 visual clearance；thread list 自身不得再在 JS 里重建 `composerHeight + gap` 公式，必须直接消费同一条 `--chat-composer-occupied-space` 合同，而且这条合同必须继续按布局模式单一收口：**mobile fixed composer = reserved-space + visual clearance，desktop in-flow composer = visual clearance only**
@@ -101,6 +115,8 @@
 - assistant transient stream 清理只认 canonical `assistantTurnId` + durable transcript；Web 只消费 authoritative stream/meta，不做 provider-specific dedupe
 - session detail 里的 menu / popover / dialog 不得挂在 `contain: paint` 或路由转场子树里，统一 portal 到 `document.body`
 - app 级 fixed / floating CTA / page overlay 必须继续只走 `body > #app-overlays` 单一 portal owner；禁止把全局浮层挂回 route 子树、scroll 容器或在 `body` 下散落第二个 overlay root
+### 平台、存储、notice 与 overlay
+
 - service worker 只认 `web/src/sw.ts`；注册来源策略只认 `web/src/lib/runtimeAssetPolicy.ts`，生产构建允许 HTTPS origin 与 HTTP loopback trustworthy origin，Vite dev server 继续 SW-free。
 - Web 发布一致性只认 `@viby/protocol` 的 `buildCompatibility` owner：Web build 必须生成同一份 build metadata，Hub embedded 与 pairing deploy bundle 构建必须校验它；运行时兼容只看 `protocolVersion` 支持窗口，不用 `buildId` 判定协议兼容。
 - PWA install 提示只认 `InstallPrompt + usePWAInstall` owner；平台/来源矩阵事实源见 `docs/development/pwa-install.md`。`/sessions` list 必须保留 local install banner 并消费其 measured bottom clearance，避免移动浏览器底部安装浮层遮挡会话卡片；direct chat route 必须 suppress local install banner，避免 composer 被安装浮层覆盖；remote pairing 扫码入口继续消费同一提示 owner，禁止另做第二套安装文案或状态。iOS/iPadOS 不等待 `beforeinstallprompt`，只能显示轻量自定义引导并提示用户走 Safari/系统分享菜单“添加到主屏幕”；LAN HTTP 只能显示快捷方式提示并明确完整提醒能力需要 HTTPS/公网/可信本地入口。
@@ -197,6 +213,12 @@
 - 附件上传与删除只走 Hub `/sessions/:id/upload` 和 `/sessions/:id/upload/delete`；Web 附件上传只发 `FormData + File` 二进制主路径，不预热 session，不维护第二条附件恢复链
 - composer 本地图片预览只认 blob object URL owner；durable transcript 预览只允许来自同一条 Hub 附件元数据链，禁止再把整图 base64 JSON 化后并行塞进第二套上传链
 - Hub-owned send 若在 lifecycle/recovery 前置阶段失败，Web 必须回到 authoritative snapshot，并把 Hub error code 映射到用户可见错误
+
+## 相关架构
+
+- 浏览器存储四层分层与 AppCacheDB owner：`docs/architecture/web-browser-storage-architecture.md`
+- realtime / reconnect / catch-up / streaming 语义：`docs/architecture/realtime-recovery.md`
+- 原生质感视觉 owner：`web-native-feel.md`
 
 ## 验证基线
 
