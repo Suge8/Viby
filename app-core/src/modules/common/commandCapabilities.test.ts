@@ -5,43 +5,25 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { getCommandCapabilitySnapshot, listCommandCapabilities } from './commandCapabilities'
 import { resetCommandCapabilityCache } from './commandCapabilityCache'
 
-async function writeSkill(skillDir: string, name: string, description: string): Promise<void> {
-    await mkdir(skillDir, { recursive: true })
-    await writeFile(
-        join(skillDir, 'SKILL.md'),
-        ['---', `name: ${name}`, `description: ${description}`, '---', '', `# ${name}`].join('\n')
-    )
-}
-
 describe('listCommandCapabilities', () => {
-    const originalHome = process.env.HOME
     let sandboxDir: string
-    let homeDir: string
     let projectDir: string
 
     beforeEach(async () => {
         sandboxDir = await mkdtemp(join(tmpdir(), 'viby-command-capabilities-'))
-        homeDir = join(sandboxDir, 'home')
         projectDir = join(sandboxDir, 'project')
-        process.env.HOME = homeDir
-
-        await mkdir(join(homeDir, '.agents', 'skills'), { recursive: true })
         await mkdir(join(projectDir, '.git'), { recursive: true })
     })
 
     afterEach(async () => {
         resetCommandCapabilityCache()
-        if (originalHome === undefined) {
-            delete process.env.HOME
-        } else {
-            process.env.HOME = originalHome
-        }
-
         await rm(sandboxDir, { recursive: true, force: true })
     })
 
-    it('merges native slash commands with Viby skills into one capability list', async () => {
-        await writeSkill(join(homeDir, '.agents', 'skills', 'build'), 'build', 'Build skill')
+    it('lists native slash commands without synthesizing Viby skills', async () => {
+        const oldSkillPath = join(projectDir, '.agents', 'skills', 'build')
+        await mkdir(oldSkillPath, { recursive: true })
+        await writeFile(join(oldSkillPath, 'SKILL.md'), '# build')
 
         const capabilities = await listCommandCapabilities('codex', projectDir)
 
@@ -54,34 +36,11 @@ describe('listCommandCapabilities', () => {
                     selectionMode: 'action',
                     actionType: 'open_new_session',
                 }),
-                expect.objectContaining({
-                    trigger: '$build',
-                    provider: 'shared',
-                    kind: 'viby_skill',
-                    selectionMode: 'insert',
-                }),
             ])
         )
+        expect(capabilities.some((capability) => capability.kind === 'native_skill')).toBe(false)
+        expect(capabilities.some((capability) => capability.trigger === '$build')).toBe(false)
         expect(capabilities.some((capability) => capability.trigger === '/resume')).toBe(false)
-    })
-
-    it('includes visible ~/.codex skills in the unified capability list', async () => {
-        await writeSkill(join(homeDir, '.codex', 'skills', 'ship'), 'ship', 'Ship skill')
-        await writeSkill(join(homeDir, '.codex', 'skills', '.system', 'hidden'), 'hidden', 'Hidden skill')
-
-        const capabilities = await listCommandCapabilities('codex', projectDir)
-
-        expect(capabilities).toEqual(
-            expect.arrayContaining([
-                expect.objectContaining({
-                    trigger: '$ship',
-                    provider: 'shared',
-                    kind: 'viby_skill',
-                    selectionMode: 'insert',
-                }),
-            ])
-        )
-        expect(capabilities.some((capability) => capability.trigger === '$hidden')).toBe(false)
     })
 
     it('invalidates cached capabilities when the watched command directory changes', async () => {

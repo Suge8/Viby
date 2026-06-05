@@ -8,8 +8,8 @@ import {
 import { SessionDriverSchema } from './schemas'
 import type { SessionDriver } from './sessionDriver'
 
-export type CommandCapabilityKind = 'native_command' | 'native_skill' | 'viby_skill' | 'viby_action'
-export type CommandCapabilitySource = 'builtin' | 'user' | 'plugin' | 'project' | 'provider' | 'viby'
+export type CommandCapabilityKind = 'native_command' | 'native_skill' | 'viby_action'
+export type CommandCapabilitySource = 'builtin' | 'user' | 'plugin' | 'project' | 'provider'
 export type CommandCapabilityProvider = SessionDriver | 'shared'
 export type CommandCapabilitySessionEffect =
     | 'none'
@@ -44,8 +44,8 @@ export const CommandCapabilitySchema = z.object({
     trigger: z.string(),
     label: z.string(),
     description: z.string().optional(),
-    kind: z.enum(['native_command', 'native_skill', 'viby_skill', 'viby_action']),
-    source: z.enum(['builtin', 'user', 'plugin', 'project', 'provider', 'viby']),
+    kind: z.enum(['native_command', 'native_skill', 'viby_action']),
+    source: z.enum(['builtin', 'user', 'plugin', 'project', 'provider']),
     provider: z.union([SessionDriverSchema, z.literal('shared')]),
     sessionEffect: z.enum(['none', 'mutates_context', 'creates_session', 'switches_session', 'replays_history']),
     requiresLifecycleOwner: z.boolean(),

@@ -12,7 +12,6 @@ import type {
     SessionDriver,
 } from '@viby/protocol/types'
 import { type CommandCapabilitySnapshot, loadCachedCommandCapabilities } from './commandCapabilityCache'
-import { discoverSkills, type SkillSummary } from './skills'
 import { listSlashCommands } from './slashCommands'
 import { listSlashCommandWatchRoots } from './slashCommandWatchRoots'
 
@@ -79,23 +78,6 @@ function createNativeCommandCapability(
     }
 }
 
-function createVibySkillCapability(skill: SkillSummary): CommandCapability {
-    return {
-        id: `viby:${skill.name}`,
-        trigger: `$${skill.name}`,
-        label: `$${skill.name}`,
-        description: skill.description,
-        kind: 'viby_skill',
-        source: 'viby',
-        provider: 'shared',
-        sessionEffect: 'none',
-        requiresLifecycleOwner: false,
-        selectionMode: 'insert',
-        displayGroup: 'skill',
-        riskLevel: 'low',
-    }
-}
-
 function sortCapabilities(capabilities: readonly CommandCapability[]): CommandCapability[] {
     const displayGroupOrder: Record<CommandCapability['displayGroup'], number> = {
         native: 0,
@@ -138,27 +120,15 @@ export async function getCommandCapabilitySnapshot(
         workingDirectory,
         onInvalidate: options?.onInvalidate,
         load: async () => {
-            const [slashCommands, skillDiscovery] = await Promise.all([
-                listSlashCommands(agent, workingDirectory),
-                discoverSkills(workingDirectory),
-            ])
+            const slashCommands = await listSlashCommands(agent, workingDirectory)
             const visibleSlashCommands = slashCommands.filter(
                 (command) => !isHiddenCommandCapabilityTrigger(`/${command.name}`)
             )
 
-            const capabilities = [
-                ...visibleSlashCommands.map((command) => createNativeCommandCapability(agent, command)),
-                ...skillDiscovery.skills.map((skill) => createVibySkillCapability(skill)),
-            ]
-
-            return sortCapabilities(capabilities)
+            return sortCapabilities(
+                visibleSlashCommands.map((command) => createNativeCommandCapability(agent, command))
+            )
         },
-        listWatchRoots: async () => {
-            const [commandRoots, skillDiscovery] = await Promise.all([
-                listSlashCommandWatchRoots(agent, workingDirectory),
-                discoverSkills(workingDirectory),
-            ])
-            return [...commandRoots, ...skillDiscovery.watchRoots]
-        },
+        listWatchRoots: async () => await listSlashCommandWatchRoots(agent, workingDirectory),
     })
 }
