@@ -139,3 +139,10 @@ Pairing broker 只保三类 owner：
 - host SSE `pairing.updated` 返回 `{ type, pairing, remoteConnections }`，verify-code、PWA handoff、guest socket attach/detach 都推进同一合同。
 - `approvalStatus === 'approved'` 只表示授权完成；在线状态只看 `remoteConnections.connectedAt`。
 - SSE 指名不开 `proxy_buffering`：broker `/pairings/:id/events` 头 `X-Accel-Buffering: no` + `Cache-Control: no-cache, no-transform`。反代层需 honor 该提示。
+
+## 相关架构
+
+- 长寿命 PeerConnection、ICE restart 与重连恢复链：`docs/architecture/pairing-reconnection.md`
+- 配对码统一认证与设备绑定：`docs/architecture/unified-pairing-auth.md`
+- 设备 presence 单一事实源：`docs/architecture/pairing-presence.md`
+- 默认验证归属与高保真 smoke 分层：`docs/architecture/pairing-integration-tests.md`
