@@ -10,6 +10,7 @@ import { MessageService } from './messageService'
 import { RpcGateway } from './rpcGateway'
 import { SessionBootstrapConfigService } from './sessionBootstrapConfigService'
 import { SessionCache } from './sessionCache'
+import { SessionCommandService } from './sessionCommandService'
 import { SessionHandoffService } from './sessionHandoffService'
 import { SessionInteractionService, type SessionSendMessageErrorCode } from './sessionInteractionService'
 import { SessionLifecycleService } from './sessionLifecycleService'
@@ -63,6 +64,12 @@ export function createSyncEngineServices(options: SyncEngineServiceFactoryOption
     )
     const runtimeCapabilityCache = new RuntimeCapabilityCache(sessionRpcFacade, eventPublisher)
     const sessionLifecycleService = new SessionLifecycleService(sessionCache, machineCache, rpcGateway)
+    const sessionCommandService = new SessionCommandService(
+        sessionCache,
+        rpcGateway,
+        sessionLifecycleService,
+        sessionRpcFacade
+    )
     const sessionBootstrapConfigService = new SessionBootstrapConfigService(
         options.getSession,
         async (sessionId, buildNextMetadata, mutateOptions) => {
@@ -121,6 +128,7 @@ export function createSyncEngineServices(options: SyncEngineServiceFactoryOption
         runtimeCapabilityCache,
         sessionBootstrapConfigService,
         sessionCache,
+        sessionCommandService,
         sessionHandoffService,
         sessionInteractionService,
         runtimeEventIngestor,

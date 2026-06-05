@@ -16,7 +16,8 @@ import type {
     SessionSendMessageResult,
 } from '@viby/protocol/types'
 import type { RuntimeSpawnValidationOptions } from '../runtime/runtimeCapabilityValidation'
-import type { DriverSwitchResult, ResumeContractState, ResumeSessionResult } from './sessionLifecycleService'
+import type { SessionCommandResumeResult } from './sessionCommandService'
+import type { DriverSwitchResult, ResumeContractState } from './sessionLifecycleService'
 import type {
     InternalSessionMessagePayload,
     SessionConfigPatch,
@@ -74,27 +75,19 @@ export abstract class SyncEngineSessionApi extends SyncEngineReadApi {
     }
 
     async abortSession(sessionId: string): Promise<Session> {
-        await this.syncServices.rpcGateway.abortSession(sessionId)
-        await this.syncServices.sessionCache.setSessionLifecycleState(sessionId, 'open', {
-            touchUpdatedAt: false,
-        })
-        const session = this.syncServices.sessionCache.setSessionThinking(sessionId, false)
-        if (!session) {
-            throw new Error('Session not found')
-        }
-        return session
+        return await this.syncServices.sessionCommandService.abortSession(sessionId)
     }
 
     async closeSession(sessionId: string): Promise<Session> {
-        return await this.syncServices.sessionLifecycleService.closeSession(sessionId)
+        return await this.syncServices.sessionCommandService.closeSession(sessionId)
     }
 
     async archiveSession(sessionId: string): Promise<Session> {
-        return await this.syncServices.sessionLifecycleService.archiveSession(sessionId)
+        return await this.syncServices.sessionCommandService.archiveSession(sessionId)
     }
 
     async unarchiveSession(sessionId: string): Promise<Session> {
-        return await this.syncServices.sessionLifecycleService.unarchiveSession(sessionId)
+        return await this.syncServices.sessionCommandService.unarchiveSession(sessionId)
     }
 
     async deleteSession(sessionId: string): Promise<void> {
@@ -103,7 +96,7 @@ export abstract class SyncEngineSessionApi extends SyncEngineReadApi {
 
     async switchSessionDriver(sessionId: string, targetDriver: AgentFlavor): Promise<DriverSwitchResult> {
         const previousDriver = resolveSessionDriver(this.getSession(sessionId)?.metadata)
-        const result = await this.syncServices.sessionLifecycleService.switchSessionDriver(sessionId, targetDriver, {
+        const result = await this.syncServices.sessionCommandService.switchSessionDriver(sessionId, targetDriver, {
             buildSessionHandoff: (targetSessionId) => this.buildSessionHandoff(targetSessionId),
         })
         if (result.type !== 'success') {
@@ -140,12 +133,30 @@ export abstract class SyncEngineSessionApi extends SyncEngineReadApi {
     }
 
     async applySessionConfig(sessionId: string, config: SessionConfigPatch): Promise<void> {
-        const session = this.syncServices.sessionCache.getSession(sessionId)
-        if (session && !session.active) {
-            this.syncServices.sessionCache.applySessionConfig(sessionId, config)
-            return
-        }
-        await this.syncServices.sessionRpcFacade.requestSessionConfig(sessionId, config)
+        await this.syncServices.sessionCommandService.applySessionConfig(sessionId, config)
+    }
+
+    async setPermissionMode(sessionId: string, mode: NonNullable<Session['permissionMode']>): Promise<Session> {
+        return await this.syncServices.sessionCommandService.setPermissionMode(sessionId, mode)
+    }
+
+    async setCollaborationMode(sessionId: string, mode: NonNullable<Session['collaborationMode']>): Promise<Session> {
+        return await this.syncServices.sessionCommandService.setCollaborationMode(sessionId, mode)
+    }
+
+    async setModel(sessionId: string, model: Session['model']): Promise<Session> {
+        return await this.syncServices.sessionCommandService.setModel(sessionId, model)
+    }
+
+    async setModelReasoningEffort(
+        sessionId: string,
+        modelReasoningEffort: Session['modelReasoningEffort']
+    ): Promise<Session> {
+        return await this.syncServices.sessionCommandService.setModelReasoningEffort(sessionId, modelReasoningEffort)
+    }
+
+    async setCodexServiceTier(sessionId: string, codexServiceTier: Session['codexServiceTier']): Promise<Session> {
+        return await this.syncServices.sessionCommandService.setCodexServiceTier(sessionId, codexServiceTier)
     }
 
     async spawnSession(
@@ -161,8 +172,8 @@ export abstract class SyncEngineSessionApi extends SyncEngineReadApi {
     async resumeSession(
         sessionId: string,
         opts?: { permissionMode?: Session['permissionMode'] }
-    ): Promise<ResumeSessionResult> {
-        return await this.syncServices.sessionLifecycleService.resumeSession(sessionId, this.buildResumeHooks(), opts)
+    ): Promise<SessionCommandResumeResult> {
+        return await this.syncServices.sessionCommandService.resumeSession(sessionId, this.buildResumeHooks(), opts)
     }
 
     async checkPathsExist(machineId: string, paths: string[]): Promise<Record<string, boolean>> {

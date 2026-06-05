@@ -1169,6 +1169,86 @@ describe('sessions routes', () => {
         expect(applySessionConfigCalls).toEqual([['session-1', { modelReasoningEffort: 'max' }]])
     })
 
+    it('applies Codex service tier changes for Viby-managed Codex sessions', async () => {
+        const { app, applySessionConfigCalls } = createApp(createSession())
+
+        const response = await app.request('/api/sessions/session-1/codex-service-tier', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ codexServiceTier: 'fast' }),
+        })
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toMatchObject({
+            ok: true,
+            session: { id: 'session-1', codexServiceTier: 'fast' },
+        })
+        expect(applySessionConfigCalls).toEqual([['session-1', { codexServiceTier: 'fast' }]])
+    })
+
+    it('rejects Codex service tier changes for local Codex sessions', async () => {
+        const { app, applySessionConfigCalls } = createApp(
+            createSession({
+                agentState: { controlledByUser: true, requests: {}, completedRequests: {} },
+            })
+        )
+
+        const response = await app.request('/api/sessions/session-1/codex-service-tier', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ codexServiceTier: 'fast' }),
+        })
+
+        expect(response.status).toBe(409)
+        expect(await response.json()).toEqual({
+            error: 'Codex fast mode can only be changed for Viby-managed Codex sessions',
+        })
+        expect(applySessionConfigCalls).toEqual([])
+    })
+
+    it('rejects Codex service tier changes for inactive sessions', async () => {
+        const { app, applySessionConfigCalls } = createApp(createSession({ active: false }))
+
+        const response = await app.request('/api/sessions/session-1/codex-service-tier', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ codexServiceTier: 'fast' }),
+        })
+
+        expect(response.status).toBe(409)
+        expect(await response.json()).toEqual({ error: 'Session is inactive' })
+        expect(applySessionConfigCalls).toEqual([])
+    })
+
+    it('returns session_not_found when the Codex service tier snapshot is unavailable', async () => {
+        const { app } = createApp(createSession(), { dropSessionSnapshotAfterConfig: true })
+
+        const response = await app.request('/api/sessions/session-1/codex-service-tier', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ codexServiceTier: 'fast' }),
+        })
+
+        expect(response.status).toBe(500)
+        expect(await response.json()).toEqual({
+            error: 'Session snapshot unavailable after config update',
+            code: 'session_not_found',
+        })
+    })
+
+    it('rejects invalid Codex service tier values', async () => {
+        const { app, applySessionConfigCalls } = createApp(createSession())
+
+        const response = await app.request('/api/sessions/session-1/codex-service-tier', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ codexServiceTier: 'turbo' }),
+        })
+
+        expect(response.status).toBe(400)
+        expect(applySessionConfigCalls).toEqual([])
+    })
+
     it('rejects invalid Claude model reasoning effort values', async () => {
         const session = createSession({
             metadata: {

@@ -1,5 +1,6 @@
 import type { SessionDriver, SessionStreamState } from '@viby/protocol/types'
 import { Hono } from 'hono'
+import { SessionCommandService } from '../../sync/sessionCommandService'
 import type { Session, SyncEngine } from '../../sync/syncEngine'
 import type { WebAppEnv } from '../middleware/auth'
 import { createPermissionsRoutes } from './permissions'
@@ -124,6 +125,43 @@ export function createApp(
             sessionSnapshotAvailable = false
         }
     }
+    const resumeSessionCore = async (sessionId: string, _hooks?: unknown, opts?: { permissionMode?: string }) => {
+        resumeSessionCalls.push([sessionId, opts])
+        const result = options?.resumeResult ?? {
+            type: 'success' as const,
+            sessionId,
+        }
+        if (result.type === 'success') {
+            currentSession = {
+                ...currentSession,
+                active: true,
+                activeAt: currentSession.updatedAt + 1,
+                updatedAt: currentSession.updatedAt + 1,
+                metadata: currentSession.metadata
+                    ? {
+                          ...currentSession.metadata,
+                          lifecycleState: 'running',
+                          lifecycleStateSince: currentSession.updatedAt + 1,
+                      }
+                    : null,
+            }
+        }
+        return result
+    }
+    const sessionCommandService = new SessionCommandService(
+        {
+            getSession: () => (sessionSnapshotAvailable ? currentSession : undefined),
+            refreshSession: () => (sessionSnapshotAvailable ? currentSession : undefined),
+            setSessionLifecycleState: async () => currentSession,
+            setSessionThinking: () => currentSession,
+            applySessionConfig: (sessionId: string, config: Record<string, unknown>) => {
+                void applySessionConfig(sessionId, config)
+            },
+        } as never,
+        { abortSession: async () => undefined } as never,
+        { resumeSession: resumeSessionCore } as never,
+        { requestSessionConfig: applySessionConfig } as never
+    )
     const engine = {
         getSession: () => (sessionSnapshotAvailable ? currentSession : undefined),
         abortSession: async (sessionId: string) => {
@@ -136,6 +174,16 @@ export function createApp(
             return currentSession
         },
         applySessionConfig,
+        setPermissionMode: async (sessionId: string, mode: NonNullable<Session['permissionMode']>) =>
+            await sessionCommandService.setPermissionMode(sessionId, mode),
+        setCollaborationMode: async (sessionId: string, mode: NonNullable<Session['collaborationMode']>) =>
+            await sessionCommandService.setCollaborationMode(sessionId, mode),
+        setModel: async (sessionId: string, model: Session['model']) =>
+            await sessionCommandService.setModel(sessionId, model),
+        setModelReasoningEffort: async (sessionId: string, modelReasoningEffort: Session['modelReasoningEffort']) =>
+            await sessionCommandService.setModelReasoningEffort(sessionId, modelReasoningEffort),
+        setCodexServiceTier: async (sessionId: string, codexServiceTier: Session['codexServiceTier']) =>
+            await sessionCommandService.setCodexServiceTier(sessionId, codexServiceTier),
         approvePermission: async (
             sessionId: string,
             requestId: string,
@@ -229,29 +277,12 @@ export function createApp(
             }
             return currentSession
         },
-        resumeSession: async (sessionId: string, opts?: { permissionMode?: string }) => {
-            resumeSessionCalls.push([sessionId, opts])
-            const result = options?.resumeResult ?? {
-                type: 'success',
+        resumeSession: async (sessionId: string, opts?: { permissionMode?: string }) =>
+            await sessionCommandService.resumeSession(
                 sessionId,
-            }
-            if (result.type === 'success') {
-                currentSession = {
-                    ...currentSession,
-                    active: true,
-                    activeAt: currentSession.updatedAt + 1,
-                    updatedAt: currentSession.updatedAt + 1,
-                    metadata: currentSession.metadata
-                        ? {
-                              ...currentSession.metadata,
-                              lifecycleState: 'running',
-                              lifecycleStateSince: currentSession.updatedAt + 1,
-                          }
-                        : null,
-                }
-            }
-            return result
-        },
+                undefined,
+                opts as Parameters<SessionCommandService['resumeSession']>[2]
+            ),
         switchSessionDriver: async (sessionId: string, targetDriver: SessionDriver) => {
             switchDriverCalls.push([sessionId, targetDriver])
             const result = options?.switchDriverResult ?? {

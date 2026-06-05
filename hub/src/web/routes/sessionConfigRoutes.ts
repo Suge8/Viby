@@ -1,14 +1,4 @@
 import {
-    getLiveSessionConfigSupport,
-    getPermissionModesForDriver,
-    isModelReasoningEffortAllowedForDriver,
-    isPermissionModeAllowedForDriver,
-    resolveSessionDriver,
-    type SessionDriver,
-    supportsLiveModelReasoningEffortForDriver,
-    supportsLiveModelSelectionForDriver,
-} from '@viby/protocol'
-import {
     CodexCollaborationModeSchema,
     CodexServiceTierSchema,
     ModelReasoningEffortSchema,
@@ -21,9 +11,9 @@ import {
     createJsonBodyValidator,
     type GetSyncEngine,
     getErrorMessage,
+    getErrorStatus,
     presentSessionSnapshot,
     resolveSessionRouteContext,
-    type SessionRouteContext,
 } from './sessionRouteSupport'
 
 const permissionModeSchema = z.object({
@@ -46,209 +36,97 @@ const codexServiceTierSchema = z.object({
     codexServiceTier: CodexServiceTierSchema.nullable(),
 })
 
-type SessionConfigSnapshotError = Error & {
-    code: 'session_not_found'
+type ConfigErrorStatus = 400 | 404 | 409 | 500 | 503
+
+function getConfigErrorStatus(error: unknown): ConfigErrorStatus {
+    const status = getErrorStatus(error)
+    return status === 400 || status === 404 || status === 409 || status === 500 || status === 503 ? status : 409
 }
 
-function getSessionDriver(session: Parameters<typeof getLiveSessionConfigSupport>[0]): SessionDriver | null {
-    return resolveSessionDriver(session.metadata)
-}
-
-function createSessionConfigSnapshotError(): SessionConfigSnapshotError {
-    const error = new Error('Session snapshot unavailable after config update') as SessionConfigSnapshotError
-    error.code = 'session_not_found'
-    return error
-}
-
-function getSessionConfigSnapshot(sessionContext: SessionRouteContext): SessionRouteContext['session'] {
-    const session = sessionContext.engine.getSession(sessionContext.sessionId)
-    if (!session) {
-        throw createSessionConfigSnapshotError()
+function getConfigErrorPayload(error: unknown, fallback: string): { error: string; code?: string } {
+    const payload: { error: string; code?: string } = { error: getErrorMessage(error, fallback) }
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'session_not_found') {
+        payload.code = error.code
     }
-    return session
-}
-
-async function applySessionConfigAndReturnSnapshot(
-    sessionContext: SessionRouteContext,
-    config: Record<string, unknown>
-): Promise<SessionRouteContext['session']> {
-    await sessionContext.engine.applySessionConfig(sessionContext.sessionId, config)
-    return getSessionConfigSnapshot(sessionContext)
-}
-
-function isSessionConfigSnapshotError(error: unknown): error is SessionConfigSnapshotError {
-    return error instanceof Error && 'code' in error && error.code === 'session_not_found'
+    return payload
 }
 
 export function registerSessionConfigRoutes(app: Hono<WebAppEnv>, getSyncEngine: GetSyncEngine): void {
     app.post('/sessions/:id/permission-mode', createJsonBodyValidator(permissionModeSchema), async (c) => {
         const sessionContext = resolveSessionRouteContext(c, getSyncEngine)
-        if (sessionContext instanceof Response) {
-            return sessionContext
-        }
-
-        const driver = getSessionDriver(sessionContext.session)
-        const liveConfigSupport = getLiveSessionConfigSupport(sessionContext.session)
-        if (sessionContext.session.active && !liveConfigSupport.canChangePermissionMode) {
-            return c.json({ error: 'Permission mode can only be changed for Viby-managed active sessions' }, 409)
-        }
-
-        const body = c.req.valid('json')
-
-        const allowedModes = driver ? getPermissionModesForDriver(driver) : []
-        if (allowedModes.length === 0) {
-            return c.json({ error: 'Permission mode not supported for session driver' }, 400)
-        }
-
-        if (!isPermissionModeAllowedForDriver(body.mode, driver)) {
-            return c.json({ error: 'Invalid permission mode for session driver' }, 400)
-        }
+        if (sessionContext instanceof Response) return sessionContext
 
         try {
-            const session = await applySessionConfigAndReturnSnapshot(sessionContext, {
-                permissionMode: body.mode,
-            })
+            const session = await sessionContext.engine.setPermissionMode(
+                sessionContext.sessionId,
+                c.req.valid('json').mode
+            )
             return c.json({ ok: true, session: presentSessionSnapshot(session) })
         } catch (error) {
-            if (isSessionConfigSnapshotError(error)) {
-                return c.json({ error: error.message, code: error.code }, 500)
-            }
-            return c.json({ error: getErrorMessage(error, 'Failed to apply permission mode') }, 409)
+            return c.json(getConfigErrorPayload(error, 'Failed to apply permission mode'), getConfigErrorStatus(error))
         }
     })
 
     app.post('/sessions/:id/collaboration-mode', createJsonBodyValidator(collaborationModeSchema), async (c) => {
-        const sessionContext = resolveSessionRouteContext(c, getSyncEngine, { requireActive: true })
-        if (sessionContext instanceof Response) {
-            return sessionContext
-        }
-
-        if (getSessionDriver(sessionContext.session) !== 'codex') {
-            return c.json({ error: 'Collaboration mode is only supported for Codex sessions' }, 400)
-        }
-        if (!getLiveSessionConfigSupport(sessionContext.session).canChangeCollaborationMode) {
-            return c.json({ error: 'Collaboration mode can only be changed for Viby-managed Codex sessions' }, 409)
-        }
+        const sessionContext = resolveSessionRouteContext(c, getSyncEngine)
+        if (sessionContext instanceof Response) return sessionContext
 
         try {
-            const session = await applySessionConfigAndReturnSnapshot(sessionContext, {
-                collaborationMode: c.req.valid('json').mode,
-            })
+            const session = await sessionContext.engine.setCollaborationMode(
+                sessionContext.sessionId,
+                c.req.valid('json').mode
+            )
             return c.json({ ok: true, session: presentSessionSnapshot(session) })
         } catch (error) {
-            if (isSessionConfigSnapshotError(error)) {
-                return c.json({ error: error.message, code: error.code }, 500)
-            }
-            return c.json({ error: getErrorMessage(error, 'Failed to apply collaboration mode') }, 409)
+            return c.json(
+                getConfigErrorPayload(error, 'Failed to apply collaboration mode'),
+                getConfigErrorStatus(error)
+            )
         }
     })
 
     app.post('/sessions/:id/model', createJsonBodyValidator(modelSchema), async (c) => {
-        const sessionContext = resolveSessionRouteContext(c, getSyncEngine, { requireActive: true })
-        if (sessionContext instanceof Response) {
-            return sessionContext
-        }
-        const body = c.req.valid('json')
-
-        const driver = getSessionDriver(sessionContext.session)
-        const liveConfigSupport = getLiveSessionConfigSupport(sessionContext.session)
-        if (!driver || !supportsLiveModelSelectionForDriver(driver)) {
-            return c.json(
-                { error: 'Live model selection is only supported for Claude, Codex, Gemini, and Pi sessions' },
-                400
-            )
-        }
-        if (!liveConfigSupport.canChangeModel) {
-            return c.json(
-                {
-                    error: 'Model selection can only be changed for Viby-managed Claude, Codex, Gemini, and Pi sessions',
-                },
-                409
-            )
-        }
+        const sessionContext = resolveSessionRouteContext(c, getSyncEngine)
+        if (sessionContext instanceof Response) return sessionContext
 
         try {
-            const session = await applySessionConfigAndReturnSnapshot(sessionContext, {
-                model: body.model,
-            })
+            const session = await sessionContext.engine.setModel(sessionContext.sessionId, c.req.valid('json').model)
             return c.json({ ok: true, session: presentSessionSnapshot(session) })
         } catch (error) {
-            if (isSessionConfigSnapshotError(error)) {
-                return c.json({ error: error.message, code: error.code }, 500)
-            }
-            return c.json({ error: getErrorMessage(error, 'Failed to apply model') }, 409)
+            return c.json(getConfigErrorPayload(error, 'Failed to apply model'), getConfigErrorStatus(error))
         }
     })
 
     app.post('/sessions/:id/model-reasoning-effort', createJsonBodyValidator(modelReasoningEffortSchema), async (c) => {
-        const sessionContext = resolveSessionRouteContext(c, getSyncEngine, { requireActive: true })
-        if (sessionContext instanceof Response) {
-            return sessionContext
-        }
-
-        const driver = getSessionDriver(sessionContext.session)
-        const liveConfigSupport = getLiveSessionConfigSupport(sessionContext.session)
-        if (!driver || !supportsLiveModelReasoningEffortForDriver(driver)) {
-            return c.json(
-                { error: 'Live model reasoning effort is only supported for Claude, Codex, and Pi sessions' },
-                400
-            )
-        }
-        if (!liveConfigSupport.canChangeModelReasoningEffort) {
-            return c.json(
-                { error: 'Model reasoning effort can only be changed for Viby-managed Claude, Codex, and Pi sessions' },
-                409
-            )
-        }
-
-        const body = c.req.valid('json')
-
-        if (
-            body.modelReasoningEffort !== null &&
-            !isModelReasoningEffortAllowedForDriver(body.modelReasoningEffort, driver)
-        ) {
-            return c.json({ error: 'Invalid model reasoning effort for session driver' }, 400)
-        }
+        const sessionContext = resolveSessionRouteContext(c, getSyncEngine)
+        if (sessionContext instanceof Response) return sessionContext
 
         try {
-            const session = await applySessionConfigAndReturnSnapshot(sessionContext, {
-                modelReasoningEffort: body.modelReasoningEffort,
-            })
+            const session = await sessionContext.engine.setModelReasoningEffort(
+                sessionContext.sessionId,
+                c.req.valid('json').modelReasoningEffort
+            )
             return c.json({ ok: true, session: presentSessionSnapshot(session) })
         } catch (error) {
-            if (isSessionConfigSnapshotError(error)) {
-                return c.json({ error: error.message, code: error.code }, 500)
-            }
-            return c.json({ error: getErrorMessage(error, 'Failed to apply model reasoning effort') }, 409)
+            return c.json(
+                getConfigErrorPayload(error, 'Failed to apply model reasoning effort'),
+                getConfigErrorStatus(error)
+            )
         }
     })
 
     app.post('/sessions/:id/codex-service-tier', createJsonBodyValidator(codexServiceTierSchema), async (c) => {
-        const sessionContext = resolveSessionRouteContext(c, getSyncEngine, { requireActive: true })
-        if (sessionContext instanceof Response) {
-            return sessionContext
-        }
+        const sessionContext = resolveSessionRouteContext(c, getSyncEngine)
+        if (sessionContext instanceof Response) return sessionContext
 
-        const driver = getSessionDriver(sessionContext.session)
-        const liveConfigSupport = getLiveSessionConfigSupport(sessionContext.session)
-        if (driver !== 'codex') {
-            return c.json({ error: 'Codex fast mode is only supported for Codex sessions' }, 400)
-        }
-        if (!liveConfigSupport.canChangeCodexServiceTier) {
-            return c.json({ error: 'Codex fast mode can only be changed for Viby-managed Codex sessions' }, 409)
-        }
-
-        const body = c.req.valid('json')
         try {
-            const session = await applySessionConfigAndReturnSnapshot(sessionContext, {
-                codexServiceTier: body.codexServiceTier,
-            })
+            const session = await sessionContext.engine.setCodexServiceTier(
+                sessionContext.sessionId,
+                c.req.valid('json').codexServiceTier
+            )
             return c.json({ ok: true, session: presentSessionSnapshot(session) })
         } catch (error) {
-            if (isSessionConfigSnapshotError(error)) {
-                return c.json({ error: error.message, code: error.code }, 500)
-            }
-            return c.json({ error: getErrorMessage(error, 'Failed to apply Codex fast mode') }, 409)
+            return c.json(getConfigErrorPayload(error, 'Failed to apply Codex fast mode'), getConfigErrorStatus(error))
         }
     })
 }

@@ -42,7 +42,13 @@ export type ResumeSessionResult =
     | {
           type: 'error'
           message: string
-          code: 'session_not_found' | 'no_machine_online' | 'resume_unavailable' | 'resume_failed' | 'session_archived'
+          code:
+              | 'session_not_found'
+              | 'no_machine_online'
+              | 'resume_unavailable'
+              | 'resume_failed'
+              | 'session_archived'
+              | 'session_action_failed'
       }
 type ResumeSessionError = Extract<ResumeSessionResult, { type: 'error' }>
 const DEFAULT_SESSION_DRIVER: SessionDriver = 'claude'

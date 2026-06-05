@@ -1,12 +1,8 @@
-import {
-    isPermissionModeAllowedForDriver,
-    resolveSessionDriver,
-    SAME_SESSION_SWITCH_TARGET_DRIVERS,
-    SESSION_RECOVERY_PAGE_SIZE,
-} from '@viby/protocol'
+import { resolveSessionDriver, SAME_SESSION_SWITCH_TARGET_DRIVERS, SESSION_RECOVERY_PAGE_SIZE } from '@viby/protocol'
 import { PermissionModeSchema } from '@viby/protocol/schemas'
 import type { Context, Hono } from 'hono'
 import { z } from 'zod'
+import { getSessionCommandResumeStatus } from '../../sync/sessionCommandService'
 import type { SyncEngine } from '../../sync/syncEngine'
 import type { WebAppEnv } from '../middleware/auth'
 import {
@@ -41,19 +37,6 @@ const resumeBodySchema = z.object({
 })
 
 type SessionLifecycleAction = 'archiveSession' | 'closeSession' | 'unarchiveSession'
-
-function getResumeErrorStatus(code: string): 404 | 409 | 500 | 503 {
-    switch (code) {
-        case 'no_machine_online':
-            return 503
-        case 'session_not_found':
-            return 404
-        case 'session_archived':
-            return 409
-        default:
-            return 500
-    }
-}
 
 async function handleSessionLifecycleAction(
     c: Context<WebAppEnv>,
@@ -113,19 +96,12 @@ export function registerSessionActionRoutes(app: Hono<WebAppEnv>, getSyncEngine:
         }
 
         const permissionMode = body.data.permissionMode
-        if (permissionMode !== undefined) {
-            const driver = resolveSessionDriver(sessionContext.session.metadata)
-            if (!driver || !isPermissionModeAllowedForDriver(permissionMode, driver)) {
-                return c.json({ error: 'Invalid permission mode for session driver' }, 400)
-            }
-        }
-
         const result = await sessionContext.engine.resumeSession(
             sessionContext.sessionId,
             permissionMode === undefined ? undefined : { permissionMode }
         )
         if (result.type === 'error') {
-            return c.json({ error: result.message, code: result.code }, getResumeErrorStatus(result.code))
+            return c.json({ error: result.message, code: result.code }, getSessionCommandResumeStatus(result.code))
         }
 
         const resumedSession = sessionContext.engine.getSession(result.sessionId)
@@ -195,13 +171,22 @@ export function registerSessionActionRoutes(app: Hono<WebAppEnv>, getSyncEngine:
     })
 
     app.post('/sessions/:id/abort', async (c) => {
-        const sessionContext = resolveSessionRouteContext(c, getSyncEngine, { requireActive: true })
+        const sessionContext = resolveSessionRouteContext(c, getSyncEngine)
         if (sessionContext instanceof Response) {
             return sessionContext
         }
 
-        const session = await sessionContext.engine.abortSession(sessionContext.sessionId)
-        return c.json({ ok: true, session: presentSessionSnapshot(session) })
+        try {
+            const session = await sessionContext.engine.abortSession(sessionContext.sessionId)
+            return c.json({ ok: true, session: presentSessionSnapshot(session) })
+        } catch (error) {
+            return Response.json(
+                {
+                    error: getErrorMessage(error, 'Session abort failed'),
+                },
+                { status: getErrorStatus(error) ?? 500 }
+            )
+        }
     })
 
     app.post(

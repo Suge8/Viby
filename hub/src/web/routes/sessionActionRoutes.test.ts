@@ -3,6 +3,7 @@ import { Hono } from 'hono'
 import type { Session, SyncEngine } from '../../sync/syncEngine'
 import type { WebAppEnv } from '../middleware/auth'
 import { createSessionsRoutes } from './sessions'
+import { createSession, createApp as createSessionsApp } from './sessions.support.test'
 
 function createInactiveSession(): Session {
     return {
@@ -65,6 +66,96 @@ describe('session action routes', () => {
         expect(deleteResponse.status).toBe(200)
         expect(await deleteResponse.json()).toEqual({ success: true })
         expect(deleteUploadFileCalls).toEqual([['session-1', '/tmp/uploaded.png']])
+    })
+
+    it('returns the resumed inactive session snapshot', async () => {
+        const { app, resumeSessionCalls } = createSessionsApp(createSession({ active: false }), {
+            resumeResult: { type: 'success', sessionId: 'session-1' },
+        })
+
+        const response = await app.request('/api/sessions/session-1/resume', { method: 'POST' })
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toMatchObject({
+            type: 'success',
+            session: { id: 'session-1', active: true },
+        })
+        expect(resumeSessionCalls).toEqual([['session-1', undefined]])
+    })
+
+    it('rejects invalid resume permission mode before lifecycle resume', async () => {
+        const { app, resumeSessionCalls } = createSessionsApp(
+            createSession({
+                active: false,
+                metadata: {
+                    path: '/tmp/project',
+                    host: 'localhost',
+                    driver: 'codex',
+                },
+            })
+        )
+
+        const response = await app.request('/api/sessions/session-1/resume', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ permissionMode: 'bypassPermissions' }),
+        })
+
+        expect(response.status).toBe(400)
+        expect(await response.json()).toEqual({
+            error: 'Invalid permission mode for session driver',
+            code: 'session_action_failed',
+        })
+        expect(resumeSessionCalls).toEqual([])
+    })
+
+    it('rejects invalid resume permission mode for active sessions before lifecycle resume', async () => {
+        const { app, resumeSessionCalls } = createSessionsApp(createSession())
+
+        const response = await app.request('/api/sessions/session-1/resume', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ permissionMode: 'bypassPermissions' }),
+        })
+
+        expect(response.status).toBe(400)
+        expect(await response.json()).toEqual({
+            error: 'Invalid permission mode for session driver',
+            code: 'session_action_failed',
+        })
+        expect(resumeSessionCalls).toEqual([])
+    })
+
+    it('rejects resume permission mode when the session driver is unavailable', async () => {
+        const { app, resumeSessionCalls } = createSessionsApp(createSession({ active: false, metadata: null }))
+
+        const response = await app.request('/api/sessions/session-1/resume', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ permissionMode: 'default' }),
+        })
+
+        expect(response.status).toBe(400)
+        expect(await response.json()).toEqual({
+            error: 'Invalid permission mode for session driver',
+            code: 'session_action_failed',
+        })
+        expect(resumeSessionCalls).toEqual([])
+    })
+
+    it('returns the active session snapshot after resume succeeds', async () => {
+        const { app, resumeSessionCalls } = createSessionsApp(createSession(), {
+            resumeResult: { type: 'success', sessionId: 'session-1' },
+        })
+
+        const response = await app.request('/api/sessions/session-1/resume', { method: 'POST' })
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toMatchObject({
+            type: 'success',
+            session: { id: 'session-1', active: true },
+        })
+        expect(resumeSessionCalls).toEqual([['session-1', undefined]])
     })
 
     it('rejects legacy JSON attachment uploads so Web and Hub stay on one multipart path', async () => {
