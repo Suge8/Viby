@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
-import { buildPairingHostEventTargets } from './usePairingHostEvents'
 import type { DesktopPairingSession } from '@/types'
+import { buildPairingHostEventTargets } from './usePairingHostEvents'
 
 function pairingSession(
     pairingId: string,

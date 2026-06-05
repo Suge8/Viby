@@ -83,12 +83,13 @@ describe('usePairingBridges support — bridge map invariants', () => {
         const onlineApproved = makeSession('online-approved', 'approved', true)
         const invite = makeSession('invite', null)
 
-        expect(selectBridgePairings([offlineApproved, onlineApproved, invite]).map((session) => session.pairing.id)).toEqual([
-            'online-approved',
-            'invite',
-        ])
+        expect(
+            selectBridgePairings([offlineApproved, onlineApproved, invite]).map((session) => session.pairing.id)
+        ).toEqual(['online-approved', 'invite'])
         expect(buildPairingBridgeLifecycleKey({ enabled: true, pairings: [offlineApproved] })).toBe('')
-        expect(buildPairingBridgeLifecycleKey({ enabled: true, pairings: [onlineApproved] })).toContain('online-approved')
+        expect(buildPairingBridgeLifecycleKey({ enabled: true, pairings: [onlineApproved] })).toContain(
+            'online-approved'
+        )
     })
 
     it('bridge lifecycle key tracks every active invite, including unapproved drafts', () => {

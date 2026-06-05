@@ -17,7 +17,11 @@ import { useDesktopUpdates } from '@/hooks/useDesktopUpdates'
 import { useDeviceAuthSummary } from '@/hooks/useDeviceAuthSummary'
 import { useHubController } from '@/hooks/useHubController'
 import { usePairingBridges } from '@/hooks/usePairingBridges'
-import { buildPairingHostEventTargets, type PairingHostEventTarget, usePairingHostEvents } from '@/hooks/usePairingHostEvents'
+import {
+    buildPairingHostEventTargets,
+    type PairingHostEventTarget,
+    usePairingHostEvents,
+} from '@/hooks/usePairingHostEvents'
 import { DESKTOP_COPY } from '@/lib/desktopCopy'
 import * as shell from '@/lib/desktopShellModel'
 import { buildDeviceLinkSnapshots } from '@/lib/deviceLinkBadge'
@@ -258,9 +262,15 @@ export function App(): JSX.Element {
     }
 
     const handleClearInactivePairings = async (): Promise<void> => {
-        const results = await Promise.allSettled(inactivePairingIds.map((pairingId) => pairings.deletePairing(pairingId)))
+        const results = await Promise.allSettled(
+            inactivePairingIds.map((pairingId) => pairings.deletePairing(pairingId))
+        )
         const failed = results.some((result) => result.status === 'rejected' || result.value === false)
-        showToast(failed ? '部分离线绑定清除失败' : '已清除离线绑定', shell.COPY_FEEDBACK_DURATION_MS, failed ? 'default' : 'success')
+        showToast(
+            failed ? '部分离线绑定清除失败' : '已清除离线绑定',
+            shell.COPY_FEEDBACK_DURATION_MS,
+            failed ? 'default' : 'success'
+        )
     }
 
     const handleCopyInviteLink = async (url: string): Promise<void> => {

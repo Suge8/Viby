@@ -8,7 +8,11 @@ import { describe, expect, it } from 'bun:test'
  */
 
 import type { DesktopPairingSession } from '@/types'
-import { clearRemoteConnectionPresence, isStaleOfflinePairing, resolveStoredDesktopPairings } from './useDesktopPairings'
+import {
+    clearRemoteConnectionPresence,
+    isStaleOfflinePairing,
+    resolveStoredDesktopPairings,
+} from './useDesktopPairings'
 
 function makeSession(
     id: string,

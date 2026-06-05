@@ -262,7 +262,11 @@ describe('pairing http routes', () => {
         let now = 1_700_000_000_000
         const store = new MemoryPairingStore(() => now)
         const socketHub = new PairingSocketHub({ store, now: () => now })
-        const tunnelHub = new PairingSocketHub({ store, now: () => now, messageSchema: PairingBrokerTunnelMessageSchema })
+        const tunnelHub = new PairingSocketHub({
+            store,
+            now: () => now,
+            messageSchema: PairingBrokerTunnelMessageSchema,
+        })
         const app = createTestApp({ store, socketHub, tunnelHub, now: () => now })
 
         const createResponse = await app.request('/pairings', {

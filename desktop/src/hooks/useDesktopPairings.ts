@@ -80,7 +80,8 @@ function latestOfflineActivityAt(session: DesktopPairingSession): number {
 
 export function isStaleOfflinePairing(session: DesktopPairingSession, now: number): boolean {
     if (session.pairing.approvalStatus !== 'approved') return false
-    if ((session.pairing.remoteConnections ?? []).some((connection) => connection.connectedAt !== undefined)) return false
+    if ((session.pairing.remoteConnections ?? []).some((connection) => connection.connectedAt !== undefined))
+        return false
     return latestOfflineActivityAt(session) < now - STALE_OFFLINE_PAIRING_TTL_MS
 }
 

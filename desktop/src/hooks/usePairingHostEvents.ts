@@ -1,13 +1,13 @@
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { useEffect, useRef } from 'react'
 import { isTauriRuntimeAvailable, subscribePairingEvents, unsubscribePairingEvents } from '@/lib/desktopApi'
-import { shouldRunPairingBridge } from './usePairingBridges'
 import type {
     DesktopPairingSession,
     DesktopPairingSnapshot,
     PairingRemoteConnectionSnapshot,
     PairingSessionSnapshot,
 } from '@/types'
+import { shouldRunPairingBridge } from './usePairingBridges'
 
 type PairingEventKind = 'update' | 'disconnect' | 'failure'
 
