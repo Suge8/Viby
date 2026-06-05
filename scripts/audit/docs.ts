@@ -62,56 +62,18 @@ const readmeForbiddenPhrases = [
     '## 产品边界',
     '## 工程边界',
 ] as const
+// README 统一：只约束“不泄露内部语义 + 不超行”，不强制任何 ref / 章节（AGENTS 才是导航中枢）。
+function readmePolicy(path: string, maxLines: number, requiredPhrases: string[] = []): StructuredDocPolicy {
+    return { path, maxLines, requiredRefs: [], requiredPhrases, forbiddenPhrases: [...readmeForbiddenPhrases] }
+}
 const readmePolicies: readonly StructuredDocPolicy[] = [
-    {
-        path: 'README.md',
-        maxLines: 120,
-        requiredRefs: [],
-        requiredPhrases: ['## 快速开始'],
-        forbiddenPhrases: readmeForbiddenPhrases,
-    },
-    {
-        path: 'web/README.md',
-        maxLines: 120,
-        requiredRefs: [],
-        requiredPhrases: [],
-        forbiddenPhrases: readmeForbiddenPhrases,
-    },
-    {
-        path: 'hub/README.md',
-        maxLines: 120,
-        requiredRefs: [],
-        requiredPhrases: [],
-        forbiddenPhrases: readmeForbiddenPhrases,
-    },
-    {
-        path: 'app-core/README.md',
-        maxLines: 140,
-        requiredRefs: [],
-        requiredPhrases: [],
-        forbiddenPhrases: readmeForbiddenPhrases,
-    },
-    {
-        path: 'desktop/README.md',
-        maxLines: 100,
-        requiredRefs: [],
-        requiredPhrases: [],
-        forbiddenPhrases: readmeForbiddenPhrases,
-    },
-    {
-        path: 'pairing/README.md',
-        maxLines: 120,
-        requiredRefs: [],
-        requiredPhrases: [],
-        forbiddenPhrases: readmeForbiddenPhrases,
-    },
-    {
-        path: 'shared/README.md',
-        maxLines: 80,
-        requiredRefs: [],
-        requiredPhrases: [],
-        forbiddenPhrases: readmeForbiddenPhrases,
-    },
+    readmePolicy('README.md', 120, ['## 快速开始']),
+    readmePolicy('web/README.md', 120),
+    readmePolicy('hub/README.md', 120),
+    readmePolicy('app-core/README.md', 140),
+    readmePolicy('desktop/README.md', 100),
+    readmePolicy('pairing/README.md', 120),
+    readmePolicy('shared/README.md', 80),
 ]
 const agentsPolicies: readonly StructuredDocPolicy[] = [
     {
@@ -229,7 +191,6 @@ function isLocalPathRef(value: string): boolean {
 
     return (
         normalized.endsWith('.md') ||
-        normalized.endsWith('.mdc') ||
         normalized.endsWith('.json') ||
         normalized.endsWith('AGENTS.md') ||
         normalized.endsWith('README.md')
@@ -358,10 +319,7 @@ export function auditDocs(options?: { scopeSpec?: string | null; touchedPaths?: 
     })
     const scopedFiles = touchedSet.size > 0 ? allFiles.filter((file) => touchedSet.has(file)) : allFiles
     const files = scopedFiles
-    const scopedPolicies =
-        touchedSet.size > 0
-            ? new Set(scopedFiles.filter((file) => file.endsWith('.md') || file.endsWith('.mdc')))
-            : undefined
+    const scopedPolicies = touchedSet.size > 0 ? new Set(scopedFiles.filter((file) => file.endsWith('.md'))) : undefined
 
     for (const file of files) {
         const fullPath = join(repoRoot, file)
