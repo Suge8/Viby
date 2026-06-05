@@ -13,39 +13,49 @@ export function useRemotePairingTokenValidation(options: {
 }): void {
     const { activeReady, closeReady, pairingId, reconnect, setConnectionReplaced } = options
     const validatedTokenRef = useRef<string | null>(null)
+    const validatingTokenRef = useRef<string | null>(null)
     const [validationGeneration, setValidationGeneration] = useState(0)
 
-    const invalidateValidation = useCallback(() => {
+    const invalidateVisibleValidation = useCallback(() => {
+        if (document.visibilityState === 'hidden') return
         validatedTokenRef.current = null
         setValidationGeneration((generation) => generation + 1)
     }, [])
 
     useEffect(() => {
-        if (!reconnect) validatedTokenRef.current = null
+        if (reconnect) return
+        validatedTokenRef.current = null
+        validatingTokenRef.current = null
     }, [reconnect])
 
     useEffect(() => {
-        window.addEventListener('focus', invalidateValidation)
-        document.addEventListener('visibilitychange', invalidateValidation)
+        document.addEventListener('visibilitychange', invalidateVisibleValidation)
         return () => {
-            window.removeEventListener('focus', invalidateValidation)
-            document.removeEventListener('visibilitychange', invalidateValidation)
+            document.removeEventListener('visibilitychange', invalidateVisibleValidation)
         }
-    }, [invalidateValidation])
+    }, [invalidateVisibleValidation])
 
     useEffect(() => {
         if (!activeReady || !reconnect) return
         const token = activeReady.token
-        if (validatedTokenRef.current === token) return
+        if (validatedTokenRef.current === token || validatingTokenRef.current === token) return
         validatedTokenRef.current = token
+        validatingTokenRef.current = token
         let disposed = false
-        void validateRemotePairingToken(pairingId, token).catch((error) => {
-            if (disposed) return
-            if (!(error instanceof RemotePairingHttpError && error.serverCode === 'pairing_invalid_token')) return
-            clearRetainedReadySoon(pairingId)
-            closeReady()
-            setConnectionReplaced()
-        })
+        void validateRemotePairingToken(pairingId, token)
+            .then(() => {
+                if (validatingTokenRef.current === token) validatedTokenRef.current = token
+            })
+            .catch((error) => {
+                if (disposed) return
+                if (!(error instanceof RemotePairingHttpError && error.serverCode === 'pairing_invalid_token')) return
+                clearRetainedReadySoon(pairingId)
+                closeReady()
+                setConnectionReplaced()
+            })
+            .finally(() => {
+                if (validatingTokenRef.current === token) validatingTokenRef.current = null
+            })
         return () => {
             disposed = true
         }
