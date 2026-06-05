@@ -23,7 +23,6 @@ const NON_CRITICAL_FEATURE_CHUNK_NAMES = [
     'registerRuntimeServiceWorker',
     'workbox-window.prod.es5',
     'usePWAInstall',
-    'recent-skills',
     'sessionAutocompleteQuery',
     'SessionHeaderActionMenu',
     'SessionListActionController',

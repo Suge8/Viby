@@ -23,20 +23,20 @@ describe('sessionAutocomplete', () => {
         localStorage.clear()
     })
 
-    it('prefetches skills only when the skill prefix is used', async () => {
+    it('uses $ as a native skill filter without rewriting the provider trigger', async () => {
         const queryClient = createQueryClient()
         const api = {
             getCommandCapabilities: vi.fn(async () => ({
                 success: true,
                 capabilities: [
                     {
-                        id: 'viby:build',
-                        trigger: '$build',
-                        label: '$build',
+                        id: 'claude:skill:build',
+                        trigger: '@build',
+                        label: '@build',
                         description: 'Build skill',
-                        kind: 'viby_skill',
-                        source: 'viby',
-                        provider: 'shared',
+                        kind: 'native_skill',
+                        source: 'provider',
+                        provider: 'claude',
                         sessionEffect: 'none',
                         requiresLifecycleOwner: false,
                         selectionMode: 'insert',
@@ -47,21 +47,93 @@ describe('sessionAutocomplete', () => {
             })),
         }
         const getSuggestions = createSessionAutocompleteSuggestions({
-            driver: 'codex',
+            driver: 'claude',
             api: api as never,
             queryClient,
             sessionId: 'session-1',
         })
 
-        expect(await getSuggestions('$')).toEqual([
+        expect(await getSuggestions('$bui')).toEqual([
             expect.objectContaining({
-                text: '$build',
-                groupLabel: 'Viby Skills',
+                text: '@build',
+                groupLabel: 'Native Skills',
             }),
         ])
         await waitFor(() => {
             expect(api.getCommandCapabilities).toHaveBeenCalledTimes(1)
         })
+    })
+
+    it('returns a disabled empty state when $ has no native skills', async () => {
+        const queryClient = createQueryClient()
+        queryClient.setQueryData(queryKeys.commandCapabilities('session-1'), {
+            success: true,
+            capabilities: [
+                {
+                    id: 'codex:builtin:new',
+                    trigger: '/new',
+                    label: '/new',
+                    description: 'Start a new chat',
+                    kind: 'native_command',
+                    source: 'builtin',
+                    provider: 'codex',
+                    sessionEffect: 'creates_session',
+                    requiresLifecycleOwner: true,
+                    selectionMode: 'action',
+                    actionType: 'open_new_session',
+                    displayGroup: 'session',
+                    riskLevel: 'high',
+                },
+            ],
+        })
+
+        const suggestions = await getSkillSuggestions({
+            api: null,
+            query: '$',
+            queryClient,
+            sessionId: 'session-1',
+        })
+
+        expect(suggestions).toEqual([
+            expect.objectContaining({
+                key: 'native-skills-empty',
+                disabled: true,
+                kind: 'native_skill',
+                groupLabel: 'Native Skills',
+            }),
+        ])
+    })
+
+    it('returns no skill suggestions instead of the no-skills empty state when a skill query misses', async () => {
+        const queryClient = createQueryClient()
+        queryClient.setQueryData(queryKeys.commandCapabilities('session-1'), {
+            success: true,
+            capabilities: [
+                {
+                    id: 'claude:skill:build',
+                    trigger: '@build',
+                    label: '@build',
+                    description: 'Build skill',
+                    kind: 'native_skill',
+                    source: 'provider',
+                    provider: 'claude',
+                    sessionEffect: 'none',
+                    requiresLifecycleOwner: false,
+                    selectionMode: 'insert',
+                    displayGroup: 'skill',
+                    riskLevel: 'low',
+                },
+            ],
+        })
+
+        const suggestions = await getSkillSuggestions({
+            api: null,
+            query: '$zzz',
+            queryClient,
+            sessionId: 'session-1',
+        })
+
+        expect(suggestions).toEqual([])
     })
 
     it('returns unified slash command capabilities and prefetches them on demand', async () => {
@@ -195,58 +267,5 @@ describe('sessionAutocomplete', () => {
             }),
         ])
         expect(api.getCommandCapabilities).toHaveBeenCalledWith('session-1', 'rev-1')
-    })
-
-    it('reuses cached capability data and keeps recent skills first for an empty skill query', async () => {
-        const queryClient = createQueryClient()
-        localStorage.setItem(
-            'viby-recent-skills',
-            JSON.stringify({
-                deploy: 2,
-                build: 1,
-            })
-        )
-        queryClient.setQueryData(queryKeys.commandCapabilities('session-1'), {
-            success: true,
-            capabilities: [
-                {
-                    id: 'viby:build',
-                    trigger: '$build',
-                    label: '$build',
-                    description: 'Build skill',
-                    kind: 'viby_skill',
-                    source: 'viby',
-                    provider: 'shared',
-                    sessionEffect: 'none',
-                    requiresLifecycleOwner: false,
-                    selectionMode: 'insert',
-                    displayGroup: 'skill',
-                    riskLevel: 'low',
-                },
-                {
-                    id: 'viby:deploy',
-                    trigger: '$deploy',
-                    label: '$deploy',
-                    description: 'Deploy skill',
-                    kind: 'viby_skill',
-                    source: 'viby',
-                    provider: 'shared',
-                    sessionEffect: 'none',
-                    requiresLifecycleOwner: false,
-                    selectionMode: 'insert',
-                    displayGroup: 'skill',
-                    riskLevel: 'low',
-                },
-            ],
-        })
-
-        const suggestions = await getSkillSuggestions({
-            api: null,
-            query: '$',
-            queryClient,
-            sessionId: 'session-1',
-        })
-
-        expect(suggestions.map((item) => item.text)).toEqual(['$deploy', '$build'])
     })
 })

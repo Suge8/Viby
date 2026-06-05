@@ -141,8 +141,6 @@ function getSourceBadge(capability: CommandCapability): SuggestionBadge | null {
             return { kind: 'source', source: 'local', tone: 'neutral' }
         case 'plugin':
             return { kind: 'source', source: 'plugin', tone: 'accent' }
-        case 'viby':
-            return { kind: 'source', source: 'viby', tone: 'accent' }
         default:
             return null
     }
@@ -158,8 +156,8 @@ function getEffectBadge(capability: CommandCapability): SuggestionBadge | null {
 }
 
 function getGroupLabel(capability: CommandCapability): string {
-    if (capability.kind === 'viby_skill') {
-        return 'Viby Skills'
+    if (capability.kind === 'native_skill') {
+        return 'Native Skills'
     }
     if (capability.selectionMode !== 'insert') {
         return 'Session Actions'
@@ -190,7 +188,7 @@ export function toSuggestion(capability: CommandCapability): Suggestion {
                 ? (capability.disabledReason ?? capability.description)
                 : capability.description,
         content: capability.content,
-        source: capability.source === 'viby' ? 'viby' : capability.source,
+        source: capability.source,
         kind: capability.kind,
         provider: capability.provider,
         selectionMode: capability.selectionMode,
@@ -206,7 +204,15 @@ export function filterCapabilitiesByPrefix(
     capabilities: readonly CommandCapability[],
     prefix: '/' | '$'
 ): CommandCapability[] {
+    if (prefix === '$') {
+        return capabilities.filter((capability) => capability.kind === 'native_skill')
+    }
+
     return capabilities.filter((capability) => capability.trigger.startsWith(prefix))
+}
+
+function getCapabilitySearchText(capability: CommandCapability): string {
+    return `${capability.trigger} ${capability.label}`.replace(/^[^\p{L}\p{N}]+/u, '').toLowerCase()
 }
 
 export function filterCapabilitiesBySearchTerm(
@@ -216,7 +222,7 @@ export function filterCapabilitiesBySearchTerm(
     return capabilities
         .map((capability) => ({
             capability,
-            score: getAutocompleteMatchScore(searchTerm, capability.trigger.slice(1).toLowerCase()),
+            score: getAutocompleteMatchScore(searchTerm, getCapabilitySearchText(capability)),
         }))
         .filter((item) => Number.isFinite(item.score))
         .sort((a, b) => a.score - b.score || a.capability.trigger.localeCompare(b.capability.trigger))

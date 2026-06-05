@@ -173,7 +173,6 @@ describe('service worker push notifications', () => {
                 '/assets/registerRuntimeServiceWorker-stu890.js',
                 '/assets/workbox-window.prod.es5-tuv901.js',
                 '/assets/usePWAInstall-uvw012.js',
-                '/assets/recent-skills-uvw345.js',
                 '/assets/sessionAutocompleteQuery-xyz678.js',
                 '/assets/SessionHeaderActionMenu-stu901.js',
                 '/assets/SessionListActionController-vwx234.js',
@@ -224,7 +223,6 @@ describe('service worker push notifications', () => {
         expect(isNonCriticalPrecacheAssetUrl('/assets/registerRuntimeServiceWorker-abc123.js')).toBe(true)
         expect(isNonCriticalPrecacheAssetUrl('/assets/workbox-window.prod.es5-abc123.js')).toBe(true)
         expect(isNonCriticalPrecacheAssetUrl('/assets/usePWAInstall-abc123.js')).toBe(true)
-        expect(isNonCriticalPrecacheAssetUrl('/assets/recent-skills-abc123.js')).toBe(true)
         expect(isNonCriticalPrecacheAssetUrl('/assets/sessionAutocompleteQuery-abc123.js')).toBe(true)
         expect(isNonCriticalPrecacheAssetUrl('/assets/SessionHeaderActionMenu-abc123.js')).toBe(true)
         expect(isNonCriticalPrecacheAssetUrl('/assets/ProjectPanel-abc123.js')).toBe(true)

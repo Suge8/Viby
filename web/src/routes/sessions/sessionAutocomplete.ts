@@ -2,7 +2,6 @@ import type { QueryClient } from '@tanstack/react-query'
 import type { ApiClient } from '@/api/client'
 import { getAutocompleteSearchTerm } from '@/hooks/queries/autocompleteFuzzyMatch'
 import type { Suggestion } from '@/hooks/useActiveSuggestions'
-import { getRecentSkills } from '@/lib/recent-skills'
 import {
     filterCapabilitiesByPrefix,
     filterCapabilitiesBySearchTerm,
@@ -24,6 +23,20 @@ type SessionAutocompleteSuggestionsOptions = CreateSessionAutocompleteSuggestion
     query: string
 }
 
+const EMPTY_NATIVE_SKILLS_SUGGESTION: Suggestion = {
+    key: 'native-skills-empty',
+    text: '$',
+    label: '$',
+    description: 'Current agent has no directly callable skills.',
+    kind: 'native_skill',
+    provider: 'shared',
+    source: 'provider',
+    selectionMode: 'disabled',
+    disabled: true,
+    disabledReason: 'Current agent has no directly callable skills.',
+    groupLabel: 'Native Skills',
+}
+
 function normalizeQuery(prefix: '$' | '/', query: string): string {
     return query.startsWith(prefix) ? query : `${prefix}${query}`
 }
@@ -39,12 +52,8 @@ async function loadSuggestions(options: SessionAutocompleteSuggestionsOptions): 
         ? filterCapabilitiesBySearchTerm(prefixedCapabilities, searchTerm)
         : prefixedCapabilities
 
-    if (prefix === '$') {
-        const recent = getRecentSkills()
-        const getRecency = (text: string) => recent[text.slice(1)] ?? 0
-        return matchedCapabilities
-            .map((capability) => toSuggestion(capability))
-            .sort((a, b) => getRecency(b.text) - getRecency(a.text) || a.text.localeCompare(b.text))
+    if (prefix === '$' && prefixedCapabilities.length === 0) {
+        return [EMPTY_NATIVE_SKILLS_SUGGESTION]
     }
 
     return matchedCapabilities.map((capability) => toSuggestion(capability))

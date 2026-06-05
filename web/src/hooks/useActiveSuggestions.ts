@@ -15,7 +15,7 @@ export type SuggestionBadge =
       }
     | {
           kind: 'source'
-          source: 'project' | 'local' | 'plugin' | 'viby'
+          source: 'project' | 'local' | 'plugin'
           tone: 'neutral' | 'accent'
       }
     | {
@@ -30,7 +30,7 @@ export interface Suggestion {
     label: string
     description?: string
     content?: string // Expanded content for Codex user prompts
-    source?: 'builtin' | 'user' | 'plugin' | 'project' | 'provider' | 'viby'
+    source?: 'builtin' | 'user' | 'plugin' | 'project' | 'provider'
     kind?: CommandCapabilityKind
     provider?: CommandCapabilityProvider
     selectionMode?: CommandCapabilitySelectionMode

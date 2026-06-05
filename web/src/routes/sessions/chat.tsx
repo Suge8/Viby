@@ -11,12 +11,8 @@ import { getNoticePreset } from '@/lib/noticePresets'
 import { appendRealtimeTrace } from '@/lib/realtimeTrace'
 import { useTranslation } from '@/lib/use-translation'
 import { useRemotePairingInteractionBlocked } from '@/remote/remotePairingInteractionState'
-import {
-    createSelectedSessionChatViewModel,
-    type RetainedSessionChatSnapshot,
-    shouldPersistRetainedSessionChatSnapshot,
-} from '@/routes/sessions/selectedSessionChatViewModel'
-import { useSessionChatRouteModel } from '@/routes/sessions/useSessionChatRouteModel'
+import type { RetainedSessionChatSnapshot } from '@/routes/sessions/selectedSessionChatViewModel'
+import { useSelectedSessionWorkspace } from '@/routes/sessions/useSelectedSessionWorkspace'
 
 export default function SessionChatRoute(): React.JSX.Element {
     const { api } = useAppContext()
@@ -93,27 +89,7 @@ type ResolvedSessionChatRouteProps = {
 }
 
 function ResolvedSessionChatRoute(props: ResolvedSessionChatRouteProps): React.JSX.Element {
-    const { isSessionDetailReady, sessionChatProps } = useSessionChatRouteModel(props)
-    const viewModel = createSelectedSessionChatViewModel({
-        isSessionDetailReady,
-        retainedSnapshot: props.retainedSnapshot,
-        routeSessionId: props.sessionId,
-        sessionChatProps,
-        sessionError: null,
-    })
-
-    useFinalizeBootShell(viewModel.surface === 'ready')
-
-    useEffect(() => {
-        if (!shouldPersistRetainedSessionChatSnapshot(viewModel.surface)) {
-            return
-        }
-
-        props.onRetainedSnapshotReady({
-            routeSessionId: props.sessionId,
-            sessionChatProps,
-        })
-    }, [props.onRetainedSnapshotReady, props.sessionId, sessionChatProps, viewModel.surface])
+    const viewModel = useSelectedSessionWorkspace(props)
 
     if (viewModel.surface === 'retained') {
         if (!viewModel.sessionChatProps) {
@@ -130,7 +106,11 @@ function ResolvedSessionChatRoute(props: ResolvedSessionChatRouteProps): React.J
         return <SessionChatPendingState testId="session-chat-detail-pending" />
     }
 
-    return <SessionChat {...sessionChatProps} />
+    if (!viewModel.sessionChatProps) {
+        return <SessionChatPendingState testId="session-chat-detail-pending" />
+    }
+
+    return <SessionChat {...viewModel.sessionChatProps} />
 }
 
 function RetainedSessionChatSurface(props: { snapshot: RetainedSessionChatSnapshot }): React.JSX.Element {

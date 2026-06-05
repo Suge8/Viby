@@ -129,6 +129,7 @@ export default {
     'autocomplete.group.custom': '自定义',
     'autocomplete.group.actions': '会话动作',
     'autocomplete.group.skills': '技能',
+    'autocomplete.skills.empty': '当前 agent 没有可直接调用的技能',
     'autocomplete.commandHint.new': '新建一条会话',
     'autocomplete.commandHint.clear': '清空当前上下文',
     'autocomplete.commandHint.compact': '压缩当前上下文',

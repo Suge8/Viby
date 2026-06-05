@@ -111,6 +111,7 @@ export default {
     'autocomplete.group.custom': 'Custom',
     'autocomplete.group.actions': 'Actions',
     'autocomplete.group.skills': 'Skills',
+    'autocomplete.skills.empty': 'Current agent has no directly callable skills',
     'autocomplete.commandHint.new': 'Start a fresh chat',
     'autocomplete.commandHint.clear': 'Clear the current context',
     'autocomplete.commandHint.compact': 'Trim the current context',

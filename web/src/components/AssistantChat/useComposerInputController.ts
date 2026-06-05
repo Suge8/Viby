@@ -23,7 +23,6 @@ import { useClaudeComposerModelShortcut } from '@/components/AssistantChat/useCl
 import { useComposerMirroredInputState } from '@/components/AssistantChat/useComposerMirroredInputState'
 import { useActiveSuggestions } from '@/hooks/useActiveSuggestions'
 import { useActiveWord } from '@/hooks/useActiveWord'
-import { markSkillUsed } from '@/lib/recent-skill-usage'
 import { reportWebRuntimeError } from '@/lib/runtimeDiagnostics'
 import { applySuggestion } from '@/utils/applySuggestion'
 
@@ -101,10 +100,6 @@ export function useComposerInputController(
                 onSuggestionAction?.(suggestion)
                 haptic('light')
                 return
-            }
-
-            if (suggestion.text.startsWith('$')) {
-                markSkillUsed(suggestion.text.slice(1))
             }
 
             if (!textareaRef.current) {

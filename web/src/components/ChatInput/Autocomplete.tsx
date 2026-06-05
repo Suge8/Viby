@@ -54,6 +54,10 @@ function getInlineDescription(options: {
     t: (key: string, params?: Record<string, string | number>) => string
 }): string | null {
     const { suggestion, t } = options
+    if (suggestion.key === 'native-skills-empty') {
+        return t('autocomplete.skills.empty')
+    }
+
     if (suggestion.disabled) {
         if (suggestion.text === '/fork') {
             return t('autocomplete.sessionAction.fork')
@@ -88,7 +92,7 @@ function getGroupHeading(label: string | undefined, t: (key: string) => string):
             return t('autocomplete.group.custom')
         case 'Session Actions':
             return t('autocomplete.group.actions')
-        case 'Viby Skills':
+        case 'Native Skills':
             return t('autocomplete.group.skills')
         default:
             return label ?? null
@@ -134,8 +138,6 @@ function getBadgeLabel(badge: SuggestionBadge, t: (key: string) => string): stri
                 return t('autocomplete.badge.local')
             case 'plugin':
                 return t('autocomplete.badge.plugin')
-            case 'viby':
-                return 'Viby'
         }
     }
 

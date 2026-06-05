@@ -9,7 +9,6 @@ export const LOCAL_STORAGE_KEYS = {
     newSessionDraft: 'viby:newSession:draft',
     newSessionLastUsed: 'viby:newSession:last-used',
     recentPaths: 'viby:recentPaths',
-    recentSkills: 'viby-recent-skills',
     remoteActivePairing: 'viby:remote:active-pairing-id',
     pairingDevicePrefix: 'viby:pairing:',
     pairingGuestTokenPrefix: 'viby:pairing:',
