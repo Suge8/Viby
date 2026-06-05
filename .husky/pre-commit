@@ -1,2 +1,1 @@
-bun run verify:secrets
-bun run verify:style
+bun run verify:commit

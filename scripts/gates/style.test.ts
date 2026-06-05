@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { resolveStyleCheckFiles, shouldStyleCheckFile } from './style'
+import { buildBiomeCheckArgs, resolveStyleCheckFiles, shouldStyleCheckFile } from './style'
 
 describe('style check', () => {
     it('filters supported style-check file types', () => {
@@ -34,5 +34,10 @@ describe('style check', () => {
 
         expect(result.checkedFiles).toEqual(['web/src/App.tsx'])
         expect(result.skippedFiles).toEqual([])
+    })
+
+    it('uses Biome write mode only for lint:fix', () => {
+        expect(buildBiomeCheckArgs(['web/src/App.tsx'], false)).not.toContain('--write')
+        expect(buildBiomeCheckArgs(['web/src/App.tsx'], true)).toContain('--write')
     })
 })

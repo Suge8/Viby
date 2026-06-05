@@ -19,6 +19,7 @@
 - 文档、测试、代码一起更新，禁止漂移。
 - 内部账本 `docs/internal/`。
 - 文件规模偏好靠人工评审与 agent 约束；不作为默认脚本门禁。
+- 提交前必须先跑 `bun run lint:fix`，再跑 `bun run verify:commit`；禁止 `--no-verify`，除非用户明确批准。
 
 ## 目录索引
 

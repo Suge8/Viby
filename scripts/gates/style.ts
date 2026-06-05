@@ -13,6 +13,7 @@ import {
 type StyleCheckResult = {
     checkedFiles: string[]
     skippedFiles: string[]
+    fixed: boolean
     markdown: string
 }
 
@@ -88,31 +89,34 @@ export function resolveStyleCheckFiles(options?: {
     }
 }
 
+export function buildBiomeCheckArgs(checkedFiles: readonly string[], fix: boolean): string[] {
+    return [
+        'check',
+        '--config-path',
+        join(repoRoot, 'biome.json'),
+        '--files-ignore-unknown=true',
+        ...(fix ? ['--write'] : []),
+        ...checkedFiles,
+    ]
+}
+
 export function runStyleCheck(options?: {
     scopeSpec?: string | null
     touchedPaths?: readonly string[]
     explicitFiles?: readonly string[]
+    fix?: boolean
 }): StyleCheckResult {
     const resolved = resolveStyleCheckFiles(options)
+    const fix = options?.fix ?? false
     if (resolved.checkedFiles.length > 0) {
         if (!existsSync(biomeBinary)) {
             throw new Error('Biome binary is missing. Run `bun install` to provision @biomejs/biome.')
         }
 
-        execFileSync(
-            biomeBinary,
-            [
-                'check',
-                '--config-path',
-                join(repoRoot, 'biome.json'),
-                '--files-ignore-unknown=true',
-                ...resolved.checkedFiles,
-            ],
-            {
-                cwd: repoRoot,
-                stdio: 'inherit',
-            }
-        )
+        execFileSync(biomeBinary, buildBiomeCheckArgs(resolved.checkedFiles, fix), {
+            cwd: repoRoot,
+            stdio: 'inherit',
+        })
     }
 
     const lines: string[] = []
@@ -120,12 +124,14 @@ export function runStyleCheck(options?: {
     lines.push('')
     lines.push(`- Checked files: ${resolved.checkedFiles.length}`)
     lines.push(`- Skipped files: ${resolved.skippedFiles.length}`)
+    lines.push(`- Fixed files: ${fix ? 'yes' : 'no'}`)
     lines.push(`- Scope: ${resolved.scopeDescription}`)
     lines.push('- Status: PASS')
 
     return {
         checkedFiles: resolved.checkedFiles,
         skippedFiles: resolved.skippedFiles,
+        fixed: fix,
         markdown: lines.join('\n'),
     }
 }
@@ -139,6 +145,7 @@ function main(): void {
     const result = runStyleCheck({
         scopeSpec: process.env.VIBY_VERIFY_SCOPE,
         explicitFiles,
+        fix: process.argv.includes('--write'),
     })
 
     mkdirSync(artifactDir, { recursive: true })
