@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'bun:test'
-import { buildPairingBridgeLifecycleKey, mergePairingSnapshotsIntoBridgeStates } from '@/hooks/usePairingBridges'
+import {
+    buildPairingBridgeLifecycleKey,
+    mergePairingSnapshotsIntoBridgeStates,
+    selectBridgePairings,
+} from '@/hooks/usePairingBridges'
 import { buildDeviceLinkSnapshots } from '@/lib/deviceLinkBadge'
 import type { DesktopPairingSession, PairingBridgeState } from '@/types'
 
@@ -24,7 +28,8 @@ function makeBridgeState(pairingId: string, phase: PairingBridgeState['phase']):
 
 function makeSession(
     pairingId: string,
-    approvalStatus: DesktopPairingSession['pairing']['approvalStatus'] = 'approved'
+    approvalStatus: DesktopPairingSession['pairing']['approvalStatus'] = 'approved',
+    online = false
 ): DesktopPairingSession {
     return {
         pairing: {
@@ -37,6 +42,7 @@ function makeSession(
             approvalStatus,
             host: {},
             guest: null,
+            remoteConnections: online ? [{ id: 'window-1', connectedAt: 3, createdAt: 2, lastSeenAt: 3 }] : [],
         },
         hostToken: `host-${pairingId}`,
         pairingUrl: `https://example.test/p/${pairingId}`,
@@ -72,12 +78,25 @@ describe('usePairingBridges support — bridge map invariants', () => {
         expect(bridges.has('gone')).toBe(false)
     })
 
+    it('bridge lifecycle skips offline approved history but keeps drafts and online devices', () => {
+        const offlineApproved = makeSession('offline-approved', 'approved')
+        const onlineApproved = makeSession('online-approved', 'approved', true)
+        const invite = makeSession('invite', null)
+
+        expect(selectBridgePairings([offlineApproved, onlineApproved, invite]).map((session) => session.pairing.id)).toEqual([
+            'online-approved',
+            'invite',
+        ])
+        expect(buildPairingBridgeLifecycleKey({ enabled: true, pairings: [offlineApproved] })).toBe('')
+        expect(buildPairingBridgeLifecycleKey({ enabled: true, pairings: [onlineApproved] })).toContain('online-approved')
+    })
+
     it('bridge lifecycle key tracks every active invite, including unapproved drafts', () => {
         // The host bridge spins up as soon as the invite exists so the
         // broker WS / tunnel is already attached when the guest verifies.
         // Waiting on `approved` introduced a race where SSE delivery delay
         // left the phone forever on the connecting splash.
-        const approved = makeSession('approved', 'approved')
+        const approved = makeSession('approved', 'approved', true)
         const invite = makeSession('invite', null)
         const single = buildPairingBridgeLifecycleKey({ enabled: true, pairings: [approved] })
         const both = buildPairingBridgeLifecycleKey({ enabled: true, pairings: [approved, invite] })
@@ -87,7 +106,7 @@ describe('usePairingBridges support — bridge map invariants', () => {
 
     it('merges latest pairing snapshots into an existing bridge without changing its lifecycle key', () => {
         const invite = makeSession('invite', null)
-        const approved = makeSession('invite', 'approved')
+        const approved = makeSession('invite', 'approved', true)
         const staleBridge = new Map<string, PairingBridgeState>([['invite', makeBridgeState('invite', 'ready')]])
         staleBridge.get('invite')!.pairing = invite.pairing
 
@@ -102,12 +121,15 @@ describe('usePairingBridges support — bridge map invariants', () => {
     })
 
     it('bridge lifecycle key changes with the active invite set and disables wholesale when public access is off', () => {
-        const first = [makeSession('first')]
+        const first = [makeSession('first', 'approved', true)]
         expect(buildPairingBridgeLifecycleKey({ enabled: true, pairings: first })).toBe(
             buildPairingBridgeLifecycleKey({ enabled: true, pairings: first })
         )
         expect(
-            buildPairingBridgeLifecycleKey({ enabled: true, pairings: [makeSession('first'), makeSession('second')] })
+            buildPairingBridgeLifecycleKey({
+                enabled: true,
+                pairings: [makeSession('first', 'approved', true), makeSession('second', 'approved', true)],
+            })
         ).not.toBe(buildPairingBridgeLifecycleKey({ enabled: true, pairings: first }))
         expect(buildPairingBridgeLifecycleKey({ enabled: false, pairings: first })).toBe('disabled')
     })

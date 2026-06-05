@@ -66,3 +66,9 @@ function isDeviceConnected(device: PresentedDevice): boolean {
 export function getConnectedDevices(devices: PresentedDevice[]): PresentedDevice[] {
     return devices.filter(isDeviceConnected)
 }
+
+export function getInactivePairingIds(pairings: readonly DesktopPairingSession[]): string[] {
+    return pairings
+        .filter((session) => onlineRemoteConnections(session.pairing.remoteConnections).length === 0)
+        .map((session) => session.pairing.id)
+}

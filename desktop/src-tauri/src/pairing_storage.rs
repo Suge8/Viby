@@ -84,12 +84,28 @@ fn remove_file_if_exists(path: &Path) -> Result<(), String> {
     }
 }
 
+fn clear_session_presence(mut session: DesktopPairingSession) -> DesktopPairingSession {
+    for connection in &mut session.pairing.remote_connections {
+        connection.connected_at = None;
+    }
+    session
+}
+
 fn parse_sessions_payload(raw: &str) -> Vec<DesktopPairingSession> {
-    serde_json::from_str::<Vec<DesktopPairingSession>>(raw).unwrap_or_default()
+    serde_json::from_str::<Vec<DesktopPairingSession>>(raw)
+        .unwrap_or_default()
+        .into_iter()
+        .map(clear_session_presence)
+        .collect()
 }
 
 fn write_sessions(sessions: &[DesktopPairingSession]) -> Result<(), String> {
-    let payload = serde_json::to_vec(&sessions.to_vec()).map_err(|error| error.to_string())?;
+    let sanitized: Vec<DesktopPairingSession> = sessions
+        .iter()
+        .cloned()
+        .map(clear_session_presence)
+        .collect();
+    let payload = serde_json::to_vec(&sanitized).map_err(|error| error.to_string())?;
     write_private_file(&sessions_file_path()?, &payload)
 }
 
@@ -154,5 +170,33 @@ mod tests {
     fn pairing_sessions_storage_only_accepts_array_payloads() {
         assert!(parse_sessions_payload("{}").is_empty());
         assert!(parse_sessions_payload("null").is_empty());
+    }
+
+    #[test]
+    fn pairing_sessions_storage_strips_runtime_presence() {
+        let parsed = parse_sessions_payload(
+            r#"[{
+                "pairing": {
+                    "id": "pairing-1",
+                    "state": "active",
+                    "createdAt": 1,
+                    "updatedAt": 2,
+                    "expiresAt": 3,
+                    "shortCode": null,
+                    "approvalStatus": "approved",
+                    "host": {"tokenHint": null, "label": null, "publicKey": null, "connectedAt": null, "lastSeenAt": null},
+                    "guest": null,
+                    "remoteConnections": [{"id": "conn-1", "label": null, "publicKey": null, "connectedAt": 4, "createdAt": 1, "lastSeenAt": 4}]
+                },
+                "hostToken": "host-token",
+                "pairingUrl": "https://example.test/p/pairing-1",
+                "wsUrl": "wss://example.test/ws",
+                "tunnelUrl": "wss://example.test/tunnel",
+                "eventsUrl": "https://example.test/events",
+                "iceServers": []
+            }]"#,
+        );
+
+        assert_eq!(parsed[0].pairing.remote_connections[0].connected_at, None);
     }
 }

@@ -30,9 +30,11 @@ type ConnectionPageProps = {
     publicAccessBusy: boolean
     deviceActionLabel: string
     deviceActionVisible: boolean
+    inactivePairingCount: number
     viewState: HubViewState
     onOpenBrokerInvite(): void
     onOpenLanInvite(): void
+    onClearInactivePairings(): void | Promise<void>
     onPairingAction(): void
     onPublicAccessChange(value: boolean): void
     onRevokeDevice(deviceId: string): void | Promise<void>
@@ -126,6 +128,16 @@ function DeviceCard(props: ConnectionPageProps): JSX.Element {
                         <span className="desktop-mobile-action-icon" aria-hidden="true">
                             <QrIcon />
                         </span>
+                    </button>
+                ) : null}
+                {props.inactivePairingCount > 0 ? (
+                    <button
+                        type="button"
+                        className="desktop-entry-button"
+                        disabled={props.busy}
+                        onClick={props.onClearInactivePairings}
+                    >
+                        {props.copy.deviceClearInactive}
                     </button>
                 ) : null}
                 <DeviceCount

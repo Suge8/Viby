@@ -41,7 +41,7 @@ export interface DesktopPairingsApi {
     refreshAll(): Promise<void>
     applySnapshot(snapshot: PairingSessionSnapshot & Partial<DesktopPairingSnapshot>): void
     clearPresence(pairingId: string): void
-    deletePairing(pairingId: string): Promise<void>
+    deletePairing(pairingId: string): Promise<boolean>
     /**
      * Drop a pairing the broker has permanently rejected. Unlike `deletePairing`
      * this skips the broker DELETE call (the session is already gone there) and
@@ -68,6 +68,22 @@ function toSortedArray(sessions: Map<string, DesktopPairingSession>): DesktopPai
     return [...sessions.values()].sort((a, b) => a.pairing.createdAt - b.pairing.createdAt)
 }
 
+const STALE_OFFLINE_PAIRING_TTL_MS = 30 * 24 * 60 * 60 * 1000
+
+function latestOfflineActivityAt(session: DesktopPairingSession): number {
+    return Math.max(
+        session.pairing.updatedAt,
+        session.pairing.guest?.lastSeenAt ?? 0,
+        ...(session.pairing.remoteConnections ?? []).map((connection) => connection.lastSeenAt)
+    )
+}
+
+export function isStaleOfflinePairing(session: DesktopPairingSession, now: number): boolean {
+    if (session.pairing.approvalStatus !== 'approved') return false
+    if ((session.pairing.remoteConnections ?? []).some((connection) => connection.connectedAt !== undefined)) return false
+    return latestOfflineActivityAt(session) < now - STALE_OFFLINE_PAIRING_TTL_MS
+}
+
 export function clearRemoteConnectionPresence(session: DesktopPairingSession): DesktopPairingSession {
     let changed = false
     const remoteConnections = (session.pairing.remoteConnections ?? []).map((connection) => {
@@ -80,6 +96,7 @@ export function clearRemoteConnectionPresence(session: DesktopPairingSession): D
 }
 
 export async function resolveStoredDesktopPairings(options: {
+    now?: number
     removePairing: (pairingId: string) => Promise<void>
     refreshPairing: (pairing: DesktopPairingSession) => Promise<DesktopPairingSession>
     sessions: readonly DesktopPairingSession[]
@@ -87,9 +104,10 @@ export async function resolveStoredDesktopPairings(options: {
     const resolved: DesktopPairingSession[] = []
     let firstError: unknown | null = null
 
+    const now = options.now ?? Date.now()
     const checks = await Promise.all(
         options.sessions.map(async (session) => {
-            if (isExpiredUnapprovedPairing(session)) {
+            if (isExpiredUnapprovedPairing(session) || isStaleOfflinePairing(session, now)) {
                 await options.removePairing(session.pairing.id).catch(() => undefined)
                 return { error: null, session: null }
             }
@@ -247,13 +265,13 @@ export function useDesktopPairings(): DesktopPairingsApi {
     }, [refreshPairing])
 
     const deletePairing = useCallback(
-        async (pairingId: string): Promise<void> => {
+        async (pairingId: string): Promise<boolean> => {
             if (!tauriRuntimeAvailable) {
                 setActionError(DESKTOP_PREVIEW_MESSAGE)
-                return
+                return false
             }
             const target = sessionsRef.current.get(pairingId)
-            if (!target) return
+            if (!target) return true
             setBusy(true)
             setActionError(null)
             try {
@@ -265,8 +283,10 @@ export function useDesktopPairings(): DesktopPairingsApi {
                     await removePairingSession(pairingId).catch(() => undefined)
                 }
                 removePairing(pairingId)
+                return true
             } catch (error) {
                 setActionError(describeDesktopError(error, '解除设备绑定失败。'))
+                return false
             } finally {
                 setBusy(false)
             }

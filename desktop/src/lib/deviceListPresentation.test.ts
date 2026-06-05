@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 import type { DeviceAuthDevice } from '@/lib/deviceAuthSummary'
 import type { DesktopPairingSession } from '@/types'
-import { buildDevicePresentation, getConnectedDevices } from './deviceListPresentation'
+import { buildDevicePresentation, getConnectedDevices, getInactivePairingIds } from './deviceListPresentation'
 
 function device(overrides: Partial<DeviceAuthDevice>): DeviceAuthDevice {
     return {
@@ -104,5 +104,18 @@ describe('deviceListPresentation', () => {
             }),
         ])
         expect(getConnectedDevices(devices).map((row) => row.id)).toEqual(['pairing:phone'])
+    })
+
+    it('identifies stored pairings with no online broker window for cleanup', () => {
+        const offline = pairingSession('offline', 1)
+        offline.pairing.remoteConnections = offline.pairing.remoteConnections?.map((connection) => ({
+            ...connection,
+            connectedAt: undefined,
+        }))
+
+        expect(getInactivePairingIds([pairingSession('ready'), offline, pairingSession('pending', 0)])).toEqual([
+            'offline',
+            'pending',
+        ])
     })
 })

@@ -28,6 +28,18 @@ function getReadyStatus(status: HubRuntimeStatus | undefined): HubRuntimeStatus 
     return status?.phase === 'ready' ? status : null
 }
 
+function hasOnlineRemoteConnection(pairing: DesktopPairingSession): boolean {
+    return (pairing.pairing.remoteConnections ?? []).some((connection) => connection.connectedAt !== undefined)
+}
+
+export function shouldRunPairingBridge(pairing: DesktopPairingSession): boolean {
+    return pairing.pairing.approvalStatus !== 'approved' || hasOnlineRemoteConnection(pairing)
+}
+
+export function selectBridgePairings(pairings: readonly DesktopPairingSession[]): DesktopPairingSession[] {
+    return pairings.filter(shouldRunPairingBridge)
+}
+
 function buildPairingsKey(pairings: readonly DesktopPairingSession[]): string {
     return pairings.map((session) => `${session.pairing.id}:${session.wsUrl}:${session.tunnelUrl}`).join('|')
 }
@@ -36,7 +48,7 @@ export function buildPairingBridgeLifecycleKey(options: {
     enabled: boolean
     pairings: readonly DesktopPairingSession[]
 }): string {
-    return options.enabled ? buildPairingsKey(options.pairings) : 'disabled'
+    return options.enabled ? buildPairingsKey(selectBridgePairings(options.pairings)) : 'disabled'
 }
 
 export function mergePairingSnapshotsIntoBridgeStates(
@@ -74,7 +86,7 @@ export function usePairingBridges(options: {
 
     const pairingsKey = buildPairingBridgeLifecycleKey(options)
     const enabled = options.enabled
-    const pairings = options.pairings
+    const pairings = selectBridgePairings(options.pairings)
 
     useEffect(() => {
         const teardownAll = (): void => {

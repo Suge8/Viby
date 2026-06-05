@@ -35,6 +35,7 @@ describe('resolveStoredDesktopPairings — over-delete safety', () => {
     it('keeps a valid pairing when a sibling stale one is being pruned', async () => {
         const removed: string[] = []
         const resolved = await resolveStoredDesktopPairings({
+            now: 10,
             sessions: [makeSession('keep'), makeSession('stale')],
             removePairing: async (id) => {
                 removed.push(id)
@@ -52,6 +53,7 @@ describe('resolveStoredDesktopPairings — over-delete safety', () => {
     it('does not delete on a transient network error and surfaces it', async () => {
         const removed: string[] = []
         const resolved = await resolveStoredDesktopPairings({
+            now: 10,
             sessions: [makeSession('flaky')],
             removePairing: async (id) => {
                 removed.push(id)

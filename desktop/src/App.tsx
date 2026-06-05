@@ -17,11 +17,11 @@ import { useDesktopUpdates } from '@/hooks/useDesktopUpdates'
 import { useDeviceAuthSummary } from '@/hooks/useDeviceAuthSummary'
 import { useHubController } from '@/hooks/useHubController'
 import { usePairingBridges } from '@/hooks/usePairingBridges'
-import { type PairingHostEventTarget, usePairingHostEvents } from '@/hooks/usePairingHostEvents'
+import { buildPairingHostEventTargets, type PairingHostEventTarget, usePairingHostEvents } from '@/hooks/usePairingHostEvents'
 import { DESKTOP_COPY } from '@/lib/desktopCopy'
 import * as shell from '@/lib/desktopShellModel'
 import { buildDeviceLinkSnapshots } from '@/lib/deviceLinkBadge'
-import { buildDevicePresentation, getConnectedDevices } from '@/lib/deviceListPresentation'
+import { buildDevicePresentation, getConnectedDevices, getInactivePairingIds } from '@/lib/deviceListPresentation'
 import { buildEntryPreviewModel } from '@/lib/entryMode'
 import { deriveHubViewState } from '@/lib/hubSnapshot'
 
@@ -99,6 +99,7 @@ export function App(): JSX.Element {
     const copy = DESKTOP_COPY[language]
     const devices = buildDevicePresentation(deviceSummary.devices, pairings.pairings)
     const activeDeviceCount = getConnectedDevices(devices).length
+    const inactivePairingIds = useMemo(() => getInactivePairingIds(pairings.pairings), [pairings.pairings])
     const lanDraft = lanPairings.draft
     const lanInviteAvailable = Boolean(entryPreview.openUrl)
     const inviteAvailable = hub.publicAccessEnabled || lanInviteAvailable
@@ -113,7 +114,7 @@ export function App(): JSX.Element {
             ? { ...draftBridge, phase: 'ready' as const }
             : draftBridge
     const brokerEventTargets = useMemo<PairingHostEventTarget[]>(
-        () => pairings.pairings.flatMap((session) => toPairingHostEventTarget(session.pairing.id, session.eventsUrl)),
+        () => buildPairingHostEventTargets(pairings.pairings),
         [pairings.pairings]
     )
     const lanEventTargets = useMemo<PairingHostEventTarget[]>(
@@ -256,6 +257,12 @@ export function App(): JSX.Element {
         showToast('已取消配对', shell.COPY_FEEDBACK_DURATION_MS, 'success')
     }
 
+    const handleClearInactivePairings = async (): Promise<void> => {
+        const results = await Promise.allSettled(inactivePairingIds.map((pairingId) => pairings.deletePairing(pairingId)))
+        const failed = results.some((result) => result.status === 'rejected' || result.value === false)
+        showToast(failed ? '部分离线绑定清除失败' : '已清除离线绑定', shell.COPY_FEEDBACK_DURATION_MS, failed ? 'default' : 'success')
+    }
+
     const handleCopyInviteLink = async (url: string): Promise<void> => {
         const copied = await hub.copyValue(url, '当前没有可复制的邀请链接。')
         if (copied) showToast('已复制', shell.COPY_FEEDBACK_DURATION_MS, 'success')
@@ -304,7 +311,9 @@ export function App(): JSX.Element {
                                 publicAccessEnabled={hub.publicAccessEnabled}
                                 deviceActionLabel={deviceActionLabel}
                                 deviceActionVisible={deviceActionVisible}
+                                inactivePairingCount={inactivePairingIds.length}
                                 viewState={connectionViewState}
+                                onClearInactivePairings={handleClearInactivePairings}
                                 onOpenBrokerInvite={handleOpenBrokerInvite}
                                 onOpenLanInvite={handleOpenLanInvite}
                                 onPairingAction={handlePairingAction}

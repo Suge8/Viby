@@ -1,7 +1,13 @@
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { useEffect, useRef } from 'react'
 import { isTauriRuntimeAvailable, subscribePairingEvents, unsubscribePairingEvents } from '@/lib/desktopApi'
-import type { DesktopPairingSnapshot, PairingRemoteConnectionSnapshot, PairingSessionSnapshot } from '@/types'
+import { shouldRunPairingBridge } from './usePairingBridges'
+import type {
+    DesktopPairingSession,
+    DesktopPairingSnapshot,
+    PairingRemoteConnectionSnapshot,
+    PairingSessionSnapshot,
+} from '@/types'
 
 type PairingEventKind = 'update' | 'disconnect' | 'failure'
 
@@ -27,6 +33,14 @@ interface HostEventsOptions {
     targets: readonly PairingHostEventTarget[]
     onSnapshot: (snapshot: PairingHostEventSnapshot) => void
     onInactive?: (pairingId: string) => void
+}
+
+export function buildPairingHostEventTargets(pairings: readonly DesktopPairingSession[]): PairingHostEventTarget[] {
+    return pairings.flatMap((session) =>
+        shouldRunPairingBridge(session) && session.eventsUrl
+            ? [{ pairingId: session.pairing.id, eventsUrl: session.eventsUrl }]
+            : []
+    )
 }
 
 function toHostEventSnapshot(payload: PairingEventPayload): PairingHostEventSnapshot | null {

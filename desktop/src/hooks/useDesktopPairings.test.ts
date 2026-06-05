@@ -8,7 +8,7 @@ import { describe, expect, it } from 'bun:test'
  */
 
 import type { DesktopPairingSession } from '@/types'
-import { clearRemoteConnectionPresence, resolveStoredDesktopPairings } from './useDesktopPairings'
+import { clearRemoteConnectionPresence, isStaleOfflinePairing, resolveStoredDesktopPairings } from './useDesktopPairings'
 
 function makeSession(
     id: string,
@@ -84,6 +84,7 @@ describe('useDesktopPairings — invariants', () => {
         const removed: string[] = []
 
         const resolved = await resolveStoredDesktopPairings({
+            now: 10,
             sessions: [valid, stale, expiredDraft],
             removePairing: async (pairingId) => {
                 removed.push(pairingId)
@@ -100,6 +101,30 @@ describe('useDesktopPairings — invariants', () => {
         expect(removed.toSorted()).toEqual(['expired-draft', 'stale'])
     })
 
+    it('auto-prunes only long-stale approved offline pairings', async () => {
+        const now = 40 * 24 * 60 * 60 * 1000
+        const stale = makeSession('stale')
+        const recent = makeSession('recent')
+        recent.pairing.guest = { lastSeenAt: now - 1_000 }
+        const online = makeSession('online')
+        online.pairing.remoteConnections = [{ id: 'window', connectedAt: now, createdAt: now, lastSeenAt: now }]
+        const draft = makeSession('draft', null)
+        const removed: string[] = []
+
+        const resolved = await resolveStoredDesktopPairings({
+            now,
+            sessions: [stale, recent, online, draft],
+            removePairing: async (pairingId) => {
+                removed.push(pairingId)
+            },
+            refreshPairing: async (pairing) => pairing,
+        })
+
+        expect(isStaleOfflinePairing(stale, now)).toBe(true)
+        expect(resolved.sessions.map((session) => session.pairing.id)).toEqual(['recent', 'online', 'draft'])
+        expect(removed).toEqual(['stale'])
+    })
+
     it('does not create a new pairing object when presence is already offline', () => {
         const offline = makeSession('offline')
         offline.pairing.remoteConnections = [{ id: 'old-window', createdAt: 1, lastSeenAt: 9 }]
@@ -111,6 +136,7 @@ describe('useDesktopPairings — invariants', () => {
         const offline = makeSession('offline')
         offline.pairing.remoteConnections = [{ id: 'old-window', connectedAt: 9, createdAt: 1, lastSeenAt: 9 }]
         const resolved = await resolveStoredDesktopPairings({
+            now: 10,
             sessions: [offline],
             removePairing: async () => {
                 throw new Error('should not remove')
