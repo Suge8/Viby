@@ -4,8 +4,8 @@ import { resolveStyleCheckFiles, shouldStyleCheckFile } from './style'
 describe('style check', () => {
     it('filters supported style-check file types', () => {
         expect(shouldStyleCheckFile('web/src/App.tsx')).toBe(true)
-        expect(shouldStyleCheckFile('docs/internal/verification-standards.md')).toBe(true)
-        expect(shouldStyleCheckFile('docs/internal/browser-observability.md')).toBe(true)
+        expect(shouldStyleCheckFile('web/src/styles/design-system-tokens.css')).toBe(true)
+        expect(shouldStyleCheckFile('docs/internal/verification-standards.md')).toBe(false)
         expect(shouldStyleCheckFile('app-core/src/runtime/embeddedAssets.bun.ts')).toBe(false)
         expect(shouldStyleCheckFile('web/dist/index.html')).toBe(false)
         expect(shouldStyleCheckFile('pairing/deploy-bundle/index.js')).toBe(false)
@@ -17,8 +17,8 @@ describe('style check', () => {
             touchedPaths: [],
         })
 
-        expect(result.checkedFiles).toEqual(['scripts/gates/style.ts', 'docs/internal/verification-standards.md'])
-        expect(result.skippedFiles).toEqual(['web/dist/index.html'])
+        expect(result.checkedFiles).toEqual(['scripts/gates/style.ts'])
+        expect(result.skippedFiles).toEqual(['docs/internal/verification-standards.md', 'web/dist/index.html'])
     })
 
     it('limits scoped runs to files inside the explicit module roots', () => {

@@ -18,7 +18,9 @@ type StyleCheckResult = {
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
 const artifactDir = join(repoRoot, '.artifacts/verify/style')
-const supportedExtensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.json', '.jsonc', '.css', '.md', '.mdc'])
+// Biome formats code/config/style files only. Markdown is not Biome-formatted;
+// doc quality is enforced by audit:docs + verify:docs, not the style gate.
+const supportedExtensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.json', '.jsonc', '.css'])
 const biomeBinary =
     process.platform === 'win32'
         ? join(repoRoot, 'node_modules/.bin/biome.cmd')
