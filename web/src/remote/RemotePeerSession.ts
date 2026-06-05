@@ -2,11 +2,9 @@ import type { PairingIceServer, PairingPeerHeartbeat, PairingPeerTerminalEventPa
 import {
     createPairingPeerTextAssembler,
     createPairingTransport,
-    createPairingTunnelRouteState,
     type PairingPeerTextSender,
     type PairingTransportHandle,
     type PairingTunnelRouteEvent,
-    type PairingTunnelRouteState,
     shouldReprobePairingDirect,
     shouldRequestPairingDirectProbeAck,
 } from '@viby/protocol/pairing'
@@ -15,7 +13,7 @@ import type { SyncEvent } from '@/types/api'
 import type { RemotePeerBridge } from './remotePairingBridgeTypes'
 import { recordRemotePairingDiagnostic, recordRemoteRelayHeartbeatTimeoutDiagnostic } from './remotePairingDiagnostics'
 import { createRemoteDirectHeartbeat, type RemoteDirectHeartbeatFailureReason } from './remotePairingDirectHeartbeat'
-import { createRemotePairingCodedError, createRemoteRelayFatalError } from './remotePairingErrors'
+import { createRemoteRelayFatalError } from './remotePairingErrors'
 import { createRemotePairingEventSeq } from './remotePairingEventSeq'
 import { createRemotePeerPendingRequests } from './remotePairingPendingRequests'
 import type { RemoteRelayHeartbeat } from './remotePairingRelayHeartbeat'
@@ -24,11 +22,10 @@ import { readRemotePairingDirectCandidateEvent, readRemotePairingRouteStats } fr
 import type { RemotePeerRpcTelemetrySample } from './remotePairingStats'
 import { attachRemotePeerDirectChannel } from './remotePeerDirectChannel'
 import { createRemotePeerSessionBridgeAdapter } from './remotePeerSessionBridgeAdapter'
-import { closeRemotePeerSessionResources, handleRemotePeerTransportFailure } from './remotePeerSessionLifecycle'
 import { handleRemotePeerSessionMessage } from './remotePeerSessionMessage'
 import { createRemotePeerReadyGate } from './remotePeerSessionReady'
 import { createRemotePeerSessionRelay } from './remotePeerSessionRelay'
-import { commitRemotePeerSessionRoute, readRemotePeerTransportFatalError } from './remotePeerSessionRouteCommit'
+import { RemotePeerSessionRouteOwner } from './remotePeerSessionRouteOwner'
 import { readRemotePeerSessionSnapshot } from './remotePeerSessionState'
 import { startRemotePeerReadyTimeout } from './remotePeerSessionTimeout'
 import {
@@ -63,11 +60,10 @@ export class RemotePeerSession {
     private readonly unsubscribeForeground: () => void
     private readonly unsubscribeTransport: () => void
     private readonly relayHeartbeat: RemoteRelayHeartbeat
+    private routeOwner!: RemotePeerSessionRouteOwner
     private channel: RTCDataChannel | null = null
     private directTextSender: PairingPeerTextSender | null = null
     private lastRpcTelemetry: RemotePeerRpcTelemetrySample | null = null
-    private routeState: PairingTunnelRouteState = createPairingTunnelRouteState()
-    private fatalError: Error | null = null
     private directChannelReady = false
     private readonly eventSeq = createRemotePairingEventSeq()
     private readonly cancelReadyTimeout: () => void
@@ -75,13 +71,13 @@ export class RemotePeerSession {
         this.trace = createRemotePeerSessionTrace(options.pairingId)
         installRemotePeerSessionTraceExporter(this.trace)
         this.cancelReadyTimeout = startRemotePeerReadyTimeout(
-            () => this.routeState.phase === 'ready',
+            () => this.routeOwner.getRouteState().phase === 'ready',
             (error) => this.fail(error)
         )
         const relay = createRemotePeerSessionRelay({
             tunnelUrl: options.tunnelUrl,
             onOpen: () => {
-                if (this.routeState.activeRoute !== 'direct') this.transport.requestIceRestart()
+                if (this.routeOwner.getRouteState().activeRoute !== 'direct') this.transport.requestIceRestart()
             },
             onClose: () => this.commitRoute({ type: 'relay-lost' }),
             onFatal: (reason) => this.fail(createRemoteRelayFatalError(reason)),
@@ -100,10 +96,26 @@ export class RemotePeerSession {
             onChannel: (channel) => this.attachChannel(channel as RTCDataChannel),
         })
         this.unsubscribeTransport = this.transport.subscribe(() => {
-            this.handleTransportState()
+            this.routeOwner.handleTransportState()
             this.emitSnapshot()
         })
         this.unsubscribeForeground = subscribeForegroundPulse(() => this.handleForeground())
+        this.routeOwner = new RemotePeerSessionRouteOwner({
+            cancelReadyTimeout: this.cancelReadyTimeout,
+            closeListeners: this.closeListeners,
+            emitSnapshot: () => this.emitSnapshot(),
+            heartbeat: this.heartbeat,
+            pendingRequests: this.pendingRequests,
+            readyGate: this.readyGate,
+            relay: this.relay,
+            relayHeartbeat: this.relayHeartbeat,
+            requestIceRestart: () => this.transport.requestIceRestart(),
+            snapshotListeners: this.snapshotListeners,
+            trace: this.trace,
+            transport: this.transport,
+            unsubscribeForeground: this.unsubscribeForeground,
+            unsubscribeTransport: this.unsubscribeTransport,
+        })
         Object.assign(this, this.createBridge())
     }
     transportSubscribe(listener: () => void): () => void {
@@ -111,22 +123,26 @@ export class RemotePeerSession {
         return () => this.snapshotListeners.delete(listener)
     }
     getSnapshot() {
-        return readRemotePeerSessionSnapshot(this.fatalError, this.routeState, this.transport)
+        return readRemotePeerSessionSnapshot(
+            this.routeOwner.getFatalError(),
+            this.routeOwner.getRouteState(),
+            this.transport
+        )
     }
     async untilReady(): Promise<void> {
-        await this.readyGate.wait(this.routeState.phase === 'ready', this.fatalError)
+        await this.readyGate.wait(this.routeOwner.getRouteState().phase === 'ready', this.routeOwner.getFatalError())
     }
     private createBridge(): RemotePeerBridge {
         return createRemotePeerSessionBridgeAdapter({
             pendingRequests: this.pendingRequests,
-            getRouteState: () => this.routeState,
+            getRouteState: () => this.routeOwner.getRouteState(),
             getDirectChannelReady: () => this.directChannelReady,
             getChannel: () => this.channel,
             getDirectTextSender: () => this.directTextSender,
             getRelay: () => this.relay,
-            getFatalError: () => this.fatalError,
+            getFatalError: () => this.routeOwner.getFatalError(),
             getTransportStats: async () => ({
-                ...(await readRemotePairingRouteStats(this.routeState, this.transport)),
+                ...(await readRemotePairingRouteStats(this.routeOwner.getRouteState(), this.transport)),
                 lastRpc: this.lastRpcTelemetry,
             }),
             close: () => this.close(),
@@ -156,21 +172,21 @@ export class RemotePeerSession {
         this.directChannelReady = false
         this.directTextSender?.close()
         this.directTextSender = null
-        this.commitRoute({ type: 'direct-failed', reason: 'closed', routeGeneration: this.routeState.routeGeneration })
+        this.commitRoute({
+            type: 'direct-failed',
+            reason: 'closed',
+            routeGeneration: this.routeOwner.getRouteState().routeGeneration,
+        })
         this.heartbeat.stop()
-        if (!this.fatalError) this.transport.requestIceRestart()
+        if (!this.routeOwner.getFatalError()) this.transport.requestIceRestart()
     }
     private emitSnapshot(): void {
         for (const listener of this.snapshotListeners) listener()
     }
-    private markReady(): void {
-        this.cancelReadyTimeout()
-        this.readyGate.resolve()
-        this.emitSnapshot()
-    }
     private handleForeground(): void {
-        recordRemotePairingDiagnostic('foreground', { route: this.routeState.activeRoute ?? 'none' })
-        if (this.routeState.phase === 'ready') this.commitRoute({ type: 'foreground-check' })
+        const routeState = this.routeOwner.getRouteState()
+        recordRemotePairingDiagnostic('foreground', { route: routeState.activeRoute ?? 'none' })
+        if (routeState.phase === 'ready') this.commitRoute({ type: 'foreground-check' })
         this.relay.notifyForeground()
         this.relayHeartbeat.notifyForeground()
         this.transport.notifyForeground()
@@ -185,23 +201,27 @@ export class RemotePeerSession {
         this.commitRoute({
             type: 'heartbeat-ack',
             route: 'direct',
-            routeGeneration: this.routeState.routeGeneration,
+            routeGeneration: this.routeOwner.getRouteState().routeGeneration,
             roundTripTimeMs,
             sampledAt: Date.now(),
         })
-        if (shouldRequestPairingDirectProbeAck(this.routeState)) this.heartbeat.notifyForeground()
+        if (shouldRequestPairingDirectProbeAck(this.routeOwner.getRouteState())) this.heartbeat.notifyForeground()
     }
     private handleDirectHeartbeatFailure(reason: RemoteDirectHeartbeatFailureReason): void {
-        if (this.fatalError) return
+        if (this.routeOwner.getFatalError()) return
         this.directChannelReady = false
         if (reason === 'heartbeat-missed') {
             this.commitRoute({
                 type: 'heartbeat-missed',
                 route: 'direct',
-                routeGeneration: this.routeState.routeGeneration,
+                routeGeneration: this.routeOwner.getRouteState().routeGeneration,
             })
         } else {
-            this.commitRoute({ type: 'direct-failed', reason, routeGeneration: this.routeState.routeGeneration })
+            this.commitRoute({
+                type: 'direct-failed',
+                reason,
+                routeGeneration: this.routeOwner.getRouteState().routeGeneration,
+            })
         }
         this.transport.requestIceRestart()
     }
@@ -228,51 +248,36 @@ export class RemotePeerSession {
         const event = await readRemotePairingDirectCandidateEvent(this.transport)
         if (!event) return
         if (event.type === 'direct-candidate-selected') {
-            this.commitRoute({ ...event, routeGeneration: this.routeState.routeGeneration })
+            this.commitRoute({ ...event, routeGeneration: this.routeOwner.getRouteState().routeGeneration })
         }
-        if (this.routeState.activeRoute !== 'direct') this.heartbeat.notifyForeground()
+        if (this.routeOwner.getRouteState().activeRoute !== 'direct') this.heartbeat.notifyForeground()
     }
     private handleDirectCandidateSampleFailure(error: unknown): void {
-        recordRemoteDirectCandidateSampleFailure({ error, routeState: this.routeState, trace: this.trace })
-    }
-    private commitRoute(event: PairingTunnelRouteEvent): void {
-        const result = commitRemotePeerSessionRoute({ event, routeState: this.routeState, trace: this.trace })
-        this.routeState = result.next
-        if (!result.changed) return
-        if (this.routeState.phase === 'ready') this.markReady()
-        else this.emitSnapshot()
-    }
-    private handleRelayHeartbeatTimeout(): void {
-        const activeRoute = this.routeState.activeRoute
-        this.commitRoute({ type: 'relay-lost' })
-        this.relay.reconnect()
-        recordRemoteRelayHeartbeatTimeoutDiagnostic(activeRoute, this.routeState.activeRoute)
-    }
-    private handleTransportFailure(route: 'direct' | 'relay' | null): void {
-        this.routeState = handleRemotePeerTransportFailure({
-            route,
-            routeState: this.routeState,
-            emitSnapshot: () => this.emitSnapshot(),
-            pendingRequests: this.pendingRequests,
-            relay: this.relay,
-            requestIceRestart: () => this.transport.requestIceRestart(),
+        recordRemoteDirectCandidateSampleFailure({
+            error,
+            routeState: this.routeOwner.getRouteState(),
+            trace: this.trace,
         })
     }
+    private commitRoute(event: PairingTunnelRouteEvent): void {
+        this.routeOwner.commit(event)
+    }
+    private handleRelayHeartbeatTimeout(): void {
+        const activeRoute = this.routeOwner.getRouteState().activeRoute
+        this.commitRoute({ type: 'relay-lost' })
+        this.relay.reconnect()
+        recordRemoteRelayHeartbeatTimeoutDiagnostic(activeRoute, this.routeOwner.getRouteState().activeRoute)
+    }
+    private handleTransportFailure(route: 'direct' | 'relay' | null): void {
+        this.routeOwner.handleRpcFailure(route)
+    }
     private maybeReprobeDirect(): void {
-        if (!this.fatalError && shouldReprobePairingDirect(this.routeState)) this.transport.requestIceRestart()
+        if (!this.routeOwner.getFatalError() && shouldReprobePairingDirect(this.routeOwner.getRouteState())) {
+            this.transport.requestIceRestart()
+        }
     }
     private fail(error: Error): void {
-        if (this.fatalError) return
-        this.cancelReadyTimeout()
-        this.fatalError = error
-        this.readyGate.reject(error)
-        this.pendingRequests.rejectAll(error)
-        for (const listener of this.closeListeners) listener(error)
-        this.emitSnapshot()
-    }
-    private handleTransportState(): void {
-        const error = readRemotePeerTransportFatalError(this.transport.getSnapshot(), this.fatalError)
-        if (error) this.fail(error)
+        this.routeOwner.fail(error)
     }
     close(): void {
         const directTextSender = this.directTextSender
@@ -280,20 +285,6 @@ export class RemotePeerSession {
         this.directChannelReady = false
         this.directTextSender = null
         this.channel = null
-        closeRemotePeerSessionResources({
-            cancelReadyTimeout: this.cancelReadyTimeout,
-            unsubscribeForeground: this.unsubscribeForeground,
-            unsubscribeTransport: this.unsubscribeTransport,
-            relay: this.relay,
-            relayHeartbeat: this.relayHeartbeat,
-            directTextSender,
-            heartbeat: this.heartbeat,
-            readyGate: this.readyGate,
-            pendingRequests: this.pendingRequests,
-            closeListeners: this.closeListeners,
-            snapshotListeners: this.snapshotListeners,
-            channel,
-            transport: this.transport,
-        })
+        this.routeOwner.close({ directTextSender, channel })
     }
 }

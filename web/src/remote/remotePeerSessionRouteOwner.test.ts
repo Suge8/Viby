@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { RemotePeerConnectError } from './remotePairingErrors'
-import { readRemotePeerTransportFatalError } from './remotePeerSessionRouteCommit'
+import { readRemotePeerTransportFatalError } from './remotePeerSessionRouteOwner'
 
 describe('readRemotePeerTransportFatalError', () => {
     it('maps broker replacement close to the non-retryable replaced error', () => {
