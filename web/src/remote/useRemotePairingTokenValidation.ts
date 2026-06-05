@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { clearRetainedReadySoon } from '@/remote/remotePairingBoot'
 import { RemotePairingHttpError, validateRemotePairingToken } from '@/remote/remotePairingHttp'
 import type { RemotePairingReadyConnection } from './RemotePairingReadyShell'
@@ -13,13 +13,28 @@ export function useRemotePairingTokenValidation(options: {
 }): void {
     const { activeReady, closeReady, pairingId, reconnect, setConnectionReplaced } = options
     const validatedTokenRef = useRef<string | null>(null)
+    const [validationGeneration, setValidationGeneration] = useState(0)
+
+    const invalidateValidation = useCallback(() => {
+        validatedTokenRef.current = null
+        setValidationGeneration((generation) => generation + 1)
+    }, [])
 
     useEffect(() => {
         if (!reconnect) validatedTokenRef.current = null
     }, [reconnect])
 
     useEffect(() => {
-        if (!activeReady || reconnect?.tone !== 'danger') return
+        window.addEventListener('focus', invalidateValidation)
+        document.addEventListener('visibilitychange', invalidateValidation)
+        return () => {
+            window.removeEventListener('focus', invalidateValidation)
+            document.removeEventListener('visibilitychange', invalidateValidation)
+        }
+    }, [invalidateValidation])
+
+    useEffect(() => {
+        if (!activeReady || !reconnect) return
         const token = activeReady.token
         if (validatedTokenRef.current === token) return
         validatedTokenRef.current = token
@@ -34,5 +49,5 @@ export function useRemotePairingTokenValidation(options: {
         return () => {
             disposed = true
         }
-    }, [activeReady, closeReady, pairingId, reconnect?.tone, setConnectionReplaced])
+    }, [activeReady, closeReady, pairingId, reconnect, setConnectionReplaced, validationGeneration])
 }
