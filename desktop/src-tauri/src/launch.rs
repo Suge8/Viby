@@ -1,7 +1,7 @@
 use std::fs;
 use std::fs::OpenOptions;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 
 use tauri::{AppHandle, Manager};
@@ -12,6 +12,7 @@ const BUN_EXECUTABLE: &str = "bun";
 const SHARED_VIBY_HOME_DIR: &str = ".viby";
 const HUB_RUNTIME_STATUS_FILE: &str = "hub.runtime-status.json";
 const APP_CORE_DESKTOP_LOG_FILE: &str = "desktop-app-core.log";
+const DESKTOP_LOG_FILE: &str = "desktop.log";
 const SETTINGS_FILE_NAME: &str = "settings.toml";
 const DEV_REPO_RELATIVE_ROOT_DEPTH: usize = 1;
 const APP_CORE_BOOTSTRAP_SCRIPT: &str = "src/appCoreBootstrap.ts";
@@ -50,6 +51,24 @@ pub fn settings_file_path() -> Result<PathBuf, String> {
 pub fn desktop_log_file_path() -> Result<PathBuf, String> {
     let viby_home_dir = resolve_shared_viby_home_dir()?;
     Ok(viby_home_dir.join("logs").join(APP_CORE_DESKTOP_LOG_FILE))
+}
+
+pub fn desktop_event_log_file_path() -> Result<PathBuf, String> {
+    let viby_home_dir = resolve_shared_viby_home_dir()?;
+    Ok(viby_home_dir.join("logs").join(DESKTOP_LOG_FILE))
+}
+
+pub fn append_desktop_log(message: &str) {
+    let Ok(log_path) = desktop_event_log_file_path() else {
+        return;
+    };
+    if let Some(log_dir) = log_path.parent() {
+        let _ = fs::create_dir_all(log_dir);
+    }
+    let Ok(mut log_file) = OpenOptions::new().create(true).append(true).open(log_path) else {
+        return;
+    };
+    let _ = writeln!(log_file, "{} {message}", chrono_like_timestamp());
 }
 
 fn resolve_home_dir() -> Result<PathBuf, String> {
@@ -142,9 +161,50 @@ fn configure_hub_runtime_environment(command: &mut Command, startup_config: &Hub
     command.env_remove("VIBY_PUBLIC_ACCESS_ENABLED");
 }
 
+fn find_executable_in_path(name: &str) -> Option<PathBuf> {
+    let path = std::env::var_os("PATH")?;
+    std::env::split_paths(&path).find_map(|dir| {
+        let candidate = dir.join(name);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+        #[cfg(target_os = "windows")]
+        {
+            let candidate = dir.join(format!("{name}.exe"));
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+        None
+    })
+}
+
+fn format_missing_dev_dependency(name: &str, fix: &str, details: &str) -> String {
+    format!("ERROR / missing dependency: {name} / fix: {fix} / details: {details}")
+}
+
+fn ensure_dev_app_core_inputs(app_core_dir: &Path) -> Result<(), String> {
+    if find_executable_in_path(BUN_EXECUTABLE).is_none() {
+        return Err(format_missing_dev_dependency(
+            BUN_EXECUTABLE,
+            "install Bun or start desktop from a shell where bun is on PATH",
+            "desktop dev AppCore spawn preflight",
+        ));
+    }
+    if !app_core_dir.is_dir() {
+        return Err(format_missing_dev_dependency(
+            "app-core directory",
+            "run bun run dev:desktop from a complete Viby checkout",
+            &format!("missing {}", app_core_dir.display()),
+        ));
+    }
+    Ok(())
+}
+
 fn create_dev_app_core_command() -> Result<Command, String> {
     let repo_root = repo_root_dir()?;
     let app_core_dir = repo_root.join("app-core");
+    ensure_dev_app_core_inputs(&app_core_dir)?;
     let mut command = Command::new(BUN_EXECUTABLE);
     command.current_dir(app_core_dir);
     command.arg("--watch").arg(APP_CORE_BOOTSTRAP_SCRIPT);
@@ -218,7 +278,7 @@ fn resolve_packaged_app_core_path(app: &AppHandle) -> Result<PathBuf, String> {
     }
 
     Err(format!(
-        "Bundled AppCore not found. Tried {:?} and {:?}.",
+        "ERROR / bundled AppCore not found / fix: rebuild the desktop package with `bun run build:desktop` / details: tried {:?} and {:?}.",
         current_exe.parent().map(|dir| dir.join(app_core_file_name)),
         Some(resource_path)
     ))
@@ -246,6 +306,15 @@ fn chrono_like_timestamp() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn missing_dev_dependency_error_is_actionable() {
+        let message = format_missing_dev_dependency("bun", "install Bun", "spawn preflight");
+
+        assert!(message.contains("ERROR / missing dependency: bun"));
+        assert!(message.contains("fix: install Bun"));
+        assert!(message.contains("details: spawn preflight"));
+    }
 
     #[test]
     fn dev_app_core_command_runs_app_core_bootstrap_not_bare_hub() {

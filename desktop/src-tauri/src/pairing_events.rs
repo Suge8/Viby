@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::error::Error;
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -6,6 +7,8 @@ use futures_util::StreamExt;
 use reqwest::Client;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
+
+use crate::launch::append_desktop_log;
 
 /// Tauri event payload pushed to the desktop webview when broker / hub LAN
 /// SSE emits a `pairing.updated` frame. The frontend listens to
@@ -60,6 +63,17 @@ fn build_topic(pairing_id: &str) -> String {
     format!("pairing-events:{pairing_id}")
 }
 
+fn format_error_chain(error: &dyn Error) -> String {
+    let mut message = error.to_string();
+    let mut source = error.source();
+    while let Some(error) = source {
+        message.push_str(": ");
+        message.push_str(&error.to_string());
+        source = error.source();
+    }
+    message
+}
+
 fn redact_url_tokens(message: &str) -> String {
     let mut output = String::with_capacity(message.len());
     let mut rest = message;
@@ -112,7 +126,7 @@ fn emit_event(
         message,
     };
     if let Err(error) = app.emit(&topic, payload) {
-        eprintln!("[pairing-events] emit failed: {error}");
+        append_desktop_log(&format!("pairing-events emit failed: {error}"));
     }
 }
 
@@ -142,15 +156,19 @@ pub fn spawn_pairing_event_stream(
             }
         };
 
-        eprintln!("[pairing-events] connecting SSE pairing={pairing_for_task}");
+        append_desktop_log(&format!(
+            "pairing-events connecting SSE pairing={pairing_for_task}"
+        ));
         let request = client
             .get(&events_url)
             .header("accept", "text/event-stream");
         let response = match request.send().await {
             Ok(value) => value,
             Err(error) => {
-                let message = redact_url_tokens(&error.to_string());
-                eprintln!("[pairing-events] connect failed pairing={pairing_for_task}: {message}");
+                let message = redact_url_tokens(&format_error_chain(&error));
+                append_desktop_log(&format!(
+                    "pairing-events connect failed pairing={pairing_for_task}: {message}"
+                ));
                 emit_event(
                     &app,
                     &pairing_for_task,
@@ -162,10 +180,10 @@ pub fn spawn_pairing_event_stream(
             }
         };
         if !response.status().is_success() {
-            eprintln!(
-                "[pairing-events] http error pairing={pairing_for_task} status={}",
+            append_desktop_log(&format!(
+                "pairing-events http error pairing={pairing_for_task} status={}",
                 response.status().as_u16()
-            );
+            ));
             emit_event(
                 &app,
                 &pairing_for_task,
@@ -178,7 +196,9 @@ pub fn spawn_pairing_event_stream(
             );
             return;
         }
-        eprintln!("[pairing-events] stream open pairing={pairing_for_task}");
+        append_desktop_log(&format!(
+            "pairing-events stream open pairing={pairing_for_task}"
+        ));
 
         let mut stream = response.bytes_stream();
         let mut buffer = String::new();
@@ -202,15 +222,17 @@ pub fn spawn_pairing_event_stream(
                                     Some("bye") => PairingEventKind::Disconnect,
                                     _ => continue,
                                 };
-                                let parsed = data
-                                    .as_deref()
-                                    .and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok());
-                                eprintln!("[pairing-events] frame pairing={pairing_for_task} kind={kind:?}");
+                                let parsed = data.as_deref().and_then(|raw| {
+                                    serde_json::from_str::<serde_json::Value>(raw).ok()
+                                });
                                 emit_event(&app, &pairing_for_task, kind, parsed, None);
                             }
                         }
                         Some(Err(error)) => {
-                            let message = redact_url_tokens(&error.to_string());
+                            let message = redact_url_tokens(&format_error_chain(&error));
+                            append_desktop_log(&format!(
+                                "pairing-events stream error pairing={pairing_for_task}: {message}"
+                            ));
                             emit_event(
                                 &app,
                                 &pairing_for_task,
@@ -230,7 +252,9 @@ pub fn spawn_pairing_event_stream(
 
 #[cfg(test)]
 mod tests {
-    use super::redact_url_tokens;
+    use super::{format_error_chain, redact_url_tokens};
+    use std::error::Error;
+    use std::fmt;
 
     #[test]
     fn redacts_pairing_event_url_tokens() {
@@ -240,5 +264,30 @@ mod tests {
             redact_url_tokens(message),
             "error sending request for url (https://pair.viby.run/pairings/id/events?token=<redacted>&x=1)"
         );
+    }
+
+    #[derive(Debug)]
+    struct ChainError(&'static str, Option<Box<dyn Error>>);
+
+    impl fmt::Display for ChainError {
+        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            formatter.write_str(self.0)
+        }
+    }
+
+    impl Error for ChainError {
+        fn source(&self) -> Option<&(dyn Error + 'static)> {
+            self.1.as_deref()
+        }
+    }
+
+    #[test]
+    fn formats_pairing_event_error_chain() {
+        let error = ChainError(
+            "request failed",
+            Some(Box::new(ChainError("dns failed", None))),
+        );
+
+        assert_eq!(format_error_chain(&error), "request failed: dns failed");
     }
 }

@@ -4,7 +4,7 @@
     "version": "0.2.0",
     "type": "module",
     "scripts": {
-        "dev:web": "vite --host 127.0.0.1 --port 1420",
+        "dev:web": "node ./scripts/dev-web.mjs",
         "build:web": "vite build",
         "test": "bun test src/lib/*.test.ts src/hooks/*.test.ts",
         "typecheck": "tsc --noEmit",
@@ -12,7 +12,7 @@
         "prepare:app-core": "node ./scripts/prepare-app-core.mjs",
         "ensure:app-core": "node ./scripts/ensure-app-core.mjs",
         "repair:tauri-target": "node ./scripts/repair-tauri-target.mjs",
-        "tauri:dev": "bun run ensure:app-core && bun run repair:tauri-target && bun run prepare:icons && tauri dev",
+        "tauri:dev": "node ./scripts/ensure-app-core.mjs && node ./scripts/repair-tauri-target.mjs && tauri dev --config src-tauri/tauri.dev.conf.json",
         "tauri:build": "bun run repair:tauri-target && bun run prepare:icons && node ./scripts/build-tauri.mjs"
     },
     "dependencies": {
