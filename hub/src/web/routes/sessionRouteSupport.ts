@@ -1,15 +1,9 @@
-import { resolveSessionInteractivity } from '@viby/protocol'
+import { resolveSessionInteractivity, type SafeParseSchema, validateJsonBody } from '@viby/protocol'
 import type { Context, Hono } from 'hono'
 import { validator } from 'hono/validator'
 import type { Session, SyncEngine } from '../../sync/syncEngine'
 import type { WebAppEnv } from '../middleware/auth'
 import { requireSessionFromParam, requireSyncEngine } from './guards'
-
-type SafeParseResult<T> = { success: true; data: T } | { success: false }
-
-type SafeParseSchema<T> = {
-    safeParse: (value: unknown) => SafeParseResult<T>
-}
 
 export type SessionRouteContext = {
     engine: SyncEngine
@@ -51,17 +45,17 @@ export async function parseJsonBody<T>(
     errorMessage: string = 'Invalid body',
     fallbackBody: unknown = null
 ): Promise<{ ok: true; data: T } | { ok: false; response: Response }> {
-    const parsed = schema.safeParse(await readJsonBodyOrNull(c, fallbackBody))
-    if (!parsed.success) {
+    const result = validateJsonBody(await readJsonBodyOrNull(c, fallbackBody), schema, errorMessage)
+    if (!result.ok) {
         return {
             ok: false,
-            response: c.json({ error: errorMessage }, 400),
+            response: c.json({ error: result.error }, 400),
         }
     }
 
     return {
         ok: true,
-        data: parsed.data,
+        data: result.data,
     }
 }
 

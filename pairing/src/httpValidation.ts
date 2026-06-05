@@ -1,11 +1,6 @@
+import { type SafeParseSchema, validateJsonBody } from '@viby/protocol'
 import type { Context } from 'hono'
 import { validator } from 'hono/validator'
-
-type SafeParseResult<T> = { success: true; data: T } | { success: false }
-
-type SafeParseSchema<T> = {
-    safeParse: (value: unknown) => SafeParseResult<T>
-}
 
 async function readJsonBodyOrNull(c: Context): Promise<unknown | null> {
     try {
@@ -20,17 +15,17 @@ export async function parseJsonBody<T>(
     schema: SafeParseSchema<T>,
     errorMessage: string
 ): Promise<{ ok: true; data: T } | { ok: false; response: Response }> {
-    const parsed = schema.safeParse(await readJsonBodyOrNull(c))
-    if (!parsed.success) {
+    const result = validateJsonBody(await readJsonBodyOrNull(c), schema, errorMessage)
+    if (!result.ok) {
         return {
             ok: false,
-            response: c.json({ error: errorMessage }, 400),
+            response: c.json({ error: result.error }, 400),
         }
     }
 
     return {
         ok: true,
-        data: parsed.data,
+        data: result.data,
     }
 }
 

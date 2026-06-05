@@ -12,7 +12,7 @@
 - route / service / store 不得平行复制第二套 durable write 链
 - Web selected session 主快照的 authoritative HTTP owner 继续只认 Hub `/sessions/:id/view`；禁止 route/service/Web 再平行拼装第二份 `session + messages + stream + watermark` 会话视图
 - Hub 静态 Web 资源选择只认 `hub/src/web/webAssetDist.ts`；非 compiled dev/server 模式必须先校验 `build-meta.json` 协议窗口，禁止旧 Hub 服务新 `web/dist` 后让用户掉进误导登录页。
-- route JSON body 校验只认 `hub/src/web/routes/sessionRouteSupport.ts` 的 `createJsonBodyValidator()` / `parseJsonBody()` owner；handler 只消费 validated body，禁止 route 私有 `req.json() + safeParse()` 再复制第二套
+- route JSON body 校验策略只认 shared `validateJsonBody()`；Hub Hono 适配只认 `hub/src/web/routes/sessionRouteSupport.ts` 的 `createJsonBodyValidator()` / `parseJsonBody()`，handler 只消费 validated body，禁止 route 私有 `req.json() + safeParse()` 再复制第二套
 - archive / restore / history / delete 只认 lifecycle owner
 - attachment upload / delete 只认 Hub `uploadFile` / `deleteUploadFile` owner；Hub 必须走 machine-scoped 文件 mutation，不得因为选图/删图先偷偷恢复 session，send / retry 继续是唯一恢复入口。
 - attachment upload HTTP transport 只认 multipart `FormData + File` 主路径；Hub route 负责唯一一次文件读取、大小校验与转 RPC payload，禁止继续兼容或恢复 base64 JSON 第二链路。
