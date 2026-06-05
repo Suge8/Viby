@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { resetBrowserRecoveryIntentForTests } from '@/lib/browserRecoveryIntent'
 import type { RemotePairingReadyConnection } from './RemotePairingReadyShell'
 import type { RemotePairingReconnectStatus } from './remotePairingViewModel'
 import { useRemotePairingTokenValidation } from './useRemotePairingTokenValidation'
@@ -44,6 +45,12 @@ function renderValidationHook(): void {
 describe('useRemotePairingTokenValidation', () => {
     afterEach(() => {
         vi.clearAllMocks()
+        vi.restoreAllMocks()
+        resetBrowserRecoveryIntentForTests()
+        Object.defineProperty(document, 'visibilityState', {
+            configurable: true,
+            get: () => 'visible',
+        })
     })
 
     it('coalesces focus and foreground visibility events into one token validation', async () => {
@@ -64,6 +71,24 @@ describe('useRemotePairingTokenValidation', () => {
         await Promise.resolve()
         expect(validateRemotePairingToken).toHaveBeenCalledTimes(2)
         expect(validateRemotePairingToken).toHaveBeenLastCalledWith('pairing-1', 'token-1')
+    })
+
+    it('does not revalidate when network resumes while the document is hidden', async () => {
+        Object.defineProperty(document, 'visibilityState', {
+            configurable: true,
+            get: () => 'hidden',
+        })
+        vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
+        renderValidationHook()
+
+        await waitFor(() => expect(validateRemotePairingToken).toHaveBeenCalledTimes(1))
+
+        act(() => {
+            window.dispatchEvent(new Event('online'))
+        })
+        await Promise.resolve()
+
+        expect(validateRemotePairingToken).toHaveBeenCalledTimes(1)
     })
 
     it('does not start a duplicate validation while the same token is already in flight', async () => {

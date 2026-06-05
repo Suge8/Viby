@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { subscribeBrowserRecoveryIntent } from '@/lib/browserRecoveryIntent'
 import { clearRetainedReadySoon } from '@/remote/remotePairingBoot'
 import { RemotePairingHttpError, validateRemotePairingToken } from '@/remote/remotePairingHttp'
 import type { RemotePairingReadyConnection } from './RemotePairingReadyShell'
@@ -29,10 +30,9 @@ export function useRemotePairingTokenValidation(options: {
     }, [reconnect])
 
     useEffect(() => {
-        document.addEventListener('visibilitychange', invalidateVisibleValidation)
-        return () => {
-            document.removeEventListener('visibilitychange', invalidateVisibleValidation)
-        }
+        return subscribeBrowserRecoveryIntent((intent) => {
+            if (intent.kind === 'foreground') invalidateVisibleValidation()
+        })
     }, [invalidateVisibleValidation])
 
     useEffect(() => {

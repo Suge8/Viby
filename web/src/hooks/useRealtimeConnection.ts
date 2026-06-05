@@ -2,8 +2,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { type WebSubscription, type WebVisibilityState } from '@viby/protocol'
 import { useEffect, useMemo, useRef } from 'react'
 import type { Socket } from 'socket.io-client'
+import { subscribeBrowserRecoveryIntent } from '@/lib/browserRecoveryIntent'
 import { enterControllerSurface } from '@/lib/controllerOwnershipProbe'
-import { subscribeForegroundPulse } from '@/lib/foregroundPulse'
 import { createRealtimeEventController, type ToastEvent } from '@/lib/realtimeEventController'
 import type { SessionAttentionSnapshot } from '@/lib/sessionAttentionToastController'
 import { createLazyRealtimeSocketOptions } from '@/lib/socketOptions'
@@ -152,28 +152,16 @@ export function useRealtimeConnection(options: {
         let isDisposed = false
         let cleanupSocket: Socket | null = null
 
-        function handleForegroundPulse(): void {
+        function handleRecoveryIntent(kind: 'foreground' | 'pagehide' | 'online-changed', online: boolean): void {
             const socket = socketRef.current
             if (!socket) {
                 return
             }
-            refreshSocketVisibility(socket)
-        }
-
-        function handlePageHide(): void {
-            const socket = socketRef.current
-            if (!socket) {
+            if (kind === 'pagehide') {
+                if (socket.connected) applyVisibility(socket)
                 return
             }
-            if (!socket.connected) {
-                return
-            }
-            applyVisibility(socket)
-        }
-
-        function handleOnline(): void {
-            const socket = socketRef.current
-            if (!socket) {
+            if (kind === 'online-changed' && !online) {
                 return
             }
             refreshSocketVisibility(socket)
@@ -225,15 +213,15 @@ export function useRealtimeConnection(options: {
                 callbacksRef.current.onError?.(error)
             })
 
-        const unsubscribeForegroundPulse = subscribeForegroundPulse(handleForegroundPulse)
-        window.addEventListener('pagehide', handlePageHide)
-        window.addEventListener('online', handleOnline)
+        const unsubscribeRecoveryIntent = subscribeBrowserRecoveryIntent((intent) => {
+            if (intent.kind === 'foreground' || intent.kind === 'pagehide' || intent.kind === 'online-changed') {
+                handleRecoveryIntent(intent.kind, intent.online)
+            }
+        })
 
         return () => {
             isDisposed = true
-            unsubscribeForegroundPulse()
-            window.removeEventListener('pagehide', handlePageHide)
-            window.removeEventListener('online', handleOnline)
+            unsubscribeRecoveryIntent()
             eventController.dispose()
             cleanupSocket?.disconnect()
             if (socketRef.current === cleanupSocket) {

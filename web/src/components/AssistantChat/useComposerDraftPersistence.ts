@@ -10,6 +10,7 @@ import {
     writeComposerDraft,
 } from '@/components/AssistantChat/composerDraftStore'
 import { emitDraftTrace } from '@/components/AssistantChat/composerDraftTrace'
+import { subscribeBrowserRecoveryIntent } from '@/lib/browserRecoveryIntent'
 
 export { COMPOSER_DRAFT_TTL_MS, clearComposerDraft, resetComposerDraftPersistenceForTests }
 
@@ -182,25 +183,14 @@ export function useComposerDraftPersistence(options: UseComposerDraftPersistence
     }, [activationScopeKey, composerText, sessionId])
 
     useEffect(() => {
-        function handlePageHide(): void {
-            flushComposerDraft(latestSnapshotRef.current, 'pagehide')
-        }
-
-        function handleVisibilityChange(): void {
-            if (document.visibilityState !== 'hidden') {
-                return
-            }
-
-            flushComposerDraft(latestSnapshotRef.current, 'visibilitychange-hidden')
-        }
-
-        window.addEventListener('pagehide', handlePageHide)
-        document.addEventListener('visibilitychange', handleVisibilityChange)
+        const unsubscribe = subscribeBrowserRecoveryIntent((intent) => {
+            if (intent.kind === 'pagehide') flushComposerDraft(latestSnapshotRef.current, 'pagehide')
+            if (intent.kind === 'backgrounded') flushComposerDraft(latestSnapshotRef.current, 'visibilitychange-hidden')
+        })
 
         return () => {
             flushComposerDraft(latestSnapshotRef.current, 'effect-cleanup-unmount')
-            window.removeEventListener('pagehide', handlePageHide)
-            document.removeEventListener('visibilitychange', handleVisibilityChange)
+            unsubscribe()
         }
     }, [])
 }

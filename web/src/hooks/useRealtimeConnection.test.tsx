@@ -161,6 +161,47 @@ describe('useRealtimeConnection', () => {
         expect(socket.connectCalls).toBe(2)
     })
 
+    it('does not reconnect on offline browser recovery intent', async () => {
+        const wrapper = createWrapper()
+
+        Object.defineProperty(document, 'visibilityState', {
+            configurable: true,
+            get: () => 'visible',
+        })
+        vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+
+        renderHook(
+            () =>
+                useRealtimeConnection({
+                    enabled: true,
+                    token: 'token-1',
+                    baseUrl: 'http://hub.test',
+                    subscription: { all: true },
+                    onEvent: () => {},
+                    onConnect: () => {},
+                }),
+            {
+                wrapper,
+            }
+        )
+
+        await waitFor(() => {
+            expect(ioMock).toHaveBeenCalledTimes(1)
+        })
+
+        const socket = sockets[0]
+        expect(socket).toBeDefined()
+        if (!socket) {
+            return
+        }
+
+        expect(socket.connectCalls).toBe(1)
+        socket.connected = false
+        window.dispatchEvent(new Event('offline'))
+
+        expect(socket.connectCalls).toBe(1)
+    })
+
     it('actively reconnects when a visible page resumes through the shared lifecycle owner', async () => {
         const wrapper = createWrapper()
 

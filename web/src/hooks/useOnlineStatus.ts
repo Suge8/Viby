@@ -1,16 +1,10 @@
 import { useSyncExternalStore } from 'react'
+import { getBrowserOnlineSnapshot, subscribeBrowserRecoveryIntent } from '@/lib/browserRecoveryIntent'
 
 function subscribe(callback: () => void): () => void {
-    window.addEventListener('online', callback)
-    window.addEventListener('offline', callback)
-    return () => {
-        window.removeEventListener('online', callback)
-        window.removeEventListener('offline', callback)
-    }
-}
-
-function getSnapshot(): boolean {
-    return navigator.onLine
+    return subscribeBrowserRecoveryIntent((intent) => {
+        if (intent.kind === 'online-changed') callback()
+    })
 }
 
 function getServerSnapshot(): boolean {
@@ -18,5 +12,5 @@ function getServerSnapshot(): boolean {
 }
 
 export function useOnlineStatus(): boolean {
-    return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
+    return useSyncExternalStore(subscribe, getBrowserOnlineSnapshot, getServerSnapshot)
 }

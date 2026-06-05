@@ -7,6 +7,7 @@ export type BrowserLifecycleEventKind =
     | 'pagehide'
     | 'freeze'
     | 'network-online'
+    | 'network-offline'
     | 'network-change'
 
 export type BrowserLifecycleEvent = Readonly<{
@@ -102,6 +103,10 @@ function installBrowserLifecycleListeners(): void {
         emitBrowserLifecycleEvent('network-online')
     }
 
+    const handleOffline = (): void => {
+        emitBrowserLifecycleEvent('network-offline')
+    }
+
     const networkConnection = getNetworkConnection()
     let lastConnectionSignature = readConnectionSignature(networkConnection)
     const handleConnectionChange = (): void => {
@@ -119,6 +124,7 @@ function installBrowserLifecycleListeners(): void {
     window.addEventListener('pagehide', handlePageHide)
     document.addEventListener('freeze', handleFreeze as EventListener)
     window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
     networkConnection?.addEventListener?.('change', handleConnectionChange)
 
     uninstallBrowserLifecycleListeners = () => {
@@ -129,6 +135,7 @@ function installBrowserLifecycleListeners(): void {
         window.removeEventListener('pagehide', handlePageHide)
         document.removeEventListener('freeze', handleFreeze as EventListener)
         window.removeEventListener('online', handleOnline)
+        window.removeEventListener('offline', handleOffline)
         networkConnection?.removeEventListener?.('change', handleConnectionChange)
         uninstallBrowserLifecycleListeners = null
     }
