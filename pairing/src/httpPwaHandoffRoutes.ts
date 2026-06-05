@@ -128,6 +128,7 @@ export function registerPairingPwaHandoffRoutes(
         if (!recovered) {
             return rejectPairingCode(c, options, 'handoff_claim_rejected', 410, 'pairing_unavailable')
         }
+        await Promise.all([options.socketHub.replaceGuest(pairingId), options.tunnelHub.replaceGuest(pairingId)])
         logPairingAudit(options, 'pwa_handoff_claim', { ip: getClientAddress(c), pairingId })
         const urls = buildPairingUrls(options.publicUrl, pairingId, guestToken)
         return c.json(

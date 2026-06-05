@@ -132,6 +132,24 @@ describe('PairingSocketHub', () => {
         expect(hostSocket.sent).toContainEqual({ type: 'peer-replaced' })
     })
 
+    it('terminates the current guest immediately when a handoff replaces it', async () => {
+        const now = 1_000
+        const { store, session, guest } = await createClaimedStore(now)
+        const hub = new PairingSocketHub({ store, now: () => now })
+        const hostSocket = createSocket()
+        const browserSocket = createSocket()
+
+        await hub.attach(session.id, session.host.tokenHash, hostSocket)
+        await hub.attach(session.id, guest.tokenHash, browserSocket)
+        await hub.replaceGuest(session.id)
+
+        expect(browserSocket.closeCalls).toContainEqual({ code: 1012, reason: 'replaced' })
+        expect(hostSocket.sent).toContainEqual({ type: 'peer-replaced' })
+        expect(await store.getRemoteConnections(session.id)).toContainEqual(
+            expect.objectContaining({ id: guest.tokenHash, connectedAt: undefined })
+        )
+    })
+
     it('rejects client-forged peer replacement control messages', async () => {
         const { store, session } = await createClaimedStore(1_000)
         const traces: unknown[] = []

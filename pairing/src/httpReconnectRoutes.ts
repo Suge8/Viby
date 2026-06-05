@@ -157,6 +157,7 @@ export function registerPairingReconnectRoutes(app: Hono, options: PairingHttpOp
             if (!recovered) {
                 return rejectPairingCode(c, options, 'reconnect_rejected', 410, 'pairing_unavailable')
             }
+            await Promise.all([options.socketHub.replaceGuest(pairingId), options.tunnelHub.replaceGuest(pairingId)])
             logPairingAudit(options, 'device_reconnect', { ip: getClientAddress(c), pairingId })
             const urls = buildPairingUrls(options.publicUrl, pairingId, guestToken)
             return c.json(

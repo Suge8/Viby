@@ -32,6 +32,17 @@ function socket(): PairingSocketLike {
     }
 }
 
+function trackedSocket(): PairingSocketLike & { closed: Array<{ code?: number; reason?: string }> } {
+    return {
+        readyState: 1,
+        closed: [],
+        send() {},
+        close(code?: number, reason?: string) {
+            this.closed.push({ code, reason })
+        },
+    }
+}
+
 function createTestApp(overrides?: {
     now?: () => number
     metrics?: PairingMetrics
@@ -249,7 +260,10 @@ describe('pairing http routes', () => {
 
     it('creates, verifies, reconnects, renews, and deletes a pairing session', async () => {
         let now = 1_700_000_000_000
-        const app = createTestApp({ now: () => now })
+        const store = new MemoryPairingStore(() => now)
+        const socketHub = new PairingSocketHub({ store, now: () => now })
+        const tunnelHub = new PairingSocketHub({ store, now: () => now, messageSchema: PairingBrokerTunnelMessageSchema })
+        const app = createTestApp({ store, socketHub, tunnelHub, now: () => now })
 
         const createResponse = await app.request('/pairings', {
             method: 'POST',
@@ -345,6 +359,10 @@ describe('pairing http routes', () => {
         expect(reconnected.tunnelUrl).toBe(
             `wss://pair.example.com/pairings/${created.pairing.id}/tunnel?token=${verified.guestToken}`
         )
+        const oldWsSocket = trackedSocket()
+        const oldTunnelSocket = trackedSocket()
+        await socketHub.attach(created.pairing.id, hashPairingSecret(verified.guestToken), oldWsSocket)
+        await tunnelHub.attach(created.pairing.id, hashPairingSecret(verified.guestToken), oldTunnelSocket)
 
         const deviceChallengeResponse = await app.request(
             `/pairings/${created.pairing.id}/device-reconnect-challenge`,
@@ -377,6 +395,8 @@ describe('pairing http routes', () => {
         expect(deviceRecovered.tunnelUrl).toBe(
             `wss://pair.example.com/pairings/${created.pairing.id}/tunnel?token=${deviceRecovered.guestToken}`
         )
+        expect(oldWsSocket.closed).toContainEqual({ code: 1012, reason: 'replaced' })
+        expect(oldTunnelSocket.closed).toContainEqual({ code: 1012, reason: 'replaced' })
 
         const staleBrowserTokenResponse = await app.request(`/pairings/${created.pairing.id}/reconnect-challenge`, {
             method: 'POST',
@@ -397,7 +417,11 @@ describe('pairing http routes', () => {
     })
 
     it('hands an approved browser pairing to a freshly installed PWA once', async () => {
-        const app = createTestApp()
+        const now = () => 1_700_000_000_000
+        const store = new MemoryPairingStore(now)
+        const socketHub = new PairingSocketHub({ store, now })
+        const tunnelHub = new PairingSocketHub({ store, now, messageSchema: PairingBrokerTunnelMessageSchema })
+        const app = createTestApp({ store, socketHub, tunnelHub, now })
         const createResponse = await app.request('/pairings', {
             method: 'POST',
             headers: { authorization: 'Bearer create-secret', 'content-type': 'application/json' },
@@ -415,6 +439,10 @@ describe('pairing http routes', () => {
             }),
         })
         const verified = await verifyResponse.json()
+        const oldWsSocket = trackedSocket()
+        const oldTunnelSocket = trackedSocket()
+        await socketHub.attach(created.pairing.id, hashPairingSecret(verified.guestToken), oldWsSocket)
+        await tunnelHub.attach(created.pairing.id, hashPairingSecret(verified.guestToken), oldTunnelSocket)
 
         const challengeResponse = await app.request(`/pairings/${created.pairing.id}/reconnect-challenge`, {
             method: 'POST',
@@ -475,6 +503,8 @@ describe('pairing http routes', () => {
         expect(handoffClaimed.tunnelUrl).toBe(
             `wss://pair.example.com/pairings/${created.pairing.id}/tunnel?token=${handoffClaimed.guestToken}`
         )
+        expect(oldWsSocket.closed).toContainEqual({ code: 1012, reason: 'replaced' })
+        expect(oldTunnelSocket.closed).toContainEqual({ code: 1012, reason: 'replaced' })
 
         const reusedHandoffResponse = await app.request(`/pairings/${created.pairing.id}/pwa-handoff-claim`, {
             method: 'POST',

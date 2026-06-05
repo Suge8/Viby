@@ -129,6 +129,28 @@ export class PairingSocketHub {
         }
         this.disconnectGrace.schedule(state, connection)
     }
+    async replaceGuest(pairingId: string): Promise<void> {
+        const state = this.connections.get(pairingId)
+        const socket = state?.sockets.get('guest')
+        if (!state || !socket) return
+        const connection = this.connectionIndex.resolve(socket)
+        this.connectionIndex.deleteSocket(socket)
+        if (connection?.role === 'guest') {
+            detachPairingSocket({ connection, state })
+            if (this.options.trackRemoteConnectionLiveness !== false) {
+                await this.options.store.markRemoteConnectionDisconnected(
+                    pairingId,
+                    connection.connectionId,
+                    this.options.now?.() ?? Date.now()
+                )
+                await this.options.onRemoteConnectionsChanged?.(pairingId)
+            }
+            this.disconnectGrace.clearAll(state)
+        }
+        state.sockets.get('host')?.send(JSON.stringify({ type: 'peer-replaced' }))
+        socket.close(1012, 'replaced')
+        this.collectEmptySession(pairingId)
+    }
     async notifyBye(pairingId: string, reason: PairingByeReason): Promise<void> {
         const state = this.connections.get(pairingId)
         if (!state) return
