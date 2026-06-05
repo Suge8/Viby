@@ -5,6 +5,7 @@
 - 活动路径：`docs/internal/agent-workflow.md`
 - 上游决策账本：`docs/internal/update.md`——仅记录 fork 与上游同步决策、审计游标、选择性捡拣事由；日常代码改动不写此文件
 - 本地开发命令：`docs/development/local-development.md`
+- Dev 终端输出契约：`docs/development/dev-output.md`
 - 仓库边界：`docs/development/repo-boundaries.md`
 - 文档分层：`docs/development/documentation-authoring.md`
 - 修改范围如果有更近的 `AGENTS.md`，以更近文件为准。

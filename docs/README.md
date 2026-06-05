@@ -23,6 +23,7 @@ README 只保留产品入口；复杂边界和运行约束统一收口到这里�
 ## 开发边界
 
 - `docs/development/local-development.md`：本地开发主入口、源码生效边界与命令分层
+- `docs/development/dev-output.md`：`bun run dev` / `dev:desktop` 终端输出、日志文件与诊断分层契约
 - `docs/development/repo-boundaries.md`：仓库级硬规则与模块边界入口
 - `docs/development/web-boundaries.md`：Web/PWA 开发边界
 - `docs/development/web-native-feel.md`：Web 原生质感视觉 owner 与验证边界

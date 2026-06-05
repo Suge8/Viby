@@ -57,7 +57,7 @@ Route reducer 带事件驱动滞后：第一次 direct 只需少量 ACK 即可�
 
 Relay active 时也要主动争取 direct：relay open、relay heartbeat ACK、foreground pulse 都会在当前不是 `direct-webrtc` 且没有 direct probe 运行时触发一次 ICE restart。Relay heartbeat ACK 是 active relay RTT 的事实源，避免 UI 长期停在“测速中”。Direct 首个 ACK 后如果 reducer 仍缺少 ACK 证明，移动端立即发下一次 probe ACK，不等 15s steady keepalive；WebKit/Safari stats 透明度差时也能快速升级。Peer heartbeat 带 `id/sentAt/ack`，两端只把 `ack=true` 当作 RTT 样本，普通 heartbeat 只回 ACK，避免双向保活互相误判。这里不是第二套路由控制器；heartbeat 是 NAT keepalive + 观测，route 决策仍只进 reducer。
 
-PWA handoff / device reconnect 不替换授权设备，只新增远端连接 token；旧 tab 与新 PWA 可同时存在。Desktop bridge 在已 ready 的 relay tunnel 收到新 peer key 时触发 direct 重建，同事务 demote direct、关闭旧 DataChannel/RTCPeerConnection、创建新 peer 并重新发起 direct probe；relay 继续保持可用，直到新 direct 通过 heartbeat ACK 后再升级。
+PWA handoff / device reconnect 不替换授权设备，只新增远端连接 token；broker 在新 token 落库后立即用 `1012 replaced` 关闭旧 guest `/ws` 与 `/tunnel`，让旧网页终态显示“已被新连接接管”，禁止继续卡在重连；新 PWA 作为同一授权设备的新远端连接接入。Desktop bridge 在已 ready 的 relay tunnel 收到新 peer key 时触发 direct 重建，同事务 demote direct、关闭旧 DataChannel/RTCPeerConnection、创建新 peer 并重新发起 direct probe；relay 继续保持可用，直到新 direct 通过 heartbeat ACK 后再升级。
 
 Desktop host bridge 也消费同一 reducer：`RTCPeerConnection` 不存在或 direct signaling 失败时，Desktop 仍然通过 relay tunnel 进入 ready，不再把 WebRTC 当成可用性的前提。WebRTC selected candidate 非 relay 时才显示“点对点直连”；selected candidate 是 relay 时显示“安全中转”，内部仍保持 `activeTransport='relay-wss'`。
 

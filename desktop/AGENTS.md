@@ -22,6 +22,8 @@
 - Codex service tier pairing RPC 只桥接到本地 Hub session config owner；desktop 不得本地持久化或推导第二套 tier。
 - pairing 二进制上传帧解析只能消费 shared `pairingPeerBinaryUpload.ts` 合同；Desktop 不得散写 magic/header/transferId 常量。
 - Desktop remote terminal 只桥接 Hub `/terminal` socket owner；禁止在 desktop 侧新增 PTY lifecycle owner 或空 session fallback。
+- `bun run dev:desktop` terminal output is an action stream, not a debug log：只允许入口、ready/restart/stop、工具链编译错误、可操作错误；请求追踪、心跳、reconnect 过程、pairing frame、provider stdout/stderr 进 `~/.viby/logs/` 或 smoke artifacts。
+- Terminal error 必须包含 `ERROR / reason / fix / details`；完整规则见 `../docs/development/dev-output.md`。
 
 ## 验证
 
