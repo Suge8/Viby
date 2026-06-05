@@ -5,6 +5,7 @@ import { type ComponentProps, type JSX, lazy, Suspense, useCallback, useEffect, 
 import {
     AppReadyShell,
     createReadyAppSession,
+    getReadyAppRuntimeSession,
     type ReadyAppSession,
     resolveDisplayAppSession,
 } from '@/components/appControllerSupport'
@@ -161,13 +162,14 @@ export function AppController(): JSX.Element | null {
     }
 
     if (displayAppSession) {
+        const runtimeSession = getReadyAppRuntimeSession(displayAppSession)
         return (
             <AppReadyShell appViewportRoute={appViewportRoute} session={displayAppSession}>
                 <Suspense fallback={null}>
                     <LazyAppRealtimeRuntime
-                        api={displayAppSession.api}
-                        token={displayAppSession.token}
-                        baseUrl={displayAppSession.baseUrl}
+                        api={runtimeSession.api}
+                        token={runtimeSession.token}
+                        baseUrl={runtimeSession.baseUrl}
                     />
                 </Suspense>
             </AppReadyShell>

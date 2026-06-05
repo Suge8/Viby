@@ -5,7 +5,7 @@ import { AppReadyShell } from '@/components/appControllerSupport'
 import { getAppViewportRoute } from '@/lib/appShellPresentation'
 import { RemotePeerBridgeProvider } from '@/remote/remoteBridgeContext'
 import type { RemotePeerBridge } from '@/remote/remotePairingBridgeTypes'
-import { createRemotePeerApiClient } from '@/remote/remotePeerApiClient'
+import { createRemoteWorkspaceAdapter } from '@/remote/remoteWorkspaceAdapter'
 import { RemotePairingLinkBadge } from './RemotePairingLinkBadge'
 import { RemotePairingInteractionProvider } from './remotePairingInteractionState'
 import type { RemotePairingLinkBadgeOverride } from './remotePairingViewModel'
@@ -35,9 +35,15 @@ type RemotePairingReadyShellProps = {
 
 export function RemotePairingReadyShell(props: RemotePairingReadyShellProps): React.JSX.Element {
     const queryClient = useQueryClient()
-    const api = useMemo(
-        () => createRemotePeerApiClient({ bridge: props.ready.bridge, queryClient }),
-        [props.ready.bridge, queryClient]
+    const workspace = useMemo(
+        () =>
+            createRemoteWorkspaceAdapter({
+                baseUrl: location.origin,
+                bridge: props.ready.bridge,
+                queryClient,
+                token: props.ready.token,
+            }),
+        [props.ready.bridge, props.ready.token, queryClient]
     )
 
     return (
@@ -50,11 +56,11 @@ export function RemotePairingReadyShell(props: RemotePairingReadyShellProps): Re
                 >
                     <AppReadyShell
                         appViewportRoute={getAppViewportRoute(props.pathname)}
-                        session={{ api, token: props.ready.token, baseUrl: location.origin }}
+                        session={workspace.appSession}
                     >
                         {props.enableRuntime ? (
                             <Suspense fallback={null}>
-                                <LazyRemotePairingRuntime api={api} bridge={props.ready.bridge} />
+                                <LazyRemotePairingRuntime runtime={workspace.runtime} />
                             </Suspense>
                         ) : null}
                     </AppReadyShell>

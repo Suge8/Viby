@@ -1,7 +1,6 @@
 import { useLocation } from '@tanstack/react-router'
 import { useCallback, useMemo } from 'react'
-import type { ApiClient } from '@/api/client'
-import { useRuntime } from '@/hooks/queries/useRuntime'
+import { type RuntimeSnapshotApi, useRuntime } from '@/hooks/queries/useRuntime'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import type { RealtimeBannerState } from '@/hooks/useRealtimeFeedback'
 import { useRuntimeUpdateState } from '@/hooks/useRuntimeUpdateState'
@@ -13,7 +12,7 @@ import { buildOfflineNotice, buildRuntimeNotice, buildRuntimeUpdateNotice } from
 import { useTranslation } from '@/lib/use-translation'
 import { NEW_SESSION_ROUTE } from '@/routes/sessions/sessionRoutePaths'
 
-export function AppFloatingNoticeLayer(props: { api: ApiClient; banner: RealtimeBannerState }) {
+export function AppFloatingNoticeLayer(props: { api: RuntimeSnapshotApi; banner: RealtimeBannerState }) {
     const { t } = useTranslation()
     const pathname = useLocation({
         select: (location) => location.pathname,

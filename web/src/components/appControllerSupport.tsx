@@ -2,14 +2,16 @@ import type { JSX, MutableRefObject, ReactNode } from 'react'
 import type { ApiClient } from '@/api/client'
 import { MotionRouteOutlet } from '@/components/motion/motionPrimitives'
 import type { AuthSource } from '@/hooks/useAuth'
-import { AppContextProvider } from '@/lib/app-context'
+import { AppContextProvider, type AppContextValue } from '@/lib/app-context'
 import type { AppViewportRoute } from '@/lib/appShellPresentation'
 
 export type ReadyAppSession = {
-    api: ApiClient
     baseUrl: string
-    token: string
+    renderAppProvider: (children: ReactNode) => JSX.Element
+    readRuntimeContext?: () => AppContextValue
 }
+
+export type ReadyAppRuntimeSession = AppContextValue
 
 type AppViewportShellProps = {
     appViewportRoute: AppViewportRoute
@@ -34,17 +36,11 @@ type AppReadyShellProps = {
 }
 
 export function AppReadyShell(props: AppReadyShellProps): JSX.Element {
-    return (
-        <AppContextProvider
-            value={{
-                api: props.session.api,
-                token: props.session.token,
-                baseUrl: props.session.baseUrl,
-            }}
-        >
+    return props.session.renderAppProvider(
+        <>
             <AppViewportShell appViewportRoute={props.appViewportRoute} />
             {props.children}
-        </AppContextProvider>
+        </>
     )
 }
 
@@ -57,7 +53,21 @@ export function createReadyAppSession(
         return null
     }
 
-    return { api, baseUrl, token }
+    const readRuntimeContext = () => ({ api, baseUrl, token })
+    return {
+        baseUrl,
+        readRuntimeContext,
+        renderAppProvider: (children) => (
+            <AppContextProvider value={readRuntimeContext()}>{children}</AppContextProvider>
+        ),
+    }
+}
+
+export function getReadyAppRuntimeSession(session: ReadyAppSession): ReadyAppRuntimeSession {
+    if (!session.readRuntimeContext) {
+        throw new Error('App runtime context is not available')
+    }
+    return session.readRuntimeContext()
 }
 
 export function canRetainReadyShell(options: {

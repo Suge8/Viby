@@ -6,8 +6,10 @@ import { formatOptionalUserFacingErrorMessage } from '@/lib/userFacingError'
 import type { LocalRuntime } from '@/types/api'
 import { realtimeQueryOptions } from './realtimeQueryOptions'
 
+export type RuntimeSnapshotApi = Pick<ApiClient, 'getRuntime'>
+
 export function useRuntime(
-    api: ApiClient | null,
+    api: RuntimeSnapshotApi | null,
     enabled: boolean,
     options?: {
         refetchOnMount?: boolean | 'always'

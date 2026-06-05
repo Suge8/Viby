@@ -1,10 +1,9 @@
 import { type JSX, lazy, Suspense, useEffect } from 'react'
-import type { ApiClient } from '@/api/client'
 import { useRealtimeEventBridge } from '@/hooks/useRealtimeConnection'
 import { useRealtimeFeedback } from '@/hooks/useRealtimeFeedback'
 import { reportWebRuntimeError } from '@/lib/runtimeDiagnostics'
-import type { RemotePeerBridge } from '@/remote/remotePairingBridgeTypes'
 import type { RemotePeerTransportStats } from './remotePairingStats'
+import type { RemoteWorkspaceRuntime } from './remoteWorkspaceAdapter'
 
 async function loadAppFloatingNoticeLayerModule() {
     const module = await import('@/components/AppFloatingNoticeLayer')
@@ -14,8 +13,7 @@ async function loadAppFloatingNoticeLayerModule() {
 const LazyAppFloatingNoticeLayer = lazy(loadAppFloatingNoticeLayerModule)
 
 type RemotePairingRuntimeProps = {
-    api: ApiClient
-    bridge: RemotePeerBridge
+    runtime: RemoteWorkspaceRuntime
 }
 
 export function RemotePairingRuntime(props: RemotePairingRuntimeProps): JSX.Element {
@@ -39,7 +37,7 @@ export function RemotePairingRuntime(props: RemotePairingRuntimeProps): JSX.Elem
 
         async function sampleTransport(): Promise<void> {
             try {
-                const stats = await props.bridge.getTransportStats()
+                const stats = await props.runtime.getTransportStats()
                 if (disposed) {
                     return
                 }
@@ -60,11 +58,11 @@ export function RemotePairingRuntime(props: RemotePairingRuntimeProps): JSX.Elem
         return () => {
             disposed = true
         }
-    }, [handleConnect, props.bridge])
+    }, [handleConnect, props.runtime])
 
     useRealtimeEventBridge({
         enabled: true,
-        subscribe: props.bridge.subscribe,
+        subscribe: props.runtime.subscribe,
         onEvent: () => {},
     })
 
@@ -76,7 +74,7 @@ export function RemotePairingRuntime(props: RemotePairingRuntimeProps): JSX.Elem
 
     return (
         <Suspense fallback={null}>
-            <LazyAppFloatingNoticeLayer api={props.api} banner={banner} />
+            <LazyAppFloatingNoticeLayer api={props.runtime.noticeApi} banner={banner} />
         </Suspense>
     )
 }
