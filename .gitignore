@@ -52,7 +52,6 @@ execplan/
 .bg-shell/
 .viby-devremote/
 .viby-dev-remote.lock.json
-**/AGENTS.md
 docs/
 docs/internal/update.md
 .taskmaster/
