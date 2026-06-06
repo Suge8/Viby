@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from '@tanstack/react-router'
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { RouteLoadingFallback } from '@/components/loading/RouteLoadingFallback'
 import { SessionChatPendingState } from '@/components/loading/SessionChatPendingState'
 import { SessionChat } from '@/components/SessionChat'
@@ -12,7 +12,10 @@ import { appendRealtimeTrace } from '@/lib/realtimeTrace'
 import { useTranslation } from '@/lib/use-translation'
 import { useRemotePairingInteractionBlocked } from '@/remote/remotePairingInteractionState'
 import type { RetainedSessionChatSnapshot } from '@/routes/sessions/selectedSessionChatViewModel'
-import { useSelectedSessionWorkspace } from '@/routes/sessions/useSelectedSessionWorkspace'
+import {
+    readSelectedSessionRetainedSnapshot,
+    useSelectedSessionWorkspace,
+} from '@/routes/sessions/useSelectedSessionWorkspace'
 
 export default function SessionChatRoute(): React.JSX.Element {
     const { api } = useAppContext()
@@ -20,7 +23,6 @@ export default function SessionChatRoute(): React.JSX.Element {
     const { addToast } = useNoticeCenter()
     const errorPreset = getNoticePreset('genericError', t)
     const { sessionId: routeSessionId } = useParams({ from: '/sessions/$sessionId' })
-    const retainedSnapshotRef = useRef<RetainedSessionChatSnapshot | null>(null)
     const remoteInteractionBlocked = useRemotePairingInteractionBlocked()
 
     useEffect(() => {
@@ -57,8 +59,8 @@ export default function SessionChatRoute(): React.JSX.Element {
     }
 
     if (!session) {
-        const retainedSnapshot = retainedSnapshotRef.current
-        if (retainedSnapshot && retainedSnapshot.routeSessionId !== routeSessionId) {
+        const retainedSnapshot = readSelectedSessionRetainedSnapshot(routeSessionId)
+        if (retainedSnapshot) {
             return <RetainedSessionChatSurface snapshot={retainedSnapshot} />
         }
 
@@ -71,19 +73,13 @@ export default function SessionChatRoute(): React.JSX.Element {
             isSessionDetailHydrated={isDetailHydrated}
             session={session}
             sessionId={routeSessionId}
-            onRetainedSnapshotReady={(snapshot) => {
-                retainedSnapshotRef.current = snapshot
-            }}
-            retainedSnapshot={retainedSnapshotRef.current}
         />
     )
 }
 
 type ResolvedSessionChatRouteProps = {
     api: ReturnType<typeof useAppContext>['api']
-    onRetainedSnapshotReady: (snapshot: RetainedSessionChatSnapshot) => void
     isSessionDetailHydrated: boolean
-    retainedSnapshot: RetainedSessionChatSnapshot | null
     session: NonNullable<ReturnType<typeof useSession>['session']>
     sessionId: string
 }

@@ -9,35 +9,52 @@ import {
 } from '@/routes/sessions/selectedSessionChatViewModel'
 import { type SessionChatRouteModelOptions, useSessionChatRouteModel } from '@/routes/sessions/useSessionChatRouteModel'
 
-export type SelectedSessionWorkspaceOptions = SessionChatRouteModelOptions & {
-    onRetainedSnapshotReady: (snapshot: RetainedSessionChatSnapshot) => void
-    retainedSnapshot: RetainedSessionChatSnapshot | null
+export type SelectedSessionWorkspaceOptions = SessionChatRouteModelOptions
+
+let retainedSnapshot: RetainedSessionChatSnapshot | null = null
+
+export function readSelectedSessionRetainedSnapshot(routeSessionId: string): RetainedSessionChatSnapshot | null {
+    return retainedSnapshot && retainedSnapshot.routeSessionId !== routeSessionId ? retainedSnapshot : null
+}
+
+function persistRetainedSnapshot(snapshot: RetainedSessionChatSnapshot): void {
+    retainedSnapshot = snapshot
+}
+
+export function clearSelectedSessionRetainedSnapshotForTest(): void {
+    retainedSnapshot = null
+}
+
+function useSelectedSessionWorkspaceBootEffect(ready: boolean): void {
+    useFinalizeBootShell(ready)
+}
+
+function useSelectedSessionWorkspaceEntryEffect(sessionId: string): void {
+    useEffect(() => {
+        setMessageWindowAtBottom(sessionId, true)
+    }, [sessionId])
 }
 
 export function useSelectedSessionWorkspace(options: SelectedSessionWorkspaceOptions): SelectedSessionChatViewModel {
     const { isSessionDetailReady, sessionChatProps } = useSessionChatRouteModel(options)
     const viewModel = createSelectedSessionChatViewModel({
         isSessionDetailReady,
-        retainedSnapshot: options.retainedSnapshot,
+        retainedSnapshot,
         routeSessionId: options.sessionId,
         sessionChatProps,
         sessionError: null,
     })
 
-    useFinalizeBootShell(viewModel.surface === 'ready')
+    useSelectedSessionWorkspaceBootEffect(viewModel.phase === 'ready')
+    useSelectedSessionWorkspaceEntryEffect(options.sessionId)
 
     useEffect(() => {
-        setMessageWindowAtBottom(options.sessionId, true)
-    }, [options.sessionId])
-
-    useEffect(() => {
-        if (!shouldPersistRetainedSessionChatSnapshot(viewModel.surface)) return
-
-        options.onRetainedSnapshotReady({
+        if (!shouldPersistRetainedSessionChatSnapshot(viewModel.phase)) return
+        persistRetainedSnapshot({
             routeSessionId: options.sessionId,
             sessionChatProps,
         })
-    }, [options.onRetainedSnapshotReady, options.sessionId, sessionChatProps, viewModel.surface])
+    }, [options.sessionId, sessionChatProps, viewModel.phase])
 
     return viewModel
 }

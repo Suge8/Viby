@@ -7,42 +7,54 @@ export type RetainedSessionChatSnapshot = {
     sessionChatProps: SessionChatProps
 }
 
-export type SelectedSessionChatSurface = 'pending' | 'ready' | 'retained'
+export type SelectedSessionWorkspacePhase = 'pending' | 'ready' | 'retained'
+export type SelectedSessionChatSurface = SelectedSessionWorkspacePhase
 
-export type SelectedSessionChatViewModel = {
+export type SelectedSessionWorkspaceState = {
+    phase: SelectedSessionWorkspacePhase
     sessionChatProps: SessionChatProps | null
     sessionError: string | null
-    surface: SelectedSessionChatSurface
 }
 
-export function createSelectedSessionChatViewModel(options: {
+export type SelectedSessionChatViewModel = SelectedSessionWorkspaceState & {
+    surface: SelectedSessionWorkspacePhase
+}
+
+export function createSelectedSessionWorkspaceState(options: {
     isSessionDetailReady: boolean
     retainedSnapshot: RetainedSessionChatSnapshot | null
     routeSessionId: string
     sessionChatProps: SessionChatProps | null
     sessionError: string | null
-}): SelectedSessionChatViewModel {
+}): SelectedSessionWorkspaceState {
     if (options.sessionChatProps && options.isSessionDetailReady) {
         return {
+            phase: 'ready',
             sessionChatProps: options.sessionChatProps,
             sessionError: options.sessionError,
-            surface: 'ready',
         }
     }
 
     if (options.retainedSnapshot && options.retainedSnapshot.routeSessionId !== options.routeSessionId) {
         return {
+            phase: 'retained',
             sessionChatProps: options.retainedSnapshot.sessionChatProps,
             sessionError: options.sessionError,
-            surface: 'retained',
         }
     }
 
     return {
+        phase: 'pending',
         sessionChatProps: options.sessionChatProps,
         sessionError: options.sessionError,
-        surface: 'pending',
     }
+}
+
+export function createSelectedSessionChatViewModel(
+    options: Parameters<typeof createSelectedSessionWorkspaceState>[0]
+): SelectedSessionChatViewModel {
+    const state = createSelectedSessionWorkspaceState(options)
+    return { ...state, surface: state.phase }
 }
 
 export function shouldPersistRetainedSessionChatSnapshot(surface: SelectedSessionChatSurface): boolean {

@@ -1,6 +1,10 @@
 import { renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { useSelectedSessionWorkspace } from './useSelectedSessionWorkspace'
+import {
+    clearSelectedSessionRetainedSnapshotForTest,
+    readSelectedSessionRetainedSnapshot,
+    useSelectedSessionWorkspace,
+} from './useSelectedSessionWorkspace'
 
 const mocks = vi.hoisted(() => ({
     finalizeBootShell: vi.fn(),
@@ -27,8 +31,6 @@ const sessionChatProps = {
 const baseOptions = {
     api: {} as never,
     isSessionDetailHydrated: true,
-    onRetainedSnapshotReady: vi.fn(),
-    retainedSnapshot: null,
     session: { id: 'session-1' } as never,
     sessionId: 'session-1',
 }
@@ -37,7 +39,7 @@ describe('useSelectedSessionWorkspace', () => {
     beforeEach(() => {
         mocks.finalizeBootShell.mockClear()
         mocks.routeModel.mockReset()
-        baseOptions.onRetainedSnapshotReady.mockClear()
+        clearSelectedSessionRetainedSnapshotForTest()
         mocks.setMessageWindowAtBottom.mockClear()
     })
 
@@ -50,7 +52,7 @@ describe('useSelectedSessionWorkspace', () => {
         expect(mocks.finalizeBootShell).toHaveBeenCalledWith(true)
         expect(mocks.setMessageWindowAtBottom).toHaveBeenCalledWith('session-1', true)
         await waitFor(() => {
-            expect(baseOptions.onRetainedSnapshotReady).toHaveBeenCalledWith({
+            expect(readSelectedSessionRetainedSnapshot('session-2')).toEqual({
                 routeSessionId: 'session-1',
                 sessionChatProps,
             })
@@ -83,16 +85,19 @@ describe('useSelectedSessionWorkspace', () => {
 
         expect(result.current.surface).toBe('pending')
         expect(mocks.setMessageWindowAtBottom).toHaveBeenCalledWith('session-1', true)
-        expect(baseOptions.onRetainedSnapshotReady).not.toHaveBeenCalled()
+        expect(readSelectedSessionRetainedSnapshot('session-2')).toBeNull()
     })
 
-    it('uses retained surface while the next session is pending', () => {
+    it('uses retained surface while the next session is pending', async () => {
+        mocks.routeModel.mockReturnValueOnce({ isSessionDetailReady: true, sessionChatProps })
+        renderHook(() => useSelectedSessionWorkspace(baseOptions))
+        await waitFor(() => expect(readSelectedSessionRetainedSnapshot('session-2')).not.toBeNull())
         mocks.routeModel.mockReturnValue({ isSessionDetailReady: false, sessionChatProps: null })
 
         const { result } = renderHook(() =>
             useSelectedSessionWorkspace({
                 ...baseOptions,
-                retainedSnapshot: { routeSessionId: 'session-1', sessionChatProps },
+                session: { id: 'session-2' } as never,
                 sessionId: 'session-2',
             })
         )
@@ -100,6 +105,9 @@ describe('useSelectedSessionWorkspace', () => {
         expect(result.current.surface).toBe('retained')
         expect(result.current.sessionChatProps).toBe(sessionChatProps)
         expect(mocks.setMessageWindowAtBottom).toHaveBeenCalledWith('session-2', true)
-        expect(baseOptions.onRetainedSnapshotReady).not.toHaveBeenCalled()
+        expect(readSelectedSessionRetainedSnapshot('session-2')).toEqual({
+            routeSessionId: 'session-1',
+            sessionChatProps,
+        })
     })
 })
