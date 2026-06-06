@@ -1,9 +1,8 @@
 import { forwardAcpAgentMessage, toAcpMcpServers } from '@/agent/acpAgentInterop'
-import { flushReadyStateBeforeReady } from '@/agent/emitReadyIfIdle'
 import { mergePromptSegments, prependPromptInstructionsToMessage } from '@/agent/promptInstructions'
-import { createReadyEventScheduler } from '@/agent/readyEventScheduler'
+import { runRuntimeTurnOwner } from '@/agent/runtimeTurnOwner'
 import { reportDiscoveredSessionId } from '@/agent/sessionDiscoveryBridge'
-import { settleTerminalTurn, surfaceTerminalFailure } from '@/agent/turnTerminalSettlement'
+import { surfaceTerminalFailure } from '@/agent/turnTerminalSettlement'
 import type { AgentMessage, PromptContent } from '@/agent/types'
 import { RemoteLauncherBase, type RemoteLauncherExitReason } from '@/modules/common/remote/RemoteLauncherBase'
 import { logger } from '@/ui/logger'
@@ -145,52 +144,42 @@ class GeminiRemoteLauncher extends RemoteLauncherBase {
             onAbort: () => this.handleAbort(),
         })
 
-        const sendReady = () => {
-            session.sendSessionEvent({ type: 'ready' })
-        }
-        const readyScheduler = createReadyEventScheduler({
-            label: '[gemini-remote]',
-            queueSize: () => session.queue.size(),
-            shouldExit: () => this.shouldExit,
-            flushBeforeReady: () => flushReadyStateBeforeReady(session.client),
-            sendReady,
-        })
-
         const preparePromptText = (message: string, mode: GeminiMode): string => {
             return prependPromptInstructionsToMessage(message, mergePromptSegments(mode.developerInstructions))
         }
 
-        while (!this.shouldExit) {
-            const batch = await session.queue.waitForMessagesAndGetAsString(this.abortController.signal)
-            if (!batch) {
-                if (this.abortController.signal.aborted && !this.shouldExit) {
-                    continue
-                }
-                break
-            }
-
-            const acpSessionId = await ensureBackendForMode(batch.mode)
-            messageBuffer.addMessage(batch.message, 'user')
-
-            const promptContent: PromptContent[] = [
-                {
-                    type: 'text',
-                    text: preparePromptText(batch.message, batch.mode),
-                },
-            ]
-
-            session.onThinkingChange(true)
-
-            try {
+        await runRuntimeTurnOwner({
+            label: '[gemini-remote]',
+            sessionClient: session.client,
+            queueSize: () => session.queue.size(),
+            shouldExit: () => this.shouldExit,
+            sendReady: () => session.sendSessionEvent({ type: 'ready' }),
+            getAbortSignal: () => this.abortController.signal,
+            waitForTurn: async (signal) => await session.queue.waitForMessagesAndGetAsString(signal),
+            prepareTurn: async (batch) => ({
+                ...batch,
+                acpSessionId: await ensureBackendForMode(batch.mode),
+                promptContent: [
+                    {
+                        type: 'text' as const,
+                        text: preparePromptText(batch.message, batch.mode),
+                    },
+                ] satisfies PromptContent[],
+            }),
+            onTurnStart: (turn) => {
+                messageBuffer.addMessage(turn.message, 'user')
+            },
+            runTurn: async (turn) => {
                 const backend = await session.ensureRemoteBackend({
-                    model: batch.mode.model,
+                    model: turn.mode.model,
                     hookSettingsPath: this.hookSettingsPath,
-                    permissionMode: batch.mode.permissionMode,
+                    permissionMode: turn.mode.permissionMode,
                 })
-                await backend.prompt(acpSessionId, promptContent, (message: AgentMessage) => {
+                await backend.prompt(turn.acpSessionId, turn.promptContent, (message: AgentMessage) => {
                     this.handleAgentMessage(message)
                 })
-            } catch (error) {
+            },
+            onTurnError: (error) => {
                 logger.warn('[gemini-remote] prompt failed', error)
                 surfaceTerminalFailure({
                     error,
@@ -199,18 +188,12 @@ class GeminiRemoteLauncher extends RemoteLauncherBase {
                     sendSessionMessage: (message) => session.sendSessionEvent({ type: 'message', message }),
                     addStatusMessage: (message) => messageBuffer.addMessage(message, 'status'),
                 })
-            } finally {
-                await settleTerminalTurn({
-                    setThinking: (thinking) => session.onThinkingChange(thinking),
-                    afterThinkingCleared: async () => {
-                        await this.permissionHandler?.cancelAll('Prompt finished')
-                    },
-                    emitReady: async () => await readyScheduler.emitNow(),
-                })
-            }
-        }
-
-        readyScheduler.dispose()
+            },
+            setThinking: (thinking) => session.onThinkingChange(thinking),
+            afterThinkingCleared: async () => {
+                await this.permissionHandler?.cancelAll('Prompt finished')
+            },
+        })
     }
 
     protected async cleanup(): Promise<void> {

@@ -1,10 +1,9 @@
 import { randomUUID } from 'node:crypto'
 import { CopilotClient } from '@github/copilot-sdk'
-import { flushReadyStateBeforeReady } from '@/agent/emitReadyIfIdle'
 import { mergePromptSegments, prependPromptInstructionsToMessage } from '@/agent/promptInstructions'
-import { createReadyEventScheduler } from '@/agent/readyEventScheduler'
+import { runRuntimeTurnOwner } from '@/agent/runtimeTurnOwner'
 import { reportDiscoveredSessionId } from '@/agent/sessionDiscoveryBridge'
-import { settleTerminalTurn, surfaceTerminalFailure } from '@/agent/turnTerminalSettlement'
+import { surfaceTerminalFailure } from '@/agent/turnTerminalSettlement'
 import { RemoteLauncherBase, type RemoteLauncherExitReason } from '@/modules/common/remote/RemoteLauncherBase'
 import { logger } from '@/ui/logger'
 import { runDetachedTask } from '@/utils/runDetachedTask'
@@ -44,17 +43,6 @@ class CopilotRemoteLauncher extends RemoteLauncherBase {
             onAbort: () => this.handleAbort(),
         })
 
-        const sendReady = (): void => {
-            session.sendSessionEvent({ type: 'ready' })
-        }
-        const readyScheduler = createReadyEventScheduler({
-            label: '[copilot-remote]',
-            queueSize: () => session.queue.size(),
-            shouldExit: () => this.shouldExit,
-            flushBeforeReady: () => flushReadyStateBeforeReady(session.client),
-            sendReady,
-        })
-
         // Start the Copilot CLI process via SDK
         const client = new CopilotClient({ useStdio: true })
         this.sdkClient = client
@@ -65,55 +53,45 @@ class CopilotRemoteLauncher extends RemoteLauncherBase {
         this.permissionHandler = permHandler
         const permissionHandler = permHandler.buildHandler()
 
-        try {
-            // Main message loop — single owner of turn lifecycle
-            while (!this.shouldExit) {
-                const waitSignal = this.abortController.signal
-                const batch = await session.queue.waitForMessagesAndGetAsString(waitSignal)
-
-                if (!batch) {
-                    if (waitSignal.aborted && !this.shouldExit) {
-                        continue
-                    }
-                    break
-                }
-
-                const { message, mode } = batch
-
-                const messageInstructions = (() => {
-                    return mergePromptSegments(mode.developerInstructions)
-                })()
-                const messageText = prependPromptInstructionsToMessage(message, messageInstructions)
-
-                messageBuffer.addMessage(message, 'user')
-                session.onThinkingChange(true)
-
-                try {
-                    await this.runTurn({
-                        client,
-                        permissionHandler,
-                        messageText,
-                        waitSignal,
-                    })
-                } catch (error) {
-                    logger.warn('[copilot-remote] Send failed:', error)
-                    surfaceTerminalFailure({
-                        error,
-                        fallbackMessage: 'Copilot failed. Check logs for details.',
-                        detailPrefix: 'Copilot failed',
-                        sendSessionMessage: (message) => session.sendSessionEvent({ type: 'message', message }),
-                        addStatusMessage: (message) => messageBuffer.addMessage(message, 'status'),
-                    })
-                } finally {
-                    await settleTerminalTurn({
-                        setThinking: (thinking) => session.onThinkingChange(thinking),
-                        emitReady: async () => await readyScheduler.emitNow(),
-                    })
-                }
-            }
-        } finally {
-            readyScheduler.dispose()
-        }
+        await runRuntimeTurnOwner({
+            label: '[copilot-remote]',
+            sessionClient: session.client,
+            queueSize: () => session.queue.size(),
+            shouldExit: () => this.shouldExit,
+            sendReady: () => session.sendSessionEvent({ type: 'ready' }),
+            getAbortSignal: () => this.abortController.signal,
+            waitForTurn: async (signal) => await session.queue.waitForMessagesAndGetAsString(signal),
+            prepareTurn: (batch) => ({
+                message: batch.message,
+                messageText: prependPromptInstructionsToMessage(
+                    batch.message,
+                    mergePromptSegments(batch.mode.developerInstructions)
+                ),
+                waitSignal: this.abortController.signal,
+            }),
+            onTurnStart: (turn) => {
+                messageBuffer.addMessage(turn.message, 'user')
+            },
+            runTurn: async (turn) => {
+                await this.runTurn({
+                    client,
+                    permissionHandler,
+                    messageText: turn.messageText,
+                    waitSignal: turn.waitSignal,
+                })
+            },
+            onTurnError: (error) => {
+                logger.warn('[copilot-remote] Send failed:', error)
+                surfaceTerminalFailure({
+                    error,
+                    fallbackMessage: 'Copilot failed. Check logs for details.',
+                    detailPrefix: 'Copilot failed',
+                    sendSessionMessage: (message) => session.sendSessionEvent({ type: 'message', message }),
+                    addStatusMessage: (message) => messageBuffer.addMessage(message, 'status'),
+                })
+            },
+            setThinking: (thinking) => session.onThinkingChange(thinking),
+        })
     }
 
     protected async cleanup(): Promise<void> {

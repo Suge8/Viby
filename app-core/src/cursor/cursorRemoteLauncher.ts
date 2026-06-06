@@ -1,11 +1,9 @@
 import { spawn } from 'node:child_process'
 import { createInterface } from 'node:readline'
-import { flushReadyStateBeforeReady } from '@/agent/emitReadyIfIdle'
 import { convertAgentMessage } from '@/agent/messageConverter'
 import { mergePromptSegments, prependPromptInstructionsToMessage } from '@/agent/promptInstructions'
-import { createReadyEventScheduler } from '@/agent/readyEventScheduler'
+import { runRuntimeTurnOwner } from '@/agent/runtimeTurnOwner'
 import { reportDiscoveredSessionId } from '@/agent/sessionDiscoveryBridge'
-import { settleTerminalTurn } from '@/agent/turnTerminalSettlement'
 import { RemoteLauncherBase, type RemoteLauncherExitReason } from '@/modules/common/remote/RemoteLauncherBase'
 import { logger } from '@/ui/logger'
 import {
@@ -81,53 +79,42 @@ class CursorRemoteLauncher extends RemoteLauncherBase {
             onAbort: () => this.handleAbort(),
         })
 
-        const sendReady = () => {
-            session.sendSessionEvent({ type: 'ready' })
-        }
-        const readyScheduler = createReadyEventScheduler({
-            label: '[cursor-remote]',
-            queueSize: () => session.queue.size(),
-            shouldExit: () => this.shouldExit,
-            flushBeforeReady: () => flushReadyStateBeforeReady(session.client),
-            sendReady,
-        })
-
         let cursorSessionId: string | null = session.sessionId
 
-        while (!this.shouldExit) {
-            const waitSignal = this.abortController.signal
-            const batch = await session.queue.waitForMessagesAndGetAsString(waitSignal)
-            if (!batch) {
-                if (waitSignal.aborted && !this.shouldExit) {
-                    continue
+        await runRuntimeTurnOwner({
+            label: '[cursor-remote]',
+            sessionClient: session.client,
+            queueSize: () => session.queue.size(),
+            shouldExit: () => this.shouldExit,
+            sendReady: () => session.sendSessionEvent({ type: 'ready' }),
+            getAbortSignal: () => this.abortController.signal,
+            waitForTurn: async (signal) => await session.queue.waitForMessagesAndGetAsString(signal),
+            prepareTurn: (batch) => {
+                const { mode: agentMode, yolo } = permissionModeToAgentArgs(batch.mode.permissionMode as string)
+                const messageText = prependPromptInstructionsToMessage(
+                    batch.message,
+                    mergePromptSegments(batch.mode.developerInstructions)
+                )
+                return {
+                    message: batch.message,
+                    permissionMode: batch.mode.permissionMode as string,
+                    args: buildAgentArgs({
+                        message: messageText,
+                        cwd: session.path,
+                        sessionId: cursorSessionId,
+                        mode: agentMode,
+                        model: session.model,
+                        yolo,
+                    }),
                 }
-                break
-            }
-
-            const { message, mode } = batch
-            const { mode: agentMode, yolo } = permissionModeToAgentArgs(mode.permissionMode as string)
-            this.applyDisplayMode(mode.permissionMode as string)
-            messageBuffer.addMessage(message, 'user')
-            const messageInstructions = (() => {
-                return mergePromptSegments(mode.developerInstructions)
-            })()
-            const messageText = prependPromptInstructionsToMessage(message, messageInstructions)
-
-            const args = buildAgentArgs({
-                message: messageText,
-                cwd: session.path,
-                sessionId: cursorSessionId,
-                mode: agentMode,
-                model: session.model,
-                yolo,
-            })
-
-            logger.debug(`[cursor-remote] Spawning agent with args: ${args.join(' ')}`)
-
-            session.onThinkingChange(true)
-
-            try {
-                const processResult = await this.runAgentProcess(args, session.path, processEnv, (event) => {
+            },
+            onTurnStart: (turn) => {
+                this.applyDisplayMode(turn.permissionMode)
+                messageBuffer.addMessage(turn.message, 'user')
+                logger.debug(`[cursor-remote] Spawning agent with args: ${turn.args.join(' ')}`)
+            },
+            runTurn: async (turn) => {
+                const processResult = await this.runAgentProcess(turn.args, session.path, processEnv, (event) => {
                     if (event.type === 'system' && event.subtype === 'init' && event.session_id) {
                         cursorSessionId = event.session_id
                         reportDiscoveredSessionId(session.onSessionFound, event.session_id)
@@ -164,26 +151,19 @@ class CursorRemoteLauncher extends RemoteLauncherBase {
                     }
                 })
 
-                if (processResult.aborted) {
-                    continue
-                }
+                if (processResult.aborted) return
                 const processError = getCursorTerminalFailureError(processResult)
                 if (processError) {
                     logger.debug('[cursor-remote] Agent exited before completion', processError)
                     surfaceCursorTerminalFailure({ session, messageBuffer, error: processError })
                 }
-            } catch (error) {
+            },
+            onTurnError: (error) => {
                 logger.warn('[cursor-remote] Agent run failed', error)
                 surfaceCursorTerminalFailure({ session, messageBuffer, error })
-            } finally {
-                await settleTerminalTurn({
-                    setThinking: (thinking) => session.onThinkingChange(thinking),
-                    emitReady: async () => await readyScheduler.emitNow(),
-                })
-            }
-        }
-
-        readyScheduler.dispose()
+            },
+            setThinking: (thinking) => session.onThinkingChange(thinking),
+        })
     }
 
     private runAgentProcess(
