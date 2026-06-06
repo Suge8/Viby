@@ -2,7 +2,6 @@ import type {
     AgentFlavor,
     CodexCollaborationMode,
     CodexServiceTier,
-    ListAgentAvailabilityRequest,
     LocalSessionExportRequest,
     ModelReasoningEffort,
     OpenAgentConfigRequest,
@@ -16,13 +15,12 @@ import {
     browseRuntimeDirectory,
     checkRuntimePathsExists,
     getAgentConfig,
+    getAgentLaunchOptions,
     getRuntime,
-    getRuntimeAgentAvailability,
     getRuntimeCapabilities,
     importRuntimeLocalSession,
     listRuntimeLocalSessions,
     openAgentConfig,
-    resolveAgentLaunchConfig,
     restoreAgentConfig,
     saveAgentConfig,
     spawnSession,
@@ -36,8 +34,8 @@ export function createApiClientRuntimeMethods(request: ApiClientRequest) {
         async getRuntimeCapabilities(input?: RuntimeCapabilityRequest & { signal?: AbortSignal }) {
             return await getRuntimeCapabilities(request, input)
         },
-        async getRuntimeAgentAvailability(input?: ListAgentAvailabilityRequest & { signal?: AbortSignal }) {
-            return await getRuntimeAgentAvailability(request, input)
+        async getAgentLaunchOptions(input?: { directory?: string; refresh?: boolean; signal?: AbortSignal }) {
+            return await getAgentLaunchOptions(request, input)
         },
         async getAgentConfig() {
             return await getAgentConfig(request)
@@ -56,9 +54,6 @@ export function createApiClientRuntimeMethods(request: ApiClientRequest) {
         },
         async browseRuntimeDirectory(path?: string, options?: { workspaceRoot?: string | null }) {
             return await browseRuntimeDirectory(request, path, options)
-        },
-        async resolveAgentLaunchConfig(input: { agent: AgentFlavor; directory: string; signal?: AbortSignal }) {
-            return await resolveAgentLaunchConfig(request, input)
         },
         async listRuntimeLocalSessions(
             path: string,

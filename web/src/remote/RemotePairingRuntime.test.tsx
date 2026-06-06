@@ -5,8 +5,6 @@ import type { RemoteWorkspaceRuntime } from './remoteWorkspaceAdapter'
 
 const mocks = vi.hoisted(() => ({
     appFloatingNoticeLayer: vi.fn(() => null),
-    handleConnect: vi.fn(),
-    handleDisconnect: vi.fn(),
     useRealtimeEventBridge: vi.fn(),
 }))
 
@@ -18,23 +16,9 @@ vi.mock('@/hooks/useRealtimeConnection', () => ({
     useRealtimeEventBridge: mocks.useRealtimeEventBridge,
 }))
 
-vi.mock('@/hooks/useRealtimeFeedback', () => ({
-    useRealtimeFeedback: () => ({
-        banner: { type: 'connected' },
-        handleConnect: mocks.handleConnect,
-        handleDisconnect: mocks.handleDisconnect,
-    }),
-}))
-
-vi.mock('@/lib/runtimeDiagnostics', () => ({
-    reportWebRuntimeError: vi.fn(),
-}))
-
 describe('RemotePairingRuntime', () => {
     beforeEach(() => {
         mocks.appFloatingNoticeLayer.mockClear()
-        mocks.handleConnect.mockClear()
-        mocks.handleDisconnect.mockClear()
         mocks.useRealtimeEventBridge.mockClear()
     })
 
@@ -55,7 +39,7 @@ describe('RemotePairingRuntime', () => {
         })
         await waitFor(() => {
             expect(mocks.appFloatingNoticeLayer).toHaveBeenCalledWith(
-                expect.objectContaining({ api: noticeApi }),
+                expect.objectContaining({ api: noticeApi, banner: { kind: 'hidden' } }),
                 undefined
             )
         })

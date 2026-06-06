@@ -19,6 +19,7 @@ import type {
     LocalSessionCatalogEntry as ProtocolLocalSessionCatalogEntry,
     LocalSessionExportRequest as ProtocolLocalSessionExportRequest,
     MachineDirectoryResponse as ProtocolMachineDirectoryResponse,
+    RuntimeAgentLaunchOptionsResponse as ProtocolRuntimeAgentLaunchOptionsResponse,
     RuntimeCapabilityResponse as ProtocolRuntimeCapabilityResponse,
     RuntimeCapabilitySnapshot as ProtocolRuntimeCapabilitySnapshot,
     SyncEvent as ProtocolSyncEvent,
@@ -83,6 +84,7 @@ export type {
     ResumableSessionsPage,
     ResumableSessionsResponse,
     ResumableSessionsSnapshot,
+    RuntimeAgentLaunchOptionsResponse,
     RuntimeCapabilityRequest,
     SaveAgentConfigRequest,
     SaveAgentConfigResponse,
@@ -186,6 +188,7 @@ export type RuntimeCapabilityResponse = ProtocolRuntimeCapabilityResponse
 export type RuntimePathsExistsResponse = { exists: Record<string, boolean> }
 export type RuntimeBrowseDirectoryResponse = ProtocolMachineDirectoryResponse
 export type AgentLaunchConfigResponse = ResolveAgentLaunchConfigResponse
+export type AgentLaunchOptionsResponse = ProtocolRuntimeAgentLaunchOptionsResponse
 export type RuntimeLocalSessionsResponse = ProtocolLocalSessionCatalog
 export type RuntimeImportLocalSessionResponse = { session: Session; imported: boolean }
 

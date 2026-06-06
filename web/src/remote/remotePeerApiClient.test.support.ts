@@ -170,7 +170,7 @@ export function createBridge(overrides: Partial<RemotePeerBridge> = {}): RemoteP
                 agents: [],
             },
         })),
-        getRuntimeAgentAvailability: vi.fn(async () => ({ agents: [] })),
+        getAgentLaunchOptions: vi.fn(async () => ({ projection: { agents: [], unavailable: {} } })),
         getAgentConfig: vi.fn(async () => ({
             agents: [
                 {
@@ -208,11 +208,6 @@ export function createBridge(overrides: Partial<RemotePeerBridge> = {}): RemoteP
             parentPath: null,
             entries: [{ name: 'app', path: '/repo/app', type: 'directory' as const }],
             roots: [],
-        })),
-        resolveAgentLaunchConfig: vi.fn(async () => ({
-            type: 'error' as const,
-            code: 'config_missing' as const,
-            message: 'not configured',
         })),
         listRuntimeLocalSessions: vi.fn(async () => ({ capabilities: [], sessions: [] })),
         importRuntimeLocalSession: vi.fn(async () => ({

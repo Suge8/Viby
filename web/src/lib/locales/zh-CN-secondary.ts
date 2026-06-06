@@ -235,6 +235,9 @@ export default {
     'offline.title': '离线',
     'runtime.recovering.title': '正在接回',
     'runtime.recovering.message': '正在同步最新状态。',
+    'runtime.recoveryFailed.title': '接回失败',
+    'runtime.recoveryFailed.message': 'Viby 没能同步最新状态。',
+    'runtime.recoveryFailed.action': '重试',
     'runtime.unavailable.title': '本机 runtime 不可用',
     'runtime.unavailable.message':
         '当前 hub 本身可访问，但它唯一的本机 runtime 还没准备好，所以现在会阻止创建或恢复会话，直到它重新连回。',

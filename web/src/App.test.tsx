@@ -181,11 +181,7 @@ describe('App', () => {
         })
         useRealtimeFeedbackMock.mockReturnValue({
             banner: { kind: 'hidden' },
-            handleConnect: vi.fn(),
-            handleDisconnect: vi.fn(),
-            handleConnectError: vi.fn(),
             announceRecovery: vi.fn(),
-            runCatchupSync: vi.fn(),
         })
         usePushNotificationsMock.mockReturnValue({
             isSupported: false,
@@ -314,11 +310,7 @@ describe('App', () => {
         })
         useRealtimeFeedbackMock.mockReturnValue({
             banner: { kind: 'restoring', reason: 'page-restored' },
-            handleConnect: vi.fn(),
-            handleDisconnect: vi.fn(),
-            handleConnectError: vi.fn(),
             announceRecovery: vi.fn(),
-            runCatchupSync: vi.fn(),
         })
 
         render(<App />)
@@ -338,11 +330,7 @@ describe('App', () => {
         })
         useRealtimeFeedbackMock.mockReturnValue({
             banner: { kind: 'busy' },
-            handleConnect: vi.fn(),
-            handleDisconnect: vi.fn(),
-            handleConnectError: vi.fn(),
             announceRecovery: vi.fn(),
-            runCatchupSync: vi.fn(),
         })
 
         render(<App />)
@@ -362,11 +350,7 @@ describe('App', () => {
         })
         useRealtimeFeedbackMock.mockReturnValue({
             banner: { kind: 'hidden' },
-            handleConnect: vi.fn(),
-            handleDisconnect: vi.fn(),
-            handleConnectError: vi.fn(),
             announceRecovery: vi.fn(),
-            runCatchupSync: vi.fn(),
         })
 
         render(<App />)
@@ -539,11 +523,7 @@ describe('App', () => {
         })
         useRealtimeFeedbackMock.mockReturnValue({
             banner: { kind: 'hidden' },
-            handleConnect: vi.fn(),
-            handleDisconnect: vi.fn(),
-            handleConnectError: vi.fn(),
             announceRecovery: announceRecoveryMock,
-            runCatchupSync: vi.fn(),
         })
         recordPendingAppRecovery('vite-preload-error', {
             resumeHref: '/sessions/session-1',
@@ -570,11 +550,7 @@ describe('App', () => {
         })
         useRealtimeFeedbackMock.mockReturnValue({
             banner: { kind: 'hidden' },
-            handleConnect: vi.fn(),
-            handleDisconnect: vi.fn(),
-            handleConnectError: vi.fn(),
             announceRecovery: announceRecoveryMock,
-            runCatchupSync: vi.fn(),
         })
 
         render(<App />)
@@ -603,7 +579,6 @@ describe('App', () => {
 
     it('runs authoritative reconnect recovery even when the socket reports recovered', async () => {
         const api = {} as object
-        const runCatchupSyncMock = vi.fn((task: Promise<unknown>) => task)
 
         useMatchRouteMock.mockReturnValue(() => ({ sessionId: 'session-1' }))
         useAuthMock.mockReturnValue({
@@ -611,14 +586,6 @@ describe('App', () => {
             api,
             isLoading: false,
             error: null,
-        })
-        useRealtimeFeedbackMock.mockReturnValue({
-            banner: { kind: 'hidden' },
-            handleConnect: vi.fn(),
-            handleDisconnect: vi.fn(),
-            handleConnectError: vi.fn(),
-            announceRecovery: vi.fn(),
-            runCatchupSync: runCatchupSyncMock,
         })
 
         render(<App />)
@@ -630,7 +597,6 @@ describe('App', () => {
         getRealtimeConnectHandler()({ initial: false, recovered: true, transport: 'websocket' })
 
         await waitFor(() => {
-            expect(runCatchupSyncMock).toHaveBeenCalledTimes(1)
             expect(runRealtimeRecoveryMock).toHaveBeenCalledWith(
                 expect.objectContaining({
                     api,
@@ -642,21 +608,12 @@ describe('App', () => {
 
     it('runs authoritative reconnect recovery after an ordinary reconnect', async () => {
         const api = {} as object
-        const runCatchupSyncMock = vi.fn((task: Promise<unknown>) => task)
 
         useAuthMock.mockReturnValue({
             token: 'session-token',
             api,
             isLoading: false,
             error: null,
-        })
-        useRealtimeFeedbackMock.mockReturnValue({
-            banner: { kind: 'hidden' },
-            handleConnect: vi.fn(),
-            handleDisconnect: vi.fn(),
-            handleConnectError: vi.fn(),
-            announceRecovery: vi.fn(),
-            runCatchupSync: runCatchupSyncMock,
         })
 
         render(<App />)
@@ -668,7 +625,6 @@ describe('App', () => {
         getRealtimeConnectHandler()({ initial: false, recovered: false, transport: 'websocket' })
 
         await waitFor(() => {
-            expect(runCatchupSyncMock).toHaveBeenCalledTimes(1)
             expect(runRealtimeRecoveryMock).toHaveBeenCalledWith(
                 expect.objectContaining({
                     api,
@@ -679,21 +635,11 @@ describe('App', () => {
     })
 
     it('skips reconnect recovery on the first realtime connect', async () => {
-        const runCatchupSyncMock = vi.fn((task: Promise<unknown>) => task)
-
         useAuthMock.mockReturnValue({
             token: 'session-token',
             api: {} as object,
             isLoading: false,
             error: null,
-        })
-        useRealtimeFeedbackMock.mockReturnValue({
-            banner: { kind: 'hidden' },
-            handleConnect: vi.fn(),
-            handleDisconnect: vi.fn(),
-            handleConnectError: vi.fn(),
-            announceRecovery: vi.fn(),
-            runCatchupSync: runCatchupSyncMock,
         })
 
         render(<App />)
@@ -705,7 +651,6 @@ describe('App', () => {
         getRealtimeConnectHandler()({ initial: true, recovered: false, transport: 'websocket' })
 
         await waitFor(() => {
-            expect(runCatchupSyncMock).not.toHaveBeenCalled()
             expect(runRealtimeRecoveryMock).not.toHaveBeenCalled()
         })
     })

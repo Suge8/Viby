@@ -4,25 +4,23 @@ import { describe, expect, it, vi } from 'vitest'
 import type { ApiClientRequest } from './client'
 import {
     getAgentConfig,
-    getRuntimeAgentAvailability,
+    getAgentLaunchOptions,
     getRuntimeCapabilities,
     openAgentConfig,
-    resolveAgentLaunchConfig,
     restoreAgentConfig,
     saveAgentConfig,
 } from './clientRuntime'
 
 describe('clientRuntime', () => {
-    it('passes agent launch config cancellation without serializing the signal', async () => {
+    it('passes agent launch options cancellation without serializing the signal', async () => {
         const signal = new AbortController().signal
         const request = vi.fn(async (_path: string, init?: RequestInit) => {
-            expect(_path).toBe('/api/runtime/agent-launch-config')
+            expect(_path).toBe('/api/runtime/agent-launch-options?directory=%2Ftmp%2Fproject&refresh=1')
             expect(init?.signal).toBe(signal)
-            expect(JSON.parse(String(init?.body))).toEqual({ agent: 'codex', directory: '/tmp/project' })
-            return { type: 'error', message: 'expected test stop' }
+            return { projection: { agents: [], unavailable: {} } }
         }) as ApiClientRequest
 
-        await resolveAgentLaunchConfig(request, { agent: 'codex', directory: '/tmp/project', signal })
+        await getAgentLaunchOptions(request, { directory: '/tmp/project', refresh: true, signal })
     })
 
     it('includes depth and drivers in the runtime capability query when requested', async () => {
@@ -39,23 +37,6 @@ describe('clientRuntime', () => {
             drivers: ['claude', 'pi'],
             depth: 'launch_config',
         })
-    })
-
-    it('includes forceRefresh and drivers in the runtime agent availability query when requested', async () => {
-        const request = vi.fn(async (path: string) => {
-            expect(path).toBe(
-                '/api/runtime/agent-availability?directory=%2Ftmp%2Fproject&forceRefresh=true&drivers=claude'
-            )
-            return { agents: [] }
-        }) as ApiClientRequest
-
-        await expect(
-            getRuntimeAgentAvailability(request, {
-                directory: '/tmp/project',
-                forceRefresh: true,
-                drivers: ['claude'],
-            })
-        ).resolves.toEqual({ agents: [] })
     })
 
     it('uses the runtime agent config endpoints for load, save, restore, and open', async () => {

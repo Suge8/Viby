@@ -19,7 +19,6 @@ import {
     isComposerCompositionActive,
     shouldComposerSendFromKeyboard,
 } from '@/components/AssistantChat/composerKeyboard'
-import { useClaudeComposerModelShortcut } from '@/components/AssistantChat/useClaudeComposerModelShortcut'
 import { useComposerMirroredInputState } from '@/components/AssistantChat/useComposerMirroredInputState'
 import { useActiveSuggestions } from '@/hooks/useActiveSuggestions'
 import { useActiveWord } from '@/hooks/useActiveWord'
@@ -60,10 +59,8 @@ export function useComposerInputController(
         autocompleteRefreshKey,
         onSuggestionAction,
         sessionDriver,
-        model,
         onAbort,
         onPermissionModeChange,
-        onModelChange,
         onSendRequest,
         haptic,
     } = options
@@ -76,13 +73,6 @@ export function useComposerInputController(
         autocompleteSuggestions,
         { clampSelection: true, autoSelectFirst: false, wrapAround: true, refreshKey: autocompleteRefreshKey ?? 0 }
     )
-
-    useClaudeComposerModelShortcut({
-        sessionDriver,
-        model,
-        onModelChange,
-        haptic,
-    })
 
     const handleSuggestionSelect = useCallback(
         (index: number) => {

@@ -60,6 +60,28 @@ describe('runtimeNoticePresentation', () => {
         })
     })
 
+    it('builds failed recovery notice with explicit retry', () => {
+        const retry = vi.fn()
+        const notice = buildRuntimeNotice({
+            banner: { kind: 'failed', retry },
+            isOnline: true,
+            t: createTranslationStub(),
+            localRuntimeUnavailableDescription: null,
+        })
+
+        expect(notice).toMatchObject({
+            id: PERSISTENT_NOTICE_IDS.runtime,
+            tone: 'danger',
+            title: 'runtime.recoveryFailed.title',
+            description: 'runtime.recoveryFailed.message',
+            compact: true,
+        })
+
+        render(<>{notice?.action}</>)
+        fireEvent.click(screen.getByRole('button', { name: 'runtime.recoveryFailed.action' }))
+        expect(retry).toHaveBeenCalledTimes(1)
+    })
+
     it('keeps prepared updates out of persistent runtime notices', () => {
         const notice = buildRuntimeNotice({
             banner: { kind: 'hidden' },

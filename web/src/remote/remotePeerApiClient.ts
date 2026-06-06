@@ -11,6 +11,7 @@ import {
 } from '@/lib/sessionQueryCache'
 import type {
     AgentFlavor,
+    AgentLaunchOptionsResponse,
     AttachmentMetadata,
     CodexCollaborationMode,
     CodexServiceTier,
@@ -18,7 +19,6 @@ import type {
     FileReadResponse,
     FileSearchResponse,
     GitCommandResponse,
-    ListAgentAvailabilityRequest,
     ListDirectoryResponse,
     LocalSessionExportRequest,
     MessagesResponse,
@@ -233,13 +233,13 @@ export function createRemotePeerApiClient(options: RemoteApiOptions): ApiClient 
                 : undefined
             return await withAbortSignal(options.bridge.getRuntimeCapabilities(request), input?.signal)
         },
-        async getRuntimeAgentAvailability(input?: ListAgentAvailabilityRequest & { signal?: AbortSignal }) {
+        async getAgentLaunchOptions(input?: {
+            directory?: string
+            refresh?: boolean
+            signal?: AbortSignal
+        }): Promise<AgentLaunchOptionsResponse> {
             return await withAbortSignal(
-                options.bridge.getRuntimeAgentAvailability({
-                    directory: input?.directory,
-                    forceRefresh: input?.forceRefresh,
-                    drivers: input?.drivers,
-                }),
+                options.bridge.getAgentLaunchOptions({ directory: input?.directory, refresh: input?.refresh }),
                 input?.signal
             )
         },
@@ -264,10 +264,6 @@ export function createRemotePeerApiClient(options: RemoteApiOptions): ApiClient 
                     ? { path, workspaceRoot: browseOptions?.workspaceRoot ?? undefined }
                     : undefined
             )
-        },
-        async resolveAgentLaunchConfig(input: { agent: AgentFlavor; directory: string; signal?: AbortSignal }) {
-            const { signal, ...request } = input
-            return await withAbortSignal(options.bridge.resolveAgentLaunchConfig(request), signal)
         },
         async listRuntimeLocalSessions(
             _path: string,

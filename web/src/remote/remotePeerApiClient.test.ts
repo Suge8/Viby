@@ -217,8 +217,11 @@ describe('createRemotePeerApiClient', () => {
             success: true,
         })
         await expect(api.checkRuntimePathsExists(['/repo'])).resolves.toEqual({ exists: { '/repo': true } })
-        await expect(api.getRuntimeAgentAvailability({ directory: '/repo', forceRefresh: true })).resolves.toEqual({
-            agents: [],
+        await expect(
+            api.getRuntimeCapabilities({ directory: '/repo', forceRefresh: true, depth: 'availability' })
+        ).resolves.toMatchObject({ snapshot: { agents: [] } })
+        await expect(api.getAgentLaunchOptions({ directory: '/repo', refresh: true })).resolves.toEqual({
+            projection: { agents: [], unavailable: {} },
         })
         await expect(api.getAgentConfig()).resolves.toMatchObject({
             agents: [{ driver: 'codex', path: '/home/user/.codex/config.toml', exists: true, values: {} }],
@@ -255,10 +258,13 @@ describe('createRemotePeerApiClient', () => {
         expect(bridge.browseRuntimeDirectory).toHaveBeenCalledWith({ path: '/repo', workspaceRoot: '/workspace' })
         expect(bridge.browseRuntimeDirectory).toHaveBeenCalledWith({ path: undefined, workspaceRoot: '/workspace' })
         expect(bridge.checkRuntimePathsExists).toHaveBeenCalledWith({ paths: ['/repo'] })
-        expect(bridge.getRuntimeAgentAvailability).toHaveBeenCalledWith({
+        expect(bridge.getRuntimeCapabilities).toHaveBeenCalledWith({
             directory: '/repo',
             forceRefresh: true,
+            drivers: undefined,
+            depth: 'availability',
         })
+        expect(bridge.getAgentLaunchOptions).toHaveBeenCalledWith({ directory: '/repo', refresh: true })
         expect(bridge.getAgentConfig).toHaveBeenCalledWith()
         expect(bridge.saveAgentConfig).toHaveBeenCalledWith({ driver: 'codex', values: { 'codex.model': 'gpt-5.4' } })
         expect(bridge.restoreAgentConfig).toHaveBeenCalledWith({ driver: 'codex', backupPath: '/tmp/config.bak' })
@@ -269,10 +275,14 @@ describe('createRemotePeerApiClient', () => {
     it('honors query abort signals on remote runtime reads', async () => {
         const controller = new AbortController()
         const bridge = createApiHarness().bridge
-        vi.mocked(bridge.getRuntimeAgentAvailability).mockReturnValue(new Promise(() => undefined))
+        vi.mocked(bridge.getRuntimeCapabilities).mockReturnValue(new Promise(() => undefined))
         const { api } = createApiHarness(bridge)
 
-        const pending = api.getRuntimeAgentAvailability({ directory: '/repo', signal: controller.signal })
+        const pending = api.getRuntimeCapabilities({
+            directory: '/repo',
+            depth: 'availability',
+            signal: controller.signal,
+        })
         controller.abort(new Error('stale request'))
 
         await expect(pending).rejects.toThrow('stale request')

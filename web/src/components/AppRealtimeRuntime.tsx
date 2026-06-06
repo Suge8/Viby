@@ -1,12 +1,12 @@
-import { useQueryClient } from '@tanstack/react-query'
 import { useLocation, useMatchRoute, useRouter } from '@tanstack/react-router'
 import { type JSX, lazy, Suspense, useCallback, useEffect, useMemo, useRef } from 'react'
 import type { ApiClient } from '@/api/client'
 import { AppInstallPromptLayer } from '@/components/AppInstallPromptLayer'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 import { useRealtimeConnection } from '@/hooks/useRealtimeConnection'
-import { type RealtimeBannerState, useRealtimeFeedback } from '@/hooks/useRealtimeFeedback'
+import { type RealtimeBannerState, useRealtimeRecoveryRuntime } from '@/hooks/useRealtimeRecoveryRuntime'
 import {
+    type AppRecoveryReason,
     consumeBootRecoverySurfaceOwner,
     consumeDiscardedPageRecovery,
     consumePendingAppRecovery,
@@ -18,8 +18,7 @@ import {
 } from '@/lib/appShellPresentation'
 import { type ForegroundPulse, subscribeForegroundPulse } from '@/lib/foregroundPulse'
 import { useNoticeCenter } from '@/lib/notice-center'
-import { runRealtimeRecovery } from '@/lib/realtimeRecovery'
-import { reportWebRuntimeError } from '@/lib/runtimeDiagnostics'
+import { RealtimeRecoveryRuntime } from '@/lib/realtimeRecoveryRuntime'
 import { presentSessionAttentionToast, type SessionAttentionSnapshot } from '@/lib/sessionAttentionToastController'
 import { presentToastEvent } from '@/lib/toastNoticePresentation'
 import { useTranslation } from '@/lib/use-translation'
@@ -45,84 +44,31 @@ type AppRealtimeRuntimeProps = {
     baseUrl: string
 }
 
-const SILENT_STALE_RECOVERY_IDLE_MS = 45_000
-const SILENT_STALE_RECOVERY_CHECK_INTERVAL_MS = 15_000
-const PAGE_RESTORE_RECOVERY_DELAY_MS = 0
-const FOREGROUND_RECOVERY_DEDUP_MS = 1_000
-
-export function AppRealtimeRuntime(props: AppRealtimeRuntimeProps): JSX.Element {
-    const matchRoute = useMatchRoute()
-    const router = useRouter()
-    const pathname = useLocation({ select: (location) => location.pathname })
-    const queryClient = useQueryClient()
-    const { addToast } = useNoticeCenter()
-    const { t } = useTranslation()
-    const sessionMatch = matchRoute({ to: '/sessions/$sessionId' })
-    const selectedSessionId = getSelectedSessionId(sessionMatch)
-    const { banner, handleConnect, handleDisconnect, handleConnectError, announceRecovery, runCatchupSync } =
-        useRealtimeFeedback()
+function usePushSubscriptionMaintenance(api: ApiClient, token: string): string | null {
     const pushPromptedRef = useRef(false)
-    const realtimeConnectedRef = useRef(false)
-    const lastRealtimeSignalAtRef = useRef(Date.now())
-    const lastForegroundRecoveryAtRef = useRef(0)
-    const authoritativeRecoveryInFlightRef = useRef(false)
-    const { isSupported, permission, ensureSubscription, pushEndpoint } = usePushNotifications(props.api)
-    const installPromptSuppressed = shouldSuppressInstallPrompt({
-        isReady: true,
-        isAuthLoading: false,
-        bannerKind: banner.kind,
-        pathname,
-    })
-
-    const scheduleAuthoritativeRecovery = useCallback(
-        (reason: 'socket-reconnect' | 'silent-stale' | 'page-restored') => {
-            if (authoritativeRecoveryInFlightRef.current) {
-                return
-            }
-            authoritativeRecoveryInFlightRef.current = true
-            const shouldRunSilent = reason !== 'socket-reconnect'
-
-            runCatchupSync(
-                runRealtimeRecovery({
-                    queryClient,
-                    api: props.api,
-                    selectedSessionId,
-                })
-                    .catch((error) => {
-                        const message =
-                            reason === 'socket-reconnect'
-                                ? 'Failed to refresh queries after realtime reconnect.'
-                                : reason === 'page-restored'
-                                  ? 'Failed to refresh queries after page restore.'
-                                  : 'Failed to refresh queries after silent realtime stall.'
-                        reportWebRuntimeError(message, error)
-                    })
-                    .finally(() => {
-                        authoritativeRecoveryInFlightRef.current = false
-                        lastRealtimeSignalAtRef.current = Date.now()
-                    }),
-                shouldRunSilent ? { silent: true } : undefined
-            )
-        },
-        [props.api, queryClient, runCatchupSync, selectedSessionId]
-    )
+    const { isSupported, permission, ensureSubscription, pushEndpoint } = usePushNotifications(api)
 
     useEffect(() => {
-        if (!props.token) {
+        if (!token) {
             pushPromptedRef.current = false
             return
         }
-        if (!isSupported || pushPromptedRef.current) {
-            return
-        }
+        if (!isSupported || pushPromptedRef.current) return
 
         pushPromptedRef.current = true
         void (async () => {
-            if (permission === 'granted') {
-                await ensureSubscription()
-            }
+            if (permission === 'granted') await ensureSubscription()
         })()
-    }, [ensureSubscription, isSupported, permission, props.token])
+    }, [ensureSubscription, isSupported, permission, token])
+
+    return pushEndpoint
+}
+
+function usePendingRecoveryAndForeground(
+    announceRecovery: (reason: AppRecoveryReason) => void,
+    runtime: RealtimeRecoveryRuntime
+): void {
+    const router = useRouter()
 
     useEffect(() => {
         const pendingRecovery = consumePendingAppRecovery() ?? consumeDiscardedPageRecovery()
@@ -132,79 +78,29 @@ export function AppRealtimeRuntime(props: AppRealtimeRuntimeProps): JSX.Element 
             if (pendingRecovery.resumeHref && pendingRecovery.resumeHref !== currentHref) {
                 router.history.replace(pendingRecovery.resumeHref, state)
             }
-
-            // Cold recovery already owns the screen through the boot shell.
-            if (!consumeBootRecoverySurfaceOwner()) {
-                announceRecovery(pendingRecovery.reason)
-            }
-        }
-
-        function shouldRecoverForegroundNow(): boolean {
-            const now = Date.now()
-            if (now - lastForegroundRecoveryAtRef.current < FOREGROUND_RECOVERY_DEDUP_MS) {
-                return false
-            }
-
-            lastForegroundRecoveryAtRef.current = now
-            return true
+            if (!consumeBootRecoverySurfaceOwner()) announceRecovery(pendingRecovery.reason)
         }
 
         return subscribeForegroundPulse((pulse: ForegroundPulse) => {
-            if (!shouldRecoverForegroundNow()) {
-                return
-            }
-
-            if (pulse.reason === 'pageshow-restored') {
-                window.setTimeout(() => {
-                    scheduleAuthoritativeRecovery('page-restored')
-                }, PAGE_RESTORE_RECOVERY_DELAY_MS)
-                return
-            }
-
-            if (pulse.reason === 'visible' || pulse.reason === 'resume') {
-                scheduleAuthoritativeRecovery('silent-stale')
-            }
+            void runtime.handleForegroundPulse(pulse)
         })
-    }, [router, scheduleAuthoritativeRecovery])
+    }, [announceRecovery, router, runtime])
+}
 
-    const handleRealtimeConnect = useCallback(
-        (details: RealtimeConnectDetails) => {
-            realtimeConnectedRef.current = true
-            lastRealtimeSignalAtRef.current = Date.now()
-            handleConnect(details)
-
-            if (details.initial) {
-                return
-            }
-
-            // Socket recovery is only a transport optimization; authoritative
-            // session/message alignment always goes through the same recovery owner.
-            scheduleAuthoritativeRecovery('socket-reconnect')
-        },
-        [handleConnect, scheduleAuthoritativeRecovery]
+function useRealtimeConnectionHandlers(runtime: RealtimeRecoveryRuntime, selectedSessionId: string | null) {
+    const { addToast } = useNoticeCenter()
+    const { t } = useTranslation()
+    const onConnect = useCallback(
+        (details: RealtimeConnectDetails) => void runtime.handleSocketConnect(details),
+        [runtime]
     )
+    const onDisconnect = useCallback(() => runtime.handleSocketDisconnect(), [runtime])
+    const onError = useCallback(() => runtime.handleSocketError(), [runtime])
+    const onEvent = useCallback((_event: SyncEvent) => undefined, [])
 
-    const handleRealtimeDisconnect = useCallback(
-        (reason: string) => {
-            realtimeConnectedRef.current = false
-            handleDisconnect(reason)
-        },
-        [handleDisconnect]
-    )
-
-    const handleRealtimeError = useCallback(
-        (error: unknown) => {
-            handleConnectError(error)
-        },
-        [handleConnectError]
-    )
-
-    const handleToast = useCallback(
+    const onToast = useCallback(
         (event: ToastEvent) => {
-            if (event.data.kind === 'ready' || event.data.kind === 'permission-request') {
-                return
-            }
-
+            if (event.data.kind === 'ready' || event.data.kind === 'permission-request') return
             const notice = presentToastEvent(event)
             addToast({
                 title: notice.title,
@@ -216,67 +112,42 @@ export function AppRealtimeRuntime(props: AppRealtimeRuntimeProps): JSX.Element 
         [addToast]
     )
 
-    const handleSessionAttentionChange = useCallback(
+    const onSessionAttentionChange = useCallback(
         (change: { before: SessionAttentionSnapshot | null; after: SessionAttentionSnapshot | null }) => {
-            if (document.visibilityState !== 'visible') {
-                return
-            }
-
-            const notice = presentSessionAttentionToast({
-                ...change,
-                selectedSessionId,
-                t,
-            })
-            if (notice) {
-                addToast(notice)
-            }
+            if (document.visibilityState !== 'visible') return
+            const notice = presentSessionAttentionToast({ ...change, selectedSessionId, t })
+            if (notice) addToast(notice)
         },
         [addToast, selectedSessionId, t]
     )
 
+    return { onConnect, onDisconnect, onError, onEvent, onToast, onSessionAttentionChange }
+}
+
+export function AppRealtimeRuntime(props: AppRealtimeRuntimeProps): JSX.Element {
+    const matchRoute = useMatchRoute()
+    const pathname = useLocation({ select: (location) => location.pathname })
+    const selectedSessionId = getSelectedSessionId(matchRoute({ to: '/sessions/$sessionId' }))
+    const { runtime, banner, announceRecovery } = useRealtimeRecoveryRuntime(props.api, selectedSessionId)
+    const pushEndpoint = usePushSubscriptionMaintenance(props.api, props.token)
     const eventSubscription = useMemo(() => buildRealtimeSubscription(selectedSessionId), [selectedSessionId])
+    const connectionHandlers = useRealtimeConnectionHandlers(runtime, selectedSessionId)
 
-    const handleRealtimeEvent = useCallback((_event: SyncEvent) => {
-        lastRealtimeSignalAtRef.current = Date.now()
-    }, [])
-
-    useEffect(() => {
-        if (!props.token) {
-            return
-        }
-
-        const intervalId = window.setInterval(() => {
-            if (document.visibilityState !== 'visible') {
-                return
-            }
-            if (!realtimeConnectedRef.current || authoritativeRecoveryInFlightRef.current) {
-                return
-            }
-            if (Date.now() - lastRealtimeSignalAtRef.current < SILENT_STALE_RECOVERY_IDLE_MS) {
-                return
-            }
-
-            lastRealtimeSignalAtRef.current = Date.now()
-            scheduleAuthoritativeRecovery('silent-stale')
-        }, SILENT_STALE_RECOVERY_CHECK_INTERVAL_MS)
-
-        return () => {
-            window.clearInterval(intervalId)
-        }
-    }, [props.token, scheduleAuthoritativeRecovery])
-
+    usePendingRecoveryAndForeground(announceRecovery, runtime)
     useRealtimeConnection({
         enabled: true,
         token: props.token,
         baseUrl: props.baseUrl,
         subscription: eventSubscription,
         pushEndpoint,
-        onConnect: handleRealtimeConnect,
-        onDisconnect: handleRealtimeDisconnect,
-        onError: handleRealtimeError,
-        onEvent: handleRealtimeEvent,
-        onToast: handleToast,
-        onSessionAttentionChange: handleSessionAttentionChange,
+        ...connectionHandlers,
+    })
+
+    const installPromptSuppressed = shouldSuppressInstallPrompt({
+        isReady: true,
+        isAuthLoading: false,
+        bannerKind: banner.kind,
+        pathname,
     })
 
     return (

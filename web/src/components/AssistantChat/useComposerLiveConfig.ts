@@ -86,7 +86,7 @@ export function useComposerLiveConfig(options: UseComposerLiveConfigOptions): re
         permissionMode = 'default',
         collaborationMode = 'default',
         model = null,
-        piModelCapabilities = null,
+        modelCapabilities = null,
         availableReasoningEfforts = null,
         modelReasoningEffort = null,
         codexServiceTier = null,
@@ -107,11 +107,11 @@ export function useComposerLiveConfig(options: UseComposerLiveConfigOptions): re
     const supportsModelSelection = useMemo(() => supportsLiveModelSelectionForDriver(sessionDriver), [sessionDriver])
     const modelOptions = useMemo(() => {
         if (supportsModelSelection) {
-            return getLocalizedModelOptions(sessionDriver, model, piModelCapabilities, t)
+            return getLocalizedModelOptions(sessionDriver, model, modelCapabilities, t)
         }
 
         return []
-    }, [model, piModelCapabilities, sessionDriver, supportsModelSelection, t])
+    }, [model, modelCapabilities, sessionDriver, supportsModelSelection, t])
     const supportsReasoningEffort = useMemo(
         () => supportsLiveModelReasoningEffortForDriver(sessionDriver),
         [sessionDriver]

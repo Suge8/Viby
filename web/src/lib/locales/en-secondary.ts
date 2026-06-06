@@ -224,6 +224,9 @@ export default {
     'offline.title': 'Offline',
     'runtime.recovering.title': 'Reconnecting',
     'runtime.recovering.message': 'Syncing the latest state.',
+    'runtime.recoveryFailed.title': 'Reconnect failed',
+    'runtime.recoveryFailed.message': 'Viby could not sync the latest state.',
+    'runtime.recoveryFailed.action': 'Retry',
     'runtime.unavailable.title': 'Local runtime unavailable',
     'runtime.unavailable.message':
         'This hub is reachable, but its single local runtime is not ready yet. Creating or recovering sessions stays blocked until it reconnects.',

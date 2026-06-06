@@ -217,7 +217,7 @@ describe('useSessionLiveConfigControls', () => {
             { wrapper: createWrapper(queryClient) }
         )
 
-        expect(result.current.composerConfig.piModelCapabilities).toEqual([
+        expect(result.current.composerConfig.modelCapabilities).toEqual([
             {
                 id: 'openai/gpt-5.4',
                 label: 'GPT-5.4',

@@ -1,11 +1,9 @@
 import type {
-    AgentAvailabilityResponse,
     AgentConfigResponse,
     AgentFlavor,
-    AgentLaunchConfigResponse,
+    AgentLaunchOptionsResponse,
     CodexCollaborationMode,
     CodexServiceTier,
-    ListAgentAvailabilityRequest,
     LocalSessionExportRequest,
     ModelReasoningEffort,
     OpenAgentConfigRequest,
@@ -83,20 +81,17 @@ export async function getRuntimeCapabilities(
     )
 }
 
-export async function getRuntimeAgentAvailability(
+export async function getAgentLaunchOptions(
     request: ApiClientRequest,
-    input?: ListAgentAvailabilityRequest & { signal?: AbortSignal }
-): Promise<AgentAvailabilityResponse> {
+    input?: { directory?: string; refresh?: boolean; signal?: AbortSignal }
+): Promise<AgentLaunchOptionsResponse> {
     const params = new URLSearchParams()
     if (input?.directory) params.set('directory', input.directory)
-    if (input?.forceRefresh) params.set('forceRefresh', 'true')
-    if (input?.drivers?.length) params.set('drivers', input.drivers.join(','))
+    if (input?.refresh) params.set('refresh', '1')
     const queryString = params.toString()
-    return await request<AgentAvailabilityResponse>(
-        `/api/runtime/agent-availability${queryString ? `?${queryString}` : ''}`,
-        {
-            signal: input?.signal,
-        }
+    return await request<AgentLaunchOptionsResponse>(
+        `/api/runtime/agent-launch-options${queryString ? `?${queryString}` : ''}`,
+        { signal: input?.signal }
     )
 }
 
@@ -167,22 +162,6 @@ export async function browseRuntimeDirectory(
     return await request<RuntimeBrowseDirectoryResponse>(
         `/api/runtime/directory${queryString ? `?${queryString}` : ''}`
     )
-}
-
-export async function resolveAgentLaunchConfig(
-    request: ApiClientRequest,
-    input: {
-        agent: AgentFlavor
-        directory: string
-        signal?: AbortSignal
-    }
-): Promise<AgentLaunchConfigResponse> {
-    const { signal, ...body } = input
-    return await request<AgentLaunchConfigResponse>('/api/runtime/agent-launch-config', {
-        method: 'POST',
-        body: JSON.stringify(body),
-        signal,
-    })
 }
 
 export async function listRuntimeLocalSessions(

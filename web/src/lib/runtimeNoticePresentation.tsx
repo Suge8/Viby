@@ -37,6 +37,24 @@ function buildRuntimeRecoveringNotice(t: TranslationFn): Notice {
     })
 }
 
+function buildRuntimeRecoveryFailedNotice(
+    banner: Extract<RealtimeBannerState, { kind: 'failed' }>,
+    t: TranslationFn
+): Notice {
+    return buildCompactPersistentNotice({
+        id: PERSISTENT_NOTICE_IDS.runtime,
+        tone: 'danger',
+        icon: buildNoticeIcon('recovering'),
+        title: t('runtime.recoveryFailed.title'),
+        description: t('runtime.recoveryFailed.message'),
+        action: (
+            <Button type="button" size="sm" variant="ghost" onClick={banner.retry}>
+                {t('runtime.recoveryFailed.action')}
+            </Button>
+        ),
+    })
+}
+
 export function buildOfflineNotice(isOnline: boolean, t: TranslationFn): Notice | null {
     if (isOnline) {
         return null
@@ -68,6 +86,10 @@ export function buildRuntimeNotice(options: RuntimeNoticeOptions): Notice | null
 
     if (banner.kind === 'busy' || banner.kind === 'restoring') {
         return buildRuntimeRecoveringNotice(t)
+    }
+
+    if (banner.kind === 'failed') {
+        return buildRuntimeRecoveryFailedNotice(banner, t)
     }
 
     return null

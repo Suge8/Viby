@@ -9,7 +9,7 @@ const realtimeConnectionHarness = vi.hoisted(() => ({
 
 const runRealtimeRecoveryMock = vi.hoisted(() => vi.fn(async (_options: unknown) => undefined))
 const addToastMock = vi.hoisted(() => vi.fn())
-const catchupSyncCalls = vi.hoisted(() => [] as Array<{ silent?: boolean }>)
+const floatingNoticeBanners = vi.hoisted(() => [] as unknown[])
 
 vi.mock('@tanstack/react-query', () => ({
     useQueryClient: () => ({
@@ -47,20 +47,6 @@ vi.mock('@/hooks/useRealtimeConnection', () => ({
     },
 }))
 
-vi.mock('@/hooks/useRealtimeFeedback', () => ({
-    useRealtimeFeedback: () => ({
-        banner: { kind: 'hidden' },
-        handleConnect: vi.fn(),
-        handleDisconnect: vi.fn(),
-        handleConnectError: vi.fn(),
-        announceRecovery: vi.fn(),
-        runCatchupSync: (task: Promise<unknown>, options?: { silent?: boolean }) => {
-            catchupSyncCalls.push(options ?? {})
-            void task
-        },
-    }),
-}))
-
 vi.mock('@/lib/realtimeRecovery', () => ({
     runRealtimeRecovery: (options: unknown) => runRealtimeRecoveryMock(options),
 }))
@@ -78,7 +64,10 @@ vi.mock('@/lib/use-translation', () => ({
 }))
 
 vi.mock('@/components/AppFloatingNoticeLayer', () => ({
-    AppFloatingNoticeLayer: () => null,
+    AppFloatingNoticeLayer: (props: { banner: unknown }) => {
+        floatingNoticeBanners.push(props.banner)
+        return null
+    },
 }))
 
 describe('AppRealtimeRuntime', () => {
@@ -87,7 +76,7 @@ describe('AppRealtimeRuntime', () => {
         realtimeConnectionHarness.options = null
         runRealtimeRecoveryMock.mockReset()
         addToastMock.mockReset()
-        catchupSyncCalls.length = 0
+        floatingNoticeBanners.length = 0
         Object.defineProperty(document, 'visibilityState', {
             configurable: true,
             value: 'visible',
@@ -99,10 +88,8 @@ describe('AppRealtimeRuntime', () => {
         resetForegroundPulseForTests()
     })
 
-    it('runs one authoritative recovery after realtime stays silently stale', async () => {
+    it('does not run silent stale recovery', async () => {
         render(<AppRealtimeRuntime api={{} as never} token="token" baseUrl="https://app.viby.run" />)
-
-        expect(realtimeConnectionHarness.options).not.toBeNull()
 
         act(() => {
             realtimeConnectionHarness.options?.onConnect?.({
@@ -113,33 +100,38 @@ describe('AppRealtimeRuntime', () => {
         })
 
         await act(async () => {
-            vi.advanceTimersByTime(44_000)
-        })
-
-        expect(runRealtimeRecoveryMock).not.toHaveBeenCalled()
-
-        await act(async () => {
-            vi.advanceTimersByTime(1_000)
+            vi.advanceTimersByTime(60_000)
             await Promise.resolve()
         })
 
-        expect(runRealtimeRecoveryMock.mock.calls.length).toBeGreaterThanOrEqual(1)
-        expect(runRealtimeRecoveryMock.mock.calls.at(-1)?.[0]).toMatchObject({
-            api: {},
-            selectedSessionId: 'session-1',
-        })
-        expect(catchupSyncCalls.at(-1)).toEqual({ silent: true })
+        expect(runRealtimeRecoveryMock).not.toHaveBeenCalled()
     })
 
-    it('runs authoritative recovery as soon as the page becomes visible again', async () => {
+    it('forwards socket reconnect into authoritative recovery', async () => {
+        render(<AppRealtimeRuntime api={{} as never} token="token" baseUrl="https://app.viby.run" />)
+
+        await act(async () => {
+            await realtimeConnectionHarness.options?.onConnect?.({
+                initial: false,
+                recovered: true,
+                transport: 'websocket',
+            })
+        })
+
+        expect(runRealtimeRecoveryMock).toHaveBeenCalledWith(
+            expect.objectContaining({
+                api: {},
+                selectedSessionId: 'session-1',
+            })
+        )
+    })
+
+    it('forwards foreground visible/resume through runtime dedupe', async () => {
         Object.defineProperty(document, 'visibilityState', {
             configurable: true,
             value: 'hidden',
         })
-
         render(<AppRealtimeRuntime api={{} as never} token="token" baseUrl="https://app.viby.run" />)
-
-        expect(runRealtimeRecoveryMock).not.toHaveBeenCalled()
 
         Object.defineProperty(document, 'visibilityState', {
             configurable: true,
@@ -148,32 +140,45 @@ describe('AppRealtimeRuntime', () => {
 
         await act(async () => {
             document.dispatchEvent(new Event('visibilitychange'))
-            await Promise.resolve()
-        })
-
-        expect(runRealtimeRecoveryMock.mock.calls.length).toBeGreaterThanOrEqual(1)
-        expect(runRealtimeRecoveryMock.mock.calls.at(-1)?.[0]).toMatchObject({
-            api: {},
-            selectedSessionId: 'session-1',
-        })
-        expect(catchupSyncCalls.at(-1)).toEqual({ silent: true })
-    })
-
-    it('runs authoritative recovery when a visible page resumes from the browser lifecycle owner', async () => {
-        render(<AppRealtimeRuntime api={{} as never} token="token" baseUrl="https://app.viby.run" />)
-
-        expect(runRealtimeRecoveryMock).not.toHaveBeenCalled()
-
-        await act(async () => {
             document.dispatchEvent(new Event('resume'))
             await Promise.resolve()
         })
 
-        expect(runRealtimeRecoveryMock.mock.calls.length).toBeGreaterThanOrEqual(1)
-        expect(runRealtimeRecoveryMock.mock.calls.at(-1)?.[0]).toMatchObject({
-            api: {},
-            selectedSessionId: 'session-1',
+        expect(runRealtimeRecoveryMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('forwards pageshow-restored into recovery', async () => {
+        render(<AppRealtimeRuntime api={{} as never} token="token" baseUrl="https://app.viby.run" />)
+        const event = new Event('pageshow')
+        Object.defineProperty(event, 'persisted', { value: true })
+
+        await act(async () => {
+            window.dispatchEvent(event)
+            await Promise.resolve()
         })
-        expect(catchupSyncCalls.at(-1)).toEqual({ silent: true })
+
+        expect(runRealtimeRecoveryMock).toHaveBeenCalledWith(
+            expect.objectContaining({
+                api: {},
+                selectedSessionId: 'session-1',
+            })
+        )
+    })
+
+    it('passes runtime state into notice presentation', async () => {
+        render(<AppRealtimeRuntime api={{} as never} token="token" baseUrl="https://app.viby.run" />)
+        await act(async () => {
+            await Promise.resolve()
+        })
+
+        act(() => {
+            realtimeConnectionHarness.options?.onConnect?.({ initial: true, recovered: false, transport: 'websocket' })
+            realtimeConnectionHarness.options?.onDisconnect?.('transport close')
+        })
+        await act(async () => {
+            await Promise.resolve()
+        })
+
+        expect(floatingNoticeBanners).toContainEqual({ kind: 'busy' })
     })
 })

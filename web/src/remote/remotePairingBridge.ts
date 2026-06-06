@@ -1,7 +1,6 @@
 import {
-    PairingPeerAgentAvailabilityResultSchema,
     PairingPeerAgentConfigResultSchema,
-    PairingPeerAgentLaunchConfigResultSchema,
+    PairingPeerAgentLaunchOptionsResultSchema,
     PairingPeerBrowseDirectoryResultSchema,
     PairingPeerCommandCapabilitiesResultSchema,
     PairingPeerDeleteUploadResultSchema,
@@ -139,10 +138,10 @@ export function createRemotePeerBridge(options: {
                 createRemotePeerRequest('runtime.capabilities', params),
                 PairingPeerRuntimeCapabilityResultSchema.parse
             ),
-        getRuntimeAgentAvailability: (params) =>
+        getAgentLaunchOptions: (params) =>
             options.requestPeer(
-                createRemotePeerRequest('runtime.agent-availability', params),
-                PairingPeerAgentAvailabilityResultSchema.parse
+                createRemotePeerRequest('runtime.agent-launch-options', params),
+                PairingPeerAgentLaunchOptionsResultSchema.parse
             ),
         getAgentConfig: () =>
             options.requestPeer(
@@ -173,11 +172,6 @@ export function createRemotePeerBridge(options: {
             options.requestPeer(
                 createRemotePeerRequest('runtime.browse-directory', params),
                 PairingPeerBrowseDirectoryResultSchema.parse
-            ),
-        resolveAgentLaunchConfig: (params) =>
-            options.requestPeer(
-                createRemotePeerRequest('runtime.agent-launch-config', params),
-                PairingPeerAgentLaunchConfigResultSchema.parse
             ),
         listRuntimeLocalSessions: (params) =>
             options.requestPeer(

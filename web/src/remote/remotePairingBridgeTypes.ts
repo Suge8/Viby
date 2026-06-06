@@ -1,10 +1,8 @@
 import type {
-    ListAgentAvailabilityRequest,
     LocalSessionExportRequest,
     OpenAgentConfigRequest,
-    PairingPeerAgentAvailabilityResult,
     PairingPeerAgentConfigResult,
-    PairingPeerAgentLaunchConfigResult,
+    PairingPeerAgentLaunchOptionsResult,
     PairingPeerApprovePermissionParams,
     PairingPeerBrowseDirectoryParams,
     PairingPeerBrowseDirectoryResult,
@@ -57,8 +55,8 @@ import type {
     PairingPeerSpawnSessionResult,
     PairingPeerTerminalEventPayload,
     PairingPeerUploadResult,
-    ResolveAgentLaunchConfigRequest,
     RestoreAgentConfigRequest,
+    RuntimeAgentLaunchOptionsRequest,
     RuntimeCapabilityRequest,
     SaveAgentConfigRequest,
 } from '@viby/protocol'
@@ -91,14 +89,13 @@ export type RemotePeerBridge = {
     denyPermission: (params: PairingPeerDenyPermissionParams) => Promise<void>
     getRuntime: () => Promise<PairingPeerRuntimeSnapshotResult>
     getRuntimeCapabilities: (params?: RuntimeCapabilityRequest) => Promise<PairingPeerRuntimeCapabilityResult>
-    getRuntimeAgentAvailability: (params?: ListAgentAvailabilityRequest) => Promise<PairingPeerAgentAvailabilityResult>
+    getAgentLaunchOptions: (params?: RuntimeAgentLaunchOptionsRequest) => Promise<PairingPeerAgentLaunchOptionsResult>
     getAgentConfig: () => Promise<PairingPeerAgentConfigResult>
     saveAgentConfig: (params: SaveAgentConfigRequest) => Promise<PairingPeerSaveAgentConfigResult>
     restoreAgentConfig: (params: RestoreAgentConfigRequest) => Promise<PairingPeerRestoreAgentConfigResult>
     openAgentConfig: (params: OpenAgentConfigRequest) => Promise<PairingPeerOpenAgentConfigResult>
     checkRuntimePathsExists: (params: PairingPeerPathsExistParams) => Promise<PairingPeerPathsExistResult>
     browseRuntimeDirectory: (params?: PairingPeerBrowseDirectoryParams) => Promise<PairingPeerBrowseDirectoryResult>
-    resolveAgentLaunchConfig: (params: ResolveAgentLaunchConfigRequest) => Promise<PairingPeerAgentLaunchConfigResult>
     listRuntimeLocalSessions: (
         params: Pick<LocalSessionExportRequest, 'path' | 'driver'>
     ) => Promise<PairingPeerRuntimeLocalSessionsResult>

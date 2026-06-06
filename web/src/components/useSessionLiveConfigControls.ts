@@ -203,7 +203,7 @@ export function useSessionLiveConfigControls(options: SessionConfigMutationOptio
             permissionMode: session.permissionMode,
             collaborationMode: liveConfigSupport.canChangeCollaborationMode ? session.collaborationMode : undefined,
             model: session.model,
-            piModelCapabilities: sessionDriver === 'pi' ? piModelCapabilities : undefined,
+            modelCapabilities: sessionDriver === 'pi' ? piModelCapabilities : undefined,
             availableReasoningEfforts:
                 sessionDriver === 'pi' ? (activePiCapability?.supportedThinkingLevels ?? null) : undefined,
             modelReasoningEffort: liveConfigSupport.canChangeModelReasoningEffort

@@ -1,13 +1,7 @@
-import type { SameSessionSwitchTargetDriver, SessionDriver } from '@viby/protocol'
+import type { AgentModelCapability, SameSessionSwitchTargetDriver, SessionDriver } from '@viby/protocol'
 import type { ComposerEnterBehavior } from '@/components/AssistantChat/composerEnterBehavior'
 import type { Suggestion } from '@/hooks/useActiveSuggestions'
-import type {
-    CodexCollaborationMode,
-    CodexServiceTier,
-    ModelReasoningEffort,
-    PermissionMode,
-    PiModelCapability,
-} from '@/types/api'
+import type { CodexCollaborationMode, CodexServiceTier, ModelReasoningEffort, PermissionMode } from '@/types/api'
 
 export type ComposerPanelId = 'controls'
 
@@ -15,7 +9,7 @@ export type ComposerConfigState = {
     permissionMode?: PermissionMode
     collaborationMode?: CodexCollaborationMode
     model?: string | null
-    piModelCapabilities?: PiModelCapability[] | null
+    modelCapabilities?: AgentModelCapability[] | null
     availableReasoningEfforts?: ModelReasoningEffort[] | null
     modelReasoningEffort?: ModelReasoningEffort | null
     codexServiceTier?: CodexServiceTier | null
