@@ -175,7 +175,8 @@ describe('LocalHubPairingClient', () => {
             fetchImpl: fetchImpl as typeof fetch,
         })
 
-        await expect(client.browseRuntimeDirectory('/repo')).resolves.toMatchObject({ success: true })
+        await expect(client.browseRuntimeDirectory('/repo', '/workspace')).resolves.toMatchObject({ success: true })
+        await expect(client.browseRuntimeDirectory(undefined, '/workspace')).resolves.toMatchObject({ success: true })
         await expect(client.checkRuntimePathsExists(['/repo'])).resolves.toEqual({ exists: { '/repo': true } })
         await expect(client.getAgentConfig()).resolves.toMatchObject({ agents: [{ driver: 'codex' }] })
         await expect(
@@ -207,7 +208,12 @@ describe('LocalHubPairingClient', () => {
             session: { id: 'session-1' },
         })
 
-        expect(calls.map((call) => call.url)).toContain('http://127.0.0.1:37173/api/runtime/directory?path=%2Frepo')
+        expect(calls.map((call) => call.url)).toContain(
+            'http://127.0.0.1:37173/api/runtime/directory?path=%2Frepo&workspaceRoot=%2Fworkspace'
+        )
+        expect(calls.map((call) => call.url)).toContain(
+            'http://127.0.0.1:37173/api/runtime/directory?workspaceRoot=%2Fworkspace'
+        )
         expect(calls.find((call) => call.url.endsWith('/api/runtime/paths/exists'))?.body).toBe(
             JSON.stringify({ paths: ['/repo'] })
         )

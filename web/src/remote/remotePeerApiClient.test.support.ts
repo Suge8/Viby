@@ -146,6 +146,19 @@ export function createBridge(overrides: Partial<RemotePeerBridge> = {}): RemoteP
         getCommandCapabilities: vi.fn(async () => ({ success: true, revision: 'remote', capabilities: [] })),
         approvePermission: vi.fn(async () => undefined),
         denyPermission: vi.fn(async () => undefined),
+        getRuntime: vi.fn(async () => ({
+            runtime: {
+                id: 'machine-1',
+                active: true,
+                metadata: {
+                    host: 'desktop',
+                    platform: 'darwin',
+                    appCoreVersion: 'test',
+                    displayName: 'Viby Desktop',
+                    capabilities: ['browse-directory' as const],
+                },
+            },
+        })),
         getRuntimeCapabilities: vi.fn(async () => ({
             snapshot: {
                 machineId: 'remote-machine',

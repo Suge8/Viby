@@ -8,10 +8,13 @@ describe('createRemotePeerApiClient', () => {
         removeMessageWindow('session-1')
     })
 
-    it('overwrites stale local runtime cache with the synthetic remote runtime', () => {
-        const { queryClient } = createApiHarness()
+    it('writes the desktop runtime snapshot after the remote runtime read', async () => {
+        const { api, queryClient } = createApiHarness()
+
+        expect(queryClient.getQueryData(queryKeys.runtime)).toBeUndefined()
+        await expect(api.getRuntime()).resolves.toMatchObject({ runtime: { id: 'machine-1', active: true } })
         expect(queryClient.getQueryData(queryKeys.runtime)).toMatchObject({
-            runtime: { id: 'remote-p2p', active: true },
+            runtime: { id: 'machine-1', active: true },
         })
     })
 
@@ -207,7 +210,12 @@ describe('createRemotePeerApiClient', () => {
     it('delegates runtime project selection to the desktop bridge', async () => {
         const { api, bridge } = createApiHarness()
 
-        await expect(api.browseRuntimeDirectory('/repo')).resolves.toMatchObject({ success: true })
+        await expect(api.browseRuntimeDirectory('/repo', { workspaceRoot: '/workspace' })).resolves.toMatchObject({
+            success: true,
+        })
+        await expect(api.browseRuntimeDirectory(undefined, { workspaceRoot: '/workspace' })).resolves.toMatchObject({
+            success: true,
+        })
         await expect(api.checkRuntimePathsExists(['/repo'])).resolves.toEqual({ exists: { '/repo': true } })
         await expect(api.getRuntimeAgentAvailability({ directory: '/repo', forceRefresh: true })).resolves.toEqual({
             agents: [],
@@ -244,7 +252,8 @@ describe('createRemotePeerApiClient', () => {
             session: { id: 'session-2' },
         })
 
-        expect(bridge.browseRuntimeDirectory).toHaveBeenCalledWith({ path: '/repo' })
+        expect(bridge.browseRuntimeDirectory).toHaveBeenCalledWith({ path: '/repo', workspaceRoot: '/workspace' })
+        expect(bridge.browseRuntimeDirectory).toHaveBeenCalledWith({ path: undefined, workspaceRoot: '/workspace' })
         expect(bridge.checkRuntimePathsExists).toHaveBeenCalledWith({ paths: ['/repo'] })
         expect(bridge.getRuntimeAgentAvailability).toHaveBeenCalledWith({
             directory: '/repo',
@@ -294,9 +303,9 @@ describe('createRemotePeerApiClient', () => {
         await api.subscribePushNotifications({ endpoint: 'https://push.example', keys: { p256dh: 'p', auth: 'a' } })
         expect(await api.getRuntime()).toMatchObject({
             runtime: {
-                id: 'remote-p2p',
+                id: 'machine-1',
                 active: true,
-                metadata: { capabilities: ['browse-directory'] },
+                metadata: { host: 'desktop', capabilities: ['browse-directory'] },
             },
         })
         expect(bridge.closeSession).toHaveBeenCalledWith({ sessionId: 'session-1' })

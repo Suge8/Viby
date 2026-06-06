@@ -43,6 +43,7 @@ import {
     PairingPeerResumeSessionResultSchema,
     PairingPeerRuntimeCapabilityResultSchema,
     PairingPeerRuntimeLocalSessionsResultSchema,
+    PairingPeerRuntimeSnapshotResultSchema,
     PairingPeerSaveAgentConfigResultSchema,
     PairingPeerSendMessageResultSchema,
     PairingPeerSessionResultSchema,
@@ -251,6 +252,11 @@ export async function executePairingPeerRequest(
             case 'permission.deny':
                 await client.denyPermission(request.params.sessionId, request.params.requestId, request.params.decision)
                 return successResponse(request.id, PairingPeerOkResultSchema.parse({ ok: true }))
+            case 'runtime.snapshot':
+                return successResponse(
+                    request.id,
+                    PairingPeerRuntimeSnapshotResultSchema.parse(await client.getRuntime())
+                )
             case 'runtime.capabilities': {
                 const result: PairingPeerRuntimeCapabilityResult = PairingPeerRuntimeCapabilityResultSchema.parse(
                     await client.getRuntimeCapabilities(request.params ?? { depth: 'availability' })
@@ -295,7 +301,7 @@ export async function executePairingPeerRequest(
             }
             case 'runtime.browse-directory': {
                 const result: PairingPeerBrowseDirectoryResult = PairingPeerBrowseDirectoryResultSchema.parse(
-                    await client.browseRuntimeDirectory(request.params?.path)
+                    await client.browseRuntimeDirectory(request.params?.path, request.params?.workspaceRoot)
                 )
                 return successResponse(request.id, result)
             }

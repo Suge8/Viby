@@ -1,5 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query'
-import { MACHINE_BROWSE_DIRECTORY_CAPABILITY, type PairingPeerSessionHeadResult } from '@viby/protocol'
+import type { PairingPeerSessionHeadResult } from '@viby/protocol'
 import type { ApiClient } from '@/api/client'
 import { type ApprovePermissionOptions, normalizeApprovePermissionBody } from '@/api/clientSessionSupport'
 import { withAbortSignal } from '@/api/clientShared'
@@ -60,27 +60,9 @@ function isSessionViewSnapshot(
     return 'latestWindow' in value
 }
 
-function buildRemoteRuntimeResponse(): RuntimeResponse {
-    return {
-        runtime: {
-            id: 'remote-p2p',
-            active: true,
-            metadata: {
-                host: 'desktop',
-                platform: globalThis.navigator?.platform || 'web',
-                appCoreVersion: 'remote',
-                displayName: 'Viby Desktop',
-                capabilities: [MACHINE_BROWSE_DIRECTORY_CAPABILITY],
-            },
-        },
-    }
-}
-
 export function createRemotePeerApiClient(options: RemoteApiOptions): ApiClient {
     const latestViews = new Map<string, SessionViewSnapshot>()
     const sessionHeads = new Map<string, PairingPeerSessionHeadResult>()
-    const remoteRuntime = buildRemoteRuntimeResponse()
-    options.queryClient.setQueryData(queryKeys.runtime, remoteRuntime)
 
     function rememberView(view: SessionViewSnapshot): SessionViewSnapshot {
         latestViews.set(view.session.id, view)
@@ -233,7 +215,10 @@ export function createRemotePeerApiClient(options: RemoteApiOptions): ApiClient 
             return await options.bridge.getCommandCapabilities({ sessionId: _sessionId, revision })
         },
         async getRuntime(): Promise<RuntimeResponse> {
-            return remoteRuntime
+            const response = options.bridge.getRuntime() as Promise<RuntimeResponse>
+            const runtime = await response
+            options.queryClient.setQueryData(queryKeys.runtime, runtime)
+            return runtime
         },
         async getRuntimeCapabilities(
             input?: RuntimeCapabilityRequest & { signal?: AbortSignal }

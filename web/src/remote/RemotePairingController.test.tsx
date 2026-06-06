@@ -231,7 +231,7 @@ describe('RemotePairingController', () => {
 
     it('shows the connecting splash on first connect and reveals the workspace only after the peer channel is ready', async () => {
         // First-connect path: until the bridge transitions to ready, the
-        // controller renders the connecting splash. The legacy implementation
+        // controller renders the connecting splash. The old implementation
         // exposed an empty `RemotePairingReadyShell` skeleton during this
         // window, which presented as a black page + floating link badge to
         // freshly-scanning phones.
@@ -251,7 +251,7 @@ describe('RemotePairingController', () => {
 
     it('does not clear the remote runtime cache after transport readiness', async () => {
         const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-        const runtimeResponse = { runtime: { id: 'remote-p2p', active: true } }
+        const runtimeResponse = { runtime: { id: 'machine-1', active: true } }
         queryClient.setQueryData(queryKeys.runtime, runtimeResponse)
         renderController(queryClient)
         await screen.findByTestId('ready-shell')

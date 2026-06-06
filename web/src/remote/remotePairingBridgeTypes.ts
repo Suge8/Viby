@@ -46,6 +46,7 @@ import type {
     PairingPeerResumeSessionResult,
     PairingPeerRuntimeCapabilityResult,
     PairingPeerRuntimeLocalSessionsResult,
+    PairingPeerRuntimeSnapshotResult,
     PairingPeerSaveAgentConfigResult,
     PairingPeerSearchFilesParams,
     PairingPeerSendMessageParams,
@@ -88,6 +89,7 @@ export type RemotePeerBridge = {
     ) => Promise<PairingPeerCommandCapabilitiesResult>
     approvePermission: (params: PairingPeerApprovePermissionParams) => Promise<void>
     denyPermission: (params: PairingPeerDenyPermissionParams) => Promise<void>
+    getRuntime: () => Promise<PairingPeerRuntimeSnapshotResult>
     getRuntimeCapabilities: (params?: RuntimeCapabilityRequest) => Promise<PairingPeerRuntimeCapabilityResult>
     getRuntimeAgentAvailability: (params?: ListAgentAvailabilityRequest) => Promise<PairingPeerAgentAvailabilityResult>
     getAgentConfig: () => Promise<PairingPeerAgentConfigResult>

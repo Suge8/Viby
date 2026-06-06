@@ -11,6 +11,7 @@ import {
 } from '../agentConfig'
 import { ResolveAgentLaunchConfigRequestSchema, ResolveAgentLaunchConfigResponseSchema } from '../agentLaunchConfig'
 import { normalizeProtocolVersion } from '../buildCompatibility'
+import { MACHINE_CAPABILITIES } from '../machineCapabilities'
 import { MachineDirectoryResponseSchema } from '../machineDirectory'
 import { RuntimeCapabilityRequestSchema, RuntimeCapabilityResponseSchema } from '../runtimeCapability'
 import {
@@ -115,6 +116,25 @@ export type PairingPeerPathsExistResult = z.infer<typeof PairingPeerPathsExistRe
 export const PairingPeerBrowseDirectoryResultSchema = MachineDirectoryResponseSchema
 export type PairingPeerBrowseDirectoryResult = z.infer<typeof PairingPeerBrowseDirectoryResultSchema>
 
+const PairingPeerRuntimeMachineSchema = z.object({
+    id: z.string().min(1),
+    active: z.boolean(),
+    metadata: z
+        .object({
+            host: z.string(),
+            platform: z.string(),
+            appCoreVersion: z.string(),
+            displayName: z.string().optional(),
+            capabilities: z.array(z.enum(MACHINE_CAPABILITIES)).optional(),
+        })
+        .passthrough()
+        .nullable(),
+    runtimeState: z.unknown().nullable().optional(),
+})
+
+export const PairingPeerRuntimeSnapshotResultSchema = z.object({ runtime: PairingPeerRuntimeMachineSchema.nullable() })
+export type PairingPeerRuntimeSnapshotResult = z.infer<typeof PairingPeerRuntimeSnapshotResultSchema>
+
 export const PairingPeerRuntimeCapabilityResultSchema = RuntimeCapabilityResponseSchema
 export type PairingPeerRuntimeCapabilityResult = z.infer<typeof PairingPeerRuntimeCapabilityResultSchema>
 
@@ -147,6 +167,10 @@ export { PairingPeerRequestIdSchema }
 export const PairingPeerSendMessageRequestSchema = createPairingPeerRequestSchema(
     'session.send',
     PairingPeerSendMessageParamsSchema
+)
+export const PairingPeerRuntimeSnapshotRequestSchema = createOptionalPairingPeerRequestSchema(
+    'runtime.snapshot',
+    z.object({})
 )
 export const PairingPeerRuntimeCapabilityRequestSchema = createOptionalPairingPeerRequestSchema(
     'runtime.capabilities',
@@ -211,6 +235,7 @@ const PairingPeerRequestSchemas = [
     PairingPeerCommandCapabilitiesRequestSchema,
     PairingPeerApprovePermissionRequestSchema,
     PairingPeerDenyPermissionRequestSchema,
+    PairingPeerRuntimeSnapshotRequestSchema,
     PairingPeerRuntimeCapabilityRequestSchema,
     PairingPeerAgentAvailabilityRequestSchema,
     PairingPeerAgentConfigRequestSchema,

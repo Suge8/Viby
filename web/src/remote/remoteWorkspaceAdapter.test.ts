@@ -31,7 +31,8 @@ describe('createRemoteWorkspaceAdapter', () => {
         expect('bridge' in workspace.runtime).toBe(false)
         expect('getSessionView' in workspace.runtime.noticeApi).toBe(false)
         await expect(workspace.runtime.getTransportStats()).resolves.toBeDefined()
-        await expect(workspace.runtime.noticeApi.getRuntime()).resolves.toBeDefined()
+        await expect(workspace.runtime.noticeApi.getRuntime()).resolves.toMatchObject({ runtime: { id: 'machine-1' } })
+        expect(bridge.getRuntime).toHaveBeenCalled()
     })
 
     it('provides a wrapped app api instead of the remote peer client object', () => {

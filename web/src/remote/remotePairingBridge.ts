@@ -21,6 +21,7 @@ import {
     PairingPeerResumeSessionResultSchema,
     PairingPeerRuntimeCapabilityResultSchema,
     PairingPeerRuntimeLocalSessionsResultSchema,
+    PairingPeerRuntimeSnapshotResultSchema,
     PairingPeerSaveAgentConfigResultSchema,
     PairingPeerSendMessageResultSchema,
     PairingPeerSessionResultSchema,
@@ -128,6 +129,11 @@ export function createRemotePeerBridge(options: {
         denyPermission: async (params) => {
             await options.requestPeer(createRemotePeerRequest('permission.deny', params), () => undefined)
         },
+        getRuntime: () =>
+            options.requestPeer(
+                createRemotePeerRequest('runtime.snapshot'),
+                PairingPeerRuntimeSnapshotResultSchema.parse
+            ),
         getRuntimeCapabilities: (params) =>
             options.requestPeer(
                 createRemotePeerRequest('runtime.capabilities', params),

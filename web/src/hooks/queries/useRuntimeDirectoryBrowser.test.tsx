@@ -153,6 +153,35 @@ describe('useRuntimeDirectoryBrowser', () => {
         expect(result.current.currentPath).toBe(TEST_RUNTIME_HOME_PATH)
     })
 
+    it('browses the workspace root when no initial path is selected', async () => {
+        const api = {
+            browseRuntimeDirectory: vi.fn().mockResolvedValue({
+                success: true,
+                currentPath: TEST_RUNTIME_PROJECTS_PATH,
+                parentPath: null,
+                entries: [],
+                roots: [{ kind: 'workspace', path: TEST_RUNTIME_PROJECTS_PATH }],
+            }),
+        } as unknown as ApiClient
+
+        renderHook(
+            () =>
+                useRuntimeDirectoryBrowser({
+                    api,
+                    initialPath: null,
+                    workspaceRoot: TEST_RUNTIME_PROJECTS_PATH,
+                    enabled: true,
+                }),
+            { wrapper: createWrapper() }
+        )
+
+        await waitFor(() => {
+            expect(api.browseRuntimeDirectory).toHaveBeenCalledWith(undefined, {
+                workspaceRoot: TEST_RUNTIME_PROJECTS_PATH,
+            })
+        })
+    })
+
     it('passes workspace-root scope through the single directory browser owner', async () => {
         const api = {
             browseRuntimeDirectory: vi.fn().mockResolvedValue({

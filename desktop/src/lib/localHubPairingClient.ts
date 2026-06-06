@@ -3,6 +3,7 @@ import type {
     PairingPeerMessagesResult,
     PairingPeerPushSubscriptionParams,
     PairingPeerPushUnsubscribeParams,
+    PairingPeerRuntimeSnapshotResult,
     PairingPeerSendMessageResult,
     PairingPeerSpawnSessionParams,
     PairingPeerSpawnSessionResult,
@@ -208,6 +209,9 @@ export class LocalHubPairingClient extends LocalHubPairingClientCore {
     async getCommandCapabilities(sessionId: string, revision?: string): Promise<CommandCapabilitiesResponse> {
         return await getCommandCapabilities(this.request, sessionId, revision)
     }
+    async getRuntime(): Promise<PairingPeerRuntimeSnapshotResult> {
+        return await this.requestJson<PairingPeerRuntimeSnapshotResult>('/api/runtime')
+    }
     async getRuntimeCapabilities(input: RuntimeCapabilityRequest): Promise<RuntimeCapabilityResponse> {
         return await getRuntimeCapabilities(this.request, input)
     }
@@ -229,8 +233,8 @@ export class LocalHubPairingClient extends LocalHubPairingClientCore {
     async checkRuntimePathsExists(paths: string[]): Promise<{ exists: Record<string, boolean> }> {
         return await checkRuntimePathsExists(this.request, paths)
     }
-    async browseRuntimeDirectory(path?: string): Promise<MachineDirectoryResponse> {
-        return await browseRuntimeDirectory(this.request, path)
+    async browseRuntimeDirectory(path?: string, workspaceRoot?: string | null): Promise<MachineDirectoryResponse> {
+        return await browseRuntimeDirectory(this.request, path, workspaceRoot)
     }
     async resolveAgentLaunchConfig(input: ResolveAgentLaunchConfigRequest): Promise<ResolveAgentLaunchConfigResponse> {
         return await resolveAgentLaunchConfig(this.request, input)

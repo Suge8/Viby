@@ -353,11 +353,11 @@ describe('pairingBridgeCore extra request coverage', () => {
                 expect(paths).toEqual(['/repo'])
                 return { exists: { '/repo': true } }
             },
-            browseRuntimeDirectory: async (path?: string) => {
-                expect(path).toBe('/repo')
+            browseRuntimeDirectory: async (path?: string, workspaceRoot?: string | null) => {
+                expect(workspaceRoot).toBe('/workspace')
                 return {
                     success: true,
-                    currentPath: '/repo',
+                    currentPath: path ?? workspaceRoot ?? '/',
                     parentPath: null,
                     entries: [{ name: 'app', path: '/repo/app', type: 'directory' as const }],
                     roots: [],
@@ -452,10 +452,22 @@ describe('pairingBridgeCore extra request coverage', () => {
                     kind: 'request',
                     id: 'runtime-browse',
                     method: 'runtime.browse-directory',
-                    params: { path: '/repo' },
+                    params: { path: '/repo', workspaceRoot: '/workspace' },
                 })
             )
         ).resolves.toMatchObject({ ok: true, result: { success: true, currentPath: '/repo' } })
+
+        await expect(
+            executePairingPeerRequest(
+                client as never,
+                parseRequest({
+                    kind: 'request',
+                    id: 'runtime-browse-workspace-root',
+                    method: 'runtime.browse-directory',
+                    params: { workspaceRoot: '/workspace' },
+                })
+            )
+        ).resolves.toMatchObject({ ok: true, result: { success: true, currentPath: '/workspace' } })
 
         await expect(
             executePairingPeerRequest(

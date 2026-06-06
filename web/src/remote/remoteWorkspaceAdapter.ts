@@ -15,10 +15,12 @@ export type RemoteWorkspaceRuntime = {
     subscribe: (listener: (event: SyncEvent) => void) => () => void
 }
 
-export type RemoteWorkspaceAdapter = {
+export type WorkspaceAdapter = {
     appSession: ReadyAppSession
     runtime: RemoteWorkspaceRuntime
 }
+
+export type RemoteWorkspaceAdapter = WorkspaceAdapter
 
 const REMOTE_WORKSPACE_API_METHODS = [
     'abortSession',
@@ -70,15 +72,17 @@ const REMOTE_WORKSPACE_API_METHODS = [
     'uploadFile',
 ] as const
 
+function pickWorkspaceApiMethod<Method extends keyof ApiClient>(api: ApiClient, method: Method): ApiClient[Method] {
+    const candidate = api[method]
+    return typeof candidate === 'function' ? (candidate.bind(api) as ApiClient[Method]) : candidate
+}
+
 function createRemoteWorkspaceAppApi(api: ApiClient): AppApi {
-    const appApi: Partial<Record<(typeof REMOTE_WORKSPACE_API_METHODS)[number], unknown>> = {}
+    const appApi: Record<string, unknown> = {}
     for (const method of REMOTE_WORKSPACE_API_METHODS) {
-        const candidate = api[method]
-        if (typeof candidate === 'function') {
-            appApi[method] = candidate.bind(api)
-        }
+        appApi[method] = pickWorkspaceApiMethod(api, method)
     }
-    return appApi as AppApi
+    return appApi as unknown as AppApi
 }
 
 export function createRemoteWorkspaceAdapter(options: {

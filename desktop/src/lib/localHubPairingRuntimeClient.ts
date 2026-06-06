@@ -97,9 +97,13 @@ export async function checkRuntimePathsExists(
 
 export async function browseRuntimeDirectory(
     requestJson: LocalHubPairingRequestJson,
-    path?: string
+    path?: string,
+    workspaceRoot?: string | null
 ): Promise<MachineDirectoryResponse> {
-    const query = path ? `?${new URLSearchParams({ path }).toString()}` : ''
+    const queryParams = new URLSearchParams()
+    if (path) queryParams.set('path', path)
+    if (workspaceRoot) queryParams.set('workspaceRoot', workspaceRoot)
+    const query = queryParams.size > 0 ? `?${queryParams.toString()}` : ''
     return await requestJson<MachineDirectoryResponse>(`/api/runtime/directory${query}`)
 }
 
