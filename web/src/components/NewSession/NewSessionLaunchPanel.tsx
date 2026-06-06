@@ -1,4 +1,4 @@
-import type { AgentAvailability } from '@viby/protocol'
+import type { NewSessionAgentLaunchProjection, NewSessionAgentUnavailableReason } from '@viby/protocol'
 import { memo } from 'react'
 import {
     FeatureBulbIcon as BulbIcon,
@@ -16,6 +16,8 @@ import { NewSessionAgentPicker } from './NewSessionAgentPicker'
 import { NewSessionChoiceField } from './NewSessionChoiceField'
 import { NewSessionSectionCard } from './NewSessionSectionCard'
 import type { AgentType, CodexServiceTierSelection, ModelReasoningEffortSelection } from './types'
+
+type ReasoningOptionValue = NonNullable<ModelReasoningEffortSelection>
 
 type LaunchOption<T extends string> = {
     value: T
@@ -35,13 +37,13 @@ type LaunchPanelProps = {
     }
     options: {
         modelOptions: Array<LaunchOption<string>>
-        reasoningOptions: Array<LaunchOption<ModelReasoningEffortSelection>>
+        reasoningOptions: Array<LaunchOption<ReasoningOptionValue>>
         isDisabled: boolean
-        agentAvailability: readonly AgentAvailability[]
+        agentLaunchProjection: NewSessionAgentLaunchProjection
         agentAvailabilityLoading: boolean
         agentAvailabilityRefreshing: boolean
         savedAgent: AgentType
-        savedAgentAvailability?: AgentAvailability | null
+        savedAgentUnavailableReason: NewSessionAgentUnavailableReason | null
         hasAgentFallback: boolean
         agentLaunchConfigLoading?: boolean
     }
@@ -72,7 +74,7 @@ function LaunchSectionHeading(props: LaunchSectionHeadingProps): React.JSX.Eleme
 function LaunchSelectField<T extends string>(props: {
     ariaLabel: string
     icon: React.JSX.Element
-    value: T
+    value: T | null
     isDisabled: boolean
     isLoading?: boolean
     options: Array<LaunchOption<T>>
@@ -174,10 +176,10 @@ function NewSessionLaunchPanelComponent(props: LaunchPanelProps): React.JSX.Elem
                 <NewSessionAgentPicker
                     agent={props.form.agent}
                     savedAgent={props.options.savedAgent}
-                    savedAgentAvailability={props.options.savedAgentAvailability}
+                    savedAgentUnavailableReason={props.options.savedAgentUnavailableReason}
                     hasAgentFallback={props.options.hasAgentFallback}
                     isDisabled={props.options.isDisabled}
-                    availability={props.options.agentAvailability}
+                    projection={props.options.agentLaunchProjection}
                     availabilityLoading={props.options.agentAvailabilityLoading}
                     availabilityRefreshing={props.options.agentAvailabilityRefreshing}
                     onAgentChange={props.handlers.onAgentChange}
@@ -201,7 +203,7 @@ function NewSessionLaunchPanelComponent(props: LaunchPanelProps): React.JSX.Elem
                             onChange={props.handlers.onModelChange}
                         />
 
-                        <LaunchSelectField<ModelReasoningEffortSelection>
+                        <LaunchSelectField<ReasoningOptionValue>
                             ariaLabel={t('newSession.reasoningEffort')}
                             icon={<RocketIcon className="h-3.5 w-3.5 text-[var(--ds-accent-violet)]" />}
                             value={props.form.modelReasoningEffort}

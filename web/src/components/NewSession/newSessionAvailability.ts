@@ -1,59 +1,34 @@
-import { type AgentAvailability, findFirstReadyAgent, isAgentAvailabilityReady } from '@viby/protocol'
-import { type AgentLaunchPreferences, getDefaultAgentLaunchPreferences } from './preferences'
-import type { AgentType, ModelReasoningEffortSelection } from './types'
+import type { NewSessionAgentLaunchProjection } from '@viby/protocol'
+import type { AgentType } from './types'
 
 export type EffectiveAgentSelection = {
     rawAgent: AgentType
     effectiveAgent: AgentType
-    rawAgentAvailability: AgentAvailability | null
-    effectiveAgentAvailability: AgentAvailability | null
+    rawAgentUnavailable: boolean
     hasFallback: boolean
 }
 
 export function resolveEffectiveAgentSelection(
     rawAgent: AgentType,
-    availability: readonly AgentAvailability[]
+    projection: NewSessionAgentLaunchProjection
 ): EffectiveAgentSelection {
-    const availabilityByDriver = new Map(availability.map((entry) => [entry.driver, entry]))
-    const rawAgentAvailability = availabilityByDriver.get(rawAgent) ?? null
-    if (isAgentAvailabilityReady(rawAgentAvailability)) {
-        return {
-            rawAgent,
-            effectiveAgent: rawAgent,
-            rawAgentAvailability,
-            effectiveAgentAvailability: rawAgentAvailability,
-            hasFallback: false,
-        }
+    const rawAgentSelectable = projection.agents.some((entry) => entry.agent === rawAgent)
+    if (rawAgentSelectable) {
+        return { rawAgent, effectiveAgent: rawAgent, rawAgentUnavailable: false, hasFallback: false }
     }
 
-    const fallbackAgent = findFirstReadyAgent(availability)
-    const effectiveAgent = (fallbackAgent ?? rawAgent) as AgentType
+    const fallbackAgent = projection.agents[0]?.agent ?? rawAgent
     return {
         rawAgent,
-        effectiveAgent,
-        rawAgentAvailability,
-        effectiveAgentAvailability: availabilityByDriver.get(effectiveAgent) ?? null,
-        hasFallback: Boolean(fallbackAgent && fallbackAgent !== rawAgent),
+        effectiveAgent: fallbackAgent,
+        rawAgentUnavailable: Boolean(projection.unavailable[rawAgent]),
+        hasFallback: fallbackAgent !== rawAgent,
     }
 }
 
-export function resolveEffectiveAgentLaunchPreferences(
-    effectiveAgent: AgentType,
-    currentAgent: AgentType,
-    currentPreferences: AgentLaunchPreferences,
-    getAgentPreferences: (agent: AgentType) => AgentLaunchPreferences
-): AgentLaunchPreferences {
-    if (effectiveAgent === currentAgent) {
-        return currentPreferences
-    }
-
-    return getAgentPreferences(effectiveAgent) ?? getDefaultAgentLaunchPreferences(effectiveAgent)
-}
-
-export function isEffectiveAgentReady(availability: AgentAvailability | null | undefined): boolean {
-    return isAgentAvailabilityReady(availability)
-}
-
-export function toEffectiveModelReasoningEffort(preferences: AgentLaunchPreferences): ModelReasoningEffortSelection {
-    return preferences.modelReasoningEffort
+export function isEffectiveAgentReady(
+    selection: EffectiveAgentSelection,
+    projection: NewSessionAgentLaunchProjection
+): boolean {
+    return projection.agents.some((entry) => entry.agent === selection.effectiveAgent)
 }

@@ -2,5 +2,5 @@ import type { AgentFlavor, CodexServiceTier, ModelReasoningEffort } from '@viby/
 
 export type AgentType = AgentFlavor
 export type SessionType = 'simple' | 'worktree'
-export type ModelReasoningEffortSelection = ModelReasoningEffort | 'default'
+export type ModelReasoningEffortSelection = ModelReasoningEffort | null
 export type CodexServiceTierSelection = CodexServiceTier

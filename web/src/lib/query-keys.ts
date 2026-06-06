@@ -30,6 +30,7 @@ export const queryKeys = {
     runtimeCapability: ['runtime-capability'] as const,
     runtimeCapabilities: (directory: string, drivers: string, depth: string) =>
         ['runtime-capability', directory, drivers, depth] as const,
+    agentLaunchOptions: (directory: string) => ['agent-launch-options', directory] as const,
     runtimeDirectory: (path: string, workspaceRoot: string = '') => ['runtime-directory', path, workspaceRoot] as const,
     gitStatus: (sessionId: string) => ['git-status', sessionId] as const,
     sessionFiles: (sessionId: string, query: string) => ['session-files', sessionId, query] as const,

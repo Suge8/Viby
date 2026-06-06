@@ -1,18 +1,13 @@
 import {
+    type AgentModelCapability,
     type CodexCollaborationMode,
     type CodexServiceTier,
     getPermissionModesForDriver,
     type PermissionMode,
-    type PiModelCapability,
 } from '@viby/protocol'
 import {
-    getClaudeComposerModelOptions,
     getClaudeComposerReasoningEffortOptions,
-    getCodexComposerModelOptions,
     getCodexComposerReasoningEffortOptions,
-    getCopilotComposerModelOptions,
-    getGeminiComposerModelOptions,
-    getPiComposerModelOptions,
     getPiComposerReasoningEffortOptions,
     getSessionModelDisplayLabelWithCapabilities,
     type SessionConfigOption,
@@ -48,7 +43,7 @@ function getPermissionTone(mode: PermissionMode): ComposerOptionTone {
 function translateModelOption<T extends string | null>(
     option: SessionConfigOption<T>,
     sessionDriver: string | null,
-    piModelCapabilities: readonly PiModelCapability[] | null | undefined,
+    modelCapabilities: readonly AgentModelCapability[] | null | undefined,
     t: Translate
 ): string {
     if (option.labelKey) {
@@ -56,7 +51,7 @@ function translateModelOption<T extends string | null>(
     }
 
     if (typeof option.value === 'string') {
-        return getSessionModelDisplayLabelWithCapabilities(option.value, sessionDriver, piModelCapabilities)
+        return getSessionModelDisplayLabelWithCapabilities(option.value, sessionDriver, modelCapabilities)
     }
 
     return option.label
@@ -177,31 +172,12 @@ function getReasoningDescription(value: ModelReasoningEffort | null, t: Translat
 }
 
 function getModelOptionsForDriver(
-    sessionDriver: string | null,
     currentModel: string | null,
-    piModelCapabilities?: readonly PiModelCapability[] | null
+    modelCapabilities?: readonly AgentModelCapability[] | null
 ): SessionConfigOption<string | null>[] {
-    if (sessionDriver === 'claude') {
-        return getClaudeComposerModelOptions(currentModel)
-    }
-
-    if (sessionDriver === 'copilot') {
-        return getCopilotComposerModelOptions(currentModel)
-    }
-
-    if (sessionDriver === 'gemini') {
-        return getGeminiComposerModelOptions(currentModel)
-    }
-
-    if (sessionDriver === 'pi') {
-        return getPiComposerModelOptions(currentModel, piModelCapabilities)
-    }
-
-    if (sessionDriver === 'codex') {
-        return getCodexComposerModelOptions(currentModel)
-    }
-
-    return []
+    const options = (modelCapabilities ?? []).map((capability) => ({ value: capability.id, label: capability.label }))
+    if (!currentModel || options.some((option) => option.value === currentModel)) return options
+    return [{ value: currentModel, label: currentModel }, ...options]
 }
 
 export function getLocalizedPermissionModeOptions(
@@ -253,14 +229,14 @@ export function getLocalizedCodexServiceTierOptions(t: Translate): ComposerPanel
 export function getLocalizedModelOptions(
     sessionDriver: string | null,
     currentModel: string | null,
-    piModelCapabilities: readonly PiModelCapability[] | null | undefined,
+    modelCapabilities: readonly AgentModelCapability[] | null | undefined,
     t: Translate
 ): ComposerPanelOption<string | null>[] {
-    const options = getModelOptionsForDriver(sessionDriver, currentModel, piModelCapabilities)
+    const options = getModelOptionsForDriver(currentModel, modelCapabilities)
 
     return options.map((option) => ({
         ...option,
-        label: translateModelOption(option, sessionDriver, piModelCapabilities, t),
+        label: translateModelOption(option, sessionDriver, modelCapabilities, t),
         description: getModelDescription(option.value, sessionDriver, t),
         tone: option.value === null ? 'neutral' : 'brand',
     }))

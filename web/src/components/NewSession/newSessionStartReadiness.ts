@@ -1,4 +1,3 @@
-import { requiresAgentLaunchConfig } from '@viby/protocol'
 import type { AgentType, ModelReasoningEffortSelection } from './types'
 
 export type NewSessionStartBlockReason =
@@ -31,17 +30,10 @@ type StartReadinessOptions = {
 }
 
 export function getNewSessionStartBlockReason(options: StartReadinessOptions): NewSessionStartBlockReason | null {
-    const needsLaunchConfig = requiresAgentLaunchConfig({
-        agent: options.agent,
-        model: options.model,
-        modelReasoningEffort: options.modelReasoningEffort === 'default' ? null : options.modelReasoningEffort,
-    })
-
     if (!options.hasDirectory) return 'noDirectory'
     if (options.missingWorktreeDirectory) return 'missingWorktree'
-    if (options.agentAvailabilityLoading) return 'detectingAgents'
-    if (needsLaunchConfig && options.launchConfigBusy) return 'detectingModelConfig'
-    if (needsLaunchConfig && options.launchConfigUnavailable) return 'modelConfigUnavailable'
-    if (!options.agentReady) return 'noReadyAgent'
+    if (options.agentAvailabilityLoading || options.launchConfigBusy) return 'detectingAgents'
+    if (options.launchConfigUnavailable) return 'modelConfigUnavailable'
+    if (!options.agentReady || !options.model) return 'noReadyAgent'
     return null
 }

@@ -13,67 +13,37 @@ describe('NewSession preferences', () => {
     })
 
     it('loads defaults when storage is empty', () => {
-        expect(loadNewSessionPreferences()).toEqual({
-            agent: 'claude',
-            sessionType: 'simple',
-            yoloMode: false,
-            agentSettings: {},
-        })
+        expect(loadNewSessionPreferences()).toEqual({ agent: 'claude', sessionType: 'simple', yoloMode: false })
     })
 
     it('prefers the newer draft over last-used', () => {
-        commitNewSessionPreferences({
-            agent: 'claude',
-            sessionType: 'simple',
-            yoloMode: false,
-            agentSettings: {
-                claude: {
-                    model: 'sonnet',
-                    modelReasoningEffort: 'high',
-                    codexServiceTier: 'standard',
-                },
-            },
-        })
-        saveNewSessionPreferencesDraft({
-            agent: 'pi',
-            sessionType: 'worktree',
-            yoloMode: true,
-            agentSettings: {
-                pi: {
-                    model: 'openai/gpt-5.4',
-                    modelReasoningEffort: 'high',
-                    codexServiceTier: 'standard',
-                },
-            },
-        })
+        commitNewSessionPreferences({ agent: 'claude', sessionType: 'simple', yoloMode: false })
+        saveNewSessionPreferencesDraft({ agent: 'pi', sessionType: 'worktree', yoloMode: true })
 
-        expect(loadNewSessionPreferences()).toMatchObject({
-            agent: 'pi',
-            sessionType: 'worktree',
-            yoloMode: true,
-        })
+        expect(loadNewSessionPreferences()).toEqual({ agent: 'pi', sessionType: 'worktree', yoloMode: true })
+    })
+
+    it('clears old preference snapshots with model settings', () => {
+        localStorage.setItem(
+            'viby.newSession.lastUsed',
+            JSON.stringify({
+                agent: 'codex',
+                sessionType: 'worktree',
+                yoloMode: true,
+                agentSettings: { codex: { model: 'auto', modelReasoningEffort: 'default' } },
+                savedAt: Date.now(),
+            })
+        )
+
+        expect(loadNewSessionPreferences()).toEqual({ agent: 'claude', sessionType: 'simple', yoloMode: false })
     })
 
     it('clears the in-progress draft without touching last-used', () => {
-        commitNewSessionPreferences({
-            agent: 'codex',
-            sessionType: 'simple',
-            yoloMode: false,
-            agentSettings: {},
-        })
-        saveNewSessionPreferencesDraft({
-            agent: 'pi',
-            sessionType: 'worktree',
-            yoloMode: true,
-            agentSettings: {},
-        })
+        commitNewSessionPreferences({ agent: 'codex', sessionType: 'simple', yoloMode: false })
+        saveNewSessionPreferencesDraft({ agent: 'pi', sessionType: 'worktree', yoloMode: true })
 
         clearNewSessionPreferencesDraft()
 
-        expect(loadNewSessionPreferences()).toMatchObject({
-            agent: 'codex',
-            sessionType: 'simple',
-            yoloMode: false,
-        })
+        expect(loadNewSessionPreferences()).toEqual({ agent: 'codex', sessionType: 'simple', yoloMode: false })
     })
 })

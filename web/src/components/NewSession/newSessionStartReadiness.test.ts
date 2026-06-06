@@ -3,8 +3,8 @@ import { getNewSessionStartBlockReason } from './newSessionStartReadiness'
 
 const READY_INPUT = {
     agent: 'claude' as const,
-    model: 'auto',
-    modelReasoningEffort: 'default' as const,
+    model: 'opus',
+    modelReasoningEffort: null,
     hasDirectory: true,
     missingWorktreeDirectory: false,
     agentAvailabilityLoading: false,
@@ -14,30 +14,14 @@ const READY_INPUT = {
 }
 
 describe('getNewSessionStartBlockReason', () => {
-    it('blocks Pi default startup until launch config is ready', () => {
-        expect(getNewSessionStartBlockReason({ ...READY_INPUT, agent: 'pi', launchConfigBusy: true })).toBe(
-            'detectingModelConfig'
-        )
-        expect(getNewSessionStartBlockReason({ ...READY_INPUT, agent: 'pi', launchConfigUnavailable: true })).toBe(
+    it('blocks while agent launch options are loading', () => {
+        expect(getNewSessionStartBlockReason({ ...READY_INPUT, launchConfigBusy: true })).toBe('detectingAgents')
+        expect(getNewSessionStartBlockReason({ ...READY_INPUT, launchConfigUnavailable: true })).toBe(
             'modelConfigUnavailable'
         )
     })
 
-    it('does not block non-Pi default startup on background model config reads', () => {
-        expect(getNewSessionStartBlockReason({ ...READY_INPUT, launchConfigBusy: true })).toBe(null)
-        expect(getNewSessionStartBlockReason({ ...READY_INPUT, launchConfigUnavailable: true })).toBe(null)
-    })
-
-    it('blocks explicit model or reasoning overrides on launch config state', () => {
-        expect(getNewSessionStartBlockReason({ ...READY_INPUT, model: 'opus', launchConfigBusy: true })).toBe(
-            'detectingModelConfig'
-        )
-        expect(
-            getNewSessionStartBlockReason({
-                ...READY_INPUT,
-                modelReasoningEffort: 'high',
-                launchConfigUnavailable: true,
-            })
-        ).toBe('modelConfigUnavailable')
+    it('requires a concrete selected model', () => {
+        expect(getNewSessionStartBlockReason({ ...READY_INPUT, model: '' })).toBe('noReadyAgent')
     })
 })

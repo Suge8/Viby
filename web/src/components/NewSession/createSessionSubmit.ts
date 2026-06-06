@@ -49,9 +49,8 @@ export async function submitNewSessionCreation(options: {
         return
     }
 
-    const resolvedModel = options.model !== 'auto' && options.agent !== 'opencode' ? options.model : undefined
-    const resolvedModelReasoningEffort =
-        options.modelReasoningEffort !== 'default' ? options.modelReasoningEffort : undefined
+    const resolvedModel = options.agent !== 'opencode' ? options.model : undefined
+    const resolvedModelReasoningEffort = options.modelReasoningEffort ?? undefined
     const result = await options.spawnSession({
         directory: options.trimmedDirectory,
         agent: options.agent,

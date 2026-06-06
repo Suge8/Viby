@@ -1,66 +1,9 @@
-import { CLAUDE_MODEL_PRESETS, CLAUDE_SELECTABLE_MODEL_PRESETS, getClaudeModelLabel } from '@viby/protocol'
 import { describe, expect, it } from 'vitest'
-import { CLAUDE_REASONING_EFFORT_OPTIONS, MODEL_OPTIONS } from '@/lib/sessionConfigOptions'
+import type { ModelReasoningEffortSelection } from './types'
 
-describe('Claude model options', () => {
-    it('only exposes terminal default plus the sonnet and opus aliases in the expected order', () => {
-        expect(MODEL_OPTIONS.claude).toEqual([
-            { value: 'auto', label: 'Terminal default model', labelKey: 'model.terminalDefault' },
-            { value: 'sonnet', label: 'Sonnet' },
-            { value: 'opus', label: 'Opus' },
-        ])
-    })
-
-    it('keeps the selectable Claude presets narrowed to sonnet and opus aliases', () => {
-        expect(CLAUDE_SELECTABLE_MODEL_PRESETS).toEqual(['sonnet', 'opus'])
-    })
-
-    it('exposes friendly labels for Claude model presets, including legacy values', () => {
-        expect(CLAUDE_MODEL_PRESETS).toEqual(['sonnet', 'sonnet[1m]', 'opus', 'opus[1m]'])
-        expect(getClaudeModelLabel('sonnet')).toBe('Sonnet')
-        expect(getClaudeModelLabel('sonnet[1m]')).toBe('Sonnet')
-        expect(getClaudeModelLabel('opus')).toBe('Opus')
-        expect(getClaudeModelLabel('opus[1m]')).toBe('Opus')
-    })
-
-    it('exposes the supported Claude reasoning effort options in the expected order', () => {
-        expect(CLAUDE_REASONING_EFFORT_OPTIONS).toEqual([
-            {
-                value: 'default',
-                label: 'Terminal default reasoning effort',
-                labelKey: 'reasoningEffort.terminalDefault',
-            },
-            { value: 'low', label: 'Low', labelKey: 'reasoningEffort.low' },
-            { value: 'medium', label: 'Medium', labelKey: 'reasoningEffort.medium' },
-            { value: 'high', label: 'High', labelKey: 'reasoningEffort.high' },
-            { value: 'xhigh', label: 'XHigh', labelKey: 'reasoningEffort.xhigh' },
-            { value: 'max', label: 'Max', labelKey: 'reasoningEffort.max' },
-        ])
-    })
-})
-
-describe('Codex model options', () => {
-    it('uses the requested terminal-default plus curated explicit models', () => {
-        expect(MODEL_OPTIONS.codex).toEqual([
-            { value: 'auto', label: 'Terminal default model', labelKey: 'model.terminalDefault' },
-            { value: 'gpt-5.5', label: 'GPT-5.5' },
-            { value: 'gpt-5.4', label: 'GPT-5.4' },
-            { value: 'gpt-5.4-mini', label: 'GPT-5.4 Mini' },
-            { value: 'gpt-5.3-codex', label: 'GPT-5.3 Codex' },
-            { value: 'gpt-5.2', label: 'GPT-5.2' },
-        ])
-    })
-})
-
-describe('Gemini model options', () => {
-    it('uses terminal default plus the current gemini-cli explicit model set', () => {
-        expect(MODEL_OPTIONS.gemini).toEqual([
-            { value: 'auto', label: 'Terminal default model', labelKey: 'model.terminalDefault' },
-            { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
-            { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-            { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
-            { value: 'gemini-3-pro-preview', label: 'Gemini 3 Pro Preview' },
-            { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' },
-        ])
+describe('NewSession types', () => {
+    it('uses null to mean no submitted reasoning effort', () => {
+        const value: ModelReasoningEffortSelection = null
+        expect(value).toBeNull()
     })
 })

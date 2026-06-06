@@ -2,13 +2,8 @@ import {
     CLAUDE_REASONING_EFFORTS,
     type ClaudeReasoningEffort,
     CODEX_MODEL_LABELS,
-    CODEX_MODEL_PRESETS,
     COPILOT_MODEL_LABELS,
-    COPILOT_MODEL_PRESETS,
     type CodexReasoningEffort,
-    type CopilotModelPreset,
-    GEMINI_MODEL_PRESETS,
-    type GeminiModelPreset,
     getClaudeReasoningEffortLabel,
     getCodexReasoningEffortLabel,
     type ModelReasoningEffort,
@@ -27,9 +22,6 @@ export type ModelReasoningEffortSelection = ModelReasoningEffort | 'default'
 const TERMINAL_DEFAULT_MODEL_LABEL_KEY = 'model.terminalDefault'
 const TERMINAL_DEFAULT_REASONING_EFFORT_LABEL_KEY = 'reasoningEffort.terminalDefault'
 
-export const CURATED_CODEX_MODELS = [...CODEX_MODEL_PRESETS] as const
-export const CURATED_COPILOT_MODELS = [...COPILOT_MODEL_PRESETS] as const satisfies readonly CopilotModelPreset[]
-export const CURATED_GEMINI_MODELS = [...GEMINI_MODEL_PRESETS] as const satisfies readonly GeminiModelPreset[]
 export const CURATED_CLAUDE_REASONING_EFFORTS = [...CLAUDE_REASONING_EFFORTS] as const
 export const CURATED_CODEX_REASONING_EFFORTS = [
     'low',
@@ -45,20 +37,6 @@ export const REASONING_EFFORT_LABEL_KEYS: Record<ModelReasoningEffort, string> =
     high: 'reasoningEffort.high',
     xhigh: 'reasoningEffort.xhigh',
     max: 'reasoningEffort.max',
-}
-
-export function buildCuratedModelOptions<TDefault extends string | null, TModel extends string>(
-    defaultValue: TDefault,
-    models: readonly TModel[],
-    getLabel: (model: TModel) => string
-): SessionConfigOption<TDefault | TModel>[] {
-    return [
-        createTerminalDefaultModelOption(defaultValue),
-        ...models.map((model) => ({
-            value: model,
-            label: getLabel(model),
-        })),
-    ]
 }
 
 export function withCurrentOption<T extends string>(

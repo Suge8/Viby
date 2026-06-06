@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ApiClient } from '@/api/client'
 import { MotionStaggerGroup, MotionStaggerItem } from '@/components/motion/motionPrimitives'
 import { useSpawnSession } from '@/hooks/mutations/useSpawnSession'
-import { useRuntimeAgentLaunchConfig } from '@/hooks/queries/useRuntimeAgentLaunchConfig'
+import { useRuntimeAgentLaunchOptions } from '@/hooks/queries/useRuntimeAgentLaunchOptions'
 import { useSessions } from '@/hooks/queries/useSessions'
 import { usePlatform } from '@/hooks/usePlatform'
 import { useRecentPaths } from '@/hooks/useRecentPaths'
@@ -19,7 +19,6 @@ import { type NewSessionMode } from './newSessionModes'
 import { getNewSessionStartBlockReason, NEW_SESSION_START_BLOCK_REASON_KEY } from './newSessionStartReadiness'
 import { RecoverLocalPanel } from './RecoverLocalPanel'
 import { useAgentLaunchOptions } from './useAgentLaunchOptions'
-import { useEffectiveNewSessionLaunchState } from './useEffectiveNewSessionLaunchState'
 import { useNewSessionCreateAction } from './useNewSessionCreateAction'
 import { useNewSessionDirectoryState } from './useNewSessionDirectoryState'
 import { useNewSessionLaunchForm } from './useNewSessionLaunchForm'
@@ -52,18 +51,12 @@ export function NewSession(props: {
         worktreeName,
         worktreeInputRef,
         buildPreferenceSnapshotFor,
-        updateAgentSetting,
-        getAgentLaunchPreferences,
-        setModel,
-        setModelReasoningEffort,
-        setAgentModel,
-        setAgentModelReasoningEffort,
+        handleModelChange,
+        handleReasoningEffortChange,
         setYoloMode,
         setSessionType,
         setWorktreeName,
         handleAgentChange,
-        handleModelChange,
-        handleReasoningEffortChange,
         handleCodexServiceTierChange,
     } = useNewSessionLaunchForm()
 
@@ -86,53 +79,29 @@ export function NewSession(props: {
     })
 
     const {
-        agentAvailability,
-        isAgentAvailabilityLoading,
-        isAgentAvailabilityRefreshing,
-        refetchAgentAvailability,
+        projection: agentLaunchProjection,
+        isLoading: isAgentLaunchOptionsLoading,
+        isRefreshing: isAgentLaunchOptionsRefreshing,
+        error: agentLaunchOptionsError,
+        refetch: refetchAgentLaunchOptions,
+    } = useRuntimeAgentLaunchOptions(props.api, trimmedDirectory)
+    const {
         effectiveAgentSelection,
-        effectiveModel,
-        effectiveReasoningEffort,
-        effectiveCodexServiceTier,
-        handleLaunchModelChange,
-        handleLaunchReasoningEffortChange,
-    } = useEffectiveNewSessionLaunchState({
-        api: props.api,
-        directory: trimmedDirectory,
+        modelOptions,
+        reasoningOptions,
+        selection: effectiveSelection,
+        savedAgentUnavailableReason,
+    } = useAgentLaunchOptions({
+        projection: agentLaunchProjection,
         agent,
         model,
         modelReasoningEffort,
-        codexServiceTier,
-        getAgentLaunchPreferences,
-        setAgentModel,
-        setAgentModelReasoningEffort,
-        handleModelChange,
-        handleReasoningEffortChange,
+        setModel: handleModelChange,
+        setModelReasoningEffort: handleReasoningEffortChange,
     })
-
-    const {
-        config: agentLaunchConfig,
-        error: agentLaunchConfigError,
-        isLoading: isAgentLaunchConfigLoading,
-        isFetching: isAgentLaunchConfigFetching,
-        refetch: refetchAgentLaunchConfig,
-    } = useRuntimeAgentLaunchConfig({
-        api: props.api,
-        agent: effectiveAgentSelection.effectiveAgent,
-        directory: trimmedDirectory,
-        t,
-    })
-
-    const { modelOptions, reasoningOptions } = useAgentLaunchOptions({
-        agent: effectiveAgentSelection.effectiveAgent,
-        model: effectiveModel,
-        modelReasoningEffort: effectiveReasoningEffort,
-        directory: trimmedDirectory,
-        launchConfig: agentLaunchConfig,
-        updateAgentSetting,
-        setModel,
-        setModelReasoningEffort,
-    })
+    const effectiveModel = effectiveSelection.model
+    const effectiveReasoningEffort = effectiveSelection.modelReasoningEffort
+    const effectiveCodexServiceTier = codexServiceTier
 
     const lastToastedErrorRef = useRef<string | null>(null)
     useEffect(() => {
@@ -182,17 +151,17 @@ export function NewSession(props: {
             }),
         [t]
     )
-    const isEffectiveReady = isEffectiveAgentReady(effectiveAgentSelection.effectiveAgentAvailability)
-    const isLaunchConfigBusy = isAgentLaunchConfigLoading || isAgentLaunchConfigFetching
+    const isEffectiveReady = isEffectiveAgentReady(effectiveAgentSelection, agentLaunchProjection)
+    const isLaunchConfigBusy = isAgentLaunchOptionsLoading || isAgentLaunchOptionsRefreshing
     const startBlockReason = getNewSessionStartBlockReason({
         agent: effectiveAgentSelection.effectiveAgent,
         model: effectiveModel,
         modelReasoningEffort: effectiveReasoningEffort,
         hasDirectory: Boolean(trimmedDirectory),
         missingWorktreeDirectory,
-        agentAvailabilityLoading: isAgentAvailabilityLoading,
+        agentAvailabilityLoading: isAgentLaunchOptionsLoading,
         launchConfigBusy: isLaunchConfigBusy,
-        launchConfigUnavailable: Boolean(agentLaunchConfigError),
+        launchConfigUnavailable: Boolean(agentLaunchOptionsError),
         agentReady: isEffectiveReady,
     })
     const startDisabledMessage = startBlockReason ? t(NEW_SESSION_START_BLOCK_REASON_KEY[startBlockReason]) : undefined
@@ -235,8 +204,8 @@ export function NewSession(props: {
           ? t('newSession.opening')
           : undefined
     const handleRefreshAgentAvailability = useCallback((): Promise<unknown> => {
-        return Promise.all([refetchAgentAvailability(), refetchAgentLaunchConfig()])
-    }, [refetchAgentAvailability, refetchAgentLaunchConfig])
+        return refetchAgentLaunchOptions()
+    }, [refetchAgentLaunchOptions])
 
     return (
         <MotionStaggerGroup className="flex flex-col gap-2.5" delay={0.03} stagger={0.06}>
@@ -275,18 +244,18 @@ export function NewSession(props: {
                                 modelOptions,
                                 reasoningOptions,
                                 isDisabled: isFormDisabled,
-                                agentAvailability,
-                                agentAvailabilityLoading: isAgentAvailabilityLoading,
-                                agentAvailabilityRefreshing: isAgentAvailabilityRefreshing,
+                                agentLaunchProjection,
+                                agentAvailabilityLoading: isAgentLaunchOptionsLoading,
+                                agentAvailabilityRefreshing: isAgentLaunchOptionsRefreshing,
                                 savedAgent: agent,
-                                savedAgentAvailability: effectiveAgentSelection.rawAgentAvailability,
+                                savedAgentUnavailableReason,
                                 hasAgentFallback: effectiveAgentSelection.hasFallback,
                                 agentLaunchConfigLoading: isLaunchConfigBusy,
                             }}
                             handlers={{
                                 onAgentChange: handleAgentChange,
-                                onModelChange: handleLaunchModelChange,
-                                onReasoningEffortChange: handleLaunchReasoningEffortChange,
+                                onModelChange: handleModelChange,
+                                onReasoningEffortChange: handleReasoningEffortChange,
                                 onCodexServiceTierChange: handleCodexServiceTierChange,
                                 onYoloModeChange: setYoloMode,
                                 onRefreshAgentAvailability: handleRefreshAgentAvailability,
