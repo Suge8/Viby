@@ -13,13 +13,11 @@ import type {
     PairingPeerUploadStartParams,
 } from '@viby/protocol/pairing'
 import type {
-    AgentAvailabilityResponse,
     AgentConfigResponse,
     CodexCollaborationMode,
     CodexServiceTier,
     CommandCapabilitiesResponse,
     DecryptedMessage,
-    ListAgentAvailabilityRequest,
     LocalSessionCatalog,
     LocalSessionExportRequest,
     MachineDirectoryResponse,
@@ -27,10 +25,10 @@ import type {
     OpenAgentConfigRequest,
     OpenAgentConfigResponse,
     PermissionMode,
-    ResolveAgentLaunchConfigRequest,
-    ResolveAgentLaunchConfigResponse,
     RestoreAgentConfigRequest,
     RestoreAgentConfigResponse,
+    RuntimeAgentLaunchOptionsRequest,
+    RuntimeAgentLaunchOptionsResponse,
     RuntimeCapabilityRequest,
     RuntimeCapabilityResponse,
     SaveAgentConfigRequest,
@@ -45,12 +43,11 @@ import {
     browseRuntimeDirectory,
     checkRuntimePathsExists,
     getAgentConfig,
-    getRuntimeAgentAvailability,
+    getAgentLaunchOptions,
     getRuntimeCapabilities,
     importRuntimeLocalSession,
     listRuntimeLocalSessions,
     openAgentConfig,
-    resolveAgentLaunchConfig,
     restoreAgentConfig,
     saveAgentConfig,
 } from './localHubPairingRuntimeClient'
@@ -215,8 +212,10 @@ export class LocalHubPairingClient extends LocalHubPairingClientCore {
     async getRuntimeCapabilities(input: RuntimeCapabilityRequest): Promise<RuntimeCapabilityResponse> {
         return await getRuntimeCapabilities(this.request, input)
     }
-    async getRuntimeAgentAvailability(input: ListAgentAvailabilityRequest = {}): Promise<AgentAvailabilityResponse> {
-        return await getRuntimeAgentAvailability(this.request, input)
+    async getAgentLaunchOptions(
+        input: RuntimeAgentLaunchOptionsRequest = {}
+    ): Promise<RuntimeAgentLaunchOptionsResponse> {
+        return await getAgentLaunchOptions(this.request, input)
     }
     async getAgentConfig(): Promise<AgentConfigResponse> {
         return await getAgentConfig(this.request)
@@ -235,9 +234,6 @@ export class LocalHubPairingClient extends LocalHubPairingClientCore {
     }
     async browseRuntimeDirectory(path?: string, workspaceRoot?: string | null): Promise<MachineDirectoryResponse> {
         return await browseRuntimeDirectory(this.request, path, workspaceRoot)
-    }
-    async resolveAgentLaunchConfig(input: ResolveAgentLaunchConfigRequest): Promise<ResolveAgentLaunchConfigResponse> {
-        return await resolveAgentLaunchConfig(this.request, input)
     }
     async listRuntimeLocalSessions(
         path: string,

@@ -30,9 +30,11 @@ export function getAgentCapabilitySummary(
 
     const modelList = formatModelList(config)
     const levels = collectThinkingLevels(config)
-    if (!config.defaultModel && !modelList && levels.length === 0) return null
+    if (!modelList && levels.length === 0) return null
 
-    const parts = [`${copy.agentDefaultModelLabel}: ${config.defaultModel ?? copy.agentDefaultModelAuto}`]
+    const recommendedModel =
+        config.availableModels[0]?.label || config.availableModels[0]?.id || copy.agentDefaultModelAuto
+    const parts = [`${copy.agentDefaultModelLabel}: ${recommendedModel}`]
     if (modelList) parts.push(`${copy.agentModelsLabel}: ${modelList}`)
     if (levels.length > 0) parts.push(`${copy.agentThinkingLabel}: ${levels.join('/')}`)
     return parts.join(' · ')

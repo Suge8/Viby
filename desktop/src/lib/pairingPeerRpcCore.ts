@@ -1,7 +1,6 @@
 import type {
-    PairingPeerAgentAvailabilityResult,
     PairingPeerAgentConfigResult,
-    PairingPeerAgentLaunchConfigResult,
+    PairingPeerAgentLaunchOptionsResult,
     PairingPeerBrowseDirectoryResult,
     PairingPeerHeartbeat,
     PairingPeerListSessionsResult,
@@ -22,9 +21,8 @@ import type {
     PairingPeerTerminalEventPayload,
 } from '@viby/protocol/pairing'
 import {
-    PairingPeerAgentAvailabilityResultSchema,
     PairingPeerAgentConfigResultSchema,
-    PairingPeerAgentLaunchConfigResultSchema,
+    PairingPeerAgentLaunchOptionsResultSchema,
     PairingPeerBrowseDirectoryResultSchema,
     PairingPeerCommandCapabilitiesResultSchema,
     PairingPeerHeartbeatSchema,
@@ -263,9 +261,9 @@ export async function executePairingPeerRequest(
                 )
                 return successResponse(request.id, result)
             }
-            case 'runtime.agent-availability': {
-                const result: PairingPeerAgentAvailabilityResult = PairingPeerAgentAvailabilityResultSchema.parse(
-                    await client.getRuntimeAgentAvailability(request.params ?? {})
+            case 'runtime.agent-launch-options': {
+                const result: PairingPeerAgentLaunchOptionsResult = PairingPeerAgentLaunchOptionsResultSchema.parse(
+                    await client.getAgentLaunchOptions(request.params ?? {})
                 )
                 return successResponse(request.id, result)
             }
@@ -302,12 +300,6 @@ export async function executePairingPeerRequest(
             case 'runtime.browse-directory': {
                 const result: PairingPeerBrowseDirectoryResult = PairingPeerBrowseDirectoryResultSchema.parse(
                     await client.browseRuntimeDirectory(request.params?.path, request.params?.workspaceRoot)
-                )
-                return successResponse(request.id, result)
-            }
-            case 'runtime.agent-launch-config': {
-                const result: PairingPeerAgentLaunchConfigResult = PairingPeerAgentLaunchConfigResultSchema.parse(
-                    await client.resolveAgentLaunchConfig(request.params)
                 )
                 return successResponse(request.id, result)
             }

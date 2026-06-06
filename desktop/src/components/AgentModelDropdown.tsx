@@ -114,21 +114,16 @@ export function AgentModelPanel(props: AgentModelBaseProps): JSX.Element | null 
 function ModelList(props: { config: LaunchConfig; copy: DesktopCopy }): JSX.Element {
     return (
         <div className="desktop-agent-model-grid">
-            {props.config.defaultModel ? (
-                <span className="desktop-agent-model-item is-default">
+            {props.config.availableModels.map((model, index) => (
+                <span
+                    key={model.id}
+                    className={index === 0 ? 'desktop-agent-model-item is-default' : 'desktop-agent-model-item'}
+                >
                     <ModelIcon />
                     <span>
-                        <strong>{props.copy.agentDefaultModelLabel}</strong>
-                        <small>{props.config.defaultModel}</small>
-                    </span>
-                </span>
-            ) : null}
-            {props.config.availableModels.map((model) => (
-                <span key={model.id} className="desktop-agent-model-item">
-                    <ModelIcon />
-                    <span>
-                        <strong>{model.label || model.id}</strong>
+                        <strong>{index === 0 ? props.copy.agentDefaultModelLabel : model.label || model.id}</strong>
                         <small>
+                            {index === 0 ? `${model.label || model.id} · ` : null}
                             <ThinkingIcon />
                             {getThinkingLabel(model.supportedThinkingLevels)}
                         </small>

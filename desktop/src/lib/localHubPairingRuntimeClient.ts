@@ -1,16 +1,14 @@
 import type {
-    AgentAvailabilityResponse,
     AgentConfigResponse,
-    ListAgentAvailabilityRequest,
     LocalSessionCatalog,
     LocalSessionExportRequest,
     MachineDirectoryResponse,
     OpenAgentConfigRequest,
     OpenAgentConfigResponse,
-    ResolveAgentLaunchConfigRequest,
-    ResolveAgentLaunchConfigResponse,
     RestoreAgentConfigRequest,
     RestoreAgentConfigResponse,
+    RuntimeAgentLaunchOptionsRequest,
+    RuntimeAgentLaunchOptionsResponse,
     RuntimeCapabilityRequest,
     RuntimeCapabilityResponse,
     SaveAgentConfigRequest,
@@ -36,16 +34,17 @@ export async function getRuntimeCapabilities(
     return await requestJson<RuntimeCapabilityResponse>(`/api/runtime/capabilities${query ? `?${query}` : ''}`)
 }
 
-export async function getRuntimeAgentAvailability(
+export async function getAgentLaunchOptions(
     requestJson: LocalHubPairingRequestJson,
-    input: ListAgentAvailabilityRequest = {}
-): Promise<AgentAvailabilityResponse> {
+    input: RuntimeAgentLaunchOptionsRequest = {}
+): Promise<RuntimeAgentLaunchOptionsResponse> {
     const params = new URLSearchParams()
     if (input.directory) params.set('directory', input.directory)
-    if (input.forceRefresh) params.set('forceRefresh', 'true')
-    if (input.drivers?.length) params.set('drivers', input.drivers.join(','))
+    if (input.refresh) params.set('refresh', '1')
     const query = params.toString()
-    return await requestJson<AgentAvailabilityResponse>(`/api/runtime/agent-availability${query ? `?${query}` : ''}`)
+    return await requestJson<RuntimeAgentLaunchOptionsResponse>(
+        `/api/runtime/agent-launch-options${query ? `?${query}` : ''}`
+    )
 }
 
 export async function getAgentConfig(requestJson: LocalHubPairingRequestJson): Promise<AgentConfigResponse> {
@@ -105,13 +104,6 @@ export async function browseRuntimeDirectory(
     if (workspaceRoot) queryParams.set('workspaceRoot', workspaceRoot)
     const query = queryParams.size > 0 ? `?${queryParams.toString()}` : ''
     return await requestJson<MachineDirectoryResponse>(`/api/runtime/directory${query}`)
-}
-
-export async function resolveAgentLaunchConfig(
-    requestJson: LocalHubPairingRequestJson,
-    input: ResolveAgentLaunchConfigRequest
-): Promise<ResolveAgentLaunchConfigResponse> {
-    return await requestJson('/api/runtime/agent-launch-config', { method: 'POST', body: JSON.stringify(input) })
 }
 
 export async function listRuntimeLocalSessions(

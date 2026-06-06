@@ -132,6 +132,20 @@ describe('LocalHubPairingClient', () => {
             if (url.endsWith('/api/runtime/paths/exists')) {
                 return jsonResponse({ exists: { '/repo': true } })
             }
+            if (url.includes('/api/runtime/agent-launch-options')) {
+                return jsonResponse({
+                    projection: {
+                        agents: [
+                            {
+                                agent: 'codex',
+                                modelOptions: [{ value: 'gpt-5.2', label: 'GPT-5.2' }],
+                                reasoningOptionsByModel: { 'gpt-5.2': [] },
+                            },
+                        ],
+                        unavailable: {},
+                    },
+                })
+            }
             if (url.endsWith('/api/runtime/agent-config')) {
                 return jsonResponse({
                     agents: [
@@ -178,6 +192,9 @@ describe('LocalHubPairingClient', () => {
         await expect(client.browseRuntimeDirectory('/repo', '/workspace')).resolves.toMatchObject({ success: true })
         await expect(client.browseRuntimeDirectory(undefined, '/workspace')).resolves.toMatchObject({ success: true })
         await expect(client.checkRuntimePathsExists(['/repo'])).resolves.toEqual({ exists: { '/repo': true } })
+        await expect(client.getAgentLaunchOptions({ directory: '/repo', refresh: true })).resolves.toMatchObject({
+            projection: { agents: [{ agent: 'codex' }] },
+        })
         await expect(client.getAgentConfig()).resolves.toMatchObject({ agents: [{ driver: 'codex' }] })
         await expect(
             client.saveAgentConfig({ driver: 'codex', values: { 'codex.model': 'gpt-5.4' } })
@@ -216,6 +233,9 @@ describe('LocalHubPairingClient', () => {
         )
         expect(calls.find((call) => call.url.endsWith('/api/runtime/paths/exists'))?.body).toBe(
             JSON.stringify({ paths: ['/repo'] })
+        )
+        expect(calls.map((call) => call.url)).toContain(
+            'http://127.0.0.1:37173/api/runtime/agent-launch-options?directory=%2Frepo&refresh=1'
         )
         expect(calls.find((call) => call.url.endsWith('/api/runtime/agent-config/codex'))?.body).toBe(
             JSON.stringify({ driver: 'codex', values: { 'codex.model': 'gpt-5.4' } })

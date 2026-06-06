@@ -306,10 +306,6 @@ describe('pairingBridgeCore extra request coverage', () => {
             checkedAt: 1,
         }
         const client = {
-            getRuntimeAgentAvailability: async (input: { directory?: string }) => {
-                expect(input).toEqual({ directory: '/repo' })
-                return { agents: [] }
-            },
             getAgentConfig: async () => ({
                 agents: [
                     {
@@ -363,9 +359,20 @@ describe('pairingBridgeCore extra request coverage', () => {
                     roots: [],
                 }
             },
-            resolveAgentLaunchConfig: async (input: { agent: string; directory: string }) => {
-                expect(input).toEqual({ agent: 'codex', directory: '/repo' })
-                return { type: 'error' as const, message: 'missing model' }
+            getAgentLaunchOptions: async (input: { directory?: string; refresh?: boolean }) => {
+                expect(input).toEqual({ directory: '/repo', refresh: true })
+                return {
+                    projection: {
+                        agents: [
+                            {
+                                agent: 'codex' as const,
+                                modelOptions: [{ value: 'gpt-5.2', label: 'GPT-5.2' }],
+                                reasoningOptionsByModel: { 'gpt-5.2': [] },
+                            },
+                        ],
+                        unavailable: {},
+                    },
+                }
             },
             spawnSession: async (input: { agent?: string; directory: string }) => {
                 expect(input).toEqual({ agent: 'codex', directory: '/repo' })
@@ -378,12 +385,12 @@ describe('pairingBridgeCore extra request coverage', () => {
                 client as never,
                 parseRequest({
                     kind: 'request',
-                    id: 'runtime-availability',
-                    method: 'runtime.agent-availability',
-                    params: { directory: '/repo' },
+                    id: 'runtime-agent-launch-options',
+                    method: 'runtime.agent-launch-options',
+                    params: { directory: '/repo', refresh: true },
                 })
             )
-        ).resolves.toMatchObject({ ok: true, result: { agents: [] } })
+        ).resolves.toMatchObject({ ok: true, result: { projection: { agents: [{ agent: 'codex' }] } } })
 
         await expect(
             executePairingPeerRequest(
@@ -468,18 +475,6 @@ describe('pairingBridgeCore extra request coverage', () => {
                 })
             )
         ).resolves.toMatchObject({ ok: true, result: { success: true, currentPath: '/workspace' } })
-
-        await expect(
-            executePairingPeerRequest(
-                client as never,
-                parseRequest({
-                    kind: 'request',
-                    id: 'runtime-config',
-                    method: 'runtime.agent-launch-config',
-                    params: { agent: 'codex', directory: '/repo' },
-                })
-            )
-        ).resolves.toMatchObject({ ok: true, result: { type: 'error', message: 'missing model' } })
 
         await expect(
             executePairingPeerRequest(
