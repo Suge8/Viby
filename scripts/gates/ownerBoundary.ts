@@ -48,6 +48,7 @@ const browserStorageOwnerFiles = new Set([
 const useSyncExternalStoreOwnerFiles = new Set([
     'web/src/hooks/useDesktopSessionsLayout.ts',
     'web/src/hooks/useOnlineStatus.ts',
+    'web/src/hooks/useRealtimeRecoveryRuntime.ts',
     'web/src/hooks/useSessionDetailReveal.ts',
     'web/src/hooks/useStandaloneDisplayMode.ts',
     'web/src/hooks/useTheme.ts',
