@@ -90,9 +90,7 @@ function supportsReasoning(
     model: string | null | undefined,
     effort: ModelReasoningEffort
 ): boolean {
-    const selected = model?.trim() || config.defaultModel?.trim() || ''
+    const selected = model?.trim() || config.availableModels[0]?.id || ''
     const capability = selected ? config.availableModels.find((candidate) => candidate.id === selected) : null
-    return capability
-        ? capability.supportedThinkingLevels.includes(effort)
-        : config.availableModels.some((candidate) => candidate.supportedThinkingLevels.includes(effort))
+    return Boolean(capability?.supportedThinkingLevels.includes(effort))
 }

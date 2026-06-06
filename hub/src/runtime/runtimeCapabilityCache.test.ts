@@ -123,8 +123,6 @@ describe('RuntimeCapabilityCache', () => {
                         type: 'success',
                         config: {
                             agent: request.agent,
-                            defaultModel: 'model-1',
-                            defaultModelReasoningEffort: null,
                             availableModels: [{ id: 'model-1', label: 'Model 1', supportedThinkingLevels: ['high'] }],
                         },
                     } satisfies ResolveAgentLaunchConfigResponse
@@ -168,6 +166,64 @@ describe('RuntimeCapabilityCache', () => {
                 }),
             ],
         })
+    })
+
+    it('refreshes expired launch config errors when building agent launch options', async () => {
+        let now = 1_000
+        let configCalls = 0
+        const originalNow = Date.now
+        Date.now = () => now
+        try {
+            const cache = new RuntimeCapabilityCache(
+                {
+                    listAgentAvailability: async (_machineId, request) => {
+                        const driver = request.drivers?.[0] ?? 'claude'
+                        return {
+                            agents: [
+                                driver === 'codex'
+                                    ? ready('codex', now)
+                                    : {
+                                          driver,
+                                          status: 'unavailable' as const,
+                                          resolution: 'learn_more' as const,
+                                          code: 'unknown' as const,
+                                          detectedAt: now,
+                                      },
+                            ],
+                        }
+                    },
+                    resolveAgentLaunchConfig: async (_machineId, request) => {
+                        configCalls += 1
+                        return configCalls === 1
+                            ? { type: 'error', code: 'provider_unavailable', message: 'provider down' }
+                            : {
+                                  type: 'success',
+                                  config: {
+                                      agent: request.agent,
+                                      availableModels: [
+                                          { id: 'gpt-5.4', label: 'GPT-5.4', supportedThinkingLevels: ['high'] },
+                                      ],
+                                  },
+                              }
+                    },
+                },
+                { emit: () => undefined }
+            )
+
+            const first = await cache.getAgentLaunchOptions('machine-1', { directory: '/repo', refresh: true })
+            expect(first.unavailable.codex).toBe('launch_config_error')
+            expect(configCalls).toBe(1)
+
+            now += 10_001
+            const second = await cache.getAgentLaunchOptions('machine-1', { directory: '/repo' })
+
+            expect(configCalls).toBe(2)
+            expect(second.agents).toEqual([
+                expect.objectContaining({ agent: 'codex', modelOptions: [{ value: 'gpt-5.4', label: 'GPT-5.4' }] }),
+            ])
+        } finally {
+            Date.now = originalNow
+        }
     })
 
     it('does not resolve launch config for default spawn options outside Pi', async () => {
@@ -221,8 +277,6 @@ describe('RuntimeCapabilityCache', () => {
                         type: 'success',
                         config: {
                             agent: 'pi',
-                            defaultModel: 'openai/gpt-5',
-                            defaultModelReasoningEffort: null,
                             availableModels: [{ id: 'openai/gpt-5', label: 'GPT-5', supportedThinkingLevels: ['low'] }],
                         },
                     }
@@ -254,8 +308,6 @@ describe('RuntimeCapabilityCache', () => {
                               type: 'success',
                               config: {
                                   agent: 'pi',
-                                  defaultModel: 'openai/gpt-5',
-                                  defaultModelReasoningEffort: null,
                                   availableModels: [
                                       { id: 'openai/gpt-5', label: 'GPT-5', supportedThinkingLevels: ['low'] },
                                   ],
@@ -300,8 +352,6 @@ describe('RuntimeCapabilityCache', () => {
                     type: 'success',
                     config: {
                         agent: 'pi',
-                        defaultModel: 'openai/gpt-5',
-                        defaultModelReasoningEffort: 'low',
                         availableModels: [{ id: 'openai/gpt-5', label: 'GPT-5', supportedThinkingLevels: ['low'] }],
                     },
                 }),

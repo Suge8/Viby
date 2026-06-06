@@ -1,11 +1,10 @@
 import {
     isPermissionModeAllowedForDriver,
-    ListAgentAvailabilityRequestSchema,
     LocalSessionCatalogRequestSchema,
     LocalSessionExportRequestSchema,
     OpenAgentConfigRequestSchema,
-    ResolveAgentLaunchConfigRequestSchema,
     RestoreAgentConfigRequestSchema,
+    RuntimeAgentLaunchOptionsRequestSchema,
     RuntimeCapabilityRequestSchema,
     SaveAgentConfigRequestSchema,
 } from '@viby/protocol'
@@ -88,7 +87,7 @@ export function createRuntimeRoutes(getSyncEngine: () => SyncEngine | null): Hon
         return c.json({ snapshot: engine.getRuntimeCapabilitySnapshot(runtime.id, parsed.data) })
     })
 
-    app.get('/runtime/agent-availability', async (c) => {
+    app.get('/runtime/agent-launch-options', async (c) => {
         const engine = requireSyncEngine(c, getSyncEngine)
         if (engine instanceof Response) {
             return engine
@@ -99,12 +98,17 @@ export function createRuntimeRoutes(getSyncEngine: () => SyncEngine | null): Hon
             return runtime
         }
 
-        const parsed = ListAgentAvailabilityRequestSchema.safeParse(c.req.query())
+        const parsed = RuntimeAgentLaunchOptionsRequestSchema.safeParse(c.req.query())
         if (!parsed.success) {
             return c.json({ error: 'Invalid query' }, 400)
         }
 
-        return c.json(await engine.listAgentAvailability(runtime.id, parsed.data))
+        return c.json({
+            projection: await engine.getAgentLaunchOptions(runtime.id, {
+                directory: parsed.data.directory,
+                refresh: parsed.data.refresh === true,
+            }),
+        })
     })
 
     app.get('/runtime/agent-config', async (c) => {
@@ -273,24 +277,6 @@ export function createRuntimeRoutes(getSyncEngine: () => SyncEngine | null): Hon
             return c.json({ error: error instanceof Error ? error.message : 'Failed to check paths' }, 500)
         }
     })
-
-    app.post(
-        '/runtime/agent-launch-config',
-        createJsonBodyValidator(ResolveAgentLaunchConfigRequestSchema),
-        async (c) => {
-            const engine = requireSyncEngine(c, getSyncEngine)
-            if (engine instanceof Response) {
-                return engine
-            }
-
-            const runtime = requireActiveLocalRuntime(c, engine)
-            if (runtime instanceof Response) {
-                return runtime
-            }
-
-            return c.json(await engine.resolveAgentLaunchConfig(runtime.id, c.req.valid('json')))
-        }
-    )
 
     app.get('/runtime/local-sessions', async (c) => {
         const engine = requireSyncEngine(c, getSyncEngine)

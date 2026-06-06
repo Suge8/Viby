@@ -252,13 +252,23 @@ describe('runtime routes', () => {
         expect(capabilityCalls).toEqual([{ machineId: 'machine-1', directory: '/tmp/project', depth: 'launch_config' }])
     })
 
-    it('returns authoritative runtime agent availability from the local runtime owner', async () => {
-        const availabilityCalls: Array<Record<string, unknown>> = []
+    it('returns New Session agent launch options from the local runtime owner', async () => {
+        const calls: Array<Record<string, unknown>> = []
+        const projection = {
+            agents: [
+                {
+                    agent: 'codex',
+                    modelOptions: [{ value: 'gpt-5.4', label: 'GPT-5.4' }],
+                    reasoningOptionsByModel: { 'gpt-5.4': [{ value: 'high', label: 'high' }] },
+                },
+            ],
+            unavailable: { cursor: 'missing_model_options' },
+        }
         const engine = {
             getMachines: () => localRuntime(),
-            listAgentAvailability: async (machineId: string, request: Record<string, unknown>) => {
-                availabilityCalls.push({ machineId, ...request })
-                return readyAgentAvailability()
+            getAgentLaunchOptions: async (machineId: string, request: Record<string, unknown>) => {
+                calls.push({ machineId, ...request })
+                return projection
             },
         } as unknown as Partial<SyncEngine>
 
@@ -268,22 +278,20 @@ describe('runtime routes', () => {
             createRuntimeRoutes(() => engine as SyncEngine)
         )
 
-        const response = await app.request('/api/runtime/agent-availability?directory=%2Ftmp%2Fproject')
+        const response = await app.request('/api/runtime/agent-launch-options?directory=%2Ftmp%2Fproject')
 
         expect(response.status).toBe(200)
-        expect(await response.json()).toEqual(readyAgentAvailability())
-        expect(availabilityCalls).toEqual([
-            { machineId: 'machine-1', directory: '/tmp/project', forceRefresh: undefined },
-        ])
+        expect(await response.json()).toEqual({ projection })
+        expect(calls).toEqual([{ machineId: 'machine-1', directory: '/tmp/project', refresh: false }])
     })
 
-    it('forwards forceRefresh on authoritative runtime agent availability checks', async () => {
-        const availabilityCalls: Array<Record<string, unknown>> = []
+    it('forwards explicit refresh on New Session agent launch options', async () => {
+        const calls: Array<Record<string, unknown>> = []
         const engine = {
             getMachines: () => localRuntime(),
-            listAgentAvailability: async (machineId: string, request: Record<string, unknown>) => {
-                availabilityCalls.push({ machineId, ...request })
-                return readyAgentAvailability()
+            getAgentLaunchOptions: async (machineId: string, request: Record<string, unknown>) => {
+                calls.push({ machineId, ...request })
+                return { agents: [], unavailable: {} }
             },
         } as unknown as Partial<SyncEngine>
 
@@ -293,36 +301,10 @@ describe('runtime routes', () => {
             createRuntimeRoutes(() => engine as SyncEngine)
         )
 
-        const response = await app.request(
-            '/api/runtime/agent-availability?directory=%2Ftmp%2Fproject&forceRefresh=true'
-        )
+        const response = await app.request('/api/runtime/agent-launch-options?directory=%2Ftmp%2Fproject&refresh=true')
 
         expect(response.status).toBe(200)
-        expect(await response.json()).toEqual(readyAgentAvailability())
-        expect(availabilityCalls).toEqual([{ machineId: 'machine-1', directory: '/tmp/project', forceRefresh: true }])
-    })
-
-    it('preserves forceRefresh=false when parsing authoritative runtime availability queries', async () => {
-        const availabilityCalls: Array<Record<string, unknown>> = []
-        const engine = {
-            getMachines: () => localRuntime(),
-            listAgentAvailability: async (machineId: string, request: Record<string, unknown>) => {
-                availabilityCalls.push({ machineId, ...request })
-                return readyAgentAvailability()
-            },
-        } as unknown as Partial<SyncEngine>
-
-        const app = new Hono<WebAppEnv>()
-        app.route(
-            '/api',
-            createRuntimeRoutes(() => engine as SyncEngine)
-        )
-
-        const response = await app.request('/api/runtime/agent-availability?forceRefresh=false')
-
-        expect(response.status).toBe(200)
-        expect(await response.json()).toEqual(readyAgentAvailability())
-        expect(availabilityCalls).toEqual([{ machineId: 'machine-1', directory: undefined, forceRefresh: false }])
+        expect(calls).toEqual([{ machineId: 'machine-1', directory: '/tmp/project', refresh: true }])
     })
 
     it('loads agent config files through the local runtime owner', async () => {
@@ -559,68 +541,17 @@ describe('runtime routes', () => {
         })
     })
 
-    it('resolves directory-aware agent launch config through the runtime RPC owner', async () => {
-        const launchConfigCalls: Array<Record<string, unknown>> = []
-        const engine = {
-            getMachines: () => localRuntime(),
-            resolveAgentLaunchConfig: async (machineId: string, request: Record<string, unknown>) => {
-                launchConfigCalls.push({ machineId, ...request })
-                return {
-                    type: 'success',
-                    config: {
-                        agent: 'pi',
-                        defaultModel: 'openai/gpt-5.4',
-                        defaultModelReasoningEffort: 'high',
-                        availableModels: [
-                            {
-                                id: 'openai/gpt-5.4',
-                                label: 'GPT-5.4',
-                                supportedThinkingLevels: ['none', 'low', 'high'],
-                            },
-                        ],
-                    },
-                }
-            },
-        } as unknown as Partial<SyncEngine>
-
+    it('rejects the removed per-agent launch config route', async () => {
+        const engine = { getMachines: () => localRuntime() } as unknown as Partial<SyncEngine>
         const app = new Hono<WebAppEnv>()
         app.route(
             '/api',
             createRuntimeRoutes(() => engine as SyncEngine)
         )
 
-        const response = await app.request('/api/runtime/agent-launch-config', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({
-                agent: 'pi',
-                directory: '/tmp/project',
-            }),
-        })
+        const response = await app.request('/api/runtime/agent-launch-config', { method: 'POST' })
 
-        expect(response.status).toBe(200)
-        expect(await response.json()).toEqual({
-            type: 'success',
-            config: {
-                agent: 'pi',
-                defaultModel: 'openai/gpt-5.4',
-                defaultModelReasoningEffort: 'high',
-                availableModels: [
-                    {
-                        id: 'openai/gpt-5.4',
-                        label: 'GPT-5.4',
-                        supportedThinkingLevels: ['none', 'low', 'high'],
-                    },
-                ],
-            },
-        })
-        expect(launchConfigCalls).toEqual([
-            {
-                machineId: 'machine-1',
-                agent: 'pi',
-                directory: '/tmp/project',
-            },
-        ])
+        expect(response.status).toBe(404)
     })
 
     it('lists recoverable local sessions through the local runtime owner', async () => {

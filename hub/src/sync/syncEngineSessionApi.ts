@@ -186,6 +186,10 @@ export abstract class SyncEngineSessionApi extends SyncEngineReadApi {
         return await this.syncServices.runtimeCapabilityCache.resolveAgentLaunchConfig(machineId, request)
     }
 
+    async getAgentLaunchOptions(machineId: string, request: { directory?: string; refresh?: boolean }) {
+        return await this.syncServices.runtimeCapabilityCache.getAgentLaunchOptions(machineId, request)
+    }
+
     getRuntimeCapabilitySnapshot(machineId: string, request: RuntimeCapabilityRequest): RuntimeCapabilitySnapshot {
         return this.syncServices.runtimeCapabilityCache.getSnapshot(machineId, request)
     }

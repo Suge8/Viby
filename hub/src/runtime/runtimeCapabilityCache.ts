@@ -4,7 +4,9 @@ import {
     type AgentAvailabilityResponse,
     type AgentFlavor,
     type AgentLaunchConfigErrorCode,
+    buildNewSessionAgentLaunchProjection,
     type ListAgentAvailabilityRequest,
+    type NewSessionAgentLaunchProjection,
     type ResolveAgentLaunchConfigRequest,
     type ResolveAgentLaunchConfigResponse,
     type RuntimeCapabilityDepth,
@@ -96,6 +98,33 @@ export class RuntimeCapabilityCache {
             drivers.map((driver) => this.refreshAvailability(scope, driver, request.forceRefresh === true))
         )
         return { agents: drivers.map((driver) => this.requireAvailability(scope, driver)) }
+    }
+
+    async getAgentLaunchOptions(
+        machineId: string,
+        request: { directory?: string; refresh?: boolean }
+    ): Promise<NewSessionAgentLaunchProjection> {
+        const scope = this.getScope(machineId, request.directory)
+        const forceRefresh = request.refresh === true
+        await Promise.all(AGENT_FLAVORS.map((driver) => this.refreshAvailability(scope, driver, forceRefresh)))
+        await Promise.all(
+            AGENT_FLAVORS.map((driver) => {
+                const entry = scope.agents.get(driver)
+                if (entry?.availability?.value?.status !== 'ready') return null
+                return this.refreshLaunchConfig(scope, driver, forceRefresh)
+            })
+        )
+        return buildNewSessionAgentLaunchProjection(
+            AGENT_FLAVORS.map((agent) => {
+                const entry = scope.agents.get(agent)
+                return {
+                    agent,
+                    availability: entry?.availability?.value ?? null,
+                    config: entry?.launchConfig?.config ?? null,
+                    launchConfigError: Boolean(entry?.launchConfig?.error),
+                }
+            })
+        )
     }
 
     async resolveAgentLaunchConfig(

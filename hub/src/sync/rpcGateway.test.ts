@@ -58,7 +58,7 @@ describe('RpcGateway browseMachineDirectory', () => {
         const gateway = createGateway(
             {
                 type: 'success',
-                config: { agent: 'codex', defaultModel: 42, defaultModelReasoningEffort: null, availableModels: [] },
+                config: { agent: 'codex', availableModels: [{ id: 'gpt', label: 42, supportedThinkingLevels: [] }] },
             },
             'machine-1:resolve-agent-launch-config'
         )
