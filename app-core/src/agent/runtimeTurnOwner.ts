@@ -3,11 +3,14 @@ import { createReadyEventScheduler } from '@/agent/readyEventScheduler'
 import { settleTerminalTurn } from '@/agent/turnTerminalSettlement'
 import type { RuntimeSessionClient } from '@/lib'
 
+export type RuntimeTurnEndReason = 'success' | 'error' | 'abort'
+export type RuntimeBeforeTurnResult<TPrepared> = { type: 'handled' } | { type: 'continue'; prepared: TPrepared }
+
 export type RuntimeTurnOwnerOptions<TBatch, TPrepared = TBatch> = {
-    afterThinkingCleared?: () => Promise<void> | void
+    afterTurn?: (reason: RuntimeTurnEndReason) => Promise<void> | void
+    beforeTurn?: (batch: TBatch) => Promise<RuntimeBeforeTurnResult<TPrepared>> | RuntimeBeforeTurnResult<TPrepared>
     getAbortSignal: () => AbortSignal
     label: string
-    prepareTurn?: (batch: TBatch) => Promise<TPrepared> | TPrepared
     queueSize: () => number
     runTurn: (prepared: TPrepared) => Promise<void>
     sendReady?: () => void
@@ -15,8 +18,8 @@ export type RuntimeTurnOwnerOptions<TBatch, TPrepared = TBatch> = {
     setThinking: (thinking: boolean) => void
     shouldExit: () => boolean
     waitForTurn: (signal: AbortSignal) => Promise<TBatch | null>
+    waitUntilReadyForNextTurn?: () => Promise<void> | void
     onTurnError?: (error: unknown) => Promise<void> | void
-    onTurnStart?: (prepared: TPrepared) => Promise<void> | void
 }
 
 export async function runRuntimeTurnOwner<TBatch, TPrepared = TBatch>(
@@ -39,18 +42,33 @@ export async function runRuntimeTurnOwner<TBatch, TPrepared = TBatch>(
                 break
             }
 
-            const prepared = options.prepareTurn ? await options.prepareTurn(batch) : (batch as unknown as TPrepared)
-            await options.onTurnStart?.(prepared)
+            const beforeTurn = options.beforeTurn
+                ? await options.beforeTurn(batch)
+                : { type: 'continue' as const, prepared: batch as unknown as TPrepared }
+            if (beforeTurn.type === 'handled') {
+                continue
+            }
+
+            let reason: RuntimeTurnEndReason = 'success'
             options.setThinking(true)
 
             try {
-                await options.runTurn(prepared)
+                await options.runTurn(beforeTurn.prepared)
+                if (signal.aborted) {
+                    reason = 'abort'
+                }
             } catch (error) {
+                reason = isAbort(error, signal) ? 'abort' : 'error'
                 await options.onTurnError?.(error)
             } finally {
                 await settleTerminalTurn({
+                    beforeThinkingCleared: async () => {
+                        await options.waitUntilReadyForNextTurn?.()
+                    },
                     setThinking: options.setThinking,
-                    afterThinkingCleared: options.afterThinkingCleared,
+                    afterThinkingCleared: async () => {
+                        await options.afterTurn?.(reason)
+                    },
                     emitReady: async () => await readyScheduler.emitNow(),
                 })
             }
@@ -58,4 +76,8 @@ export async function runRuntimeTurnOwner<TBatch, TPrepared = TBatch>(
     } finally {
         readyScheduler.dispose()
     }
+}
+
+function isAbort(error: unknown, signal: AbortSignal): boolean {
+    return signal.aborted || (error instanceof Error && error.name === 'AbortError')
 }

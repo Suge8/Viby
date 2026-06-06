@@ -156,18 +156,21 @@ class GeminiRemoteLauncher extends RemoteLauncherBase {
             sendReady: () => session.sendSessionEvent({ type: 'ready' }),
             getAbortSignal: () => this.abortController.signal,
             waitForTurn: async (signal) => await session.queue.waitForMessagesAndGetAsString(signal),
-            prepareTurn: async (batch) => ({
-                ...batch,
-                acpSessionId: await ensureBackendForMode(batch.mode),
-                promptContent: [
-                    {
-                        type: 'text' as const,
-                        text: preparePromptText(batch.message, batch.mode),
+            beforeTurn: async (batch) => {
+                messageBuffer.addMessage(batch.message, 'user')
+                return {
+                    type: 'continue',
+                    prepared: {
+                        ...batch,
+                        acpSessionId: await ensureBackendForMode(batch.mode),
+                        promptContent: [
+                            {
+                                type: 'text' as const,
+                                text: preparePromptText(batch.message, batch.mode),
+                            },
+                        ] satisfies PromptContent[],
                     },
-                ] satisfies PromptContent[],
-            }),
-            onTurnStart: (turn) => {
-                messageBuffer.addMessage(turn.message, 'user')
+                }
             },
             runTurn: async (turn) => {
                 const backend = await session.ensureRemoteBackend({
@@ -190,7 +193,7 @@ class GeminiRemoteLauncher extends RemoteLauncherBase {
                 })
             },
             setThinking: (thinking) => session.onThinkingChange(thinking),
-            afterThinkingCleared: async () => {
+            afterTurn: async () => {
                 await this.permissionHandler?.cancelAll('Prompt finished')
             },
         })

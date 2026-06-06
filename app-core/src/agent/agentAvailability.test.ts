@@ -49,8 +49,6 @@ describe('listAgentAvailability', () => {
         harness.geminiRuntimeConfig.mockReset().mockReturnValue({ token: 'token', modelSource: 'env' })
         harness.piLaunchConfig.mockReset().mockResolvedValue({
             agent: 'pi',
-            defaultModel: 'openai/gpt-5.4',
-            defaultModelReasoningEffort: 'high',
             availableModels: [{ id: 'openai/gpt-5.4', label: 'GPT-5.4', supportedThinkingLevels: ['none', 'high'] }],
         })
     })

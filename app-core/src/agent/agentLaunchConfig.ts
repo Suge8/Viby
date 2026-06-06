@@ -7,13 +7,9 @@ import {
     type AgentLaunchConfigErrorCode,
     type AgentModelCapability,
     CLAUDE_REASONING_EFFORTS,
-    CLAUDE_SELECTABLE_MODEL_PRESETS,
     CODEX_MODEL_LABELS,
-    CODEX_MODEL_PRESETS,
     CODEX_REASONING_EFFORTS,
     COPILOT_MODEL_LABELS,
-    COPILOT_MODEL_PRESETS,
-    GEMINI_MODEL_PRESETS,
     getClaudeModelLabel,
     getGeminiModelLabel,
     type ModelReasoningEffort,
@@ -139,6 +135,21 @@ function normalizeModelIds(models: readonly string[]): string[] {
     return normalized
 }
 
+function preferFirst<T extends string | null>(preferred: T, values: readonly string[]): string[] {
+    const normalized = normalizeModelIds(preferred ? [preferred, ...values] : values)
+    return normalized
+}
+
+function orderReasoning(
+    preferred: ModelReasoningEffort | null,
+    supportedThinkingLevels: readonly ModelReasoningEffort[]
+): ModelReasoningEffort[] {
+    if (!preferred) return [...supportedThinkingLevels]
+    return [...new Set([preferred, ...supportedThinkingLevels])].filter((effort) =>
+        supportedThinkingLevels.includes(effort)
+    )
+}
+
 function createCapabilities(
     models: readonly string[],
     getLabel: (model: string) => string | null,
@@ -195,21 +206,19 @@ function resolveClaudeLaunchConfig(directory: string): AgentLaunchConfig {
     const settingsLayers = getClaudeSettingsLayers(directory)
     const settingsEnvModel = readLayeredSettingsEnv(settingsLayers, CLAUDE_MODEL_ENV_KEYS)
     const settingsEnvEffort = readLayeredSettingsEnv(settingsLayers, CLAUDE_REASONING_ENV_KEYS)
+    const configuredModel =
+        readEnv(CLAUDE_MODEL_ENV_KEYS) ?? settingsEnvModel ?? readLayeredString(settingsLayers, ['model'])
+    const configuredEffort = normalizeReasoningEffort(
+        readEnv(CLAUDE_REASONING_ENV_KEYS) ?? settingsEnvEffort ?? readLayeredString(settingsLayers, ['effortLevel'])
+    )
     const availableModels = readMergedStringList(settingsLayers, 'availableModels')
 
     return {
         agent: 'claude',
-        defaultModel:
-            readEnv(CLAUDE_MODEL_ENV_KEYS) ?? settingsEnvModel ?? readLayeredString(settingsLayers, ['model']),
-        defaultModelReasoningEffort: normalizeReasoningEffort(
-            readEnv(CLAUDE_REASONING_ENV_KEYS) ??
-                settingsEnvEffort ??
-                readLayeredString(settingsLayers, ['effortLevel'])
-        ),
         availableModels: createCapabilities(
-            availableModels.length > 0 ? availableModels : CLAUDE_SELECTABLE_MODEL_PRESETS,
+            preferFirst(configuredModel, availableModels),
             getClaudeModelLabel,
-            CLAUDE_REASONING_EFFORTS
+            orderReasoning(configuredEffort, CLAUDE_REASONING_EFFORTS)
         ),
     }
 }
@@ -236,14 +245,14 @@ function getCodexConfig(directory: string): Record<string, unknown> {
 
 function resolveCodexLaunchConfig(directory: string): AgentLaunchConfig {
     const config = getCodexConfig(directory)
+    const configuredModel = readString(config, ['model'])
+    const configuredEffort = normalizeReasoningEffort(readString(config, ['model_reasoning_effort']))
     return {
         agent: 'codex',
-        defaultModel: readString(config, ['model']),
-        defaultModelReasoningEffort: normalizeReasoningEffort(readString(config, ['model_reasoning_effort'])),
         availableModels: createCapabilities(
-            CODEX_MODEL_PRESETS,
+            configuredModel ? [configuredModel] : [],
             (model) => CODEX_MODEL_LABELS[model as keyof typeof CODEX_MODEL_LABELS] ?? model,
-            CODEX_REASONING_EFFORTS
+            orderReasoning(configuredEffort, CODEX_REASONING_EFFORTS)
         ),
     }
 }
@@ -252,26 +261,22 @@ function resolveGeminiLaunchConfig(directory: string): AgentLaunchConfig {
     const config = resolveGeminiRuntimeConfig({ cwd: directory })
     return {
         agent: 'gemini',
-        defaultModel: config.model ?? null,
-        defaultModelReasoningEffort: null,
-        availableModels: createCapabilities(GEMINI_MODEL_PRESETS, getGeminiModelLabel),
+        availableModels: createCapabilities(config.model ? [config.model] : [], getGeminiModelLabel),
     }
 }
 
 function resolveCopilotLaunchConfig(): AgentLaunchConfig {
     return {
         agent: 'copilot',
-        defaultModel: COPILOT_DEFAULT_MODEL,
-        defaultModelReasoningEffort: null,
         availableModels: createCapabilities(
-            COPILOT_MODEL_PRESETS,
+            [COPILOT_DEFAULT_MODEL],
             (model) => COPILOT_MODEL_LABELS[model as keyof typeof COPILOT_MODEL_LABELS] ?? model
         ),
     }
 }
 
 function resolveStaticLaunchConfig(agent: 'cursor' | 'opencode'): AgentLaunchConfig {
-    return { agent, defaultModel: null, defaultModelReasoningEffort: null, availableModels: [] }
+    return { agent, availableModels: [] }
 }
 
 export function classifyAgentLaunchConfigError(error: unknown): AgentLaunchConfigErrorCode {

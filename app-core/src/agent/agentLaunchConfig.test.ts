@@ -4,7 +4,14 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { resolveAgentLaunchConfig } from './agentLaunchConfig'
 
-const ORIGINAL_ENV = { ...process.env }
+const envKeys = [
+    'ANTHROPIC_MODEL',
+    'CLAUDE_MODEL',
+    'CLAUDE_CODE_EFFORT_LEVEL',
+    'CODEX_HOME',
+    'GEMINI_CLI_HOME',
+    'GEMINI_MODEL',
+]
 const tempDirs: string[] = []
 
 function makeTempDir(): string {
@@ -14,62 +21,55 @@ function makeTempDir(): string {
 }
 
 afterEach(() => {
-    process.env = { ...ORIGINAL_ENV }
-    for (const path of tempDirs.splice(0)) {
-        rmSync(path, { recursive: true, force: true })
-    }
+    for (const key of envKeys) delete process.env[key]
+    for (const path of tempDirs.splice(0)) rmSync(path, { recursive: true, force: true })
 })
 
 describe('resolveAgentLaunchConfig', () => {
-    it('resolves Claude model from local runtime environment', async () => {
+    it('orders Claude launch options from local runtime environment', async () => {
         process.env.ANTHROPIC_MODEL = 'opus'
         process.env.CLAUDE_CODE_EFFORT_LEVEL = 'xhigh'
 
-        await expect(resolveAgentLaunchConfig('claude', '/repo')).resolves.toMatchObject({
-            agent: 'claude',
-            defaultModel: 'opus',
-            defaultModelReasoningEffort: 'xhigh',
-        })
+        const config = await resolveAgentLaunchConfig('claude', '/repo')
+
+        expect(config.availableModels[0]?.id).toBe('opus')
+        expect(config.availableModels[0]?.supportedThinkingLevels[0]).toBe('xhigh')
     })
 
-    it('resolves Claude project settings with local precedence', async () => {
+    it('orders Claude project settings with local precedence', async () => {
         const project = makeTempDir()
         const claudeDir = join(project, '.claude')
         mkdirSync(claudeDir, { recursive: true })
         writeFileSync(join(claudeDir, 'settings.json'), JSON.stringify({ model: 'sonnet', effortLevel: 'low' }))
         writeFileSync(join(claudeDir, 'settings.local.json'), JSON.stringify({ model: 'opus', effortLevel: 'max' }))
 
-        await expect(resolveAgentLaunchConfig('claude', join(project, 'nested'))).resolves.toMatchObject({
-            agent: 'claude',
-            defaultModel: 'opus',
-            defaultModelReasoningEffort: 'max',
-        })
+        const config = await resolveAgentLaunchConfig('claude', join(project, 'nested'))
+
+        expect(config.availableModels[0]?.id).toBe('opus')
+        expect(config.availableModels[0]?.supportedThinkingLevels[0]).toBe('max')
     })
 
-    it('resolves Codex model and reasoning from config.toml', async () => {
+    it('orders Codex model and reasoning from config.toml', async () => {
         const codexHome = makeTempDir()
         process.env.CODEX_HOME = codexHome
         writeFileSync(join(codexHome, 'config.toml'), 'model = "gpt-5.4"\nmodel_reasoning_effort = "high"\n')
 
-        await expect(resolveAgentLaunchConfig('codex', '/repo')).resolves.toMatchObject({
-            agent: 'codex',
-            defaultModel: 'gpt-5.4',
-            defaultModelReasoningEffort: 'high',
-            availableModels: expect.arrayContaining([expect.objectContaining({ id: 'gpt-5.4', label: 'GPT-5.4' })]),
-        })
+        const config = await resolveAgentLaunchConfig('codex', '/repo')
+
+        expect(config.availableModels[0]).toMatchObject({ id: 'gpt-5.4', label: 'GPT-5.4' })
+        expect(config.availableModels[0]?.supportedThinkingLevels[0]).toBe('high')
     })
 
-    it('resolves Codex project config from the selected directory', async () => {
+    it('orders Codex project config from the selected directory', async () => {
         const project = makeTempDir()
         const codexDir = join(project, '.codex')
         mkdirSync(codexDir, { recursive: true })
         writeFileSync(join(codexDir, 'config.toml'), 'model = "gpt-5.5"\nmodel_reasoning_effort = "xhigh"\n')
 
-        await expect(resolveAgentLaunchConfig('codex', join(project, 'packages/app'))).resolves.toMatchObject({
-            agent: 'codex',
-            defaultModel: 'gpt-5.5',
-            defaultModelReasoningEffort: 'xhigh',
-        })
+        const config = await resolveAgentLaunchConfig('codex', join(project, 'packages/app'))
+
+        expect(config.availableModels[0]?.id).toBe('gpt-5.5')
+        expect(config.availableModels[0]?.supportedThinkingLevels[0]).toBe('xhigh')
     })
 
     it('resolves Codex active profile overlays', async () => {
@@ -80,24 +80,21 @@ describe('resolveAgentLaunchConfig', () => {
             'model = "gpt-5.2"\nprofile = "fast"\n[profiles.fast]\nmodel = "gpt-5.4-mini"\nmodel_reasoning_effort = "high"\n'
         )
 
-        await expect(resolveAgentLaunchConfig('codex', '/repo')).resolves.toMatchObject({
-            agent: 'codex',
-            defaultModel: 'gpt-5.4-mini',
-            defaultModelReasoningEffort: 'high',
-        })
+        const config = await resolveAgentLaunchConfig('codex', '/repo')
+
+        expect(config.availableModels[0]?.id).toBe('gpt-5.4-mini')
+        expect(config.availableModels[0]?.supportedThinkingLevels[0]).toBe('high')
     })
 
-    it('resolves Gemini model from the same runtime config owner', async () => {
+    it('orders Gemini model from the same runtime config owner', async () => {
         process.env.GEMINI_MODEL = 'gemini-3-pro-preview'
 
-        await expect(resolveAgentLaunchConfig('gemini', '/repo')).resolves.toMatchObject({
-            agent: 'gemini',
-            defaultModel: 'gemini-3-pro-preview',
-            defaultModelReasoningEffort: null,
-        })
+        const config = await resolveAgentLaunchConfig('gemini', '/repo')
+
+        expect(config.availableModels[0]?.id).toBe('gemini-3-pro-preview')
     })
 
-    it('resolves Gemini project settings by directory', async () => {
+    it('orders Gemini project settings by directory', async () => {
         process.env.GEMINI_CLI_HOME = makeTempDir()
         const project = makeTempDir()
         const geminiDir = join(project, '.gemini')
@@ -105,18 +102,14 @@ describe('resolveAgentLaunchConfig', () => {
         writeFileSync(join(geminiDir, 'settings.json'), JSON.stringify({ model: { name: 'gemini-2.5-flash' } }))
         writeFileSync(join(project, '.env'), 'GEMINI_API_KEY=test-key\n')
 
-        await expect(resolveAgentLaunchConfig('gemini', join(project, 'src'))).resolves.toMatchObject({
-            agent: 'gemini',
-            defaultModel: 'gemini-2.5-flash',
-            defaultModelReasoningEffort: null,
-        })
+        const config = await resolveAgentLaunchConfig('gemini', join(project, 'src'))
+
+        expect(config.availableModels[0]?.id).toBe('gemini-2.5-flash')
     })
 
-    it('exposes Copilot launcher fallback as the resolved default model', async () => {
-        await expect(resolveAgentLaunchConfig('copilot', '/repo')).resolves.toMatchObject({
-            agent: 'copilot',
-            defaultModel: 'gpt-5',
-            defaultModelReasoningEffort: null,
-        })
+    it('orders Copilot launcher fallback first', async () => {
+        const config = await resolveAgentLaunchConfig('copilot', '/repo')
+
+        expect(config.availableModels[0]?.id).toBe('gpt-5')
     })
 })

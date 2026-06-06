@@ -61,16 +61,18 @@ class CopilotRemoteLauncher extends RemoteLauncherBase {
             sendReady: () => session.sendSessionEvent({ type: 'ready' }),
             getAbortSignal: () => this.abortController.signal,
             waitForTurn: async (signal) => await session.queue.waitForMessagesAndGetAsString(signal),
-            prepareTurn: (batch) => ({
-                message: batch.message,
-                messageText: prependPromptInstructionsToMessage(
-                    batch.message,
-                    mergePromptSegments(batch.mode.developerInstructions)
-                ),
-                waitSignal: this.abortController.signal,
-            }),
-            onTurnStart: (turn) => {
-                messageBuffer.addMessage(turn.message, 'user')
+            beforeTurn: (batch) => {
+                messageBuffer.addMessage(batch.message, 'user')
+                return {
+                    type: 'continue',
+                    prepared: {
+                        messageText: prependPromptInstructionsToMessage(
+                            batch.message,
+                            mergePromptSegments(batch.mode.developerInstructions)
+                        ),
+                        waitSignal: this.abortController.signal,
+                    },
+                }
             },
             runTurn: async (turn) => {
                 await this.runTurn({

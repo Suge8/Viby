@@ -13,7 +13,6 @@ import {
     TURN_CONTENT_EVENT_TYPES,
 } from './codexRemoteSupport'
 import type { CodexSession } from './session'
-import type { AppServerEventConverter } from './utils/appServerEventConverter'
 import type { DiffProcessor } from './utils/diffProcessor'
 import type { ReasoningProcessor } from './utils/reasoningProcessor'
 import { shouldIgnoreTerminalEvent } from './utils/terminalEventGuard'
@@ -24,15 +23,10 @@ export function createCodexEventHandler(options: {
     messageBuffer: MessageBuffer
     reasoningProcessor: ReasoningProcessor
     diffProcessor: DiffProcessor
-    appServerEventConverter: AppServerEventConverter
     bindThreadId: (threadId: string) => void
-    clearAssistantStream: () => void
     appendAssistantStream: (assistantTurnId: string, delta: string) => void
     acknowledgeAssistantTurn: (assistantTurnId: string) => void
     notifyTurnSettled: () => void
-    scheduleReadyAfterTurn: () => void
-    clearReadyAfterTurnTimer: () => void
-    hasReadyAfterTurnTimer: () => boolean
 }): (msg: Record<string, unknown>) => void {
     const {
         session,
@@ -40,15 +34,10 @@ export function createCodexEventHandler(options: {
         messageBuffer,
         reasoningProcessor,
         diffProcessor,
-        appServerEventConverter,
         bindThreadId,
-        clearAssistantStream,
         appendAssistantStream,
         acknowledgeAssistantTurn,
         notifyTurnSettled,
-        scheduleReadyAfterTurn,
-        clearReadyAfterTurnTimer,
-        hasReadyAfterTurnTimer,
     } = options
 
     return (msg: Record<string, unknown>) => {
@@ -121,10 +110,6 @@ export function createCodexEventHandler(options: {
             state.allowAnonymousTerminalEvent = false
         }
 
-        if (isTerminalEvent) {
-            clearAssistantStream()
-        }
-
         dispatchBufferEvent(
             {
                 session,
@@ -142,31 +127,18 @@ export function createCodexEventHandler(options: {
         )
 
         if (msgType === 'task_started') {
-            clearReadyAfterTurnTimer()
             state.turnInFlight = true
             if (!eventTurnId && !state.currentTurnId) {
                 state.allowAnonymousTerminalEvent = true
-            }
-            if (!session.thinking) {
-                session.onThinkingChange(true)
             }
         }
 
         if (isTerminalEvent) {
             state.turnInFlight = false
             state.allowAnonymousTerminalEvent = false
-            notifyTurnSettled()
-            if (session.thinking) {
-                session.onThinkingChange(false)
+            if (state.activeChildTurns.size === 0) {
+                notifyTurnSettled()
             }
-            diffProcessor.reset()
-            appServerEventConverter.reset()
-        }
-
-        if (isTerminalEvent && !state.turnInFlight) {
-            scheduleReadyAfterTurn()
-        } else if (hasReadyAfterTurnTimer() && msgType !== 'task_started') {
-            scheduleReadyAfterTurn()
         }
 
         dispatchCodexStructuredEvent(

@@ -30,23 +30,18 @@ describe('createCodexEventHandler', () => {
             messageBuffer: { addMessage: vi.fn() } as never,
             reasoningProcessor: { processDelta: vi.fn(), complete: vi.fn(), handleSectionBreak: vi.fn() } as never,
             diffProcessor: { reset: vi.fn(), processDiff: vi.fn() } as never,
-            appServerEventConverter: { reset: vi.fn() } as never,
             bindThreadId: vi.fn(),
-            clearAssistantStream,
             appendAssistantStream: vi.fn(),
             acknowledgeAssistantTurn: vi.fn(),
             notifyTurnSettled,
-            scheduleReadyAfterTurn: vi.fn(),
-            clearReadyAfterTurnTimer: vi.fn(),
-            hasReadyAfterTurnTimer: () => false,
         })
 
         handler({ type: 'agent_message_delta', delta: 'hello', item_id: 'msg-1' })
         handler({ type: 'task_complete' })
 
-        expect(clearAssistantStream).toHaveBeenCalledTimes(1)
+        expect(clearAssistantStream).not.toHaveBeenCalled()
         expect(notifyTurnSettled).toHaveBeenCalledTimes(1)
         expect(state.turnInFlight).toBe(false)
-        expect(session.onThinkingChange).toHaveBeenCalledWith(false)
+        expect(session.onThinkingChange).not.toHaveBeenCalled()
     })
 })

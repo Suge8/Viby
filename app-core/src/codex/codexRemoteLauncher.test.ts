@@ -11,6 +11,7 @@ const harness = vi.hoisted(() => ({
     startThreadCalls: [] as unknown[],
     resumeThreadCalls: [] as unknown[],
     startTurnCalls: [] as unknown[],
+    compactThreadCalls: [] as unknown[],
     delayFirstTurnCompletion: false,
     warmupNotifications: [] as Array<{ method: string; params: unknown }>,
     resumeThreadFailuresRemaining: 0,
@@ -69,6 +70,11 @@ vi.mock('./codexAppServerClient', () => {
             return { thread: { id: 'thread-anonymous' }, model: 'gpt-5.4' }
         }
 
+        async compactThread(params: unknown): Promise<{ thread: { id: string } }> {
+            harness.compactThreadCalls.push(params)
+            return { thread: { id: 'thread-compacted' } }
+        }
+
         async startTurn(params: unknown): Promise<{ turn: { id: string } }> {
             harness.startTurnCalls.push(params)
             const turnId = `turn-${harness.startTurnCalls.length}`
@@ -119,10 +125,13 @@ function createDriverSwitchInstructions(): string {
     )
 }
 
-function createSessionStub(modes: EnhancedMode[] = [createMode()], options: { autoCloseQueue?: boolean } = {}) {
+function createSessionStub(
+    modes: EnhancedMode[] = [createMode()],
+    options: { autoCloseQueue?: boolean; messages?: string[] } = {}
+) {
     const queue = new MessageQueue2<EnhancedMode>((mode) => JSON.stringify(mode))
     for (const [index, mode] of modes.entries()) {
-        queue.push(`hello from launcher test ${index + 1}`, mode)
+        queue.push(options.messages?.[index] ?? `hello from launcher test ${index + 1}`, mode)
     }
     if (options.autoCloseQueue !== false) {
         queue.close()
@@ -251,6 +260,7 @@ describe('codexRemoteLauncher', () => {
         harness.startThreadCalls = []
         harness.resumeThreadCalls = []
         harness.startTurnCalls = []
+        harness.compactThreadCalls = []
         harness.delayFirstTurnCompletion = false
         harness.warmupNotifications = []
         harness.resumeThreadFailuresRemaining = 0
@@ -322,6 +332,36 @@ describe('codexRemoteLauncher', () => {
         expect(session.thinking).toBe(false)
         expect(codexMessages).toEqual([])
         expect(sessionEvents).toEqual([])
+    })
+
+    it('handles /clear without starting a Codex turn', async () => {
+        const { session, sessionEvents, thinkingChanges } = createSessionStub([createMode()], { messages: ['/clear'] })
+
+        const exitReason = await codexRemoteLauncher(session as never)
+
+        expect(exitReason).toBe('exit')
+        expect(harness.startTurnCalls).toEqual([])
+        expect(harness.compactThreadCalls).toEqual([])
+        expect(sessionEvents).toContainEqual({
+            type: 'message',
+            message: 'Open a new Viby session to clear Codex context.',
+        })
+        expect(thinkingChanges).toEqual([])
+    })
+
+    it('handles /compact through the Codex compact transport path', async () => {
+        const { session, sessionEvents, thinkingChanges, foundSessionIds } = createSessionStub([createMode()], {
+            messages: ['/compact'],
+        })
+
+        const exitReason = await codexRemoteLauncher(session as never)
+
+        expect(exitReason).toBe('exit')
+        expect(harness.startTurnCalls).toEqual([])
+        expect(harness.compactThreadCalls).toEqual([{ threadId: 'thread-anonymous' }])
+        expect(foundSessionIds).toContain('thread-compacted')
+        expect(sessionEvents).toContainEqual({ type: 'message', message: 'Conversation compacted.' })
+        expect(thinkingChanges).toEqual([true, false])
     })
 
     it('waits for the current turn to finish before starting another turn with a new model', async () => {

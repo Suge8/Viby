@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { CodexRemoteRuntimeState } from './codexRemoteSupport'
-import { abortCodexTurn, finalizeIdleTurn, recoverFromTurnStartError } from './codexRemoteTurnLifecycle'
+import { abortCodexTurn, cleanupCodexTurn, recoverFromTurnStartError } from './codexRemoteTurnLifecycle'
 
 function createState(): CodexRemoteRuntimeState {
     return {
@@ -20,6 +20,7 @@ describe('codexRemoteTurnLifecycle', () => {
         state.activeChildTurns.set('thread-child-a', 'turn-child-a')
         state.activeChildTurns.set('thread-child-b', 'turn-child-b')
         const interruptTurn = vi.fn(async () => ({ ok: true }))
+        const notifyTurnSettled = vi.fn()
 
         await abortCodexTurn({
             state,
@@ -27,10 +28,10 @@ describe('codexRemoteTurnLifecycle', () => {
             abortController: new AbortController(),
             resetQueue: vi.fn(),
             clearAssistantStream: vi.fn(),
-            setThinking: vi.fn(),
             resetPermissionHandler: vi.fn(),
             abortReasoning: vi.fn(),
             resetDiff: vi.fn(),
+            notifyTurnSettled,
             replaceAbortController: vi.fn(),
         })
 
@@ -38,6 +39,7 @@ describe('codexRemoteTurnLifecycle', () => {
         expect(interruptTurn).toHaveBeenCalledWith({ threadId: 'thread-child-a', turnId: 'turn-child-a' })
         expect(interruptTurn).toHaveBeenCalledWith({ threadId: 'thread-child-b', turnId: 'turn-child-b' })
         expect(state.activeChildTurns.size).toBe(0)
+        expect(notifyTurnSettled).toHaveBeenCalledTimes(1)
     })
 
     it('clears tracked child turns after a best-effort abort even when interrupt fails', async () => {
@@ -56,10 +58,10 @@ describe('codexRemoteTurnLifecycle', () => {
             abortController: new AbortController(),
             resetQueue: vi.fn(),
             clearAssistantStream: vi.fn(),
-            setThinking: vi.fn(),
             resetPermissionHandler: vi.fn(),
             abortReasoning: vi.fn(),
             resetDiff: vi.fn(),
+            notifyTurnSettled: vi.fn(),
             replaceAbortController: vi.fn(),
         })
 
@@ -67,37 +69,46 @@ describe('codexRemoteTurnLifecycle', () => {
         expect(state.activeChildTurns.size).toBe(0)
     })
 
-    it('surfaces the concrete turn-start error and still returns the session to ready', async () => {
+    it('surfaces the concrete turn-start error and marks the turn settled', () => {
         const state = createState()
         const addMessage = vi.fn()
         const sendSessionMessage = vi.fn()
-        const emitReady = vi.fn(async () => true)
+        const notifyTurnSettled = vi.fn()
 
         recoverFromTurnStartError({
             error: new Error("Collaboration mode 'plan' requires a resolved model"),
             state,
             messageBuffer: { addMessage } as never,
             clearAssistantStream: vi.fn(),
-            notifyTurnSettled: vi.fn(),
+            notifyTurnSettled,
             sendSessionMessage,
             resetThreadState: vi.fn(),
         })
 
         expect(addMessage).toHaveBeenCalledWith("Collaboration mode 'plan' requires a resolved model", 'status')
         expect(sendSessionMessage).toHaveBeenCalledWith("Collaboration mode 'plan' requires a resolved model")
+        expect(notifyTurnSettled).toHaveBeenCalledTimes(1)
+    })
 
-        await finalizeIdleTurn({
-            state,
-            clearAssistantStream: vi.fn(),
-            resetPermissionHandler: vi.fn(),
-            abortReasoning: vi.fn(),
-            resetDiff: vi.fn(),
-            resetEventConverter: vi.fn(),
-            setThinking: vi.fn(),
-            clearReadyAfterTurnTimer: vi.fn(),
-            emitReady,
+    it('cleans Codex turn transport state without owning ready emission', async () => {
+        const clearAssistantStream = vi.fn()
+        const resetPermissionHandler = vi.fn()
+        const abortReasoning = vi.fn()
+        const resetDiff = vi.fn()
+        const resetEventConverter = vi.fn()
+
+        await cleanupCodexTurn({
+            clearAssistantStream,
+            resetPermissionHandler,
+            abortReasoning,
+            resetDiff,
+            resetEventConverter,
         })
 
-        expect(emitReady).toHaveBeenCalledTimes(1)
+        expect(clearAssistantStream).toHaveBeenCalledTimes(1)
+        expect(resetPermissionHandler).toHaveBeenCalledTimes(1)
+        expect(abortReasoning).toHaveBeenCalledTimes(1)
+        expect(resetDiff).toHaveBeenCalledTimes(1)
+        expect(resetEventConverter).toHaveBeenCalledTimes(1)
     })
 })

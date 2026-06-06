@@ -1,10 +1,10 @@
 import { AssistantStreamBridge } from '@/agent/assistantStreamBridge'
+import { runRuntimeTurnOwner } from '@/agent/runtimeTurnOwner'
 import { reportDiscoveredSessionId } from '@/agent/sessionDiscoveryBridge'
 import { parseSpecialCommand } from '@/parsers/specialCommands'
 import type { MessageBuffer } from '@/ui/ink/messageBuffer'
 import { logger } from '@/ui/logger'
 import type { CodexAppServerClient } from './codexAppServerClient'
-import { createCodexReadyScheduler } from './codexReadyScheduler'
 import { createCodexEventHandler } from './codexRemoteEventHandler'
 import { buildCodexPermissionBridgeHandlers } from './codexRemotePermissionBridge'
 import { registerCodexNotificationHandler, warmupCodexRemoteThread } from './codexRemoteRuntime'
@@ -13,7 +13,7 @@ import { ensureCodexRemoteThreadReady } from './codexRemoteThreadOwner'
 import {
     abortCodexTurn,
     applyTurnStartResponse,
-    finalizeIdleTurn,
+    cleanupCodexTurn,
     recoverFromTurnStartError,
 } from './codexRemoteTurnLifecycle'
 import type { EnhancedMode } from './loop'
@@ -26,7 +26,6 @@ import { CodexPermissionHandler } from './utils/permissionHandler'
 import { ReasoningProcessor } from './utils/reasoningProcessor'
 import { getCodexThreadMode } from './utils/threadWarmup'
 
-const READY_AFTER_TURN_DELAY_MS = 120
 const CODEX_COMPACT_SUCCESS_MESSAGE = 'Conversation compacted.'
 const CODEX_CLEAR_REDIRECT_MESSAGE = 'Open a new Viby session to clear Codex context.'
 
@@ -48,8 +47,6 @@ export class CodexRemoteCoordinator {
     reasoningProcessor: ReasoningProcessor | null = null
     diffProcessor: DiffProcessor | null = null
     private hasThread = false
-    private readyScheduler: ReturnType<typeof createCodexReadyScheduler> | null = null
-    private pending: QueuedMessage | null = null
     private resolveTurnSettledWaiter: (() => void) | null = null
     private readonly assistantStream: AssistantStreamBridge
 
@@ -76,10 +73,10 @@ export class CodexRemoteCoordinator {
             abortController: this.abortController,
             resetQueue: () => this.session.queue.reset(),
             clearAssistantStream: () => this.assistantStream.clearDanglingAssistantTurn(),
-            setThinking: (thinking) => this.session.onThinkingChange(thinking),
             resetPermissionHandler: () => this.permissionHandler?.reset(),
             abortReasoning: () => this.reasoningProcessor?.abort(),
             resetDiff: () => this.diffProcessor?.reset(),
+            notifyTurnSettled: () => this.notifyTurnSettled(),
             replaceAbortController: (nextController) => {
                 ;(this as { abortController: AbortController }).abortController = nextController
             },
@@ -87,18 +84,21 @@ export class CodexRemoteCoordinator {
     }
 
     private notifyTurnSettled(): void {
+        if (!this.isTurnSettled()) {
+            return
+        }
         const waiter = this.resolveTurnSettledWaiter
         this.resolveTurnSettledWaiter = null
         waiter?.()
     }
 
-    private async waitForTurnToSettle(): Promise<void> {
-        if (!this.state.turnInFlight) {
+    private async waitUntilReadyForNextTurn(): Promise<void> {
+        if (this.isTurnSettled()) {
             return
         }
 
         await new Promise<void>((resolve) => {
-            if (!this.state.turnInFlight) {
+            if (this.isTurnSettled()) {
                 resolve()
                 return
             }
@@ -106,12 +106,8 @@ export class CodexRemoteCoordinator {
         })
     }
 
-    private clearReadyAfterTurnTimer(): void {
-        this.readyScheduler?.cancel()
-    }
-
-    private scheduleReadyAfterTurn(): void {
-        this.readyScheduler?.schedule(READY_AFTER_TURN_DELAY_MS)
+    private isTurnSettled(): boolean {
+        return !this.state.turnInFlight && this.state.activeChildTurns.size === 0
     }
 
     private bindThreadId(threadId: string): void {
@@ -201,7 +197,6 @@ export class CodexRemoteCoordinator {
         this.permissionHandler = permissionHandler
         this.reasoningProcessor = reasoningProcessor
         this.diffProcessor = diffProcessor
-        this.readyScheduler = createCodexReadyScheduler(this.session, shouldExit, () => this.pending !== null)
 
         registerAppServerPermissionHandlers({
             client: this.appServerClient,
@@ -216,16 +211,11 @@ export class CodexRemoteCoordinator {
             messageBuffer: this.messageBuffer,
             reasoningProcessor,
             diffProcessor,
-            appServerEventConverter,
             bindThreadId: (threadId) => this.bindThreadId(threadId),
-            clearAssistantStream: () => this.assistantStream.clearDanglingAssistantTurn(),
             appendAssistantStream: (assistantTurnId, delta) =>
                 this.assistantStream.appendTextDelta(delta, assistantTurnId),
             acknowledgeAssistantTurn: (assistantTurnId) => this.assistantStream.acknowledgeDurableTurn(assistantTurnId),
             notifyTurnSettled: () => this.notifyTurnSettled(),
-            scheduleReadyAfterTurn: () => this.scheduleReadyAfterTurn(),
-            clearReadyAfterTurnTimer: () => this.clearReadyAfterTurnTimer(),
-            hasReadyAfterTurnTimer: () => this.readyScheduler?.isScheduled() ?? false,
         })
 
         registerCodexNotificationHandler({
@@ -233,6 +223,7 @@ export class CodexRemoteCoordinator {
             state: this.state,
             appServerEventConverter,
             handleCodexEvent,
+            notifyTurnSettled: () => this.notifyTurnSettled(),
         })
 
         await this.appServerClient.connect()
@@ -254,38 +245,25 @@ export class CodexRemoteCoordinator {
             },
         })
 
-        while (!shouldExit()) {
-            logActiveHandles('loop-top')
-            let message = this.pending
-            this.pending = null
-            if (!message) {
-                const batch = await this.session.queue.waitForMessagesAndGetAsString(this.abortController.signal)
-                if (!batch) {
-                    if (this.abortController.signal.aborted && !shouldExit()) {
-                        continue
-                    }
-                    break
+        await runRuntimeTurnOwner<QueuedMessage>({
+            label: '[codex-remote]',
+            sessionClient: this.session.client,
+            queueSize: () => this.session.queue.size(),
+            shouldExit,
+            sendReady: () => this.session.sendSessionEvent({ type: 'ready' }),
+            getAbortSignal: () => this.abortController.signal,
+            waitForTurn: async (signal) => {
+                logActiveHandles('loop-top')
+                return await this.session.queue.waitForMessagesAndGetAsString(signal)
+            },
+            beforeTurn: async (message) => {
+                if (await this.handleQueuedSpecialCommand(message)) {
+                    return { type: 'handled' }
                 }
-                message = batch
-            }
-
-            if (!message) {
-                break
-            }
-
-            if (this.state.turnInFlight) {
-                this.pending = message
-                await this.waitForTurnToSettle()
-                continue
-            }
-
-            if (await this.handleQueuedSpecialCommand(message)) {
-                continue
-            }
-
-            this.messageBuffer.addMessage(message.message, 'user')
-
-            try {
+                this.messageBuffer.addMessage(message.message, 'user')
+                return { type: 'continue', prepared: message }
+            },
+            runTurn: async (message) => {
                 this.state.suppressAnonymousTurnEvents = false
                 this.state.currentThreadId = await this.ensureThreadReady(
                     getCodexThreadMode(this.session, message.mode),
@@ -314,7 +292,8 @@ export class CodexRemoteCoordinator {
                     { signal: this.abortController.signal }
                 )
                 applyTurnStartResponse(this.state, turnResponse)
-            } catch (error) {
+            },
+            onTurnError: (error) => {
                 recoverFromTurnStartError({
                     error,
                     state: this.state,
@@ -327,21 +306,20 @@ export class CodexRemoteCoordinator {
                         this.hasThread = false
                     },
                 })
-            } finally {
-                await finalizeIdleTurn({
-                    state: this.state,
+            },
+            afterTurn: async () => {
+                await cleanupCodexTurn({
                     clearAssistantStream: () => this.assistantStream.clearDanglingAssistantTurn(),
                     resetPermissionHandler: () => permissionHandler.reset(),
                     abortReasoning: () => reasoningProcessor.abort(),
                     resetDiff: () => diffProcessor.reset(),
                     resetEventConverter: () => appServerEventConverter.reset(),
-                    setThinking: (thinking) => this.session.onThinkingChange(thinking),
-                    clearReadyAfterTurnTimer: () => this.clearReadyAfterTurnTimer(),
-                    emitReady: async () => await this.readyScheduler?.emitNow(),
                 })
                 logActiveHandles('after-turn')
-            }
-        }
+            },
+            waitUntilReadyForNextTurn: async () => await this.waitUntilReadyForNextTurn(),
+            setThinking: (thinking) => this.session.onThinkingChange(thinking),
+        })
     }
 
     async cleanup(): Promise<void> {
@@ -349,10 +327,8 @@ export class CodexRemoteCoordinator {
         this.permissionHandler?.reset()
         this.reasoningProcessor?.abort()
         this.diffProcessor?.reset()
-        this.readyScheduler?.dispose()
         this.permissionHandler = null
         this.reasoningProcessor = null
         this.diffProcessor = null
-        this.readyScheduler = null
     }
 }

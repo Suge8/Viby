@@ -117,12 +117,35 @@ export function resolvePiModel(
     return resolvedModel
 }
 
-export function toPiModelCapabilities(models: readonly PiRpcModel[]): PiModelCapability[] {
-    const capabilities: PiModelCapability[] = models.map((model) => ({
-        id: formatPiModel(model) ?? model.id,
-        label: normalizePiLabel(model),
-        supportedThinkingLevels: model.reasoning === false ? ['none'] : [...PI_SUPPORTED_REASONING_LEVELS],
-    }))
+function orderPiReasoning(
+    preferred: string | null | undefined,
+    supportedThinkingLevels: PiModelCapability['supportedThinkingLevels']
+): PiModelCapability['supportedThinkingLevels'] {
+    if (!preferred || !supportedThinkingLevels.includes(preferred as never)) return supportedThinkingLevels
+    return [...new Set([preferred as PiModelCapability['supportedThinkingLevels'][number], ...supportedThinkingLevels])]
+}
+
+export function toPiModelCapabilities(
+    models: readonly PiRpcModel[],
+    preferredModel?: PiRpcModel | null,
+    preferredReasoning?: string | null
+): PiModelCapability[] {
+    const preferredId = formatPiModel(preferredModel)
+    const orderedModels = preferredId
+        ? [
+              ...models.filter((model) => formatPiModel(model) === preferredId),
+              ...models.filter((model) => formatPiModel(model) !== preferredId),
+          ]
+        : models
+    const capabilities: PiModelCapability[] = orderedModels.map((model) => {
+        const supportedThinkingLevels: PiModelCapability['supportedThinkingLevels'] =
+            model.reasoning === false ? ['none'] : [...PI_SUPPORTED_REASONING_LEVELS]
+        return {
+            id: formatPiModel(model) ?? model.id,
+            label: normalizePiLabel(model),
+            supportedThinkingLevels: orderPiReasoning(preferredReasoning, supportedThinkingLevels),
+        }
+    })
     return disambiguateDuplicatePiLabels(capabilities)
 }
 
@@ -133,9 +156,11 @@ export async function resolvePiAgentLaunchConfig(workingDirectory: string): Prom
         const [models, state] = await Promise.all([client.getAvailableModels(), client.getState()])
         return {
             agent: 'pi',
-            defaultModel: formatPiModel(state.model),
-            defaultModelReasoningEffort: fromPiThinkingLevel(state.thinkingLevel as PiThinkingLevel | undefined),
-            availableModels: toPiModelCapabilities(models),
+            availableModels: toPiModelCapabilities(
+                models,
+                state.model,
+                fromPiThinkingLevel(state.thinkingLevel as PiThinkingLevel | undefined)
+            ),
         }
     } finally {
         await client.stop()

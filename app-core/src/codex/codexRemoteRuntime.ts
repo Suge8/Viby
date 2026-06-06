@@ -21,8 +21,9 @@ export function registerCodexNotificationHandler(options: {
     state: CodexRemoteRuntimeState
     appServerEventConverter: AppServerEventConverter
     handleCodexEvent: (event: Record<string, unknown>) => void
+    notifyTurnSettled?: () => void
 }): void {
-    const { appServerClient, state, appServerEventConverter, handleCodexEvent } = options
+    const { appServerClient, state, appServerEventConverter, handleCodexEvent, notifyTurnSettled } = options
 
     appServerClient.setNotificationHandler((method, params) => {
         if (state.suppressAnonymousTurnEvents && isAbortSuppressedNotificationMethod(method)) {
@@ -32,7 +33,7 @@ export function registerCodexNotificationHandler(options: {
 
         const notificationThreadId = extractNotificationThreadId(params)
         if (state.currentThreadId && notificationThreadId && notificationThreadId !== state.currentThreadId) {
-            trackChildTurn(state, method, params, notificationThreadId)
+            trackChildTurn(state, method, params, notificationThreadId, notifyTurnSettled)
             logger.debug(
                 `[Codex] Ignoring notification for non-current thread ${notificationThreadId}; ` +
                     `active=${state.currentThreadId}; method=${method}`
@@ -46,8 +47,14 @@ export function registerCodexNotificationHandler(options: {
     })
 }
 
-function trackChildTurn(state: CodexRemoteRuntimeState, method: string, params: unknown, threadId: string): void {
-    if (!state.turnInFlight) {
+function trackChildTurn(
+    state: CodexRemoteRuntimeState,
+    method: string,
+    params: unknown,
+    threadId: string,
+    notifyTurnSettled?: () => void
+): void {
+    if (!state.turnInFlight && state.activeChildTurns.size === 0) {
         return
     }
 
@@ -61,6 +68,9 @@ function trackChildTurn(state: CodexRemoteRuntimeState, method: string, params: 
 
     if (method === 'turn/completed' || method === 'error') {
         state.activeChildTurns.delete(threadId)
+        if (!state.turnInFlight && state.activeChildTurns.size === 0) {
+            notifyTurnSettled?.()
+        }
     }
 }
 

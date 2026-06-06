@@ -89,14 +89,13 @@ class CursorRemoteLauncher extends RemoteLauncherBase {
             sendReady: () => session.sendSessionEvent({ type: 'ready' }),
             getAbortSignal: () => this.abortController.signal,
             waitForTurn: async (signal) => await session.queue.waitForMessagesAndGetAsString(signal),
-            prepareTurn: (batch) => {
+            beforeTurn: (batch) => {
                 const { mode: agentMode, yolo } = permissionModeToAgentArgs(batch.mode.permissionMode as string)
                 const messageText = prependPromptInstructionsToMessage(
                     batch.message,
                     mergePromptSegments(batch.mode.developerInstructions)
                 )
-                return {
-                    message: batch.message,
+                const prepared = {
                     permissionMode: batch.mode.permissionMode as string,
                     args: buildAgentArgs({
                         message: messageText,
@@ -107,11 +106,10 @@ class CursorRemoteLauncher extends RemoteLauncherBase {
                         yolo,
                     }),
                 }
-            },
-            onTurnStart: (turn) => {
-                this.applyDisplayMode(turn.permissionMode)
-                messageBuffer.addMessage(turn.message, 'user')
-                logger.debug(`[cursor-remote] Spawning agent with args: ${turn.args.join(' ')}`)
+                this.applyDisplayMode(prepared.permissionMode)
+                messageBuffer.addMessage(batch.message, 'user')
+                logger.debug(`[cursor-remote] Spawning agent with args: ${prepared.args.join(' ')}`)
+                return { type: 'continue', prepared }
             },
             runTurn: async (turn) => {
                 const processResult = await this.runAgentProcess(turn.args, session.path, processEnv, (event) => {

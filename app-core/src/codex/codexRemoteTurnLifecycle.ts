@@ -1,4 +1,4 @@
-import { settleTerminalTurn, surfaceTerminalFailure } from '@/agent/turnTerminalSettlement'
+import { surfaceTerminalFailure } from '@/agent/turnTerminalSettlement'
 import type { MessageBuffer } from '@/ui/ink/messageBuffer'
 import { logger } from '@/ui/logger'
 import { asRecord, asString, type CodexRemoteRuntimeState, rememberSuppressedTurn } from './codexRemoteSupport'
@@ -11,10 +11,10 @@ export async function abortCodexTurn(options: {
     abortController: AbortController
     resetQueue: () => void
     clearAssistantStream: () => void
-    setThinking: (thinking: boolean) => void
     resetPermissionHandler: () => void
     abortReasoning: () => void
     resetDiff: () => void
+    notifyTurnSettled: () => void
     replaceAbortController: (nextController: AbortController) => void
 }): Promise<void> {
     try {
@@ -43,14 +43,16 @@ export async function abortCodexTurn(options: {
             )
         }
         options.state.activeChildTurns.clear()
+        options.state.turnInFlight = false
         options.state.currentTurnId = null
+        options.state.allowAnonymousTerminalEvent = false
         options.abortController.abort()
         options.resetQueue()
         options.clearAssistantStream()
-        options.setThinking(false)
         options.resetPermissionHandler()
         options.abortReasoning()
         options.resetDiff()
+        options.notifyTurnSettled()
     } finally {
         options.replaceAbortController(new AbortController())
     }
@@ -119,33 +121,16 @@ export function recoverFromTurnStartError(options: {
     options.resetThreadState()
 }
 
-export async function finalizeIdleTurn(options: {
-    state: CodexRemoteRuntimeState
+export async function cleanupCodexTurn(options: {
     clearAssistantStream: () => void
     resetPermissionHandler: () => void
     abortReasoning: () => void
     resetDiff: () => void
     resetEventConverter: () => void
-    setThinking: (thinking: boolean) => void
-    clearReadyAfterTurnTimer: () => void
-    emitReady: () => Promise<boolean | undefined>
 }): Promise<void> {
-    if (options.state.turnInFlight) {
-        return
-    }
-
-    await settleTerminalTurn({
-        beforeThinkingCleared: () => {
-            options.clearAssistantStream()
-            options.resetPermissionHandler()
-            options.abortReasoning()
-            options.resetDiff()
-            options.resetEventConverter()
-        },
-        setThinking: options.setThinking,
-        afterThinkingCleared: () => {
-            options.clearReadyAfterTurnTimer()
-        },
-        emitReady: options.emitReady,
-    })
+    options.clearAssistantStream()
+    options.resetPermissionHandler()
+    options.abortReasoning()
+    options.resetDiff()
+    options.resetEventConverter()
 }
