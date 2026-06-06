@@ -134,12 +134,12 @@
 
 - launch preferences steady-state 与运行时只认 `viby:newSession:draft`（编辑草稿）与 `viby:newSession:last-used`（成功创建后的最近一次启动）；两者都必须走 `browserStorage` 的 durable localStorage owner，旧的 `viby:newSession:preferences` 已退出主路径，禁止继续读取、迁移或回写
 - 新建会话的 launch draft 属于当前用户最近一次编辑事实；返回/取消新建页不得误清 `viby:newSession:draft`，只有成功创建后的 `last-used` 提交或显式 reset owner 才能覆盖它；禁止把 draft 放回 `sessionStorage` 这类 page-session owner
-- 新建会话 agent availability、模型列表、默认模型与 reasoning/thinking 支持只认 Hub `/runtime/capabilities` snapshot；Web 只渲染灰卡/CTA、ready-filter、create readiness 和 model picker，不得用浏览器 protocol probe、`getInstalledRelatedApps()`、PATH 猜测、静态模型表或本地第二套枚举推导安装/模型/认证状态；Pi 默认启动必须等 launch config ready，因为 Pi child 启动同样要读取 RPC model/state
-- 新建会话保留用户持久化的原始 agent 选择，但 launch surface 可以按 authoritative availability 临时 fallback 到首个 `ready` agent；禁止在 storage load 时静默改写用户保存值
+- 新建会话 agent 可选项、模型列表与 reasoning/thinking 支持只认 Hub `/runtime/agent-launch-options` 投影；Web 只渲染 selectable `agents` 和 `unavailable` 灰卡，不得用浏览器 protocol probe、`getInstalledRelatedApps()`、PATH 猜测、静态模型表或本地第二套枚举推导安装/模型/认证状态
+- 新建会话只持久化用户原始 agent/sessionType/yoloMode；model、reasoning、Codex fast-mode 是本次创建的临时选择，下一次必须重新读取 AppCore/provider launch facts
 - runtime capability query 的 UI cache 只用于展示；首次进入先读 Hub cache，missing/expired 由 Hub 后台 refresh，Web 通过 realtime `runtime-capability-updated` invalidate 后重读；Web loading 必须同时消费 HTTP fetch 状态和 Hub snapshot 内的 per-agent `refreshing`，显式“重新检测”只向 Hub 传 `forceRefresh`，不得本地二次检测
-- 新建会话 agent availability 与 launch config 的自动 revalidate / 手动 refresh 必须共用 React Query owner 和 `/runtime/capabilities` 请求：共享取消、错误与结果提交语义；手动 refresh 必须同时 force-refresh availability 和当前 agent launch config；被动检测失败不得发全局 toast 或把布局顶开，只有用户主动 create / refresh 的失败才进入 notice rail；禁止 refresh 旁路 query 状态机再直接 `api + setQueryData`
+- 新建会话 agent launch options 的自动加载 / 手动 refresh 必须共用 React Query owner 和 `/runtime/agent-launch-options` 请求：共享取消、错误与结果提交语义；手动 refresh 只传 `refresh=1`；HTTP pending 是唯一 loading 信号，响应不包含 `refreshing`
 - 新建会话这类关键偏好写入若遭遇 localStorage 压力，必须优先清理 `sessions/message-window/session-attention` 这类非关键 warm cache 后重试；禁止静默吞掉失败并让关键偏好与巨型缓存共用同一失败域
-- 新建会话持久化的 model / reasoning / Codex fast-mode selection 必须保留用户原始值；live launch options 若暂时不认识该值，只允许在 options owner 里把当前值显式挂回 surface，禁止在 storage load 时静默改写成默认值
+- New Session model / reasoning selection 由 shared agent launch options owner 归一：当前临时值仍有效则保留，否则使用 provider option order 的首项；无 reasoning options 时隐藏 reasoning field 并不提交 reasoning effort
 - agent 合法值只认协议层 `AGENT_FLAVORS`，禁止 Web 侧平行维护第二份枚举
 - Agent 配置页入口只放在 `/sessions/agents`，由 workspace header 图标进入；字段、默认值、路径和保存合同只消费 shared catalog + Hub `/runtime/agent-config`，Web 不直接写用户目录、不重建 provider 配置事实源
 - 新建会话的 mode toggle、recover-local picker、history continuation 入口与 agent 选择文案只认当前 locale；禁止再在 surface 内硬编码英文产品词

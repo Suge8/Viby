@@ -137,6 +137,7 @@ Pairing broker 只保三类 owner：
 - `PairingSessionRecord.guest` 已退出存储 owner；对外 snapshot 里的 `guest` 只是由 `authorizedDevice` 派生的 UI 快照。
 - `GET /pairings/:id` 返回 `{ pairing, remoteConnections }`。
 - host SSE `pairing.updated` 返回 `{ type, pairing, remoteConnections }`，verify-code、PWA handoff、guest socket attach/detach 都推进同一合同。
+- `pairing host event stream` 拥有订阅语义：先发当前 host snapshot，再按 eventBus 顺序发增量；HTTP route 只做 auth、SSE headers、序列化、abort wiring。
 - `approvalStatus === 'approved'` 只表示授权完成；在线状态只看 `remoteConnections.connectedAt`。
 - SSE 指名不开 `proxy_buffering`：broker `/pairings/:id/events` 头 `X-Accel-Buffering: no` + `Cache-Control: no-cache, no-transform`。反代层需 honor 该提示。
 

@@ -101,3 +101,6 @@ tmp/
 
 # Local transport experiments
 experiments/
+
+# Local architecture follow-up notes
+future.md
