@@ -1,6 +1,6 @@
 import type { PairingSessionRecord } from '@viby/protocol/pairing'
+import { renewPairingSession } from './pairingSessionTransition'
 import { loadRemoteConnectionIndex, setTokenIndex } from './redisStoreIndexSupport'
-import { isActiveState } from './storeSupport'
 import type { RedisPairingAdapter } from './storeTypes'
 
 type RedisSessionMutator = (
@@ -17,8 +17,7 @@ export async function renewRedisPairingSession(options: {
     updateSession: RedisSessionMutator
 }): Promise<PairingSessionRecord | null> {
     const session = await options.updateSession(options.pairingId, async (current) => {
-        if (!isActiveState(current.state)) return null
-        return { ...current, expiresAt: Math.max(current.expiresAt, options.expiresAt), updatedAt: options.at }
+        return renewPairingSession(current, options.expiresAt, options.at)?.nextSession ?? null
     })
     if (!session) return null
 

@@ -1,5 +1,11 @@
 import type { PairingSessionRecord } from '@viby/protocol/pairing'
 import {
+    createPairingRemoteConnection,
+    expirePairingSessionIfNeeded,
+    type PairingSessionTransition,
+} from './pairingSessionTransition'
+import {
+    clearGuestConnectionTokenIndexes,
     clearSessionSideKeys,
     loadRemoteConnectionIndex,
     saveRemoteConnectionIndex,
@@ -7,14 +13,7 @@ import {
     updateRemoteConnectionIndex,
 } from './redisStoreIndexSupport'
 import { loadStoredSessionEntry, replaceStoredSession } from './redisStoreSessionSupport'
-import {
-    cloneSession,
-    encodeTokenIndex,
-    expireIfNeeded,
-    remoteConnectionIndexKey,
-    sessionKey,
-    tokenIndexKey,
-} from './storeSupport'
+import { cloneSession, encodeTokenIndex, remoteConnectionIndexKey, sessionKey, tokenIndexKey } from './storeSupport'
 import type { PairingRemoteConnectionDraft, PairingRemoteConnectionRecord, RedisPairingAdapter } from './storeTypes'
 
 const SESSION_CONNECTION_UPDATE_RETRY_LIMIT = 5
@@ -30,61 +29,50 @@ redis.call('SET', KEYS[3], ARGV[6], 'EX', ARGV[5])
 return 1
 `.trim()
 
-export function createRemoteConnection(
-    pairingId: string,
-    deviceId: string,
-    connection: PairingRemoteConnectionDraft,
-    at: number
-): PairingRemoteConnectionRecord {
-    return {
-        id: connection.connectionId,
-        connectionId: connection.connectionId,
-        pairingId,
-        deviceId,
-        tokenHash: connection.participant.tokenHash,
-        channel: 'tunnel',
-        createdAt: at,
-        lastSeenAt: at,
-    }
-}
+export const createRemoteConnection = createPairingRemoteConnection
 
 export async function updateSessionWithRemoteConnection(options: {
     adapter: RedisPairingAdapter
     now: () => number
     pairingId: string
     ttlSeconds(expiresAt: number): number
-    mutate(session: PairingSessionRecord): Promise<{
-        connection: PairingRemoteConnectionRecord
-        session: PairingSessionRecord
-    } | null>
+    mutate(session: PairingSessionTransition['nextSession']): Promise<PairingSessionTransition | null>
 }): Promise<PairingSessionRecord | null> {
     for (let attempt = 0; attempt < SESSION_CONNECTION_UPDATE_RETRY_LIMIT; attempt += 1) {
         const entry = await loadStoredSessionEntry(options.adapter, options.pairingId)
         if (!entry) return null
 
-        const current = expireIfNeeded(entry.session, options.now(), new Map())
-        if (current !== entry.session) {
-            if (current.state === 'expired') await clearSessionSideKeys(options.adapter, entry.session)
+        const expired = expirePairingSessionIfNeeded(
+            entry.session,
+            await loadGuestRemoteConnections(options.adapter, options.pairingId),
+            options.now()
+        )
+        if (expired) {
+            await clearSessionSideKeys(options.adapter, entry.session)
             await replaceStoredSession({
                 adapter: options.adapter,
                 pairingId: options.pairingId,
                 expectedRaw: entry.raw,
-                next: current,
-                ttlSeconds: options.ttlSeconds(current.expiresAt),
+                next: expired.nextSession,
+                ttlSeconds: options.ttlSeconds(expired.nextSession.expiresAt),
             })
             return null
         }
 
-        const next = await options.mutate(current)
-        if (!next) return null
+        const next = await options.mutate(entry.session)
+        const connection = next?.remoteConnectionOps.find((op) => op.type === 'replace-all')?.connection
+        if (!next || !connection) return null
+        if (next.remoteConnectionOps.some((op) => op.type === 'clear-all')) {
+            await clearGuestConnectionTokenIndexes(options.adapter, options.pairingId)
+        }
         const saved = await saveSessionWithRemoteConnection({
             adapter: options.adapter,
             expectedRaw: entry.raw,
-            session: next.session,
-            connection: next.connection,
-            ttlSeconds: options.ttlSeconds(next.session.expiresAt),
+            session: next.nextSession,
+            connection,
+            ttlSeconds: options.ttlSeconds(next.nextSession.expiresAt),
         })
-        if (saved) return cloneSession(next.session)
+        if (saved) return cloneSession(next.nextSession)
     }
     return null
 }

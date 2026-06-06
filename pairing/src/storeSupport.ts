@@ -1,4 +1,4 @@
-import type { PairingParticipantRecord, PairingRole, PairingSessionRecord } from '@viby/protocol/pairing'
+import type { PairingRole, PairingSessionRecord } from '@viby/protocol/pairing'
 import type { PairingHandoffTicketRecord, PairingReconnectChallengeRecord } from './storeTypes'
 
 export interface PairingTokenIndex {
@@ -137,64 +137,5 @@ export function decodeHandoffTicket(raw: string): PairingHandoffTicketRecord | n
         return { tokenHash: parsed.tokenHash, expiresAt: Number(parsed.expiresAt) }
     } catch {
         return null
-    }
-}
-
-export function isActiveState(state: PairingSessionRecord['state']): boolean {
-    return state === 'active' || state === 'waiting'
-}
-
-export function isApprovedSession(session: PairingSessionRecord): boolean {
-    return session.approvalStatus === 'approved'
-}
-
-export function deriveState(session: PairingSessionRecord): PairingSessionRecord['state'] {
-    return isActiveState(session.state) ? 'active' : session.state
-}
-
-export function clearTokenIndexes(session: PairingSessionRecord, tokenIndex: Map<string, PairingTokenIndex>): void {
-    tokenIndex.delete(session.host.tokenHash)
-}
-
-export function expireIfNeeded(
-    session: PairingSessionRecord,
-    now: number,
-    tokenIndex: Map<string, PairingTokenIndex>
-): PairingSessionRecord {
-    if (isActiveState(session.state) && now >= session.expiresAt) {
-        clearTokenIndexes(session, tokenIndex)
-        return {
-            ...session,
-            state: 'expired',
-            updatedAt: now,
-            shortCode: session.shortCode,
-            approvalStatus: session.approvalStatus,
-            host: { ...session.host, connectedAt: undefined },
-            authorizedDevice: session.authorizedDevice,
-        }
-    }
-
-    return session
-}
-
-export function updateParticipant(
-    session: PairingSessionRecord,
-    role: PairingRole,
-    patch: Partial<Pick<PairingParticipantRecord, 'connectedAt' | 'lastSeenAt'>>
-): PairingSessionRecord {
-    if (role === 'host') {
-        return {
-            ...session,
-            host: { ...session.host, ...patch },
-        }
-    }
-
-    return session
-}
-
-export function updateState(session: PairingSessionRecord): PairingSessionRecord {
-    return {
-        ...session,
-        state: deriveState(session),
     }
 }

@@ -1,7 +1,11 @@
 import { type PairingRole, type PairingSessionRecord, PairingSessionRecordSchema } from '@viby/protocol/pairing'
 import {
-    clearGuestConnectionTokenIndexes,
-    clearSessionSideKeys,
+    addPairingRemoteConnection,
+    approvePairingSession,
+    deletePairingSession,
+    expirePairingSessionIfNeeded,
+} from './pairingSessionTransition'
+import {
     consumeHandoffTicket,
     consumeReconnectChallenge,
     createTokenIndex,
@@ -10,15 +14,15 @@ import {
     storeReconnectChallenge,
 } from './redisStoreIndexSupport'
 import {
-    createRemoteConnection,
     loadGuestRemoteConnections,
     markGuestRemoteConnectionForSession,
     updateSessionWithRemoteConnection,
 } from './redisStoreRemoteConnections'
 import { renewRedisPairingSession } from './redisStoreRenewal'
 import { loadStoredSession, ttlSecondsFromExpiry } from './redisStoreSessionSupport'
+import { applyRedisPairingTransitionEffects } from './redisStoreTransitionEffects'
 import { updateRedisPairingSession } from './redisStoreUpdate'
-import { cloneSession, expireIfNeeded, isActiveState, sessionKey, tokenIndexKey, updateState } from './storeSupport'
+import { cloneSession, sessionKey, tokenIndexKey } from './storeSupport'
 import type {
     PairingHandoffTicketRecord,
     PairingReconnectChallengeRecord,
@@ -71,15 +75,22 @@ export class RedisPairingStore implements PairingStore {
             return null
         }
 
-        const normalized = expireIfNeeded(stored, this.now(), new Map())
-        if (normalized !== stored) {
-            if (normalized.state === 'expired') {
-                await clearSessionSideKeys(this.adapter, stored)
-            }
-            await this.saveSession(normalized)
+        const expired = expirePairingSessionIfNeeded(
+            stored,
+            await loadGuestRemoteConnections(this.adapter, pairingId),
+            this.now()
+        )
+        if (expired) {
+            await applyRedisPairingTransitionEffects({
+                adapter: this.adapter,
+                transition: expired,
+                ttlSeconds: this.ttlSeconds(expired.nextSession.expiresAt),
+            })
+            await this.saveSession(expired.nextSession)
+            return cloneSession(expired.nextSession)
         }
 
-        return cloneSession(normalized)
+        return cloneSession(stored)
     }
 
     async getSessionByTokenHash(
@@ -106,23 +117,13 @@ export class RedisPairingStore implements PairingStore {
         connection: PairingRemoteConnectionDraft,
         at: number
     ): Promise<PairingSessionRecord | null> {
-        if (!device) return null
         return await updateSessionWithRemoteConnection({
             adapter: this.adapter,
             now: this.now,
             pairingId,
             ttlSeconds: (expiresAt) => this.ttlSeconds(expiresAt),
-            mutate: async (current) => {
-                if (!isActiveState(current.state) || current.authorizedDevice) return null
-                if (current.shortCode === null || current.shortCode !== providedCode) return null
-                const session = updateState({
-                    ...current,
-                    updatedAt: at,
-                    approvalStatus: 'approved',
-                    authorizedDevice: { ...device },
-                })
-                return { connection: createRemoteConnection(pairingId, device.id, connection, at), session }
-            },
+            mutate: async (current) =>
+                approvePairingSession({ at, connection, device, providedCode, session: current }),
         })
     }
 
@@ -142,22 +143,12 @@ export class RedisPairingStore implements PairingStore {
         connection: PairingRemoteConnectionDraft,
         at: number
     ): Promise<PairingSessionRecord | null> {
-        await clearGuestConnectionTokenIndexes(this.adapter, pairingId)
         return await updateSessionWithRemoteConnection({
             adapter: this.adapter,
             now: this.now,
             pairingId,
             ttlSeconds: (expiresAt) => this.ttlSeconds(expiresAt),
-            mutate: async (current) => {
-                const device = current.authorizedDevice
-                if (!isActiveState(current.state) || !device || current.approvalStatus !== 'approved') return null
-                const session = updateState({
-                    ...current,
-                    updatedAt: at,
-                    authorizedDevice: { ...device, lastSeenAt: at },
-                })
-                return { connection: createRemoteConnection(pairingId, device.id, connection, at), session }
-            },
+            mutate: async (current) => addPairingRemoteConnection({ at, connection, session: current }),
         })
     }
 
@@ -236,26 +227,17 @@ export class RedisPairingStore implements PairingStore {
     }
 
     async deleteSession(pairingId: string, at: number): Promise<PairingSessionRecord | null> {
-        const session = await this.updateSession(pairingId, async (current) => {
-            if (current.state === 'deleted') {
-                return current
-            }
+        const stored = await loadStoredSession(this.adapter, pairingId)
+        if (!stored) return null
 
-            return {
-                ...current,
-                state: 'deleted',
-                updatedAt: at,
-                host: { ...current.host, connectedAt: undefined },
-                authorizedDevice: current.authorizedDevice,
-            }
+        const deleted = deletePairingSession(stored, await loadGuestRemoteConnections(this.adapter, pairingId), at)
+        await applyRedisPairingTransitionEffects({
+            adapter: this.adapter,
+            transition: deleted,
+            ttlSeconds: this.ttlSeconds(deleted.nextSession.expiresAt),
         })
-
-        if (!session) {
-            return null
-        }
-
-        await clearSessionSideKeys(this.adapter, session)
-        return session
+        await this.saveSession(deleted.nextSession)
+        return cloneSession(deleted.nextSession)
     }
 
     async updateSession(
