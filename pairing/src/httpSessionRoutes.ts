@@ -3,7 +3,6 @@ import {
     PairingCreateResponseSchema,
     PairingDeleteResponseSchema,
     PairingGuestAuthResponseSchema,
-    type PairingHostEvent,
     PairingStatusResponseSchema,
     type PairingVerifyCodeRequest,
     toPairingSessionSnapshot,
@@ -13,6 +12,7 @@ import type { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { generatePairingSecret, hashPairingSecret } from './crypto'
 import { buildPairingHostEventFromStore, toRemoteConnectionSnapshots } from './hostEventPayload'
+import { createPairingHostEventStream } from './hostEventStream'
 import {
     enforcePairingRateLimit,
     getClientAddress,
@@ -37,8 +37,6 @@ type PairingSessionRouteValidators = {
     createPairingBodyValidator: ReturnType<typeof createJsonBodyValidator<PairingCreateRequest>>
     verifyCodeBodyValidator: ReturnType<typeof createJsonBodyValidator<PairingVerifyCodeRequest>>
 }
-
-const SSE_KEEPALIVE_INTERVAL_MS = 25_000
 
 export function registerPairingSessionRoutes(
     app: Hono,
@@ -240,52 +238,27 @@ export function registerPairingSessionRoutes(
 
         return streamSSE(c, async (stream) => {
             let frame = 0
-            const pending: PairingHostEvent[] = []
-            let notify: (() => void) | null = null
+            const abortController = new AbortController()
+            stream.onAbort(() => abortController.abort())
 
-            const unsubscribe = options.eventBus.subscribe(pairingId, (event) => {
-                pending.push(event)
-                notify?.()
-            })
-
-            // Emit the current snapshot once on connect so the host renders
-            // the right state even when verify happened during reconnect.
-            const initial = await options.store.getSession(pairingId)
-            if (initial) {
-                pending.push(
-                    await buildPairingHostEventFromStore(options.store, initial, (pairingId) =>
-                        options.socketHub.getActiveRemoteConnectionIds(pairingId)
-                    )
-                )
-            }
-
-            stream.onAbort(() => {
-                unsubscribe()
-                notify?.()
-            })
-
-            try {
-                while (!stream.aborted && !stream.closed) {
-                    if (pending.length === 0) {
-                        await Promise.race([
-                            new Promise<void>((resolve) => {
-                                notify = resolve
-                            }),
-                            stream.sleep(SSE_KEEPALIVE_INTERVAL_MS),
-                        ])
-                        notify = null
-                        if (pending.length === 0 && !stream.aborted && !stream.closed) {
-                            await stream.writeSSE({ event: 'keepalive', data: '' })
-                            continue
-                        }
-                    }
-                    const next = pending.shift()
-                    if (!next) continue
-                    frame += 1
-                    await stream.writeSSE({ event: next.type, data: JSON.stringify(next), id: String(frame) })
+            for await (const item of createPairingHostEventStream({
+                pairingId,
+                store: options.store,
+                eventBus: options.eventBus,
+                getActiveRemoteConnectionIds: (pairingId) => options.socketHub.getActiveRemoteConnectionIds(pairingId),
+                signal: abortController.signal,
+            })) {
+                if (stream.aborted || stream.closed) break
+                if (item.type === 'keepalive') {
+                    await stream.writeSSE({ event: 'keepalive', data: '' })
+                    continue
                 }
-            } finally {
-                unsubscribe()
+                frame += 1
+                await stream.writeSSE({
+                    event: item.event.type,
+                    data: JSON.stringify(item.event),
+                    id: String(frame),
+                })
             }
         })
     })
