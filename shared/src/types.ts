@@ -32,6 +32,16 @@ export type {
     ResolveAgentLaunchConfigResponse,
 } from './agentLaunchConfig'
 export type {
+    AgentLaunchOption,
+    AgentLaunchSelection,
+    NewSessionAgentLaunchOptions,
+    NewSessionAgentLaunchProjection,
+    NewSessionAgentUnavailableReason,
+    NewSessionSelectableAgent,
+    RuntimeAgentLaunchOptionsRequest,
+    RuntimeAgentLaunchOptionsResponse,
+} from './agentLaunchOptions'
+export type {
     CommandCapabilitiesResponse,
     CommandCapability,
     CommandCapabilityActionType,

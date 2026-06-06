@@ -24,15 +24,12 @@ export const AgentModelCapabilitySchema = z.object({
     id: z.string(),
     label: z.string(),
     supportedThinkingLevels: z.array(ModelReasoningEffortSchema),
-    defaultThinkingLevel: ModelReasoningEffortSchema.optional(),
 })
 
 export type AgentModelCapability = z.infer<typeof AgentModelCapabilitySchema>
 
 export const AgentLaunchConfigSchema = z.object({
     agent: SessionDriverSchema,
-    defaultModel: z.string().nullable(),
-    defaultModelReasoningEffort: ModelReasoningEffortSchema.nullable(),
     availableModels: z.array(AgentModelCapabilitySchema),
 })
 
@@ -47,8 +44,7 @@ export function requiresAgentLaunchConfig(options: {
 }
 
 function isModelOverride(model: string | null | undefined): boolean {
-    const trimmed = model?.trim()
-    return Boolean(trimmed && trimmed !== 'auto' && trimmed !== 'default')
+    return Boolean(model?.trim())
 }
 
 export const ResolveAgentLaunchConfigResponseSchema = z.union([

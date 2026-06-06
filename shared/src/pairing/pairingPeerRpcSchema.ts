@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { AgentAvailabilityResponseSchema, ListAgentAvailabilityRequestSchema } from '../agentAvailability'
 import {
     AgentConfigResponseSchema,
     OpenAgentConfigRequestSchema,
@@ -9,7 +8,7 @@ import {
     SaveAgentConfigRequestSchema,
     SaveAgentConfigResponseSchema,
 } from '../agentConfig'
-import { ResolveAgentLaunchConfigRequestSchema, ResolveAgentLaunchConfigResponseSchema } from '../agentLaunchConfig'
+import { RuntimeAgentLaunchOptionsRequestSchema, RuntimeAgentLaunchOptionsResponseSchema } from '../agentLaunchOptions'
 import { normalizeProtocolVersion } from '../buildCompatibility'
 import { MACHINE_CAPABILITIES } from '../machineCapabilities'
 import { MachineDirectoryResponseSchema } from '../machineDirectory'
@@ -138,9 +137,6 @@ export type PairingPeerRuntimeSnapshotResult = z.infer<typeof PairingPeerRuntime
 export const PairingPeerRuntimeCapabilityResultSchema = RuntimeCapabilityResponseSchema
 export type PairingPeerRuntimeCapabilityResult = z.infer<typeof PairingPeerRuntimeCapabilityResultSchema>
 
-export const PairingPeerAgentAvailabilityResultSchema = AgentAvailabilityResponseSchema
-export type PairingPeerAgentAvailabilityResult = z.infer<typeof PairingPeerAgentAvailabilityResultSchema>
-
 export const PairingPeerAgentConfigResultSchema = AgentConfigResponseSchema
 export type PairingPeerAgentConfigResult = z.infer<typeof PairingPeerAgentConfigResultSchema>
 
@@ -153,8 +149,8 @@ export type PairingPeerRestoreAgentConfigResult = z.infer<typeof PairingPeerRest
 export const PairingPeerOpenAgentConfigResultSchema = OpenAgentConfigResponseSchema
 export type PairingPeerOpenAgentConfigResult = z.infer<typeof PairingPeerOpenAgentConfigResultSchema>
 
-export const PairingPeerAgentLaunchConfigResultSchema = ResolveAgentLaunchConfigResponseSchema
-export type PairingPeerAgentLaunchConfigResult = z.infer<typeof PairingPeerAgentLaunchConfigResultSchema>
+export const PairingPeerAgentLaunchOptionsResultSchema = RuntimeAgentLaunchOptionsResponseSchema
+export type PairingPeerAgentLaunchOptionsResult = z.infer<typeof PairingPeerAgentLaunchOptionsResultSchema>
 
 export const PairingPeerSpawnSessionResultSchema = z.union([
     z.object({ type: z.literal('success'), session: SessionSchema }),
@@ -175,10 +171,6 @@ export const PairingPeerRuntimeSnapshotRequestSchema = createOptionalPairingPeer
 export const PairingPeerRuntimeCapabilityRequestSchema = createOptionalPairingPeerRequestSchema(
     'runtime.capabilities',
     RuntimeCapabilityRequestSchema
-)
-export const PairingPeerAgentAvailabilityRequestSchema = createOptionalPairingPeerRequestSchema(
-    'runtime.agent-availability',
-    ListAgentAvailabilityRequestSchema
 )
 export const PairingPeerAgentConfigRequestSchema = createOptionalPairingPeerRequestSchema(
     'runtime.agent-config',
@@ -204,9 +196,9 @@ export const PairingPeerBrowseDirectoryRequestSchema = createOptionalPairingPeer
     'runtime.browse-directory',
     PairingPeerBrowseDirectoryParamsSchema
 )
-export const PairingPeerAgentLaunchConfigRequestSchema = createPairingPeerRequestSchema(
-    'runtime.agent-launch-config',
-    ResolveAgentLaunchConfigRequestSchema
+export const PairingPeerAgentLaunchOptionsRequestSchema = createOptionalPairingPeerRequestSchema(
+    'runtime.agent-launch-options',
+    RuntimeAgentLaunchOptionsRequestSchema
 )
 export const PairingPeerSpawnSessionRequestSchema = createPairingPeerRequestSchema(
     'runtime.spawn',
@@ -237,14 +229,13 @@ const PairingPeerRequestSchemas = [
     PairingPeerDenyPermissionRequestSchema,
     PairingPeerRuntimeSnapshotRequestSchema,
     PairingPeerRuntimeCapabilityRequestSchema,
-    PairingPeerAgentAvailabilityRequestSchema,
+    PairingPeerAgentLaunchOptionsRequestSchema,
     PairingPeerAgentConfigRequestSchema,
     PairingPeerSaveAgentConfigRequestSchema,
     PairingPeerRestoreAgentConfigRequestSchema,
     PairingPeerOpenAgentConfigRequestSchema,
     PairingPeerPathsExistRequestSchema,
     PairingPeerBrowseDirectoryRequestSchema,
-    PairingPeerAgentLaunchConfigRequestSchema,
     PairingPeerSpawnSessionRequestSchema,
     PairingPeerRuntimeLocalSessionsRequestSchema,
     PairingPeerImportLocalSessionRequestSchema,
