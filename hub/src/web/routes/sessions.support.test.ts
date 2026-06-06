@@ -1,6 +1,11 @@
 import type { SessionDriver, SessionStreamState } from '@viby/protocol/types'
 import { Hono } from 'hono'
-import { SessionCommandService } from '../../sync/sessionCommandService'
+import {
+    getSessionCommandResumeStatus,
+    type SessionCommandRequest,
+    SessionCommandService,
+} from '../../sync/sessionCommandService'
+import type { DriverSwitchResult } from '../../sync/sessionLifecycleService'
 import type { Session, SyncEngine } from '../../sync/syncEngine'
 import type { WebAppEnv } from '../middleware/auth'
 import { createPermissionsRoutes } from './permissions'
@@ -69,7 +74,7 @@ export function createApp(
         latestWindowHasMore?: boolean
         resumeResult?: Awaited<ReturnType<SyncEngine['resumeSession']>>
         stream?: SessionStreamState | null
-        switchDriverResult?: Awaited<ReturnType<SyncEngine['switchSessionDriver']>>
+        switchDriverResult?: DriverSwitchResult
         dropSessionSnapshotAfterConfig?: boolean
         commandCapabilitiesResult?: Awaited<ReturnType<SyncEngine['listCommandCapabilities']>>
     }
@@ -164,26 +169,6 @@ export function createApp(
     )
     const engine = {
         getSession: () => (sessionSnapshotAvailable ? currentSession : undefined),
-        abortSession: async (sessionId: string) => {
-            abortSessionCalls.push(sessionId)
-            currentSession = options?.abortSessionResult ?? {
-                ...currentSession,
-                thinking: false,
-                thinkingAt: currentSession.updatedAt + 1,
-            }
-            return currentSession
-        },
-        applySessionConfig,
-        setPermissionMode: async (sessionId: string, mode: NonNullable<Session['permissionMode']>) =>
-            await sessionCommandService.setPermissionMode(sessionId, mode),
-        setCollaborationMode: async (sessionId: string, mode: NonNullable<Session['collaborationMode']>) =>
-            await sessionCommandService.setCollaborationMode(sessionId, mode),
-        setModel: async (sessionId: string, model: Session['model']) =>
-            await sessionCommandService.setModel(sessionId, model),
-        setModelReasoningEffort: async (sessionId: string, modelReasoningEffort: Session['modelReasoningEffort']) =>
-            await sessionCommandService.setModelReasoningEffort(sessionId, modelReasoningEffort),
-        setCodexServiceTier: async (sessionId: string, codexServiceTier: Session['codexServiceTier']) =>
-            await sessionCommandService.setCodexServiceTier(sessionId, codexServiceTier),
         approvePermission: async (
             sessionId: string,
             requestId: string,
@@ -193,36 +178,6 @@ export function createApp(
             answers?: Record<string, string[]> | Record<string, { answers: string[] }>
         ) => {
             approvePermissionCalls.push([sessionId, requestId, mode, allowTools, decision, answers])
-        },
-        archiveSession: async (sessionId: string) => {
-            archiveSessionCalls.push(sessionId)
-            currentSession = {
-                ...currentSession,
-                active: false,
-                metadata: currentSession.metadata
-                    ? {
-                          ...currentSession.metadata,
-                          lifecycleState: 'archived',
-                          lifecycleStateSince: currentSession.updatedAt + 1,
-                      }
-                    : null,
-            }
-            return currentSession
-        },
-        closeSession: async (sessionId: string) => {
-            closeSessionCalls.push(sessionId)
-            currentSession = {
-                ...currentSession,
-                active: false,
-                metadata: currentSession.metadata
-                    ? {
-                          ...currentSession.metadata,
-                          lifecycleState: 'closed',
-                          lifecycleStateSince: currentSession.updatedAt + 1,
-                      }
-                    : null,
-            }
-            return currentSession
         },
         deleteSession: async (sessionId: string) => {
             deleteSessionCalls.push(sessionId)
@@ -277,32 +232,128 @@ export function createApp(
             }
             return currentSession
         },
-        resumeSession: async (sessionId: string, opts?: { permissionMode?: string }) =>
-            await sessionCommandService.resumeSession(
+        resumeSession: async (sessionId: string, opts?: { permissionMode?: string }) => {
+            const result = await sessionCommandService.executeSessionCommand({
+                type: 'resume',
                 sessionId,
-                undefined,
-                opts as Parameters<SessionCommandService['resumeSession']>[2]
-            ),
-        switchSessionDriver: async (sessionId: string, targetDriver: SessionDriver) => {
-            switchDriverCalls.push([sessionId, targetDriver])
-            const result = options?.switchDriverResult ?? {
-                type: 'success' as const,
-                targetDriver,
-                session: {
-                    ...currentSession,
-                    metadata: currentSession.metadata
-                        ? {
-                              ...currentSession.metadata,
-                              driver: targetDriver,
+                permissionMode: opts?.permissionMode as never,
+            })
+            if (result.ok) {
+                return (
+                    result.resume ?? { type: 'error', message: 'Session resume failed', code: 'session_action_failed' }
+                )
+            }
+            return { type: 'error', message: result.error.message, code: result.error.code }
+        },
+        executeSessionCommand: async (command: SessionCommandRequest) => {
+            switch (command.type) {
+                case 'resume': {
+                    const resumeResult = await sessionCommandService.executeSessionCommand({
+                        type: 'resume',
+                        sessionId: command.sessionId,
+                        permissionMode: command.permissionMode,
+                    })
+                    const resume = resumeResult.ok
+                        ? (resumeResult.resume ?? {
+                              type: 'error' as const,
+                              message: 'Session resume failed',
+                              code: 'session_action_failed' as const,
+                          })
+                        : {
+                              type: 'error' as const,
+                              message: resumeResult.error.message,
+                              code: resumeResult.error.code,
                           }
-                        : null,
-                    updatedAt: currentSession.updatedAt + 1,
-                },
+                    return resume.type === 'error'
+                        ? {
+                              ok: false as const,
+                              command: command.type,
+                              error: {
+                                  message: resume.message,
+                                  code: resume.code,
+                                  status: getSessionCommandResumeStatus(resume.code),
+                              },
+                          }
+                        : { ok: true as const, command: command.type, resume }
+                }
+                case 'abort':
+                    abortSessionCalls.push(command.sessionId)
+                    currentSession = options?.abortSessionResult ?? {
+                        ...currentSession,
+                        thinking: false,
+                        thinkingAt: currentSession.updatedAt + 1,
+                    }
+                    return { ok: true as const, command: command.type, session: currentSession }
+                case 'archive':
+                    archiveSessionCalls.push(command.sessionId)
+                    currentSession = {
+                        ...currentSession,
+                        active: false,
+                        metadata: currentSession.metadata
+                            ? {
+                                  ...currentSession.metadata,
+                                  lifecycleState: 'archived',
+                                  lifecycleStateSince: currentSession.updatedAt + 1,
+                              }
+                            : null,
+                    }
+                    return { ok: true as const, command: command.type, session: currentSession }
+                case 'close':
+                    closeSessionCalls.push(command.sessionId)
+                    currentSession = {
+                        ...currentSession,
+                        active: false,
+                        metadata: currentSession.metadata
+                            ? {
+                                  ...currentSession.metadata,
+                                  lifecycleState: 'closed',
+                                  lifecycleStateSince: currentSession.updatedAt + 1,
+                              }
+                            : null,
+                    }
+                    return { ok: true as const, command: command.type, session: currentSession }
+                case 'unarchive':
+                    return {
+                        ok: true as const,
+                        command: command.type,
+                        session: await (engine as SyncEngine).unarchiveSession(command.sessionId),
+                    }
+                case 'driver-switch': {
+                    switchDriverCalls.push([command.sessionId, command.targetDriver])
+                    const driverSwitch = options?.switchDriverResult ?? {
+                        type: 'success' as const,
+                        targetDriver: command.targetDriver,
+                        session: {
+                            ...currentSession,
+                            metadata: currentSession.metadata
+                                ? { ...currentSession.metadata, driver: command.targetDriver }
+                                : null,
+                            updatedAt: currentSession.updatedAt + 1,
+                        },
+                    }
+                    if (driverSwitch.type === 'success') {
+                        currentSession = driverSwitch.session
+                    }
+                    return driverSwitch.type === 'error'
+                        ? {
+                              ok: false as const,
+                              command: command.type,
+                              error: {
+                                  message: driverSwitch.message,
+                                  code: 'session_action_failed' as const,
+                                  status: driverSwitch.status,
+                              },
+                              driverSwitch,
+                          }
+                        : { ok: true as const, command: command.type, session: driverSwitch.session, driverSwitch }
+                }
+                case 'permission-mode':
+                case 'collaboration-mode':
+                case 'model':
+                case 'model-reasoning-effort':
+                case 'codex-service-tier':
+                    return await sessionCommandService.executeSessionCommand(command)
             }
-            if (result.type === 'success') {
-                currentSession = result.session
-            }
-            return result
         },
         unarchiveSession: async (sessionId: string) => {
             unarchiveSessionCalls.push(sessionId)

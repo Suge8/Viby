@@ -16,48 +16,27 @@ import type {
 } from '@viby/protocol/types'
 import type { RpcGateway } from './rpcGateway'
 import type { SessionCache } from './sessionCache'
-import type { DriverSwitchResult, ResumeSessionResult, SessionLifecycleService } from './sessionLifecycleService'
+import {
+    getSessionCommandResumeStatus,
+    type SessionCommand,
+    SessionCommandError,
+    type SessionCommandResult,
+    type SessionCommandResumeResult,
+    toSessionCommandError,
+} from './sessionCommandTypes'
+import type { DriverSwitchResult, SessionLifecycleService } from './sessionLifecycleService'
 import type { DriverSwitchHooks } from './sessionLifecycleSupport'
 import type { SessionConfigPatch } from './sessionPayloadTypes'
 import type { SessionRpcFacade } from './sessionRpcFacade'
 
-export type SessionCommandErrorCode =
-    | 'session_not_found'
-    | 'no_machine_online'
-    | 'resume_unavailable'
-    | 'resume_failed'
-    | 'session_archived'
-    | 'session_action_failed'
-
-export type SessionCommandResumeResult =
-    | ResumeSessionResult
-    | { type: 'error'; message: string; code: 'session_action_failed' }
-
-export class SessionCommandError extends Error {
-    constructor(
-        message: string,
-        readonly code: SessionCommandErrorCode,
-        readonly status: 400 | 404 | 409 | 500 | 503
-    ) {
-        super(message)
-        this.name = 'SessionCommandError'
-    }
-}
-
-export function getSessionCommandResumeStatus(code: SessionCommandErrorCode): 400 | 404 | 409 | 500 | 503 {
-    switch (code) {
-        case 'no_machine_online':
-            return 503
-        case 'session_not_found':
-            return 404
-        case 'session_archived':
-            return 409
-        case 'session_action_failed':
-            return 400
-        default:
-            return 500
-    }
-}
+export type {
+    SessionCommand,
+    SessionCommandErrorCode,
+    SessionCommandRequest,
+    SessionCommandResult,
+    SessionCommandResumeResult,
+} from './sessionCommandTypes'
+export { getSessionCommandResumeStatus, SessionCommandError }
 
 export class SessionCommandService {
     constructor(
@@ -66,40 +45,124 @@ export class SessionCommandService {
         private readonly sessionLifecycleService: SessionLifecycleService,
         private readonly sessionRpcFacade: SessionRpcFacade
     ) {}
-
-    async abortSession(sessionId: string): Promise<Session> {
-        const current = this.sessionCache.getSession(sessionId) ?? this.sessionCache.refreshSession(sessionId)
-        if (!current) {
-            throw new SessionCommandError('Session not found', 'session_not_found', 404)
+    async executeSessionCommand(command: SessionCommand): Promise<SessionCommandResult> {
+        try {
+            switch (command.type) {
+                case 'abort':
+                    return { ok: true, command: command.type, session: await this.abort(command.sessionId) }
+                case 'close':
+                    return {
+                        ok: true,
+                        command: command.type,
+                        session: await this.sessionLifecycleService.closeSession(command.sessionId),
+                    }
+                case 'archive':
+                    return {
+                        ok: true,
+                        command: command.type,
+                        session: await this.sessionLifecycleService.archiveSession(command.sessionId),
+                    }
+                case 'unarchive':
+                    return {
+                        ok: true,
+                        command: command.type,
+                        session: await this.sessionLifecycleService.unarchiveSession(command.sessionId),
+                    }
+                case 'resume': {
+                    const resume = await this.resume(
+                        command.sessionId,
+                        command.hooks,
+                        command.permissionMode === undefined ? undefined : { permissionMode: command.permissionMode }
+                    )
+                    if (resume.type === 'error') {
+                        return {
+                            ok: false,
+                            command: command.type,
+                            error: {
+                                message: resume.message,
+                                code: resume.code,
+                                status: getSessionCommandResumeStatus(resume.code),
+                            },
+                        }
+                    }
+                    return { ok: true, command: command.type, resume }
+                }
+                case 'driver-switch': {
+                    const driverSwitch = await this.sessionLifecycleService.switchSessionDriver(
+                        command.sessionId,
+                        command.targetDriver,
+                        command.hooks
+                    )
+                    if (driverSwitch.type === 'error') {
+                        return {
+                            ok: false,
+                            command: command.type,
+                            error: {
+                                message: driverSwitch.message,
+                                code: 'session_action_failed',
+                                status: driverSwitch.status,
+                            },
+                            driverSwitch,
+                        }
+                    }
+                    return { ok: true, command: command.type, session: driverSwitch.session, driverSwitch }
+                }
+                case 'permission-mode':
+                    return {
+                        ok: true,
+                        command: command.type,
+                        session: await this.setPermission(command.sessionId, command.mode),
+                    }
+                case 'collaboration-mode':
+                    return {
+                        ok: true,
+                        command: command.type,
+                        session: await this.setCollaboration(command.sessionId, command.mode),
+                    }
+                case 'model':
+                    return {
+                        ok: true,
+                        command: command.type,
+                        session: await this.setLiveModel(command.sessionId, command.model),
+                    }
+                case 'model-reasoning-effort':
+                    return {
+                        ok: true,
+                        command: command.type,
+                        session: await this.setReasoning(command.sessionId, command.modelReasoningEffort),
+                    }
+                case 'codex-service-tier':
+                    return {
+                        ok: true,
+                        command: command.type,
+                        session: await this.setCodexTier(command.sessionId, command.codexServiceTier),
+                    }
+            }
+        } catch (error) {
+            return { ok: false, command: command.type, error: toSessionCommandError(error) }
         }
+    }
+
+    private async applySessionConfig(sessionId: string, config: SessionConfigPatch): Promise<void> {
+        const session = this.requireSession(sessionId)
+        if (!session.active) {
+            this.sessionCache.applySessionConfig(sessionId, config)
+            return
+        }
+        await this.sessionRpcFacade.requestSessionConfig(sessionId, config)
+    }
+
+    private async abort(sessionId: string): Promise<Session> {
+        const current = this.requireSession(sessionId)
         if (!current.active) {
             throw new SessionCommandError('Session is inactive', 'session_action_failed', 409)
         }
-
         await this.rpcGateway.abortSession(sessionId)
-        await this.sessionCache.setSessionLifecycleState(sessionId, 'open', {
-            touchUpdatedAt: false,
-        })
-        const session = this.sessionCache.setSessionThinking(sessionId, false)
-        if (!session) {
-            throw new SessionCommandError('Session not found', 'session_not_found', 404)
-        }
-        return session
+        await this.sessionCache.setSessionLifecycleState(sessionId, 'open', { touchUpdatedAt: false })
+        return this.sessionCache.setSessionThinking(sessionId, false) ?? this.missingSession()
     }
 
-    async closeSession(sessionId: string): Promise<Session> {
-        return await this.sessionLifecycleService.closeSession(sessionId)
-    }
-
-    async archiveSession(sessionId: string): Promise<Session> {
-        return await this.sessionLifecycleService.archiveSession(sessionId)
-    }
-
-    async unarchiveSession(sessionId: string): Promise<Session> {
-        return await this.sessionLifecycleService.unarchiveSession(sessionId)
-    }
-
-    async resumeSession(
+    private async resume(
         sessionId: string,
         hooks?: Parameters<SessionLifecycleService['resumeSession']>[1],
         opts?: { permissionMode?: PermissionMode }
@@ -117,25 +180,7 @@ export class SessionCommandService {
         }
         return await this.sessionLifecycleService.resumeSession(sessionId, hooks, opts)
     }
-
-    async switchSessionDriver(
-        sessionId: string,
-        targetDriver: Parameters<SessionLifecycleService['switchSessionDriver']>[1],
-        hooks: DriverSwitchHooks
-    ): Promise<DriverSwitchResult> {
-        return await this.sessionLifecycleService.switchSessionDriver(sessionId, targetDriver, hooks)
-    }
-
-    async applySessionConfig(sessionId: string, config: SessionConfigPatch): Promise<void> {
-        const session = this.requireSession(sessionId)
-        if (!session.active) {
-            this.sessionCache.applySessionConfig(sessionId, config)
-            return
-        }
-        await this.sessionRpcFacade.requestSessionConfig(sessionId, config)
-    }
-
-    async setPermissionMode(sessionId: string, mode: PermissionMode): Promise<Session> {
+    private async setPermission(sessionId: string, mode: PermissionMode): Promise<Session> {
         const session = this.requireSession(sessionId)
         const driver = resolveSessionDriver(session.metadata)
         const liveConfigSupport = getLiveSessionConfigSupport(session)
@@ -146,8 +191,7 @@ export class SessionCommandService {
                 409
             )
         }
-        const allowedModes = driver ? getPermissionModesForDriver(driver) : []
-        if (allowedModes.length === 0) {
+        if (!driver || getPermissionModesForDriver(driver).length === 0) {
             throw new SessionCommandError(
                 'Permission mode not supported for session driver',
                 'session_action_failed',
@@ -160,7 +204,7 @@ export class SessionCommandService {
         return await this.applySessionConfigAndReturnSnapshot(sessionId, { permissionMode: mode })
     }
 
-    async setCollaborationMode(sessionId: string, collaborationMode: CodexCollaborationMode): Promise<Session> {
+    private async setCollaboration(sessionId: string, collaborationMode: CodexCollaborationMode): Promise<Session> {
         const session = this.requireActiveSession(sessionId)
         if (resolveSessionDriver(session.metadata) !== 'codex') {
             throw new SessionCommandError(
@@ -179,7 +223,7 @@ export class SessionCommandService {
         return await this.applySessionConfigAndReturnSnapshot(sessionId, { collaborationMode })
     }
 
-    async setModel(sessionId: string, model: string | null): Promise<Session> {
+    private async setLiveModel(sessionId: string, model: string | null): Promise<Session> {
         const session = this.requireActiveSession(sessionId)
         const driver = resolveSessionDriver(session.metadata)
         const liveConfigSupport = getLiveSessionConfigSupport(session)
@@ -200,10 +244,7 @@ export class SessionCommandService {
         return await this.applySessionConfigAndReturnSnapshot(sessionId, { model })
     }
 
-    async setModelReasoningEffort(
-        sessionId: string,
-        modelReasoningEffort: ModelReasoningEffort | null
-    ): Promise<Session> {
+    private async setReasoning(sessionId: string, modelReasoningEffort: ModelReasoningEffort | null): Promise<Session> {
         const session = this.requireActiveSession(sessionId)
         const driver = resolveSessionDriver(session.metadata)
         const liveConfigSupport = getLiveSessionConfigSupport(session)
@@ -231,7 +272,7 @@ export class SessionCommandService {
         return await this.applySessionConfigAndReturnSnapshot(sessionId, { modelReasoningEffort })
     }
 
-    async setCodexServiceTier(sessionId: string, codexServiceTier: CodexServiceTier | null): Promise<Session> {
+    private async setCodexTier(sessionId: string, codexServiceTier: CodexServiceTier | null): Promise<Session> {
         const session = this.requireActiveSession(sessionId)
         const driver = resolveSessionDriver(session.metadata)
         const liveConfigSupport = getLiveSessionConfigSupport(session)
@@ -279,5 +320,9 @@ export class SessionCommandService {
             throw new SessionCommandError('Session snapshot unavailable after config update', 'session_not_found', 500)
         }
         return session
+    }
+
+    private missingSession(): never {
+        throw new SessionCommandError('Session not found', 'session_not_found', 404)
     }
 }

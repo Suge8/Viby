@@ -16,6 +16,25 @@ function allowDriverSwitchTarget(engine: SyncEngine, driver: SessionDriver): voi
     })
 }
 
+async function executeSessionCommandSession(
+    engine: SyncEngine,
+    command: Parameters<SyncEngine['executeSessionCommand']>[0]
+) {
+    const result = await engine.executeSessionCommand(command)
+    if (!result.ok || !result.session) {
+        throw new Error(result.ok ? 'Session command did not return a session' : result.error.message)
+    }
+    return result.session
+}
+
+async function switchSessionDriver(engine: SyncEngine, sessionId: string, targetDriver: SessionDriver) {
+    const result = await engine.executeSessionCommand({ type: 'driver-switch', sessionId, targetDriver })
+    if (!result.driverSwitch) {
+        throw new Error(result.ok ? 'Driver switch result unavailable' : result.error.message)
+    }
+    return result.driverSwitch
+}
+
 describe('session model', () => {
     it('includes explicit model and live config modes in session summaries', () => {
         const store = new Store(':memory:')
@@ -363,7 +382,7 @@ describe('session model', () => {
             throw new Error('kill timeout')
         }
 
-        const closedSession = await engine.closeSession(session.id)
+        const closedSession = await executeSessionCommandSession(engine, { type: 'close', sessionId: session.id })
 
         expect(closedSession).toMatchObject({
             active: false,
@@ -621,7 +640,7 @@ describe('session model', () => {
             }
             allowDriverSwitchTarget(engine, 'claude')
 
-            const result = await engine.switchSessionDriver(session.id, 'claude')
+            const result = await switchSessionDriver(engine, session.id, 'claude')
 
             expect(result).toMatchObject({
                 type: 'success',
@@ -715,7 +734,7 @@ describe('session model', () => {
             }
             allowDriverSwitchTarget(engine, 'cursor')
 
-            const result = await engine.switchSessionDriver(session.id, 'cursor')
+            const result = await switchSessionDriver(engine, session.id, 'cursor')
 
             expect(result).toMatchObject({
                 type: 'success',
@@ -810,7 +829,7 @@ describe('session model', () => {
             }
             allowDriverSwitchTarget(engine, 'copilot')
 
-            const result = await engine.switchSessionDriver(session.id, 'copilot')
+            const result = await switchSessionDriver(engine, session.id, 'copilot')
 
             expect(result).toMatchObject({
                 type: 'success',
@@ -879,7 +898,7 @@ describe('session model', () => {
                 return { type: 'success', sessionId: session.id }
             }
 
-            const result = await engine.switchSessionDriver(session.id, 'claude')
+            const result = await switchSessionDriver(engine, session.id, 'claude')
 
             expect(result).toEqual({
                 type: 'error',
@@ -929,7 +948,7 @@ describe('session model', () => {
                 return { type: 'success', sessionId: session.id }
             }
 
-            const result = await engine.switchSessionDriver(session.id, 'codex')
+            const result = await switchSessionDriver(engine, session.id, 'codex')
 
             expect(result).toEqual({
                 type: 'error',
@@ -995,7 +1014,7 @@ describe('session model', () => {
                 throw new Error('marker append failed')
             }
 
-            const result = await engine.switchSessionDriver(session.id, 'claude')
+            const result = await switchSessionDriver(engine, session.id, 'claude')
             const recoveryPage = engine.getSessionRecoveryPage(session.id, { afterSeq: 0, limit: 10 })
 
             expect(result).toEqual({
@@ -1057,7 +1076,7 @@ describe('session model', () => {
             }
             allowDriverSwitchTarget(engine, 'claude')
 
-            const result = await engine.switchSessionDriver(session.id, 'claude')
+            const result = await switchSessionDriver(engine, session.id, 'claude')
             const switchedSnapshot = engine.getSession(session.id)
 
             expect(capturedSpawnOptions).toMatchObject({

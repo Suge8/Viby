@@ -16,13 +16,15 @@ import type {
     SessionSendMessageResult,
 } from '@viby/protocol/types'
 import type { RuntimeSpawnValidationOptions } from '../runtime/runtimeCapabilityValidation'
-import type { SessionCommandResumeResult } from './sessionCommandService'
-import type { DriverSwitchResult, ResumeContractState } from './sessionLifecycleService'
-import type {
-    InternalSessionMessagePayload,
-    SessionConfigPatch,
-    SessionSendMessagePayload,
-} from './sessionPayloadTypes'
+import {
+    type SessionCommand,
+    SessionCommandError,
+    type SessionCommandRequest,
+    type SessionCommandResult,
+    type SessionCommandResumeResult,
+} from './sessionCommandService'
+import type { ResumeContractState } from './sessionLifecycleService'
+import type { InternalSessionMessagePayload, SessionSendMessagePayload } from './sessionPayloadTypes'
 import { SyncEngineReadApi } from './syncEngineReadApi'
 import type { SyncEngineServices } from './syncEngineServiceFactory'
 
@@ -30,6 +32,16 @@ export type SyncEngineSpawnSessionOptions = Parameters<SyncEngineServices['sessi
 
 export abstract class SyncEngineSessionApi extends SyncEngineReadApi {
     protected abstract get syncServices(): SyncEngineServices
+
+    private requireCommandSession(result: SessionCommandResult): Session {
+        if (!result.ok) {
+            throw new SessionCommandError(result.error.message, result.error.code, result.error.status)
+        }
+        if (!result.session) {
+            throw new Error('Session command did not return a session')
+        }
+        return result.session
+    }
 
     async sendMessage(sessionId: string, payload: SessionSendMessagePayload): Promise<SessionSendMessageResult> {
         return await this.syncServices.sessionInteractionService.sendMessage(sessionId, payload)
@@ -74,89 +86,67 @@ export abstract class SyncEngineSessionApi extends SyncEngineReadApi {
         await this.syncServices.sessionRpcFacade.denyPermission(sessionId, requestId, decision)
     }
 
-    async abortSession(sessionId: string): Promise<Session> {
-        return await this.syncServices.sessionCommandService.abortSession(sessionId)
-    }
-
-    async closeSession(sessionId: string): Promise<Session> {
-        return await this.syncServices.sessionCommandService.closeSession(sessionId)
-    }
-
-    async archiveSession(sessionId: string): Promise<Session> {
-        return await this.syncServices.sessionCommandService.archiveSession(sessionId)
+    async executeSessionCommand(command: SessionCommandRequest): Promise<SessionCommandResult> {
+        if (command.type === 'resume') {
+            return await this.syncServices.sessionCommandService.executeSessionCommand({
+                ...command,
+                hooks: this.buildResumeHooks(),
+            })
+        }
+        if (command.type === 'driver-switch') {
+            const previousDriver = resolveSessionDriver(this.getSession(command.sessionId)?.metadata)
+            const result = await this.syncServices.sessionCommandService.executeSessionCommand({
+                ...command,
+                hooks: { buildSessionHandoff: (targetSessionId) => this.buildSessionHandoff(targetSessionId) },
+            })
+            if (!result.ok || result.driverSwitch?.type !== 'success') {
+                return result
+            }
+            if (!previousDriver || previousDriver === result.driverSwitch.targetDriver) {
+                return result
+            }
+            try {
+                await this.syncServices.messageService.appendDriverSwitchedEvent(command.sessionId, {
+                    type: 'driver-switched',
+                    previousDriver,
+                    targetDriver: result.driverSwitch.targetDriver,
+                })
+                return result
+            } catch (error) {
+                return {
+                    ok: false,
+                    command: command.type,
+                    error: {
+                        message: error instanceof Error ? error.message : 'Failed to append driver switch marker',
+                        code: 'session_action_failed',
+                        status: 500,
+                    },
+                    driverSwitch: {
+                        type: 'error',
+                        message: error instanceof Error ? error.message : 'Failed to append driver switch marker',
+                        code: 'marker_append_failed',
+                        stage: 'marker_append',
+                        status: 500,
+                        targetDriver: result.driverSwitch.targetDriver,
+                        rollbackResult: 'not_needed',
+                        session: this.getSession(command.sessionId) ?? result.driverSwitch.session,
+                    },
+                }
+            }
+        }
+        return await this.syncServices.sessionCommandService.executeSessionCommand(command as SessionCommand)
     }
 
     async unarchiveSession(sessionId: string): Promise<Session> {
-        return await this.syncServices.sessionCommandService.unarchiveSession(sessionId)
+        return this.requireCommandSession(await this.executeSessionCommand({ type: 'unarchive', sessionId }))
     }
 
     async deleteSession(sessionId: string): Promise<void> {
         await this.syncServices.sessionCache.deleteSession(sessionId)
     }
 
-    async switchSessionDriver(sessionId: string, targetDriver: AgentFlavor): Promise<DriverSwitchResult> {
-        const previousDriver = resolveSessionDriver(this.getSession(sessionId)?.metadata)
-        const result = await this.syncServices.sessionCommandService.switchSessionDriver(sessionId, targetDriver, {
-            buildSessionHandoff: (targetSessionId) => this.buildSessionHandoff(targetSessionId),
-        })
-        if (result.type !== 'success') {
-            return result
-        }
-
-        if (!previousDriver || previousDriver === result.targetDriver) {
-            return result
-        }
-
-        try {
-            await this.syncServices.messageService.appendDriverSwitchedEvent(sessionId, {
-                type: 'driver-switched',
-                previousDriver,
-                targetDriver: result.targetDriver,
-            })
-            return result
-        } catch (error) {
-            return {
-                type: 'error',
-                message: error instanceof Error ? error.message : 'Failed to append driver switch marker',
-                code: 'marker_append_failed',
-                stage: 'marker_append',
-                status: 500,
-                targetDriver: result.targetDriver,
-                rollbackResult: 'not_needed',
-                session: this.getSession(sessionId) ?? result.session,
-            }
-        }
-    }
-
     async renameSession(sessionId: string, name: string): Promise<Session> {
         return await this.syncServices.sessionCache.renameSession(sessionId, name)
-    }
-
-    async applySessionConfig(sessionId: string, config: SessionConfigPatch): Promise<void> {
-        await this.syncServices.sessionCommandService.applySessionConfig(sessionId, config)
-    }
-
-    async setPermissionMode(sessionId: string, mode: NonNullable<Session['permissionMode']>): Promise<Session> {
-        return await this.syncServices.sessionCommandService.setPermissionMode(sessionId, mode)
-    }
-
-    async setCollaborationMode(sessionId: string, mode: NonNullable<Session['collaborationMode']>): Promise<Session> {
-        return await this.syncServices.sessionCommandService.setCollaborationMode(sessionId, mode)
-    }
-
-    async setModel(sessionId: string, model: Session['model']): Promise<Session> {
-        return await this.syncServices.sessionCommandService.setModel(sessionId, model)
-    }
-
-    async setModelReasoningEffort(
-        sessionId: string,
-        modelReasoningEffort: Session['modelReasoningEffort']
-    ): Promise<Session> {
-        return await this.syncServices.sessionCommandService.setModelReasoningEffort(sessionId, modelReasoningEffort)
-    }
-
-    async setCodexServiceTier(sessionId: string, codexServiceTier: Session['codexServiceTier']): Promise<Session> {
-        return await this.syncServices.sessionCommandService.setCodexServiceTier(sessionId, codexServiceTier)
     }
 
     async spawnSession(
@@ -173,7 +163,15 @@ export abstract class SyncEngineSessionApi extends SyncEngineReadApi {
         sessionId: string,
         opts?: { permissionMode?: Session['permissionMode'] }
     ): Promise<SessionCommandResumeResult> {
-        return await this.syncServices.sessionCommandService.resumeSession(sessionId, this.buildResumeHooks(), opts)
+        const result = await this.executeSessionCommand({
+            type: 'resume',
+            sessionId,
+            permissionMode: opts?.permissionMode,
+        })
+        if (result.ok) {
+            return result.resume ?? { type: 'error', message: 'Session resume failed', code: 'session_action_failed' }
+        }
+        return { type: 'error', message: result.error.message, code: result.error.code }
     }
 
     async checkPathsExist(machineId: string, paths: string[]): Promise<Record<string, boolean>> {

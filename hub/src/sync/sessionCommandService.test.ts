@@ -51,7 +51,10 @@ describe('SessionCommandService', () => {
     it('aborts through the command owner and returns the authoritative snapshot', async () => {
         const { service, rpcGateway, sessionCache } = createService()
 
-        await expect(service.abortSession('session-1')).resolves.toMatchObject({ id: 'session-1', thinking: false })
+        await expect(service.executeSessionCommand({ type: 'abort', sessionId: 'session-1' })).resolves.toMatchObject({
+            ok: true,
+            session: { id: 'session-1', thinking: false },
+        })
         expect(rpcGateway.abortSession).toHaveBeenCalledWith('session-1')
         expect(sessionCache.setSessionLifecycleState).toHaveBeenCalledWith('session-1', 'open', {
             touchUpdatedAt: false,
@@ -60,16 +63,20 @@ describe('SessionCommandService', () => {
 
     it('rejects missing and inactive aborts before runtime mutation', async () => {
         const missing = createService({ session: null })
-        await expect(missing.service.abortSession('missing')).rejects.toMatchObject({
-            code: 'session_not_found',
-            status: 404,
+        await expect(
+            missing.service.executeSessionCommand({ type: 'abort', sessionId: 'missing' })
+        ).resolves.toMatchObject({
+            ok: false,
+            error: { code: 'session_not_found', status: 404 },
         })
         expect(missing.rpcGateway.abortSession).not.toHaveBeenCalled()
 
         const inactive = createService({ session: createSession({ active: false }) })
-        await expect(inactive.service.abortSession('session-1')).rejects.toMatchObject({
-            code: 'session_action_failed',
-            status: 409,
+        await expect(
+            inactive.service.executeSessionCommand({ type: 'abort', sessionId: 'session-1' })
+        ).resolves.toMatchObject({
+            ok: false,
+            error: { code: 'session_action_failed', status: 409 },
         })
         expect(inactive.rpcGateway.abortSession).not.toHaveBeenCalled()
     })
@@ -78,7 +85,12 @@ describe('SessionCommandService', () => {
         const { service, sessionLifecycleService } = createService()
         const hooks = { buildSessionHandoff: mock() }
 
-        await service.switchSessionDriver('session-1', 'codex', hooks)
+        await service.executeSessionCommand({
+            type: 'driver-switch',
+            sessionId: 'session-1',
+            targetDriver: 'codex',
+            hooks,
+        })
         expect(sessionLifecycleService.switchSessionDriver).toHaveBeenCalledWith('session-1', 'codex', hooks)
     })
 
@@ -88,11 +100,14 @@ describe('SessionCommandService', () => {
         })
 
         await expect(
-            service.resumeSession('session-1', undefined, { permissionMode: 'bypassPermissions' })
-        ).resolves.toEqual({
-            type: 'error',
-            message: 'Invalid permission mode for session driver',
-            code: 'session_action_failed',
+            service.executeSessionCommand({
+                type: 'resume',
+                sessionId: 'session-1',
+                permissionMode: 'bypassPermissions',
+            })
+        ).resolves.toMatchObject({
+            ok: false,
+            error: { message: 'Invalid permission mode for session driver', code: 'session_action_failed' },
         })
         expect(sessionLifecycleService.resumeSession).not.toHaveBeenCalled()
     })
@@ -104,13 +119,23 @@ describe('SessionCommandService', () => {
                 metadata: { driver: 'codex' },
             }),
         })
-        await ready.service.setCodexServiceTier('session-1', 'fast')
+        await ready.service.executeSessionCommand({
+            type: 'codex-service-tier',
+            sessionId: 'session-1',
+            codexServiceTier: 'fast',
+        })
         expect(ready.sessionRpcFacade.requestSessionConfig).toHaveBeenCalledWith('session-1', {
             codexServiceTier: 'fast',
         })
 
         const inactive = createService({ session: createSession({ active: false, metadata: { driver: 'codex' } }) })
-        await expect(inactive.service.setCodexServiceTier('session-1', 'fast')).rejects.toMatchObject({ status: 409 })
+        await expect(
+            inactive.service.executeSessionCommand({
+                type: 'codex-service-tier',
+                sessionId: 'session-1',
+                codexServiceTier: 'fast',
+            })
+        ).resolves.toMatchObject({ ok: false, error: { status: 409 } })
 
         const local = createService({
             session: createSession({
@@ -118,7 +143,13 @@ describe('SessionCommandService', () => {
                 metadata: { driver: 'codex' },
             }),
         })
-        await expect(local.service.setCodexServiceTier('session-1', 'fast')).rejects.toMatchObject({ status: 409 })
+        await expect(
+            local.service.executeSessionCommand({
+                type: 'codex-service-tier',
+                sessionId: 'session-1',
+                codexServiceTier: 'fast',
+            })
+        ).resolves.toMatchObject({ ok: false, error: { status: 409 } })
     })
 
     it('keeps resume status as route mapping, not resume result payload', async () => {

@@ -36,7 +36,17 @@ const resumeBodySchema = z.object({
     permissionMode: PermissionModeSchema.optional(),
 })
 
-type SessionLifecycleAction = 'archiveSession' | 'closeSession' | 'unarchiveSession'
+type SessionLifecycleAction = 'archive' | 'close' | 'unarchive'
+
+function sessionCommandErrorResponse(
+    c: Context<WebAppEnv>,
+    result: { error: { message: string; code?: string; status: number } }
+) {
+    return c.json(
+        { error: result.error.message, code: result.error.code },
+        result.error.status as 400 | 404 | 409 | 500 | 503
+    )
+}
 
 async function handleSessionLifecycleAction(
     c: Context<WebAppEnv>,
@@ -48,17 +58,13 @@ async function handleSessionLifecycleAction(
         return sessionContext
     }
 
-    try {
-        const session = await sessionContext.engine[action](sessionContext.sessionId)
-        return c.json({ ok: true, session: presentSessionSnapshot(session) })
-    } catch (error) {
-        return Response.json(
-            {
-                error: getErrorMessage(error, 'Session lifecycle action failed'),
-            },
-            { status: getErrorStatus(error) ?? 500 }
-        )
-    }
+    const result = await sessionContext.engine.executeSessionCommand({
+        type: action,
+        sessionId: sessionContext.sessionId,
+    })
+    if (!result.ok) return sessionCommandErrorResponse(c, result)
+    if (!result.session) return c.json({ error: 'Session command did not return a session' }, 500)
+    return c.json({ ok: true, session: presentSessionSnapshot(result.session) })
 }
 
 export function registerSessionActionRoutes(app: Hono<WebAppEnv>, getSyncEngine: GetSyncEngine): void {
@@ -95,16 +101,20 @@ export function registerSessionActionRoutes(app: Hono<WebAppEnv>, getSyncEngine:
             return body.response
         }
 
-        const permissionMode = body.data.permissionMode
-        const result = await sessionContext.engine.resumeSession(
-            sessionContext.sessionId,
-            permissionMode === undefined ? undefined : { permissionMode }
-        )
-        if (result.type === 'error') {
-            return c.json({ error: result.message, code: result.code }, getSessionCommandResumeStatus(result.code))
+        const result = await sessionContext.engine.executeSessionCommand({
+            type: 'resume',
+            sessionId: sessionContext.sessionId,
+            permissionMode: body.data.permissionMode,
+        })
+        if (!result.ok) return sessionCommandErrorResponse(c, result)
+        if (!result.resume || result.resume.type === 'error') {
+            return c.json(
+                { error: 'Session resume failed', code: 'session_action_failed' },
+                getSessionCommandResumeStatus('session_action_failed')
+            )
         }
 
-        const resumedSession = sessionContext.engine.getSession(result.sessionId)
+        const resumedSession = sessionContext.engine.getSession(result.resume.sessionId)
         if (!resumedSession) {
             return c.json(
                 {
@@ -176,28 +186,18 @@ export function registerSessionActionRoutes(app: Hono<WebAppEnv>, getSyncEngine:
             return sessionContext
         }
 
-        try {
-            const session = await sessionContext.engine.abortSession(sessionContext.sessionId)
-            return c.json({ ok: true, session: presentSessionSnapshot(session) })
-        } catch (error) {
-            return Response.json(
-                {
-                    error: getErrorMessage(error, 'Session abort failed'),
-                },
-                { status: getErrorStatus(error) ?? 500 }
-            )
-        }
+        const result = await sessionContext.engine.executeSessionCommand({
+            type: 'abort',
+            sessionId: sessionContext.sessionId,
+        })
+        if (!result.ok) return sessionCommandErrorResponse(c, result)
+        if (!result.session) return c.json({ error: 'Session command did not return a session' }, 500)
+        return c.json({ ok: true, session: presentSessionSnapshot(result.session) })
     })
 
-    app.post(
-        '/sessions/:id/archive',
-        async (c) => await handleSessionLifecycleAction(c, getSyncEngine, 'archiveSession')
-    )
-    app.post('/sessions/:id/close', async (c) => await handleSessionLifecycleAction(c, getSyncEngine, 'closeSession'))
-    app.post(
-        '/sessions/:id/unarchive',
-        async (c) => await handleSessionLifecycleAction(c, getSyncEngine, 'unarchiveSession')
-    )
+    app.post('/sessions/:id/archive', async (c) => await handleSessionLifecycleAction(c, getSyncEngine, 'archive'))
+    app.post('/sessions/:id/close', async (c) => await handleSessionLifecycleAction(c, getSyncEngine, 'close'))
+    app.post('/sessions/:id/unarchive', async (c) => await handleSessionLifecycleAction(c, getSyncEngine, 'unarchive'))
 
     app.post('/sessions/:id/driver-switch', createJsonBodyValidator(driverSwitchSchema), async (c) => {
         const sessionContext = resolveSessionRouteContext(c, getSyncEngine)
@@ -206,18 +206,26 @@ export function registerSessionActionRoutes(app: Hono<WebAppEnv>, getSyncEngine:
         }
         const body = c.req.valid('json')
 
-        const result = await sessionContext.engine.switchSessionDriver(sessionContext.sessionId, body.targetDriver)
-        if (result.type === 'error') {
+        const commandResult = await sessionContext.engine.executeSessionCommand({
+            type: 'driver-switch',
+            sessionId: sessionContext.sessionId,
+            targetDriver: body.targetDriver,
+        })
+        const result = commandResult.driverSwitch
+        if (!commandResult.ok || !result || result.type === 'error') {
+            const errorResult = result?.type === 'error' ? result : commandResult.ok ? null : commandResult.driverSwitch
             return c.json(
                 {
-                    error: result.message,
-                    code: result.code,
-                    stage: result.stage,
-                    targetDriver: result.targetDriver,
-                    rollbackResult: result.rollbackResult,
-                    session: result.session ? presentSessionSnapshot(result.session) : null,
+                    error:
+                        errorResult?.message ??
+                        (commandResult.ok ? 'Driver switch failed' : commandResult.error.message),
+                    code: errorResult?.code ?? (commandResult.ok ? 'session_action_failed' : commandResult.error.code),
+                    stage: errorResult?.stage,
+                    targetDriver: errorResult?.targetDriver ?? body.targetDriver,
+                    rollbackResult: errorResult?.rollbackResult,
+                    session: errorResult?.session ? presentSessionSnapshot(errorResult.session) : null,
                 },
-                result.status
+                commandResult.ok ? 500 : commandResult.error.status
             )
         }
 
